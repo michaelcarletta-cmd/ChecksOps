@@ -213,7 +213,11 @@ export function DepositKPIDashboard() {
 /*  Owner Queue & Bulk Actions                                         */
 /* ------------------------------------------------------------------ */
 
-export function DepositOwnerQueue() {
+interface DepositOwnerQueueProps {
+  searchQuery?: string;
+}
+
+export function DepositOwnerQueue({ searchQuery = "" }: DepositOwnerQueueProps = {}) {
   const { user } = useAuth();
   const { tenantId } = useTenantFilter();
   const { toast } = useToast();
@@ -430,11 +434,18 @@ export function DepositOwnerQueue() {
   };
 
   const uniqueOwners = [...new Set(items.filter((i) => i.owner_id).map((i) => i.owner_id!))];
-  const filteredItems =
+  const ownerScoped =
     ownerFilter === "all" ? items
     : ownerFilter === "unassigned" ? items.filter((i) => !i.owner_id)
     : ownerFilter === "mine" ? items.filter((i) => i.owner_id === user?.id)
     : items.filter((i) => i.owner_id === ownerFilter);
+
+  const q = (searchQuery ?? "").trim().toLowerCase();
+  const filteredItems = q
+    ? ownerScoped.filter((i) =>
+        [i.check_number, i.carrier_name].some((v) => v && v.toString().toLowerCase().includes(q))
+      )
+    : ownerScoped;
 
   return (
     <div className="space-y-4">

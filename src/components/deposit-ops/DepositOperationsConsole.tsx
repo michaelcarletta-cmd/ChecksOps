@@ -94,7 +94,11 @@ const statusConfig: Record<string, { label: string; color: string; icon: typeof 
 /*  Main console                                                       */
 /* ------------------------------------------------------------------ */
 
-export function DepositOperationsConsole() {
+interface DepositOperationsConsoleProps {
+  searchQuery?: string;
+}
+
+export function DepositOperationsConsole({ searchQuery = "" }: DepositOperationsConsoleProps = {}) {
   const { user } = useAuth();
   const { tenantId } = useTenantFilter();
   const { toast } = useToast();
@@ -240,7 +244,14 @@ export function DepositOperationsConsole() {
     setActionSlipNumber("");
   };
 
-  const filteredItems = statusFilter === "all" ? items : items.filter((i) => i.status === statusFilter);
+  const q = (searchQuery ?? "").trim().toLowerCase();
+  const baseFiltered = statusFilter === "all" ? items : items.filter((i) => i.status === statusFilter);
+  const filteredItems = q
+    ? baseFiltered.filter((i) =>
+        [i.check_number, i.carrier_name, i.bank_reference, i.deposit_slip_number, i.provider_reference]
+          .some((v) => v && v.toString().toLowerCase().includes(q))
+      )
+    : baseFiltered;
 
   const handleExecuteAction = () => {
     if (!actionDialog) return;

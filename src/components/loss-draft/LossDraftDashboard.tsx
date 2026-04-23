@@ -66,7 +66,11 @@ export { escrowStatusConfig };
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function LossDraftDashboard() {
+interface LossDraftDashboardProps {
+  searchQuery?: string;
+}
+
+export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps = {}) {
   const qc = useQueryClient();
   const { tenantId } = useTenantFilter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -86,7 +90,7 @@ export function LossDraftDashboard() {
     enabled: !!tenantId,
   });
 
-  const filtered = filter === "active"
+  const baseFiltered = filter === "active"
     ? drafts.filter(d => d.escrow_status !== "final_release_complete")
     : filter === "stale"
     ? drafts.filter(d => d.is_stale)
@@ -95,6 +99,14 @@ export function LossDraftDashboard() {
     : filter === "overdue"
     ? drafts.filter(d => d.follow_up_date && new Date(d.follow_up_date) < new Date())
     : drafts;
+
+  const q = (searchQuery ?? "").trim().toLowerCase();
+  const filtered = q
+    ? baseFiltered.filter(d =>
+        [d.claim_number, d.policyholder_name, d.mortgage_servicer, d.insurance_company]
+          .some(v => v && v.toString().toLowerCase().includes(q))
+      )
+    : baseFiltered;
 
   const totalUnreleased = drafts
     .filter(d => d.escrow_status !== "final_release_complete")

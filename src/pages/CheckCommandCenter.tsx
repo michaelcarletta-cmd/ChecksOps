@@ -508,18 +508,18 @@ export default function CheckCommandCenter() {
         {/* Loss Draft Tab */}
         {activeTab === "lossdraft" && (
           <div className="mt-3">
-            <LossDraftDashboard />
+            <LossDraftDashboard searchQuery={searchQuery} />
           </div>
         )}
 
         {/* Deposit Ops Tab */}
         <TabsContent value="deposit_ops" className="mt-3">
-          <DepositOperationsConsole />
+          <DepositOperationsConsole searchQuery={searchQuery} />
         </TabsContent>
 
         {/* Reconciliation Tab */}
         <TabsContent value="reconciliation" className="mt-3">
-          <ReconciliationDashboard />
+          <ReconciliationDashboard searchQuery={searchQuery} />
         </TabsContent>
 
         {/* Reports Tab */}
@@ -529,12 +529,12 @@ export default function CheckCommandCenter() {
 
         {/* Work Queue Tab */}
         <TabsContent value="workqueue" className="mt-3">
-          <DepositOwnerQueue />
+          <DepositOwnerQueue searchQuery={searchQuery} />
         </TabsContent>
 
         {/* Manager Tab */}
         <TabsContent value="manager" className="mt-3">
-          <DepositManagerCommandCenter />
+          <DepositManagerCommandCenter searchQuery={searchQuery} />
         </TabsContent>
 
         {/* Partners Tab */}
