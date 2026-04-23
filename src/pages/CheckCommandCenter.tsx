@@ -221,7 +221,8 @@ export default function CheckCommandCenter() {
       let query = supabase
         .from("check_intake_items")
         .select("*, check_payees(*)");
-      if (isWhiteLabel && tenantId) {
+      // Always scope by tenant — each company only sees their own checks
+      if (tenantId) {
         query = query.eq("tenant_id", tenantId);
       }
       const { data, error } = await query.order("created_at", { ascending: false });
