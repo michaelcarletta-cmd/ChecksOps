@@ -333,7 +333,7 @@ async function queryKnowledgeBase(
     }
   }
 
-  return results.slice(0, 8);
+  return results.slice(0, 5);
 }
 
 // ── AI Call ──────────────────────────────────────────────────────
