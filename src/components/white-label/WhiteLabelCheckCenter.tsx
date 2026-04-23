@@ -21,6 +21,7 @@ export function WhiteLabelCheckCenter() {
   const { tenant, isWhiteLabel } = useTenant();
   const { user, loading } = useAuth();
   const [usersOpen, setUsersOpen] = useState(false);
+  const [partnersOpen, setPartnersOpen] = useState(false);
 
   if (loading) return <PageLoader />;
   if (!user) {
