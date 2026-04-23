@@ -11,6 +11,7 @@ export interface Tenant {
   custom_domain: string | null;
   subscription_status: string;
   plan_tier: string;
+  partner_code: string | null;
   is_system_tenant: boolean;
   max_checks_per_month: number;
 }
