@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { Navigate } from "react-router-dom";
+import { Navigate, Link } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +15,7 @@ import { TenantUserManager } from "./TenantUserManager";
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { TenantCreditManager } from "./TenantCreditManager";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center">
@@ -24,20 +24,8 @@ const PageLoader = () => (
 );
 
 export function WhiteLabelSettings() {
-  const { tenant, refreshTenant } = useTenant();
+  const { tenant } = useTenant();
   const { user, loading } = useAuth();
-
-  useQuery({
-    queryKey: ["tenant-settings-refresh", tenant?.id],
-    queryFn: async () => {
-      await refreshTenant();
-      return true;
-    },
-    enabled: !!tenant?.id,
-    staleTime: 0,
-    gcTime: 0,
-    refetchOnMount: "always",
-  });
 
   if (loading) return <PageLoader />;
   if (!user) return <Navigate to={tenant?.slug ? `/wl/${tenant.slug}/login` : "/login"} replace />;
@@ -53,9 +41,9 @@ export function WhiteLabelSettings() {
         </div>
         <div className="ml-auto flex items-center gap-2">
           <Button variant="ghost" size="sm" asChild>
-            <a href={`/wl/${tenant?.slug}/checks`}>
+            <Link to={`/wl/${tenant?.slug}/checks`}>
               <ArrowLeft className="h-4 w-4 mr-1" /> Back to Checks
-            </a>
+            </Link>
           </Button>
           <Button variant="ghost" size="icon" onClick={() => supabase.auth.signOut()} title="Sign Out">
             <LogOut className="h-4 w-4" />

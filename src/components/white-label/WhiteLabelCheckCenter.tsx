@@ -1,6 +1,6 @@
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/hooks/useAuth";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, Link } from "react-router-dom";
 import { lazy, Suspense, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -59,9 +59,9 @@ export function WhiteLabelCheckCenter() {
           </span>
           {tenant && (
             <Button variant="ghost" size="icon" className="h-8 w-8" asChild title="Settings">
-              <a href={`/wl/${tenant.slug}/settings`}>
+              <Link to={`/wl/${tenant.slug}/settings`}>
                 <Settings className="h-4 w-4" />
-              </a>
+              </Link>
             </Button>
           )}
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleSignOut} title="Sign Out">
