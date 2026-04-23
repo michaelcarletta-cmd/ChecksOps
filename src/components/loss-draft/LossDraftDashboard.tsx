@@ -50,6 +50,8 @@ const escrowStatusConfig: Record<string, { label: string; color: string }> = {
   pending_send: { label: "Pending Send", color: "bg-muted text-muted-foreground" },
   sent_to_lender: { label: "Sent to Lender", color: "bg-blue-500/20 text-blue-400" },
   received_by_lender: { label: "Received", color: "bg-blue-500/20 text-blue-400" },
+  check_received_back: { label: "Received Back", color: "bg-emerald-500/20 text-emerald-400" },
+  endorsing: { label: "Endorsing", color: "bg-orange-500/20 text-orange-400" },
   escrowed: { label: "Escrowed", color: "bg-amber-500/20 text-amber-400" },
   first_draw_requested: { label: "Draw Requested", color: "bg-orange-500/20 text-orange-400" },
   partial_release: { label: "Partial Release", color: "bg-emerald-500/20 text-emerald-300" },
