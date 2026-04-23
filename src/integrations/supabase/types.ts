@@ -16919,7 +16919,6 @@ export type Database = {
         Args: { p_deposit_item_id: string }
         Returns: Json
       }
-      generate_partner_code: { Args: never; Returns: string }
       geometry: { Args: { "": string }; Returns: unknown }
       geometry_above: {
         Args: { geom1: unknown; geom2: unknown }
@@ -17064,6 +17063,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      get_partner_tenant_ids: {
+        Args: { _tenant_id: string }
+        Returns: string[]
       }
       get_portfolio_carrier_analytics: { Args: never; Returns: Json }
       get_portfolio_intelligence: { Args: never; Returns: Json }
