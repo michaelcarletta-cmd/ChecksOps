@@ -307,10 +307,30 @@ export function LossDraftDetailPanel({
   if (!draft) return null;
 
   const sc = escrowStatusConfig[draft.escrow_status] ?? { label: draft.escrow_status, color: "" };
-  const availableActions = ACTION_BUTTONS.filter(a => a.fromStatuses.includes(draft.escrow_status));
+  const isMonitored = draft.monitoring_type !== "not_monitored";
+  const actionButtons = isMonitored ? MONITORED_ACTIONS : NOT_MONITORED_ACTIONS;
+  const availableActions = actionButtons.filter(a => a.fromStatuses.includes(draft.escrow_status));
   const fmtMoney = (v: number) => `$${(v ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
 
-  return (
+  const toggleMonitoringType = async () => {
+    if (!user?.id) return;
+    const newType = isMonitored ? "not_monitored" : "monitored";
+    try {
+      const { error } = await supabase.rpc("loss_draft_action", {
+        p_loss_draft_id: lossDraftId,
+        p_action: "set_monitoring_type",
+        p_actor_id: user.id,
+        p_amount: null,
+        p_notes: `Changed to ${newType}`,
+        p_extra: JSON.stringify({ monitoring_type: newType }),
+      });
+      if (error) throw error;
+      toast({ title: "Monitoring type updated", description: `Set to ${newType === "monitored" ? "Monitored" : "Not Monitored"}` });
+      invalidateAll();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+  };
     <Card className="h-[calc(100vh-480px)] flex flex-col">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
