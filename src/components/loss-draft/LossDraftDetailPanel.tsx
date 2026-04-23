@@ -372,9 +372,17 @@ export function LossDraftDetailPanel({
           </CardTitle>
           <Badge className={`text-[10px] ${sc.color}`}>{sc.label}</Badge>
         </div>
-        <div className="text-xs text-muted-foreground">
-          Draw #{draft.draw_stage} · Holdback {fmtMoney(draft.holdback_amount)}
-        </div>
+        {isMonitored && (
+          <div className="text-xs text-muted-foreground">
+            Draw #{draft.draw_stage} · Holdback {fmtMoney(draft.holdback_amount)}
+          </div>
+        )}
+        {!isMonitored && (
+          <div className="text-xs text-muted-foreground">
+            Not Monitored — Mortgage endorses &amp; returns check
+            {draft.check_received_back_date && " · ✅ Received back"}
+          </div>
+        )}
       </CardHeader>
       <Separator />
 
@@ -395,7 +403,7 @@ export function LossDraftDetailPanel({
         <TabsList className="w-full rounded-none shrink-0">
           <TabsTrigger value="actions" className="flex-1 text-xs">Actions</TabsTrigger>
           <TabsTrigger value="docs" className="flex-1 text-xs">Docs ({docs.filter(d => d.is_required && !d.is_submitted).length})</TabsTrigger>
-          <TabsTrigger value="releases" className="flex-1 text-xs">Draws ({releases.length})</TabsTrigger>
+          {isMonitored && <TabsTrigger value="releases" className="flex-1 text-xs">Draws ({releases.length})</TabsTrigger>}
           <TabsTrigger value="audit" className="flex-1 text-xs">Audit</TabsTrigger>
         </TabsList>
 
