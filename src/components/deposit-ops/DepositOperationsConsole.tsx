@@ -94,7 +94,11 @@ const statusConfig: Record<string, { label: string; color: string; icon: typeof 
 /*  Main console                                                       */
 /* ------------------------------------------------------------------ */
 
-export function DepositOperationsConsole() {
+interface DepositOperationsConsoleProps {
+  searchQuery?: string;
+}
+
+export function DepositOperationsConsole({ searchQuery = "" }: DepositOperationsConsoleProps = {}) {
   const { user } = useAuth();
   const { tenantId } = useTenantFilter();
   const { toast } = useToast();
