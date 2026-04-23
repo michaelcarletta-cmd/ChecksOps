@@ -235,7 +235,38 @@ export default function CheckCommandCenter() {
     },
   });
 
-  
+
+  // Shared-with-me checks (cross-tenant)
+  const { data: sharedChecks = [] } = useQuery({
+    queryKey: ["shared-with-me-checks", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shared_checks")
+        .select("check_id, source_tenant_id, tenants!shared_checks_source_tenant_id_fkey(name)")
+        .eq("target_tenant_id", tenantId!)
+        .is("revoked_at", null);
+      if (error) throw error;
+      if (!data || data.length === 0) return [];
+
+      const checkIds = data.map((s: any) => s.check_id);
+      const { data: checkData, error: checkErr } = await supabase
+        .from("check_intake_items")
+        .select("*, check_payees(*)")
+        .in("id", checkIds)
+        .order("created_at", { ascending: false });
+      if (checkErr) throw checkErr;
+
+      // Tag each with source tenant name
+      const shareMap = new Map(data.map((s: any) => [s.check_id, s.tenants?.name ?? "Partner"]));
+      return (checkData ?? []).map((c: any) => ({
+        ...c,
+        _shared: true,
+        _sourceTenantName: shareMap.get(c.id) ?? "Partner",
+      })) as (CheckItem & { _shared: true; _sourceTenantName: string })[];
+    },
+    enabled: !!tenantId,
+  });
+
   const awaitingEndorsement = checks.filter(
     (c) =>
       c.deposit_recommendation === "endorsements_pending" ||
@@ -256,7 +287,8 @@ export default function CheckCommandCenter() {
   const branchDeposit = checks.filter((c) => c.status === "branch_deposit_required");
 
   const filteredChecks =
-    activeTab === "endorsements" ? awaitingEndorsement
+    activeTab === "shared" ? sharedChecks
+    : activeTab === "endorsements" ? awaitingEndorsement
     : activeTab === "ready" ? readyForDeposit
     : activeTab === "review" ? needsReview
     : checks;
