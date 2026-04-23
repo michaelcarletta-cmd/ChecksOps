@@ -1442,6 +1442,11 @@ export type Database = {
           id: string
           is_multi_payee: boolean | null
           issue_date: string | null
+          mortgage_final_released_at: string | null
+          mortgage_monitoring_type: string
+          mortgage_received_at: string | null
+          mortgage_sent_at: string | null
+          mortgage_tracking_number: string | null
           ocr_heartbeat_at: string | null
           ocr_status: string | null
           payee_line: string | null
@@ -1471,6 +1476,11 @@ export type Database = {
           id?: string
           is_multi_payee?: boolean | null
           issue_date?: string | null
+          mortgage_final_released_at?: string | null
+          mortgage_monitoring_type?: string
+          mortgage_received_at?: string | null
+          mortgage_sent_at?: string | null
+          mortgage_tracking_number?: string | null
           ocr_heartbeat_at?: string | null
           ocr_status?: string | null
           payee_line?: string | null
@@ -1500,6 +1510,11 @@ export type Database = {
           id?: string
           is_multi_payee?: boolean | null
           issue_date?: string | null
+          mortgage_final_released_at?: string | null
+          mortgage_monitoring_type?: string
+          mortgage_received_at?: string | null
+          mortgage_sent_at?: string | null
+          mortgage_tracking_number?: string | null
           ocr_heartbeat_at?: string | null
           ocr_status?: string | null
           payee_line?: string | null
@@ -1540,6 +1555,53 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      check_intake_mortgage_draws: {
+        Row: {
+          amount: number | null
+          check_id: string
+          completed_at: string | null
+          created_at: string
+          draw_number: number
+          draw_type: string
+          id: string
+          notes: string | null
+          requested_at: string
+          status: string
+        }
+        Insert: {
+          amount?: number | null
+          check_id: string
+          completed_at?: string | null
+          created_at?: string
+          draw_number?: number
+          draw_type?: string
+          id?: string
+          notes?: string | null
+          requested_at?: string
+          status?: string
+        }
+        Update: {
+          amount?: number | null
+          check_id?: string
+          completed_at?: string | null
+          created_at?: string
+          draw_number?: number
+          draw_type?: string
+          id?: string
+          notes?: string | null
+          requested_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_intake_mortgage_draws_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
             referencedColumns: ["id"]
           },
         ]
