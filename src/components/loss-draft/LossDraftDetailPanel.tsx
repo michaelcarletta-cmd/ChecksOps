@@ -130,6 +130,9 @@ export function LossDraftDetailPanel({
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [uploadingDocId, setUploadingDocId] = useState<string | null>(null);
+  const [showAdminEdit, setShowAdminEdit] = useState(false);
+  const [adminTargetStatus, setAdminTargetStatus] = useState("");
+  const [adminResetNotes, setAdminResetNotes] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: draft } = useQuery({
