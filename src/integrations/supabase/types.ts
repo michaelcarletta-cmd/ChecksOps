@@ -17236,6 +17236,17 @@ export type Database = {
       }
       get_portfolio_carrier_analytics: { Args: never; Returns: Json }
       get_portfolio_intelligence: { Args: never; Returns: Json }
+      get_tenant_users_with_profiles: {
+        Args: { _tenant_id: string }
+        Returns: {
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          role: string
+          user_id: string
+        }[]
+      }
       get_user_tenant_ids: { Args: { _user_id: string }; Returns: string[] }
       get_weekly_command_review: { Args: never; Returns: Json }
       gettransactionid: { Args: never; Returns: unknown }
