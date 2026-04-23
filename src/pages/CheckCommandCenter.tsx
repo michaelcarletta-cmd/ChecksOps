@@ -223,17 +223,15 @@ export default function CheckCommandCenter() {
   const { data: checks = [], isLoading } = useQuery({
     queryKey: ["check-intake-items", tenantId],
     queryFn: async () => {
-      let query = supabase
+      const { data, error } = await supabase
         .from("check_intake_items")
-        .select("*, check_payees(*)");
-      // Always scope by tenant — each company only sees their own checks
-      if (tenantId) {
-        query = query.eq("tenant_id", tenantId);
-      }
-      const { data, error } = await query.order("created_at", { ascending: false });
+        .select("*, check_payees(*)")
+        .eq("tenant_id", tenantId!)
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as CheckItem[];
     },
+    enabled: !!tenantId,
   });
 
 
