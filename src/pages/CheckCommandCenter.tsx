@@ -375,6 +375,115 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
+        {/* Deposit Ops Tab */}
+        <TabsContent value="deposit_ops" className="mt-3">
+          <DepositOperationsConsole />
+        </TabsContent>
+
+        {/* Reconciliation Tab */}
+        <TabsContent value="reconciliation" className="mt-3">
+          <ReconciliationDashboard />
+        </TabsContent>
+
+        {/* Reports Tab */}
+        <TabsContent value="reports" className="mt-3">
+          <DepositReports />
+        </TabsContent>
+
+        {/* Work Queue Tab */}
+        <TabsContent value="workqueue" className="mt-3">
+          <DepositOwnerQueue />
+        </TabsContent>
+
+        {/* Manager Tab */}
+        <TabsContent value="manager" className="mt-3">
+          <DepositManagerCommandCenter />
+        </TabsContent>
+
+        {/* Reissue Tab */}
+        {activeTab === "reissue" && (
+          <div className="mt-3">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <RotateCcw className="h-4 w-4 text-orange-400" />
+                  Reissue Requested ({reissueRequested.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[calc(100vh-400px)]">
+                  {reissueRequested.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground">No reissue requests</div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Check #</TableHead>
+                          <TableHead>Carrier</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {reissueRequested.map((check) => (
+                          <TableRow key={check.id} className="cursor-pointer" onClick={() => setSelectedCheck(check.id)}>
+                            <TableCell className="font-mono text-sm">#{check.check_number || "—"}</TableCell>
+                            <TableCell className="text-sm">{check.carrier_name || "—"}</TableCell>
+                            <TableCell className="text-right tabular-nums">{check.amount != null ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}</TableCell>
+                            <TableCell><Badge className={`text-[10px] ${statusColors[check.status] ?? ""}`}>{check.status.replace(/_/g, " ")}</Badge></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Branch Deposit Tab */}
+        {activeTab === "branch" && (
+          <div className="mt-3">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-blue-400" />
+                  Branch Deposit Required ({branchDeposit.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[calc(100vh-400px)]">
+                  {branchDeposit.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground">No branch deposits pending</div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Check #</TableHead>
+                          <TableHead>Carrier</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {branchDeposit.map((check) => (
+                          <TableRow key={check.id} className="cursor-pointer" onClick={() => setSelectedCheck(check.id)}>
+                            <TableCell className="font-mono text-sm">#{check.check_number || "—"}</TableCell>
+                            <TableCell className="text-sm">{check.carrier_name || "—"}</TableCell>
+                            <TableCell className="text-right tabular-nums">{check.amount != null ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}</TableCell>
+                            <TableCell><Badge className={`text-[10px] ${statusColors[check.status] ?? ""}`}>{check.status.replace(/_/g, " ")}</Badge></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* Review Tab — only renders when active */}
         {activeTab === "review" && (
           <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_28rem]">
