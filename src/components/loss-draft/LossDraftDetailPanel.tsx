@@ -41,6 +41,9 @@ interface LossDraftRecord {
   last_contact_at: string | null;
   check_sent_date: string | null;
   check_received_date: string | null;
+  check_received_back_date: string | null;
+  monitoring_type: string;
+  tracking_number_sent: string | null;
   notes: string | null;
 }
 
