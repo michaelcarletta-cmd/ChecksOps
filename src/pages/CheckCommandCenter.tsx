@@ -1040,6 +1040,102 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Admin Status Override — manually move a check between stages       */
+/* ------------------------------------------------------------------ */
+
+const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "uploaded", label: "Uploaded" },
+  { value: "processing", label: "Processing" },
+  { value: "ocr_complete", label: "OCR Complete" },
+  { value: "needs_review", label: "Needs Review" },
+  { value: "manual_review_required", label: "Manual Review Required" },
+  { value: "endorsements_in_progress", label: "Endorsements In Progress" },
+  { value: "endorsements_complete", label: "Endorsements Complete" },
+  { value: "approved_for_deposit", label: "Approved for Deposit" },
+  { value: "branch_deposit_required", label: "Branch Deposit Required" },
+  { value: "loss_draft_required", label: "Loss Draft Required" },
+  { value: "reissue_requested", label: "Reissue Requested" },
+  { value: "deposited", label: "Deposited" },
+  { value: "voided", label: "Voided" },
+];
+
+function StatusOverride({
+  checkId,
+  currentStatus,
+  onSuccess,
+}: {
+  checkId: string;
+  currentStatus: string;
+  onSuccess: () => void;
+}) {
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const [editing, setEditing] = useState(false);
+  const [newStatus, setNewStatus] = useState(currentStatus);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (newStatus === currentStatus) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("check_intake_items")
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq("id", checkId);
+      if (error) throw error;
+      await supabase.from("check_audit_log").insert({
+        check_id: checkId,
+        event_type: "status_manual_override",
+        actor_id: user?.id ?? null,
+        event_description: `Status manually changed from "${currentStatus}" to "${newStatus}"`,
+        event_data: { old_status: currentStatus, new_status: newStatus },
+      });
+      toast({ title: "Status updated", description: `Moved to ${newStatus.replace(/_/g, " ")}` });
+      setEditing(false);
+      onSuccess();
+    } catch (e: any) {
+      toast({ title: "Failed to update status", description: e.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <Button variant="outline" size="sm" className="w-full text-xs h-7" onClick={() => { setNewStatus(currentStatus); setEditing(true); }}>
+        <Pencil className="h-3 w-3 mr-1" /> Override Status (Admin)
+      </Button>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-border/60 p-2 bg-muted/30">
+      <Label className="text-[10px] text-muted-foreground">Manually set check status</Label>
+      <Select value={newStatus} onValueChange={setNewStatus}>
+        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {STATUS_OPTIONS.map((s) => (
+            <SelectItem key={s.value} value={s.value} className="text-xs">{s.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <div className="flex gap-1">
+        <Button size="sm" className="flex-1 h-7 text-xs" onClick={handleSave} disabled={saving}>
+          {saving ? <Loader2Icon className="h-3 w-3 animate-spin mr-1" /> : <CheckIcon className="h-3 w-3 mr-1" />}
+          Save
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditing(false)}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Re-run OCR button                                                   */
 /* ------------------------------------------------------------------ */
 
