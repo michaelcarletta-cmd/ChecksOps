@@ -1,0 +1,1 @@
+UPDATE claim_files SET needs_reprocessing = false WHERE needs_reprocessing = true AND processed_by_darwin = true;
