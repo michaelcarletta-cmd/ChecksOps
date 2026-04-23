@@ -24,10 +24,20 @@ const PageLoader = () => (
 );
 
 export function WhiteLabelSettings() {
-  const { tenant } = useTenant();
+  const { tenant, refreshTenant } = useTenant();
   const { user, loading } = useAuth();
-  const { toast } = useToast();
-  const qc = useQueryClient();
+
+  useQuery({
+    queryKey: ["tenant-settings-refresh", tenant?.id],
+    queryFn: async () => {
+      await refreshTenant();
+      return true;
+    },
+    enabled: !!tenant?.id,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+  });
 
   if (loading) return <PageLoader />;
   if (!user) return <Navigate to={tenant?.slug ? `/wl/${tenant.slug}/login` : "/login"} replace />;
@@ -101,7 +111,6 @@ export function WhiteLabelSettings() {
 
 function ProfileSettings({ tenant }: { tenant: any }) {
   const { toast } = useToast();
-  const qc = useQueryClient();
   const [name, setName] = useState(tenant.name || "");
   const [saving, setSaving] = useState(false);
 
