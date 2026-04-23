@@ -391,9 +391,19 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Querying knowledge base, building codes & manufacturer specs…
+              {progress.total > 0
+                ? `Processing batch ${Math.min(Math.ceil(progress.done / 5) + 1, Math.ceil(progress.total / 5))} of ${Math.ceil(progress.total / 5)} (${progress.done}/${progress.total} items)…`
+                : "Querying knowledge base, building codes & manufacturer specs…"}
             </div>
-            {Array.from({ length: 4 }).map((_, i) => (
+            {progress.total > 0 && (
+              <div className="w-full bg-muted rounded-full h-1.5">
+                <div
+                  className="bg-primary h-1.5 rounded-full transition-all duration-300"
+                  style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
+                />
+              </div>
+            )}
+            {results.length === 0 && Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-10 w-full" />
             ))}
           </div>
