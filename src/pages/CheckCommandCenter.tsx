@@ -279,23 +279,23 @@ export default function CheckCommandCenter() {
               <div className="mt-6 space-y-6">
                 <HelpStep
                   step={1}
-                  title="Receive Endorsement"
-                  description="When a check arrives with 'Branch Endorsement Required' status, it means all payees must sign before the check can be deposited. The endorsement checklist tracks each payee's signature status."
+                  title="Endorsing"
+                  description="When a check arrives, all payees must sign before it can be deposited. The endorsement checklist tracks each payee's signature status. Send requests via email or SMS."
                 />
                 <HelpStep
                   step={2}
-                  title="Move to Branch"
-                  description="Once endorsements are complete, the check moves to the Branch tab. A reviewer assigns the deposit path — either direct deposit, branch deposit, or loss draft if a mortgage company is involved."
+                  title="Review"
+                  description="Verify the OCR-extracted data — amount, check number, carrier, and payees. Approve the check to move it forward or flag issues."
                 />
                 <HelpStep
                   step={3}
-                  title="Approve for Deposit"
-                  description="Click 'Approve for Deposit' to mark the check ready. For branch deposits, use 'Move to Deposited' once the physical deposit is complete. If stuck, use 'Force Move to Deposited'."
+                  title="Ready for Deposit"
+                  description="Fully endorsed and verified checks land here. Generate a deposit packet or batch them for electronic or branch deposit."
                 />
                 <HelpStep
                   step={4}
-                  title="Check Deposited"
-                  description="Final state — the check has been deposited and is awaiting clearance. The accounting entry is auto-posted and the check appears in reconciliation reports."
+                  title="Loss Draft"
+                  description="Manage mortgage company escrow holds, track disbursement schedules, and follow up on held funds until fully released."
                 />
               </div>
               <div className="mt-8">
