@@ -10,11 +10,19 @@ import { AlertTriangle, Coins, CreditCard, History, Loader2, ShieldAlert, Zap } 
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
-const CREDIT_PACKS = [
+interface CreditPack {
+  credits: number;
+  price: number;
+  label: string;
+  description: string;
+  popular?: boolean;
+}
+
+const CREDIT_PACKS: CreditPack[] = [
   { credits: 50, price: 25, label: "Starter", description: "~50 check scans" },
   { credits: 150, price: 50, label: "Standard", description: "~150 check scans" },
   { credits: 500, price: 100, label: "Bulk", description: "~500 check scans", popular: true },
-] as const;
+];
 
 export function TenantCreditManager() {
   const { tenantId } = useTenantFilter();
