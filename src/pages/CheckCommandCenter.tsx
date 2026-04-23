@@ -603,7 +603,7 @@ export default function CheckCommandCenter() {
                           <TableHead>Payees</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Deposit</TableHead>
-                          <TableHead className="w-10"></TableHead>
+                          <TableHead className="w-20"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
