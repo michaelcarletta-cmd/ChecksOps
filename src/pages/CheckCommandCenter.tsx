@@ -722,6 +722,15 @@ export default function CheckCommandCenter() {
           </div>
         )}
       </Tabs>
+
+      {/* Share check dialog */}
+      {shareCheckId && (
+        <ShareCheckDialog
+          checkId={shareCheckId}
+          open={!!shareCheckId}
+          onOpenChange={(open) => { if (!open) setShareCheckId(null); }}
+        />
+      )}
     </div>
   );
 }
