@@ -1716,6 +1716,7 @@ function CheckDetailPanel({
               />
               <DetailRow label="OCR Status" value={check.ocr_status} />
               <RerunOcrButton checkId={checkId} onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
+              <CheckMortgageMonitoring checkId={checkId} onRefresh={onRefresh} />
               <Separator />
               {/* Check Images */}
               {(frontImageUrl || backImageUrl) && (
