@@ -120,6 +120,7 @@ export function LossDraftDetailPanel({
   onUpdate: () => void;
 }) {
   const { user } = useAuth();
+  const { isAdmin } = usePermissions();
   const { toast } = useToast();
   const qc = useQueryClient();
 
