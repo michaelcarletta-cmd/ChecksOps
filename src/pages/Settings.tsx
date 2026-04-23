@@ -623,6 +623,20 @@ export default function Settings() {
     }
   };
 
+  if (isAdminLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Settings</h1>
+          <p className="text-muted-foreground">Manage your claim workflow and dropdown options</p>
+        </div>
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
