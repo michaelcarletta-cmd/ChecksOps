@@ -12630,6 +12630,7 @@ export type Database = {
       loss_draft_tracking: {
         Row: {
           check_intake_item_id: string | null
+          check_received_back_date: string | null
           check_received_date: string | null
           check_sent_date: string | null
           claim_id: string
@@ -12650,6 +12651,7 @@ export type Database = {
           loss_draft_email: string | null
           loss_draft_fax: string | null
           loss_draft_phone: string | null
+          monitoring_type: string
           mortgage_servicer: string
           notes: string | null
           shipping_method_return: string | null
@@ -12661,6 +12663,7 @@ export type Database = {
         }
         Insert: {
           check_intake_item_id?: string | null
+          check_received_back_date?: string | null
           check_received_date?: string | null
           check_sent_date?: string | null
           claim_id: string
@@ -12681,6 +12684,7 @@ export type Database = {
           loss_draft_email?: string | null
           loss_draft_fax?: string | null
           loss_draft_phone?: string | null
+          monitoring_type?: string
           mortgage_servicer: string
           notes?: string | null
           shipping_method_return?: string | null
@@ -12692,6 +12696,7 @@ export type Database = {
         }
         Update: {
           check_intake_item_id?: string | null
+          check_received_back_date?: string | null
           check_received_date?: string | null
           check_sent_date?: string | null
           claim_id?: string
@@ -12712,6 +12717,7 @@ export type Database = {
           loss_draft_email?: string | null
           loss_draft_fax?: string | null
           loss_draft_phone?: string | null
+          monitoring_type?: string
           mortgage_servicer?: string
           notes?: string | null
           shipping_method_return?: string | null
