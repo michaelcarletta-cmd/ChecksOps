@@ -331,6 +331,8 @@ export function LossDraftDetailPanel({
       toast({ title: "Error", description: e.message, variant: "destructive" });
     }
   };
+
+  return (
     <Card className="h-[calc(100vh-480px)] flex flex-col">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
