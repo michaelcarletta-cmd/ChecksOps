@@ -195,19 +195,22 @@ export function LossDraftDetailPanel({
     if (!user?.id || !draft) return;
     setSubmitting(true);
     try {
+      const extra: Record<string, string> = {};
+      if (actionTracking) extra.tracking_number = actionTracking;
       const { error } = await supabase.rpc("loss_draft_action", {
         p_loss_draft_id: lossDraftId,
         p_action: action,
         p_actor_id: user.id,
         p_amount: actionAmount ? parseFloat(actionAmount) : null,
         p_notes: actionNotes || null,
-        p_extra: JSON.stringify({}),
+        p_extra: JSON.stringify(extra),
       });
       if (error) throw error;
       toast({ title: "Action completed", description: `${action.replace(/_/g, " ")} applied successfully.` });
       setPendingAction(null);
       setActionAmount("");
       setActionNotes("");
+      setActionTracking("");
       invalidateAll();
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
