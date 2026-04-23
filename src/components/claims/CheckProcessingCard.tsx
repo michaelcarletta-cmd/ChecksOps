@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
+import { MortgageMonitoringSection } from "./MortgageMonitoringSection";
 
 type Props = {
   claimId: string;
@@ -14,12 +15,13 @@ export function CheckProcessingCard({ claimId, checkId }: Props) {
   const [check, setCheck] = useState<any>(null);
   const [paymentDirection, setPaymentDirection] = useState<any>(null);
   const [disbursement, setDisbursement] = useState<any>(null);
+  const [draws, setDraws] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function load() {
     setLoading(true);
 
-    const [{ data: checkData }, { data: directionData }, { data: disbursementData }] =
+    const [{ data: checkData }, { data: directionData }, { data: disbursementData }, { data: drawData }] =
       await Promise.all([
         supabase
           .from("claim_checks")
@@ -40,11 +42,17 @@ export function CheckProcessingCard({ claimId, checkId }: Props) {
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle(),
+        supabase
+          .from("claim_check_mortgage_draws" as any)
+          .select("*")
+          .eq("check_id", checkId)
+          .order("draw_number", { ascending: true }),
       ]);
 
     setCheck(checkData ?? null);
     setPaymentDirection(directionData ?? null);
     setDisbursement(disbursementData ?? null);
+    setDraws((drawData as any[]) ?? []);
     setLoading(false);
   }
 
@@ -140,6 +148,15 @@ export function CheckProcessingCard({ claimId, checkId }: Props) {
             Client requested funds be sent to insured
           </Badge>
         )}
+
+        {/* Mortgage / Loss Draft section */}
+        <MortgageMonitoringSection
+          claimId={claimId}
+          checkId={checkId}
+          check={check}
+          draws={draws}
+          onRefresh={load}
+        />
       </CardContent>
     </Card>
   );
