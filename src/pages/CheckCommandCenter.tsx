@@ -42,6 +42,7 @@ import { ReconciliationDashboard } from "@/components/deposit-ops/Reconciliation
 
 
 import { DepositReports } from "@/components/deposit-ops/DepositReports";
+import { TenantPartnerManager } from "@/components/white-label/TenantPartnerManager";
 import { DepositOwnerQueue } from "@/components/deposit-ops/DepositOwnerQueue";
 import { DepositManagerCommandCenter } from "@/components/deposit-ops/DepositManagerCommandCenter";
 import { ArrowDownToLine, Scale, FileBarChart, Users as UsersIcon, Command } from "lucide-react";
@@ -437,6 +438,11 @@ export default function CheckCommandCenter() {
         {/* Manager Tab */}
         <TabsContent value="manager" className="mt-3">
           <DepositManagerCommandCenter />
+        </TabsContent>
+
+        {/* Partners Tab */}
+        <TabsContent value="partners" className="mt-3">
+          <TenantPartnerManager />
         </TabsContent>
 
         {/* Reissue Tab */}
