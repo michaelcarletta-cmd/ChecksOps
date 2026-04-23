@@ -388,7 +388,12 @@ function DailyDigestPanel() {
 /* ------------------------------------------------------------------ */
 /*  Main Manager Command Center                                        */
 /* ------------------------------------------------------------------ */
-export function DepositManagerCommandCenter() {
+interface DepositManagerCommandCenterProps {
+  searchQuery?: string;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function DepositManagerCommandCenter({ searchQuery: _searchQuery = "" }: DepositManagerCommandCenterProps = {}) {
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();

@@ -41,7 +41,11 @@ const providerLabels: Record<string, string> = {
   treasury_prime: "Treasury Prime",
 };
 
-export function ReconciliationDashboard() {
+interface ReconciliationDashboardProps {
+  searchQuery?: string;
+}
+
+export function ReconciliationDashboard({ searchQuery = "" }: ReconciliationDashboardProps = {}) {
   const { tenantId } = useTenantFilter();
 
   const { data: items = [], isLoading } = useQuery({
