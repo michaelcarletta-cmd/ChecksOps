@@ -13876,6 +13876,61 @@ export type Database = {
           },
         ]
       }
+      shared_checks: {
+        Row: {
+          access_level: string
+          check_id: string
+          created_at: string
+          id: string
+          revoked_at: string | null
+          shared_by: string
+          source_tenant_id: string
+          target_tenant_id: string
+        }
+        Insert: {
+          access_level?: string
+          check_id: string
+          created_at?: string
+          id?: string
+          revoked_at?: string | null
+          shared_by: string
+          source_tenant_id: string
+          target_tenant_id: string
+        }
+        Update: {
+          access_level?: string
+          check_id?: string
+          created_at?: string
+          id?: string
+          revoked_at?: string | null
+          shared_by?: string
+          source_tenant_id?: string
+          target_tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shared_checks_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shared_checks_source_tenant_id_fkey"
+            columns: ["source_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shared_checks_target_tenant_id_fkey"
+            columns: ["target_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       signature_document_presets: {
         Row: {
           created_at: string
@@ -17720,6 +17775,10 @@ export type Database = {
           table_name: string
         }
         Returns: string
+      }
+      user_belongs_to_tenant: {
+        Args: { _tenant_id: string; _user_id: string }
+        Returns: boolean
       }
       user_org_id: { Args: { _user_id: string }; Returns: string }
       validate_session: {

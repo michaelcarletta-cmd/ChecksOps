@@ -46,6 +46,9 @@ import { DepositOwnerQueue } from "@/components/deposit-ops/DepositOwnerQueue";
 import { DepositManagerCommandCenter } from "@/components/deposit-ops/DepositManagerCommandCenter";
 import { ArrowDownToLine, Scale, FileBarChart, Users as UsersIcon, Command } from "lucide-react";
 import { CheckCenterHelpButton } from "@/components/check-review/CheckCenterHelp";
+import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
+import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
+import { Share2 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -163,6 +166,7 @@ export default function CheckCommandCenter() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [shareCheckId, setShareCheckId] = useState<string | null>(null);
 
   // Admin: allow delete at any stage
   const canDeleteAnyCheck = true;
@@ -231,7 +235,38 @@ export default function CheckCommandCenter() {
     },
   });
 
-  
+
+  // Shared-with-me checks (cross-tenant)
+  const { data: sharedChecks = [] } = useQuery({
+    queryKey: ["shared-with-me-checks", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shared_checks")
+        .select("check_id, source_tenant_id, tenants!shared_checks_source_tenant_id_fkey(name)")
+        .eq("target_tenant_id", tenantId!)
+        .is("revoked_at", null);
+      if (error) throw error;
+      if (!data || data.length === 0) return [];
+
+      const checkIds = data.map((s: any) => s.check_id);
+      const { data: checkData, error: checkErr } = await supabase
+        .from("check_intake_items")
+        .select("*, check_payees(*)")
+        .in("id", checkIds)
+        .order("created_at", { ascending: false });
+      if (checkErr) throw checkErr;
+
+      // Tag each with source tenant name
+      const shareMap = new Map(data.map((s: any) => [s.check_id, s.tenants?.name ?? "Partner"]));
+      return (checkData ?? []).map((c: any) => ({
+        ...c,
+        _shared: true,
+        _sourceTenantName: shareMap.get(c.id) ?? "Partner",
+      })) as (CheckItem & { _shared: true; _sourceTenantName: string })[];
+    },
+    enabled: !!tenantId,
+  });
+
   const awaitingEndorsement = checks.filter(
     (c) =>
       c.deposit_recommendation === "endorsements_pending" ||
@@ -252,7 +287,8 @@ export default function CheckCommandCenter() {
   const branchDeposit = checks.filter((c) => c.status === "branch_deposit_required");
 
   const filteredChecks =
-    activeTab === "endorsements" ? awaitingEndorsement
+    activeTab === "shared" ? sharedChecks
+    : activeTab === "endorsements" ? awaitingEndorsement
     : activeTab === "ready" ? readyForDeposit
     : activeTab === "review" ? needsReview
     : checks;
@@ -327,12 +363,13 @@ export default function CheckCommandCenter() {
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
         {/* Gradient nav cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           {[
             { key: "endorsements", label: "Endorsing", count: awaitingEndorsement.length, icon: Send, gradient: "from-amber-500/20 to-orange-500/10", accent: "text-amber-400", ring: "ring-amber-500/30" },
             { key: "review", label: "Review", count: needsReview.length, icon: ClipboardCheck, gradient: "from-blue-500/20 to-cyan-500/10", accent: "text-blue-400", ring: "ring-blue-500/30" },
             { key: "ready", label: "Ready for Deposit", count: readyForDeposit.length, icon: CheckCircle2, gradient: "from-emerald-500/20 to-green-500/10", accent: "text-emerald-400", ring: "ring-emerald-500/30" },
             { key: "lossdraft", label: "Loss Draft", count: 0, icon: Landmark, gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400", ring: "ring-purple-500/30" },
+            { key: "shared", label: "Shared with Me", count: sharedChecks.length, icon: Share2, gradient: "from-sky-500/20 to-blue-500/10", accent: "text-sky-400", ring: "ring-sky-500/30" },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.key;
@@ -566,7 +603,7 @@ export default function CheckCommandCenter() {
                           <TableHead>Payees</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Deposit</TableHead>
-                          <TableHead className="w-10"></TableHead>
+                          <TableHead className="w-20"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -577,6 +614,8 @@ export default function CheckCommandCenter() {
                           const RecIcon = rec?.icon ?? null;
                           const canDelete = canDeleteAnyCheck;
                           const isSelected = selectedCheck === check.id;
+                          const isShared = (check as any)._shared;
+                          const sourceTenantName = (check as any)._sourceTenantName;
                           return (
                             <TableRow
                               key={check.id}
@@ -584,7 +623,10 @@ export default function CheckCommandCenter() {
                               onClick={() => setSelectedCheck(isSelected ? null : check.id)}
                             >
                               <TableCell className="font-mono text-sm">
-                                #{check.check_number || "—"}
+                                <div className="flex items-center gap-1.5">
+                                  #{check.check_number || "—"}
+                                  {isShared && <SharedChecksBadge sourceTenantName={sourceTenantName} />}
+                                </div>
                               </TableCell>
                               <TableCell className="text-sm max-w-[120px] truncate">
                                 {check.carrier_name || "Pending OCR"}
@@ -613,22 +655,38 @@ export default function CheckCommandCenter() {
                                 )}
                               </TableCell>
                               <TableCell>
-                                {canDelete && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (confirm("Delete this check? This cannot be undone.")) {
-                                        deleteCheckMutation.mutate(check.id);
-                                      }
-                                    }}
-                                    disabled={deleteCheckMutation.isPending}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                )}
+                                <div className="flex items-center gap-1">
+                                  {!isShared && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShareCheckId(check.id);
+                                      }}
+                                      title="Share with partner"
+                                    >
+                                      <Share2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
+                                  {canDelete && !isShared && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (confirm("Delete this check? This cannot be undone.")) {
+                                          deleteCheckMutation.mutate(check.id);
+                                        }
+                                      }}
+                                      disabled={deleteCheckMutation.isPending}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
+                                </div>
                               </TableCell>
                             </TableRow>
                           );
@@ -664,6 +722,15 @@ export default function CheckCommandCenter() {
           </div>
         )}
       </Tabs>
+
+      {/* Share check dialog */}
+      {shareCheckId && (
+        <ShareCheckDialog
+          checkId={shareCheckId}
+          open={!!shareCheckId}
+          onOpenChange={(open) => { if (!open) setShareCheckId(null); }}
+        />
+      )}
     </div>
   );
 }
