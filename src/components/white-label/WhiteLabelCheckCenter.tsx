@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { LogOut, Settings, Users } from "lucide-react";
 import { TenantUserManager } from "./TenantUserManager";
+import { TenantPartnerManager } from "./TenantPartnerManager";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 const CheckCommandCenter = lazy(() => import("@/pages/CheckCommandCenter"));
