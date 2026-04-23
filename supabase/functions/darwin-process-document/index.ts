@@ -251,6 +251,8 @@ Deno.serve(async (req) => {
       file = fileData;
       targetClaimId = file.claim_id;
 
+      const isIntelligenceOnlyRetry = forceIntelligence === true && !shouldForceReextract;
+
       // Skip only when we're not explicitly forcing re-extraction or intelligence backfill.
       if (file.processed_by_darwin && !shouldBypassProcessedGuard) {
         return new Response(
@@ -267,6 +269,39 @@ Deno.serve(async (req) => {
               attempted: false,
               written: false,
               skipped_reason: 'already_processed',
+              error: null,
+            },
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Intelligence-only backfills should never re-run full AI processing for files that
+      // were already processed and explicitly blocked from analysis. Clear the retry flag so
+      // they don't get selected over and over in future batches.
+      if (isIntelligenceOnlyRetry && file.processed_by_darwin && file.ready_for_analysis !== true) {
+        if (file.needs_reprocessing) {
+          await supabase
+            .from('claim_files')
+            .update({ needs_reprocessing: false })
+            .eq('id', fileId);
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: 'File is blocked from intelligence backfill',
+            classification: file.document_classification,
+            document_type: file.document_type || null,
+            document_subtype: file.document_subtype || null,
+            ready_for_analysis: false,
+            ready_reason: 'previously_blocked',
+            text_quality_status: file.text_quality_status || null,
+            processing_error: file.processing_error || null,
+            intelligence: {
+              attempted: false,
+              written: false,
+              skipped_reason: 'not_ready_for_analysis:previously_blocked',
               error: null,
             },
           }),

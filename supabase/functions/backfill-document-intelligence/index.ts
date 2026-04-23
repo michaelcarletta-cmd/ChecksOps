@@ -274,18 +274,20 @@ async function fetchCandidates(
     (existingIntel || []).map((r: any) => r.claim_file_id)
   );
 
-  // Filter to candidates that actually need processing
+  // Filter to candidates that actually need processing.
+  // Important: blocked files marked needs_reprocessing must NOT be treated as
+  // perpetual candidates for intelligence backfill, or they will churn forever.
   const candidates = files.filter((f: any) => {
     if (force) return true;
     if (existingIntelSet.has(f.id)) return false; // Already has intelligence
-    if (f.needs_reprocessing) return true;
-    // Skip files with no text at all
+
     const textLen = Math.max(
       (f.extracted_text || "").length,
       (f.clean_text || "").length
     );
+
     if (textLen < 50) return false;
-    // Skip unusable quality unless reprocessing
+    if (f.ready_for_analysis !== true) return false;
     if (f.text_quality_status === "unusable") return false;
     return true;
   });
@@ -311,10 +313,12 @@ async function countCandidates(
   cursor: string | null,
   force: boolean
 ): Promise<number> {
-  // Approximate count of remaining candidates
+  // Approximate count of remaining candidates.
+  // Only count files that are actually eligible for intelligence backfill.
   let query = supabase
     .from("claim_files")
     .select("id", { count: "exact", head: true })
+    .eq("ready_for_analysis", true)
     .or(
       SUPPORTED_CLASSIFICATIONS.map((c) => `document_classification.eq.${c}`).join(",") +
         "," +
@@ -326,8 +330,6 @@ async function countCandidates(
   }
 
   const { count } = await query;
-  // This over-counts because it doesn't subtract files with existing intel,
-  // but it's a good approximation for UI progress
   return count ?? 0;
 }
 
@@ -358,6 +360,11 @@ async function processFile(
     (file.clean_text || "").length
   );
   if (textLen < 50) {
+    await supabase
+      .from("claim_files")
+      .update({ needs_reprocessing: false })
+      .eq("id", file.id);
+
     return {
       ...baseResult,
       skipped: true,
@@ -365,8 +372,27 @@ async function processFile(
     };
   }
 
+  // Skip blocked / not-ready files for intelligence backfill.
+  if (!force && file.ready_for_analysis !== true) {
+    await supabase
+      .from("claim_files")
+      .update({ needs_reprocessing: false })
+      .eq("id", file.id);
+
+    return {
+      ...baseResult,
+      skipped: true,
+      reason: "not_ready_for_analysis",
+    };
+  }
+
   // Skip unusable quality files (unless force)
   if (!force && file.text_quality_status === "unusable") {
+    await supabase
+      .from("claim_files")
+      .update({ needs_reprocessing: false })
+      .eq("id", file.id);
+
     return {
       ...baseResult,
       skipped: true,
@@ -426,6 +452,13 @@ async function processFile(
         reason === "Extracted text detected as garbage/binary data" ||
         skippedReason?.startsWith("not_ready_for_analysis:") === true;
 
+      if (shouldSkip) {
+        await supabase
+          .from("claim_files")
+          .update({ needs_reprocessing: false })
+          .eq("id", file.id);
+      }
+
       return {
         ...baseResult,
         skipped: shouldSkip,
@@ -451,6 +484,13 @@ async function processFile(
 
     const countedAsSuccess = !!intelRow || !!queueRow;
     const shouldSkip = !countedAsSuccess && skippedReason?.startsWith("not_ready_for_analysis:") === true;
+
+    if (countedAsSuccess || shouldSkip) {
+      await supabase
+        .from("claim_files")
+        .update({ needs_reprocessing: false })
+        .eq("id", file.id);
+    }
 
     return {
       ...baseResult,
