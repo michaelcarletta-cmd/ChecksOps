@@ -22,19 +22,13 @@ export function CheckDashboardCards() {
   const { data: counts } = useQuery({
     queryKey: ["check-dashboard-counts", tenantId],
     queryFn: async () => {
-      if (tenantId) {
-        // Always use tenant-scoped RPC — each company only sees their own counts
-        const { data, error } = await supabase.rpc("get_check_dashboard_counts_for_tenant", {
-          _tenant_id: tenantId,
-        });
-        if (error) throw error;
-        return data as unknown as DashboardCounts;
-      }
-      // Fallback if no tenant context
-      const { data, error } = await supabase.rpc("get_check_dashboard_counts");
+      const { data, error } = await supabase.rpc("get_check_dashboard_counts_for_tenant", {
+        _tenant_id: tenantId!,
+      });
       if (error) throw error;
       return data as unknown as DashboardCounts;
     },
+    enabled: !!tenantId,
     refetchInterval: 30000,
   });
 
