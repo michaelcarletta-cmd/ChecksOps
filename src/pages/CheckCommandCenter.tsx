@@ -357,10 +357,130 @@ export default function CheckCommandCenter() {
           })}
         </div>
 
+        {/* Operations tabs */}
+        <TabsList className="mt-3 w-full flex-wrap h-auto gap-1 bg-muted/50">
+          <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
+          <TabsTrigger value="reconciliation" className="text-xs gap-1"><Scale className="h-3 w-3" />Reconciliation</TabsTrigger>
+          <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
+          <TabsTrigger value="workqueue" className="text-xs gap-1"><UsersIcon className="h-3 w-3" />Work Queue</TabsTrigger>
+          <TabsTrigger value="manager" className="text-xs gap-1"><Command className="h-3 w-3" />Manager</TabsTrigger>
+          <TabsTrigger value="reissue" className="text-xs gap-1"><RotateCcw className="h-3 w-3" />Reissue ({reissueRequested.length})</TabsTrigger>
+          <TabsTrigger value="branch" className="text-xs gap-1"><Building2 className="h-3 w-3" />Branch ({branchDeposit.length})</TabsTrigger>
+        </TabsList>
+
         {/* Loss Draft Tab */}
         {activeTab === "lossdraft" && (
           <div className="mt-3">
             <LossDraftDashboard />
+          </div>
+        )}
+
+        {/* Deposit Ops Tab */}
+        <TabsContent value="deposit_ops" className="mt-3">
+          <DepositOperationsConsole />
+        </TabsContent>
+
+        {/* Reconciliation Tab */}
+        <TabsContent value="reconciliation" className="mt-3">
+          <ReconciliationDashboard />
+        </TabsContent>
+
+        {/* Reports Tab */}
+        <TabsContent value="reports" className="mt-3">
+          <DepositReports />
+        </TabsContent>
+
+        {/* Work Queue Tab */}
+        <TabsContent value="workqueue" className="mt-3">
+          <DepositOwnerQueue />
+        </TabsContent>
+
+        {/* Manager Tab */}
+        <TabsContent value="manager" className="mt-3">
+          <DepositManagerCommandCenter />
+        </TabsContent>
+
+        {/* Reissue Tab */}
+        {activeTab === "reissue" && (
+          <div className="mt-3">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <RotateCcw className="h-4 w-4 text-orange-400" />
+                  Reissue Requested ({reissueRequested.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[calc(100vh-400px)]">
+                  {reissueRequested.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground">No reissue requests</div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Check #</TableHead>
+                          <TableHead>Carrier</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {reissueRequested.map((check) => (
+                          <TableRow key={check.id} className="cursor-pointer" onClick={() => setSelectedCheck(check.id)}>
+                            <TableCell className="font-mono text-sm">#{check.check_number || "—"}</TableCell>
+                            <TableCell className="text-sm">{check.carrier_name || "—"}</TableCell>
+                            <TableCell className="text-right tabular-nums">{check.amount != null ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}</TableCell>
+                            <TableCell><Badge className={`text-[10px] ${statusColors[check.status] ?? ""}`}>{check.status.replace(/_/g, " ")}</Badge></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Branch Deposit Tab */}
+        {activeTab === "branch" && (
+          <div className="mt-3">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-blue-400" />
+                  Branch Deposit Required ({branchDeposit.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[calc(100vh-400px)]">
+                  {branchDeposit.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground">No branch deposits pending</div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Check #</TableHead>
+                          <TableHead>Carrier</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {branchDeposit.map((check) => (
+                          <TableRow key={check.id} className="cursor-pointer" onClick={() => setSelectedCheck(check.id)}>
+                            <TableCell className="font-mono text-sm">#{check.check_number || "—"}</TableCell>
+                            <TableCell className="text-sm">{check.carrier_name || "—"}</TableCell>
+                            <TableCell className="text-right tabular-nums">{check.amount != null ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}</TableCell>
+                            <TableCell><Badge className={`text-[10px] ${statusColors[check.status] ?? ""}`}>{check.status.replace(/_/g, " ")}</Badge></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </ScrollArea>
+              </CardContent>
+            </Card>
           </div>
         )}
 
@@ -421,7 +541,7 @@ export default function CheckCommandCenter() {
         )}
 
         {/* All other tabs — only render the active one */}
-        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "deposit_ops" && activeTab !== "reconciliation" && activeTab !== "exceptions" && activeTab !== "aging" && activeTab !== "reports" && activeTab !== "kpis" && activeTab !== "workqueue" && activeTab !== "manager" && (
+        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "deposit_ops" && activeTab !== "reconciliation" && activeTab !== "reports" && activeTab !== "workqueue" && activeTab !== "manager" && activeTab !== "reissue" && activeTab !== "branch" && (
           <div className="mt-3 flex gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
             {/* Check list — grows when no check selected */}
             <Card
