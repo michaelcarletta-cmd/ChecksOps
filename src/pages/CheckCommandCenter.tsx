@@ -169,6 +169,7 @@ export default function CheckCommandCenter() {
   const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [shareCheckId, setShareCheckId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Admin: allow delete at any stage
   const canDeleteAnyCheck = true;
@@ -293,31 +294,81 @@ export default function CheckCommandCenter() {
     enabled: !!tenantId,
   });
 
+  // Fetch claim numbers + policyholder names for any linked claims so search works on them
+  const linkedClaimIds = useMemo(() => {
+    const ids = new Set<string>();
+    checks.forEach((c) => { if (c.claim_id) ids.add(c.claim_id); });
+    sharedChecks.forEach((c) => { if (c.claim_id) ids.add(c.claim_id); });
+    return Array.from(ids);
+  }, [checks, sharedChecks]);
+
+  const { data: linkedClaims = [] } = useQuery({
+    queryKey: ["check-linked-claims", linkedClaimIds],
+    queryFn: async () => {
+      if (linkedClaimIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("claims")
+        .select("id, claim_number, policyholder_name")
+        .in("id", linkedClaimIds);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: linkedClaimIds.length > 0,
+    staleTime: 60_000,
+  });
+
+  const claimLookup = useMemo(() => {
+    const map = new Map<string, { claim_number: string | null; policyholder_name: string | null }>();
+    linkedClaims.forEach((c: any) => map.set(c.id, { claim_number: c.claim_number, policyholder_name: c.policyholder_name }));
+    return map;
+  }, [linkedClaims]);
+
+  const matchesSearch = useCallback((c: CheckItem) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    const linked = c.claim_id ? claimLookup.get(c.claim_id) : null;
+    const haystacks: (string | null | undefined)[] = [
+      c.check_number,
+      c.carrier_name,
+      c.payee_line,
+      c.detected_claim_number,
+      linked?.claim_number,
+      linked?.policyholder_name,
+      ...(c.check_payees ?? []).map((p) => p.payee_name),
+    ];
+    return haystacks.some((v) => v && v.toString().toLowerCase().includes(q));
+  }, [searchQuery, claimLookup]);
+
   const awaitingEndorsement = checks.filter(
     (c) =>
-      c.deposit_recommendation === "endorsements_pending" ||
-      c.status === "endorsements_in_progress",
+      (c.deposit_recommendation === "endorsements_pending" ||
+        c.status === "endorsements_in_progress") && matchesSearch(c),
   );
   const readyForDeposit = checks.filter(
-    (c) => c.status === "approved_for_deposit" || (c.deposit_recommendation === "ready_for_deposit" && c.status !== "deposited"),
+    (c) =>
+      (c.status === "approved_for_deposit" ||
+        (c.deposit_recommendation === "ready_for_deposit" && c.status !== "deposited")) &&
+      matchesSearch(c),
   );
   const needsReview = checks.filter(
     (c) =>
-      c.status === "needs_review" ||
-      c.status === "manual_review_required" ||
-      c.status === "endorsements_complete" ||
-      c.deposit_recommendation === "branch_deposit_recommended" ||
-      c.ocr_status === "failed",
+      (c.status === "needs_review" ||
+        c.status === "manual_review_required" ||
+        c.status === "endorsements_complete" ||
+        c.deposit_recommendation === "branch_deposit_recommended" ||
+        c.ocr_status === "failed") && matchesSearch(c),
   );
-  const reissueRequested = checks.filter((c) => c.status === "reissue_requested");
-  const branchDeposit = checks.filter((c) => c.status === "branch_deposit_required");
+  const reissueRequested = checks.filter((c) => c.status === "reissue_requested" && matchesSearch(c));
+  const branchDeposit = checks.filter((c) => c.status === "branch_deposit_required" && matchesSearch(c));
+
+  const filteredSharedChecks = sharedChecks.filter((c) => matchesSearch(c as CheckItem));
 
   const filteredChecks =
-    activeTab === "shared" ? sharedChecks
+    activeTab === "shared" ? filteredSharedChecks
     : activeTab === "endorsements" ? awaitingEndorsement
     : activeTab === "ready" ? readyForDeposit
     : activeTab === "review" ? needsReview
-    : checks;
+    : checks.filter(matchesSearch);
 
   return (
     <div className="space-y-4">
@@ -386,6 +437,27 @@ export default function CheckCommandCenter() {
         </div>
       </div>
 
+      {/* Search bar — filter checks by name, claim #, check #, or carrier */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+        <Input
+          placeholder="Search by policyholder name, claim #, check #, payee, or carrier..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9 h-10"
+        />
+        {searchQuery && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+            onClick={() => setSearchQuery("")}
+            title="Clear search"
+          >
+            <XIcon className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
         {/* Gradient nav cards */}
@@ -963,6 +1035,102 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
         {uploading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
         {uploading ? "Processing..." : "Upload & Analyze"}
       </Button>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Admin Status Override — manually move a check between stages       */
+/* ------------------------------------------------------------------ */
+
+const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "uploaded", label: "Uploaded" },
+  { value: "processing", label: "Processing" },
+  { value: "ocr_complete", label: "OCR Complete" },
+  { value: "needs_review", label: "Needs Review" },
+  { value: "manual_review_required", label: "Manual Review Required" },
+  { value: "endorsements_in_progress", label: "Endorsements In Progress" },
+  { value: "endorsements_complete", label: "Endorsements Complete" },
+  { value: "approved_for_deposit", label: "Approved for Deposit" },
+  { value: "branch_deposit_required", label: "Branch Deposit Required" },
+  { value: "loss_draft_required", label: "Loss Draft Required" },
+  { value: "reissue_requested", label: "Reissue Requested" },
+  { value: "deposited", label: "Deposited" },
+  { value: "voided", label: "Voided" },
+];
+
+function StatusOverride({
+  checkId,
+  currentStatus,
+  onSuccess,
+}: {
+  checkId: string;
+  currentStatus: string;
+  onSuccess: () => void;
+}) {
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const [editing, setEditing] = useState(false);
+  const [newStatus, setNewStatus] = useState(currentStatus);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (newStatus === currentStatus) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("check_intake_items")
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq("id", checkId);
+      if (error) throw error;
+      await supabase.from("check_audit_log").insert({
+        check_id: checkId,
+        event_type: "status_manual_override",
+        actor_id: user?.id ?? null,
+        event_description: `Status manually changed from "${currentStatus}" to "${newStatus}"`,
+        event_data: { old_status: currentStatus, new_status: newStatus },
+      });
+      toast({ title: "Status updated", description: `Moved to ${newStatus.replace(/_/g, " ")}` });
+      setEditing(false);
+      onSuccess();
+    } catch (e: any) {
+      toast({ title: "Failed to update status", description: e.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <Button variant="outline" size="sm" className="w-full text-xs h-7" onClick={() => { setNewStatus(currentStatus); setEditing(true); }}>
+        <Pencil className="h-3 w-3 mr-1" /> Override Status (Admin)
+      </Button>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-border/60 p-2 bg-muted/30">
+      <Label className="text-[10px] text-muted-foreground">Manually set check status</Label>
+      <Select value={newStatus} onValueChange={setNewStatus}>
+        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {STATUS_OPTIONS.map((s) => (
+            <SelectItem key={s.value} value={s.value} className="text-xs">{s.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <div className="flex gap-1">
+        <Button size="sm" className="flex-1 h-7 text-xs" onClick={handleSave} disabled={saving}>
+          {saving ? <Loader2Icon className="h-3 w-3 animate-spin mr-1" /> : <CheckIcon className="h-3 w-3 mr-1" />}
+          Save
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditing(false)}>
+          Cancel
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1717,6 +1885,11 @@ function CheckDetailPanel({
               />
               <DetailRow label="OCR Status" value={check.ocr_status} />
               <RerunOcrButton checkId={checkId} onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
+              <StatusOverride
+                checkId={checkId}
+                currentStatus={check.status}
+                onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); qc.invalidateQueries({ queryKey: ["check-intake-items"] }); onRefresh(); }}
+              />
               
               <Separator />
               {/* Check Images */}
