@@ -252,7 +252,7 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
     setMetadata(null);
     abortRef.current = false;
 
-    const BATCH_SIZE = 5;
+    const BATCH_SIZE = 3;
     const batches: typeof lineItems[] = [];
     for (let i = 0; i < lineItems.length; i += BATCH_SIZE) {
       batches.push(lineItems.slice(i, i + BATCH_SIZE));

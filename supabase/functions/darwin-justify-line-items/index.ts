@@ -122,7 +122,7 @@ async function queryManufacturerData(
     // Track per-item seen keys to prevent cross-contamination
     const itemSeen = new Set<string>();
 
-    for (const term of searchTerms.slice(0, 3)) {
+  for (const term of searchTerms.slice(0, 2)) {
       const words = term.split(/[\s\/&\-]+/).filter((w) => w.length > 2);
       if (!words.length) continue;
       const tsQuery = words.join(" & ");
@@ -132,7 +132,7 @@ async function queryManufacturerData(
           .from("ai_knowledge_chunks")
           .select("content, document_id")
           .textSearch("content", tsQuery, { type: "plain" })
-          .limit(5);
+          .limit(3);
 
         if (!chunks?.length) continue;
 
@@ -294,7 +294,7 @@ async function queryKnowledgeBase(
   const results: any[] = [];
   const seen = new Set<string>();
 
-  for (const term of searchTerms.slice(0, 5)) {
+  for (const term of searchTerms.slice(0, 3)) {
     const words = term.split(/[\s\/&\-]+/).filter((w) => w.length > 2);
     if (!words.length) continue;
 
@@ -339,10 +339,9 @@ async function queryKnowledgeBase(
 // ── AI Call ──────────────────────────────────────────────────────
 
 async function callAI(systemPrompt: string, userPrompt: string, itemCount: number): Promise<string> {
-  // Allocate ~700 tokens per justification item, with a generous floor and ceiling.
-  // Bumps to the strong model when many items are requested so we don't truncate.
-  const dynamicMax = Math.min(16000, Math.max(4000, itemCount * 700));
-  const forceStrong = itemCount > 4 || (systemPrompt.length + userPrompt.length) > 6000;
+  // Allocate ~800 tokens per justification item, with a generous floor and ceiling.
+  const dynamicMax = Math.min(12000, Math.max(4000, itemCount * 800));
+  const forceStrong = itemCount > 3 || (systemPrompt.length + userPrompt.length) > 6000;
 
   const result = await generate({
     task: 'extraction',
