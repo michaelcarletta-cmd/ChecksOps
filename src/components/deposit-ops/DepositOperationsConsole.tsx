@@ -801,18 +801,22 @@ function DepositItemDetail({
 /* ------------------------------------------------------------------ */
 
 export function BranchDepositManifest() {
+  const { tenantId } = useTenantFilter();
+
   const { data: branchItems = [] } = useQuery({
-    queryKey: ["branch-deposit-items"],
+    queryKey: ["branch-deposit-items", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deposit_items")
-        .select("*")
+        .select("*, check_intake_items!inner(tenant_id)")
+        .eq("check_intake_items.tenant_id", tenantId!)
         .in("provider", ["manual_branch", "internal_ready"])
         .in("status", ["pending_assignment", "provider_assigned"])
         .order("created_at", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as DepositItem[];
+      return ((data ?? []) as Array<DepositItem & { check_intake_items?: { tenant_id: string | null } | null }>).map(({ check_intake_items, ...item }) => item);
     },
+    enabled: !!tenantId,
   });
 
   const total = branchItems.reduce((sum, i) => sum + (i.amount ?? 0), 0);
