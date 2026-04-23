@@ -124,6 +124,7 @@ export function LossDraftDetailPanel({
 
   const [actionAmount, setActionAmount] = useState("");
   const [actionNotes, setActionNotes] = useState("");
+  const [actionTracking, setActionTracking] = useState("");
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [uploadingDocId, setUploadingDocId] = useState<string | null>(null);
