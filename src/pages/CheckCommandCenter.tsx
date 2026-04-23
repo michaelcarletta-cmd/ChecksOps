@@ -322,12 +322,12 @@ export default function CheckCommandCenter() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Check Command Center</h1>
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight">Check Command Center</h1>
           <p className="text-sm text-muted-foreground">
-            Insurance check intake, review & deposit readiness
+            {isWhiteLabel ? "Manage checks, endorsements & deposits" : "Insurance check intake, review & deposit readiness"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 md:gap-2">
           <Sheet open={helpOpen} onOpenChange={setHelpOpen}>
             <SheetTrigger asChild>
               <Button variant="outline" size="icon" className="h-9 w-9">
@@ -388,7 +388,7 @@ export default function CheckCommandCenter() {
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
         {/* Gradient nav cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-3">
           {[
             { key: "endorsements", label: "Endorsing", count: awaitingEndorsement.length, icon: Send, gradient: "from-amber-500/20 to-orange-500/10", accent: "text-amber-400", ring: "ring-amber-500/30" },
             { key: "review", label: "Review", count: needsReview.length, icon: ClipboardCheck, gradient: "from-blue-500/20 to-cyan-500/10", accent: "text-blue-400", ring: "ring-blue-500/30" },
