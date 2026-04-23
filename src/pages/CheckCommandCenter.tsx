@@ -614,6 +614,8 @@ export default function CheckCommandCenter() {
                           const RecIcon = rec?.icon ?? null;
                           const canDelete = canDeleteAnyCheck;
                           const isSelected = selectedCheck === check.id;
+                          const isShared = (check as any)._shared;
+                          const sourceTenantName = (check as any)._sourceTenantName;
                           return (
                             <TableRow
                               key={check.id}
@@ -621,7 +623,10 @@ export default function CheckCommandCenter() {
                               onClick={() => setSelectedCheck(isSelected ? null : check.id)}
                             >
                               <TableCell className="font-mono text-sm">
-                                #{check.check_number || "—"}
+                                <div className="flex items-center gap-1.5">
+                                  #{check.check_number || "—"}
+                                  {isShared && <SharedChecksBadge sourceTenantName={sourceTenantName} />}
+                                </div>
                               </TableCell>
                               <TableCell className="text-sm max-w-[120px] truncate">
                                 {check.carrier_name || "Pending OCR"}
@@ -650,22 +655,38 @@ export default function CheckCommandCenter() {
                                 )}
                               </TableCell>
                               <TableCell>
-                                {canDelete && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (confirm("Delete this check? This cannot be undone.")) {
-                                        deleteCheckMutation.mutate(check.id);
-                                      }
-                                    }}
-                                    disabled={deleteCheckMutation.isPending}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                )}
+                                <div className="flex items-center gap-1">
+                                  {!isShared && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShareCheckId(check.id);
+                                      }}
+                                      title="Share with partner"
+                                    >
+                                      <Share2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
+                                  {canDelete && !isShared && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (confirm("Delete this check? This cannot be undone.")) {
+                                          deleteCheckMutation.mutate(check.id);
+                                        }
+                                      }}
+                                      disabled={deleteCheckMutation.isPending}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
+                                </div>
                               </TableCell>
                             </TableRow>
                           );
