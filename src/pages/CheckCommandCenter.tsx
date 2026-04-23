@@ -254,8 +254,6 @@ export default function CheckCommandCenter() {
     activeTab === "endorsements" ? awaitingEndorsement
     : activeTab === "ready" ? readyForDeposit
     : activeTab === "review" ? needsReview
-    : activeTab === "reissue" ? reissueRequested
-    : activeTab === "branch" ? branchDeposit
     : checks;
 
   return (
