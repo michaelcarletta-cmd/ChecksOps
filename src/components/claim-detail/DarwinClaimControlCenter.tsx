@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, lazy, Suspense } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClaimOverview } from "@/components/claim-detail/ClaimOverview";
 import { ClaimCashFlowCard } from "@/components/loss-draft/ClaimCashFlowCard";
+import { CheckStatusWorkflow } from "@/components/check-review/CheckStatusWorkflow";
 import { ClaimAssigned } from "@/components/claim-detail/ClaimAssigned";
 import { ClaimActivity } from "@/components/claim-detail/ClaimActivity";
 import { ClaimTasks } from "@/components/claim-detail/ClaimTasks";
