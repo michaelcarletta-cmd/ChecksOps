@@ -337,6 +337,31 @@ export function LossDraftDetailPanel({
     }
   };
 
+  const adminResetStatus = async () => {
+    if (!user?.id || !adminTargetStatus) return;
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.rpc("loss_draft_action", {
+        p_loss_draft_id: lossDraftId,
+        p_action: "admin_reset_status",
+        p_actor_id: user.id,
+        p_amount: null,
+        p_notes: adminResetNotes || `Admin reset to ${adminTargetStatus}`,
+        p_extra: JSON.stringify({ target_status: adminTargetStatus }),
+      });
+      if (error) throw error;
+      toast({ title: "Status reset", description: `Status changed to ${adminTargetStatus.replace(/_/g, " ")}` });
+      setShowAdminEdit(false);
+      setAdminTargetStatus("");
+      setAdminResetNotes("");
+      invalidateAll();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <Card className="h-[calc(100vh-480px)] flex flex-col">
       <CardHeader className="pb-2">
