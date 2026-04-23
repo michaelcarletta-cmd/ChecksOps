@@ -15162,6 +15162,100 @@ export type Database = {
           },
         ]
       }
+      tenant_credit_balances: {
+        Row: {
+          balance: number
+          created_at: string
+          has_payment_method: boolean
+          id: string
+          lifetime_purchased: number
+          lifetime_used: number
+          payment_method_last4: string | null
+          payment_method_type: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          balance?: number
+          created_at?: string
+          has_payment_method?: boolean
+          id?: string
+          lifetime_purchased?: number
+          lifetime_used?: number
+          payment_method_last4?: string | null
+          payment_method_type?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          balance?: number
+          created_at?: string
+          has_payment_method?: boolean
+          id?: string
+          lifetime_purchased?: number
+          lifetime_used?: number
+          payment_method_last4?: string | null
+          payment_method_type?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_credit_balances_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_credit_transactions: {
+        Row: {
+          amount: number
+          balance_after: number
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          reference_id: string | null
+          reference_type: string | null
+          tenant_id: string
+          transaction_type: string
+        }
+        Insert: {
+          amount: number
+          balance_after: number
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          reference_id?: string | null
+          reference_type?: string | null
+          tenant_id: string
+          transaction_type: string
+        }
+        Update: {
+          amount?: number
+          balance_after?: number
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          reference_id?: string | null
+          reference_type?: string | null
+          tenant_id?: string
+          transaction_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_credit_transactions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_partnerships: {
         Row: {
           accepted_at: string | null
@@ -16739,6 +16833,16 @@ export type Database = {
       decrypt_pii: {
         Args: { p_ciphertext: string; p_key_name?: string }
         Returns: string
+      }
+      deduct_tenant_credits: {
+        Args: {
+          p_amount: number
+          p_description?: string
+          p_reference_id?: string
+          p_reference_type?: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       deposit_action: {
         Args: {
