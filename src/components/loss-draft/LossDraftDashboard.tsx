@@ -66,7 +66,11 @@ export { escrowStatusConfig };
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function LossDraftDashboard() {
+interface LossDraftDashboardProps {
+  searchQuery?: string;
+}
+
+export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps = {}) {
   const qc = useQueryClient();
   const { tenantId } = useTenantFilter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
