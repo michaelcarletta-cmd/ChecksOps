@@ -327,34 +327,37 @@ export default function CheckCommandCenter() {
 
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
-        <TabsList className="w-full flex-wrap h-auto gap-1 p-1">
-          <TabsTrigger value="all" className="text-xs">All ({checks.length})</TabsTrigger>
-          <TabsTrigger value="endorsements" className="text-xs">Endorsing ({awaitingEndorsement.length})</TabsTrigger>
-          <TabsTrigger value="review" className="text-xs flex items-center gap-1">
-            <ClipboardCheck className="h-3 w-3" />Review ({needsReview.length})
-          </TabsTrigger>
-          <TabsTrigger value="ready" className="text-xs">Ready ({readyForDeposit.length})</TabsTrigger>
-          <TabsTrigger value="branch" className="text-xs">Branch ({branchDeposit.length})</TabsTrigger>
-          <TabsTrigger value="reissue" className="text-xs">Reissue ({reissueRequested.length})</TabsTrigger>
-          <TabsTrigger value="deposit_ops" className="text-xs flex items-center gap-1">
-            <ArrowDownToLine className="h-3 w-3" />Deposit Ops
-          </TabsTrigger>
-          <TabsTrigger value="reconciliation" className="text-xs flex items-center gap-1">
-            <Scale className="h-3 w-3" />Reconciliation
-          </TabsTrigger>
-          <TabsTrigger value="reports" className="text-xs flex items-center gap-1">
-            <FileBarChart className="h-3 w-3" />Reports
-          </TabsTrigger>
-          <TabsTrigger value="lossdraft" className="text-xs flex items-center gap-1">
-            <Landmark className="h-3 w-3" />Loss Draft
-          </TabsTrigger>
-          <TabsTrigger value="workqueue" className="text-xs flex items-center gap-1">
-            <UsersIcon className="h-3 w-3" />Work Queue
-          </TabsTrigger>
-          <TabsTrigger value="manager" className="text-xs flex items-center gap-1">
-            <Command className="h-3 w-3" />Manager
-          </TabsTrigger>
-        </TabsList>
+        {/* Gradient nav cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { key: "endorsements", label: "Endorsing", count: awaitingEndorsement.length, icon: Send, gradient: "from-amber-500/20 to-orange-500/10", accent: "text-amber-400", ring: "ring-amber-500/30" },
+            { key: "review", label: "Review", count: needsReview.length, icon: ClipboardCheck, gradient: "from-blue-500/20 to-cyan-500/10", accent: "text-blue-400", ring: "ring-blue-500/30" },
+            { key: "ready", label: "Ready for Deposit", count: readyForDeposit.length, icon: CheckCircle2, gradient: "from-emerald-500/20 to-green-500/10", accent: "text-emerald-400", ring: "ring-emerald-500/30" },
+            { key: "lossdraft", label: "Loss Draft", count: 0, icon: Landmark, gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400", ring: "ring-purple-500/30" },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => { setActiveTab(tab.key); setSelectedCheck(null); setReviewCheckId(null); }}
+                className={`relative flex flex-col items-center gap-1.5 rounded-xl p-4 transition-all duration-200 bg-gradient-to-br ${tab.gradient} border cursor-pointer ${
+                  isActive
+                    ? `border-transparent ring-2 ${tab.ring} shadow-lg scale-[1.02]`
+                    : "border-border/50 hover:border-border hover:shadow-md hover:scale-[1.01]"
+                }`}
+              >
+                <Icon className={`h-5 w-5 ${tab.accent}`} />
+                <span className={`text-xs font-semibold ${isActive ? "text-foreground" : "text-muted-foreground"}`}>{tab.label}</span>
+                {tab.key !== "lossdraft" && (
+                  <Badge className={`text-[10px] px-1.5 py-0 ${isActive ? "bg-foreground/10 text-foreground" : "bg-muted text-muted-foreground"}`}>
+                    {tab.count}
+                  </Badge>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
         {/* Deposit Operations Tab */}
         {activeTab === "deposit_ops" && (
