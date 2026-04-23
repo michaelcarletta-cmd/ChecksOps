@@ -169,6 +169,14 @@ export default function CheckCommandCenter() {
   const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [shareCheckId, setShareCheckId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Lookup map: check_id -> { policyholder_name, claim_number } for search
+  const claimIdsForLookup = useMemo(() => {
+    const ids = new Set<string>();
+    checks.forEach((c) => { if (c.claim_id) ids.add(c.claim_id); });
+    return Array.from(ids);
+  }, [/* checks added below after declaration */]);
 
   // Admin: allow delete at any stage
   const canDeleteAnyCheck = true;
