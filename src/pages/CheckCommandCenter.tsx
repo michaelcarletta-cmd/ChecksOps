@@ -1789,6 +1789,11 @@ function CheckDetailPanel({
               />
               <DetailRow label="OCR Status" value={check.ocr_status} />
               <RerunOcrButton checkId={checkId} onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
+              <StatusOverride
+                checkId={checkId}
+                currentStatus={check.status}
+                onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); qc.invalidateQueries({ queryKey: ["check-intake-items"] }); onRefresh(); }}
+              />
               
               <Separator />
               {/* Check Images */}
