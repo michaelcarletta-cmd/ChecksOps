@@ -239,6 +239,9 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
     setTimeout(() => window.print(), 100);
   }, [results]);
 
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const abortRef = useRef(false);
+
   const handleJustify = useCallback(async () => {
     if (!lineItems?.length) {
       toast.error("No line items to justify.");
@@ -247,27 +250,71 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
     setLoading(true);
     setResults([]);
     setMetadata(null);
-    try {
-      const { data, error } = await supabase.functions.invoke("darwin-justify-line-items", {
-        body: {
-          claimId,
-          lineItems,
-          stateCode,
-          manufacturer: claim?.manufacturer || null,
-          lossType: claim?.loss_type || null,
-          viewMode,
-          industryStandards: industryStandards.trim() || null,
-        },
-      });
+    abortRef.current = false;
 
-      if (error) throw error;
-      if (!data || data.ok === false) {
-        throw new Error(data?.error || "Justification failed");
+    const BATCH_SIZE = 5;
+    const batches: typeof lineItems[] = [];
+    for (let i = 0; i < lineItems.length; i += BATCH_SIZE) {
+      batches.push(lineItems.slice(i, i + BATCH_SIZE));
+    }
+    setProgress({ done: 0, total: lineItems.length });
+
+    const allJustifications: JustificationResult[] = [];
+    let mergedMeta: JustificationMetadata | null = null;
+    let batchErrors = 0;
+
+    try {
+      for (let b = 0; b < batches.length; b++) {
+        if (abortRef.current) break;
+
+        const batch = batches[b];
+        const { data, error } = await supabase.functions.invoke("darwin-justify-line-items", {
+          body: {
+            claimId,
+            lineItems: batch,
+            stateCode,
+            manufacturer: claim?.manufacturer || null,
+            lossType: claim?.loss_type || null,
+            viewMode,
+            industryStandards: industryStandards.trim() || null,
+          },
+        });
+
+        if (error || !data || data.ok === false) {
+          console.error(`Batch ${b + 1} failed:`, error || data?.error);
+          batchErrors++;
+          setProgress((p) => ({ ...p, done: p.done + batch.length }));
+          continue;
+        }
+
+        const batchResults = data.justifications || [];
+        allJustifications.push(...batchResults);
+        setResults((prev) => [...prev, ...batchResults]);
+        setProgress((p) => ({ ...p, done: p.done + batch.length }));
+
+        // Merge metadata
+        if (data.metadata) {
+          if (!mergedMeta) {
+            mergedMeta = { ...data.metadata };
+          } else {
+            mergedMeta.kbChunksUsed = Math.max(mergedMeta.kbChunksUsed, data.metadata.kbChunksUsed || 0);
+            mergedMeta.codeCitationsUsed += data.metadata.codeCitationsUsed || 0;
+            mergedMeta.mfrSpecsUsed += data.metadata.mfrSpecsUsed || 0;
+            mergedMeta.itemsWithMfrData = (mergedMeta.itemsWithMfrData || 0) + (data.metadata.itemsWithMfrData || 0);
+            mergedMeta.itemsWithCodeData = (mergedMeta.itemsWithCodeData || 0) + (data.metadata.itemsWithCodeData || 0);
+            mergedMeta.totalItems = (mergedMeta.totalItems || 0) + (data.metadata.totalItems || 0);
+          }
+        }
       }
 
-      setResults(data.justifications || []);
-      setMetadata(data.metadata || null);
-      toast.success(`${(data.justifications || []).length} line items justified with real source data.`);
+      setMetadata(mergedMeta);
+      if (batchErrors > 0 && allJustifications.length > 0) {
+        toast.warning(`${allJustifications.length} items justified, ${batchErrors} batch(es) failed.`);
+      } else if (batchErrors > 0) {
+        toast.error("All batches failed. Try again or reduce line items.");
+      } else {
+        toast.success(`${allJustifications.length} line items justified with real source data.`);
+      }
     } catch (err: any) {
       console.error("Justification error:", err);
       toast.error(err.message || "Failed to generate justifications.");
@@ -344,9 +391,19 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Querying knowledge base, building codes & manufacturer specs…
+              {progress.total > 0
+                ? `Processing batch ${Math.min(Math.ceil(progress.done / 5) + 1, Math.ceil(progress.total / 5))} of ${Math.ceil(progress.total / 5)} (${progress.done}/${progress.total} items)…`
+                : "Querying knowledge base, building codes & manufacturer specs…"}
             </div>
-            {Array.from({ length: 4 }).map((_, i) => (
+            {progress.total > 0 && (
+              <div className="w-full bg-muted rounded-full h-1.5">
+                <div
+                  className="bg-primary h-1.5 rounded-full transition-all duration-300"
+                  style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
+                />
+              </div>
+            )}
+            {results.length === 0 && Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-10 w-full" />
             ))}
           </div>
@@ -358,7 +415,7 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
           </p>
         )}
 
-        {!loading && results.length > 0 && (
+        {results.length > 0 && (
           <div className="overflow-y-auto max-h-[calc(100vh-200px)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 pr-2">
             <MetadataBanner metadata={metadata} />
             <div className="space-y-1">
