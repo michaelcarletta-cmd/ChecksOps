@@ -4,7 +4,7 @@ import { Navigate } from "react-router-dom";
 import { lazy, Suspense, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { LogOut, Settings, Users } from "lucide-react";
+import { LogOut, Settings, Users, Link2 } from "lucide-react";
 import { TenantUserManager } from "./TenantUserManager";
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
