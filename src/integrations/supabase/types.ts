@@ -15356,7 +15356,7 @@ export type Database = {
           logo_url: string | null
           max_checks_per_month: number | null
           name: string
-          partner_code: string | null
+          partner_code: string
           plan_tier: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color: string | null
           secondary_color: string | null
@@ -15378,7 +15378,7 @@ export type Database = {
           logo_url?: string | null
           max_checks_per_month?: number | null
           name: string
-          partner_code?: string | null
+          partner_code?: string
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color?: string | null
           secondary_color?: string | null
@@ -15400,7 +15400,7 @@ export type Database = {
           logo_url?: string | null
           max_checks_per_month?: number | null
           name?: string
-          partner_code?: string | null
+          partner_code?: string
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color?: string | null
           secondary_color?: string | null
