@@ -66,6 +66,22 @@ export function WhiteLabelCheckCenter() {
               </SheetContent>
             </Sheet>
           )}
+          {tenant && (
+            <Sheet open={partnersOpen} onOpenChange={setPartnersOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" title="Partner Connections">
+                  <Link2 className="h-4 w-4" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent className="w-[380px] sm:w-[420px]">
+                <SheetHeader>
+                  <SheetTitle>Partner Connections</SheetTitle>
+                </SheetHeader>
+                <div className="mt-4 overflow-y-auto max-h-[calc(100vh-100px)]">
+                  <TenantPartnerManager />
+                </div>
+              </SheetContent>
+            </Sheet>
           <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign Out">
             <LogOut className="h-4 w-4" />
           </Button>
