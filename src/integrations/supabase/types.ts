@@ -15115,6 +15115,53 @@ export type Database = {
           },
         ]
       }
+      tenant_bank_accounts: {
+        Row: {
+          account_holder_name: string
+          account_number_last4: string
+          account_type: string
+          bank_name: string
+          created_at: string
+          id: string
+          is_primary: boolean
+          routing_number: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          account_holder_name: string
+          account_number_last4: string
+          account_type?: string
+          bank_name: string
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          routing_number: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          account_holder_name?: string
+          account_number_last4?: string
+          account_type?: string
+          bank_name?: string
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          routing_number?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_bank_accounts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_partnerships: {
         Row: {
           accepted_at: string | null
@@ -15215,6 +15262,7 @@ export type Database = {
           logo_url: string | null
           max_checks_per_month: number | null
           name: string
+          partner_code: string | null
           plan_tier: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color: string | null
           secondary_color: string | null
@@ -15236,6 +15284,7 @@ export type Database = {
           logo_url?: string | null
           max_checks_per_month?: number | null
           name: string
+          partner_code?: string | null
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color?: string | null
           secondary_color?: string | null
@@ -15257,6 +15306,7 @@ export type Database = {
           logo_url?: string | null
           max_checks_per_month?: number | null
           name?: string
+          partner_code?: string | null
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color?: string | null
           secondary_color?: string | null
@@ -16765,6 +16815,7 @@ export type Database = {
         Args: { p_deposit_item_id: string }
         Returns: Json
       }
+      generate_partner_code: { Args: never; Returns: string }
       geometry: { Args: { "": string }; Returns: unknown }
       geometry_above: {
         Args: { geom1: unknown; geom2: unknown }
