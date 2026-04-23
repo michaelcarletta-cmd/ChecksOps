@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -90,33 +91,54 @@ const reminderLabels: Record<string, { label: string; color: string }> = {
 /* ------------------------------------------------------------------ */
 
 export function DepositKPIDashboard() {
-  const { data: kpis } = useQuery({
-    queryKey: ["deposit-ops-kpis"],
+  const { tenantId } = useTenantFilter();
+
+  const { data: items = [] } = useQuery({
+    queryKey: ["deposit-kpi-items", tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_deposit_ops_kpis");
+      const { data, error } = await supabase
+        .from("deposit_items")
+        .select("*, check_intake_items!inner(tenant_id)")
+        .eq("check_intake_items.tenant_id", tenantId!)
+        .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as Record<string, number>;
+      return ((data ?? []) as Array<DepositQueueItem & { check_intake_items?: { tenant_id: string | null } | null }>).map(({ check_intake_items, ...item }) => item);
     },
+    enabled: !!tenantId,
   });
 
-  const { data: excKpis } = useQuery({
-    queryKey: ["deposit-exception-kpis"],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_deposit_exception_kpis");
-      if (error) throw error;
-      return data as Record<string, number>;
-    },
-  });
+  const kpis = {
+    avg_days_to_deposit: "—",
+    avg_days_to_bank_confirm: "—",
+    avg_days_to_reconcile: "—",
+    avg_days_to_sync: "—",
+    avg_days_to_closeout: "—",
+    nsf_rate_pct: items.length ? ((items.filter((item) => item.nsf_flag).length / items.length) * 100).toFixed(1) : "—",
+    variance_rate_pct: items.length ? ((items.filter((item) => (item.variance_amount ?? 0) !== 0).length / items.length) * 100).toFixed(1) : "—",
+    total_items: items.length,
+    closed_out: items.filter((item) => item.closeout_complete).length,
+    total_closed_amount: items.filter((item) => item.closeout_complete).reduce((sum, item) => sum + (item.amount ?? 0), 0),
+    in_pipeline: items.filter((item) => !item.closeout_complete).length,
+    total_open_amount: items.filter((item) => !item.closeout_complete).reduce((sum, item) => sum + (item.amount ?? 0), 0),
+  };
+
+  const excKpis = {
+    avg_hours_to_resolve: "—",
+    open_count: items.filter((item) => item.status === "exception").length,
+    resolved_count: 0,
+    reopen_count: 0,
+    critical_open: items.filter((item) => item.status === "exception").length,
+  };
 
   const kpiCards = [
-    { label: "Avg Days to Deposit", value: kpis?.avg_days_to_deposit ?? "—", icon: Clock, color: "text-amber-400" },
-    { label: "Avg Days to Confirm", value: kpis?.avg_days_to_bank_confirm ?? "—", icon: Landmark, color: "text-blue-400" },
-    { label: "Avg Days to Reconcile", value: kpis?.avg_days_to_reconcile ?? "—", icon: Scale, color: "text-purple-400" },
-    { label: "Avg Days to Sync", value: kpis?.avg_days_to_sync ?? "—", icon: BookCheck, color: "text-primary" },
-    { label: "Avg Days to Closeout", value: kpis?.avg_days_to_closeout ?? "—", icon: Lock, color: "text-emerald-400" },
-    { label: "NSF Rate", value: kpis?.nsf_rate_pct != null ? `${kpis.nsf_rate_pct}%` : "—", icon: Ban, color: "text-destructive" },
-    { label: "Variance Rate", value: kpis?.variance_rate_pct != null ? `${kpis.variance_rate_pct}%` : "—", icon: AlertTriangle, color: "text-amber-400" },
-    { label: "Avg Exc Resolution (hrs)", value: excKpis?.avg_hours_to_resolve ?? "—", icon: ShieldCheck, color: "text-emerald-400" },
+    { label: "Avg Days to Deposit", value: kpis.avg_days_to_deposit, icon: Clock, color: "text-amber-400" },
+    { label: "Avg Days to Confirm", value: kpis.avg_days_to_bank_confirm, icon: Landmark, color: "text-blue-400" },
+    { label: "Avg Days to Reconcile", value: kpis.avg_days_to_reconcile, icon: Scale, color: "text-purple-400" },
+    { label: "Avg Days to Sync", value: kpis.avg_days_to_sync, icon: BookCheck, color: "text-primary" },
+    { label: "Avg Days to Closeout", value: kpis.avg_days_to_closeout, icon: Lock, color: "text-emerald-400" },
+    { label: "NSF Rate", value: kpis.nsf_rate_pct !== "—" ? `${kpis.nsf_rate_pct}%` : "—", icon: Ban, color: "text-destructive" },
+    { label: "Variance Rate", value: kpis.variance_rate_pct !== "—" ? `${kpis.variance_rate_pct}%` : "—", icon: AlertTriangle, color: "text-amber-400" },
+    { label: "Avg Exc Resolution (hrs)", value: excKpis.avg_hours_to_resolve, icon: ShieldCheck, color: "text-emerald-400" },
   ];
 
   return (
@@ -136,20 +158,20 @@ export function DepositKPIDashboard() {
       <div className="grid md:grid-cols-3 gap-2">
         <Card>
           <CardContent className="p-3 text-center">
-            <p className="text-2xl font-bold tabular-nums">{kpis?.total_items ?? 0}</p>
+            <p className="text-2xl font-bold tabular-nums">{kpis.total_items}</p>
             <p className="text-xs text-muted-foreground">Total Items</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-3 text-center">
-            <p className="text-2xl font-bold tabular-nums text-emerald-400">{kpis?.closed_out ?? 0}</p>
-            <p className="text-xs text-muted-foreground">Closed Out ({fmtMoney(kpis?.total_closed_amount)})</p>
+            <p className="text-2xl font-bold tabular-nums text-emerald-400">{kpis.closed_out}</p>
+            <p className="text-xs text-muted-foreground">Closed Out ({fmtMoney(kpis.total_closed_amount)})</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-3 text-center">
-            <p className="text-2xl font-bold tabular-nums text-amber-400">{(kpis?.in_pipeline ?? 0) + (kpis?.cleared_pending ?? 0) + (kpis?.reconciled_pending ?? 0)}</p>
-            <p className="text-xs text-muted-foreground">Open ({fmtMoney(kpis?.total_open_amount)})</p>
+            <p className="text-2xl font-bold tabular-nums text-amber-400">{kpis.in_pipeline}</p>
+            <p className="text-xs text-muted-foreground">Open ({fmtMoney(kpis.total_open_amount)})</p>
           </CardContent>
         </Card>
       </div>
@@ -160,15 +182,15 @@ export function DepositKPIDashboard() {
             <p className="text-xs text-muted-foreground mb-2">Exception Health</p>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div>
-                <p className="text-lg font-bold tabular-nums text-destructive">{excKpis?.open_count ?? 0}</p>
+                <p className="text-lg font-bold tabular-nums text-destructive">{excKpis.open_count}</p>
                 <p className="text-[10px] text-muted-foreground">Open</p>
               </div>
               <div>
-                <p className="text-lg font-bold tabular-nums text-emerald-400">{excKpis?.resolved_count ?? 0}</p>
+                <p className="text-lg font-bold tabular-nums text-emerald-400">{excKpis.resolved_count}</p>
                 <p className="text-[10px] text-muted-foreground">Resolved</p>
               </div>
               <div>
-                <p className="text-lg font-bold tabular-nums text-amber-400">{excKpis?.reopen_count ?? 0}</p>
+                <p className="text-lg font-bold tabular-nums text-amber-400">{excKpis.reopen_count}</p>
                 <p className="text-[10px] text-muted-foreground">Reopened</p>
               </div>
             </div>
@@ -177,8 +199,8 @@ export function DepositKPIDashboard() {
         <Card>
           <CardContent className="p-3">
             <p className="text-xs text-muted-foreground mb-2">Critical Exceptions</p>
-            <p className={`text-3xl font-bold tabular-nums text-center ${(excKpis?.critical_open ?? 0) > 0 ? "text-destructive" : "text-emerald-400"}`}>
-              {excKpis?.critical_open ?? 0}
+            <p className={`text-3xl font-bold tabular-nums text-center ${excKpis.critical_open > 0 ? "text-destructive" : "text-emerald-400"}`}>
+              {excKpis.critical_open}
             </p>
           </CardContent>
         </Card>
@@ -193,6 +215,7 @@ export function DepositKPIDashboard() {
 
 export function DepositOwnerQueue() {
   const { user } = useAuth();
+  const { tenantId } = useTenantFilter();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -203,33 +226,40 @@ export function DepositOwnerQueue() {
 
   // Fetch items (non-closed)
   const { data: items = [], isLoading } = useQuery({
-    queryKey: ["deposit-owner-queue"],
+    queryKey: ["deposit-owner-queue", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deposit_items")
-        .select("*")
+        .select("*, check_intake_items!inner(tenant_id)")
+        .eq("check_intake_items.tenant_id", tenantId!)
         .eq("closeout_complete", false)
         .not("status", "in", "(failed,returned)")
         .order("created_at", { ascending: false })
         .limit(200);
       if (error) throw error;
-      return (data ?? []) as DepositQueueItem[];
+      return ((data ?? []) as Array<DepositQueueItem & { check_intake_items?: { tenant_id: string | null } | null }>).map(({ check_intake_items, ...item }) => item);
     },
+    enabled: !!tenantId,
   });
+
+  const itemIds = items.map((item) => item.id);
 
   // Reminders
   const { data: reminders = [] } = useQuery({
-    queryKey: ["deposit-reminders"],
+    queryKey: ["deposit-reminders", tenantId, itemIds.join(",")],
     queryFn: async () => {
+      if (itemIds.length === 0) return [];
       const { data, error } = await supabase
         .from("deposit_reminder_queue")
         .select("*")
+        .in("deposit_item_id", itemIds)
         .not("reminder_type", "is", null)
         .order("created_at", { ascending: true })
         .limit(100);
       if (error) throw error;
       return (data ?? []) as ReminderItem[];
     },
+    enabled: !!tenantId && itemIds.length > 0,
   });
 
   // Team members

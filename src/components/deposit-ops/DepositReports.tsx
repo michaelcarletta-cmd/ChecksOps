@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +21,26 @@ const providerLabels: Record<string, string> = {
   treasury_prime: "Treasury Prime",
 };
 
+interface TenantDepositItem {
+  id: string;
+  amount: number | null;
+  provider: string | null;
+  check_number: string | null;
+  carrier_name: string | null;
+  bank_reference: string | null;
+  status: string;
+  created_at: string;
+  cleared_at: string | null;
+  bank_confirmed_at: string | null;
+  reconciled_at: string | null;
+  reconciled_amount: number | null;
+  nsf_flag: boolean | null;
+  variance_amount: number | null;
+  variance_reason: string | null;
+  return_reason: string | null;
+  exception_reason: string | null;
+}
+
 function exportCSV(rows: Record<string, unknown>[], filename: string) {
   if (rows.length === 0) return;
   const keys = Object.keys(rows[0]);
@@ -33,23 +54,7 @@ function exportCSV(rows: Record<string, unknown>[], filename: string) {
   URL.revokeObjectURL(url);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Daily Deposit Log                                                  */
-/* ------------------------------------------------------------------ */
-function DailyDepositLog() {
-  const { data: logs = [] } = useQuery({
-    queryKey: ["deposit-daily-log"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("deposit_daily_log")
-        .select("*")
-        .order("deposit_date", { ascending: false })
-        .limit(60);
-      if (error) throw error;
-      return (data ?? []) as Record<string, unknown>[];
-    },
-  });
-
+function DailyDepositLog({ logs }: { logs: Record<string, unknown>[] }) {
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -107,39 +112,24 @@ function DailyDepositLog() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  NSF/Return Report                                                  */
-/* ------------------------------------------------------------------ */
-function NSFReturnReport() {
-  const { data: items = [] } = useQuery({
-    queryKey: ["deposit-nsf-items"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("deposit_items")
-        .select("*")
-        .or("nsf_flag.eq.true,status.eq.returned")
-        .order("created_at", { ascending: false })
-        .limit(50);
-      if (error) throw error;
-      return (data ?? []) as Record<string, unknown>[];
-    },
-  });
+function NSFReturnReport({ items }: { items: TenantDepositItem[] }) {
+  const rows = items.filter((item) => item.nsf_flag || item.status === "returned");
 
   return (
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm flex items-center gap-2">
-            <Ban className="h-4 w-4 text-destructive" />NSF &amp; Return Report ({items.length})
+            <Ban className="h-4 w-4 text-destructive" />NSF &amp; Return Report ({rows.length})
           </CardTitle>
-          <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => exportCSV(items, `nsf-report-${format(new Date(), "yyyy-MM-dd")}.csv`)}>
+          <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => exportCSV(rows as unknown as Record<string, unknown>[], `nsf-report-${format(new Date(), "yyyy-MM-dd")}.csv`)}>
             <Download className="h-3 w-3 mr-1" />CSV
           </Button>
         </div>
       </CardHeader>
       <CardContent className="p-0">
         <ScrollArea className="max-h-[400px]">
-          {items.length === 0 ? (
+          {rows.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">No NSF/returns</div>
           ) : (
             <Table>
@@ -153,13 +143,13 @@ function NSFReturnReport() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((item) => (
-                  <TableRow key={item.id as string}>
-                    <TableCell className="font-mono text-xs">#{(item.check_number as string) || "—"}</TableCell>
-                    <TableCell className="text-xs">{(item.carrier_name as string) || "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums text-destructive">{fmtMoney(item.amount as number)}</TableCell>
-                    <TableCell className="text-xs max-w-[200px] truncate">{(item.return_reason as string) || (item.exception_reason as string) || "—"}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{format(new Date(item.created_at as string), "MMM d")}</TableCell>
+                {rows.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-mono text-xs">#{item.check_number || "—"}</TableCell>
+                    <TableCell className="text-xs">{item.carrier_name || "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums text-destructive">{fmtMoney(item.amount)}</TableCell>
+                    <TableCell className="text-xs max-w-[200px] truncate">{item.return_reason || item.exception_reason || "—"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{format(new Date(item.created_at), "MMM d")}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -171,40 +161,24 @@ function NSFReturnReport() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Variance Report                                                    */
-/* ------------------------------------------------------------------ */
-function VarianceReport() {
-  const { data: items = [] } = useQuery({
-    queryKey: ["deposit-variance-items"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("deposit_items")
-        .select("*")
-        .not("variance_amount", "is", null)
-        .neq("variance_amount", 0)
-        .order("created_at", { ascending: false })
-        .limit(50);
-      if (error) throw error;
-      return (data ?? []) as Record<string, unknown>[];
-    },
-  });
+function VarianceReport({ items }: { items: TenantDepositItem[] }) {
+  const rows = items.filter((item) => (item.variance_amount ?? 0) !== 0);
 
   return (
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-400" />Variance Report ({items.length})
+            <AlertTriangle className="h-4 w-4 text-amber-400" />Variance Report ({rows.length})
           </CardTitle>
-          <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => exportCSV(items, `variance-report-${format(new Date(), "yyyy-MM-dd")}.csv`)}>
+          <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => exportCSV(rows as unknown as Record<string, unknown>[], `variance-report-${format(new Date(), "yyyy-MM-dd")}.csv`)}>
             <Download className="h-3 w-3 mr-1" />CSV
           </Button>
         </div>
       </CardHeader>
       <CardContent className="p-0">
         <ScrollArea className="max-h-[400px]">
-          {items.length === 0 ? (
+          {rows.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">No variances detected</div>
           ) : (
             <Table>
@@ -218,15 +192,15 @@ function VarianceReport() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((item) => (
-                  <TableRow key={item.id as string}>
-                    <TableCell className="font-mono text-xs">#{(item.check_number as string) || "—"}</TableCell>
-                    <TableCell className="text-xs">{(item.carrier_name as string) || "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">{fmtMoney(item.amount as number)}</TableCell>
+                {rows.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-mono text-xs">#{item.check_number || "—"}</TableCell>
+                    <TableCell className="text-xs">{item.carrier_name || "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmtMoney(item.amount)}</TableCell>
                     <TableCell className="text-right tabular-nums text-amber-400 font-medium">
-                      {(item.variance_amount as number) >= 0 ? "+" : ""}{fmtMoney(item.variance_amount as number)}
+                      {(item.variance_amount ?? 0) >= 0 ? "+" : ""}{fmtMoney(item.variance_amount)}
                     </TableCell>
-                    <TableCell className="text-xs max-w-[200px] truncate">{(item.variance_reason as string) || "—"}</TableCell>
+                    <TableCell className="text-xs max-w-[200px] truncate">{item.variance_reason || "—"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -238,42 +212,25 @@ function VarianceReport() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Unreconciled Cash Report                                           */
-/* ------------------------------------------------------------------ */
-function UnreconciledCashReport() {
-  const { data: items = [] } = useQuery({
-    queryKey: ["deposit-unreconciled-items"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("deposit_items")
-        .select("*")
-        .eq("status", "succeeded")
-        .is("reconciled_at", null)
-        .order("cleared_at", { ascending: true })
-        .limit(100);
-      if (error) throw error;
-      return (data ?? []) as Record<string, unknown>[];
-    },
-  });
-
-  const total = items.reduce((s, i) => s + ((i.amount as number) || 0), 0);
+function UnreconciledCashReport({ items }: { items: TenantDepositItem[] }) {
+  const rows = items.filter((item) => item.status === "succeeded" && !item.reconciled_at);
+  const total = rows.reduce((s, i) => s + (i.amount || 0), 0);
 
   return (
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm flex items-center gap-2">
-            <Scale className="h-4 w-4 text-orange-400" />Unreconciled Cash ({items.length}) — {fmtMoney(total)}
+            <Scale className="h-4 w-4 text-orange-400" />Unreconciled Cash ({rows.length}) — {fmtMoney(total)}
           </CardTitle>
-          <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => exportCSV(items, `unreconciled-${format(new Date(), "yyyy-MM-dd")}.csv`)}>
+          <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => exportCSV(rows as unknown as Record<string, unknown>[], `unreconciled-${format(new Date(), "yyyy-MM-dd")}.csv`)}>
             <Download className="h-3 w-3 mr-1" />CSV
           </Button>
         </div>
       </CardHeader>
       <CardContent className="p-0">
         <ScrollArea className="max-h-[400px]">
-          {items.length === 0 ? (
+          {rows.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">All deposits reconciled ✓</div>
           ) : (
             <Table>
@@ -288,15 +245,15 @@ function UnreconciledCashReport() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((item) => {
-                  const days = item.cleared_at ? Math.floor((Date.now() - new Date(item.cleared_at as string).getTime()) / 86400000) : 0;
+                {rows.map((item) => {
+                  const days = item.cleared_at ? Math.floor((Date.now() - new Date(item.cleared_at).getTime()) / 86400000) : 0;
                   return (
-                    <TableRow key={item.id as string}>
-                      <TableCell className="font-mono text-xs">#{(item.check_number as string) || "—"}</TableCell>
-                      <TableCell className="text-xs">{(item.carrier_name as string) || "—"}</TableCell>
-                      <TableCell className="text-right tabular-nums">{fmtMoney(item.amount as number)}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{(item.bank_reference as string) || "—"}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{item.cleared_at ? format(new Date(item.cleared_at as string), "MMM d") : "—"}</TableCell>
+                    <TableRow key={item.id}>
+                      <TableCell className="font-mono text-xs">#{item.check_number || "—"}</TableCell>
+                      <TableCell className="text-xs">{item.carrier_name || "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">{fmtMoney(item.amount)}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{item.bank_reference || "—"}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{item.cleared_at ? format(new Date(item.cleared_at), "MMM d") : "—"}</TableCell>
                       <TableCell className={`text-sm font-medium ${days > 3 ? "text-destructive" : "text-muted-foreground"}`}>{days}d</TableCell>
                     </TableRow>
                   );
@@ -310,10 +267,54 @@ function UnreconciledCashReport() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Main Reports container                                             */
-/* ------------------------------------------------------------------ */
 export function DepositReports() {
+  const { tenantId } = useTenantFilter();
+  const { data: depositItems = [] } = useQuery({
+    queryKey: ["deposit-report-items", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("deposit_items")
+        .select("*, check_intake_items!inner(tenant_id)")
+        .eq("check_intake_items.tenant_id", tenantId!)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return ((data ?? []) as Array<TenantDepositItem & { check_intake_items?: { tenant_id: string | null } | null }>).map(({ check_intake_items, ...item }) => item);
+    },
+    enabled: !!tenantId,
+  });
+
+  const dailyLogs = useMemo(() => {
+    const grouped = new Map<string, Record<string, unknown>>();
+
+    depositItems.forEach((item) => {
+      const rawDate = item.cleared_at || item.created_at;
+      const depositDate = rawDate ? rawDate.slice(0, 10) : "unknown";
+      const provider = item.provider || "unknown";
+      const key = `${depositDate}:${provider}`;
+      const current = grouped.get(key) ?? {
+        deposit_date: depositDate,
+        provider,
+        item_count: 0,
+        total_amount: 0,
+        confirmed_amount: 0,
+        reconciled_amount: 0,
+        nsf_count: 0,
+        total_variance: 0,
+      };
+
+      current.item_count = Number(current.item_count) + 1;
+      current.total_amount = Number(current.total_amount) + (item.amount || 0);
+      current.confirmed_amount = Number(current.confirmed_amount) + (item.bank_confirmed_at ? item.amount || 0 : 0);
+      current.reconciled_amount = Number(current.reconciled_amount) + (item.reconciled_at ? item.reconciled_amount ?? item.amount ?? 0 : 0);
+      current.nsf_count = Number(current.nsf_count) + (item.nsf_flag ? 1 : 0);
+      current.total_variance = Number(current.total_variance) + (item.variance_amount || 0);
+
+      grouped.set(key, current);
+    });
+
+    return Array.from(grouped.values()).sort((a, b) => String(b.deposit_date).localeCompare(String(a.deposit_date)));
+  }, [depositItems]);
+
   return (
     <Tabs defaultValue="daily" className="space-y-4">
       <TabsList>
@@ -322,10 +323,10 @@ export function DepositReports() {
         <TabsTrigger value="nsf" className="text-xs">NSF/Returns</TabsTrigger>
         <TabsTrigger value="variance" className="text-xs">Variances</TabsTrigger>
       </TabsList>
-      <TabsContent value="daily"><DailyDepositLog /></TabsContent>
-      <TabsContent value="unreconciled"><UnreconciledCashReport /></TabsContent>
-      <TabsContent value="nsf"><NSFReturnReport /></TabsContent>
-      <TabsContent value="variance"><VarianceReport /></TabsContent>
+      <TabsContent value="daily"><DailyDepositLog logs={dailyLogs} /></TabsContent>
+      <TabsContent value="unreconciled"><UnreconciledCashReport items={depositItems} /></TabsContent>
+      <TabsContent value="nsf"><NSFReturnReport items={depositItems} /></TabsContent>
+      <TabsContent value="variance"><VarianceReport items={depositItems} /></TabsContent>
     </Tabs>
   );
 }

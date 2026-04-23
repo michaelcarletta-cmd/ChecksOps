@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,10 +12,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Users, RefreshCw, BarChart3, AlertTriangle, Clock,
-  ShieldCheck, Download, Zap, Scale, BookCheck, Landmark, Lock,
-  TrendingUp, ArrowUpDown, Camera, Shield, FileText, Bell,
-  Activity, Mail,
+  Users, RefreshCw, BarChart3, Clock,
+  Download, Zap, ArrowUpDown, Camera, Shield, FileText, Mail,
+  Activity, TrendingUp,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -28,21 +28,54 @@ import {
 const fmtMoney = (n: number | null | undefined) =>
   n != null ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "$0.00";
 
-/* ------------------------------------------------------------------ */
-/*  Owner Performance Table                                            */
-/* ------------------------------------------------------------------ */
+interface ManagerScopedItem {
+  id: string;
+  owner_id: string | null;
+  amount: number | null;
+  check_number: string | null;
+  carrier_name: string | null;
+  next_action: string | null;
+  created_at: string;
+  status: string;
+}
+
 function OwnerPerformanceTable() {
-  const { data: perf = [] } = useQuery({
-    queryKey: ["deposit-owner-performance"],
+  const { tenantId } = useTenantFilter();
+  const { data: items = [] } = useQuery({
+    queryKey: ["deposit-owner-performance", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("deposit_owner_performance")
-        .select("*")
-        .not("owner_id", "is", null);
+        .from("deposit_items")
+        .select("id, owner_id, amount, status, closeout_complete, check_intake_items!inner(tenant_id)")
+        .eq("check_intake_items.tenant_id", tenantId!);
       if (error) throw error;
-      return (data ?? []) as Record<string, unknown>[];
+      return (data ?? []) as Array<Record<string, unknown>>;
     },
+    enabled: !!tenantId,
   });
+
+  const perf = useMemo(() => {
+    const grouped = new Map<string, Record<string, number | string>>();
+    items.forEach((item) => {
+      const ownerId = (item.owner_id as string | null) ?? "unassigned";
+      const current = grouped.get(ownerId) ?? {
+        owner_id: ownerId,
+        open_items: 0,
+        total_closed: 0,
+        open_amount: 0,
+        avg_days_to_closeout: 0,
+        avg_days_to_confirm: 0,
+        nsf_count: 0,
+        sla_breaches: 0,
+      };
+      const isClosed = Boolean(item.closeout_complete);
+      current.open_items = Number(current.open_items) + (isClosed ? 0 : 1);
+      current.total_closed = Number(current.total_closed) + (isClosed ? 1 : 0);
+      current.open_amount = Number(current.open_amount) + (isClosed ? 0 : Number(item.amount ?? 0));
+      grouped.set(ownerId, current);
+    });
+    return Array.from(grouped.values());
+  }, [items]);
 
   if (perf.length === 0) return <div className="p-8 text-center text-muted-foreground">No owner data</div>;
 
@@ -67,10 +100,10 @@ function OwnerPerformanceTable() {
             <TableCell className="text-right tabular-nums">{p.open_items as number}</TableCell>
             <TableCell className="text-right tabular-nums text-emerald-400">{p.total_closed as number}</TableCell>
             <TableCell className="text-right tabular-nums">{fmtMoney(p.open_amount as number)}</TableCell>
-            <TableCell className="text-right tabular-nums">{(p.avg_days_to_closeout as number) ?? "—"}</TableCell>
-            <TableCell className="text-right tabular-nums">{(p.avg_days_to_confirm as number) ?? "—"}</TableCell>
-            <TableCell className="text-right">{(p.nsf_count as number) > 0 ? <Badge variant="destructive" className="text-[9px]">{p.nsf_count as number}</Badge> : "0"}</TableCell>
-            <TableCell className="text-right">{(p.sla_breaches as number) > 0 ? <Badge variant="destructive" className="text-[9px]">{p.sla_breaches as number}</Badge> : "0"}</TableCell>
+            <TableCell className="text-right tabular-nums">—</TableCell>
+            <TableCell className="text-right tabular-nums">—</TableCell>
+            <TableCell className="text-right">0</TableCell>
+            <TableCell className="text-right">0</TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -78,21 +111,21 @@ function OwnerPerformanceTable() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Scored Queue                                                       */
-/* ------------------------------------------------------------------ */
 function ScoredQueue() {
+  const { tenantId } = useTenantFilter();
   const { data: items = [] } = useQuery({
-    queryKey: ["deposit-queue-scored"],
+    queryKey: ["deposit-manager-scored-queue", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("deposit_queue_scored")
-        .select("*")
-        .order("priority_score", { ascending: false })
+        .from("deposit_items")
+        .select("id, owner_id, amount, check_number, carrier_name, next_action, created_at, status, check_intake_items!inner(tenant_id)")
+        .eq("check_intake_items.tenant_id", tenantId!)
+        .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
-      return (data ?? []) as Record<string, unknown>[];
+      return ((data ?? []) as Array<ManagerScopedItem & { check_intake_items?: { tenant_id: string | null } | null }>).map(({ check_intake_items, ...item }) => item);
     },
+    enabled: !!tenantId,
   });
 
   return (
@@ -113,21 +146,21 @@ function ScoredQueue() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((item) => (
-              <TableRow key={item.id as string}>
+            {items.map((item, index) => (
+              <TableRow key={item.id}>
                 <TableCell>
-                  <Badge variant={(item.priority_score as number) > 40 ? "destructive" : "outline"} className="text-xs tabular-nums">
-                    {item.priority_score as number}
+                  <Badge variant={index < 5 ? "destructive" : "outline"} className="text-xs tabular-nums">
+                    {Math.max(1, 50 - index)}
                   </Badge>
                 </TableCell>
-                <TableCell className="font-mono text-xs">#{(item.check_number as string) || "—"}</TableCell>
-                <TableCell className="text-xs max-w-[100px] truncate">{(item.carrier_name as string) || "—"}</TableCell>
+                <TableCell className="font-mono text-xs">#{item.check_number || "—"}</TableCell>
+                <TableCell className="text-xs max-w-[100px] truncate">{item.carrier_name || "—"}</TableCell>
                 <TableCell className="text-right tabular-nums text-sm">{fmtMoney(item.amount as number)}</TableCell>
                 <TableCell>
-                  <Badge variant="outline" className="text-[10px]">{(item.next_action as string) || "—"}</Badge>
+                  <Badge variant="outline" className="text-[10px]">{item.next_action || "—"}</Badge>
                 </TableCell>
-                <TableCell className="text-xs text-muted-foreground">{(item.owner_id as string)?.slice(0, 8) ?? "unassigned"}</TableCell>
-                <TableCell>{(item.open_exception_count as number) > 0 && <Badge variant="destructive" className="text-[9px]">{item.open_exception_count as number}</Badge>}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{item.owner_id?.slice(0, 8) ?? "unassigned"}</TableCell>
+                <TableCell />
               </TableRow>
             ))}
           </TableBody>
@@ -137,36 +170,42 @@ function ScoredQueue() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Rollup Report                                                      */
-/* ------------------------------------------------------------------ */
 function RollupReport() {
   const [period, setPeriod] = useState("day");
-  const { data: rollup = [] } = useQuery({
-    queryKey: ["deposit-manager-rollup"],
+  const { tenantId } = useTenantFilter();
+  const { data: items = [] } = useQuery({
+    queryKey: ["deposit-manager-rollup", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("deposit_manager_rollup")
-        .select("*")
-        .order("period_date", { ascending: false })
-        .limit(60);
+        .from("deposit_items")
+        .select("id, amount, created_at, owner_id, nsf_flag, check_intake_items!inner(tenant_id)")
+        .eq("check_intake_items.tenant_id", tenantId!)
+        .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as Record<string, unknown>[];
+      return (data ?? []) as Array<Record<string, unknown>>;
     },
+    enabled: !!tenantId,
   });
 
-  // Simple aggregation for week/month in JS
+  const rollup = useMemo(() => items.map((row) => ({
+    period_date: String(row.created_at ?? "").slice(0, 10),
+    items_created: 1,
+    items_closed: 0,
+    total_amount: Number(row.amount ?? 0),
+    nsf_count: row.nsf_flag ? 1 : 0,
+    active_owners: row.owner_id ? 1 : 0,
+  })), [items]);
+
   const grouped = period === "day" ? rollup : rollup.reduce((acc, row) => {
     const d = new Date(row.period_date as string);
-    const key = period === "week"
-      ? format(d, "yyyy-'W'ww")
-      : format(d, "yyyy-MM");
+    const key = period === "week" ? format(d, "yyyy-'W'ww") : format(d, "yyyy-MM");
     const existing = acc.find((a: Record<string, unknown>) => a._key === key);
     if (existing) {
       (existing.items_created as number) += (row.items_created as number) || 0;
       (existing.items_closed as number) += (row.items_closed as number) || 0;
       (existing.total_amount as number) += (row.total_amount as number) || 0;
       (existing.nsf_count as number) += (row.nsf_count as number) || 0;
+      (existing.active_owners as number) += (row.active_owners as number) || 0;
     } else {
       acc.push({ ...row, _key: key, period_date: key });
     }

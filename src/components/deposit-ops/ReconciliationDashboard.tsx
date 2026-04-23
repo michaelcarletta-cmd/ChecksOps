@@ -1,17 +1,20 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  CheckCircle2, XCircle, AlertTriangle, Clock, RotateCcw, FileCheck,
-  Scale, Landmark, CircleDollarSign, Ban, FileWarning, BookCheck,
+  CheckCircle2, XCircle, AlertTriangle, RotateCcw, FileCheck,
+  Scale, Landmark, Ban, FileWarning, BookCheck,
 } from "lucide-react";
 import { format } from "date-fns";
 
 interface ReconciliationItem {
   id: string;
+  batch_id?: string | null;
   check_number: string | null;
   carrier_name: string | null;
   amount: number;
@@ -39,54 +42,108 @@ const providerLabels: Record<string, string> = {
 };
 
 export function ReconciliationDashboard() {
-  const { data: summary } = useQuery({
-    queryKey: ["deposit-recon-summary"],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_deposit_reconciliation_summary");
-      if (error) throw error;
-      return data as Record<string, number>;
-    },
-  });
+  const { tenantId } = useTenantFilter();
 
   const { data: items = [], isLoading } = useQuery({
-    queryKey: ["reconciliation-items"],
+    queryKey: ["reconciliation-items", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deposit_items")
-        .select("*")
+        .select("*, check_intake_items!inner(tenant_id)")
+        .eq("check_intake_items.tenant_id", tenantId!)
         .in("status", ["succeeded", "reconciled", "failed", "returned", "exception"])
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as ReconciliationItem[];
+      return ((data ?? []) as Array<ReconciliationItem & { check_intake_items?: { tenant_id: string | null } | null }>).map(({ check_intake_items, ...item }) => item);
     },
+    enabled: !!tenantId,
   });
 
-  const { data: batches = [] } = useQuery({
-    queryKey: ["deposit-batches"],
+  const itemIds = items.map((item) => item.id);
+  const batchIds = [...new Set(items.map((item) => item.batch_id).filter(Boolean))] as string[];
+
+  const { data: batchMeta = [] } = useQuery({
+    queryKey: ["deposit-batches", tenantId, batchIds.join(",")],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("deposit_batches")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(20);
+      if (batchIds.length === 0) return [];
+      const { data, error } = await supabase.from("deposit_batches").select("id, batch_number, provider, status").in("id", batchIds);
       if (error) throw error;
       return data ?? [];
     },
+    enabled: !!tenantId && batchIds.length > 0,
   });
 
   const { data: unresolvedExceptions = [] } = useQuery({
-    queryKey: ["unresolved-deposit-exceptions"],
+    queryKey: ["unresolved-deposit-exceptions", tenantId, itemIds.join(",")],
     queryFn: async () => {
+      if (itemIds.length === 0) return [];
       const { data, error } = await supabase
         .from("deposit_exceptions")
         .select("*")
+        .in("deposit_item_id", itemIds)
         .is("resolved_at", null)
         .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
       return data ?? [];
     },
+    enabled: !!tenantId && itemIds.length > 0,
   });
+
+  const summary = useMemo(() => items.reduce<Record<string, number>>((acc, item) => {
+    acc.in_flight_amount += ["pending_assignment", "provider_assigned", "submitted", "processing"].includes(item.status) ? item.amount ?? 0 : 0;
+    acc.cleared_amount += item.status === "succeeded" ? item.amount ?? 0 : 0;
+    acc.reconciled_amount += item.status === "reconciled" ? item.reconciled_amount ?? item.amount ?? 0 : 0;
+    acc.failed_amount += ["failed", "returned"].includes(item.status) ? item.amount ?? 0 : 0;
+    acc.succeeded += item.status === "succeeded" ? 1 : 0;
+    acc.reconciled += item.status === "reconciled" ? 1 : 0;
+    acc.unconfirmed_count += item.bank_confirmed_at ? 0 : 1;
+    acc.total_variance += item.variance_amount ?? 0;
+    acc.variance_count += item.variance_amount && item.variance_amount !== 0 ? 1 : 0;
+    acc.nsf_count += item.nsf_flag ? 1 : 0;
+    acc.unsynced_count += item.accounting_synced_at ? 0 : 1;
+    return acc;
+  }, {
+    in_flight_amount: 0,
+    cleared_amount: 0,
+    reconciled_amount: 0,
+    failed_amount: 0,
+    succeeded: 0,
+    reconciled: 0,
+    unconfirmed_count: 0,
+    total_variance: 0,
+    variance_count: 0,
+    nsf_count: 0,
+    unsynced_count: 0,
+  }), [items]);
+
+  const batches = useMemo(() => {
+    const metaMap = new Map(batchMeta.map((batch: any) => [batch.id, batch]));
+    const grouped = new Map<string, Record<string, string | number | null>>();
+
+    items.forEach((item) => {
+      if (!item.batch_id) return;
+      const meta = metaMap.get(item.batch_id);
+      const current = grouped.get(item.batch_id) ?? {
+        id: item.batch_id,
+        batch_number: meta?.batch_number ?? item.batch_id,
+        provider: meta?.provider ?? item.provider,
+        status: meta?.status ?? item.status,
+        total_items: 0,
+        total_amount: 0,
+        cleared_amount: 0,
+        failed_amount: 0,
+      };
+
+      current.total_items = Number(current.total_items) + 1;
+      current.total_amount = Number(current.total_amount) + (item.amount ?? 0);
+      current.cleared_amount = Number(current.cleared_amount) + (item.status === "succeeded" ? item.amount ?? 0 : 0);
+      current.failed_amount = Number(current.failed_amount) + (["failed", "returned"].includes(item.status) ? item.amount ?? 0 : 0);
+      grouped.set(item.batch_id, current);
+    });
+
+    return Array.from(grouped.values());
+  }, [batchMeta, items]);
 
   const fmtMoney = (n: number | null | undefined) =>
     n != null ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "$0.00";
