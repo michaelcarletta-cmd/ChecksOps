@@ -415,7 +415,7 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
           </p>
         )}
 
-        {!loading && results.length > 0 && (
+        {results.length > 0 && (
           <div className="overflow-y-auto max-h-[calc(100vh-200px)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 pr-2">
             <MetadataBanner metadata={metadata} />
             <div className="space-y-1">
