@@ -437,6 +437,27 @@ export default function CheckCommandCenter() {
         </div>
       </div>
 
+      {/* Search bar — filter checks by name, claim #, check #, or carrier */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+        <Input
+          placeholder="Search by policyholder name, claim #, check #, payee, or carrier..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9 h-10"
+        />
+        {searchQuery && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+            onClick={() => setSearchQuery("")}
+            title="Clear search"
+          >
+            <XIcon className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
         {/* Gradient nav cards */}
