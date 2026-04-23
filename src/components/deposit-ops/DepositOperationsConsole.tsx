@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -95,6 +96,7 @@ const statusConfig: Record<string, { label: string; color: string; icon: typeof 
 
 export function DepositOperationsConsole() {
   const { user } = useAuth();
+  const { tenantId } = useTenantFilter();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -131,43 +133,64 @@ export function DepositOperationsConsole() {
   const activeProviders = providerConfigs.filter((p) => p.is_active);
   const stubbedProviders = providerConfigs.filter((p) => p.is_stubbed);
 
-  // Fetch deposit items
+  // Fetch deposit items scoped to the active tenant via the related check
   const { data: items = [], isLoading } = useQuery({
-    queryKey: ["deposit-items"],
+    queryKey: ["deposit-items", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deposit_items")
-        .select("*")
+        .select("*, check_intake_items!inner(tenant_id)")
+        .eq("check_intake_items.tenant_id", tenantId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as DepositItem[];
+      return ((data ?? []) as Array<DepositItem & { check_intake_items?: { tenant_id: string | null } | null }>).map(({ check_intake_items, ...item }) => item);
     },
+    enabled: !!tenantId,
   });
 
   // Fetch approved checks not yet in pipeline
   const existingCheckIds = new Set(items.map((i) => i.check_id));
   const { data: approvedChecks = [] } = useQuery({
-    queryKey: ["approved-checks-for-deposit", existingCheckIds.size],
+    queryKey: ["approved-checks-for-deposit", tenantId, existingCheckIds.size],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
         .select("id, check_number, carrier_name, amount, claim_id, status, reviewed_at")
+        .eq("tenant_id", tenantId!)
         .eq("status", "approved_for_deposit")
         .order("reviewed_at", { ascending: false });
       if (error) throw error;
       return ((data ?? []) as ApprovedCheck[]).filter((c) => !existingCheckIds.has(c.id));
     },
-    enabled: !isLoading,
+    enabled: !!tenantId && !isLoading,
   });
 
-  // Reconciliation summary
-  const { data: reconSummary } = useQuery({
-    queryKey: ["deposit-recon-summary"],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_deposit_reconciliation_summary");
-      if (error) throw error;
-      return data as Record<string, number>;
-    },
+  // Reconciliation summary derived from tenant-scoped items
+  const reconSummary = items.reduce<Record<string, number>>((acc, item) => {
+    acc.in_flight_amount += ["pending_assignment", "provider_assigned", "submitted", "processing"].includes(item.status) ? item.amount ?? 0 : 0;
+    acc.cleared_amount += item.status === "succeeded" ? item.amount ?? 0 : 0;
+    acc.reconciled_amount += item.status === "reconciled" ? item.reconciled_amount ?? item.amount ?? 0 : 0;
+    acc.failed_amount += ["failed", "returned"].includes(item.status) ? item.amount ?? 0 : 0;
+    acc.succeeded += item.status === "succeeded" ? 1 : 0;
+    acc.reconciled += item.status === "reconciled" ? 1 : 0;
+    acc.unconfirmed_count += item.bank_confirmed_at ? 0 : 1;
+    acc.total_variance += item.variance_amount ?? 0;
+    acc.variance_count += item.variance_amount && item.variance_amount !== 0 ? 1 : 0;
+    acc.nsf_count += item.nsf_flag ? 1 : 0;
+    acc.unsynced_count += item.accounting_synced_at ? 0 : 1;
+    return acc;
+  }, {
+    in_flight_amount: 0,
+    cleared_amount: 0,
+    reconciled_amount: 0,
+    failed_amount: 0,
+    succeeded: 0,
+    reconciled: 0,
+    unconfirmed_count: 0,
+    total_variance: 0,
+    variance_count: 0,
+    nsf_count: 0,
+    unsynced_count: 0,
   });
 
   // Deposit action mutation
@@ -778,18 +801,22 @@ function DepositItemDetail({
 /* ------------------------------------------------------------------ */
 
 export function BranchDepositManifest() {
+  const { tenantId } = useTenantFilter();
+
   const { data: branchItems = [] } = useQuery({
-    queryKey: ["branch-deposit-items"],
+    queryKey: ["branch-deposit-items", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deposit_items")
-        .select("*")
+        .select("*, check_intake_items!inner(tenant_id)")
+        .eq("check_intake_items.tenant_id", tenantId!)
         .in("provider", ["manual_branch", "internal_ready"])
         .in("status", ["pending_assignment", "provider_assigned"])
         .order("created_at", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as DepositItem[];
+      return ((data ?? []) as Array<DepositItem & { check_intake_items?: { tenant_id: string | null } | null }>).map(({ check_intake_items, ...item }) => item);
     },
+    enabled: !!tenantId,
   });
 
   const total = branchItems.reduce((sum, i) => sum + (i.amount ?? 0), 0);
