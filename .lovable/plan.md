@@ -1,82 +1,53 @@
 
 
-# White-Label Product Extraction: Check Command Center
+# Cross-Tenant Check Sharing
 
 ## Overview
+Add the ability to selectively share individual checks between tenants so contractors and public adjusters working together on specific claims can track shared checks without exposing their entire check portfolio.
 
-Extract the Check Command Center into a standalone, white-label-ready product that can be licensed to other insurance companies, PA firms, or contractors -- each with their own branding, users, and data isolation. The same pattern will be reusable for future feature extractions (Referral Marketplace, Guided Claims, etc.).
+## How It Works
+- A tenant admin can "share" a specific check with another tenant
+- The receiving tenant sees a read-only copy of the shared check in their Check Command Center, visually tagged as "Shared"
+- The originating tenant controls which checks are shared and can revoke access at any time
+- Shared checks update in real-time -- when the owner updates status, amount, or endorsement info, the partner tenant sees the latest data
 
-## Architecture
+## Database Changes
 
-```text
-┌─────────────────────────────────────────────────┐
-│           Freedom Claims (Main App)             │
-│  Uses Check Command Center as internal feature  │
-└─────────────────────────────────────────────────┘
+**New table: `shared_checks`**
+- `id` (UUID, PK)
+- `check_id` (UUID, FK to check_intake_items)
+- `source_tenant_id` (UUID, FK to tenants -- the owner)
+- `target_tenant_id` (UUID, FK to tenants -- the recipient)
+- `shared_by` (UUID, FK to auth.users)
+- `access_level` (text, default 'read_only' -- future-proof for edit access)
+- `created_at`, `revoked_at` (nullable, soft-revoke)
+- RLS: source tenant members can insert/update/delete; target tenant members can select active (non-revoked) shares
 
-┌─────────────────────────────────────────────────┐
-│     White-Label Check Command Center            │
-│  ┌───────────┐  ┌───────────┐  ┌───────────┐   │
-│  │ Tenant A  │  │ Tenant B  │  │ Tenant C  │   │
-│  │ (Branding)│  │ (Branding)│  │ (Branding)│   │
-│  └───────────┘  └───────────┘  └───────────┘   │
-│         Shared backend, isolated data           │
-└─────────────────────────────────────────────────┘
-```
+**No data duplication** -- shared checks are not copied. The target tenant queries `check_intake_items` joined through `shared_checks` to see the originating check data.
 
-## What Gets Built
+## UI Changes
 
-### 1. Multi-Tenant Data Layer
+### Check Command Center (both system and white-label)
+1. **Share button** on each check row (kebab menu or action column) -- opens a dialog to pick a target tenant
+2. **"Shared with you" tab or filter** -- lets tenants toggle between "My Checks" and "Shared with Me"
+3. **Visual badge** -- shared checks display a small "Shared" or partner name tag
+4. **Manage Shares panel** -- source tenant can see who they've shared each check with and revoke access
 
-- New `tenants` table: id, name, slug, logo_url, primary_color, secondary_color, custom_domain, stripe_customer_id, subscription_status, plan_tier, created_at
-- New `tenant_users` table: tenant_id, user_id, role (admin/operator/viewer)
-- Add `tenant_id` column to check-related tables (`claim_checks`, `deposit_items`, `deposit_batches`, `check_endorsements`) with RLS policies ensuring complete data isolation
-- Security-definer helper `current_tenant_id()` for RLS policies
+### Share Dialog
+- Dropdown of available tenants (fetched from `tenants` table, excluding self and system)
+- Confirm button to create the share record
 
-### 2. White-Label Theming
+## Query Changes
+- `CheckCommandCenter` adds a secondary query joining `shared_checks` + `check_intake_items` where `target_tenant_id = current tenant` and `revoked_at IS NULL`
+- Results merged into the check list with a `shared: true` flag for UI differentiation
+- Shared checks are read-only in the target tenant's view (no edit/delete actions)
 
-- New `TenantThemeProvider` component that reads tenant branding (logo, colors) from context and applies CSS custom properties
-- Tenant-aware login page at `/wl/:slug/login` with tenant branding
-- Tenant dashboard at `/wl/:slug/checks` rendering the Check Command Center with tenant context
+## Technical Details
 
-### 3. Check Command Center Refactor
-
-- Extract the core Check Command Center logic into reusable components under `src/components/check-center/` (already partially done with `check-review/`)
-- Create a `WhiteLabelCheckCenter` wrapper that injects tenant context and strips Freedom Claims-specific references
-- The internal Freedom Claims route continues working as-is -- it just uses the same shared components
-
-### 4. Tenant Admin Portal
-
-- Admin page for Freedom Claims staff to manage tenants: create, configure branding, manage users, view usage
-- Tenant self-service settings: upload logo, set colors, manage their own users
-- Usage dashboard showing check volume per tenant
-
-### 5. Stripe Subscription for Tenants
-
-- Product tiers (e.g., Starter $199/mo, Pro $499/mo, Enterprise custom)
-- Stripe Checkout integration for tenant signup
-- Webhook handler to activate/suspend tenant access based on subscription status
-- Usage-based billing option for per-check fees
-
-### 6. Custom Domain Support
-
-- Tenants can map their own domain (e.g., `checks.theircompany.com`)
-- Routing logic to resolve tenant from custom domain or `/wl/:slug` path
-
-## Implementation Order
-
-1. **Database**: Create tenants, tenant_users tables with RLS; add tenant_id to check tables
-2. **Tenant context**: Build TenantProvider, theme provider, tenant-aware auth
-3. **Component extraction**: Refactor CheckCommandCenter into shared components
-4. **White-label routes**: `/wl/:slug/login`, `/wl/:slug/checks`
-5. **Tenant admin**: Management UI for creating and configuring tenants
-6. **Stripe billing**: Subscription products, checkout, webhooks
-7. **Custom domains**: Domain mapping and resolution logic
-
-## Technical Notes
-
-- The existing Check Command Center (2,730 lines) will be broken into smaller composable components that both the internal and white-label versions consume
-- RLS policies use `current_tenant_id()` so tenants can never see each other's data
-- The main Freedom Claims app gets a special "system" tenant automatically
-- Future features (Referral Marketplace, Guided Claims) follow the same tenant pattern once established
+| Area | Detail |
+|------|--------|
+| Migration | Create `shared_checks` table with RLS, indexes on `check_id`, `source_tenant_id`, `target_tenant_id` |
+| Realtime | Enable realtime on `shared_checks` so partner sees new shares immediately |
+| RLS | Source tenant: full CRUD on own shares. Target tenant: SELECT only on active shares. Check data visibility via join (existing check RLS bypassed by `source_tenant_id` ownership proof) |
+| Files touched | `CheckCommandCenter.tsx`, `useTenantFilter.ts` (add shared-check merge), new `ShareCheckDialog.tsx`, new `SharedChecksBadge.tsx`, migration SQL |
 
