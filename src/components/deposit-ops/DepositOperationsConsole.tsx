@@ -244,7 +244,14 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
     setActionSlipNumber("");
   };
 
-  const filteredItems = statusFilter === "all" ? items : items.filter((i) => i.status === statusFilter);
+  const q = (searchQuery ?? "").trim().toLowerCase();
+  const baseFiltered = statusFilter === "all" ? items : items.filter((i) => i.status === statusFilter);
+  const filteredItems = q
+    ? baseFiltered.filter((i) =>
+        [i.check_number, i.carrier_name, i.bank_reference, i.deposit_slip_number, i.provider_reference]
+          .some((v) => v && v.toString().toLowerCase().includes(q))
+      )
+    : baseFiltered;
 
   const handleExecuteAction = () => {
     if (!actionDialog) return;
