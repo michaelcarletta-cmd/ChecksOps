@@ -92,7 +92,8 @@ const NOT_MONITORED_ACTIONS: {
   needsAmount?: boolean; needsTracking?: boolean; fromStatuses: string[];
 }[] = [
   { action: "mark_sent", label: "Sent Check to Mortgage Company", icon: Send, color: "text-blue-400", needsTracking: true, fromStatuses: ["pending_send"] },
-  { action: "mark_received_back", label: "Received Check from Mortgage Company", icon: PackageCheck, color: "text-emerald-400", fromStatuses: ["sent_to_lender", "received_by_lender"] },
+  { action: "mark_received_back", label: "Received Check from Mortgage Company (Endorsed)", icon: PackageCheck, color: "text-emerald-400", fromStatuses: ["sent_to_lender", "received_by_lender", "escrowed", "first_draw_requested", "partial_release"] },
+  { action: "send_for_endorsements", label: "Send for Endorsements", icon: Send, color: "text-orange-400", fromStatuses: ["check_received_back"] },
 ];
 
 /* Monitored = mortgage holds funds in escrow, draws required */
