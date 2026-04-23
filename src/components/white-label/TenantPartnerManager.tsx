@@ -31,6 +31,9 @@ export function TenantPartnerManager() {
       return data;
     },
     enabled: !!tenantId,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
   });
 
   // Active partnerships
