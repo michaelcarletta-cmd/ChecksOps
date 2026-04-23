@@ -16919,6 +16919,7 @@ export type Database = {
         Args: { p_deposit_item_id: string }
         Returns: Json
       }
+      generate_partner_code_value: { Args: never; Returns: string }
       geometry: { Args: { "": string }; Returns: unknown }
       geometry_above: {
         Args: { geom1: unknown; geom2: unknown }
