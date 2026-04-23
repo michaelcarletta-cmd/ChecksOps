@@ -209,7 +209,7 @@ export function LossDraftDetailPanel({
         p_actor_id: user.id,
         p_amount: actionAmount ? parseFloat(actionAmount) : null,
         p_notes: actionNotes || null,
-        p_extra: JSON.stringify(extra),
+        p_extra: extra,
       });
       if (error) throw error;
       toast({ title: "Action completed", description: `${action.replace(/_/g, " ")} applied successfully.` });
@@ -328,7 +328,7 @@ export function LossDraftDetailPanel({
         p_actor_id: user.id,
         p_amount: null,
         p_notes: `Changed to ${newType}`,
-        p_extra: JSON.stringify({ monitoring_type: newType }),
+        p_extra: { monitoring_type: newType },
       });
       if (error) throw error;
       toast({ title: "Monitoring type updated", description: `Set to ${newType === "monitored" ? "Monitored" : "Not Monitored"}` });
@@ -348,7 +348,7 @@ export function LossDraftDetailPanel({
         p_actor_id: user.id,
         p_amount: null,
         p_notes: adminResetNotes || `Admin reset to ${adminTargetStatus}`,
-        p_extra: JSON.stringify({ target_status: adminTargetStatus }),
+        p_extra: { target_status: adminTargetStatus },
       });
       if (error) throw error;
       toast({ title: "Status reset", description: `Status changed to ${adminTargetStatus.replace(/_/g, " ")}` });
