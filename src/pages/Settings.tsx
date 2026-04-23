@@ -421,7 +421,7 @@ export default function Settings() {
   const { toast } = useToast();
 
   // Check if current user is admin
-  const { data: isAdmin } = useQuery({
+  const { data: isAdmin, isLoading: isAdminLoading } = useQuery({
     queryKey: ["is-admin-settings"],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -622,6 +622,20 @@ export default function Settings() {
       fetchStatuses();
     }
   };
+
+  if (isAdminLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Settings</h1>
+          <p className="text-muted-foreground">Manage your claim workflow and dropdown options</p>
+        </div>
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
