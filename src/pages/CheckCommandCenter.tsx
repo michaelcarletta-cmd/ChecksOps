@@ -359,44 +359,6 @@ export default function CheckCommandCenter() {
           })}
         </div>
 
-        {/* Deposit Operations Tab */}
-        {activeTab === "deposit_ops" && (
-          <div className="mt-3 space-y-4">
-            <DepositOperationsConsole />
-            <BranchDepositManifest />
-          </div>
-        )}
-
-        {/* Reconciliation Tab */}
-        {activeTab === "reconciliation" && (
-          <div className="mt-3">
-            <ReconciliationDashboard />
-          </div>
-        )}
-
-
-        {/* Reports Tab */}
-        {activeTab === "reports" && (
-          <div className="mt-3">
-            <DepositReports />
-          </div>
-        )}
-
-
-        {/* Work Queue Tab */}
-        {activeTab === "workqueue" && (
-          <div className="mt-3">
-            <DepositOwnerQueue />
-          </div>
-        )}
-
-        {/* Manager Command Center Tab */}
-        {activeTab === "manager" && (
-          <div className="mt-3">
-            <DepositManagerCommandCenter />
-          </div>
-        )}
-
         {/* Loss Draft Tab */}
         {activeTab === "lossdraft" && (
           <div className="mt-3">
