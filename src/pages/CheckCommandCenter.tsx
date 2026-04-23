@@ -357,6 +357,17 @@ export default function CheckCommandCenter() {
           })}
         </div>
 
+        {/* Operations tabs */}
+        <TabsList className="mt-3 w-full flex-wrap h-auto gap-1 bg-muted/50">
+          <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
+          <TabsTrigger value="reconciliation" className="text-xs gap-1"><Scale className="h-3 w-3" />Reconciliation</TabsTrigger>
+          <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
+          <TabsTrigger value="workqueue" className="text-xs gap-1"><UsersIcon className="h-3 w-3" />Work Queue</TabsTrigger>
+          <TabsTrigger value="manager" className="text-xs gap-1"><Command className="h-3 w-3" />Manager</TabsTrigger>
+          <TabsTrigger value="reissue" className="text-xs gap-1"><RotateCcw className="h-3 w-3" />Reissue ({reissueRequested.length})</TabsTrigger>
+          <TabsTrigger value="branch" className="text-xs gap-1"><Building2 className="h-3 w-3" />Branch ({branchDeposit.length})</TabsTrigger>
+        </TabsList>
+
         {/* Loss Draft Tab */}
         {activeTab === "lossdraft" && (
           <div className="mt-3">
