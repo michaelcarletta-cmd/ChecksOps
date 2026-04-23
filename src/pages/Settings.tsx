@@ -421,7 +421,7 @@ export default function Settings() {
   const { toast } = useToast();
 
   // Check if current user is admin
-  const { data: isAdmin } = useQuery({
+  const { data: isAdmin, isLoading: isAdminLoading } = useQuery({
     queryKey: ["is-admin-settings"],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
