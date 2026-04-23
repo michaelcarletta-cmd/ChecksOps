@@ -2,15 +2,20 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Landmark, Send, ArrowRightLeft, AlertTriangle, DollarSign, Clock, ShieldAlert, FileWarning, CheckCircle2 } from "lucide-react";
+import { useTenantFilter } from "@/hooks/useTenantFilter";
 
 export function LossDraftDashboardCards() {
+  const { tenantId } = useTenantFilter();
   const { data: counts } = useQuery({
-    queryKey: ["loss-draft-counts"],
+    queryKey: ["loss-draft-counts", tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_loss_draft_dashboard_counts");
+      const { data, error } = await supabase.rpc("get_loss_draft_dashboard_counts_for_tenant" as any, {
+        _tenant_id: tenantId!,
+      });
       if (error) throw error;
-      return data as Record<string, number>;
+      return (data ?? {}) as Record<string, number>;
     },
+    enabled: !!tenantId,
     refetchInterval: 30_000,
   });
 

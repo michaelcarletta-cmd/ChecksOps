@@ -16,6 +16,7 @@ import { format, differenceInDays } from "date-fns";
 import { LossDraftDetailPanel } from "./LossDraftDetailPanel";
 import { LossDraftDashboardCards } from "./LossDraftDashboardCards";
 import { NewLossDraftDialog } from "./NewLossDraftDialog";
+import { useTenantFilter } from "@/hooks/useTenantFilter";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -67,19 +68,22 @@ export { escrowStatusConfig };
 
 export function LossDraftDashboard() {
   const qc = useQueryClient();
+  const { tenantId } = useTenantFilter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("active");
 
   const { data: drafts = [], isLoading } = useQuery({
-    queryKey: ["loss-draft-dashboard"],
+    queryKey: ["loss-draft-dashboard", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("loss_draft_dashboard" as any)
         .select("*")
+        .eq("tenant_id", tenantId!)
         .order("updated_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as unknown as LossDraftRow[];
     },
+    enabled: !!tenantId,
   });
 
   const filtered = filter === "active"

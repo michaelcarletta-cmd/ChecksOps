@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -96,12 +97,14 @@ export function CheckReviewQueue({
   onSelectCheck: (id: string) => void;
   selectedCheckId: string | null;
 }) {
+  const { tenantId } = useTenantFilter();
   const { data: reviewChecks = [], isLoading } = useQuery({
-    queryKey: ["check-review-queue"],
+    queryKey: ["check-review-queue", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
         .select("*, check_payees(*)")
+        .eq("tenant_id", tenantId!)
         .or(
           `status.in.(${REVIEW_STATUSES.join(",")}),deposit_recommendation.in.(manual_review_required,branch_deposit_recommended),ocr_status.eq.failed`
         )
@@ -109,6 +112,7 @@ export function CheckReviewQueue({
       if (error) throw error;
       return (data ?? []) as ReviewCheck[];
     },
+    enabled: !!tenantId,
     refetchInterval: 15000,
   });
 
