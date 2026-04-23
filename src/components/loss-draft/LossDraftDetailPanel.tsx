@@ -372,9 +372,17 @@ export function LossDraftDetailPanel({
           </CardTitle>
           <Badge className={`text-[10px] ${sc.color}`}>{sc.label}</Badge>
         </div>
-        <div className="text-xs text-muted-foreground">
-          Draw #{draft.draw_stage} · Holdback {fmtMoney(draft.holdback_amount)}
-        </div>
+        {isMonitored && (
+          <div className="text-xs text-muted-foreground">
+            Draw #{draft.draw_stage} · Holdback {fmtMoney(draft.holdback_amount)}
+          </div>
+        )}
+        {!isMonitored && (
+          <div className="text-xs text-muted-foreground">
+            Not Monitored — Mortgage endorses &amp; returns check
+            {draft.check_received_back_date && " · ✅ Received back"}
+          </div>
+        )}
       </CardHeader>
       <Separator />
 
