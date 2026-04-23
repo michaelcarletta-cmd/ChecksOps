@@ -3,6 +3,7 @@ import { TenantProvider } from "@/contexts/TenantContext";
 import { TenantThemeProvider } from "@/components/white-label/TenantThemeProvider";
 import { WhiteLabelLogin } from "@/components/white-label/WhiteLabelLogin";
 import { WhiteLabelCheckCenter } from "@/components/white-label/WhiteLabelCheckCenter";
+import { WhiteLabelSettings } from "@/components/white-label/WhiteLabelSettings";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
@@ -95,6 +96,16 @@ function WhiteLabelRoutes() {
             ? <Navigate to={`/wl/${tenant.slug}/login`} replace />
             : isMember
               ? <WhiteLabelCheckCenter />
+              : <Navigate to={`/wl/${tenant.slug}/login`} replace />
+        }
+      />
+      <Route
+        path="settings"
+        element={
+          !user
+            ? <Navigate to={`/wl/${tenant.slug}/login`} replace />
+            : isMember
+              ? <WhiteLabelSettings />
               : <Navigate to={`/wl/${tenant.slug}/login`} replace />
         }
       />

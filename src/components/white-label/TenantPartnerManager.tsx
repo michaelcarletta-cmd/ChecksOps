@@ -7,16 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Copy, Link2, Loader2, Check, X, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-function generateCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "";
-  for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
-  return code;
-}
 
 export function TenantPartnerManager() {
   const { user } = useAuth();
@@ -24,7 +16,22 @@ export function TenantPartnerManager() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [redeemCode, setRedeemCode] = useState("");
-  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  // Get current tenant's permanent partner code
+  const { data: tenantData } = useQuery({
+    queryKey: ["tenant-partner-code", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tenants")
+        .select("partner_code, name")
+        .eq("id", tenantId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!tenantId,
+  });
 
   // Active partnerships
   const { data: partnerships = [] } = useQuery({
@@ -33,6 +40,7 @@ export function TenantPartnerManager() {
       const { data, error } = await supabase
         .from("tenant_partnerships")
         .select("*, inviter:tenants!tenant_partnerships_inviter_tenant_id_fkey(name), invitee:tenants!tenant_partnerships_invitee_tenant_id_fkey(name)")
+        .eq("status", "active")
         .or(`inviter_tenant_id.eq.${tenantId},invitee_tenant_id.eq.${tenantId}`)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -41,79 +49,49 @@ export function TenantPartnerManager() {
     enabled: !!tenantId,
   });
 
-  // Pending invite codes (ones we created, not yet redeemed)
-  const { data: pendingInvites = [] } = useQuery({
-    queryKey: ["pending-invites", tenantId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tenant_partnerships")
-        .select("id, invite_code, created_at")
-        .eq("inviter_tenant_id", tenantId!)
-        .eq("status", "pending")
-        .is("invitee_tenant_id", null);
-      if (error) throw error;
-      return (data ?? []) as any[];
-    },
-    enabled: !!tenantId,
-  });
-
-  const activePartners = partnerships.filter((p: any) => p.status === "active");
-
-  // Generate invite code
-  const generateMutation = useMutation({
-    mutationFn: async () => {
-      const code = generateCode();
-      const { error } = await supabase.from("tenant_partnerships").insert({
-        inviter_tenant_id: tenantId!,
-        invite_code: code,
-        created_by: user!.id,
-        status: "pending",
-      });
-      if (error) throw error;
-      return code;
-    },
-    onSuccess: (code) => {
-      toast({ title: "Invite code created", description: code });
-      qc.invalidateQueries({ queryKey: ["pending-invites", tenantId] });
-    },
-    onError: (e: any) => {
-      toast({ title: "Failed to generate code", description: e.message, variant: "destructive" });
-    },
-  });
-
-  // Redeem invite code
+  // Redeem a partner's code
   const redeemMutation = useMutation({
     mutationFn: async (code: string) => {
-      // Look up the pending invite
-      const { data: invite, error: lookupErr } = await supabase
-        .from("tenant_partnerships")
-        .select("id, inviter_tenant_id")
-        .eq("invite_code", code.toUpperCase().trim())
-        .eq("status", "pending")
-        .is("invitee_tenant_id", null)
+      const normalizedCode = code.toUpperCase().trim();
+
+      // Look up the tenant by their permanent partner_code
+      const { data: partnerTenant, error: lookupErr } = await supabase
+        .from("tenants")
+        .select("id, name")
+        .eq("partner_code", normalizedCode)
         .maybeSingle();
       if (lookupErr) throw lookupErr;
-      if (!invite) throw new Error("Invalid or expired invite code");
-      if (invite.inviter_tenant_id === tenantId) throw new Error("Cannot redeem your own invite code");
+      if (!partnerTenant) throw new Error("Invalid partner code. Check the code and try again.");
+      if (partnerTenant.id === tenantId) throw new Error("That's your own partner code!");
 
-      // Activate the partnership
-      const { error: updateErr } = await supabase
+      // Check if partnership already exists
+      const { data: existing } = await supabase
         .from("tenant_partnerships")
-        .update({
-          invitee_tenant_id: tenantId!,
-          status: "active",
-          accepted_at: new Date().toISOString(),
-        })
-        .eq("id", invite.id);
-      if (updateErr) throw updateErr;
+        .select("id, status")
+        .or(`and(inviter_tenant_id.eq.${tenantId},invitee_tenant_id.eq.${partnerTenant.id}),and(inviter_tenant_id.eq.${partnerTenant.id},invitee_tenant_id.eq.${tenantId})`)
+        .eq("status", "active")
+        .maybeSingle();
+      if (existing) throw new Error(`Already partnered with ${partnerTenant.name}`);
+
+      // Create the partnership
+      const { error: insertErr } = await supabase.from("tenant_partnerships").insert({
+        inviter_tenant_id: tenantId!,
+        invitee_tenant_id: partnerTenant.id,
+        invite_code: normalizedCode,
+        status: "active",
+        created_by: user!.id,
+        accepted_at: new Date().toISOString(),
+      });
+      if (insertErr) throw insertErr;
+      return partnerTenant.name;
     },
-    onSuccess: () => {
-      toast({ title: "Partnership established!" });
+    onSuccess: (partnerName) => {
+      toast({ title: `Connected with ${partnerName}!` });
       setRedeemCode("");
       qc.invalidateQueries({ queryKey: ["tenant-partnerships", tenantId] });
     },
     onError: (e: any) => {
-      toast({ title: "Failed to redeem", description: e.message, variant: "destructive" });
+      toast({ title: "Connection failed", description: e.message, variant: "destructive" });
     },
   });
 
@@ -132,65 +110,52 @@ export function TenantPartnerManager() {
     },
   });
 
-  const copyCode = (code: string) => {
-    navigator.clipboard.writeText(code);
-    setCopiedCode(code);
-    setTimeout(() => setCopiedCode(null), 2000);
+  const copyCode = () => {
+    if (tenantData?.partner_code) {
+      navigator.clipboard.writeText(tenantData.partner_code);
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+    }
   };
 
   return (
     <div className="space-y-6">
-      {/* Generate invite code */}
+      {/* Your partner code */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2">
-            <Link2 className="h-4 w-4" /> Generate Invite Code
+            <Link2 className="h-4 w-4" /> Your Partner Code
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            Generate a code and share it with a partner company. They'll enter it to connect with you for check sharing.
+            Share this code with any company you want to partner with. They can enter it to connect with you for check sharing.
           </p>
-          <Button
-            onClick={() => generateMutation.mutate()}
-            disabled={generateMutation.isPending}
-            size="sm"
-          >
-            {generateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-            Generate Code
-          </Button>
-
-          {pendingInvites.length > 0 && (
-            <div className="space-y-2 pt-2">
-              <p className="text-xs font-medium text-muted-foreground">Active invite codes</p>
-              {pendingInvites.map((inv: any) => (
-                <div key={inv.id} className="flex items-center gap-2 rounded-md border border-border/60 px-3 py-2">
-                  <code className="text-sm font-mono font-bold tracking-widest">{inv.invite_code}</code>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => copyCode(inv.invite_code)}
-                  >
-                    {copiedCode === inv.invite_code ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-                  </Button>
-                </div>
-              ))}
+          {tenantData?.partner_code ? (
+            <div className="flex items-center gap-3">
+              <code className="text-lg font-mono font-bold tracking-[0.3em] bg-muted px-4 py-2 rounded-md">
+                {tenantData.partner_code}
+              </code>
+              <Button variant="outline" size="icon" onClick={copyCode}>
+                {copiedCode ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+              </Button>
             </div>
+          ) : (
+            <div className="text-xs text-muted-foreground">Loading...</div>
           )}
         </CardContent>
       </Card>
 
-      {/* Redeem invite code */}
+      {/* Enter partner's code */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2">
-            <Users className="h-4 w-4" /> Redeem Partner Code
+            <Users className="h-4 w-4" /> Connect with a Partner
           </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-xs text-muted-foreground mb-3">
-            Enter the invite code you received from a partner company.
+            Enter the partner code you received from another company.
           </p>
           <div className="flex gap-2">
             <Input
@@ -217,11 +182,11 @@ export function TenantPartnerManager() {
           <CardTitle className="text-sm">Active Partners</CardTitle>
         </CardHeader>
         <CardContent>
-          {activePartners.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No active partnerships yet.</p>
+          {partnerships.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No active partnerships yet. Share your code or enter a partner's code to connect.</p>
           ) : (
             <div className="space-y-2">
-              {activePartners.map((p: any) => {
+              {partnerships.map((p: any) => {
                 const partnerName = p.inviter_tenant_id === tenantId
                   ? p.invitee?.name
                   : p.inviter?.name;
@@ -236,7 +201,7 @@ export function TenantPartnerManager() {
                       size="sm"
                       className="h-7 text-destructive hover:text-destructive"
                       onClick={() => {
-                        if (confirm("Revoke this partnership? The partner will no longer see shared checks.")) {
+                        if (confirm("Revoke this partnership? The partner will lose access to shared checks.")) {
                           revokeMutation.mutate(p.id);
                         }
                       }}
