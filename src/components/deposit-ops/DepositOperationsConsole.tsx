@@ -139,7 +139,7 @@ export function DepositOperationsConsole() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deposit_items")
-        .select("*, check_intake_items!deposit_items_check_id_fkey(tenant_id)")
+        .select("*, check_intake_items!inner(tenant_id)")
         .eq("check_intake_items.tenant_id", tenantId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
