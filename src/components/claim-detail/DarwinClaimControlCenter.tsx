@@ -111,7 +111,16 @@ export function DarwinClaimControlCenter({
 
         <TabsContent value="overview" className="mt-6 space-y-6">
           <ClaimOverview claim={claim} isPortalUser={false} onClaimUpdated={onClaimUpdated} />
-          {isStaffOrAdmin && <ClaimCashFlowCard claimId={claimId} />}
+          {isStaffOrAdmin && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2">
+                <ClaimCashFlowCard claimId={claimId} />
+              </div>
+              <div className="lg:col-span-1">
+                <CheckStatusWorkflow claimId={claimId} />
+              </div>
+            </div>
+          )}
         </TabsContent>
 
         {isStaffOrAdmin && (
