@@ -94,19 +94,21 @@ export function WhiteLabelLogin() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center space-y-4">
+      <Card className="w-full max-w-md border-border/50">
+        <CardHeader className="text-center space-y-3 pb-2">
           {tenant.logo_url && (
             <img
               src={tenant.logo_url}
               alt={tenant.name}
-              className="h-12 mx-auto object-contain"
+              className="h-10 md:h-12 mx-auto object-contain"
             />
           )}
-          <CardTitle className="text-2xl">{tenant.name}</CardTitle>
-          <p className="text-sm text-muted-foreground">Check Command Center</p>
+          <div>
+            <CardTitle className="text-xl md:text-2xl">{tenant.name}</CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">Check Command Center</p>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-2">
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
