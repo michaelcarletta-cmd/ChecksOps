@@ -404,6 +404,7 @@ export default function CheckCommandCenter() {
           <TabsTrigger value="manager" className="text-xs gap-1"><Command className="h-3 w-3" />Manager</TabsTrigger>
           <TabsTrigger value="reissue" className="text-xs gap-1"><RotateCcw className="h-3 w-3" />Reissue ({reissueRequested.length})</TabsTrigger>
           <TabsTrigger value="branch" className="text-xs gap-1"><Building2 className="h-3 w-3" />Branch ({branchDeposit.length})</TabsTrigger>
+          <TabsTrigger value="partners" className="text-xs gap-1"><Share2 className="h-3 w-3" />Partners</TabsTrigger>
         </TabsList>
 
         {/* Loss Draft Tab */}
