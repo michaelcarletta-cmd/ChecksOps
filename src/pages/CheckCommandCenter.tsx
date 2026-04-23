@@ -294,31 +294,81 @@ export default function CheckCommandCenter() {
     enabled: !!tenantId,
   });
 
+  // Fetch claim numbers + policyholder names for any linked claims so search works on them
+  const linkedClaimIds = useMemo(() => {
+    const ids = new Set<string>();
+    checks.forEach((c) => { if (c.claim_id) ids.add(c.claim_id); });
+    sharedChecks.forEach((c) => { if (c.claim_id) ids.add(c.claim_id); });
+    return Array.from(ids);
+  }, [checks, sharedChecks]);
+
+  const { data: linkedClaims = [] } = useQuery({
+    queryKey: ["check-linked-claims", linkedClaimIds],
+    queryFn: async () => {
+      if (linkedClaimIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("claims")
+        .select("id, claim_number, policyholder_name")
+        .in("id", linkedClaimIds);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: linkedClaimIds.length > 0,
+    staleTime: 60_000,
+  });
+
+  const claimLookup = useMemo(() => {
+    const map = new Map<string, { claim_number: string | null; policyholder_name: string | null }>();
+    linkedClaims.forEach((c: any) => map.set(c.id, { claim_number: c.claim_number, policyholder_name: c.policyholder_name }));
+    return map;
+  }, [linkedClaims]);
+
+  const matchesSearch = useCallback((c: CheckItem) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    const linked = c.claim_id ? claimLookup.get(c.claim_id) : null;
+    const haystacks: (string | null | undefined)[] = [
+      c.check_number,
+      c.carrier_name,
+      c.payee_line,
+      c.detected_claim_number,
+      linked?.claim_number,
+      linked?.policyholder_name,
+      ...(c.check_payees ?? []).map((p) => p.payee_name),
+    ];
+    return haystacks.some((v) => v && v.toString().toLowerCase().includes(q));
+  }, [searchQuery, claimLookup]);
+
   const awaitingEndorsement = checks.filter(
     (c) =>
-      c.deposit_recommendation === "endorsements_pending" ||
-      c.status === "endorsements_in_progress",
+      (c.deposit_recommendation === "endorsements_pending" ||
+        c.status === "endorsements_in_progress") && matchesSearch(c),
   );
   const readyForDeposit = checks.filter(
-    (c) => c.status === "approved_for_deposit" || (c.deposit_recommendation === "ready_for_deposit" && c.status !== "deposited"),
+    (c) =>
+      (c.status === "approved_for_deposit" ||
+        (c.deposit_recommendation === "ready_for_deposit" && c.status !== "deposited")) &&
+      matchesSearch(c),
   );
   const needsReview = checks.filter(
     (c) =>
-      c.status === "needs_review" ||
-      c.status === "manual_review_required" ||
-      c.status === "endorsements_complete" ||
-      c.deposit_recommendation === "branch_deposit_recommended" ||
-      c.ocr_status === "failed",
+      (c.status === "needs_review" ||
+        c.status === "manual_review_required" ||
+        c.status === "endorsements_complete" ||
+        c.deposit_recommendation === "branch_deposit_recommended" ||
+        c.ocr_status === "failed") && matchesSearch(c),
   );
-  const reissueRequested = checks.filter((c) => c.status === "reissue_requested");
-  const branchDeposit = checks.filter((c) => c.status === "branch_deposit_required");
+  const reissueRequested = checks.filter((c) => c.status === "reissue_requested" && matchesSearch(c));
+  const branchDeposit = checks.filter((c) => c.status === "branch_deposit_required" && matchesSearch(c));
+
+  const filteredSharedChecks = sharedChecks.filter((c) => matchesSearch(c as CheckItem));
 
   const filteredChecks =
-    activeTab === "shared" ? sharedChecks
+    activeTab === "shared" ? filteredSharedChecks
     : activeTab === "endorsements" ? awaitingEndorsement
     : activeTab === "ready" ? readyForDeposit
     : activeTab === "review" ? needsReview
-    : checks;
+    : checks.filter(matchesSearch);
 
   return (
     <div className="space-y-4">
