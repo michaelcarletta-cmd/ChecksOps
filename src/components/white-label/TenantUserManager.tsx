@@ -22,13 +22,18 @@ export function TenantUserManager({ tenantId }: Props) {
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["tenant-users", tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tenant_users")
-        .select("*")
-        .eq("tenant_id", tenantId)
-        .order("created_at", { ascending: true });
+      const { data, error } = await supabase.rpc("get_tenant_users_with_profiles", {
+        _tenant_id: tenantId,
+      });
       if (error) throw error;
-      return data;
+      return (data ?? []) as Array<{
+        id: string;
+        user_id: string;
+        role: string;
+        created_at: string;
+        full_name: string | null;
+        email: string | null;
+      }>;
     },
   });
 
@@ -119,22 +124,30 @@ export function TenantUserManager({ tenantId }: Props) {
         </div>
       ) : (
         <div className="space-y-2">
-          {users.map((u) => (
-            <div key={u.id} className="flex items-center justify-between p-2 rounded border">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-sm truncate">{u.user_id.slice(0, 8)}...</span>
-                <Badge className={`text-xs ${roleColor(u.role)}`}>{u.role}</Badge>
+          {users.map((u) => {
+            const displayName = u.full_name?.trim() || u.email?.split("@")[0] || "Unknown user";
+            return (
+              <div key={u.id} className="flex items-center justify-between p-2 rounded border">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium truncate">{displayName}</div>
+                    {u.email && (
+                      <div className="text-xs text-muted-foreground truncate">{u.email}</div>
+                    )}
+                  </div>
+                  <Badge className={`text-xs shrink-0 ${roleColor(u.role)}`}>{u.role}</Badge>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0"
+                  onClick={() => removeMutation.mutate(u.user_id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => removeMutation.mutate(u.user_id)}
-              >
-                <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-              </Button>
-            </div>
-          ))}
+            );
+          })}
           {users.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-4">
               No team members yet. Invite someone above.
