@@ -21,6 +21,7 @@ interface TenantContextType {
   loading: boolean;
   error: string | null;
   setTenantBySlug: (slug: string) => Promise<void>;
+  refreshTenant: () => Promise<void>;
   isWhiteLabel: boolean;
 }
 
@@ -29,6 +30,7 @@ const TenantContext = createContext<TenantContextType>({
   loading: false,
   error: null,
   setTenantBySlug: async () => {},
+  refreshTenant: async () => {},
   isWhiteLabel: false,
 });
 
@@ -71,6 +73,23 @@ export function TenantProvider({ children, slug }: { children: ReactNode; slug?:
     }
   }, [slug]);
 
+  useEffect(() => {
+    if (!slug) return;
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      void setTenantBySlug(slug);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [slug]);
+
+  const refreshTenant = async () => {
+    if (!slug) return;
+    await setTenantBySlug(slug);
+  };
+
   return (
     <TenantContext.Provider
       value={{
@@ -78,6 +97,7 @@ export function TenantProvider({ children, slug }: { children: ReactNode; slug?:
         loading,
         error,
         setTenantBySlug,
+        refreshTenant,
         isWhiteLabel: !!tenant && !tenant.is_system_tenant,
       }}
     >
