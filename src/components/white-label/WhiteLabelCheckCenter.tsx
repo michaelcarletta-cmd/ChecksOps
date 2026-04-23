@@ -1,13 +1,10 @@
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/hooks/useAuth";
 import { Navigate } from "react-router-dom";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { LogOut, Settings, Users, Link2 } from "lucide-react";
-import { TenantUserManager } from "./TenantUserManager";
-import { TenantPartnerManager } from "./TenantPartnerManager";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { LogOut, Settings } from "lucide-react";
 
 const CheckCommandCenter = lazy(() => import("@/pages/CheckCommandCenter"));
 
@@ -18,23 +15,16 @@ const PageLoader = () => (
 );
 
 export function WhiteLabelCheckCenter() {
-  const { tenant, isWhiteLabel } = useTenant();
+  const { tenant } = useTenant();
   const { user, loading } = useAuth();
-  const [usersOpen, setUsersOpen] = useState(false);
-  const [partnersOpen, setPartnersOpen] = useState(false);
 
   if (loading) return <PageLoader />;
   if (!user) {
-    // Support both /wl/{slug} routes and custom domain routes
     const loginPath = tenant?.slug && window.location.pathname.startsWith("/wl/")
       ? `/wl/${tenant.slug}/login`
       : "/login";
     return <Navigate to={loginPath} replace />;
   }
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -50,40 +40,13 @@ export function WhiteLabelCheckCenter() {
             {user.email}
           </span>
           {tenant && (
-            <Sheet open={usersOpen} onOpenChange={setUsersOpen}>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" title="Manage Users">
-                  <Users className="h-4 w-4" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent>
-                <SheetHeader>
-                  <SheetTitle>Team Members</SheetTitle>
-                </SheetHeader>
-                <div className="mt-4">
-                  <TenantUserManager tenantId={tenant.id} />
-                </div>
-              </SheetContent>
-            </Sheet>
+            <Button variant="ghost" size="icon" asChild title="Settings">
+              <a href={`/wl/${tenant.slug}/settings`}>
+                <Settings className="h-4 w-4" />
+              </a>
+            </Button>
           )}
-          {tenant && (
-            <Sheet open={partnersOpen} onOpenChange={setPartnersOpen}>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" title="Partner Connections">
-                  <Link2 className="h-4 w-4" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent className="w-[380px] sm:w-[420px]">
-                <SheetHeader>
-                  <SheetTitle>Partner Connections</SheetTitle>
-                </SheetHeader>
-                <div className="mt-4 overflow-y-auto max-h-[calc(100vh-100px)]">
-                  <TenantPartnerManager />
-                </div>
-              </SheetContent>
-            </Sheet>
-          )}
-          <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign Out">
+          <Button variant="ghost" size="icon" onClick={() => supabase.auth.signOut()} title="Sign Out">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
