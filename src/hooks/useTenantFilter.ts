@@ -1,6 +1,21 @@
 import { useTenant } from "@/contexts/TenantContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useLocation } from "react-router-dom";
+
+const KNOWN_APP_DOMAINS = [
+  "localhost",
+  "127.0.0.1",
+  "0.0.0.0",
+  "freedomclaims.work",
+  "www.freedomclaims.work",
+  "freedomclaims.lovable.app",
+];
+
+function isKnownAppDomain(hostname: string) {
+  if (KNOWN_APP_DOMAINS.includes(hostname)) return true;
+  return hostname.endsWith(".lovable.app");
+}
 
 /**
  * Returns the current tenant_id to use for filtering queries.
@@ -11,7 +26,13 @@ import { supabase } from "@/integrations/supabase/client";
  * auto-resolves to the system tenant so isolation is enforced.
  */
 export function useTenantFilter() {
-  const { tenant, isWhiteLabel } = useTenant();
+  const { tenant, isWhiteLabel, loading } = useTenant();
+  const location = useLocation();
+  const hostname = typeof window !== "undefined" ? window.location.hostname : "";
+  const isWhiteLabelRoute = location.pathname.startsWith("/wl/");
+  const isCustomTenantDomain = hostname !== "" && !isKnownAppDomain(hostname);
+  const isResolvingWhiteLabelTenant = (isWhiteLabelRoute || isCustomTenantDomain) && !tenant;
+  const shouldResolveSystemTenant = !tenant && !loading && !isResolvingWhiteLabelTenant;
 
   // If no tenant from context, auto-resolve system tenant for Freedom Claims staff
   const { data: systemTenantId } = useQuery({
@@ -24,7 +45,7 @@ export function useTenantFilter() {
         .maybeSingle();
       return data?.id ?? null;
     },
-    enabled: !tenant, // Only fetch when no tenant context
+    enabled: shouldResolveSystemTenant,
     staleTime: Infinity,
   });
 
