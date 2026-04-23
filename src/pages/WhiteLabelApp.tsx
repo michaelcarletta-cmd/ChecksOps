@@ -99,6 +99,16 @@ function WhiteLabelRoutes() {
               : <Navigate to={`/wl/${tenant.slug}/login`} replace />
         }
       />
+      <Route
+        path="settings"
+        element={
+          !user
+            ? <Navigate to={`/wl/${tenant.slug}/login`} replace />
+            : isMember
+              ? <WhiteLabelSettings />
+              : <Navigate to={`/wl/${tenant.slug}/login`} replace />
+        }
+      />
       <Route path="*" element={<Navigate to={user && isMember ? "checks" : "login"} replace />} />
     </Routes>
   );
