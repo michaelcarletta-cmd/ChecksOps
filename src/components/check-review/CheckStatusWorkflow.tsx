@@ -45,7 +45,8 @@ function resolveActiveStep(
 
   if (path === "not_monitored") {
     if (checkStatus === "approved_for_deposit" || checkStatus === "deposited") return 4;
-    if (checkStatus === "endorsing") return 2;
+    if (checkStatus === "endorsing" || lossDraft?.escrow_status === "endorsing") return 3;
+    if (lossDraft?.escrow_status === "check_received_back") return 2;
     if (lossDraft?.check_received_back_date) return 2;
     if (lossDraft?.check_sent_date) return 1;
     return 0;
