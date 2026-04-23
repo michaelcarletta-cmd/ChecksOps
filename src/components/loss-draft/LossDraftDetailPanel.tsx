@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Send, Building2, ArrowRightLeft, DollarSign, CheckCircle2,
   Clock, AlertTriangle, Landmark, Upload, FileText, Trash2, Download,
-  PackageCheck, Eye, EyeOff,
+  PackageCheck, Eye, EyeOff, Shield, RotateCcw,
 } from "lucide-react";
 import { format } from "date-fns";
 import { escrowStatusConfig } from "./LossDraftDashboard";
@@ -119,6 +120,7 @@ export function LossDraftDetailPanel({
   onUpdate: () => void;
 }) {
   const { user } = useAuth();
+  const { isAdmin } = usePermissions();
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -128,6 +130,9 @@ export function LossDraftDetailPanel({
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [uploadingDocId, setUploadingDocId] = useState<string | null>(null);
+  const [showAdminEdit, setShowAdminEdit] = useState(false);
+  const [adminTargetStatus, setAdminTargetStatus] = useState("");
+  const [adminResetNotes, setAdminResetNotes] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: draft } = useQuery({
@@ -332,6 +337,31 @@ export function LossDraftDetailPanel({
     }
   };
 
+  const adminResetStatus = async () => {
+    if (!user?.id || !adminTargetStatus) return;
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.rpc("loss_draft_action", {
+        p_loss_draft_id: lossDraftId,
+        p_action: "admin_reset_status",
+        p_actor_id: user.id,
+        p_amount: null,
+        p_notes: adminResetNotes || `Admin reset to ${adminTargetStatus}`,
+        p_extra: JSON.stringify({ target_status: adminTargetStatus }),
+      });
+      if (error) throw error;
+      toast({ title: "Status reset", description: `Status changed to ${adminTargetStatus.replace(/_/g, " ")}` });
+      setShowAdminEdit(false);
+      setAdminTargetStatus("");
+      setAdminResetNotes("");
+      invalidateAll();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <Card className="h-[calc(100vh-480px)] flex flex-col">
       <CardHeader className="pb-2">
@@ -480,7 +510,54 @@ export function LossDraftDetailPanel({
                     )}
                   </div>
                 ))}
-              </div>
+               </div>
+
+              {/* Admin Override Section */}
+              {isAdmin && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                        <Shield className="h-3 w-3" /> Admin Override
+                      </p>
+                      <Button size="sm" variant="ghost" className="text-xs h-6 px-2" onClick={() => setShowAdminEdit(!showAdminEdit)}>
+                        <RotateCcw className="h-3 w-3 mr-1" /> {showAdminEdit ? "Cancel" : "Edit Status"}
+                      </Button>
+                    </div>
+                    {showAdminEdit && (
+                      <div className="border border-destructive/30 rounded-lg p-3 space-y-2 bg-destructive/5">
+                        <p className="text-[10px] text-destructive">Change the escrow status and monitoring type. This overrides normal workflow.</p>
+                        <div>
+                          <Label className="text-xs">Target Status</Label>
+                          <select
+                            className="w-full h-8 rounded-md border border-input bg-background px-3 text-xs"
+                            value={adminTargetStatus}
+                            onChange={e => setAdminTargetStatus(e.target.value)}
+                          >
+                            <option value="">Select status...</option>
+                            <option value="pending_send">Pending Send</option>
+                            <option value="sent_to_lender">Sent to Lender</option>
+                            <option value="received_by_lender">Received by Lender</option>
+                            <option value="escrowed">Escrowed</option>
+                            <option value="first_draw_requested">First Draw Requested</option>
+                            <option value="partial_release">Partial Release</option>
+                            <option value="final_release_complete">Final Release Complete</option>
+                          </select>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Reason for change</Label>
+                          <Textarea rows={2} value={adminResetNotes} onChange={e => setAdminResetNotes(e.target.value)}
+                            placeholder="e.g. Mortgage sent check back endorsed, not monitoring" className="text-xs" />
+                        </div>
+                        <Button size="sm" variant="destructive" className="text-xs" disabled={submitting || !adminTargetStatus} onClick={adminResetStatus}>
+                          {submitting ? "Saving..." : "Apply Override"}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
 
               {draft.follow_up_date && (
                 <div className="bg-accent/30 rounded-lg p-2 mt-2">
