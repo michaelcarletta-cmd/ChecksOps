@@ -2506,6 +2506,83 @@ export type Database = {
           },
         ]
       }
+      claim_check_mortgage_draws: {
+        Row: {
+          amount: number | null
+          check_id: string
+          claim_id: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          draw_number: number
+          draw_type: string
+          id: string
+          notes: string | null
+          requested_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number | null
+          check_id: string
+          claim_id: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          draw_number?: number
+          draw_type?: string
+          id?: string
+          notes?: string | null
+          requested_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number | null
+          check_id?: string
+          claim_id?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          draw_number?: number
+          draw_type?: string
+          id?: string
+          notes?: string | null
+          requested_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_check_mortgage_draws_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "claim_checks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_check_mortgage_draws_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_check_mortgage_draws_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_check_mortgage_draws_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_checks: {
         Row: {
           amount: number
@@ -2522,7 +2599,12 @@ export type Database = {
           eligibility_status: string | null
           endorsement_status: string | null
           id: string
+          mortgage_final_released_at: string | null
           mortgage_flag: boolean | null
+          mortgage_monitoring_type: string | null
+          mortgage_received_at: string | null
+          mortgage_sent_at: string | null
+          mortgage_tracking_number: string | null
           notes: string | null
           payee_line: string | null
           payment_direction_status: string | null
@@ -2545,7 +2627,12 @@ export type Database = {
           eligibility_status?: string | null
           endorsement_status?: string | null
           id?: string
+          mortgage_final_released_at?: string | null
           mortgage_flag?: boolean | null
+          mortgage_monitoring_type?: string | null
+          mortgage_received_at?: string | null
+          mortgage_sent_at?: string | null
+          mortgage_tracking_number?: string | null
           notes?: string | null
           payee_line?: string | null
           payment_direction_status?: string | null
@@ -2568,7 +2655,12 @@ export type Database = {
           eligibility_status?: string | null
           endorsement_status?: string | null
           id?: string
+          mortgage_final_released_at?: string | null
           mortgage_flag?: boolean | null
+          mortgage_monitoring_type?: string | null
+          mortgage_received_at?: string | null
+          mortgage_sent_at?: string | null
+          mortgage_tracking_number?: string | null
           notes?: string | null
           payee_line?: string | null
           payment_direction_status?: string | null
