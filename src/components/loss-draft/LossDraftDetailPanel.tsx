@@ -85,11 +85,21 @@ interface AuditEntry {
 /*  Actions config                                                     */
 /* ------------------------------------------------------------------ */
 
-const ACTION_BUTTONS: {
+/* Not Monitored = mortgage endorses & releases check, no escrow/draws */
+const NOT_MONITORED_ACTIONS: {
   action: string; label: string; icon: typeof Send; color: string;
-  needsAmount?: boolean; fromStatuses: string[];
+  needsAmount?: boolean; needsTracking?: boolean; fromStatuses: string[];
 }[] = [
-  { action: "mark_sent", label: "Mark Sent to Mortgage", icon: Send, color: "text-blue-400", fromStatuses: ["pending_send"] },
+  { action: "mark_sent", label: "Sent Check to Mortgage Company", icon: Send, color: "text-blue-400", needsTracking: true, fromStatuses: ["pending_send"] },
+  { action: "mark_received_back", label: "Received Check from Mortgage Company", icon: PackageCheck, color: "text-emerald-400", fromStatuses: ["sent_to_lender", "received_by_lender"] },
+];
+
+/* Monitored = mortgage holds funds in escrow, draws required */
+const MONITORED_ACTIONS: {
+  action: string; label: string; icon: typeof Send; color: string;
+  needsAmount?: boolean; needsTracking?: boolean; fromStatuses: string[];
+}[] = [
+  { action: "mark_sent", label: "Check Sent to Mortgage Company", icon: Send, color: "text-blue-400", needsTracking: true, fromStatuses: ["pending_send"] },
   { action: "mark_escrowed", label: "Mark Escrowed", icon: Building2, color: "text-amber-400", needsAmount: true, fromStatuses: ["sent_to_lender", "received_by_lender", "pending_send"] },
   { action: "request_draw", label: "Request Draw", icon: ArrowRightLeft, color: "text-orange-400", needsAmount: true, fromStatuses: ["escrowed", "first_draw_requested", "partial_release"] },
   { action: "record_release", label: "Record Release", icon: DollarSign, color: "text-emerald-400", needsAmount: true, fromStatuses: ["first_draw_requested", "partial_release", "escrowed"] },
