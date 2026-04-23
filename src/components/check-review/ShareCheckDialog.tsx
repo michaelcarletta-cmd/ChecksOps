@@ -23,15 +23,30 @@ export function ShareCheckDialog({ checkId, open, onOpenChange }: ShareCheckDial
   const qc = useQueryClient();
   const [selectedTenant, setSelectedTenant] = useState<string>("");
 
-  // Fetch available tenants (exclude self)
+  // Fetch partnered tenants only
   const { data: tenants = [] } = useQuery({
-    queryKey: ["tenants-for-sharing", tenantId],
+    queryKey: ["partnered-tenants", tenantId],
     queryFn: async () => {
+      // Get active partnerships
+      const { data: partnerships, error: pErr } = await supabase
+        .from("tenant_partnerships")
+        .select("inviter_tenant_id, invitee_tenant_id")
+        .eq("status", "active")
+        .or(`inviter_tenant_id.eq.${tenantId},invitee_tenant_id.eq.${tenantId}`);
+      if (pErr) throw pErr;
+      if (!partnerships || partnerships.length === 0) return [];
+
+      // Extract partner tenant IDs
+      const partnerIds = partnerships.map((p: any) =>
+        p.inviter_tenant_id === tenantId ? p.invitee_tenant_id : p.inviter_tenant_id
+      ).filter(Boolean);
+
+      if (partnerIds.length === 0) return [];
+
       const { data, error } = await supabase
         .from("tenants")
         .select("id, name, slug")
-        .neq("id", tenantId!)
-        .eq("is_system_tenant", false)
+        .in("id", partnerIds)
         .order("name");
       if (error) throw error;
       return data ?? [];

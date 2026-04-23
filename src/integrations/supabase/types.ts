@@ -15115,6 +15115,57 @@ export type Database = {
           },
         ]
       }
+      tenant_partnerships: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          created_by: string
+          id: string
+          invite_code: string
+          invitee_tenant_id: string | null
+          inviter_tenant_id: string
+          revoked_at: string | null
+          status: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          created_by: string
+          id?: string
+          invite_code: string
+          invitee_tenant_id?: string | null
+          inviter_tenant_id: string
+          revoked_at?: string | null
+          status?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          invite_code?: string
+          invitee_tenant_id?: string | null
+          inviter_tenant_id?: string
+          revoked_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_partnerships_invitee_tenant_id_fkey"
+            columns: ["invitee_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_partnerships_inviter_tenant_id_fkey"
+            columns: ["inviter_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_users: {
         Row: {
           created_at: string

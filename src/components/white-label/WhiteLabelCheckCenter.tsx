@@ -4,8 +4,9 @@ import { Navigate } from "react-router-dom";
 import { lazy, Suspense, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { LogOut, Settings, Users } from "lucide-react";
+import { LogOut, Settings, Users, Link2 } from "lucide-react";
 import { TenantUserManager } from "./TenantUserManager";
+import { TenantPartnerManager } from "./TenantPartnerManager";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 const CheckCommandCenter = lazy(() => import("@/pages/CheckCommandCenter"));
@@ -20,6 +21,7 @@ export function WhiteLabelCheckCenter() {
   const { tenant, isWhiteLabel } = useTenant();
   const { user, loading } = useAuth();
   const [usersOpen, setUsersOpen] = useState(false);
+  const [partnersOpen, setPartnersOpen] = useState(false);
 
   if (loading) return <PageLoader />;
   if (!user) {
@@ -60,6 +62,23 @@ export function WhiteLabelCheckCenter() {
                 </SheetHeader>
                 <div className="mt-4">
                   <TenantUserManager tenantId={tenant.id} />
+                </div>
+              </SheetContent>
+            </Sheet>
+          )}
+          {tenant && (
+            <Sheet open={partnersOpen} onOpenChange={setPartnersOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" title="Partner Connections">
+                  <Link2 className="h-4 w-4" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent className="w-[380px] sm:w-[420px]">
+                <SheetHeader>
+                  <SheetTitle>Partner Connections</SheetTitle>
+                </SheetHeader>
+                <div className="mt-4 overflow-y-auto max-h-[calc(100vh-100px)]">
+                  <TenantPartnerManager />
                 </div>
               </SheetContent>
             </Sheet>

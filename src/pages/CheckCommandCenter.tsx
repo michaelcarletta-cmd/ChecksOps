@@ -42,6 +42,7 @@ import { ReconciliationDashboard } from "@/components/deposit-ops/Reconciliation
 
 
 import { DepositReports } from "@/components/deposit-ops/DepositReports";
+import { TenantPartnerManager } from "@/components/white-label/TenantPartnerManager";
 import { DepositOwnerQueue } from "@/components/deposit-ops/DepositOwnerQueue";
 import { DepositManagerCommandCenter } from "@/components/deposit-ops/DepositManagerCommandCenter";
 import { ArrowDownToLine, Scale, FileBarChart, Users as UsersIcon, Command } from "lucide-react";
@@ -404,6 +405,7 @@ export default function CheckCommandCenter() {
           <TabsTrigger value="manager" className="text-xs gap-1"><Command className="h-3 w-3" />Manager</TabsTrigger>
           <TabsTrigger value="reissue" className="text-xs gap-1"><RotateCcw className="h-3 w-3" />Reissue ({reissueRequested.length})</TabsTrigger>
           <TabsTrigger value="branch" className="text-xs gap-1"><Building2 className="h-3 w-3" />Branch ({branchDeposit.length})</TabsTrigger>
+          <TabsTrigger value="partners" className="text-xs gap-1"><Share2 className="h-3 w-3" />Partners</TabsTrigger>
         </TabsList>
 
         {/* Loss Draft Tab */}
@@ -436,6 +438,11 @@ export default function CheckCommandCenter() {
         {/* Manager Tab */}
         <TabsContent value="manager" className="mt-3">
           <DepositManagerCommandCenter />
+        </TabsContent>
+
+        {/* Partners Tab */}
+        <TabsContent value="partners" className="mt-3">
+          <TenantPartnerManager />
         </TabsContent>
 
         {/* Reissue Tab */}
@@ -579,7 +586,7 @@ export default function CheckCommandCenter() {
         )}
 
         {/* All other tabs — only render the active one */}
-        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "deposit_ops" && activeTab !== "reconciliation" && activeTab !== "reports" && activeTab !== "workqueue" && activeTab !== "manager" && activeTab !== "reissue" && activeTab !== "branch" && (
+        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "deposit_ops" && activeTab !== "reconciliation" && activeTab !== "reports" && activeTab !== "workqueue" && activeTab !== "manager" && activeTab !== "reissue" && activeTab !== "branch" && activeTab !== "partners" && (
           <div className="mt-3 flex gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
             {/* Check list — grows when no check selected */}
             <Card
