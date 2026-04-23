@@ -16481,6 +16481,7 @@ export type Database = {
           missing_docs_count: number | null
           mortgage_servicer: string | null
           policyholder_name: string | null
+          tenant_id: string | null
           total_escrowed: number | null
           unreleased_amount: number | null
           updated_at: string | null
@@ -17207,6 +17208,10 @@ export type Database = {
         }[]
       }
       get_loss_draft_dashboard_counts: { Args: never; Returns: Json }
+      get_loss_draft_dashboard_counts_for_tenant: {
+        Args: { _tenant_id: string }
+        Returns: Json
+      }
       get_or_create_notification_preferences: {
         Args: { p_user_id: string }
         Returns: {
