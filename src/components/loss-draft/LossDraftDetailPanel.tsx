@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Send, Building2, ArrowRightLeft, DollarSign, CheckCircle2,
   Clock, AlertTriangle, Landmark, Upload, FileText, Trash2, Download,
+  PackageCheck, Eye, EyeOff,
 } from "lucide-react";
 import { format } from "date-fns";
 import { escrowStatusConfig } from "./LossDraftDashboard";
@@ -40,6 +41,9 @@ interface LossDraftRecord {
   last_contact_at: string | null;
   check_sent_date: string | null;
   check_received_date: string | null;
+  check_received_back_date: string | null;
+  monitoring_type: string;
+  tracking_number_sent: string | null;
   notes: string | null;
 }
 
@@ -81,11 +85,21 @@ interface AuditEntry {
 /*  Actions config                                                     */
 /* ------------------------------------------------------------------ */
 
-const ACTION_BUTTONS: {
+/* Not Monitored = mortgage endorses & releases check, no escrow/draws */
+const NOT_MONITORED_ACTIONS: {
   action: string; label: string; icon: typeof Send; color: string;
-  needsAmount?: boolean; fromStatuses: string[];
+  needsAmount?: boolean; needsTracking?: boolean; fromStatuses: string[];
 }[] = [
-  { action: "mark_sent", label: "Mark Sent to Mortgage", icon: Send, color: "text-blue-400", fromStatuses: ["pending_send"] },
+  { action: "mark_sent", label: "Sent Check to Mortgage Company", icon: Send, color: "text-blue-400", needsTracking: true, fromStatuses: ["pending_send"] },
+  { action: "mark_received_back", label: "Received Check from Mortgage Company", icon: PackageCheck, color: "text-emerald-400", fromStatuses: ["sent_to_lender", "received_by_lender"] },
+];
+
+/* Monitored = mortgage holds funds in escrow, draws required */
+const MONITORED_ACTIONS: {
+  action: string; label: string; icon: typeof Send; color: string;
+  needsAmount?: boolean; needsTracking?: boolean; fromStatuses: string[];
+}[] = [
+  { action: "mark_sent", label: "Check Sent to Mortgage Company", icon: Send, color: "text-blue-400", needsTracking: true, fromStatuses: ["pending_send"] },
   { action: "mark_escrowed", label: "Mark Escrowed", icon: Building2, color: "text-amber-400", needsAmount: true, fromStatuses: ["sent_to_lender", "received_by_lender", "pending_send"] },
   { action: "request_draw", label: "Request Draw", icon: ArrowRightLeft, color: "text-orange-400", needsAmount: true, fromStatuses: ["escrowed", "first_draw_requested", "partial_release"] },
   { action: "record_release", label: "Record Release", icon: DollarSign, color: "text-emerald-400", needsAmount: true, fromStatuses: ["first_draw_requested", "partial_release", "escrowed"] },
@@ -110,6 +124,7 @@ export function LossDraftDetailPanel({
 
   const [actionAmount, setActionAmount] = useState("");
   const [actionNotes, setActionNotes] = useState("");
+  const [actionTracking, setActionTracking] = useState("");
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [uploadingDocId, setUploadingDocId] = useState<string | null>(null);
@@ -180,19 +195,22 @@ export function LossDraftDetailPanel({
     if (!user?.id || !draft) return;
     setSubmitting(true);
     try {
+      const extra: Record<string, string> = {};
+      if (actionTracking) extra.tracking_number = actionTracking;
       const { error } = await supabase.rpc("loss_draft_action", {
         p_loss_draft_id: lossDraftId,
         p_action: action,
         p_actor_id: user.id,
         p_amount: actionAmount ? parseFloat(actionAmount) : null,
         p_notes: actionNotes || null,
-        p_extra: JSON.stringify({}),
+        p_extra: JSON.stringify(extra),
       });
       if (error) throw error;
       toast({ title: "Action completed", description: `${action.replace(/_/g, " ")} applied successfully.` });
       setPendingAction(null);
       setActionAmount("");
       setActionNotes("");
+      setActionTracking("");
       invalidateAll();
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
@@ -289,8 +307,30 @@ export function LossDraftDetailPanel({
   if (!draft) return null;
 
   const sc = escrowStatusConfig[draft.escrow_status] ?? { label: draft.escrow_status, color: "" };
-  const availableActions = ACTION_BUTTONS.filter(a => a.fromStatuses.includes(draft.escrow_status));
+  const isMonitored = draft.monitoring_type !== "not_monitored";
+  const actionButtons = isMonitored ? MONITORED_ACTIONS : NOT_MONITORED_ACTIONS;
+  const availableActions = actionButtons.filter(a => a.fromStatuses.includes(draft.escrow_status));
   const fmtMoney = (v: number) => `$${(v ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+
+  const toggleMonitoringType = async () => {
+    if (!user?.id) return;
+    const newType = isMonitored ? "not_monitored" : "monitored";
+    try {
+      const { error } = await supabase.rpc("loss_draft_action", {
+        p_loss_draft_id: lossDraftId,
+        p_action: "set_monitoring_type",
+        p_actor_id: user.id,
+        p_amount: null,
+        p_notes: `Changed to ${newType}`,
+        p_extra: JSON.stringify({ monitoring_type: newType }),
+      });
+      if (error) throw error;
+      toast({ title: "Monitoring type updated", description: `Set to ${newType === "monitored" ? "Monitored" : "Not Monitored"}` });
+      invalidateAll();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+  };
 
   return (
     <Card className="h-[calc(100vh-480px)] flex flex-col">
@@ -333,24 +373,60 @@ export function LossDraftDetailPanel({
         <TabsContent value="actions" className="mt-0 flex-1 overflow-auto">
           <ScrollArea className="h-full">
             <div className="p-4 space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="bg-accent/30 rounded-lg p-2">
-                  <p className="text-[10px] text-muted-foreground">Total Escrowed</p>
-                  <p className="text-sm font-bold">{fmtMoney(draft.total_escrowed)}</p>
-                </div>
-                <div className="bg-accent/30 rounded-lg p-2">
-                  <p className="text-[10px] text-muted-foreground">Released</p>
-                  <p className="text-sm font-bold text-emerald-400">{fmtMoney(draft.draw_amount_released)}</p>
-                </div>
-                <div className="bg-accent/30 rounded-lg p-2">
-                  <p className="text-[10px] text-muted-foreground">Holdback</p>
-                  <p className="text-sm font-bold text-red-400">{fmtMoney(draft.holdback_amount)}</p>
-                </div>
-                <div className="bg-accent/30 rounded-lg p-2">
-                  <p className="text-[10px] text-muted-foreground">Unreleased</p>
-                  <p className="text-sm font-bold text-amber-400">{fmtMoney(draft.total_escrowed - draft.draw_amount_released)}</p>
-                </div>
+              {/* Monitoring Type Toggle */}
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant={isMonitored ? "default" : "outline"}
+                  className="flex-1 text-xs"
+                  onClick={() => !isMonitored && toggleMonitoringType()}
+                >
+                  <Eye className="h-3.5 w-3.5 mr-1" /> Monitored
+                </Button>
+                <Button
+                  size="sm"
+                  variant={!isMonitored ? "default" : "outline"}
+                  className="flex-1 text-xs"
+                  onClick={() => isMonitored && toggleMonitoringType()}
+                >
+                  <EyeOff className="h-3.5 w-3.5 mr-1" /> Not Monitored
+                </Button>
               </div>
+              <p className="text-[10px] text-muted-foreground">
+                {isMonitored
+                  ? "Mortgage company holds funds in escrow — draws required to release."
+                  : "Mortgage company will endorse and release the check — no escrow or draws."}
+              </p>
+
+              {/* Tracking info if check was sent */}
+              {draft.tracking_number_sent && (
+                <div className="bg-accent/30 rounded-lg p-2">
+                  <p className="text-[10px] text-muted-foreground">Tracking Number</p>
+                  <p className="text-xs font-medium">{draft.tracking_number_sent}</p>
+                </div>
+              )}
+
+              {/* Money summary - only for monitored */}
+              {isMonitored && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-accent/30 rounded-lg p-2">
+                    <p className="text-[10px] text-muted-foreground">Total Escrowed</p>
+                    <p className="text-sm font-bold">{fmtMoney(draft.total_escrowed)}</p>
+                  </div>
+                  <div className="bg-accent/30 rounded-lg p-2">
+                    <p className="text-[10px] text-muted-foreground">Released</p>
+                    <p className="text-sm font-bold text-emerald-400">{fmtMoney(draft.draw_amount_released)}</p>
+                  </div>
+                  <div className="bg-accent/30 rounded-lg p-2">
+                    <p className="text-[10px] text-muted-foreground">Holdback</p>
+                    <p className="text-sm font-bold text-red-400">{fmtMoney(draft.holdback_amount)}</p>
+                  </div>
+                  <div className="bg-accent/30 rounded-lg p-2">
+                    <p className="text-[10px] text-muted-foreground">Unreleased</p>
+                    <p className="text-sm font-bold text-amber-400">{fmtMoney(draft.total_escrowed - draft.draw_amount_released)}</p>
+                  </div>
+                </div>
+              )}
 
               <Separator />
 
@@ -364,6 +440,16 @@ export function LossDraftDetailPanel({
                     {pendingAction === a.action ? (
                       <div className="border rounded-lg p-3 space-y-2">
                         <p className="text-xs font-medium">{a.label}</p>
+                        {a.needsTracking && (
+                          <div>
+                            <Label className="text-xs">Tracking Number</Label>
+                            <Input
+                              placeholder="Enter shipping tracking #"
+                              value={actionTracking} onChange={e => setActionTracking(e.target.value)}
+                              className="h-8"
+                            />
+                          </div>
+                        )}
                         {a.needsAmount && (
                           <div>
                             <Label className="text-xs">Amount</Label>

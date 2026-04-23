@@ -17308,7 +17308,7 @@ export type Database = {
           p_loss_draft_id: string
           p_notes?: string
         }
-        Returns: Json
+        Returns: undefined
       }
       loss_draft_toggle_document: {
         Args: {
