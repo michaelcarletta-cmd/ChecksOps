@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Send, Building2, ArrowRightLeft, DollarSign, CheckCircle2,
   Clock, AlertTriangle, Landmark, Upload, FileText, Trash2, Download,
+  PackageCheck, Eye, EyeOff,
 } from "lucide-react";
 import { format } from "date-fns";
 import { escrowStatusConfig } from "./LossDraftDashboard";
