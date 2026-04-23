@@ -498,6 +498,38 @@ Deno.serve(async (req) => {
         { stale_since: heartbeat, lock_age_ms: lockAge }, userId);
     }
 
+    // ---- Tenant credit check (white-label only) ----
+    stage = "credit_check";
+    const tenantId = (check as Record<string, unknown>).tenant_id as string | null;
+    if (tenantId) {
+      const { data: deductResult, error: deductErr } = await supabase
+        .rpc("deduct_tenant_credits", {
+          p_tenant_id: tenantId,
+          p_amount: 1,
+          p_description: "Check OCR processing",
+          p_reference_id: checkId,
+          p_reference_type: "check_ocr",
+        });
+      if (deductErr) {
+        log("credit_check", "Deduction RPC error", { error: deductErr.message });
+        // Don't block Freedom's own checks — only block if tenant
+      } else if (deductResult && !(deductResult as any).success) {
+        const errType = (deductResult as any).error;
+        log("credit_check", "Insufficient credits", { tenantId, error: errType });
+        await logAudit(supabase, checkId, "credit_check_failed",
+          `Check processing blocked: ${errType === 'insufficient_credits' ? 'Insufficient AI credits' : 'No credit balance configured'}`,
+          { tenant_id: tenantId, error: errType }, userId);
+        return errResponse(
+          errType === "insufficient_credits"
+            ? "Insufficient AI credits. Please purchase more credits in Settings > Credits."
+            : "No credit balance configured. Please contact your administrator.",
+          402, stage
+        );
+      } else {
+        log("credit_check", "Credit deducted", { tenantId, remaining: (deductResult as any)?.balance });
+      }
+    }
+
     // ---- Check active endorsements ----
     stage = "check_endorsements";
     const { data: activePayees } = await supabase
