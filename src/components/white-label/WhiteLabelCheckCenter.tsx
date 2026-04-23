@@ -82,6 +82,7 @@ export function WhiteLabelCheckCenter() {
                 </div>
               </SheetContent>
             </Sheet>
+          )}
           <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign Out">
             <LogOut className="h-4 w-4" />
           </Button>
