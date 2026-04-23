@@ -373,24 +373,60 @@ export function LossDraftDetailPanel({
         <TabsContent value="actions" className="mt-0 flex-1 overflow-auto">
           <ScrollArea className="h-full">
             <div className="p-4 space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="bg-accent/30 rounded-lg p-2">
-                  <p className="text-[10px] text-muted-foreground">Total Escrowed</p>
-                  <p className="text-sm font-bold">{fmtMoney(draft.total_escrowed)}</p>
-                </div>
-                <div className="bg-accent/30 rounded-lg p-2">
-                  <p className="text-[10px] text-muted-foreground">Released</p>
-                  <p className="text-sm font-bold text-emerald-400">{fmtMoney(draft.draw_amount_released)}</p>
-                </div>
-                <div className="bg-accent/30 rounded-lg p-2">
-                  <p className="text-[10px] text-muted-foreground">Holdback</p>
-                  <p className="text-sm font-bold text-red-400">{fmtMoney(draft.holdback_amount)}</p>
-                </div>
-                <div className="bg-accent/30 rounded-lg p-2">
-                  <p className="text-[10px] text-muted-foreground">Unreleased</p>
-                  <p className="text-sm font-bold text-amber-400">{fmtMoney(draft.total_escrowed - draft.draw_amount_released)}</p>
-                </div>
+              {/* Monitoring Type Toggle */}
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant={isMonitored ? "default" : "outline"}
+                  className="flex-1 text-xs"
+                  onClick={() => !isMonitored && toggleMonitoringType()}
+                >
+                  <Eye className="h-3.5 w-3.5 mr-1" /> Monitored
+                </Button>
+                <Button
+                  size="sm"
+                  variant={!isMonitored ? "default" : "outline"}
+                  className="flex-1 text-xs"
+                  onClick={() => isMonitored && toggleMonitoringType()}
+                >
+                  <EyeOff className="h-3.5 w-3.5 mr-1" /> Not Monitored
+                </Button>
               </div>
+              <p className="text-[10px] text-muted-foreground">
+                {isMonitored
+                  ? "Mortgage company holds funds in escrow — draws required to release."
+                  : "Mortgage company will endorse and release the check — no escrow or draws."}
+              </p>
+
+              {/* Tracking info if check was sent */}
+              {draft.tracking_number_sent && (
+                <div className="bg-accent/30 rounded-lg p-2">
+                  <p className="text-[10px] text-muted-foreground">Tracking Number</p>
+                  <p className="text-xs font-medium">{draft.tracking_number_sent}</p>
+                </div>
+              )}
+
+              {/* Money summary - only for monitored */}
+              {isMonitored && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-accent/30 rounded-lg p-2">
+                    <p className="text-[10px] text-muted-foreground">Total Escrowed</p>
+                    <p className="text-sm font-bold">{fmtMoney(draft.total_escrowed)}</p>
+                  </div>
+                  <div className="bg-accent/30 rounded-lg p-2">
+                    <p className="text-[10px] text-muted-foreground">Released</p>
+                    <p className="text-sm font-bold text-emerald-400">{fmtMoney(draft.draw_amount_released)}</p>
+                  </div>
+                  <div className="bg-accent/30 rounded-lg p-2">
+                    <p className="text-[10px] text-muted-foreground">Holdback</p>
+                    <p className="text-sm font-bold text-red-400">{fmtMoney(draft.holdback_amount)}</p>
+                  </div>
+                  <div className="bg-accent/30 rounded-lg p-2">
+                    <p className="text-[10px] text-muted-foreground">Unreleased</p>
+                    <p className="text-sm font-bold text-amber-400">{fmtMoney(draft.total_escrowed - draft.draw_amount_released)}</p>
+                  </div>
+                </div>
+              )}
 
               <Separator />
 
@@ -404,6 +440,16 @@ export function LossDraftDetailPanel({
                     {pendingAction === a.action ? (
                       <div className="border rounded-lg p-3 space-y-2">
                         <p className="text-xs font-medium">{a.label}</p>
+                        {a.needsTracking && (
+                          <div>
+                            <Label className="text-xs">Tracking Number</Label>
+                            <Input
+                              placeholder="Enter shipping tracking #"
+                              value={actionTracking} onChange={e => setActionTracking(e.target.value)}
+                              className="h-8"
+                            />
+                          </div>
+                        )}
                         {a.needsAmount && (
                           <div>
                             <Label className="text-xs">Amount</Label>
