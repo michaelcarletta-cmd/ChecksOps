@@ -403,7 +403,7 @@ export function LossDraftDetailPanel({
         <TabsList className="w-full rounded-none shrink-0">
           <TabsTrigger value="actions" className="flex-1 text-xs">Actions</TabsTrigger>
           <TabsTrigger value="docs" className="flex-1 text-xs">Docs ({docs.filter(d => d.is_required && !d.is_submitted).length})</TabsTrigger>
-          <TabsTrigger value="releases" className="flex-1 text-xs">Draws ({releases.length})</TabsTrigger>
+          {isMonitored && <TabsTrigger value="releases" className="flex-1 text-xs">Draws ({releases.length})</TabsTrigger>}
           <TabsTrigger value="audit" className="flex-1 text-xs">Audit</TabsTrigger>
         </TabsList>
 
