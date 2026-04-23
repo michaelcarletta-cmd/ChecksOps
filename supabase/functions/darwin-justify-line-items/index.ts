@@ -122,7 +122,7 @@ async function queryManufacturerData(
     // Track per-item seen keys to prevent cross-contamination
     const itemSeen = new Set<string>();
 
-    for (const term of searchTerms.slice(0, 3)) {
+  for (const term of searchTerms.slice(0, 2)) {
       const words = term.split(/[\s\/&\-]+/).filter((w) => w.length > 2);
       if (!words.length) continue;
       const tsQuery = words.join(" & ");
@@ -132,7 +132,7 @@ async function queryManufacturerData(
           .from("ai_knowledge_chunks")
           .select("content, document_id")
           .textSearch("content", tsQuery, { type: "plain" })
-          .limit(5);
+          .limit(3);
 
         if (!chunks?.length) continue;
 
@@ -294,7 +294,7 @@ async function queryKnowledgeBase(
   const results: any[] = [];
   const seen = new Set<string>();
 
-  for (const term of searchTerms.slice(0, 5)) {
+  for (const term of searchTerms.slice(0, 3)) {
     const words = term.split(/[\s\/&\-]+/).filter((w) => w.length > 2);
     if (!words.length) continue;
 
@@ -333,18 +333,16 @@ async function queryKnowledgeBase(
     }
   }
 
-  return results.slice(0, 8);
+  return results.slice(0, 5);
 }
 
 // ── AI Call ──────────────────────────────────────────────────────
 
 async function callAI(systemPrompt: string, userPrompt: string, itemCount: number): Promise<string> {
-  // Allocate ~700 tokens per justification item, with a generous floor and ceiling.
-  // Bumps to the strong model when many items are requested so we don't truncate.
-  const dynamicMax = Math.min(16000, Math.max(4000, itemCount * 700));
-  const forceStrong = itemCount > 4 || (systemPrompt.length + userPrompt.length) > 6000;
+  const dynamicMax = Math.min(12000, Math.max(4000, itemCount * 800));
 
-  const result = await generate({
+  // Attempt 1
+  let result = await generate({
     task: 'extraction',
     system: systemPrompt,
     user: userPrompt,
@@ -352,10 +350,28 @@ async function callAI(systemPrompt: string, userPrompt: string, itemCount: numbe
     temperature: 0.15,
     jsonMode: true,
     maxTokens: dynamicMax,
-    forceStrong,
+    skipCache: true,
   });
 
-  console.log(`[darwin-justify-line-items] model=${result.model}, items=${itemCount}, maxTokens=${dynamicMax}, forceStrong=${forceStrong}, cached=${result.cached}`);
+  console.log(`[darwin-justify-line-items] model=${result.model}, items=${itemCount}, maxTokens=${dynamicMax}, cached=${result.cached}, textLen=${result.text?.length || 0}`);
+
+  // Retry once if empty
+  if (!result.text || result.text.trim().length < 10) {
+    console.warn(`[darwin-justify-line-items] Empty response, retrying with skipCache...`);
+    result = await generate({
+      task: 'extraction',
+      system: systemPrompt,
+      user: userPrompt,
+      searchMode: 'off',
+      temperature: 0.2,
+      jsonMode: true,
+      maxTokens: dynamicMax,
+      skipCache: true,
+      forceStrong: true,
+    });
+    console.log(`[darwin-justify-line-items] retry model=${result.model}, textLen=${result.text?.length || 0}`);
+  }
+
   return result.text;
 }
 
