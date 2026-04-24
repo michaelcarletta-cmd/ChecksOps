@@ -181,7 +181,7 @@ export default function CheckCenterMarketing() {
   ];
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen max-w-full overflow-x-hidden bg-background text-foreground">
       {/* Top Nav */}
       <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-4 md:px-6 h-14 flex items-center justify-between">
@@ -226,8 +226,8 @@ export default function CheckCenterMarketing() {
               "radial-gradient(ellipse at 20% 0%, hsl(217 91% 60% / 0.18) 0%, transparent 50%), radial-gradient(ellipse at 85% 15%, hsl(200 80% 54% / 0.14) 0%, transparent 45%)",
           }}
         />
-        <div className="relative mx-auto max-w-7xl px-4 md:px-6 pt-14 md:pt-24 pb-16 md:pb-24 grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
-          <div>
+        <div className="relative mx-auto max-w-7xl min-w-0 px-4 md:px-6 pt-14 md:pt-24 pb-16 md:pb-24 grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
+          <div className="min-w-0">
             <Badge variant="outline" className="mb-5 gap-1.5 border-primary/30 bg-primary/5 text-primary">
               <Sparkles className="h-3 w-3" />
               Built for teams that handle insurance checks
@@ -239,7 +239,7 @@ export default function CheckCenterMarketing() {
                 Locked on target.
               </span>
             </h1>
-            <p className="mt-5 text-lg text-muted-foreground max-w-xl leading-relaxed">
+            <p className="mt-5 text-lg text-muted-foreground max-w-xl leading-relaxed break-words">
               From intake to deposit to loss draft — move insurance checks through a single,
               auditable pipeline. OCR, digital endorsements, partner sharing, and mortgage
               tracking in one workspace.
@@ -252,12 +252,12 @@ export default function CheckCenterMarketing() {
                 <Link to="/login">Sign in</Link>
               </Button>
             </div>
-            <div className="mt-8 flex items-center gap-6 text-xs text-muted-foreground">
+            <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-muted-foreground">
               <div className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" /> Audit trail on every action</div>
               <div className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Role-based access</div>
             </div>
           </div>
-          <div className="relative">
+          <div className="relative min-w-0 max-w-full">
             <div className="absolute -inset-6 bg-gradient-to-tr from-primary/20 via-transparent to-blue-400/10 blur-3xl" />
             <div className="relative">
               <HeroMockup />
