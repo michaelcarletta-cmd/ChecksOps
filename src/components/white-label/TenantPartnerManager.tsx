@@ -57,13 +57,12 @@ export function TenantPartnerManager() {
     mutationFn: async (code: string) => {
       const normalizedCode = code.toUpperCase().trim();
 
-      // Look up the tenant by their permanent partner_code
-      const { data: partnerTenant, error: lookupErr } = await supabase
-        .from("tenants")
-        .select("id, name")
-        .eq("partner_code", normalizedCode)
-        .maybeSingle();
+      // Look up the tenant by their permanent partner_code via SECURITY DEFINER RPC
+      // (bypasses RLS so cross-tenant lookup works for any signed-in user)
+      const { data: lookupRows, error: lookupErr } = await supabase
+        .rpc("lookup_tenant_by_partner_code", { _code: normalizedCode });
       if (lookupErr) throw lookupErr;
+      const partnerTenant = Array.isArray(lookupRows) ? lookupRows[0] : null;
       if (!partnerTenant) throw new Error("Invalid partner code. Check the code and try again.");
       if (partnerTenant.id === tenantId) throw new Error("That's your own partner code!");
 
