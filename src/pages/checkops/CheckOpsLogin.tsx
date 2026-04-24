@@ -122,7 +122,7 @@ export default function CheckOpsLogin() {
           </form>
           <div className="mt-6 pt-4 border-t border-border/40 text-center">
             <Button variant="ghost" size="sm" asChild className="text-xs text-muted-foreground">
-              <Link to="/"><ArrowLeft className="h-3 w-3 mr-1" /> Back to checkops.com</Link>
+              <Link to="/"><ArrowLeft className="h-3 w-3 mr-1" /> Back to checksops.com</Link>
             </Button>
           </div>
         </CardContent>

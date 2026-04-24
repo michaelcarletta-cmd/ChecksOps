@@ -13,17 +13,24 @@
 const CHECKOPS_HOSTS = [
   "checkops.com",
   "www.checkops.com",
+  "checksops.com",
+  "www.checksops.com",
   "checkops.app",
   "www.checkops.app",
-  // Staging subdomain we may provision on Lovable for the white-label surface
+  "checksops.app",
+  "www.checksops.app",
+  // Staging subdomains we may provision on Lovable for the white-label surface
   "checkops.lovable.app",
+  "checksops.lovable.app",
 ];
 
 export function isCheckOpsHost(hostname: string = typeof window !== "undefined" ? window.location.hostname : ""): boolean {
   if (!hostname) return false;
   if (CHECKOPS_HOSTS.includes(hostname)) return true;
-  // Any subdomain of checkops.com / checkops.app
+  // Any subdomain of checkops.com / checksops.com / checkops.app / checksops.app
   if (hostname.endsWith(".checkops.com")) return true;
+  if (hostname.endsWith(".checksops.com")) return true;
   if (hostname.endsWith(".checkops.app")) return true;
+  if (hostname.endsWith(".checksops.app")) return true;
   return false;
 }
