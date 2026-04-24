@@ -389,6 +389,9 @@ export function ProfileSettings() {
         </CardContent>
       </Card>
 
+      {/* Change Password */}
+      <ChangePasswordCard />
+
       {/* Notifications - Collapsible */}
       <Collapsible open={notificationsOpen} onOpenChange={setNotificationsOpen}>
         <Card>
