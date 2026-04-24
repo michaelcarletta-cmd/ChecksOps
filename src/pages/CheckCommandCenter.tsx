@@ -2198,7 +2198,7 @@ function CheckDetailPanel({
                 onRefresh={onRefresh}
               />
 
-              {check?.back_image_path && (
+              {check?.back_image_path && !isSharedView && (
                 <>
                   <div className="flex flex-col gap-2 sm:flex-row">
                     {backImageUrl && (
