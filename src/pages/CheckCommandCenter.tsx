@@ -347,7 +347,7 @@ export default function CheckCommandCenter() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold tracking-tight">Check Command Center</h1>
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight">CheckOps</h1>
           <p className="text-sm text-muted-foreground">
             {isWhiteLabel ? "Manage checks, endorsements & deposits" : "Insurance check intake, review & deposit readiness"}
           </p>
@@ -361,7 +361,7 @@ export default function CheckCommandCenter() {
             </SheetTrigger>
             <SheetContent side="right" className="w-[320px] sm:w-[320px]">
               <SheetHeader>
-                <SheetTitle>How to Use Check Command Center</SheetTitle>
+                <SheetTitle>How to Use CheckOps</SheetTitle>
               </SheetHeader>
               <div className="mt-6 space-y-6">
                 <HelpStep
