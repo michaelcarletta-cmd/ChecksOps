@@ -241,7 +241,7 @@ export default function CheckCenterMarketing() {
                 <a href="#demo">Book a live demo<ArrowRight className="h-4 w-4 ml-2" /></a>
               </Button>
               <Button asChild size="lg" variant="outline" className="text-base">
-                <Link to="/auth">Sign in</Link>
+                <Link to="/login">Sign in</Link>
               </Button>
             </div>
             <div className="mt-8 flex items-center gap-6 text-xs text-muted-foreground">
@@ -506,7 +506,7 @@ export default function CheckCenterMarketing() {
             © {new Date().getFullYear()} ChecksOps. All rights reserved.
           </p>
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <Link to="/auth" className="hover:text-foreground">Sign in</Link>
+            <Link to="/login" className="hover:text-foreground">Sign in</Link>
             <a href="#demo" className="hover:text-foreground">Book demo</a>
           </div>
         </div>
