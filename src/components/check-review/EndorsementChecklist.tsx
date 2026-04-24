@@ -64,9 +64,10 @@ const payeeTypeIcons: Record<string, typeof Users> = {
 interface EndorsementChecklistProps {
   checkId: string;
   onRefresh?: () => void;
+  readOnly?: boolean;
 }
 
-export function EndorsementChecklist({ checkId, onRefresh }: EndorsementChecklistProps) {
+export function EndorsementChecklist({ checkId, onRefresh, readOnly = false }: EndorsementChecklistProps) {
   const qc = useQueryClient();
   const { toast } = useToast();
 
