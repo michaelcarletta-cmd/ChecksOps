@@ -2542,6 +2542,7 @@ function EditableField({
   multiline = false,
   displayFormatter,
   onSave,
+  readOnly = false,
 }: {
   label: string;
   checkId: string;
@@ -2551,6 +2552,7 @@ function EditableField({
   multiline?: boolean;
   displayFormatter?: (v: string | null) => string | null;
   onSave: () => void;
+  readOnly?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<string>(value ?? "");
