@@ -105,6 +105,7 @@ const HeroMockup = () => (
 );
 
 export default function CheckCenterMarketing() {
+  const supportEmail = "checksopsadmin@gmail.com";
   const [menuOpen, setMenuOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", company: "", role: "", notes: "" });
@@ -115,17 +116,24 @@ export default function CheckCenterMarketing() {
       toast.error("Please fill in your name and email");
       return;
     }
+
+    const subject = "ChecksOps Live Demo Request";
+    const body = encodeURIComponent(
+      `Name: ${form.name}\nEmail: ${form.email}\nCompany: ${form.company}\nRole: ${form.role}\n\nWhat they would like to see:\n${form.notes}`
+    );
+
     setSubmitting(true);
     try {
-      const { error } = await supabase.functions.invoke("demo-request", { body: form });
-      if (error) throw error;
-      toast.success("Request received. We'll reach out shortly.");
+      const { error } = await supabase.functions.invoke("demo-request", { body: { ...form, to: supportEmail } });
+      if (error) {
+        window.location.href = `mailto:${supportEmail}?subject=${encodeURIComponent(subject)}&body=${body}`;
+        return;
+      }
+
+      toast.success(`Request received. We'll reach out from ${supportEmail}.`);
       setForm({ name: "", email: "", company: "", role: "", notes: "" });
     } catch (err) {
-      // Fallback: mailto
-      window.location.href = `mailto:hello@freedomclaims.work?subject=Check Center Demo Request&body=${encodeURIComponent(
-        `Name: ${form.name}\nEmail: ${form.email}\nCompany: ${form.company}\nRole: ${form.role}\n\n${form.notes}`
-      )}`;
+      window.location.href = `mailto:${supportEmail}?subject=${encodeURIComponent(subject)}&body=${body}`;
     } finally {
       setSubmitting(false);
     }
@@ -492,6 +500,9 @@ export default function CheckCenterMarketing() {
                 <p className="text-[10px] text-muted-foreground text-center">
                   By submitting, you agree to be contacted about ChecksOps.
                 </p>
+                <p className="text-[10px] text-muted-foreground text-center">
+                  Support: <a href={`mailto:${supportEmail}`} className="underline underline-offset-2 hover:text-foreground">{supportEmail}</a>
+                </p>
               </form>
             </CardContent>
           </Card>
@@ -506,6 +517,7 @@ export default function CheckCenterMarketing() {
             © {new Date().getFullYear()} ChecksOps. All rights reserved.
           </p>
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <a href={`mailto:${supportEmail}`} className="hover:text-foreground">Support</a>
             <Link to="/login" className="hover:text-foreground">Sign in</Link>
             <a href="#demo" className="hover:text-foreground">Book demo</a>
           </div>
