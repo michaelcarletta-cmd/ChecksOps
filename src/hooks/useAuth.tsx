@@ -4,12 +4,13 @@ import { supabase } from "@/integrations/supabase/client";
 
 const ROLE_CACHE_KEY = "cached_user_role";
 
-function getCachedRole(): string | null {
+function getCachedRole(forUserId?: string | null): string | null {
   try {
     const cached = localStorage.getItem(ROLE_CACHE_KEY);
     if (cached) {
       const { role, userId, expiry } = JSON.parse(cached);
-      if (Date.now() < expiry) {
+      // Only return cache if it's for the same user and not expired
+      if (Date.now() < expiry && (!forUserId || userId === forUserId)) {
         return role;
       }
       localStorage.removeItem(ROLE_CACHE_KEY);
