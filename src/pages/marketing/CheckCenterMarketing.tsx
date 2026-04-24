@@ -187,7 +187,7 @@ export default function CheckCenterMarketing() {
           </nav>
           <div className="flex items-center gap-2">
             <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-              <Link to="/auth"><LogIn className="h-4 w-4 mr-1.5" />Log in</Link>
+              <Link to="/login"><LogIn className="h-4 w-4 mr-1.5" />Log in</Link>
             </Button>
             <Button asChild size="sm">
               <a href="#demo">Book a demo<ArrowRight className="h-4 w-4 ml-1.5" /></a>
@@ -204,7 +204,7 @@ export default function CheckCenterMarketing() {
                 {s}
               </a>
             ))}
-            <Link to="/auth" className="block py-1.5 text-foreground font-medium">Log in</Link>
+            <Link to="/login" className="block py-1.5 text-foreground font-medium">Log in</Link>
           </div>
         )}
       </header>

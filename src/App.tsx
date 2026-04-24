@@ -218,6 +218,7 @@ function CheckOpsHostRoutes() {
     <Routes>
       <Route path="/" element={<Suspense fallback={<PageLoader />}><CheckOpsLanding /></Suspense>} />
       <Route path="/login" element={<Suspense fallback={<PageLoader />}><CheckOpsLogin /></Suspense>} />
+      <Route path="/auth" element={<Navigate to="/login" replace />} />
       <Route path="/sign" element={<Suspense fallback={<PageLoader />}><Sign /></Suspense>} />
       <Route path="/endorse" element={<Suspense fallback={<PageLoader />}><Endorse /></Suspense>} />
       <Route path="/payment-direction/:token" element={<Suspense fallback={<PageLoader />}><PaymentDirectionPage /></Suspense>} />
