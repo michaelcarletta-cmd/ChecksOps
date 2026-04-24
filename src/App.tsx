@@ -16,7 +16,6 @@ const Index = lazy(() => import("./pages/Index"));
 const Claims = lazy(() => import("./pages/Claims"));
 const ClaimDetail = lazy(() => import("./pages/ClaimDetail"));
 const Tasks = lazy(() => import("./pages/Tasks"));
-const ClaimsControlBoard = lazy(() => import("./pages/ClaimsControlBoard"));
 const Inbox = lazy(() => import("./pages/Inbox"));
 const Clients = lazy(() => import("./pages/Clients"));
 const ClientDetail = lazy(() => import("./pages/ClientDetail"));
@@ -182,7 +181,7 @@ function AppRoutesInner() {
       <Route path="/claims" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><Claims /></Suspense></AppLayout></ProtectedRoute>} />
       <Route path="/claims/:id" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><ClaimDetail /></Suspense></AppLayout></ProtectedRoute>} />
       <Route path="/tasks" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><Tasks /></Suspense></AppLayout></ProtectedRoute>} />
-      <Route path="/control-board" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><ClaimsControlBoard /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/control-board" element={<Navigate to="/tasks" replace />} />
       <Route path="/inbox" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><Inbox /></Suspense></AppLayout></ProtectedRoute>} />
       <Route path="/clients" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><Clients /></Suspense></AppLayout></ProtectedRoute>} />
       <Route path="/clients/:id" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><ClientDetail /></Suspense></AppLayout></ProtectedRoute>} />
