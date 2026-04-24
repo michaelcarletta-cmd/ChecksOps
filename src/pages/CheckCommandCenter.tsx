@@ -2116,7 +2116,7 @@ function CheckDetailPanel({
                   </div>
                 </>
                )}
-              {canUndo && (
+              {canUndo && !isSharedView && (
                 <Button
                   size="sm"
                   variant="outline"
