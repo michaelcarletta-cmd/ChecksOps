@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, AlertTriangle, ShieldAlert, Ban, X, CheckCheck } from "lucide-react";
+import { Bell, AlertTriangle, ShieldAlert, X, CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -14,7 +14,6 @@ import { useUrgentAlerts, UrgentAlert } from "@/hooks/useUrgentAlerts";
 const REASON_CONFIG: Record<UrgentAlert["reason"], { icon: typeof AlertTriangle; color: string; bg: string }> = {
   escalation: { icon: AlertTriangle, color: "text-red-500", bg: "bg-red-500/10" },
   high_pressure: { icon: ShieldAlert, color: "text-amber-500", bg: "bg-amber-500/10" },
-  blocking_microtask: { icon: Ban, color: "text-orange-500", bg: "bg-orange-500/10" },
 };
 
 export function UrgentAlertsBell() {
@@ -93,11 +92,11 @@ export function UrgentAlertsBell() {
               size="sm"
               className="w-full text-xs"
               onClick={() => {
-                navigate("/control-board");
+                navigate("/tasks");
                 setOpen(false);
               }}
             >
-              View Control Board →
+              View Tasks →
             </Button>
           </div>
         )}

@@ -16,7 +16,6 @@ const Index = lazy(() => import("./pages/Index"));
 const Claims = lazy(() => import("./pages/Claims"));
 const ClaimDetail = lazy(() => import("./pages/ClaimDetail"));
 const Tasks = lazy(() => import("./pages/Tasks"));
-const ClaimsControlBoard = lazy(() => import("./pages/ClaimsControlBoard"));
 const Inbox = lazy(() => import("./pages/Inbox"));
 const Clients = lazy(() => import("./pages/Clients"));
 const ClientDetail = lazy(() => import("./pages/ClientDetail"));

@@ -8,7 +8,7 @@ export interface UrgentAlert {
   claim_id: string;
   claim_number: string | null;
   policyholder_name: string | null;
-  reason: "escalation" | "blocking_microtask" | "high_pressure";
+  reason: "escalation" | "high_pressure";
   label: string;
   pressure_score: number;
   created_at: string;
@@ -41,18 +41,10 @@ export function useUrgentAlerts() {
         .gte("pressure_score", PRESSURE_THRESHOLD)
         .neq("follow_up_status", "escalation"); // avoid duplicates
 
-      // 3. Blocking microtasks
-      const { data: blocking } = await supabase
-        .from("claim_microtasks")
-        .select("id, claim_id, title, created_at")
-        .eq("is_blocking", true)
-        .in("status", ["pending", "in_progress"]);
-
       // Get claim details for all relevant claim IDs
       const claimIds = new Set<string>();
       escalated?.forEach(e => claimIds.add(e.claim_id));
       highPressure?.forEach(e => claimIds.add(e.claim_id));
-      blocking?.forEach(e => claimIds.add(e.claim_id));
 
       const ids = Array.from(claimIds);
       if (ids.length === 0) return [];
@@ -89,20 +81,6 @@ export function useUrgentAlerts() {
           label: `${c?.policyholder_name || "Claim"} — pressure ${e.pressure_score}`,
           pressure_score: e.pressure_score || 0,
           created_at: e.updated_at,
-        });
-      });
-
-      blocking?.forEach(mt => {
-        const c = claimMap.get(mt.claim_id);
-        alerts.push({
-          id: `blk-${mt.id}`,
-          claim_id: mt.claim_id,
-          claim_number: c?.claim_number || null,
-          policyholder_name: c?.policyholder_name || null,
-          reason: "blocking_microtask",
-          label: `Blocking: ${mt.title}`,
-          pressure_score: 0,
-          created_at: mt.created_at,
         });
       });
 
