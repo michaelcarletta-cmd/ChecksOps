@@ -2131,7 +2131,7 @@ function CheckDetailPanel({
                 </Button>
               )}
               {/* Branch → Deposited transition */}
-              {check.status === "branch_deposit_required" && (
+              {check.status === "branch_deposit_required" && !isSharedView && (
                 <div className="space-y-2 mt-2">
                   <Button
                     size="sm"
