@@ -236,59 +236,32 @@ export default function CheckCommandCenter() {
     enabled: !!tenantId,
   });
 
-  // Partner checks — from active tenant partnerships
+  // Partner checks — ONLY checks explicitly shared via shared_checks table.
+  // Partnerships enable the ability to share, but do NOT auto-share every check.
   const { data: sharedChecks = [] } = useQuery({
     queryKey: ["shared-with-me-checks", tenantId],
     queryFn: async () => {
-      // First get partner tenant IDs via the DB function
-      const { data: partnerIds, error: pErr } = await supabase.rpc("get_partner_tenant_ids", {
-        _tenant_id: tenantId!,
-      });
-      if (pErr) throw pErr;
-      if (!partnerIds || partnerIds.length === 0) {
-        // Also check shared_checks table for explicitly shared checks
-        const { data: sharedData, error: sErr } = await supabase
-          .from("shared_checks")
-          .select("check_id, source_tenant_id, tenants!shared_checks_source_tenant_id_fkey(name)")
-          .eq("target_tenant_id", tenantId!)
-          .is("revoked_at", null);
-        if (sErr) throw sErr;
-        if (!sharedData || sharedData.length === 0) return [];
+      const { data: sharedData, error: sErr } = await supabase
+        .from("shared_checks")
+        .select("check_id, source_tenant_id, tenants!shared_checks_source_tenant_id_fkey(name)")
+        .eq("target_tenant_id", tenantId!)
+        .is("revoked_at", null);
+      if (sErr) throw sErr;
+      if (!sharedData || sharedData.length === 0) return [];
 
-        const checkIds = sharedData.map((s: any) => s.check_id);
-        const { data: checkData, error: checkErr } = await supabase
-          .from("check_intake_items")
-          .select("*, check_payees(*)")
-          .in("id", checkIds)
-          .order("created_at", { ascending: false });
-        if (checkErr) throw checkErr;
-        const shareMap = new Map(sharedData.map((s: any) => [s.check_id, s.tenants?.name ?? "Partner"]));
-        return (checkData ?? []).map((c: any) => ({
-          ...c,
-          _shared: true,
-          _sourceTenantName: shareMap.get(c.id) ?? "Partner",
-        })) as (CheckItem & { _shared: true; _sourceTenantName: string })[];
-      }
-
-      // Get partner names for display
-      const { data: partnerTenants } = await supabase
-        .from("tenants")
-        .select("id, name")
-        .in("id", partnerIds);
-      const nameMap = new Map((partnerTenants ?? []).map((t: any) => [t.id, t.name]));
-
-      // Fetch partner checks
-      const { data: partnerChecks, error: pcErr } = await supabase
+      const checkIds = sharedData.map((s: any) => s.check_id);
+      const { data: checkData, error: checkErr } = await supabase
         .from("check_intake_items")
         .select("*, check_payees(*)")
-        .in("tenant_id", partnerIds)
+        .in("id", checkIds)
         .order("created_at", { ascending: false });
-      if (pcErr) throw pcErr;
+      if (checkErr) throw checkErr;
 
-      return (partnerChecks ?? []).map((c: any) => ({
+      const shareMap = new Map(sharedData.map((s: any) => [s.check_id, s.tenants?.name ?? "Partner"]));
+      return (checkData ?? []).map((c: any) => ({
         ...c,
         _shared: true,
-        _sourceTenantName: nameMap.get(c.tenant_id) ?? "Partner",
+        _sourceTenantName: shareMap.get(c.id) ?? "Partner",
       })) as (CheckItem & { _shared: true; _sourceTenantName: string })[];
     },
     enabled: !!tenantId,
