@@ -40,7 +40,7 @@ const HeroMockup = () => (
       <span className="h-2.5 w-2.5 rounded-full bg-destructive/70" />
       <span className="h-2.5 w-2.5 rounded-full bg-warning/70" />
       <span className="h-2.5 w-2.5 rounded-full bg-success/70" />
-      <span className="ml-3 text-[10px] text-muted-foreground font-mono">check-command-center</span>
+      <span className="ml-3 text-[10px] text-muted-foreground font-mono">checkops.app</span>
     </div>
     <div className="p-4 md:p-6 space-y-4">
       {/* Dashboard cards */}
@@ -177,12 +177,7 @@ export default function CheckCenterMarketing() {
       {/* Top Nav */}
       <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-4 md:px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-primary to-blue-400 flex items-center justify-center">
-              <FileCheck className="h-4 w-4 text-primary-foreground" />
-            </div>
-            <span className="font-semibold tracking-tight">Check Command Center</span>
-          </div>
+          <CheckOpsLogo className="text-foreground text-base" />
           <nav className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
             <a href="#capabilities" className="hover:text-foreground transition-colors">Capabilities</a>
             <a href="#workflow" className="hover:text-foreground transition-colors">Workflow</a>
@@ -233,7 +228,7 @@ export default function CheckCenterMarketing() {
               Every check.
               <br />
               <span className="bg-gradient-to-r from-primary via-blue-400 to-cyan-300 bg-clip-text text-transparent">
-                One command center.
+                Locked on target.
               </span>
             </h1>
             <p className="mt-5 text-lg text-muted-foreground max-w-xl leading-relaxed">
@@ -495,7 +490,7 @@ export default function CheckCenterMarketing() {
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
                 <p className="text-[10px] text-muted-foreground text-center">
-                  By submitting, you agree to be contacted about Check Command Center.
+                  By submitting, you agree to be contacted about CheckOps.
                 </p>
               </form>
             </CardContent>
@@ -506,14 +501,9 @@ export default function CheckCenterMarketing() {
       {/* Footer */}
       <footer className="border-t border-border/40 bg-card/30">
         <div className="mx-auto max-w-7xl px-4 md:px-6 py-10 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-md bg-gradient-to-br from-primary to-blue-400 flex items-center justify-center">
-              <FileCheck className="h-3.5 w-3.5 text-primary-foreground" />
-            </div>
-            <span className="text-sm font-semibold">Check Command Center</span>
-          </div>
+          <CheckOpsLogo className="text-foreground text-sm" />
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} Check Command Center. All rights reserved.
+            © {new Date().getFullYear()} CheckOps. All rights reserved.
           </p>
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <Link to="/auth" className="hover:text-foreground">Sign in</Link>
