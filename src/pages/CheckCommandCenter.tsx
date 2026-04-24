@@ -1173,6 +1173,7 @@ function CheckDetailPanel({
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { tenantId } = useTenantFilter();
 
    const { data: check } = useQuery({
     queryKey: ["check-detail", checkId],
@@ -1297,6 +1298,13 @@ function CheckDetailPanel({
   }, []);
 
   const canUndo = check && ['branch_deposit_required', 'approved_for_deposit', 'loss_draft_required', 'reissue_requested'].includes(check.status) && check.status !== 'deposited';
+
+  // Ownership: only the tenant that uploaded the check can edit it. Partners with whom
+  // the check is shared are strictly read-only (they can still upload loss-draft docs
+  // elsewhere in the UI, but cannot mutate the check or its payees).
+  const checkOwnerTenantId = (check as any)?.tenant_id as string | null | undefined;
+  const isOwner = !!tenantId && !!checkOwnerTenantId && tenantId === checkOwnerTenantId;
+  const isSharedView = !!check && !isOwner;
 
   const handleBypassEndorsements = async () => {
     if (!user?.id || !check) return;
@@ -1690,10 +1698,23 @@ function CheckDetailPanel({
           <p className="text-sm text-muted-foreground">{check.carrier_name}</p>
         )}
         {check.amount != null && (
-          <EditableAmount checkId={checkId} currentAmount={check.amount} onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
+          <EditableAmount checkId={checkId} currentAmount={check.amount} readOnly={isSharedView} onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
         )}
         {check.amount == null && (
-          <EditableAmount checkId={checkId} currentAmount={null} onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
+          <EditableAmount checkId={checkId} currentAmount={null} readOnly={isSharedView} onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
+        )}
+
+        {/* Shared / read-only banner for non-owner tenants */}
+        {isSharedView && (
+          <div className="mt-2 border border-blue-500/30 bg-blue-500/10 rounded-lg p-3 space-y-1">
+            <div className="flex items-center gap-2 text-blue-400 font-semibold text-sm">
+              <Eye className="h-4 w-4 shrink-0" />
+              Shared check — read only
+            </div>
+            <p className="text-xs text-blue-300/80 pl-6">
+              This check was uploaded by another organization. You can view details, but only the owner can edit the check or payees. If this check is in loss draft, you can still upload supporting documents from the claim's file area.
+            </p>
+          </div>
         )}
 
         {/* Single Source of Truth Blocking Banner */}
@@ -1707,7 +1728,7 @@ function CheckDetailPanel({
               <p key={i} className="text-xs text-amber-300/80 pl-6">• {reason}</p>
             ))}
             {/* Bypass endorsements — physical signatures already on check */}
-            {pendingEndorsements.length > 0 && check.status !== "loss_draft_required" && (
+            {pendingEndorsements.length > 0 && check.status !== "loss_draft_required" && !isSharedView && (
               <Button
                 size="sm"
                 variant="outline"
@@ -1814,6 +1835,7 @@ function CheckDetailPanel({
                 checkId={checkId}
                 field="check_number"
                 value={check.check_number}
+                readOnly={isSharedView}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
               <EditableField
@@ -1821,6 +1843,7 @@ function CheckDetailPanel({
                 checkId={checkId}
                 field="carrier_name"
                 value={check.carrier_name}
+                readOnly={isSharedView}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
               <EditableField
@@ -1829,6 +1852,7 @@ function CheckDetailPanel({
                 field="issue_date"
                 value={check.issue_date}
                 inputType="date"
+                readOnly={isSharedView}
                 displayFormatter={(v) => (v ? format(new Date(v), "MMM d, yyyy") : null)}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
@@ -1837,6 +1861,7 @@ function CheckDetailPanel({
                 checkId={checkId}
                 field="detected_claim_number"
                 value={check.detected_claim_number}
+                readOnly={isSharedView}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
               <EditableField
@@ -1845,6 +1870,7 @@ function CheckDetailPanel({
                 field="payee_line"
                 value={check.payee_line}
                 multiline
+                readOnly={isSharedView}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
               <EditableField
@@ -1853,17 +1879,21 @@ function CheckDetailPanel({
                 field="is_multi_payee"
                 value={check.is_multi_payee ? "true" : "false"}
                 inputType="boolean"
+                readOnly={isSharedView}
                 displayFormatter={(v) => (v === "true" ? "Yes" : "No")}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
               <DetailRow label="OCR Status" value={check.ocr_status} />
-              <RerunOcrButton checkId={checkId} onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
-              <StatusOverride
-                checkId={checkId}
-                currentStatus={check.status}
-                onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); qc.invalidateQueries({ queryKey: ["check-intake-items"] }); onRefresh(); }}
-              />
-              
+              {!isSharedView && (
+                <>
+                  <RerunOcrButton checkId={checkId} onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
+                  <StatusOverride
+                    checkId={checkId}
+                    currentStatus={check.status}
+                    onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); qc.invalidateQueries({ queryKey: ["check-intake-items"] }); onRefresh(); }}
+                  />
+                </>
+              )}
               <Separator />
               {/* Check Images */}
               {(frontImageUrl || backImageUrl) && (
@@ -2086,7 +2116,7 @@ function CheckDetailPanel({
                   </div>
                 </>
                )}
-              {canUndo && (
+              {canUndo && !isSharedView && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -2285,7 +2315,7 @@ function CheckDetailPanel({
             </TabsContent>
 
             <TabsContent value="payees" className="p-4 space-y-3 mt-0">
-              <PayeeManager checkId={checkId} payees={check.check_payees ?? []} onRefresh={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
+              <PayeeManager checkId={checkId} payees={check.check_payees ?? []} readOnly={isSharedView} onRefresh={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
             </TabsContent>
 
             <TabsContent value="eligibility" className="p-4 space-y-3 mt-0">
@@ -2441,7 +2471,7 @@ function DetailRow({ label, value }: { label: string; value: string | null | und
 /*  Editable Amount                                                    */
 /* ------------------------------------------------------------------ */
 
-function EditableAmount({ checkId, currentAmount, onSave }: { checkId: string; currentAmount: number | null; onSave: () => void }) {
+function EditableAmount({ checkId, currentAmount, onSave, readOnly = false }: { checkId: string; currentAmount: number | null; onSave: () => void; readOnly?: boolean }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(currentAmount?.toString() ?? "");
   const [saving, setSaving] = useState(false);
@@ -2507,14 +2537,16 @@ function EditableAmount({ checkId, currentAmount, onSave }: { checkId: string; c
           : <span className="text-destructive">Amount missing</span>
         }
       </p>
-      <Button
-        size="icon"
-        variant="ghost"
-        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-        onClick={() => { setValue(currentAmount?.toString() ?? ""); setEditing(true); }}
-      >
-        <Pencil className="h-3 w-3" />
-      </Button>
+      {!readOnly && (
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={() => { setValue(currentAmount?.toString() ?? ""); setEditing(true); }}
+        >
+          <Pencil className="h-3 w-3" />
+        </Button>
+      )}
     </div>
   );
 }
@@ -2532,6 +2564,7 @@ function EditableField({
   multiline = false,
   displayFormatter,
   onSave,
+  readOnly = false,
 }: {
   label: string;
   checkId: string;
@@ -2541,6 +2574,7 @@ function EditableField({
   multiline?: boolean;
   displayFormatter?: (v: string | null) => string | null;
   onSave: () => void;
+  readOnly?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<string>(value ?? "");
@@ -2633,14 +2667,16 @@ function EditableField({
         <span className={`font-medium text-right break-words min-w-0 ${!display ? "text-destructive italic" : ""}`}>
           {display ?? "Missing"}
         </span>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-          onClick={() => setEditing(true)}
-        >
-          <Pencil className="h-3 w-3" />
-        </Button>
+        {!readOnly && (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+            onClick={() => setEditing(true)}
+          >
+            <Pencil className="h-3 w-3" />
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -2650,7 +2686,7 @@ function EditableField({
 /*  Payee Manager — add / edit / remove                                */
 /* ------------------------------------------------------------------ */
 
-function PayeeManager({ checkId, payees, onRefresh }: { checkId: string; payees: CheckPayee[]; onRefresh: () => void }) {
+function PayeeManager({ checkId, payees, onRefresh, readOnly = false }: { checkId: string; payees: CheckPayee[]; onRefresh: () => void; readOnly?: boolean }) {
   const { toast } = useToast();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -2698,13 +2734,20 @@ function PayeeManager({ checkId, payees, onRefresh }: { checkId: string; payees:
   return (
     <div className="space-y-3">
       {payees.map((payee) => (
-        <EditablePayeeCard key={payee.id} payee={payee} checkId={checkId} onRefresh={onRefresh} onRemove={() => removePayee(payee.id)} />
+        <EditablePayeeCard
+          key={payee.id}
+          payee={payee}
+          checkId={checkId}
+          onRefresh={onRefresh}
+          onRemove={() => removePayee(payee.id)}
+          readOnly={readOnly}
+        />
       ))}
       {payees.length === 0 && !adding && (
         <p className="text-sm text-muted-foreground text-center py-4">No payees detected yet</p>
       )}
 
-      {adding ? (
+      {!readOnly && (adding ? (
         <Card className="p-3 space-y-2 border-dashed border-primary/50">
           <Input placeholder="Payee name" value={newName} onChange={(e) => setNewName(e.target.value)} className="h-8 text-sm" autoFocus />
           <Select value={newType} onValueChange={setNewType}>
@@ -2728,7 +2771,7 @@ function PayeeManager({ checkId, payees, onRefresh }: { checkId: string; payees:
         <Button size="sm" variant="outline" className="w-full text-xs" onClick={() => setAdding(true)}>
           <Plus className="h-3 w-3 mr-1" />Add Payee
         </Button>
-      )}
+      ))}
     </div>
   );
 }
@@ -2742,11 +2785,13 @@ function EditablePayeeCard({
   checkId,
   onRefresh,
   onRemove,
+  readOnly = false,
 }: {
   payee: CheckPayee;
   checkId: string;
   onRefresh: () => void;
   onRemove: () => void;
+  readOnly?: boolean;
 }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
@@ -2849,7 +2894,7 @@ function EditablePayeeCard({
           <Badge className={`text-[10px] ${endorsementColors[payee.endorsement_status] ?? ""}`}>
             {payee.endorsement_status}
           </Badge>
-          {!editing && (
+          {!editing && !readOnly && (
             <>
               <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditing(true)}>
                 <Pencil className="h-3 w-3" />
@@ -2867,7 +2912,7 @@ function EditablePayeeCard({
         </p>
       )}
 
-      {payee.endorsement_status !== "signed" && payee.endorsement_status !== "rejected" && !editing && (
+      {payee.endorsement_status !== "signed" && payee.endorsement_status !== "rejected" && !editing && !readOnly && (
         <div className="space-y-2 pt-1">
           <Input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-8 text-xs" />
           <Input placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} className="h-8 text-xs" />
