@@ -2,6 +2,7 @@ import { useTenant } from "@/contexts/TenantContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useLocation } from "react-router-dom";
+import { isCheckOpsHost } from "@/lib/checkopsHost";
 
 const KNOWN_APP_DOMAINS = [
   "localhost",
@@ -14,7 +15,8 @@ const KNOWN_APP_DOMAINS = [
 
 function isKnownAppDomain(hostname: string) {
   if (KNOWN_APP_DOMAINS.includes(hostname)) return true;
-  return hostname.endsWith(".lovable.app");
+  if (hostname.endsWith(".lovable.app")) return true;
+  return false;
 }
 
 /**
@@ -30,9 +32,13 @@ export function useTenantFilter() {
   const location = useLocation();
   const hostname = typeof window !== "undefined" ? window.location.hostname : "";
   const isWhiteLabelRoute = location.pathname.startsWith("/wl/");
-  const isCustomTenantDomain = hostname !== "" && !isKnownAppDomain(hostname);
-  const isResolvingWhiteLabelTenant = (isWhiteLabelRoute || isCustomTenantDomain) && !tenant;
-  const shouldResolveSystemTenant = !tenant && !loading && !isResolvingWhiteLabelTenant;
+  const isCustomTenantDomain = hostname !== "" && !isKnownAppDomain(hostname) && !isCheckOpsHost(hostname);
+  const onCheckOpsHost = isCheckOpsHost(hostname);
+  // On checkops.com, any /{slug}/... route is a tenant route (not the system tenant)
+  const isCheckOpsTenantRoute = onCheckOpsHost && /^\/[^/]+\/(checks|settings|login)/.test(location.pathname);
+  const isResolvingWhiteLabelTenant =
+    (isWhiteLabelRoute || isCustomTenantDomain || isCheckOpsTenantRoute) && !tenant;
+  const shouldResolveSystemTenant = !tenant && !loading && !isResolvingWhiteLabelTenant && !onCheckOpsHost;
 
   // If no tenant from context, auto-resolve system tenant for Freedom Claims staff
   const { data: systemTenantId } = useQuery({

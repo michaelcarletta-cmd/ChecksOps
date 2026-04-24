@@ -75,7 +75,7 @@ export function CheckCenterHelpButton() {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <HelpCircle className="h-5 w-5 text-primary" />
-            Check Command Center — Tab Guide
+            CheckOps — Tab Guide
           </DialogTitle>
         </DialogHeader>
         <ScrollArea className="max-h-[65vh] pr-3">

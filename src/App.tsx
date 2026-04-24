@@ -10,6 +10,7 @@ import { useAuth } from "./hooks/useAuth";
 import { useToast } from "./hooks/use-toast";
 import { useCustomDomainTenant } from "./hooks/useCustomDomainTenant";
 import { CustomDomainWhiteLabelApp } from "./components/white-label/CustomDomainWhiteLabelApp";
+import { isCheckOpsHost } from "./lib/checkopsHost";
 
 // Lazy load all page components for code splitting
 const Index = lazy(() => import("./pages/Index"));
@@ -43,6 +44,8 @@ const CheckCommandCenter = lazy(() => import("./pages/CheckCommandCenter"));
 const CheckCenterMarketing = lazy(() => import("./pages/marketing/CheckCenterMarketing"));
 const BuildingFootprintIngestion = lazy(() => import("./pages/admin/BuildingFootprintIngestion"));
 const WhiteLabelApp = lazy(() => import("./pages/WhiteLabelApp"));
+const CheckOpsLanding = lazy(() => import("./pages/checkops/CheckOpsLanding"));
+const CheckOpsLogin = lazy(() => import("./pages/checkops/CheckOpsLogin"));
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -203,20 +206,56 @@ function AppRoutesInner() {
   );
 }
 
+/**
+ * Routes that apply when the app is loaded on checkops.com.
+ * - /           → CheckOps marketing + Sign In CTA
+ * - /login      → CheckOps login (resolves tenant, redirects to /{slug}/checks)
+ * - /:slug/*    → Tenant Check Center (reuses WhiteLabelApp)
+ * - /wl/:slug/* → kept as a redirect so legacy links still work
+ */
+function CheckOpsHostRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<Suspense fallback={<PageLoader />}><CheckOpsLanding /></Suspense>} />
+      <Route path="/login" element={<Suspense fallback={<PageLoader />}><CheckOpsLogin /></Suspense>} />
+      <Route path="/sign" element={<Suspense fallback={<PageLoader />}><Sign /></Suspense>} />
+      <Route path="/endorse" element={<Suspense fallback={<PageLoader />}><Endorse /></Suspense>} />
+      <Route path="/payment-direction/:token" element={<Suspense fallback={<PageLoader />}><PaymentDirectionPage /></Suspense>} />
+      {/* Legacy /wl/:slug/... → /:slug/... */}
+      <Route path="/wl/:slug/*" element={<LegacyWlRedirect />} />
+      {/* Tenant white-label routes mounted directly at /:slug/* */}
+      <Route path="/:slug/*" element={<Suspense fallback={<PageLoader />}><WhiteLabelApp /></Suspense>} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+function LegacyWlRedirect() {
+  const pathname = window.location.pathname;
+  const rest = pathname.replace(/^\/wl\//, "/");
+  return <Navigate to={rest || "/"} replace />;
+}
+
 // Custom domain detection wrapper
 function AppRoutes() {
   const { tenantSlug, loading } = useCustomDomainTenant();
+  const onCheckOpsHost = isCheckOpsHost();
 
   if (loading) {
     return <PageLoader />;
   }
 
-  // If a custom domain matched a tenant, render the white-label app directly
+  // Tenant-owned custom domain (e.g., acme-inspections.com) → always their tenant
   if (tenantSlug) {
     return <CustomDomainWhiteLabelApp slug={tenantSlug} />;
   }
 
-  // Normal app routing
+  // checkops.com (the white-label platform front door) has its own route tree
+  if (onCheckOpsHost) {
+    return <CheckOpsHostRoutes />;
+  }
+
+  // Freedom CRM (freedomclaims.work, lovable previews, localhost)
   return <AppRoutesInner />;
 }
 

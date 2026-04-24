@@ -1,12 +1,14 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { isCheckOpsHost } from "@/lib/checkopsHost";
 
 /**
  * Checks if the current hostname matches a tenant's custom_domain.
  * Returns the tenant slug if matched, null otherwise.
- * 
+ *
  * Known app domains (freedomclaims.work, freedomclaims.lovable.app, localhost, preview domains)
- * are skipped — they belong to the main app.
+ * and the CheckOps platform hosts (checkops.com, etc.) are skipped — they are handled by
+ * the normal router, not the tenant custom-domain shortcut.
  */
 
 const KNOWN_APP_DOMAINS = [
@@ -22,6 +24,8 @@ function isKnownAppDomain(hostname: string): boolean {
   if (hostname.endsWith(".lovable.app")) return true;
   // Local dev
   if (hostname === "127.0.0.1" || hostname === "0.0.0.0") return true;
+  // CheckOps platform hosts are handled by CheckOpsHostRoutes, not tenant custom-domain
+  if (isCheckOpsHost(hostname)) return true;
   return false;
 }
 

@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LogOut, Settings, Shield } from "lucide-react";
+import { isCheckOpsHost } from "@/lib/checkopsHost";
 
 const CheckCommandCenter = lazy(() => import("@/pages/CheckCommandCenter"));
 
@@ -20,19 +21,24 @@ export function WhiteLabelCheckCenter() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
 
+  const resolveTenantBase = useCallback((): string | null => {
+    if (!tenant?.slug) return null;
+    if (isCheckOpsHost()) return `/${tenant.slug}`;
+    if (window.location.pathname.startsWith("/wl/")) return `/wl/${tenant.slug}`;
+    return null;
+  }, [tenant]);
+
   const handleSignOut = useCallback(async () => {
     await supabase.auth.signOut();
-    const loginPath = tenant?.slug && window.location.pathname.startsWith("/wl/")
-      ? `/wl/${tenant.slug}/login`
-      : "/login";
+    const tenantBase = resolveTenantBase();
+    const loginPath = tenantBase ? `${tenantBase}/login` : "/login";
     navigate(loginPath, { replace: true });
-  }, [tenant, navigate]);
+  }, [resolveTenantBase, navigate]);
 
   if (loading) return <PageLoader />;
   if (!user) {
-    const loginPath = tenant?.slug && window.location.pathname.startsWith("/wl/")
-      ? `/wl/${tenant.slug}/login`
-      : "/login";
+    const tenantBase = resolveTenantBase();
+    const loginPath = tenantBase ? `${tenantBase}/login` : "/login";
     return <Navigate to={loginPath} replace />;
   }
 
@@ -59,7 +65,7 @@ export function WhiteLabelCheckCenter() {
           </span>
           {tenant && (
             <Button variant="ghost" size="icon" className="h-8 w-8" asChild title="Settings">
-              <Link to={`/wl/${tenant.slug}/settings`}>
+              <Link to={`${resolveTenantBase() ?? `/wl/${tenant.slug}`}/settings`}>
                 <Settings className="h-4 w-4" />
               </Link>
             </Button>

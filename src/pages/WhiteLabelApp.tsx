@@ -8,11 +8,24 @@ import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isCheckOpsHost } from "@/lib/checkopsHost";
+
+/**
+ * Resolves the base path for tenant routes.
+ * On checkops.com: /{slug}
+ * On other hosts (freedomclaims.work, lovable previews): /wl/{slug}
+ */
+function useTenantBasePath(slug?: string) {
+  const hostScoped = isCheckOpsHost();
+  if (!slug) return "";
+  return hostScoped ? `/${slug}` : `/wl/${slug}`;
+}
 
 function WhiteLabelRoutes() {
   const { tenant, loading, error } = useTenant();
   const { user, loading: authLoading } = useAuth();
   const location = useLocation();
+  const basePath = useTenantBasePath(tenant?.slug);
 
   // Check tenant membership
   const { data: isMember, isLoading: memberLoading } = useQuery({
@@ -66,13 +79,13 @@ function WhiteLabelRoutes() {
 
   // User is logged in but not a member of this tenant.
   // Let them reach the login screen so they can switch accounts instead of hard-blocking.
-  if (user && !memberLoading && !isMember && location.pathname !== `/wl/${tenant.slug}/login`) {
+  if (user && !memberLoading && !isMember && location.pathname !== `${basePath}/login`) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-bold">Access Denied</h1>
           <p className="text-muted-foreground">
-            You don't have access to {tenant.name}'s Check Center. Contact your administrator for an invite.
+            You don't have access to {tenant.name}'s CheckOps workspace. Contact your administrator for an invite.
           </p>
         </div>
       </div>
@@ -85,7 +98,7 @@ function WhiteLabelRoutes() {
         path="login"
         element={
           user && !authLoading && isMember
-            ? <Navigate to={`/wl/${tenant.slug}/checks`} replace />
+            ? <Navigate to={`${basePath}/checks`} replace />
             : <WhiteLabelLogin />
         }
       />
@@ -93,20 +106,20 @@ function WhiteLabelRoutes() {
         path="checks"
         element={
           !user
-            ? <Navigate to={`/wl/${tenant.slug}/login`} replace />
+            ? <Navigate to={`${basePath}/login`} replace />
             : isMember
               ? <WhiteLabelCheckCenter />
-              : <Navigate to={`/wl/${tenant.slug}/login`} replace />
+              : <Navigate to={`${basePath}/login`} replace />
         }
       />
       <Route
         path="settings"
         element={
           !user
-            ? <Navigate to={`/wl/${tenant.slug}/login`} replace />
+            ? <Navigate to={`${basePath}/login`} replace />
             : isMember
               ? <WhiteLabelSettings />
-              : <Navigate to={`/wl/${tenant.slug}/login`} replace />
+              : <Navigate to={`${basePath}/login`} replace />
         }
       />
       <Route path="*" element={<Navigate to={user && isMember ? "checks" : "login"} replace />} />

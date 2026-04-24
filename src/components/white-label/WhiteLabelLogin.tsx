@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { isCheckOpsHost } from "@/lib/checkopsHost";
 
 export function WhiteLabelLogin() {
   const { tenant } = useTenant();
@@ -74,9 +75,12 @@ export function WhiteLabelLogin() {
         throw new Error(`This account doesn't have access to ${tenant.name}`);
       }
 
-      const checksPath = location.pathname.startsWith(`/wl/${tenant.slug}`)
-        ? `/wl/${tenant.slug}/checks`
-        : "/checks";
+      const basePath = isCheckOpsHost()
+        ? `/${tenant.slug}`
+        : location.pathname.startsWith(`/wl/${tenant.slug}`)
+          ? `/wl/${tenant.slug}`
+          : "";
+      const checksPath = basePath ? `${basePath}/checks` : "/checks";
 
       navigate(checksPath, { replace: true });
     } catch (err: any) {
@@ -105,7 +109,7 @@ export function WhiteLabelLogin() {
           )}
           <div>
             <CardTitle className="text-xl md:text-2xl">{tenant.name}</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">Check Command Center</p>
+            <p className="text-xs text-muted-foreground mt-1">CheckOps</p>
           </div>
         </CardHeader>
         <CardContent className="pt-2">

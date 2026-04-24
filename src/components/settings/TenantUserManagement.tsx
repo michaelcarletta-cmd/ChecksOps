@@ -346,7 +346,7 @@ export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: 
               {tenantName} — Users
             </DialogTitle>
             <DialogDescription>
-              Manage who can access this tenant's Check Command Center.
+              Manage who can access this tenant's CheckOps workspace.
             </DialogDescription>
           </DialogHeader>
 
@@ -626,7 +626,7 @@ export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: 
             <AlertDialogTitle>Remove User</AlertDialogTitle>
             <AlertDialogDescription>
               Remove <strong>{removeTarget?.full_name || removeTarget?.email}</strong> from{" "}
-              <strong>{tenantName}</strong>? They will lose access to the Check Command Center
+              <strong>{tenantName}</strong>? They will lose access to the CheckOps workspace
               immediately. Their account will not be deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
