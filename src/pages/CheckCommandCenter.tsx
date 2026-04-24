@@ -1835,6 +1835,7 @@ function CheckDetailPanel({
                 checkId={checkId}
                 field="check_number"
                 value={check.check_number}
+                readOnly={isSharedView}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
               <EditableField
@@ -1842,6 +1843,7 @@ function CheckDetailPanel({
                 checkId={checkId}
                 field="carrier_name"
                 value={check.carrier_name}
+                readOnly={isSharedView}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
               <EditableField
@@ -1850,6 +1852,7 @@ function CheckDetailPanel({
                 field="issue_date"
                 value={check.issue_date}
                 inputType="date"
+                readOnly={isSharedView}
                 displayFormatter={(v) => (v ? format(new Date(v), "MMM d, yyyy") : null)}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
@@ -1858,6 +1861,7 @@ function CheckDetailPanel({
                 checkId={checkId}
                 field="detected_claim_number"
                 value={check.detected_claim_number}
+                readOnly={isSharedView}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
               <EditableField
@@ -1866,6 +1870,7 @@ function CheckDetailPanel({
                 field="payee_line"
                 value={check.payee_line}
                 multiline
+                readOnly={isSharedView}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
               <EditableField
@@ -1874,17 +1879,21 @@ function CheckDetailPanel({
                 field="is_multi_payee"
                 value={check.is_multi_payee ? "true" : "false"}
                 inputType="boolean"
+                readOnly={isSharedView}
                 displayFormatter={(v) => (v === "true" ? "Yes" : "No")}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
               <DetailRow label="OCR Status" value={check.ocr_status} />
-              <RerunOcrButton checkId={checkId} onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
-              <StatusOverride
-                checkId={checkId}
-                currentStatus={check.status}
-                onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); qc.invalidateQueries({ queryKey: ["check-intake-items"] }); onRefresh(); }}
-              />
-              
+              {!isSharedView && (
+                <>
+                  <RerunOcrButton checkId={checkId} onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
+                  <StatusOverride
+                    checkId={checkId}
+                    currentStatus={check.status}
+                    onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); qc.invalidateQueries({ queryKey: ["check-intake-items"] }); onRefresh(); }}
+                  />
+                </>
+              )}
               <Separator />
               {/* Check Images */}
               {(frontImageUrl || backImageUrl) && (
