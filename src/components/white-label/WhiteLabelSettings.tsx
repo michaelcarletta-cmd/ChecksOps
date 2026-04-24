@@ -10,10 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft, Loader2, Save, Trash2, Coins } from "lucide-react";
+import { LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft, Loader2, Save, Trash2, Coins, UserCircle } from "lucide-react";
 import { TenantUserManager } from "./TenantUserManager";
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { TenantCreditManager } from "./TenantCreditManager";
+import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -57,6 +58,7 @@ export function WhiteLabelSettings() {
         <Tabs defaultValue="profile" className="space-y-6">
           <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
             <TabsTrigger value="profile" className="text-xs gap-1"><Building2 className="h-3 w-3" />Profile</TabsTrigger>
+            <TabsTrigger value="account" className="text-xs gap-1"><UserCircle className="h-3 w-3" />My Account</TabsTrigger>
             <TabsTrigger value="credits" className="text-xs gap-1"><Coins className="h-3 w-3" />Credits</TabsTrigger>
             <TabsTrigger value="users" className="text-xs gap-1"><Users className="h-3 w-3" />Users</TabsTrigger>
             <TabsTrigger value="partners" className="text-xs gap-1"><Link2 className="h-3 w-3" />Partners</TabsTrigger>
@@ -66,6 +68,10 @@ export function WhiteLabelSettings() {
 
           <TabsContent value="profile">
             {tenant && <ProfileSettings tenant={tenant} />}
+          </TabsContent>
+
+          <TabsContent value="account">
+            <ChangePasswordCard />
           </TabsContent>
 
           <TabsContent value="credits">

@@ -126,13 +126,17 @@ export function ShareCheckDialog({ checkId, open, onOpenChange }: ShareCheckDial
               <div key={share.id} className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
                 <span className="text-sm">{share.tenants?.name ?? "Unknown"}</span>
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  className="h-7 text-destructive hover:text-destructive"
-                  onClick={() => revokeMutation.mutate(share.id)}
+                  className="h-7 text-destructive hover:text-destructive border-destructive/40 hover:bg-destructive/10"
+                  onClick={() => {
+                    if (confirm(`Unsync this check from ${share.tenants?.name ?? "this partner"}? They will lose access immediately.`)) {
+                      revokeMutation.mutate(share.id);
+                    }
+                  }}
                   disabled={revokeMutation.isPending}
                 >
-                  <X className="h-3 w-3 mr-1" /> Revoke
+                  <X className="h-3 w-3 mr-1" /> Unsync
                 </Button>
               </div>
             ))}
