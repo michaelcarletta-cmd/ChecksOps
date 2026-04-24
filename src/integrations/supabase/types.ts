@@ -17321,6 +17321,13 @@ export type Database = {
         Returns: string
       }
       longtransactionsenabled: { Args: never; Returns: boolean }
+      lookup_tenant_by_partner_code: {
+        Args: { _code: string }
+        Returns: {
+          id: string
+          name: string
+        }[]
+      }
       loss_draft_action: {
         Args: {
           p_action: string
