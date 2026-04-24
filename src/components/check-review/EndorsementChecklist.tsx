@@ -232,6 +232,7 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false }: E
           key={endorsement.id}
           endorsement={endorsement}
           onRefresh={refresh}
+          readOnly={readOnly}
         />
       ))}
     </div>
