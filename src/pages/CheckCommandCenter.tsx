@@ -2172,7 +2172,7 @@ function CheckDetailPanel({
                 </div>
               )}
               {/* Approved → Deposited transition */}
-              {check.status === "approved_for_deposit" && (
+              {check.status === "approved_for_deposit" && !isSharedView && (
                 <Button
                   size="sm"
                   variant="outline"
