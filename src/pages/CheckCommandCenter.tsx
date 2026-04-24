@@ -1938,6 +1938,7 @@ function CheckDetailPanel({
                       <div className="flex items-center justify-between">
                         <p className="text-[10px] text-muted-foreground">Back</p>
                         <div className="flex items-center gap-1">
+                          {!isSharedView && (
                           <label className="cursor-pointer">
                             <Button variant="ghost" size="icon" className="h-5 w-5" asChild disabled={reuploadingBack}>
                               <span><Upload className={`h-3 w-3 ${reuploadingBack ? "animate-spin" : ""}`} /></span>
