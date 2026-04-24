@@ -13,11 +13,11 @@ interface CheckOpsLogoProps {
 }
 
 /**
- * CheckOps brand mark.
+ * ChecksOps brand mark.
  * The "O" in Ops is rendered as a crosshair/reticle — the visual metaphor for
  * precision targeting of every check moving through the pipeline.
  *
- * Default palette: white "Check", blue "Ops", grey outer ring, blue ticks.
+ * Default palette: white "Checks", blue "Ops", grey outer ring, blue ticks.
  */
 export function CheckOpsLogo({
   className,
@@ -56,7 +56,7 @@ export function CheckOpsLogo({
 
       {showWordmark && (
         <span className="font-bold tracking-tight">
-          <span className={checkClassName}>Check</span>
+          <span className={checkClassName}>Checks</span>
           <span className={accentClassName}>Ops</span>
         </span>
       )}

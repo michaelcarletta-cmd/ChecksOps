@@ -109,7 +109,7 @@ export function WhiteLabelLogin() {
           )}
           <div>
             <CardTitle className="text-xl md:text-2xl">{tenant.name}</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">CheckOps</p>
+            <p className="text-xs text-muted-foreground mt-1">ChecksOps</p>
           </div>
         </CardHeader>
         <CardContent className="pt-2">

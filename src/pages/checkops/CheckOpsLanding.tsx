@@ -12,7 +12,7 @@ const PageLoader = () => (
 );
 
 /**
- * Root page on checkops.com. Shows the existing CheckOps marketing landing
+ * Root page on checkops.com. Shows the existing ChecksOps marketing landing
  * with a floating "Sign In" CTA in the top-right for returning users.
  */
 export default function CheckOpsLanding() {

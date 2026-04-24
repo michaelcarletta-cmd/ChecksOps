@@ -490,7 +490,7 @@ export default function CheckCenterMarketing() {
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
                 <p className="text-[10px] text-muted-foreground text-center">
-                  By submitting, you agree to be contacted about CheckOps.
+                  By submitting, you agree to be contacted about ChecksOps.
                 </p>
               </form>
             </CardContent>
@@ -503,7 +503,7 @@ export default function CheckCenterMarketing() {
         <div className="mx-auto max-w-7xl px-4 md:px-6 py-10 flex flex-col md:flex-row items-center justify-between gap-4">
           <CheckOpsLogo className="text-foreground text-sm" />
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} CheckOps. All rights reserved.
+            © {new Date().getFullYear()} ChecksOps. All rights reserved.
           </p>
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <Link to="/auth" className="hover:text-foreground">Sign in</Link>
