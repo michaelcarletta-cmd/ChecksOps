@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Save, User, Bell, Mail, MessageSquare, ChevronDown, Loader2, Upload, Building2, X } from "lucide-react";
 import { formatPhoneNumber } from "@/lib/utils";
 import { LicensesSettings } from "./LicensesSettings";
+import { ChangePasswordCard } from "./ChangePasswordCard";
 
 interface ProfileData {
   full_name: string | null;
@@ -387,6 +388,9 @@ export function ProfileSettings() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Change Password */}
+      <ChangePasswordCard />
 
       {/* Notifications - Collapsible */}
       <Collapsible open={notificationsOpen} onOpenChange={setNotificationsOpen}>
