@@ -2763,11 +2763,13 @@ function EditablePayeeCard({
   checkId,
   onRefresh,
   onRemove,
+  readOnly = false,
 }: {
   payee: CheckPayee;
   checkId: string;
   onRefresh: () => void;
   onRemove: () => void;
+  readOnly?: boolean;
 }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
