@@ -1299,6 +1299,13 @@ function CheckDetailPanel({
 
   const canUndo = check && ['branch_deposit_required', 'approved_for_deposit', 'loss_draft_required', 'reissue_requested'].includes(check.status) && check.status !== 'deposited';
 
+  // Ownership: only the tenant that uploaded the check can edit it. Partners with whom
+  // the check is shared are strictly read-only (they can still upload loss-draft docs
+  // elsewhere in the UI, but cannot mutate the check or its payees).
+  const checkOwnerTenantId = (check as any)?.tenant_id as string | null | undefined;
+  const isOwner = !!tenantId && !!checkOwnerTenantId && tenantId === checkOwnerTenantId;
+  const isSharedView = !!check && !isOwner;
+
   const handleBypassEndorsements = async () => {
     if (!user?.id || !check) return;
     setBypassingEndorsements(true);
