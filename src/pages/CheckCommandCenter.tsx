@@ -2664,7 +2664,7 @@ function EditableField({
 /*  Payee Manager — add / edit / remove                                */
 /* ------------------------------------------------------------------ */
 
-function PayeeManager({ checkId, payees, onRefresh }: { checkId: string; payees: CheckPayee[]; onRefresh: () => void }) {
+function PayeeManager({ checkId, payees, onRefresh, readOnly = false }: { checkId: string; payees: CheckPayee[]; onRefresh: () => void; readOnly?: boolean }) {
   const { toast } = useToast();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
