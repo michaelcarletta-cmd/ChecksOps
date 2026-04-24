@@ -4,29 +4,37 @@ interface CheckOpsLogoProps {
   className?: string;
   /** Show wordmark next to the mark */
   showWordmark?: boolean;
-  /** Override accent color (defaults to destructive for red crosshair ticks) */
+  /** Override accent color for the crosshair ticks and "Ops" text (defaults to primary blue) */
   accentClassName?: string;
+  /** Override color for "Check" text (defaults to white) */
+  checkClassName?: string;
+  /** Override color for the outer crosshair ring (defaults to muted grey) */
+  ringClassName?: string;
 }
 
 /**
  * CheckOps brand mark.
  * The "O" in Ops is rendered as a crosshair/reticle — the visual metaphor for
  * precision targeting of every check moving through the pipeline.
+ *
+ * Default palette: white "Check", blue "Ops", grey outer ring, blue ticks.
  */
 export function CheckOpsLogo({
   className,
   showWordmark = true,
-  accentClassName = "text-destructive",
+  accentClassName = "text-primary",
+  checkClassName = "text-white",
+  ringClassName = "text-muted-foreground",
 }: CheckOpsLogoProps) {
   return (
     <span className={cn("inline-flex items-center gap-2 leading-none", className)}>
       {/* Crosshair mark */}
       <svg
         viewBox="0 0 40 40"
-        className="h-[1.1em] w-[1.1em] shrink-0"
+        className={cn("h-[1.1em] w-[1.1em] shrink-0", ringClassName)}
         aria-hidden="true"
       >
-        {/* Outer ring */}
+        {/* Outer ring — muted grey */}
         <circle
           cx="20"
           cy="20"
@@ -35,7 +43,7 @@ export function CheckOpsLogo({
           stroke="currentColor"
           strokeWidth="3.5"
         />
-        {/* Crosshair ticks - accent color */}
+        {/* Crosshair ticks & center dot — primary blue */}
         <g className={accentClassName}>
           <line x1="20" y1="1" x2="20" y2="9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
           <line x1="20" y1="31" x2="20" y2="39" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
@@ -48,7 +56,8 @@ export function CheckOpsLogo({
 
       {showWordmark && (
         <span className="font-bold tracking-tight">
-          Check<span className={accentClassName}>Ops</span>
+          <span className={checkClassName}>Check</span>
+          <span className={accentClassName}>Ops</span>
         </span>
       )}
     </span>
