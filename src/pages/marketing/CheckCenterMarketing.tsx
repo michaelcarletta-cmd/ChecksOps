@@ -506,7 +506,7 @@ export default function CheckCenterMarketing() {
             © {new Date().getFullYear()} ChecksOps. All rights reserved.
           </p>
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <Link to="/auth" className="hover:text-foreground">Sign in</Link>
+            <Link to="/login" className="hover:text-foreground">Sign in</Link>
             <a href="#demo" className="hover:text-foreground">Book demo</a>
           </div>
         </div>
