@@ -2890,7 +2890,7 @@ function EditablePayeeCard({
         </p>
       )}
 
-      {payee.endorsement_status !== "signed" && payee.endorsement_status !== "rejected" && !editing && (
+      {payee.endorsement_status !== "signed" && payee.endorsement_status !== "rejected" && !editing && !readOnly && (
         <div className="space-y-2 pt-1">
           <Input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-8 text-xs" />
           <Input placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} className="h-8 text-xs" />
