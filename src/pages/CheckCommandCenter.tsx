@@ -1698,10 +1698,23 @@ function CheckDetailPanel({
           <p className="text-sm text-muted-foreground">{check.carrier_name}</p>
         )}
         {check.amount != null && (
-          <EditableAmount checkId={checkId} currentAmount={check.amount} onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
+          <EditableAmount checkId={checkId} currentAmount={check.amount} readOnly={isSharedView} onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
         )}
         {check.amount == null && (
-          <EditableAmount checkId={checkId} currentAmount={null} onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
+          <EditableAmount checkId={checkId} currentAmount={null} readOnly={isSharedView} onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
+        )}
+
+        {/* Shared / read-only banner for non-owner tenants */}
+        {isSharedView && (
+          <div className="mt-2 border border-blue-500/30 bg-blue-500/10 rounded-lg p-3 space-y-1">
+            <div className="flex items-center gap-2 text-blue-400 font-semibold text-sm">
+              <Eye className="h-4 w-4 shrink-0" />
+              Shared check — read only
+            </div>
+            <p className="text-xs text-blue-300/80 pl-6">
+              This check was uploaded by another organization. You can view details, but only the owner can edit the check or payees. If this check is in loss draft, you can still upload supporting documents from the claim's file area.
+            </p>
+          </div>
         )}
 
         {/* Single Source of Truth Blocking Banner */}
