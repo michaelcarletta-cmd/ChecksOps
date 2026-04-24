@@ -86,8 +86,8 @@ const HeroMockup = () => (
       <div className="space-y-2">
         {[
           { payee: "John & Jane Smith", amount: "$24,850.00", carrier: "Allstate", status: "Ready", statusColor: "bg-emerald-500/15 text-emerald-400" },
-          { payee: "Condition One Restoration", amount: "$12,400.00", carrier: "State Farm", status: "Endorsing", statusColor: "bg-amber-500/15 text-amber-400" },
-          { payee: "Wells Fargo Mortgage", amount: "$87,200.00", carrier: "Travelers", status: "Loss Draft", statusColor: "bg-orange-500/15 text-orange-400" },
+          { payee: "Condition One Commercial", amount: "$12,400.00", carrier: "State Farm", status: "Endorsing", statusColor: "bg-amber-500/15 text-amber-400" },
+          { payee: "Wells Fargo", amount: "$87,200.00", carrier: "Travelers", status: "Loss Draft", statusColor: "bg-orange-500/15 text-orange-400" },
         ].map((r, i) => (
           <div key={i} className="flex items-center gap-3 rounded-md border border-border/50 bg-muted/20 p-2.5">
             <div className="h-8 w-12 rounded bg-gradient-to-br from-emerald-500/20 to-blue-500/20 border border-border/40 flex-shrink-0" />
