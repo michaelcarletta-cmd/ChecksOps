@@ -375,7 +375,7 @@ export default function CheckCenterMarketing() {
                 <div className="p-5 border-b border-border/40 bg-muted/20 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Building2 className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-semibold">Condition One Restoration</span>
+                    <span className="text-sm font-semibold">Condition One Commercial</span>
                   </div>
                   <Badge variant="outline" className="text-[10px] border-blue-500/30 text-blue-400 bg-blue-500/10 gap-1">
                     <Share2 className="h-2.5 w-2.5" /> Shared by Freedom
