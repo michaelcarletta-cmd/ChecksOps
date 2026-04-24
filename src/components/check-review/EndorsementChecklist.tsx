@@ -64,9 +64,10 @@ const payeeTypeIcons: Record<string, typeof Users> = {
 interface EndorsementChecklistProps {
   checkId: string;
   onRefresh?: () => void;
+  readOnly?: boolean;
 }
 
-export function EndorsementChecklist({ checkId, onRefresh }: EndorsementChecklistProps) {
+export function EndorsementChecklist({ checkId, onRefresh, readOnly = false }: EndorsementChecklistProps) {
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -185,7 +186,7 @@ export function EndorsementChecklist({ checkId, onRefresh }: EndorsementChecklis
         )}
       </div>
 
-      {!allComplete && (
+      {!allComplete && !readOnly && (
         <div className="px-1 space-y-2">
           <div className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
             <AlertTriangle className="h-3 w-3 shrink-0" />
@@ -231,6 +232,7 @@ export function EndorsementChecklist({ checkId, onRefresh }: EndorsementChecklis
           key={endorsement.id}
           endorsement={endorsement}
           onRefresh={refresh}
+          readOnly={readOnly}
         />
       ))}
     </div>
@@ -240,9 +242,11 @@ export function EndorsementChecklist({ checkId, onRefresh }: EndorsementChecklis
 function EndorsementCard({
   endorsement,
   onRefresh,
+  readOnly = false,
 }: {
   endorsement: CheckEndorsement;
   onRefresh: () => void;
+  readOnly?: boolean;
 }) {
   const { toast } = useToast();
   const [email, setEmail] = useState(endorsement.contact_email ?? "");
@@ -255,11 +259,11 @@ function EndorsementCard({
   const PayeeIcon = payeeTypeIcons[endorsement.payee_type] ?? AlertTriangle;
 
   const isMortgage = endorsement.payee_type === "mortgage_company";
-  const canSendRequest = !isMortgage &&
+  const canSendRequest = !readOnly && !isMortgage &&
     endorsement.status !== "signed" &&
     endorsement.status !== "waived" &&
     endorsement.status !== "rejected";
-  const canMarkInternal = endorsement.status !== "signed" && endorsement.status !== "waived";
+  const canMarkInternal = !readOnly && endorsement.status !== "signed" && endorsement.status !== "waived";
   const isResend = endorsement.request_sent_at != null;
 
   const sendRequest = async (method: "email" | "sms") => {

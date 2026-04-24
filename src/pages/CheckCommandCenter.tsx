@@ -1938,6 +1938,7 @@ function CheckDetailPanel({
                       <div className="flex items-center justify-between">
                         <p className="text-[10px] text-muted-foreground">Back</p>
                         <div className="flex items-center gap-1">
+                          {!isSharedView && (
                           <label className="cursor-pointer">
                             <Button variant="ghost" size="icon" className="h-5 w-5" asChild disabled={reuploadingBack}>
                               <span><Upload className={`h-3 w-3 ${reuploadingBack ? "animate-spin" : ""}`} /></span>
@@ -1982,6 +1983,7 @@ function CheckDetailPanel({
                               }}
                             />
                           </label>
+                          )}
                           <a href={backImageUrl} download={`check-${check.check_number ?? check.id}-back`} target="_blank" rel="noopener noreferrer">
                             <Button variant="ghost" size="icon" className="h-5 w-5"><Download className="h-3 w-3" /></Button>
                           </a>
@@ -2013,7 +2015,7 @@ function CheckDetailPanel({
                       </div>
                     </div>
                   )}
-                  {!backImageUrl && (
+                  {!backImageUrl && !isSharedView && (
                     <div className="space-y-1">
                       <p className="text-[10px] text-muted-foreground">Back — No image uploaded</p>
                       <label className="cursor-pointer">
@@ -2129,7 +2131,7 @@ function CheckDetailPanel({
                 </Button>
               )}
               {/* Branch → Deposited transition */}
-              {check.status === "branch_deposit_required" && (
+              {check.status === "branch_deposit_required" && !isSharedView && (
                 <div className="space-y-2 mt-2">
                   <Button
                     size="sm"
@@ -2170,7 +2172,7 @@ function CheckDetailPanel({
                 </div>
               )}
               {/* Approved → Deposited transition */}
-              {check.status === "approved_for_deposit" && (
+              {check.status === "approved_for_deposit" && !isSharedView && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -2194,9 +2196,10 @@ function CheckDetailPanel({
               <EndorsementChecklist
                 checkId={checkId}
                 onRefresh={onRefresh}
+                readOnly={isSharedView}
               />
 
-              {check?.back_image_path && (
+              {check?.back_image_path && !isSharedView && (
                 <>
                   <div className="flex flex-col gap-2 sm:flex-row">
                     {backImageUrl && (
