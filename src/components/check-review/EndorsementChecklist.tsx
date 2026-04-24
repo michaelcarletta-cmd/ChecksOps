@@ -242,9 +242,11 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false }: E
 function EndorsementCard({
   endorsement,
   onRefresh,
+  readOnly = false,
 }: {
   endorsement: CheckEndorsement;
   onRefresh: () => void;
+  readOnly?: boolean;
 }) {
   const { toast } = useToast();
   const [email, setEmail] = useState(endorsement.contact_email ?? "");
