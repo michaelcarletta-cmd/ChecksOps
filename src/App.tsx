@@ -10,6 +10,7 @@ import { useAuth } from "./hooks/useAuth";
 import { useToast } from "./hooks/use-toast";
 import { useCustomDomainTenant } from "./hooks/useCustomDomainTenant";
 import { CustomDomainWhiteLabelApp } from "./components/white-label/CustomDomainWhiteLabelApp";
+import { isCheckOpsHost } from "./lib/checkopsHost";
 
 // Lazy load all page components for code splitting
 const Index = lazy(() => import("./pages/Index"));
@@ -43,6 +44,8 @@ const CheckCommandCenter = lazy(() => import("./pages/CheckCommandCenter"));
 const CheckCenterMarketing = lazy(() => import("./pages/marketing/CheckCenterMarketing"));
 const BuildingFootprintIngestion = lazy(() => import("./pages/admin/BuildingFootprintIngestion"));
 const WhiteLabelApp = lazy(() => import("./pages/WhiteLabelApp"));
+const CheckOpsLanding = lazy(() => import("./pages/checkops/CheckOpsLanding"));
+const CheckOpsLogin = lazy(() => import("./pages/checkops/CheckOpsLogin"));
 
 export const queryClient = new QueryClient({
   defaultOptions: {
