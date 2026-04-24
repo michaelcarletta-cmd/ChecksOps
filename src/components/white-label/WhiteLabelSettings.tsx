@@ -17,6 +17,13 @@ import { TenantCreditManager } from "./TenantCreditManager";
 import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { isCheckOpsHost } from "@/lib/checkopsHost";
+
+function resolveTenantBase(slug?: string | null): string {
+  if (!slug) return "";
+  if (isCheckOpsHost()) return `/${slug}`;
+  return `/wl/${slug}`;
+}
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center">
@@ -29,7 +36,8 @@ export function WhiteLabelSettings() {
   const { user, loading } = useAuth();
 
   if (loading) return <PageLoader />;
-  if (!user) return <Navigate to={tenant?.slug ? `/wl/${tenant.slug}/login` : "/login"} replace />;
+  if (!user) return <Navigate to={tenant?.slug ? `${resolveTenantBase(tenant.slug)}/login` : "/login"} replace />;
+  const tenantBase = resolveTenantBase(tenant?.slug);
 
   return (
     <div className="min-h-screen bg-background">
@@ -42,7 +50,7 @@ export function WhiteLabelSettings() {
         </div>
         <div className="ml-auto flex items-center gap-2">
           <Button variant="ghost" size="sm" asChild>
-            <Link to={`/wl/${tenant?.slug}/checks`}>
+            <Link to={`${tenantBase}/checks`}>
               <ArrowLeft className="h-4 w-4 mr-1" /> Back to Checks
             </Link>
           </Button>
