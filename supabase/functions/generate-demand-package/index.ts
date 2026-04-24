@@ -1206,6 +1206,10 @@ Deno.serve(async (req) => {
       forceStrong: true,
       searchMode: 'off',
       jsonMode: true,
+      // GPT-5 reasoning models consume max_completion_tokens for hidden reasoning too.
+      // The default 4000 was getting fully eaten by reasoning, returning 0 chars of output.
+      // Demand packages need ~6-12K tokens of actual JSON output.
+      maxTokens: 16000,
     });
 
     console.log(`[generate-demand-package] model=${aiResult.model}, cached=${aiResult.cached}`);
@@ -1213,19 +1217,43 @@ Deno.serve(async (req) => {
     const rawContent = aiResult.text;
     console.log("AI response length:", rawContent.length, "chars");
 
+    if (!rawContent || rawContent.trim().length === 0) {
+      throw new Error(
+        "AI returned an empty response. The prompt may be too large or the model hit its output limit. Try removing some attached documents or splitting the request.",
+      );
+    }
+
     // Robust JSON extraction: try direct parse first, then regex fallback
     let demandPackage: Record<string, unknown>;
     try {
       demandPackage = JSON.parse(rawContent);
     } catch {
       // Strip markdown code fences if present
-      const cleaned = rawContent.replace(/```json\s*/gi, "").replace(/```\s*/g, "");
-      const match = cleaned.match(/\{[\s\S]*\}/);
-      if (!match) throw new Error("No JSON found in AI response");
+      const cleaned = rawContent
+        .replace(/```json\s*/gi, "")
+        .replace(/```\s*/g, "")
+        .trim();
+      const firstBrace = cleaned.indexOf("{");
+      const lastBrace = cleaned.lastIndexOf("}");
+      if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+        console.error("[generate-demand-package] No JSON braces found. First 500 chars:", rawContent.slice(0, 500));
+        throw new Error("AI response did not contain valid JSON. The model may have been truncated mid-output.");
+      }
+      let candidate = cleaned.slice(firstBrace, lastBrace + 1);
       try {
-        demandPackage = JSON.parse(match[0]);
+        demandPackage = JSON.parse(candidate);
       } catch {
-        throw new Error("Model returned invalid JSON");
+        // Try repairing common issues: trailing commas, control chars
+        candidate = candidate
+          .replace(/,\s*}/g, "}")
+          .replace(/,\s*]/g, "]")
+          .replace(/[\x00-\x1F\x7F]/g, " ");
+        try {
+          demandPackage = JSON.parse(candidate);
+        } catch (e) {
+          console.error("[generate-demand-package] JSON parse failed. First 500 chars:", rawContent.slice(0, 500));
+          throw new Error("Model returned invalid JSON that could not be repaired.");
+        }
       }
     }
 
