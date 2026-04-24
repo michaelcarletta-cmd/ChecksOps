@@ -42,22 +42,22 @@ const HeroMockup = () => (
       <span className="h-2.5 w-2.5 rounded-full bg-success/70" />
       <span className="ml-3 text-[10px] text-muted-foreground font-mono">checkops.app</span>
     </div>
-    <div className="p-4 md:p-6 space-y-4">
+      <div className="p-3 md:p-6 space-y-4">
       {/* Dashboard cards */}
-      <div className="grid grid-cols-4 gap-2 md:gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 md:gap-3">
         {[
           { label: "Manual Review", count: 4, icon: AlertTriangle, color: "text-orange-400", bg: "bg-orange-500/10" },
           { label: "Branch Deposit", count: 12, icon: Building2, color: "text-blue-400", bg: "bg-blue-500/10" },
           { label: "Reissue", count: 2, icon: RotateCcw, color: "text-amber-400", bg: "bg-amber-500/10" },
           { label: "Approved", count: 27, icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/10" },
         ].map((c) => (
-          <div key={c.label} className="rounded-lg border border-border/60 bg-card p-2.5 md:p-3 flex items-center gap-2">
+          <div key={c.label} className="rounded-lg border border-border/60 bg-card p-2.5 md:p-3 flex items-center gap-2 min-w-0">
             <div className={`p-1.5 rounded-md ${c.bg} ${c.color}`}>
               <c.icon className="h-3.5 w-3.5 md:h-4 md:w-4" />
             </div>
             <div className="min-w-0">
               <p className="text-lg md:text-xl font-bold leading-none">{c.count}</p>
-              <p className="text-[9px] md:text-[10px] text-muted-foreground truncate">{c.label}</p>
+              <p className="text-[9px] md:text-[10px] text-muted-foreground leading-tight break-words">{c.label}</p>
             </div>
           </div>
         ))}
@@ -89,14 +89,14 @@ const HeroMockup = () => (
           { payee: "Condition One Commercial", amount: "$12,400.00", carrier: "State Farm", status: "Endorsing", statusColor: "bg-amber-500/15 text-amber-400" },
           { payee: "Wells Fargo", amount: "$87,200.00", carrier: "Travelers", status: "Loss Draft", statusColor: "bg-orange-500/15 text-orange-400" },
         ].map((r, i) => (
-          <div key={i} className="flex items-center gap-3 rounded-md border border-border/50 bg-muted/20 p-2.5">
+          <div key={i} className="flex items-center gap-2 sm:gap-3 rounded-md border border-border/50 bg-muted/20 p-2.5 min-w-0">
             <div className="h-8 w-12 rounded bg-gradient-to-br from-emerald-500/20 to-blue-500/20 border border-border/40 flex-shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium truncate">{r.payee}</p>
+              <p className="text-xs font-medium leading-tight break-words">{r.payee}</p>
               <p className="text-[10px] text-muted-foreground">{r.carrier} • Check #{4501 + i}</p>
             </div>
             <div className="text-xs font-mono font-semibold hidden sm:block">{r.amount}</div>
-            <span className={`text-[9px] px-2 py-0.5 rounded-full ${r.statusColor}`}>{r.status}</span>
+            <span className={`text-[9px] px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap ${r.statusColor}`}>{r.status}</span>
           </div>
         ))}
       </div>
