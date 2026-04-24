@@ -1983,6 +1983,7 @@ function CheckDetailPanel({
                               }}
                             />
                           </label>
+                          )}
                           <a href={backImageUrl} download={`check-${check.check_number ?? check.id}-back`} target="_blank" rel="noopener noreferrer">
                             <Button variant="ghost" size="icon" className="h-5 w-5"><Download className="h-3 w-3" /></Button>
                           </a>
