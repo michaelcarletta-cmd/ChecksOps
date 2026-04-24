@@ -2449,7 +2449,7 @@ function DetailRow({ label, value }: { label: string; value: string | null | und
 /*  Editable Amount                                                    */
 /* ------------------------------------------------------------------ */
 
-function EditableAmount({ checkId, currentAmount, onSave }: { checkId: string; currentAmount: number | null; onSave: () => void }) {
+function EditableAmount({ checkId, currentAmount, onSave, readOnly = false }: { checkId: string; currentAmount: number | null; onSave: () => void; readOnly?: boolean }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(currentAmount?.toString() ?? "");
   const [saving, setSaving] = useState(false);
