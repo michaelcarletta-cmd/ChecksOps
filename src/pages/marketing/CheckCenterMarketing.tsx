@@ -34,7 +34,7 @@ import {
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 
 const HeroMockup = () => (
-  <div className="relative rounded-xl border border-border/60 bg-card/80 backdrop-blur shadow-2xl overflow-hidden">
+  <div className="relative w-full max-w-full min-w-0 rounded-xl border border-border/60 bg-card/80 backdrop-blur shadow-2xl overflow-hidden">
     {/* Fake window chrome */}
     <div className="h-8 border-b border-border/50 bg-muted/40 flex items-center px-3 gap-1.5">
       <span className="h-2.5 w-2.5 rounded-full bg-destructive/70" />
@@ -83,20 +83,20 @@ const HeroMockup = () => (
         ))}
       </div>
       {/* Check row */}
-      <div className="space-y-2">
+      <div className="space-y-2 min-w-0">
         {[
           { payee: "John & Jane Smith", amount: "$24,850.00", carrier: "Allstate", status: "Ready", statusColor: "bg-emerald-500/15 text-emerald-400" },
           { payee: "Condition One Commercial", amount: "$12,400.00", carrier: "State Farm", status: "Endorsing", statusColor: "bg-amber-500/15 text-amber-400" },
           { payee: "Wells Fargo", amount: "$87,200.00", carrier: "Travelers", status: "Loss Draft", statusColor: "bg-orange-500/15 text-orange-400" },
         ].map((r, i) => (
-          <div key={i} className="flex items-center gap-2 sm:gap-3 rounded-md border border-border/50 bg-muted/20 p-2.5 min-w-0">
+          <div key={i} className="grid grid-cols-[3rem_minmax(0,1fr)] sm:flex sm:items-center gap-2 sm:gap-3 rounded-md border border-border/50 bg-muted/20 p-2.5 min-w-0">
             <div className="h-8 w-12 rounded bg-gradient-to-br from-emerald-500/20 to-blue-500/20 border border-border/40 flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium leading-tight break-words">{r.payee}</p>
               <p className="text-[10px] text-muted-foreground">{r.carrier} • Check #{4501 + i}</p>
             </div>
             <div className="text-xs font-mono font-semibold hidden sm:block">{r.amount}</div>
-            <span className={`text-[9px] px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap ${r.statusColor}`}>{r.status}</span>
+            <span className={`col-span-2 justify-self-start sm:justify-self-auto text-[9px] px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap ${r.statusColor}`}>{r.status}</span>
           </div>
         ))}
       </div>
