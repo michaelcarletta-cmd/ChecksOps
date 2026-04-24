@@ -1728,7 +1728,7 @@ function CheckDetailPanel({
               <p key={i} className="text-xs text-amber-300/80 pl-6">• {reason}</p>
             ))}
             {/* Bypass endorsements — physical signatures already on check */}
-            {pendingEndorsements.length > 0 && check.status !== "loss_draft_required" && (
+            {pendingEndorsements.length > 0 && check.status !== "loss_draft_required" && !isSharedView && (
               <Button
                 size="sm"
                 variant="outline"
