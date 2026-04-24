@@ -85,7 +85,7 @@ function WhiteLabelRoutes() {
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-bold">Access Denied</h1>
           <p className="text-muted-foreground">
-            You don't have access to {tenant.name}'s CheckOps workspace. Contact your administrator for an invite.
+            You don't have access to {tenant.name}'s ChecksOps workspace. Contact your administrator for an invite.
           </p>
         </div>
       </div>

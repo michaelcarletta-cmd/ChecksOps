@@ -56,7 +56,7 @@ export function CheckOpsLogo({
 
       {showWordmark && (
         <span className="font-bold tracking-tight">
-          <span className={checkClassName}>Check</span>
+          <span className={checkClassName}>Checks</span>
           <span className={accentClassName}>Ops</span>
         </span>
       )}

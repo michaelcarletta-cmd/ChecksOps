@@ -11,7 +11,7 @@ import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { useAuth } from "@/hooks/useAuth";
 
 /**
- * Generic CheckOps sign-in page at checkops.com/login.
+ * Generic ChecksOps sign-in page at checkops.com/login.
  *
  * Authenticates the user, then resolves the tenant they belong to via
  * tenant_users and redirects to /{slug}/checks. Users who belong to multiple
@@ -45,7 +45,7 @@ export default function CheckOpsLogin() {
     if (memberships.length === 0) {
       await supabase.auth.signOut();
       toast({
-        title: "No CheckOps access",
+        title: "No ChecksOps access",
         description: "This account isn't a member of any active organization. Contact your admin.",
         variant: "destructive",
       });
@@ -86,7 +86,7 @@ export default function CheckOpsLogin() {
           <div className="mx-auto">
             <CheckOpsLogo className="h-10" />
           </div>
-          <CardTitle className="text-xl md:text-2xl">Sign in to CheckOps</CardTitle>
+          <CardTitle className="text-xl md:text-2xl">Sign in to ChecksOps</CardTitle>
           <p className="text-xs text-muted-foreground">
             Access your organization's check workflows.
           </p>

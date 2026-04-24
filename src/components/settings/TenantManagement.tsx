@@ -476,7 +476,7 @@ export function TenantManagement() {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold">White-Label Tenants</h3>
-          <p className="text-sm text-muted-foreground">Manage organizations using CheckOps</p>
+          <p className="text-sm text-muted-foreground">Manage organizations using ChecksOps</p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
