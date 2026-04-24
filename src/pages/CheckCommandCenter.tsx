@@ -2315,7 +2315,7 @@ function CheckDetailPanel({
             </TabsContent>
 
             <TabsContent value="payees" className="p-4 space-y-3 mt-0">
-              <PayeeManager checkId={checkId} payees={check.check_payees ?? []} onRefresh={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
+              <PayeeManager checkId={checkId} payees={check.check_payees ?? []} readOnly={isSharedView} onRefresh={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
             </TabsContent>
 
             <TabsContent value="eligibility" className="p-4 space-y-3 mt-0">
