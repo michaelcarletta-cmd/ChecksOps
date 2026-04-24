@@ -2712,13 +2712,20 @@ function PayeeManager({ checkId, payees, onRefresh, readOnly = false }: { checkI
   return (
     <div className="space-y-3">
       {payees.map((payee) => (
-        <EditablePayeeCard key={payee.id} payee={payee} checkId={checkId} onRefresh={onRefresh} onRemove={() => removePayee(payee.id)} />
+        <EditablePayeeCard
+          key={payee.id}
+          payee={payee}
+          checkId={checkId}
+          onRefresh={onRefresh}
+          onRemove={() => removePayee(payee.id)}
+          readOnly={readOnly}
+        />
       ))}
       {payees.length === 0 && !adding && (
         <p className="text-sm text-muted-foreground text-center py-4">No payees detected yet</p>
       )}
 
-      {adding ? (
+      {!readOnly && (adding ? (
         <Card className="p-3 space-y-2 border-dashed border-primary/50">
           <Input placeholder="Payee name" value={newName} onChange={(e) => setNewName(e.target.value)} className="h-8 text-sm" autoFocus />
           <Select value={newType} onValueChange={setNewType}>
@@ -2742,7 +2749,7 @@ function PayeeManager({ checkId, payees, onRefresh, readOnly = false }: { checkI
         <Button size="sm" variant="outline" className="w-full text-xs" onClick={() => setAdding(true)}>
           <Plus className="h-3 w-3 mr-1" />Add Payee
         </Button>
-      )}
+      ))}
     </div>
   );
 }
