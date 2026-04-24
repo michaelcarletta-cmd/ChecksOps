@@ -40,7 +40,7 @@ const HeroMockup = () => (
       <span className="h-2.5 w-2.5 rounded-full bg-destructive/70" />
       <span className="h-2.5 w-2.5 rounded-full bg-warning/70" />
       <span className="h-2.5 w-2.5 rounded-full bg-success/70" />
-      <span className="ml-3 text-[10px] text-muted-foreground font-mono">checkops.app</span>
+      <span className="ml-3 text-[10px] text-muted-foreground font-mono">checksops.com</span>
     </div>
       <div className="p-3 md:p-6 space-y-4">
       {/* Dashboard cards */}
