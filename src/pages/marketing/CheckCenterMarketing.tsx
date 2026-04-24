@@ -31,6 +31,7 @@ import {
   Zap,
   LineChart,
 } from "lucide-react";
+import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 
 const HeroMockup = () => (
   <div className="relative rounded-xl border border-border/60 bg-card/80 backdrop-blur shadow-2xl overflow-hidden">
