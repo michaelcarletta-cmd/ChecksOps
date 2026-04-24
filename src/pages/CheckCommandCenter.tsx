@@ -1173,6 +1173,7 @@ function CheckDetailPanel({
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { tenantId } = useTenantFilter();
 
    const { data: check } = useQuery({
     queryKey: ["check-detail", checkId],
