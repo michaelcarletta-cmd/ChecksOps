@@ -2015,7 +2015,7 @@ function CheckDetailPanel({
                       </div>
                     </div>
                   )}
-                  {!backImageUrl && (
+                  {!backImageUrl && !isSharedView && (
                     <div className="space-y-1">
                       <p className="text-[10px] text-muted-foreground">Back — No image uploaded</p>
                       <label className="cursor-pointer">
