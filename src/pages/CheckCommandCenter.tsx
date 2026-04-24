@@ -2645,14 +2645,16 @@ function EditableField({
         <span className={`font-medium text-right break-words min-w-0 ${!display ? "text-destructive italic" : ""}`}>
           {display ?? "Missing"}
         </span>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-          onClick={() => setEditing(true)}
-        >
-          <Pencil className="h-3 w-3" />
-        </Button>
+        {!readOnly && (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+            onClick={() => setEditing(true)}
+          >
+            <Pencil className="h-3 w-3" />
+          </Button>
+        )}
       </div>
     </div>
   );
