@@ -2515,14 +2515,16 @@ function EditableAmount({ checkId, currentAmount, onSave, readOnly = false }: { 
           : <span className="text-destructive">Amount missing</span>
         }
       </p>
-      <Button
-        size="icon"
-        variant="ghost"
-        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-        onClick={() => { setValue(currentAmount?.toString() ?? ""); setEditing(true); }}
-      >
-        <Pencil className="h-3 w-3" />
-      </Button>
+      {!readOnly && (
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={() => { setValue(currentAmount?.toString() ?? ""); setEditing(true); }}
+        >
+          <Pencil className="h-3 w-3" />
+        </Button>
+      )}
     </div>
   );
 }
