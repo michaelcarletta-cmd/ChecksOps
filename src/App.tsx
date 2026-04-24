@@ -40,6 +40,7 @@ const WorkspaceDetailPage = lazy(() => import("./pages/WorkspaceDetailPage"));
 
 const DarwinOperations = lazy(() => import("./pages/DarwinOperations"));
 const CheckCommandCenter = lazy(() => import("./pages/CheckCommandCenter"));
+const CheckCenterMarketing = lazy(() => import("./pages/marketing/CheckCenterMarketing"));
 const BuildingFootprintIngestion = lazy(() => import("./pages/admin/BuildingFootprintIngestion"));
 const WhiteLabelApp = lazy(() => import("./pages/WhiteLabelApp"));
 
@@ -129,6 +130,7 @@ function AppRoutesInner() {
       <Route path="/portal" element={<Suspense fallback={<PageLoader />}><PortalLogin /></Suspense>} />
       <Route path="/guided/auth" element={<Suspense fallback={<PageLoader />}><GuidedAuth /></Suspense>} />
       <Route path="/guided" element={<Suspense fallback={<PageLoader />}><GuidedPortal /></Suspense>} />
+      <Route path="/check-center" element={<Suspense fallback={<PageLoader />}><CheckCenterMarketing /></Suspense>} />
       {/* Redirect unauthenticated portal visitors to PIN login */}
       {!user && (
         <>
