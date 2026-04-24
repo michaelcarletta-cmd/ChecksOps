@@ -424,11 +424,25 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
         },
       });
 
+      console.log('[DemandPackage] invoke result', { error, data });
+
       if (error) throw error;
+
+      // Surface server-side errors that come back inside a 2xx response body
+      if (data?.error) {
+        throw new Error(data.error);
+      }
 
       const demandPackage = data?.demandPackage;
       const demandText = demandPackage?.full_demand_package || '';
       const returnedDocxHtml = data?.docxHtml || '';
+
+      if (!demandText) {
+        console.error('[DemandPackage] empty full_demand_package in response', data);
+        throw new Error(
+          'The AI returned an empty report. This usually means the model produced an incomplete response or hit a content guardrail. Try regenerating, or reduce the number of selected files.'
+        );
+      }
 
       setGeneratedPackage(demandText);
       setDocxHtml(returnedDocxHtml);
