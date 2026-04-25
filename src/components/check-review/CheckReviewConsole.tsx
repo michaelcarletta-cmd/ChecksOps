@@ -202,25 +202,36 @@ export function CheckReviewQueue({
   return (
     <ScrollArea className="h-[calc(100vh-400px)]">
       <div className="space-y-2 p-2">
-        {reviewChecks.map((check) => (
-          <Card
-            key={check.id}
-            className={`cursor-pointer transition-colors hover:bg-accent/30 ${
-              selectedCheckId === check.id ? "ring-1 ring-primary bg-accent/50" : ""
-            }`}
-            onClick={() => onSelectCheck(check.id)}
-          >
-            <CardContent className="p-3">
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-mono text-sm font-medium">
-                  #{check.check_number || "Pending"}
-                </span>
-                <span className="text-sm font-bold tabular-nums">
-                  {check.amount != null
-                    ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
-                    : "—"}
-                </span>
+        {groupedReviewChecks.map((group) => (
+          <Fragment key={group.key}>
+            <div className="rounded-lg border bg-muted/30 px-3 py-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-foreground">{group.policyholderName}</p>
+                  <p className="text-xs text-muted-foreground">Claim #{group.claimNumber} · {group.checks.length} {group.checks.length === 1 ? "check" : "checks"}</p>
+                </div>
+                <span className="text-sm font-semibold tabular-nums text-foreground">${group.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
               </div>
+            </div>
+            {group.checks.map((check) => (
+              <Card
+                key={check.id}
+                className={`cursor-pointer transition-colors hover:bg-accent/30 ${
+                  selectedCheckId === check.id ? "ring-1 ring-primary bg-accent/50" : ""
+                }`}
+                onClick={() => onSelectCheck(check.id)}
+              >
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-mono text-sm font-medium">
+                      #{check.check_number || "Pending"}
+                    </span>
+                    <span className="text-sm font-bold tabular-nums">
+                      {check.amount != null
+                        ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                        : "—"}
+                    </span>
+                  </div>
               <p className="text-xs text-muted-foreground truncate">
                 {check.carrier_name || "Unknown carrier"}
               </p>
@@ -235,8 +246,10 @@ export function CheckReviewQueue({
                   </Badge>
                 )}
               </div>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            ))}
+          </Fragment>
         ))}
       </div>
     </ScrollArea>
