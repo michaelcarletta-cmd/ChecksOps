@@ -230,19 +230,19 @@ export default function CheckCenterMarketing() {
           <div className="min-w-0">
             <Badge variant="outline" className="mb-5 gap-1.5 border-primary/30 bg-primary/5 text-primary">
               <Sparkles className="h-3 w-3" />
-              Built for teams that handle insurance checks
+              The command center for insurance check operations
             </Badge>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05]">
-              Every check.
+              Every claim check.
               <br />
               <span className="bg-gradient-to-r from-primary via-blue-400 to-cyan-300 bg-clip-text text-transparent">
-                Locked on target.
+                Under control.
               </span>
             </h1>
             <p className="mt-5 text-lg text-muted-foreground max-w-xl leading-relaxed break-words">
-              From intake to deposit to loss draft — move insurance checks through a single,
-              auditable pipeline. OCR, digital endorsements, partner sharing, and mortgage
-              tracking in one workspace.
+              ChecksOps organizes insurance checks by claim, captures endorsements, shows deposit
+              readiness, and gives loss draft visibility without taking mortgage-company communication
+              away from your team.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row gap-3">
               <Button asChild size="lg" className="text-base">
@@ -270,10 +270,10 @@ export default function CheckCenterMarketing() {
       <section className="border-y border-border/40 bg-card/30">
         <div className="mx-auto max-w-7xl px-4 md:px-6 py-8 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
           {[
-            { n: "5+", l: "Status lanes" },
+            { n: "Claim", l: "Centered files" },
             { n: "100%", l: "Audit-logged" },
-            { n: "2-sided", l: "OCR capture" },
-            { n: "1 view", l: "Loss draft to close" },
+            { n: "Payee", l: "Signature tracking" },
+            { n: "1 view", l: "Funds visibility" },
           ].map((s) => (
             <div key={s.l}>
               <p className="text-2xl md:text-3xl font-bold bg-gradient-to-b from-foreground to-muted-foreground bg-clip-text text-transparent">{s.n}</p>
@@ -288,11 +288,11 @@ export default function CheckCenterMarketing() {
         <div className="max-w-2xl">
           <Badge variant="outline" className="mb-4">Capabilities</Badge>
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight">
-            Purpose-built for the check lifecycle.
+              Built to beat generic payment workflows.
           </h2>
           <p className="mt-4 text-muted-foreground text-lg">
-            Not a generic inbox with tags. A structured pipeline that knows the difference
-            between a payee awaiting signature and a mortgage company holding funds.
+              ChecksOps is a workflow control layer for firms that need visibility, documentation,
+              and auditability around claim checks — not a third party taking over the relationship.
           </p>
         </div>
         <div className="mt-12 grid md:grid-cols-2 lg:grid-cols-3 gap-4">
