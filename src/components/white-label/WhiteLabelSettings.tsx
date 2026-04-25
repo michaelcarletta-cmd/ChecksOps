@@ -111,6 +111,7 @@ function ProfileSettings({ tenant }: { tenant: any }) {
   const { toast } = useToast();
   const [name, setName] = useState(tenant.name || "");
   const [saving, setSaving] = useState(false);
+  const tenantUrl = isCheckOpsHost() ? `/${tenant.slug}/checks` : `/wl/${tenant.slug}/checks`;
 
   const handleSave = async () => {
     setSaving(true);
@@ -139,7 +140,7 @@ function ProfileSettings({ tenant }: { tenant: any }) {
         <div className="space-y-2">
           <Label className="text-xs">Slug (URL path)</Label>
           <Input value={tenant.slug} disabled className="opacity-60" />
-          <p className="text-[10px] text-muted-foreground">URL: /wl/{tenant.slug}/checks</p>
+          <p className="text-[10px] text-muted-foreground">Workspace URL: {tenantUrl}</p>
         </div>
         <div className="space-y-2">
           <Label className="text-xs">Partner Code</Label>
