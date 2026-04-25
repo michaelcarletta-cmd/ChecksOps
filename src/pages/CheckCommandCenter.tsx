@@ -949,6 +949,44 @@ export default function CheckCommandCenter() {
 /*  Summary card (kept for Phase 1 compat)                             */
 /* ------------------------------------------------------------------ */
 
+function ClaimCheckFileHeader({ group, compact = false }: { group: CheckGroup; compact?: boolean }) {
+  const signedPayees = group.checks.reduce(
+    (sum, check) => sum + (check.check_payees ?? []).filter((p) => p.endorsement_status === "signed").length,
+    0,
+  );
+  const totalPayees = group.checks.reduce((sum, check) => sum + (check.check_payees?.length ?? 0), 0);
+  const hasBlocked = group.checks.some((check) => ["loss_draft_required", "branch_deposit_required", "reissue_requested", "needs_review", "manual_review_required"].includes(check.status));
+  const hasReady = group.checks.some((check) => check.status === "approved_for_deposit" || check.deposit_recommendation === "ready_for_deposit");
+  const hasLossDraft = group.checks.some((check) => check.status === "loss_draft_required");
+
+  return (
+    <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">Claim Check File</Badge>
+          <span className="font-semibold text-foreground truncate">{group.policyholderName}</span>
+          <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
+        </div>
+        {!compact && (
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>{group.checks.length} {group.checks.length === 1 ? "check" : "checks"}</span>
+            <span>•</span>
+            <span>{signedPayees}/{totalPayees || 0} endorsements signed</span>
+            {hasLossDraft && <span>• Loss draft visibility active</span>}
+          </div>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+        {hasBlocked && <Badge variant="outline" className="border-orange-500/30 text-orange-400 text-[10px]">Blocked / pending</Badge>}
+        {hasReady && <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-[10px]">Ready signal</Badge>}
+        <div className="text-sm font-semibold tabular-nums text-foreground">
+          ${group.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SummaryCard({
   label,
   count,
