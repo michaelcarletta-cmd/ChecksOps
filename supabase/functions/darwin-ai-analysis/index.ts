@@ -1101,6 +1101,7 @@ type EngineerReportSourceOrigin =
   | 'pdf_extracted_text'
   | 'uploaded_engineer_report_text'
   | 'file_extracted_text'
+  | 'file_extracted_text_broadened'
   | 'content'
   | 'additional_context'
   | 'none';
@@ -4369,7 +4370,7 @@ interface DismantlerResult {
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify' | 'auto_draft_rebuttal' | 'estimate_gap_analysis' | 'photo_to_xactimate' | 'systematic_dismantling' | 'position_detection' | 'dobi_letter' | 'estimate_comparison' | 'document_timeline' | 'claim_analysis' | 'operating_manual' | 'case_study' | 'marketing_assets';
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify' | 'auto_draft_rebuttal' | 'estimate_gap_analysis' | 'photo_to_xactimate' | 'systematic_dismantling' | 'position_detection' | 'dobi_letter' | 'estimate_comparison' | 'document_timeline' | 'claim_analysis' | 'operating_manual' | 'case_study' | 'marketing_assets' | 'refine_document';
   mode?: string;
   content?: string;
   pdfContent?: string;
