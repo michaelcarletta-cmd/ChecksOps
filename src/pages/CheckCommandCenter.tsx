@@ -352,10 +352,10 @@ export default function CheckCommandCenter() {
     : activeTab === "review" ? needsReview
     : checks.filter(matchesSearch);
 
-  const groupedFilteredChecks = useMemo<CheckGroup[]>(() => {
+  const buildCheckGroups = useCallback((items: CheckItem[]) => {
     const groups = new Map<string, CheckGroup>();
 
-    filteredChecks.forEach((check) => {
+    items.forEach((check) => {
       const linked = check.claim_id ? claimLookup.get(check.claim_id) : null;
       const claimNumber = linked?.claim_number || check.detected_claim_number || "Unlinked claim";
       const insuredPayee = check.check_payees?.find((p) => p.payee_type === "insured")?.payee_name;
@@ -384,7 +384,11 @@ export default function CheckCommandCenter() {
     return Array.from(groups.values()).sort(
       (a, b) => new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime(),
     );
-  }, [filteredChecks, claimLookup]);
+  }, [claimLookup]);
+
+  const groupedFilteredChecks = useMemo<CheckGroup[]>(() => buildCheckGroups(filteredChecks as CheckItem[]), [buildCheckGroups, filteredChecks]);
+  const groupedReissueRequested = useMemo<CheckGroup[]>(() => buildCheckGroups(reissueRequested), [buildCheckGroups, reissueRequested]);
+  const groupedBranchDeposit = useMemo<CheckGroup[]>(() => buildCheckGroups(branchDeposit), [buildCheckGroups, branchDeposit]);
 
   return (
     <div className="space-y-4">
