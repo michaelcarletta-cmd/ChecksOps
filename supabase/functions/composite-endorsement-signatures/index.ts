@@ -789,6 +789,8 @@ async function loadSignatureDataUrl(supabase: any, signatureRef: string): Promis
     blob = data;
   }
 
+  if (!blob) throw new Error(`Signature asset was empty: ${signatureRef}`);
+
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const contentType = blob.type || inferImageContentType(signatureRef);
   return `data:${contentType};base64,${uint8ToBase64(bytes)}`;
@@ -823,9 +825,9 @@ async function recoverOriginalBackImagePath(supabase: any, endorsedPath: string)
 
   const candidates = (siblingFiles ?? [])
     .map((entry: { name?: string | null }) => entry.name ?? "")
-    .filter((name) => Boolean(name) && !name.includes("/") && !/_endorsed(?:_\d+)?\.[^.]+$/i.test(name))
-    .filter((name) => stripFileExtension(name) === originalBaseName)
-    .sort((a, b) => fileExtensionPriority(a) - fileExtensionPriority(b));
+    .filter((name: string) => Boolean(name) && !name.includes("/") && !/_endorsed(?:_\d+)?\.[^.]+$/i.test(name))
+    .filter((name: string) => stripFileExtension(name) === originalBaseName)
+    .sort((a: string, b: string) => fileExtensionPriority(a) - fileExtensionPriority(b));
 
   if (!candidates.length) {
     console.warn(`[COMPOSITE] could not infer original back image from endorsed path: ${endorsedPath}`);
