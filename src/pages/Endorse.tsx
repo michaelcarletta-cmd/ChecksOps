@@ -150,6 +150,10 @@ export default function Endorse() {
         setMessage({ text: "Please provide your signature before endorsing.", type: "error" });
         return;
       }
+      if (!eSignConsentAccepted) {
+        setMessage({ text: "Please review and accept the electronic signature consent before endorsing.", type: "error" });
+        return;
+      }
       // Validate payment direction is selected if required
       if (data?.requires_payment_direction && !paymentDirection) {
         setMessage({ text: "Please select a payment direction before endorsing.", type: "error" });
@@ -163,6 +167,8 @@ export default function Endorse() {
       const payload: Record<string, unknown> = { action, token };
       if (type === "approve") {
         payload.signatureData = getSignatureData();
+        payload.eSignConsentAccepted = eSignConsentAccepted;
+        payload.consentText = endorsementConsentText;
         if (paymentDirection) {
           payload.paymentDirection = paymentDirection;
           if (paymentDirection === "pay_contractor" && contractorName.trim()) {
@@ -268,38 +274,45 @@ export default function Endorse() {
         {!alreadySigned && !isRejected && !isExpired && (
           <>
             <div style={styles.authText}>
-              <strong>Authorization:</strong> I, <strong>{data.payee_name}</strong>, hereby authorize the endorsement of the above check. I confirm my identity as the named payee and consent to the electronic endorsement of this insurance payment.
+              <strong>Authorization:</strong> I, <strong>{data.payee_name}</strong>, authorize the endorsement of the above check. I confirm my identity as the named payee and consent to use electronic records and signatures for this endorsement.
             </div>
 
             <div style={{ marginTop: 20 }}>
               <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: 8, fontWeight: 600 }}>Your Signature</p>
-              <p style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>Draw your signature below using your finger or mouse</p>
+              <p style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>Use a stylus, finger, or mouse. A pressure-sensitive stylus will produce a more natural line.</p>
               <div style={styles.canvasWrap} ref={containerRef}>
                 <canvas
                   ref={canvasRef}
                   height={120}
                   style={{ display: "block", width: "100%", borderRadius: 8, cursor: "crosshair", touchAction: "none" }}
-                  onMouseDown={(e) => startDraw(e.nativeEvent.offsetX, e.nativeEvent.offsetY)}
-                  onMouseMove={(e) => moveDraw(e.nativeEvent.offsetX, e.nativeEvent.offsetY)}
-                  onMouseUp={endDraw}
-                  onMouseLeave={endDraw}
-                  onTouchStart={(e) => {
+                  onPointerDown={(e) => {
                     e.preventDefault();
-                    const t = e.touches[0];
-                    const r = (e.target as HTMLCanvasElement).getBoundingClientRect();
-                    startDraw(t.clientX - r.left, t.clientY - r.top);
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    const p = getCanvasPoint(e);
+                    startDraw(p.x, p.y, p.pressure);
                   }}
-                  onTouchMove={(e) => {
+                  onPointerMove={(e) => {
                     e.preventDefault();
-                    const t = e.touches[0];
-                    const r = (e.target as HTMLCanvasElement).getBoundingClientRect();
-                    moveDraw(t.clientX - r.left, t.clientY - r.top);
+                    const p = getCanvasPoint(e);
+                    moveDraw(p.x, p.y, p.pressure);
                   }}
-                  onTouchEnd={endDraw}
+                  onPointerUp={endDraw}
+                  onPointerCancel={endDraw}
+                  onPointerLeave={endDraw}
                 />
                 <button style={styles.clearBtn} onClick={clearCanvas}>Clear</button>
               </div>
             </div>
+
+            <label style={styles.consentBox}>
+              <input
+                type="checkbox"
+                checked={eSignConsentAccepted}
+                onChange={(e) => setESignConsentAccepted(e.target.checked)}
+                style={styles.consentCheckbox}
+              />
+              <span>{endorsementConsentText}</span>
+            </label>
 
             {/* Payment Direction Section */}
             {data.requires_payment_direction && (
