@@ -110,6 +110,15 @@ interface ClaimOption {
   policyholder_name: string | null;
 }
 
+interface CheckGroup {
+  key: string;
+  claimNumber: string;
+  policyholderName: string;
+  checks: CheckItem[];
+  totalAmount: number;
+  latestCreatedAt: string;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Config maps                                                        */
 /* ------------------------------------------------------------------ */
@@ -342,6 +351,40 @@ export default function CheckCommandCenter() {
     : activeTab === "ready" ? readyForDeposit
     : activeTab === "review" ? needsReview
     : checks.filter(matchesSearch);
+
+  const groupedFilteredChecks = useMemo<CheckGroup[]>(() => {
+    const groups = new Map<string, CheckGroup>();
+
+    filteredChecks.forEach((check) => {
+      const linked = check.claim_id ? claimLookup.get(check.claim_id) : null;
+      const claimNumber = linked?.claim_number || check.detected_claim_number || "Unlinked claim";
+      const insuredPayee = check.check_payees?.find((p) => p.payee_type === "insured")?.payee_name;
+      const policyholderName = linked?.policyholder_name || insuredPayee || check.payee_line || "Unknown insured";
+      const key = `${claimNumber.trim().toLowerCase()}::${policyholderName.trim().toLowerCase()}`;
+      const existing = groups.get(key);
+
+      if (existing) {
+        existing.checks.push(check);
+        existing.totalAmount += check.amount ?? 0;
+        if (new Date(check.created_at).getTime() > new Date(existing.latestCreatedAt).getTime()) {
+          existing.latestCreatedAt = check.created_at;
+        }
+      } else {
+        groups.set(key, {
+          key,
+          claimNumber,
+          policyholderName,
+          checks: [check],
+          totalAmount: check.amount ?? 0,
+          latestCreatedAt: check.created_at,
+        });
+      }
+    });
+
+    return Array.from(groups.values()).sort(
+      (a, b) => new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime(),
+    );
+  }, [filteredChecks, claimLookup]);
 
   return (
     <div className="space-y-4">
