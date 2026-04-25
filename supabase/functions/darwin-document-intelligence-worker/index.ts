@@ -523,6 +523,9 @@ async function extractDocumentIntelligence(input: {
 }): Promise<IntelligenceOutput> {
   const { callOpenAI } = await import("../_shared/ai/openaiClient.ts");
 
+  const prompt = `Extract structured claim intelligence from the document. Return only valid JSON with source_summary, extracted_entities, financial_data, timeline_data, action_items, coverage_signals, parties, and confidence_score.`;
+  const content = `File: ${input.fileName}\nDocument type: ${input.documentType}\nClassification: ${input.documentClassification}\nSummary: ${input.summary}\n\nText:\n${input.text.slice(0, 60000)}`;
+
   const result = await callOpenAI({
     model: 'gpt-4o-mini',
     system: prompt,
