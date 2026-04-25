@@ -118,10 +118,10 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
         <div>
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Landmark className="h-5 w-5 text-amber-400" />
-            Loss Draft Tracker
+            Loss Draft Visibility
           </h2>
           <p className="text-xs text-muted-foreground">
-            Mortgage-escrowed funds · {drafts.filter(d => d.escrow_status !== "final_release_complete").length} active ·{" "}
+            Track lender-held funds, missing documents, follow-ups, and releases · {drafts.filter(d => d.escrow_status !== "final_release_complete").length} active ·{" "}
             ${totalUnreleased.toLocaleString("en-US", { minimumFractionDigits: 2 })} unreleased
           </p>
         </div>
