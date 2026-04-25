@@ -143,12 +143,12 @@ export default function CheckCenterMarketing() {
     {
       icon: ScanLine,
       title: "OCR-powered intake",
-      desc: "Drop a photo or PDF. We extract amount, check number, carrier, issue date, and every payee line — then flag anomalies before they hit your ledger.",
+      desc: "Drop a photo or PDF. ChecksOps extracts amount, check number, carrier, issue date, and every payee line — then flags anomalies before they reach deposit review.",
     },
     {
       icon: ClipboardCheck,
-      title: "Structured review queue",
-      desc: "Manual Review, Endorsing, Ready, Loss Draft — every check has exactly one place to be, with a clear next action and an auditable decision trail.",
+      title: "Claim Check Files",
+      desc: "Multiple checks for the same insured and claim number stay together so your team tracks the whole money file, not isolated transactions.",
     },
     {
       icon: Send,
@@ -157,8 +157,8 @@ export default function CheckCenterMarketing() {
     },
     {
       icon: Landmark,
-      title: "Loss draft tracking",
-      desc: "Purpose-built workflow for mortgage company disbursements. Track sent/received dates, tracking numbers, draws, and final release — in one view.",
+      title: "Loss draft visibility",
+      desc: "Track lender-held funds, missing documents, draw requests, releases, and follow-up history while your company keeps control of mortgage communications.",
     },
     {
       icon: Share2,
@@ -167,8 +167,8 @@ export default function CheckCenterMarketing() {
     },
     {
       icon: ShieldCheck,
-      title: "Owner-only controls",
-      desc: "Partner tenants get strict read-only access to shared checks. All edits, status transitions, and payee changes stay locked to the owner tenant.",
+      title: "Control-first model",
+      desc: "ChecksOps is not a bank or payment middleman. Your company owns the process, decisions, deposits, and customer relationships.",
     },
   ];
 
@@ -176,8 +176,8 @@ export default function CheckCenterMarketing() {
     { step: "01", title: "Upload", desc: "Photo, scan, or PDF. Front and back captured with OCR heartbeat monitoring." },
     { step: "02", title: "Review", desc: "Verify extracted data, correct payees, confirm amount. One-click approve to the right lane." },
     { step: "03", title: "Endorse", desc: "Each payee signs digitally. Track who's signed, who's pending, who's waived." },
-    { step: "04", title: "Deposit", desc: "Ready-for-deposit packet generated automatically. Branch or electronic — your call." },
-    { step: "05", title: "Monitor", desc: "Loss draft disbursements, reissue requests, and cleared status — all tracked to close." },
+    { step: "04", title: "Deposit", desc: "Ready-for-deposit packet generated automatically. Branch or electronic — your company decides." },
+    { step: "05", title: "Monitor", desc: "Loss draft visibility, reissue requests, and cleared status — all tracked to close." },
   ];
 
   return (
@@ -230,19 +230,19 @@ export default function CheckCenterMarketing() {
           <div className="min-w-0">
             <Badge variant="outline" className="mb-5 gap-1.5 border-primary/30 bg-primary/5 text-primary">
               <Sparkles className="h-3 w-3" />
-              Built for teams that handle insurance checks
+              The command center for insurance check operations
             </Badge>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05]">
-              Every check.
+              Every claim check.
               <br />
               <span className="bg-gradient-to-r from-primary via-blue-400 to-cyan-300 bg-clip-text text-transparent">
-                Locked on target.
+                Under control.
               </span>
             </h1>
             <p className="mt-5 text-lg text-muted-foreground max-w-xl leading-relaxed break-words">
-              From intake to deposit to loss draft — move insurance checks through a single,
-              auditable pipeline. OCR, digital endorsements, partner sharing, and mortgage
-              tracking in one workspace.
+              ChecksOps organizes insurance checks by claim, captures endorsements, shows deposit
+              readiness, and gives loss draft visibility without taking mortgage-company communication
+              away from your team.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row gap-3">
               <Button asChild size="lg" className="text-base">
@@ -266,14 +266,39 @@ export default function CheckCenterMarketing() {
         </div>
       </section>
 
+      <section className="border-y border-border/40 bg-muted/20">
+        <div className="mx-auto max-w-7xl px-4 md:px-6 py-12 grid gap-8 lg:grid-cols-[0.9fr_1.1fr] items-center">
+          <div>
+            <Badge variant="outline" className="mb-4">Competitive advantage</Badge>
+            <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Control without outsourcing the claim relationship.</h2>
+            <p className="mt-3 text-sm md:text-base text-muted-foreground leading-relaxed">
+              Some platforms center the payment processor. ChecksOps centers the professional managing the claim. Your company keeps the mortgage, carrier, payee, and banking decisions while ChecksOps provides the organized workflow, evidence, and status visibility.
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-3 gap-3">
+            {[
+              { icon: ClipboardCheck, title: "Claim files", desc: "Checks grouped by insured and claim number." },
+              { icon: ShieldCheck, title: "Audit proof", desc: "Actions, signatures, decisions, and status changes tracked." },
+              { icon: Landmark, title: "Lender visibility", desc: "Track held funds without claiming to handle the lender." },
+            ].map((item) => (
+              <div key={item.title} className="rounded-lg border border-border/50 bg-card/60 p-4">
+                <item.icon className="h-5 w-5 text-primary mb-3" />
+                <h3 className="text-sm font-semibold">{item.title}</h3>
+                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Stat strip */}
       <section className="border-y border-border/40 bg-card/30">
         <div className="mx-auto max-w-7xl px-4 md:px-6 py-8 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
           {[
-            { n: "5+", l: "Status lanes" },
+            { n: "Claim", l: "Centered files" },
             { n: "100%", l: "Audit-logged" },
-            { n: "2-sided", l: "OCR capture" },
-            { n: "1 view", l: "Loss draft to close" },
+            { n: "Payee", l: "Signature tracking" },
+            { n: "1 view", l: "Funds visibility" },
           ].map((s) => (
             <div key={s.l}>
               <p className="text-2xl md:text-3xl font-bold bg-gradient-to-b from-foreground to-muted-foreground bg-clip-text text-transparent">{s.n}</p>
@@ -288,11 +313,11 @@ export default function CheckCenterMarketing() {
         <div className="max-w-2xl">
           <Badge variant="outline" className="mb-4">Capabilities</Badge>
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight">
-            Purpose-built for the check lifecycle.
+              Built to beat generic payment workflows.
           </h2>
           <p className="mt-4 text-muted-foreground text-lg">
-            Not a generic inbox with tags. A structured pipeline that knows the difference
-            between a payee awaiting signature and a mortgage company holding funds.
+              ChecksOps is a workflow control layer for firms that need visibility, documentation,
+              and auditability around claim checks — not a third party taking over the relationship.
           </p>
         </div>
         <div className="mt-12 grid md:grid-cols-2 lg:grid-cols-3 gap-4">

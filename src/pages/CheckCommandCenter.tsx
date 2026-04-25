@@ -390,6 +390,29 @@ export default function CheckCommandCenter() {
   const groupedReissueRequested = useMemo<CheckGroup[]>(() => buildCheckGroups(reissueRequested), [buildCheckGroups, reissueRequested]);
   const groupedBranchDeposit = useMemo<CheckGroup[]>(() => buildCheckGroups(branchDeposit), [buildCheckGroups, branchDeposit]);
 
+  const { data: lossDraftCounts = {} } = useQuery({
+    queryKey: ["loss-draft-counts", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_loss_draft_dashboard_counts_for_tenant" as any, {
+        _tenant_id: tenantId!,
+      });
+      if (error) throw error;
+      return (data ?? {}) as Record<string, number>;
+    },
+    enabled: !!tenantId,
+    refetchInterval: 30_000,
+  });
+
+  const operationalInsights = [
+    { label: "Awaiting endorsements", value: awaitingEndorsement.length, icon: Send, tone: "text-amber-400", onClick: () => setActiveTab("endorsements") },
+    { label: "Needs review", value: needsReview.length, icon: ClipboardCheck, tone: "text-blue-400", onClick: () => setActiveTab("review") },
+    { label: "Ready to deposit", value: readyForDeposit.length, icon: CheckCircle2, tone: "text-emerald-400", onClick: () => setActiveTab("ready") },
+    { label: "Branch deposit", value: branchDeposit.length, icon: Building2, tone: "text-sky-400", onClick: () => setActiveTab("branch") },
+    { label: "Reissue requested", value: reissueRequested.length, icon: RotateCcw, tone: "text-orange-400", onClick: () => setActiveTab("reissue") },
+    { label: "Blocked in loss draft", value: lossDraftCounts.checks_blocked_in_lender ?? 0, icon: Landmark, tone: "text-purple-400", onClick: () => setActiveTab("lossdraft") },
+    { label: "Overdue follow-up", value: lossDraftCounts.overdue_followup ?? 0, icon: Clock, tone: "text-red-400", onClick: () => setActiveTab("lossdraft") },
+  ];
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -477,6 +500,36 @@ export default function CheckCommandCenter() {
             <XIcon className="h-4 w-4" />
           </Button>
         )}
+      </div>
+
+      <div className="rounded-lg border border-border/60 bg-card/70 p-3">
+        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold">Operational bottlenecks</p>
+            <p className="text-xs text-muted-foreground">Claim-centered check files, endorsements, deposit readiness, and loss draft visibility.</p>
+          </div>
+          <Badge variant="outline" className="w-fit text-[10px]">{checks.length} total checks</Badge>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-2">
+          {operationalInsights.map((item) => {
+            const Icon = item.icon;
+            const isHot = item.value > 0;
+            return (
+              <button
+                key={item.label}
+                type="button"
+                onClick={item.onClick}
+                className={`rounded-md border p-3 text-left transition-colors ${isHot ? "border-border/80 bg-muted/40 hover:border-primary/50" : "border-border/40 bg-background/40 text-muted-foreground hover:bg-muted/30"}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <Icon className={`h-4 w-4 ${item.tone}`} />
+                  <span className="text-lg font-bold tabular-nums">{item.value}</span>
+                </div>
+                <p className="mt-1 text-[11px] leading-tight">{item.label}</p>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
@@ -592,14 +645,7 @@ export default function CheckCommandCenter() {
                             <TableRow className="bg-muted/40 hover:bg-muted/40">
                               <TableCell colSpan={4} className="py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                  <div className="min-w-0">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className="font-semibold text-foreground truncate">{group.policyholderName}</span>
-                                      <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">{group.checks.length} {group.checks.length === 1 ? "check" : "checks"} in this claim group</p>
-                                  </div>
-                                  <div className="text-sm font-semibold tabular-nums text-foreground">${group.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</div>
+                                  <ClaimCheckFileHeader group={group} compact />
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -652,14 +698,7 @@ export default function CheckCommandCenter() {
                             <TableRow className="bg-muted/40 hover:bg-muted/40">
                               <TableCell colSpan={4} className="py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                  <div className="min-w-0">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className="font-semibold text-foreground truncate">{group.policyholderName}</span>
-                                      <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">{group.checks.length} {group.checks.length === 1 ? "check" : "checks"} in this claim group</p>
-                                  </div>
-                                  <div className="text-sm font-semibold tabular-nums text-foreground">${group.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</div>
+                                  <ClaimCheckFileHeader group={group} compact />
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -772,18 +811,7 @@ export default function CheckCommandCenter() {
                             <TableRow key={`${group.key}-header`} className="bg-muted/40 hover:bg-muted/40">
                               <TableCell colSpan={7} className="py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                  <div className="min-w-0">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className="font-semibold text-foreground truncate">{group.policyholderName}</span>
-                                      <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">
-                                      {group.checks.length} {group.checks.length === 1 ? "check" : "checks"} in this claim group
-                                    </p>
-                                  </div>
-                                  <div className="text-sm font-semibold tabular-nums text-foreground">
-                                    ${group.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                                  </div>
+                                  <ClaimCheckFileHeader group={group} />
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -920,6 +948,44 @@ export default function CheckCommandCenter() {
 /* ------------------------------------------------------------------ */
 /*  Summary card (kept for Phase 1 compat)                             */
 /* ------------------------------------------------------------------ */
+
+function ClaimCheckFileHeader({ group, compact = false }: { group: CheckGroup; compact?: boolean }) {
+  const signedPayees = group.checks.reduce(
+    (sum, check) => sum + (check.check_payees ?? []).filter((p) => p.endorsement_status === "signed").length,
+    0,
+  );
+  const totalPayees = group.checks.reduce((sum, check) => sum + (check.check_payees?.length ?? 0), 0);
+  const hasBlocked = group.checks.some((check) => ["loss_draft_required", "branch_deposit_required", "reissue_requested", "needs_review", "manual_review_required"].includes(check.status));
+  const hasReady = group.checks.some((check) => check.status === "approved_for_deposit" || check.deposit_recommendation === "ready_for_deposit");
+  const hasLossDraft = group.checks.some((check) => check.status === "loss_draft_required");
+
+  return (
+    <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">Claim Check File</Badge>
+          <span className="font-semibold text-foreground truncate">{group.policyholderName}</span>
+          <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
+        </div>
+        {!compact && (
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>{group.checks.length} {group.checks.length === 1 ? "check" : "checks"}</span>
+            <span>•</span>
+            <span>{signedPayees}/{totalPayees || 0} endorsements signed</span>
+            {hasLossDraft && <span>• Loss draft visibility active</span>}
+          </div>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+        {hasBlocked && <Badge variant="outline" className="border-orange-500/30 text-orange-400 text-[10px]">Blocked / pending</Badge>}
+        {hasReady && <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-[10px]">Ready signal</Badge>}
+        <div className="text-sm font-semibold tabular-nums text-foreground">
+          ${group.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function SummaryCard({
   label,
