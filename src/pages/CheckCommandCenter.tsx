@@ -727,21 +727,41 @@ export default function CheckCommandCenter() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredChecks.map((check) => {
-                          const rec = check.deposit_recommendation
-                            ? recommendationConfig[check.deposit_recommendation]
-                            : null;
-                          const RecIcon = rec?.icon ?? null;
-                          const canDelete = canDeleteAnyCheck;
-                          const isSelected = selectedCheck === check.id;
-                          const isShared = (check as any)._shared;
-                          const sourceTenantName = (check as any)._sourceTenantName;
-                          return (
-                            <TableRow
-                              key={check.id}
-                              className={`cursor-pointer transition-colors ${isSelected ? "bg-blue-50 dark:bg-blue-950/30" : ""}`}
-                              onClick={() => setSelectedCheck(isSelected ? null : check.id)}
-                            >
+                        {groupedFilteredChecks.map((group) => (
+                          <>
+                            <TableRow key={`${group.key}-header`} className="bg-muted/40 hover:bg-muted/40">
+                              <TableCell colSpan={7} className="py-3">
+                                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="font-semibold text-foreground truncate">{group.policyholderName}</span>
+                                      <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                      {group.checks.length} {group.checks.length === 1 ? "check" : "checks"} in this claim group
+                                    </p>
+                                  </div>
+                                  <div className="text-sm font-semibold tabular-nums text-foreground">
+                                    ${group.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                            {group.checks.map((check) => {
+                              const rec = check.deposit_recommendation
+                                ? recommendationConfig[check.deposit_recommendation]
+                                : null;
+                              const RecIcon = rec?.icon ?? null;
+                              const canDelete = canDeleteAnyCheck;
+                              const isSelected = selectedCheck === check.id;
+                              const isShared = (check as any)._shared;
+                              const sourceTenantName = (check as any)._sourceTenantName;
+                              return (
+                                <TableRow
+                                  key={check.id}
+                                  className={`cursor-pointer transition-colors ${isSelected ? "bg-accent" : ""}`}
+                                  onClick={() => setSelectedCheck(isSelected ? null : check.id)}
+                                >
                               <TableCell className="font-mono text-sm">
                                 <div className="flex items-center gap-1.5">
                                   #{check.check_number || "—"}
@@ -808,9 +828,11 @@ export default function CheckCommandCenter() {
                                   )}
                                 </div>
                               </TableCell>
-                            </TableRow>
-                          );
-                        })}
+                                </TableRow>
+                              );
+                            })}
+                          </>
+                        ))}
                       </TableBody>
                     </Table>
                   )}
