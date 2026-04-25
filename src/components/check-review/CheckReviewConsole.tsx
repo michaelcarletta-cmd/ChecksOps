@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { Fragment, useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -49,6 +49,15 @@ interface ReviewCheck {
   claim_id: string | null;
   created_at: string;
   check_payees?: CheckPayee[];
+}
+
+interface ReviewCheckGroup {
+  key: string;
+  claimNumber: string;
+  policyholderName: string;
+  checks: ReviewCheck[];
+  totalAmount: number;
+  earliestCreatedAt: string;
 }
 
 const REVIEW_STATUSES = [
@@ -116,6 +125,49 @@ export function CheckReviewQueue({
     refetchInterval: 15000,
   });
 
+  const linkedClaimIds = useMemo(() => Array.from(new Set(reviewChecks.map((check) => check.claim_id).filter(Boolean))) as string[], [reviewChecks]);
+
+  const { data: linkedClaims = [] } = useQuery({
+    queryKey: ["check-review-linked-claims", linkedClaimIds],
+    queryFn: async () => {
+      if (linkedClaimIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("claims")
+        .select("id, claim_number, policyholder_name")
+        .in("id", linkedClaimIds);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: linkedClaimIds.length > 0,
+    staleTime: 60_000,
+  });
+
+  const groupedReviewChecks = useMemo<ReviewCheckGroup[]>(() => {
+    const claimLookup = new Map(linkedClaims.map((claim: any) => [claim.id, claim]));
+    const groups = new Map<string, ReviewCheckGroup>();
+
+    reviewChecks.forEach((check) => {
+      const linked = check.claim_id ? claimLookup.get(check.claim_id) : null;
+      const claimNumber = linked?.claim_number || check.detected_claim_number || "Unlinked claim";
+      const insuredPayee = check.check_payees?.find((payee) => payee.payee_type === "insured")?.payee_name;
+      const policyholderName = linked?.policyholder_name || insuredPayee || check.payee_line || "Unknown insured";
+      const key = `${claimNumber.trim().toLowerCase()}::${policyholderName.trim().toLowerCase()}`;
+      const existing = groups.get(key);
+
+      if (existing) {
+        existing.checks.push(check);
+        existing.totalAmount += check.amount ?? 0;
+        if (new Date(check.created_at).getTime() < new Date(existing.earliestCreatedAt).getTime()) {
+          existing.earliestCreatedAt = check.created_at;
+        }
+      } else {
+        groups.set(key, { key, claimNumber, policyholderName, checks: [check], totalAmount: check.amount ?? 0, earliestCreatedAt: check.created_at });
+      }
+    });
+
+    return Array.from(groups.values()).sort((a, b) => new Date(a.earliestCreatedAt).getTime() - new Date(b.earliestCreatedAt).getTime());
+  }, [linkedClaims, reviewChecks]);
+
   function getReviewReason(check: ReviewCheck): string {
     const reasons: string[] = [];
     if (check.ocr_status === "failed") reasons.push("OCR failed");
@@ -150,25 +202,36 @@ export function CheckReviewQueue({
   return (
     <ScrollArea className="h-[calc(100vh-400px)]">
       <div className="space-y-2 p-2">
-        {reviewChecks.map((check) => (
-          <Card
-            key={check.id}
-            className={`cursor-pointer transition-colors hover:bg-accent/30 ${
-              selectedCheckId === check.id ? "ring-1 ring-primary bg-accent/50" : ""
-            }`}
-            onClick={() => onSelectCheck(check.id)}
-          >
-            <CardContent className="p-3">
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-mono text-sm font-medium">
-                  #{check.check_number || "Pending"}
-                </span>
-                <span className="text-sm font-bold tabular-nums">
-                  {check.amount != null
-                    ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
-                    : "—"}
-                </span>
+        {groupedReviewChecks.map((group) => (
+          <Fragment key={group.key}>
+            <div className="rounded-lg border bg-muted/30 px-3 py-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-foreground">{group.policyholderName}</p>
+                  <p className="text-xs text-muted-foreground">Claim #{group.claimNumber} · {group.checks.length} {group.checks.length === 1 ? "check" : "checks"}</p>
+                </div>
+                <span className="text-sm font-semibold tabular-nums text-foreground">${group.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
               </div>
+            </div>
+            {group.checks.map((check) => (
+              <Card
+                key={check.id}
+                className={`cursor-pointer transition-colors hover:bg-accent/30 ${
+                  selectedCheckId === check.id ? "ring-1 ring-primary bg-accent/50" : ""
+                }`}
+                onClick={() => onSelectCheck(check.id)}
+              >
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-mono text-sm font-medium">
+                      #{check.check_number || "Pending"}
+                    </span>
+                    <span className="text-sm font-bold tabular-nums">
+                      {check.amount != null
+                        ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                        : "—"}
+                    </span>
+                  </div>
               <p className="text-xs text-muted-foreground truncate">
                 {check.carrier_name || "Unknown carrier"}
               </p>
@@ -183,8 +246,10 @@ export function CheckReviewQueue({
                   </Badge>
                 )}
               </div>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            ))}
+          </Fragment>
         ))}
       </div>
     </ScrollArea>
