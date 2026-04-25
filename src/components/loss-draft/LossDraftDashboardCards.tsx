@@ -21,7 +21,7 @@ export function LossDraftDashboardCards() {
 
   const cards = [
     { label: "Active Files",       value: counts?.total_active ?? 0,              icon: Landmark,      color: "text-amber-400" },
-    { label: "Blocked in Lender",  value: counts?.checks_blocked_in_lender ?? 0,  icon: ShieldAlert,   color: "text-destructive" },
+    { label: "Lender-Held",        value: counts?.checks_blocked_in_lender ?? 0,  icon: ShieldAlert,   color: "text-destructive" },
     { label: "Awaiting Docs",      value: counts?.checks_awaiting_docs ?? 0,      icon: FileWarning,   color: "text-orange-400" },
     { label: "Ready for Release",  value: counts?.checks_ready_for_release ?? 0,  icon: CheckCircle2,  color: "text-emerald-400" },
     { label: "Draw Requested",     value: counts?.draw_requested ?? 0,            icon: ArrowRightLeft, color: "text-blue-400" },
@@ -39,7 +39,7 @@ export function LossDraftDashboardCards() {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
       {cards.map(c => (
-        <Card key={c.label} className={c.label === "Blocked in Lender" && (counts?.checks_blocked_in_lender ?? 0) > 0 ? "border-destructive/40" : ""}>
+        <Card key={c.label} className={c.label === "Lender-Held" && (counts?.checks_blocked_in_lender ?? 0) > 0 ? "border-destructive/40" : ""}>
           <CardContent className="p-3 flex items-center gap-2">
             <c.icon className={`h-4 w-4 ${c.color} shrink-0`} />
             <div className="min-w-0">
