@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { Fragment, useState, useMemo, useCallback, useEffect } from "react";
 
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -728,7 +728,7 @@ export default function CheckCommandCenter() {
                       </TableHeader>
                       <TableBody>
                         {groupedFilteredChecks.map((group) => (
-                          <>
+                          <Fragment key={group.key}>
                             <TableRow key={`${group.key}-header`} className="bg-muted/40 hover:bg-muted/40">
                               <TableCell colSpan={7} className="py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -831,7 +831,7 @@ export default function CheckCommandCenter() {
                                 </TableRow>
                               );
                             })}
-                          </>
+                          </Fragment>
                         ))}
                       </TableBody>
                     </Table>
