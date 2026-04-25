@@ -182,6 +182,7 @@ function AppRoutesInner() {
   return (
     <Routes>
       {publicRoutes}
+      <Route path="/index" element={<Navigate to="/" replace />} />
       <Route path="/" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><Index /></Suspense></AppLayout></ProtectedRoute>} />
       <Route path="/claims" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><Claims /></Suspense></AppLayout></ProtectedRoute>} />
       <Route path="/claims/:id" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><ClaimDetail /></Suspense></AppLayout></ProtectedRoute>} />
