@@ -42,6 +42,8 @@ interface AmountFallbackResult {
   raw: string | null;
 }
 
+type VisionContentPart = { type: string; text?: string; image_url?: { url: string } };
+
 const VALID_PAYEE_TYPES = new Set([
   "insured", "mortgage_company", "contractor", "public_adjuster", "unknown",
 ]);
@@ -63,7 +65,7 @@ function log(stage: string, msg: string, data?: Record<string, unknown>) {
 }
 
 function logAudit(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   checkId: string,
   eventType: string,
   description: string,
@@ -119,7 +121,7 @@ Rules:
 - Amount must be numeric with optional decimals, no currency symbols.
 - Return null ONLY if both locations are unreadable.`;
 
-  const content: Array<Record<string, unknown>> = [
+  const content: VisionContentPart[] = [
     { type: "text", text: amountPrompt },
     { type: "image_url", image_url: { url: frontImageUrl } },
   ];
@@ -372,7 +374,7 @@ function deriveFallbackCheckDate(issueDate: unknown, createdAt: unknown): string
 }
 
 async function ensureClaimCheckLinkOnFailure(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   check: Record<string, unknown>,
   userId: string,
   reason: string,
@@ -394,10 +396,11 @@ async function ensureClaimCheckLinkOnFailure(
   }
 
   if (existingCheck) {
+    const linkedCheck = existingCheck as { id: string };
     log("claim_check_link_fallback", "Linked claim check already exists", {
       checkId,
       claimId,
-      claimCheckId: existingCheck.id,
+      claimCheckId: linkedCheck.id,
     });
     return;
   }
@@ -451,6 +454,8 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("authorization");
     const token = authHeader?.replace("Bearer ", "");
     if (!token) return errResponse("Unauthorized", 401, stage);
+
+    if (!supabaseUrl || !serviceKey || !anonKey) return errResponse("Missing backend configuration", 500, stage);
 
     const anonClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } },
@@ -609,7 +614,7 @@ Rules:
 - CRITICAL for amount: The check amount appears in TWO places — a numeric box (usually right side) AND written out in words on the "dollars" line. Check BOTH locations. Even if one is partially obscured, use the other. The amount should almost NEVER be null for a valid check. If you can read the written-out amount (e.g. "Two thousand five hundred ten and 27/100"), convert it to numeric (2510.27). Only return null if BOTH the numeric and written amounts are completely unreadable.
 - Return ONLY the JSON object, no markdown, no explanation.`;
 
-      const content: Array<Record<string, unknown>> = [
+      const content: VisionContentPart[] = [
         { type: "text", text: ocrPrompt },
         { type: "image_url", image_url: { url: frontImageUrl } },
       ];

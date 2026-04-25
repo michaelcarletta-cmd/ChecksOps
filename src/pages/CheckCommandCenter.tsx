@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { Fragment, useState, useMemo, useCallback, useEffect } from "react";
 
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -108,6 +108,15 @@ interface ClaimOption {
   id: string;
   claim_number: string | null;
   policyholder_name: string | null;
+}
+
+interface CheckGroup {
+  key: string;
+  claimNumber: string;
+  policyholderName: string;
+  checks: CheckItem[];
+  totalAmount: number;
+  latestCreatedAt: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -342,6 +351,40 @@ export default function CheckCommandCenter() {
     : activeTab === "ready" ? readyForDeposit
     : activeTab === "review" ? needsReview
     : checks.filter(matchesSearch);
+
+  const groupedFilteredChecks = useMemo<CheckGroup[]>(() => {
+    const groups = new Map<string, CheckGroup>();
+
+    filteredChecks.forEach((check) => {
+      const linked = check.claim_id ? claimLookup.get(check.claim_id) : null;
+      const claimNumber = linked?.claim_number || check.detected_claim_number || "Unlinked claim";
+      const insuredPayee = check.check_payees?.find((p) => p.payee_type === "insured")?.payee_name;
+      const policyholderName = linked?.policyholder_name || insuredPayee || check.payee_line || "Unknown insured";
+      const key = `${claimNumber.trim().toLowerCase()}::${policyholderName.trim().toLowerCase()}`;
+      const existing = groups.get(key);
+
+      if (existing) {
+        existing.checks.push(check);
+        existing.totalAmount += check.amount ?? 0;
+        if (new Date(check.created_at).getTime() > new Date(existing.latestCreatedAt).getTime()) {
+          existing.latestCreatedAt = check.created_at;
+        }
+      } else {
+        groups.set(key, {
+          key,
+          claimNumber,
+          policyholderName,
+          checks: [check],
+          totalAmount: check.amount ?? 0,
+          latestCreatedAt: check.created_at,
+        });
+      }
+    });
+
+    return Array.from(groups.values()).sort(
+      (a, b) => new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime(),
+    );
+  }, [filteredChecks, claimLookup]);
 
   return (
     <div className="space-y-4">
@@ -684,21 +727,41 @@ export default function CheckCommandCenter() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredChecks.map((check) => {
-                          const rec = check.deposit_recommendation
-                            ? recommendationConfig[check.deposit_recommendation]
-                            : null;
-                          const RecIcon = rec?.icon ?? null;
-                          const canDelete = canDeleteAnyCheck;
-                          const isSelected = selectedCheck === check.id;
-                          const isShared = (check as any)._shared;
-                          const sourceTenantName = (check as any)._sourceTenantName;
-                          return (
-                            <TableRow
-                              key={check.id}
-                              className={`cursor-pointer transition-colors ${isSelected ? "bg-blue-50 dark:bg-blue-950/30" : ""}`}
-                              onClick={() => setSelectedCheck(isSelected ? null : check.id)}
-                            >
+                        {groupedFilteredChecks.map((group) => (
+                          <Fragment key={group.key}>
+                            <TableRow key={`${group.key}-header`} className="bg-muted/40 hover:bg-muted/40">
+                              <TableCell colSpan={7} className="py-3">
+                                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="font-semibold text-foreground truncate">{group.policyholderName}</span>
+                                      <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                      {group.checks.length} {group.checks.length === 1 ? "check" : "checks"} in this claim group
+                                    </p>
+                                  </div>
+                                  <div className="text-sm font-semibold tabular-nums text-foreground">
+                                    ${group.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                            {group.checks.map((check) => {
+                              const rec = check.deposit_recommendation
+                                ? recommendationConfig[check.deposit_recommendation]
+                                : null;
+                              const RecIcon = rec?.icon ?? null;
+                              const canDelete = canDeleteAnyCheck;
+                              const isSelected = selectedCheck === check.id;
+                              const isShared = (check as any)._shared;
+                              const sourceTenantName = (check as any)._sourceTenantName;
+                              return (
+                                <TableRow
+                                  key={check.id}
+                                  className={`cursor-pointer transition-colors ${isSelected ? "bg-accent" : ""}`}
+                                  onClick={() => setSelectedCheck(isSelected ? null : check.id)}
+                                >
                               <TableCell className="font-mono text-sm">
                                 <div className="flex items-center gap-1.5">
                                   #{check.check_number || "—"}
@@ -765,9 +828,11 @@ export default function CheckCommandCenter() {
                                   )}
                                 </div>
                               </TableCell>
-                            </TableRow>
-                          );
-                        })}
+                                </TableRow>
+                              );
+                            })}
+                          </Fragment>
+                        ))}
                       </TableBody>
                     </Table>
                   )}
