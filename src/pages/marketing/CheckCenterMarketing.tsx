@@ -266,6 +266,31 @@ export default function CheckCenterMarketing() {
         </div>
       </section>
 
+      <section className="border-y border-border/40 bg-muted/20">
+        <div className="mx-auto max-w-7xl px-4 md:px-6 py-12 grid gap-8 lg:grid-cols-[0.9fr_1.1fr] items-center">
+          <div>
+            <Badge variant="outline" className="mb-4">Competitive advantage</Badge>
+            <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Control without outsourcing the claim relationship.</h2>
+            <p className="mt-3 text-sm md:text-base text-muted-foreground leading-relaxed">
+              Some platforms center the payment processor. ChecksOps centers the professional managing the claim. Your company keeps the mortgage, carrier, payee, and banking decisions while ChecksOps provides the organized workflow, evidence, and status visibility.
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-3 gap-3">
+            {[
+              { icon: ClipboardCheck, title: "Claim files", desc: "Checks grouped by insured and claim number." },
+              { icon: ShieldCheck, title: "Audit proof", desc: "Actions, signatures, decisions, and status changes tracked." },
+              { icon: Landmark, title: "Lender visibility", desc: "Track held funds without claiming to handle the lender." },
+            ].map((item) => (
+              <div key={item.title} className="rounded-lg border border-border/50 bg-card/60 p-4">
+                <item.icon className="h-5 w-5 text-primary mb-3" />
+                <h3 className="text-sm font-semibold">{item.title}</h3>
+                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Stat strip */}
       <section className="border-y border-border/40 bg-card/30">
         <div className="mx-auto max-w-7xl px-4 md:px-6 py-8 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
