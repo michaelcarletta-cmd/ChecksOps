@@ -78,6 +78,8 @@ function signerForensics(req: Request, consentText?: string): Record<string, str
   };
 }
 
+const db = (client: ReturnType<typeof createClient>) => client as any;
+
 async function refreshCompositeBackImage(checkId: string) {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
