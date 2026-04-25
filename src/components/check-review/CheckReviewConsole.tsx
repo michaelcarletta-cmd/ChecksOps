@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { Fragment, useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -49,6 +49,15 @@ interface ReviewCheck {
   claim_id: string | null;
   created_at: string;
   check_payees?: CheckPayee[];
+}
+
+interface ReviewCheckGroup {
+  key: string;
+  claimNumber: string;
+  policyholderName: string;
+  checks: ReviewCheck[];
+  totalAmount: number;
+  earliestCreatedAt: string;
 }
 
 const REVIEW_STATUSES = [
