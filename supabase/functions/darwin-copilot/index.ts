@@ -1418,7 +1418,7 @@ ${research.text}`;
       : 'copilot_drafting';
 
     // Skip the general AI call entirely for draft requests — go straight to structured draft generation
-    let ai: { text: string; model?: string } = { text: '', model: '' };
+    let ai: { text: string; model?: string; meta?: Record<string, unknown> } = { text: '', model: '' };
     if (!isDraftGeneration) {
       ai = await runDarwinTask(
         taskType as any,
