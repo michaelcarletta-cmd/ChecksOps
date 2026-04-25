@@ -30,10 +30,14 @@ export default function Sign() {
   const [dbPresets, setDbPresets] = useState<any[]>([]);
 
   const canvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
+  const lastSignaturePointRefs = useRef<Record<string, { x: number; y: number; pressure: number } | null>>({});
   const submitBtnRef = useRef<HTMLButtonElement | null>(null);
   const documentSectionRef = useRef<HTMLDivElement | null>(null);
   const [activeStep, setActiveStep] = useState<"review" | "sign">("review");
   const [drawingFields, setDrawingFields] = useState<Record<string, boolean>>({});
+  const [eSignConsentAccepted, setESignConsentAccepted] = useState(false);
+
+  const eSignConsentText = "I agree to use electronic records and electronic signatures for this document. I intend my electronic signature to be legally binding, and I understand I may decline to sign electronically and request another process.";
 
   // UI-only progress: count completed required fields
   const isCanvasDrawn = useCallback((fieldId: string) => {
@@ -169,53 +173,49 @@ export default function Sign() {
     }
   };
 
-  const startDrawing = (fieldId: string, e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+  const getSignaturePoint = (canvas: HTMLCanvasElement, e: React.PointerEvent<HTMLCanvasElement>) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY,
+      pressure: e.pressure && e.pressure > 0 ? e.pressure : 0.5,
+    };
+  };
+
+  const startDrawing = (fieldId: string, e: React.PointerEvent<HTMLCanvasElement>) => {
     setDrawingFields(prev => ({ ...prev, [fieldId]: true }));
     const canvas = canvasRefs.current[fieldId];
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const rect = canvas.getBoundingClientRect();
-    
-    let clientX: number, clientY: number;
-    if ("touches" in e) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = e.clientX;
-      clientY = e.clientY;
-    }
-    
+    const point = getSignaturePoint(canvas, e);
+    lastSignaturePointRefs.current[fieldId] = point;
     ctx.beginPath();
     ctx.strokeStyle = "#111111";
-    ctx.lineWidth = 2;
     ctx.lineCap = "round";
-    ctx.moveTo(clientX - rect.left, clientY - rect.top);
+    ctx.lineJoin = "round";
+    ctx.moveTo(point.x, point.y);
   };
 
-  const draw = (fieldId: string, e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+  const draw = (fieldId: string, e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!drawingFields[fieldId]) return;
     const canvas = canvasRefs.current[fieldId];
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const rect = canvas.getBoundingClientRect();
-    
-    let clientX: number, clientY: number;
-    if ("touches" in e) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = e.clientX;
-      clientY = e.clientY;
-    }
-    
-    ctx.lineTo(clientX - rect.left, clientY - rect.top);
+    const point = getSignaturePoint(canvas, e);
+    const last = lastSignaturePointRefs.current[fieldId] ?? point;
+    ctx.lineWidth = 1.2 + Math.max(point.pressure || last.pressure || 0.5, 0.25) * 3;
+    ctx.quadraticCurveTo(last.x, last.y, (last.x + point.x) / 2, (last.y + point.y) / 2);
     ctx.stroke();
+    lastSignaturePointRefs.current[fieldId] = point;
   };
 
   const stopDrawing = (fieldId: string) => {
     setDrawingFields(prev => ({ ...prev, [fieldId]: false }));
+    lastSignaturePointRefs.current[fieldId] = null;
   };
 
   const clearSignature = (fieldId: string) => {
@@ -228,6 +228,15 @@ export default function Sign() {
 
   const handleSign = async () => {
     setValidationErrors([]);
+    if (!eSignConsentAccepted) {
+      setValidationErrors(["Electronic signature consent must be accepted before signing."]);
+      toast({
+        title: "Consent required",
+        description: "Please accept the electronic signature consent before signing.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     // Collect signature data and field values
     const collectedValues: Record<string, any> = {};
@@ -255,7 +264,7 @@ export default function Sign() {
           "Content-Type": "application/json",
           "apikey": anonKey,
         },
-        body: JSON.stringify({ token, fieldValues: collectedValues }),
+        body: JSON.stringify({ token, fieldValues: collectedValues, eSignConsentAccepted, consentText: eSignConsentText }),
       });
 
       const data = await response.json();
