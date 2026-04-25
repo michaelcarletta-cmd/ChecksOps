@@ -390,6 +390,29 @@ export default function CheckCommandCenter() {
   const groupedReissueRequested = useMemo<CheckGroup[]>(() => buildCheckGroups(reissueRequested), [buildCheckGroups, reissueRequested]);
   const groupedBranchDeposit = useMemo<CheckGroup[]>(() => buildCheckGroups(branchDeposit), [buildCheckGroups, branchDeposit]);
 
+  const { data: lossDraftCounts = {} } = useQuery({
+    queryKey: ["loss-draft-counts", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_loss_draft_dashboard_counts_for_tenant" as any, {
+        _tenant_id: tenantId!,
+      });
+      if (error) throw error;
+      return (data ?? {}) as Record<string, number>;
+    },
+    enabled: !!tenantId,
+    refetchInterval: 30_000,
+  });
+
+  const operationalInsights = [
+    { label: "Awaiting endorsements", value: awaitingEndorsement.length, icon: Send, tone: "text-amber-400", onClick: () => setActiveTab("endorsements") },
+    { label: "Needs review", value: needsReview.length, icon: ClipboardCheck, tone: "text-blue-400", onClick: () => setActiveTab("review") },
+    { label: "Ready to deposit", value: readyForDeposit.length, icon: CheckCircle2, tone: "text-emerald-400", onClick: () => setActiveTab("ready") },
+    { label: "Branch deposit", value: branchDeposit.length, icon: Building2, tone: "text-sky-400", onClick: () => setActiveTab("branch") },
+    { label: "Reissue requested", value: reissueRequested.length, icon: RotateCcw, tone: "text-orange-400", onClick: () => setActiveTab("reissue") },
+    { label: "Blocked in loss draft", value: lossDraftCounts.checks_blocked_in_lender ?? 0, icon: Landmark, tone: "text-purple-400", onClick: () => setActiveTab("lossdraft") },
+    { label: "Overdue follow-up", value: lossDraftCounts.overdue_followup ?? 0, icon: Clock, tone: "text-red-400", onClick: () => setActiveTab("lossdraft") },
+  ];
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -477,6 +500,36 @@ export default function CheckCommandCenter() {
             <XIcon className="h-4 w-4" />
           </Button>
         )}
+      </div>
+
+      <div className="rounded-lg border border-border/60 bg-card/70 p-3">
+        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold">Operational bottlenecks</p>
+            <p className="text-xs text-muted-foreground">Claim-centered check files, endorsements, deposit readiness, and loss draft visibility.</p>
+          </div>
+          <Badge variant="outline" className="w-fit text-[10px]">{checks.length} total checks</Badge>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-2">
+          {operationalInsights.map((item) => {
+            const Icon = item.icon;
+            const isHot = item.value > 0;
+            return (
+              <button
+                key={item.label}
+                type="button"
+                onClick={item.onClick}
+                className={`rounded-md border p-3 text-left transition-colors ${isHot ? "border-border/80 bg-muted/40 hover:border-primary/50" : "border-border/40 bg-background/40 text-muted-foreground hover:bg-muted/30"}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <Icon className={`h-4 w-4 ${item.tone}`} />
+                  <span className="text-lg font-bold tabular-nums">{item.value}</span>
+                </div>
+                <p className="mt-1 text-[11px] leading-tight">{item.label}</p>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
