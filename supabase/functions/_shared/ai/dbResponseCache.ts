@@ -40,10 +40,10 @@ export async function readDbResponseCache<T>(cacheKey: string): Promise<T | null
     if (error || !data) return null;
     if (new Date(data.expires_at).getTime() < Date.now()) return null;
     // Fire-and-forget hit counter
-    client.from("ai_response_cache")
+    Promise.resolve(client.from("ai_response_cache")
       .update({ hits: 1 })
       .eq("cache_key", cacheKey)
-      .then(() => {})
+      .then(() => {}))
       .catch(() => {});
     return data.payload as T;
   } catch (e) {
