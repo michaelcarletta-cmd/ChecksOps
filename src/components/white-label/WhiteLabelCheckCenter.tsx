@@ -5,7 +5,7 @@ import { lazy, Suspense, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { LogOut, Settings, Shield } from "lucide-react";
+import { LogOut, Settings, Shield, Banknote } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 
 const CheckCommandCenter = lazy(() => import("@/pages/CheckCommandCenter"));
@@ -50,7 +50,12 @@ export function WhiteLabelCheckCenter() {
             <img src={tenant.logo_url} alt={tenant.name} className="h-7 md:h-8 object-contain flex-shrink-0" />
           )}
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-sm font-semibold truncate">{tenant?.name || "Check Center"}</span>
+            <div className="min-w-0">
+              <span className="text-sm font-semibold truncate block">{tenant?.name || "Check Center"}</span>
+              <span className="hidden sm:flex items-center gap-1 text-[10px] text-muted-foreground leading-none">
+                <Banknote className="h-3 w-3" /> ChecksOps command center
+              </span>
+            </div>
             {tenant && !tenant.is_system_tenant && (
               <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-primary/30 text-primary hidden sm:inline-flex gap-0.5 flex-shrink-0">
                 <Shield className="h-2.5 w-2.5" />
