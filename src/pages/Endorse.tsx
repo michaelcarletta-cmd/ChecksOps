@@ -26,10 +26,14 @@ export default function Endorse() {
   // Payment direction state
   const [paymentDirection, setPaymentDirection] = useState<"pay_contractor" | "pay_insured" | null>(null);
   const [contractorName, setContractorName] = useState("");
+  const [eSignConsentAccepted, setESignConsentAccepted] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const lastPointRef = useRef<{ x: number; y: number; pressure: number } | null>(null);
+
+  const endorsementConsentText = "I agree to use electronic records and electronic signatures for this endorsement. I confirm my identity as the named payee, intend my electronic signature to be legally binding, and authorize the electronic endorsement of this insurance check payment. I understand I may decline to sign electronically and request another process.";
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://yvagrvfkeuvzjezfsbun.supabase.co";
   const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2YWdydmZrZXV2emplemZzYnVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NzcyMjUsImV4cCI6MjA4NzQ1MzIyNX0.1Jgm-plSdEFFnPrtA492s0jH-GQcCN08WplZS_VrtEg";
@@ -68,10 +72,20 @@ export default function Endorse() {
     const resize = () => {
       const parent = canvas.parentElement;
       if (!parent) return;
-      canvas.width = parent.clientWidth;
-      canvas.height = 120;
+      const dpr = window.devicePixelRatio || 1;
+      const width = parent.clientWidth;
+      const height = 140;
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
+      canvas.style.height = `${height}px`;
       const ctx = canvas.getContext("2d");
-      if (ctx) { ctx.strokeStyle = "#1e293b"; ctx.lineWidth = 2; ctx.lineCap = "round"; }
+      if (ctx) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.strokeStyle = "#1e293b";
+        ctx.lineWidth = 2;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+      }
     };
     resize();
     window.addEventListener("resize", resize);
@@ -80,23 +94,36 @@ export default function Endorse() {
 
   const getCtx = () => canvasRef.current?.getContext("2d") ?? null;
 
-  const startDraw = (x: number, y: number) => {
+  const startDraw = (x: number, y: number, pressure = 0.5) => {
     drawingRef.current = true;
+    lastPointRef.current = { x, y, pressure };
     const ctx = getCtx();
     if (!ctx) return;
     ctx.beginPath();
     ctx.moveTo(x, y);
   };
 
-  const moveDraw = (x: number, y: number) => {
+  const moveDraw = (x: number, y: number, pressure = 0.5) => {
     if (!drawingRef.current) return;
     const ctx = getCtx();
     if (!ctx) return;
-    ctx.lineTo(x, y);
+    const last = lastPointRef.current ?? { x, y, pressure };
+    ctx.lineWidth = 1.35 + Math.max(pressure || last.pressure || 0.5, 0.25) * 2.6;
+    ctx.quadraticCurveTo(last.x, last.y, (last.x + x) / 2, (last.y + y) / 2);
     ctx.stroke();
+    lastPointRef.current = { x, y, pressure };
   };
 
-  const endDraw = () => { drawingRef.current = false; };
+  const endDraw = () => { drawingRef.current = false; lastPointRef.current = null; };
+
+  const getCanvasPoint = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+      pressure: event.pressure && event.pressure > 0 ? event.pressure : 0.5,
+    };
+  };
 
   const clearCanvas = () => {
     const canvas = canvasRef.current;
