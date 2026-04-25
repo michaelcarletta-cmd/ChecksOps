@@ -129,7 +129,7 @@ async function detectContradictionsUncached(
     ).join("\n\n");
 
     const result = await generate({
-      task: "analysis",
+      task: "summary",
       system: `You are an insurance claims analyst detecting contradictions across carrier documents. Return only valid JSON array.`,
       user: `Analyze these carrier positions from the SAME claim for contradictions, shifting positions, and admissions against interest.
 
@@ -184,7 +184,7 @@ Return JSON array (empty if none found):
         severity: c.severity,
         rebuttal_value: c.rebuttalValue,
       }));
-      await supabase.from("claim_contradiction_detections").insert(rows).throwOnError().catch(() => {});
+      await Promise.resolve(supabase.from("claim_contradiction_detections").insert(rows).throwOnError()).catch(() => {});
     }
 
     return contradictions;
