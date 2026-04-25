@@ -662,7 +662,7 @@ export default function Sign() {
                   {field.type === "signature" ? (
                     <div className="space-y-2">
                       <p className="text-xs text-gray-500">
-                        Draw your signature below using your finger or mouse
+                        Use a stylus, finger, or mouse. A pressure-sensitive stylus will produce a more natural line.
                       </p>
                       <div className="border-2 border-dashed border-blue-300 rounded-lg p-1 bg-white">
                         <canvas
@@ -736,6 +736,14 @@ export default function Sign() {
             </div>
 
             <div className="pt-2 pb-6 space-y-3">
+              <label className="flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-3 text-sm leading-relaxed text-muted-foreground">
+                <Checkbox
+                  checked={eSignConsentAccepted}
+                  onCheckedChange={(checked) => setESignConsentAccepted(checked === true)}
+                  className="mt-0.5"
+                />
+                <span>{eSignConsentText}</span>
+              </label>
               <Button
                 ref={submitBtnRef}
                 onClick={handleSign}
