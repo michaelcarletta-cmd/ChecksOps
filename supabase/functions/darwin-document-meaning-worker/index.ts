@@ -113,7 +113,7 @@ Deno.serve(async (req) => {
 });
 
 async function processJob(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   job: QueueRow
 ) {
   const sourceScope = job.source_scope || job.payload.source_scope || 'file';
@@ -346,7 +346,7 @@ ${JSON.stringify(input.intelligence).slice(0, 25000)}
 }
 
 async function refreshClaimMasterStateMeaning(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   claimId: string
 ) {
   const { data: existing } = await supabase
@@ -416,7 +416,7 @@ async function refreshClaimMasterStateMeaning(
 }
 
 async function lockPendingJobs(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   workerId: string,
   batchSize: number
 ): Promise<QueueRow[]> {
