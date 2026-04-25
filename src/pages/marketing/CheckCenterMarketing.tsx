@@ -143,12 +143,12 @@ export default function CheckCenterMarketing() {
     {
       icon: ScanLine,
       title: "OCR-powered intake",
-      desc: "Drop a photo or PDF. We extract amount, check number, carrier, issue date, and every payee line — then flag anomalies before they hit your ledger.",
+      desc: "Drop a photo or PDF. ChecksOps extracts amount, check number, carrier, issue date, and every payee line — then flags anomalies before they reach deposit review.",
     },
     {
       icon: ClipboardCheck,
-      title: "Structured review queue",
-      desc: "Manual Review, Endorsing, Ready, Loss Draft — every check has exactly one place to be, with a clear next action and an auditable decision trail.",
+      title: "Claim Check Files",
+      desc: "Multiple checks for the same insured and claim number stay together so your team tracks the whole money file, not isolated transactions.",
     },
     {
       icon: Send,
@@ -157,8 +157,8 @@ export default function CheckCenterMarketing() {
     },
     {
       icon: Landmark,
-      title: "Loss draft tracking",
-      desc: "Purpose-built workflow for mortgage company disbursements. Track sent/received dates, tracking numbers, draws, and final release — in one view.",
+      title: "Loss draft visibility",
+      desc: "Track lender-held funds, missing documents, draw requests, releases, and follow-up history while your company keeps control of mortgage communications.",
     },
     {
       icon: Share2,
@@ -167,8 +167,8 @@ export default function CheckCenterMarketing() {
     },
     {
       icon: ShieldCheck,
-      title: "Owner-only controls",
-      desc: "Partner tenants get strict read-only access to shared checks. All edits, status transitions, and payee changes stay locked to the owner tenant.",
+      title: "Control-first model",
+      desc: "ChecksOps is not a bank or payment middleman. Your company owns the process, decisions, deposits, and customer relationships.",
     },
   ];
 
@@ -176,8 +176,8 @@ export default function CheckCenterMarketing() {
     { step: "01", title: "Upload", desc: "Photo, scan, or PDF. Front and back captured with OCR heartbeat monitoring." },
     { step: "02", title: "Review", desc: "Verify extracted data, correct payees, confirm amount. One-click approve to the right lane." },
     { step: "03", title: "Endorse", desc: "Each payee signs digitally. Track who's signed, who's pending, who's waived." },
-    { step: "04", title: "Deposit", desc: "Ready-for-deposit packet generated automatically. Branch or electronic — your call." },
-    { step: "05", title: "Monitor", desc: "Loss draft disbursements, reissue requests, and cleared status — all tracked to close." },
+    { step: "04", title: "Deposit", desc: "Ready-for-deposit packet generated automatically. Branch or electronic — your company decides." },
+    { step: "05", title: "Monitor", desc: "Loss draft visibility, reissue requests, and cleared status — all tracked to close." },
   ];
 
   return (
