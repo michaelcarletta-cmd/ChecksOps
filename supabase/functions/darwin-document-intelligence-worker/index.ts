@@ -36,7 +36,7 @@ type IntelligenceOutput = {
 };
 
 async function enqueueDocumentMeaningJob(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   payload: {
     claim_id: string;
     file_id: string;
@@ -151,7 +151,7 @@ Deno.serve(async (req) => {
   }
 });
 
-async function processJob(supabase: ReturnType<typeof createClient>, job: QueueRow) {
+async function processJob(supabase: any, job: QueueRow) {
   let sourceText = '';
   let sourceSummary = '';
   let sourceDocumentType = job.payload.document_type || 'other';
@@ -339,7 +339,7 @@ function parseIntelDate(raw: string): string | null {
 }
 
 async function writeIntelligenceDatesToClaimEvents(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   claimId: string,
   fileId: string,
   fileName: string,
@@ -567,7 +567,7 @@ function mapDocumentType(classification: string): string {
 }
 
 async function refreshClaimMasterState(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   claimId: string,
   lastFileId: string,
   lastDocumentType: string
@@ -633,7 +633,7 @@ async function refreshClaimMasterState(
 }
 
 async function lockPendingJobs(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   workerId: string,
   batchSize: number
 ): Promise<QueueRow[]> {
