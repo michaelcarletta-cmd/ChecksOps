@@ -125,6 +125,49 @@ export function CheckReviewQueue({
     refetchInterval: 15000,
   });
 
+  const linkedClaimIds = useMemo(() => Array.from(new Set(reviewChecks.map((check) => check.claim_id).filter(Boolean))) as string[], [reviewChecks]);
+
+  const { data: linkedClaims = [] } = useQuery({
+    queryKey: ["check-review-linked-claims", linkedClaimIds],
+    queryFn: async () => {
+      if (linkedClaimIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("claims")
+        .select("id, claim_number, policyholder_name")
+        .in("id", linkedClaimIds);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: linkedClaimIds.length > 0,
+    staleTime: 60_000,
+  });
+
+  const groupedReviewChecks = useMemo<ReviewCheckGroup[]>(() => {
+    const claimLookup = new Map(linkedClaims.map((claim: any) => [claim.id, claim]));
+    const groups = new Map<string, ReviewCheckGroup>();
+
+    reviewChecks.forEach((check) => {
+      const linked = check.claim_id ? claimLookup.get(check.claim_id) : null;
+      const claimNumber = linked?.claim_number || check.detected_claim_number || "Unlinked claim";
+      const insuredPayee = check.check_payees?.find((payee) => payee.payee_type === "insured")?.payee_name;
+      const policyholderName = linked?.policyholder_name || insuredPayee || check.payee_line || "Unknown insured";
+      const key = `${claimNumber.trim().toLowerCase()}::${policyholderName.trim().toLowerCase()}`;
+      const existing = groups.get(key);
+
+      if (existing) {
+        existing.checks.push(check);
+        existing.totalAmount += check.amount ?? 0;
+        if (new Date(check.created_at).getTime() < new Date(existing.earliestCreatedAt).getTime()) {
+          existing.earliestCreatedAt = check.created_at;
+        }
+      } else {
+        groups.set(key, { key, claimNumber, policyholderName, checks: [check], totalAmount: check.amount ?? 0, earliestCreatedAt: check.created_at });
+      }
+    });
+
+    return Array.from(groups.values()).sort((a, b) => new Date(a.earliestCreatedAt).getTime() - new Date(b.earliestCreatedAt).getTime());
+  }, [linkedClaims, reviewChecks]);
+
   function getReviewReason(check: ReviewCheck): string {
     const reasons: string[] = [];
     if (check.ocr_status === "failed") reasons.push("OCR failed");
