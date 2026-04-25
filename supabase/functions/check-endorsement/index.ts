@@ -110,7 +110,7 @@ async function refreshCompositeBackImage(checkId: string) {
 }
 
 async function reEvaluateAfterEndorsement(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   checkId: string,
 ) {
   const { data: allEndorsements } = await supabase
@@ -1263,7 +1263,7 @@ Deno.serve(async (req) => {
 /* ------------------------------------------------------------------ */
 
 async function handlePublicEndorsementPage(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   supabaseUrl: string,
   token: string,
 ) {
