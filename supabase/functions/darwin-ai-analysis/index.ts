@@ -8660,7 +8660,10 @@ Structure the rebuttal as follows:
 Make this document READY FOR IMMEDIATE SUBMISSION to the carrier. Be thorough, specific, and cite everything. The goal is to leave the carrier no choice but to reverse their denial.`;
 
         if (isAutoDraftLowSlope) {
-          const lowSlopeEngineerDocContext = autoDraftEngineerReports
+          const lowSlopeEngineerDocContext = (fullClaimFiles || []).filter((doc: any) => {
+            const name = String(doc.file_name || '').toLowerCase();
+            return doc.document_classification === 'engineering_report' || name.includes('engineer');
+          })
             .slice(0, 4)
             .map((doc: any) => {
               const excerpt = String(doc.extracted_text || '').substring(0, 2500);
