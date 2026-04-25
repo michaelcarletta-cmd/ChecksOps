@@ -671,13 +671,18 @@ export default function Sign() {
                           height={150}
                           className="w-full rounded cursor-crosshair bg-white"
                           style={{ touchAction: "none" }}
-                          onMouseDown={(e) => startDrawing(field.id, e)}
-                          onMouseMove={(e) => draw(field.id, e)}
-                          onMouseUp={() => stopDrawing(field.id)}
-                          onMouseLeave={() => stopDrawing(field.id)}
-                          onTouchStart={(e) => { e.preventDefault(); startDrawing(field.id, e); }}
-                          onTouchMove={(e) => { e.preventDefault(); draw(field.id, e); }}
-                          onTouchEnd={() => stopDrawing(field.id)}
+                          onPointerDown={(e) => {
+                            e.preventDefault();
+                            e.currentTarget.setPointerCapture(e.pointerId);
+                            startDrawing(field.id, e);
+                          }}
+                          onPointerMove={(e) => {
+                            e.preventDefault();
+                            draw(field.id, e);
+                          }}
+                          onPointerUp={() => stopDrawing(field.id)}
+                          onPointerCancel={() => stopDrawing(field.id)}
+                          onPointerLeave={() => stopDrawing(field.id)}
                         />
                       </div>
                       <button
