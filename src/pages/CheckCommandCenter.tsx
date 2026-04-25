@@ -645,14 +645,7 @@ export default function CheckCommandCenter() {
                             <TableRow className="bg-muted/40 hover:bg-muted/40">
                               <TableCell colSpan={4} className="py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                  <div className="min-w-0">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className="font-semibold text-foreground truncate">{group.policyholderName}</span>
-                                      <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">{group.checks.length} {group.checks.length === 1 ? "check" : "checks"} in this claim group</p>
-                                  </div>
-                                  <div className="text-sm font-semibold tabular-nums text-foreground">${group.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</div>
+                                  <ClaimCheckFileHeader group={group} compact />
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -705,14 +698,7 @@ export default function CheckCommandCenter() {
                             <TableRow className="bg-muted/40 hover:bg-muted/40">
                               <TableCell colSpan={4} className="py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                  <div className="min-w-0">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className="font-semibold text-foreground truncate">{group.policyholderName}</span>
-                                      <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">{group.checks.length} {group.checks.length === 1 ? "check" : "checks"} in this claim group</p>
-                                  </div>
-                                  <div className="text-sm font-semibold tabular-nums text-foreground">${group.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</div>
+                                  <ClaimCheckFileHeader group={group} compact />
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -825,18 +811,7 @@ export default function CheckCommandCenter() {
                             <TableRow key={`${group.key}-header`} className="bg-muted/40 hover:bg-muted/40">
                               <TableCell colSpan={7} className="py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                  <div className="min-w-0">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className="font-semibold text-foreground truncate">{group.policyholderName}</span>
-                                      <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">
-                                      {group.checks.length} {group.checks.length === 1 ? "check" : "checks"} in this claim group
-                                    </p>
-                                  </div>
-                                  <div className="text-sm font-semibold tabular-nums text-foreground">
-                                    ${group.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                                  </div>
+                                  <ClaimCheckFileHeader group={group} />
                                 </div>
                               </TableCell>
                             </TableRow>
