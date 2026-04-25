@@ -408,7 +408,7 @@ export default function Endorse() {
             )}
 
             <p style={styles.consent}>
-              By endorsing, you agree: &quot;I confirm my identity as the named payee and authorize the electronic endorsement of this insurance check payment.&quot;
+              By selecting Endorse Check, your signature, consent language, timestamp, IP address, and device details are recorded with this endorsement.
             </p>
           </>
         )}
@@ -477,6 +477,29 @@ const styles: Record<string, React.CSSProperties> = {
     position: "relative",
     background: "#0f172a",
     marginBottom: 8,
+    overflow: "hidden",
+    boxShadow: "inset 0 0 0 1px rgba(148,163,184,0.08)",
+  },
+  consentBox: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 10,
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 8,
+    border: "1px solid #334155",
+    background: "#0f172a",
+    color: "#94a3b8",
+    fontSize: 12,
+    lineHeight: 1.5,
+    cursor: "pointer",
+  },
+  consentCheckbox: {
+    width: 16,
+    height: 16,
+    marginTop: 2,
+    accentColor: "#22c55e",
+    flexShrink: 0,
   },
   clearBtn: {
     position: "absolute",
