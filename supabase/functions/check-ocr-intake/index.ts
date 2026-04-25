@@ -42,6 +42,8 @@ interface AmountFallbackResult {
   raw: string | null;
 }
 
+type VisionContentPart = { type: string; text?: string; image_url?: { url: string } };
+
 const VALID_PAYEE_TYPES = new Set([
   "insured", "mortgage_company", "contractor", "public_adjuster", "unknown",
 ]);
@@ -63,7 +65,7 @@ function log(stage: string, msg: string, data?: Record<string, unknown>) {
 }
 
 function logAudit(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   checkId: string,
   eventType: string,
   description: string,
@@ -119,7 +121,7 @@ Rules:
 - Amount must be numeric with optional decimals, no currency symbols.
 - Return null ONLY if both locations are unreadable.`;
 
-  const content: Array<Record<string, unknown>> = [
+  const content: VisionContentPart[] = [
     { type: "text", text: amountPrompt },
     { type: "image_url", image_url: { url: frontImageUrl } },
   ];
