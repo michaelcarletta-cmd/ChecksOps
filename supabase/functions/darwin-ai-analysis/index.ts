@@ -946,11 +946,12 @@ function postValidateDemandPackageStrict(
   // ── Force siding quantities ──
   const sidingFindings = summary.findings.filter(f => f.category === 'siding' && f.supported);
   for (const sf of sidingFindings) {
-    const nums = sf.fact.match(/\d+/g);
+    const factText = sf.facts.join('; ');
+    const nums = factText.match(/\d+/g);
     if (nums) {
       for (const num of nums) {
         if (!text.includes(num)) {
-          errors.push(`REQUIRED FACT: Siding quantity missing (${sf.fact})`);
+          errors.push(`REQUIRED FACT: Siding quantity missing (${factText})`);
           break;
         }
       }
@@ -960,11 +961,12 @@ function postValidateDemandPackageStrict(
   // ── Force gutter quantities ──
   const gutterFindings = summary.findings.filter(f => f.category === 'gutter_downspout' && f.supported);
   for (const gf of gutterFindings) {
-    const nums = gf.fact.match(/\d+/g);
+    const factText = gf.facts.join('; ');
+    const nums = factText.match(/\d+/g);
     if (nums) {
       for (const num of nums) {
         if (!text.includes(num)) {
-          errors.push(`REQUIRED FACT: Gutter/downspout quantity missing (${gf.fact})`);
+          errors.push(`REQUIRED FACT: Gutter/downspout quantity missing (${factText})`);
           break;
         }
       }
