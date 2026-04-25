@@ -460,7 +460,7 @@ Deno.serve(async (req) => {
         toolChoice: { type: 'function', function: { name: 'extract_estimate' } },
       });
 
-      console.log(`[darwin-estimate-import] model=${aiResult.model}, cached=${aiResult.cached}`);
+      console.log(`[darwin-estimate-import] model=${aiResult.model}`);
 
       const toolCall = aiResult.toolCalls?.[0];
       if (!toolCall) throw new Error('No structured extraction returned');
