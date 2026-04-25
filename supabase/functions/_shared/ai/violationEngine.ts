@@ -175,7 +175,7 @@ export async function detectViolations(
         days_exceeded: v.daysExceeded || null,
         statute_reference: v.statuteReference || null,
       }));
-      await supabase.from("claim_violation_detections").insert(rows).throwOnError().catch(() => {});
+      await Promise.resolve(supabase.from("claim_violation_detections").insert(rows).throwOnError()).catch(() => {});
     }
 
     return violations;

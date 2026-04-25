@@ -509,7 +509,7 @@ Deno.serve(async (req) => {
         const flattenedBytes = await generateFlattenedPdf(sb, request, allSigners!);
 
         // Upload to storage
-        const blob = new Blob([flattenedBytes], { type: "application/pdf" });
+        const blob = new Blob([flattenedBytes.buffer as ArrayBuffer], { type: "application/pdf" });
 
         const { error: uploadError } = await sb.storage
           .from("claim-files")

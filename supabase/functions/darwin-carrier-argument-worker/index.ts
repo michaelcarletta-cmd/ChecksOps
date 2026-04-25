@@ -350,8 +350,6 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
     // Step 1: Acquire job lock
     const { data: lockResult } = await supabase.rpc("acquire_darwin_job", {
       p_job_type: JOB_TYPE,

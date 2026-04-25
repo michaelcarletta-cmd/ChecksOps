@@ -946,11 +946,12 @@ function postValidateDemandPackageStrict(
   // ── Force siding quantities ──
   const sidingFindings = summary.findings.filter(f => f.category === 'siding' && f.supported);
   for (const sf of sidingFindings) {
-    const nums = sf.fact.match(/\d+/g);
+    const factText = sf.facts.join('; ');
+    const nums = factText.match(/\d+/g);
     if (nums) {
       for (const num of nums) {
         if (!text.includes(num)) {
-          errors.push(`REQUIRED FACT: Siding quantity missing (${sf.fact})`);
+          errors.push(`REQUIRED FACT: Siding quantity missing (${factText})`);
           break;
         }
       }
@@ -960,11 +961,12 @@ function postValidateDemandPackageStrict(
   // ── Force gutter quantities ──
   const gutterFindings = summary.findings.filter(f => f.category === 'gutter_downspout' && f.supported);
   for (const gf of gutterFindings) {
-    const nums = gf.fact.match(/\d+/g);
+    const factText = gf.facts.join('; ');
+    const nums = factText.match(/\d+/g);
     if (nums) {
       for (const num of nums) {
         if (!text.includes(num)) {
-          errors.push(`REQUIRED FACT: Gutter/downspout quantity missing (${gf.fact})`);
+          errors.push(`REQUIRED FACT: Gutter/downspout quantity missing (${factText})`);
           break;
         }
       }
@@ -1099,6 +1101,7 @@ type EngineerReportSourceOrigin =
   | 'pdf_extracted_text'
   | 'uploaded_engineer_report_text'
   | 'file_extracted_text'
+  | 'file_extracted_text_broadened'
   | 'content'
   | 'additional_context'
   | 'none';
@@ -4367,7 +4370,7 @@ interface DismantlerResult {
 
 interface AnalysisRequest {
   claimId: string;
-  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify' | 'auto_draft_rebuttal' | 'estimate_gap_analysis' | 'photo_to_xactimate' | 'systematic_dismantling' | 'position_detection' | 'dobi_letter' | 'estimate_comparison' | 'document_timeline' | 'claim_analysis' | 'operating_manual' | 'case_study' | 'marketing_assets';
+  analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify' | 'auto_draft_rebuttal' | 'estimate_gap_analysis' | 'photo_to_xactimate' | 'systematic_dismantling' | 'position_detection' | 'dobi_letter' | 'estimate_comparison' | 'document_timeline' | 'claim_analysis' | 'operating_manual' | 'case_study' | 'marketing_assets' | 'refine_document';
   mode?: string;
   content?: string;
   pdfContent?: string;
@@ -8657,7 +8660,10 @@ Structure the rebuttal as follows:
 Make this document READY FOR IMMEDIATE SUBMISSION to the carrier. Be thorough, specific, and cite everything. The goal is to leave the carrier no choice but to reverse their denial.`;
 
         if (isAutoDraftLowSlope) {
-          const lowSlopeEngineerDocContext = autoDraftEngineerReports
+          const lowSlopeEngineerDocContext = (fullClaimFiles || []).filter((doc: any) => {
+            const name = String(doc.file_name || '').toLowerCase();
+            return doc.document_classification === 'engineering_report' || name.includes('engineer');
+          })
             .slice(0, 4)
             .map((doc: any) => {
               const excerpt = String(doc.extracted_text || '').substring(0, 2500);

@@ -36,7 +36,7 @@ type IntelligenceOutput = {
 };
 
 async function enqueueDocumentMeaningJob(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   payload: {
     claim_id: string;
     file_id: string;
@@ -151,7 +151,7 @@ Deno.serve(async (req) => {
   }
 });
 
-async function processJob(supabase: ReturnType<typeof createClient>, job: QueueRow) {
+async function processJob(supabase: any, job: QueueRow) {
   let sourceText = '';
   let sourceSummary = '';
   let sourceDocumentType = job.payload.document_type || 'other';
@@ -339,7 +339,7 @@ function parseIntelDate(raw: string): string | null {
 }
 
 async function writeIntelligenceDatesToClaimEvents(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   claimId: string,
   fileId: string,
   fileName: string,
@@ -523,6 +523,9 @@ async function extractDocumentIntelligence(input: {
 }): Promise<IntelligenceOutput> {
   const { callOpenAI } = await import("../_shared/ai/openaiClient.ts");
 
+  const prompt = `Extract structured claim intelligence from the document. Return only valid JSON with source_summary, extracted_entities, financial_data, timeline_data, action_items, coverage_signals, parties, and confidence_score.`;
+  const content = `File: ${input.fileName}\nDocument type: ${input.documentType}\nClassification: ${input.documentClassification}\nSummary: ${input.summary}\n\nText:\n${input.text.slice(0, 60000)}`;
+
   const result = await callOpenAI({
     model: 'gpt-4o-mini',
     system: prompt,
@@ -567,7 +570,7 @@ function mapDocumentType(classification: string): string {
 }
 
 async function refreshClaimMasterState(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   claimId: string,
   lastFileId: string,
   lastDocumentType: string
@@ -633,7 +636,7 @@ async function refreshClaimMasterState(
 }
 
 async function lockPendingJobs(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   workerId: string,
   batchSize: number
 ): Promise<QueueRow[]> {
