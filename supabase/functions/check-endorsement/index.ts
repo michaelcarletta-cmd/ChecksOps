@@ -67,16 +67,18 @@ function escHtml(s: string | number | null | undefined): string {
     .replace(/'/g, "&#x27;");
 }
 
-function signerForensics(req: Request): Record<string, string | null> {
+function signerForensics(req: Request, consentText?: string): Record<string, string | null> {
   return {
     ip_address: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
       ?? req.headers.get("cf-connecting-ip")
       ?? null,
     user_agent: req.headers.get("user-agent") ?? null,
-    consent_text: "I confirm my identity as the named payee and authorize this endorsement.",
+    consent_text: consentText || "I agree to use electronic records and electronic signatures for this endorsement. I confirm my identity as the named payee, intend my electronic signature to be legally binding, and authorize the electronic endorsement of this insurance check payment. I understand I may decline to sign electronically and request another process.",
     signed_at_utc: new Date().toISOString(),
   };
 }
+
+const db = (client: ReturnType<typeof createClient>) => client as any;
 
 async function refreshCompositeBackImage(checkId: string) {
   try {
@@ -108,7 +110,7 @@ async function refreshCompositeBackImage(checkId: string) {
 }
 
 async function reEvaluateAfterEndorsement(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   checkId: string,
 ) {
   const { data: allEndorsements } = await supabase
@@ -562,7 +564,7 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const supabase = createClient(supabaseUrl, serviceKey);
+  const supabase = createClient<any>(supabaseUrl, serviceKey);
 
   try {
     const url = new URL(req.url);
@@ -893,7 +895,10 @@ Deno.serve(async (req) => {
         const signatureData = body.signatureData as string | undefined;
         const paymentDirection = body.paymentDirection as string | undefined; // "pay_contractor" or "pay_insured"
         const contractorName = body.contractorName as string | undefined;
+        const eSignConsentAccepted = body.eSignConsentAccepted === true;
+        const consentText = typeof body.consentText === "string" ? body.consentText : undefined;
         if (!eToken) return json({ error: "Token required" }, 400);
+        if (!eSignConsentAccepted) return json({ error: "Electronic signature consent is required" }, 400);
 
         const { data: endorsement, error: eErr } = await supabase
           .from("check_endorsements")
@@ -912,7 +917,7 @@ Deno.serve(async (req) => {
           return json({ success: true, message: "Already endorsed" });
         }
 
-        const forensics = signerForensics(req);
+        const forensics = signerForensics(req, consentText);
         const newToken = crypto.randomUUID();
 
         // Determine signature image URL
@@ -955,7 +960,7 @@ Deno.serve(async (req) => {
           check_id: endorsement.check_id,
           event_type: "endorsement_signed",
           event_description: `${endorsement.payee_name} endorsed the check`,
-          event_data: { has_signature: !!signatureData, ...forensics },
+          event_data: { has_signature: !!signatureData, e_sign_consent_accepted: eSignConsentAccepted, ...forensics },
           ip_address: forensics.ip_address,
           user_agent: forensics.user_agent,
         });
@@ -1258,7 +1263,7 @@ Deno.serve(async (req) => {
 /* ------------------------------------------------------------------ */
 
 async function handlePublicEndorsementPage(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   supabaseUrl: string,
   token: string,
 ) {

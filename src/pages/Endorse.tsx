@@ -26,10 +26,14 @@ export default function Endorse() {
   // Payment direction state
   const [paymentDirection, setPaymentDirection] = useState<"pay_contractor" | "pay_insured" | null>(null);
   const [contractorName, setContractorName] = useState("");
+  const [eSignConsentAccepted, setESignConsentAccepted] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const lastPointRef = useRef<{ x: number; y: number; pressure: number } | null>(null);
+
+  const endorsementConsentText = "I agree to use electronic records and electronic signatures for this endorsement. I confirm my identity as the named payee, intend my electronic signature to be legally binding, and authorize the electronic endorsement of this insurance check payment. I understand I may decline to sign electronically and request another process.";
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://yvagrvfkeuvzjezfsbun.supabase.co";
   const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2YWdydmZrZXV2emplemZzYnVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NzcyMjUsImV4cCI6MjA4NzQ1MzIyNX0.1Jgm-plSdEFFnPrtA492s0jH-GQcCN08WplZS_VrtEg";
@@ -68,10 +72,20 @@ export default function Endorse() {
     const resize = () => {
       const parent = canvas.parentElement;
       if (!parent) return;
-      canvas.width = parent.clientWidth;
-      canvas.height = 120;
+      const dpr = window.devicePixelRatio || 1;
+      const width = parent.clientWidth;
+      const height = 140;
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
+      canvas.style.height = `${height}px`;
       const ctx = canvas.getContext("2d");
-      if (ctx) { ctx.strokeStyle = "#1e293b"; ctx.lineWidth = 2; ctx.lineCap = "round"; }
+      if (ctx) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.strokeStyle = "#1e293b";
+        ctx.lineWidth = 2;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+      }
     };
     resize();
     window.addEventListener("resize", resize);
@@ -80,23 +94,36 @@ export default function Endorse() {
 
   const getCtx = () => canvasRef.current?.getContext("2d") ?? null;
 
-  const startDraw = (x: number, y: number) => {
+  const startDraw = (x: number, y: number, pressure = 0.5) => {
     drawingRef.current = true;
+    lastPointRef.current = { x, y, pressure };
     const ctx = getCtx();
     if (!ctx) return;
     ctx.beginPath();
     ctx.moveTo(x, y);
   };
 
-  const moveDraw = (x: number, y: number) => {
+  const moveDraw = (x: number, y: number, pressure = 0.5) => {
     if (!drawingRef.current) return;
     const ctx = getCtx();
     if (!ctx) return;
-    ctx.lineTo(x, y);
+    const last = lastPointRef.current ?? { x, y, pressure };
+    ctx.lineWidth = 1.35 + Math.max(pressure || last.pressure || 0.5, 0.25) * 2.6;
+    ctx.quadraticCurveTo(last.x, last.y, (last.x + x) / 2, (last.y + y) / 2);
     ctx.stroke();
+    lastPointRef.current = { x, y, pressure };
   };
 
-  const endDraw = () => { drawingRef.current = false; };
+  const endDraw = () => { drawingRef.current = false; lastPointRef.current = null; };
+
+  const getCanvasPoint = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+      pressure: event.pressure && event.pressure > 0 ? event.pressure : 0.5,
+    };
+  };
 
   const clearCanvas = () => {
     const canvas = canvasRef.current;
@@ -123,6 +150,10 @@ export default function Endorse() {
         setMessage({ text: "Please provide your signature before endorsing.", type: "error" });
         return;
       }
+      if (!eSignConsentAccepted) {
+        setMessage({ text: "Please review and accept the electronic signature consent before endorsing.", type: "error" });
+        return;
+      }
       // Validate payment direction is selected if required
       if (data?.requires_payment_direction && !paymentDirection) {
         setMessage({ text: "Please select a payment direction before endorsing.", type: "error" });
@@ -136,6 +167,8 @@ export default function Endorse() {
       const payload: Record<string, unknown> = { action, token };
       if (type === "approve") {
         payload.signatureData = getSignatureData();
+        payload.eSignConsentAccepted = eSignConsentAccepted;
+        payload.consentText = endorsementConsentText;
         if (paymentDirection) {
           payload.paymentDirection = paymentDirection;
           if (paymentDirection === "pay_contractor" && contractorName.trim()) {
@@ -241,38 +274,45 @@ export default function Endorse() {
         {!alreadySigned && !isRejected && !isExpired && (
           <>
             <div style={styles.authText}>
-              <strong>Authorization:</strong> I, <strong>{data.payee_name}</strong>, hereby authorize the endorsement of the above check. I confirm my identity as the named payee and consent to the electronic endorsement of this insurance payment.
+              <strong>Authorization:</strong> I, <strong>{data.payee_name}</strong>, authorize the endorsement of the above check. I confirm my identity as the named payee and consent to use electronic records and signatures for this endorsement.
             </div>
 
             <div style={{ marginTop: 20 }}>
               <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: 8, fontWeight: 600 }}>Your Signature</p>
-              <p style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>Draw your signature below using your finger or mouse</p>
+              <p style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>Use a stylus, finger, or mouse. A pressure-sensitive stylus will produce a more natural line.</p>
               <div style={styles.canvasWrap} ref={containerRef}>
                 <canvas
                   ref={canvasRef}
                   height={120}
                   style={{ display: "block", width: "100%", borderRadius: 8, cursor: "crosshair", touchAction: "none" }}
-                  onMouseDown={(e) => startDraw(e.nativeEvent.offsetX, e.nativeEvent.offsetY)}
-                  onMouseMove={(e) => moveDraw(e.nativeEvent.offsetX, e.nativeEvent.offsetY)}
-                  onMouseUp={endDraw}
-                  onMouseLeave={endDraw}
-                  onTouchStart={(e) => {
+                  onPointerDown={(e) => {
                     e.preventDefault();
-                    const t = e.touches[0];
-                    const r = (e.target as HTMLCanvasElement).getBoundingClientRect();
-                    startDraw(t.clientX - r.left, t.clientY - r.top);
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    const p = getCanvasPoint(e);
+                    startDraw(p.x, p.y, p.pressure);
                   }}
-                  onTouchMove={(e) => {
+                  onPointerMove={(e) => {
                     e.preventDefault();
-                    const t = e.touches[0];
-                    const r = (e.target as HTMLCanvasElement).getBoundingClientRect();
-                    moveDraw(t.clientX - r.left, t.clientY - r.top);
+                    const p = getCanvasPoint(e);
+                    moveDraw(p.x, p.y, p.pressure);
                   }}
-                  onTouchEnd={endDraw}
+                  onPointerUp={endDraw}
+                  onPointerCancel={endDraw}
+                  onPointerLeave={endDraw}
                 />
                 <button style={styles.clearBtn} onClick={clearCanvas}>Clear</button>
               </div>
             </div>
+
+            <label style={styles.consentBox}>
+              <input
+                type="checkbox"
+                checked={eSignConsentAccepted}
+                onChange={(e) => setESignConsentAccepted(e.target.checked)}
+                style={styles.consentCheckbox}
+              />
+              <span>{endorsementConsentText}</span>
+            </label>
 
             {/* Payment Direction Section */}
             {data.requires_payment_direction && (
@@ -368,7 +408,7 @@ export default function Endorse() {
             )}
 
             <p style={styles.consent}>
-              By endorsing, you agree: &quot;I confirm my identity as the named payee and authorize the electronic endorsement of this insurance check payment.&quot;
+              By selecting Endorse Check, your signature, consent language, timestamp, IP address, and device details are recorded with this endorsement.
             </p>
           </>
         )}
@@ -437,6 +477,29 @@ const styles: Record<string, React.CSSProperties> = {
     position: "relative",
     background: "#0f172a",
     marginBottom: 8,
+    overflow: "hidden",
+    boxShadow: "inset 0 0 0 1px rgba(148,163,184,0.08)",
+  },
+  consentBox: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 10,
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 8,
+    border: "1px solid #334155",
+    background: "#0f172a",
+    color: "#94a3b8",
+    fontSize: 12,
+    lineHeight: 1.5,
+    cursor: "pointer",
+  },
+  consentCheckbox: {
+    width: 16,
+    height: 16,
+    marginTop: 2,
+    accentColor: "#22c55e",
+    flexShrink: 0,
   },
   clearBtn: {
     position: "absolute",

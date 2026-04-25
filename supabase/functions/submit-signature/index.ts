@@ -287,10 +287,14 @@ Deno.serve(async (req) => {
   );
 
   try {
-    const { token, fieldValues } = await req.json();
+    const { token, fieldValues, eSignConsentAccepted, consentText } = await req.json();
 
     if (!token || typeof token !== "string") {
       return respond({ ok: false, stage: "validate_token", error: "Missing token" }, 400);
+    }
+
+    if (eSignConsentAccepted !== true) {
+      return respond({ ok: false, stage: "esign_consent", error: "Electronic signature consent is required" }, 400);
     }
 
     const ipAddress = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
@@ -456,7 +460,13 @@ Deno.serve(async (req) => {
       request_id: request.id, signer_id: signer.id, claim_id: claimId,
       stage: "signer_signed", status: "ok",
       message: `${signer.signer_name} signed the document`,
-      payload: { ip_address: ipAddress, fields_completed: Object.keys(normalizedValues).length },
+      payload: {
+        ip_address: ipAddress,
+        user_agent: userAgent,
+        e_sign_consent_accepted: true,
+        consent_text: typeof consentText === "string" ? consentText : "Electronic records and signature consent accepted before signing.",
+        fields_completed: Object.keys(normalizedValues).length,
+      },
     });
 
     // Check if all signers have signed
