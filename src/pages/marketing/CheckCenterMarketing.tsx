@@ -511,16 +511,21 @@ export default function CheckCenterMarketing() {
 
       {/* Footer */}
       <footer className="border-t border-border/40 bg-card/30">
-        <div className="mx-auto max-w-7xl px-4 md:px-6 py-10 flex flex-col md:flex-row items-center justify-between gap-4">
-          <CheckOpsLogo className="text-foreground text-sm" />
-          <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} ChecksOps. All rights reserved.
-          </p>
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <a href={`mailto:${supportEmail}`} className="hover:text-foreground">Support</a>
-            <Link to="/login" className="hover:text-foreground">Sign in</Link>
-            <a href="#demo" className="hover:text-foreground">Book demo</a>
+        <div className="mx-auto max-w-7xl px-4 md:px-6 py-10 space-y-6">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <CheckOpsLogo className="text-foreground text-sm" />
+            <p className="text-xs text-muted-foreground">
+              © {new Date().getFullYear()} ChecksOps. All rights reserved.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+              <a href={`mailto:${supportEmail}`} className="hover:text-foreground">Support</a>
+              <Link to="/login" className="hover:text-foreground">Sign in</Link>
+              <a href="#demo" className="hover:text-foreground">Book demo</a>
+            </div>
           </div>
+          <p className="mx-auto max-w-4xl text-center text-[11px] leading-relaxed text-muted-foreground">
+            ChecksOps is workflow software, not a bank, lender, escrow service, or payment processor. Your company owns the process, controls all communications with carriers, mortgage companies, payees, and banks, and is responsible for deposit, endorsement, compliance, and release decisions.
+          </p>
         </div>
       </footer>
     </div>
