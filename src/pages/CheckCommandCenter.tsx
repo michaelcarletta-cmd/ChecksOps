@@ -1247,9 +1247,24 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
           )}
         </div>
       </div>
+      <div className="flex items-start gap-2 rounded-md border bg-muted/30 p-3">
+        <input
+          id="skip-ai-checkbox"
+          type="checkbox"
+          checked={skipAi}
+          onChange={(e) => setSkipAi(e.target.checked)}
+          className="mt-0.5 h-4 w-4 cursor-pointer accent-primary"
+        />
+        <label htmlFor="skip-ai-checkbox" className="text-sm cursor-pointer flex-1">
+          <span className="font-medium">Skip AI — enter details manually</span>
+          <span className="block text-xs text-muted-foreground mt-0.5">
+            Use this if you're out of AI credits or prefer to type the check info yourself. The check will go straight to the review queue.
+          </span>
+        </label>
+      </div>
       <Button onClick={handleUpload} disabled={uploading || !frontFile} className="w-full">
         {uploading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-        {uploading ? "Processing..." : "Upload & Analyze"}
+        {uploading ? "Processing..." : skipAi ? "Upload for Manual Entry" : "Upload & Analyze"}
       </Button>
     </div>
   );
