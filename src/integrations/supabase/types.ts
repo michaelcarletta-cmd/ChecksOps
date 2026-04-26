@@ -15340,10 +15340,16 @@ export type Database = {
           id: string
           lifetime_purchased: number
           lifetime_used: number
+          maintenance_current_period_end: string | null
+          maintenance_price_id: string | null
+          maintenance_subscription_id: string | null
+          maintenance_subscription_status: string | null
           payment_method_last4: string | null
           payment_method_type: string | null
+          stripe_customer_id: string | null
           tenant_id: string
           updated_at: string
+          usd_per_credit: number
         }
         Insert: {
           balance?: number
@@ -15352,10 +15358,16 @@ export type Database = {
           id?: string
           lifetime_purchased?: number
           lifetime_used?: number
+          maintenance_current_period_end?: string | null
+          maintenance_price_id?: string | null
+          maintenance_subscription_id?: string | null
+          maintenance_subscription_status?: string | null
           payment_method_last4?: string | null
           payment_method_type?: string | null
+          stripe_customer_id?: string | null
           tenant_id: string
           updated_at?: string
+          usd_per_credit?: number
         }
         Update: {
           balance?: number
@@ -15364,10 +15376,16 @@ export type Database = {
           id?: string
           lifetime_purchased?: number
           lifetime_used?: number
+          maintenance_current_period_end?: string | null
+          maintenance_price_id?: string | null
+          maintenance_subscription_id?: string | null
+          maintenance_subscription_status?: string | null
           payment_method_last4?: string | null
           payment_method_type?: string | null
+          stripe_customer_id?: string | null
           tenant_id?: string
           updated_at?: string
+          usd_per_credit?: number
         }
         Relationships: [
           {
