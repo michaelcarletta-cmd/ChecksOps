@@ -520,16 +520,29 @@ Deno.serve(async (req) => {
         // Don't block Freedom's own checks — only block if tenant
       } else if (deductResult && !(deductResult as any).success) {
         const errType = (deductResult as any).error;
-        log("credit_check", "Insufficient credits", { tenantId, error: errType });
+        log("credit_check", "Insufficient credits — routing to manual entry", { tenantId, error: errType });
         await logAudit(supabase, checkId, "credit_check_failed",
-          `Check processing blocked: ${errType === 'insufficient_credits' ? 'Insufficient AI credits' : 'No credit balance configured'}`,
+          `AI skipped (${errType === 'insufficient_credits' ? 'insufficient credits' : 'no credit balance'}). Check routed for manual entry.`,
           { tenant_id: tenantId, error: errType }, userId);
-        return errResponse(
-          errType === "insufficient_credits"
-            ? "Insufficient AI credits. Please purchase more credits in Settings > Credits."
-            : "No credit balance configured. Please contact your administrator.",
-          402, stage
-        );
+        // Graceful degradation: route to the same manual review queue used when
+        // OCR fails or when the user opts out of AI. Downstream pipeline is identical.
+        await supabase
+          .from("check_intake_items")
+          .update({
+            ocr_status: "skipped",
+            status: "manual_review_required",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", checkId);
+        return new Response(JSON.stringify({
+          success: true,
+          ocr_success: false,
+          skipped: true,
+          reason: errType === "insufficient_credits" ? "insufficient_credits" : "no_credit_balance",
+          message: errType === "insufficient_credits"
+            ? "AI skipped — out of credits. Enter check details manually."
+            : "AI skipped — no credit balance. Enter check details manually.",
+        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       } else {
         log("credit_check", "Credit deducted", { tenantId, remaining: (deductResult as any)?.balance });
       }
