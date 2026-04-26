@@ -12,7 +12,7 @@
  *   import { buildRebuttalFromDismantler } from "../_shared/ai/dismantlerActions.ts";
  */
 
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2.39.3";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { generate } from "./generate.ts";
 import { getClaimsContextBundle, formatContextBundle } from "./claimsKnowledgeEngine.ts";
 import { formatDismantlerForPrompt, reconstructDismantlerFromRow, type DismantlerResult } from "./universalDismantler.ts";

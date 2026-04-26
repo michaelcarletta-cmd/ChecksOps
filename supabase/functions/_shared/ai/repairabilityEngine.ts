@@ -6,7 +6,7 @@
  * Integrates with Authority Knowledge Layer for backing evidence.
  */
 
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2.39.3";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { generate } from "./generate.ts";
 import { retrieveAuthorityKnowledge, formatAuthorityKnowledge, type AuthorityEntry } from "./authorityKnowledge.ts";
 import { withClaimCache } from "./intelligenceCache.ts";

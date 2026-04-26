@@ -12,7 +12,7 @@
  * NON-BREAKING: Additive only. Does not modify or remove the AI dismantler.
  */
 
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2.39.3";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getActiveLearnedRules } from "./ruleLearningEngine.ts";
 
 export type RuleFlag =

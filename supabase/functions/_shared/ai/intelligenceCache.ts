@@ -13,7 +13,7 @@
  * which transparently falls through to the producer on miss/stale.
  */
 
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2.39.3";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 export type CacheType =
   | "knowledge_bundle"

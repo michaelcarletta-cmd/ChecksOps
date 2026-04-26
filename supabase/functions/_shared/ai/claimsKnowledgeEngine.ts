@@ -13,7 +13,7 @@
  *   const enrichedSystem = formatContextBundle(bundle) + "\n\n" + originalSystemPrompt;
  */
 
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2.39.3";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import type { DarwinTaskType } from "./modelRouter.ts";
 import { generate } from "./generate.ts";
 import { searchTavily } from "./tavily.ts";
