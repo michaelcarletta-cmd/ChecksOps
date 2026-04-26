@@ -50,6 +50,7 @@ import { CheckCenterHelpButton } from "@/components/check-review/CheckCenterHelp
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
 import { Share2 } from "lucide-react";
+import { MortgageCompaniesDirectory } from "@/components/checks/MortgageCompaniesDirectory";
 
 
 /* ------------------------------------------------------------------ */
@@ -534,12 +535,13 @@ export default function CheckCommandCenter() {
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
         {/* Gradient nav cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3">
           {[
             { key: "endorsements", label: "Endorsing", count: awaitingEndorsement.length, icon: Send, gradient: "from-amber-500/20 to-orange-500/10", accent: "text-amber-400", ring: "ring-amber-500/30" },
             { key: "review", label: "Review", count: needsReview.length, icon: ClipboardCheck, gradient: "from-blue-500/20 to-cyan-500/10", accent: "text-blue-400", ring: "ring-blue-500/30" },
             { key: "ready", label: "Ready for Deposit", count: readyForDeposit.length, icon: CheckCircle2, gradient: "from-emerald-500/20 to-green-500/10", accent: "text-emerald-400", ring: "ring-emerald-500/30" },
             { key: "lossdraft", label: "Loss Draft", count: 0, icon: Landmark, gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400", ring: "ring-purple-500/30" },
+            { key: "mortgage_cos", label: "Mortgage Cos", count: 0, icon: Building2, gradient: "from-pink-500/20 to-rose-500/10", accent: "text-pink-400", ring: "ring-pink-500/30" },
             { key: "shared", label: "Shared with Me", count: sharedChecks.length, icon: Share2, gradient: "from-sky-500/20 to-blue-500/10", accent: "text-sky-400", ring: "ring-sky-500/30" },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -556,7 +558,7 @@ export default function CheckCommandCenter() {
               >
                 <Icon className={`h-5 w-5 ${tab.accent}`} />
                 <span className={`text-xs font-semibold ${isActive ? "text-foreground" : "text-muted-foreground"}`}>{tab.label}</span>
-                {tab.key !== "lossdraft" && (
+                {tab.key !== "lossdraft" && tab.key !== "mortgage_cos" && (
                   <Badge className={`text-[10px] px-1.5 py-0 ${isActive ? "bg-foreground/10 text-foreground" : "bg-muted text-muted-foreground"}`}>
                     {tab.count}
                   </Badge>
@@ -582,6 +584,13 @@ export default function CheckCommandCenter() {
         {activeTab === "lossdraft" && (
           <div className="mt-3">
             <LossDraftDashboard searchQuery={searchQuery} />
+          </div>
+        )}
+
+        {/* Mortgage Companies Directory Tab */}
+        {activeTab === "mortgage_cos" && (
+          <div className="mt-3">
+            <MortgageCompaniesDirectory searchQuery={searchQuery} />
           </div>
         )}
 
