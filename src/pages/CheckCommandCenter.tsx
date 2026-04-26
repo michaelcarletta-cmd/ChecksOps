@@ -2502,48 +2502,50 @@ function CheckDetailPanel({
                   </div>
 
                   {showEndorsementAdjuster && backImageUrl && (
-                    <EndorsementAdjuster
-                      checkId={checkId}
-                      imageUrl={backImageUrl}
-                      imageWidth={backImageDimensions.width}
-                      imageHeight={backImageDimensions.height}
-                      companyName="Freedom Adjustment"
-                      initialOverride={
-                        (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null
-                      }
-                      onSave={async (ov) => {
-                        console.log("[ENDORSEMENT-DEBUG] saving override", {
-                          checkId,
-                          override: ov,
-                          userScale: ov.scale,
-                          xPct: ov.xPct,
-                          yPct: ov.yPct,
-                          rotationDeg: ov.rotationDeg,
-                        });
-                        // 1) Save override to DB first
-                        const { error: saveErr } = await supabase
-                          .from("check_intake_items")
-                          .update({
-                            endorsement_override: ov as any,
-                            updated_at: new Date().toISOString(),
-                          })
-                          .eq("id", checkId);
-                        if (saveErr) throw saveErr;
-                        qc.setQueryData(["check-detail", checkId], (current: CheckItem | undefined) => (
-                          current
-                            ? { ...current, endorsement_override: ov as unknown as Record<string, unknown> }
-                            : current
-                        ));
-                        // 2) Then generate final deposit image (forces re-composite with latest override)
-                        console.log("[ENDORSEMENT-DEBUG] triggering composite regeneration");
-                        await ensureDepositReadyBackImage();
-                        console.log("[ENDORSEMENT-DEBUG] composite regeneration complete, new composite generated");
-                        toast({ title: "Endorsement saved & deposit image generated" });
-                        setShowEndorsementAdjuster(false);
-                        qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
-                        qc.invalidateQueries({ queryKey: ["check-back-img"] });
-                      }}
-                    />
+                    <Suspense fallback={<TabLoader />}>
+                      <EndorsementAdjuster
+                        checkId={checkId}
+                        imageUrl={backImageUrl}
+                        imageWidth={backImageDimensions.width}
+                        imageHeight={backImageDimensions.height}
+                        companyName="Freedom Adjustment"
+                        initialOverride={
+                          (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null
+                        }
+                        onSave={async (ov) => {
+                          console.log("[ENDORSEMENT-DEBUG] saving override", {
+                            checkId,
+                            override: ov,
+                            userScale: ov.scale,
+                            xPct: ov.xPct,
+                            yPct: ov.yPct,
+                            rotationDeg: ov.rotationDeg,
+                          });
+                          // 1) Save override to DB first
+                          const { error: saveErr } = await supabase
+                            .from("check_intake_items")
+                            .update({
+                              endorsement_override: ov as any,
+                              updated_at: new Date().toISOString(),
+                            })
+                            .eq("id", checkId);
+                          if (saveErr) throw saveErr;
+                          qc.setQueryData(["check-detail", checkId], (current: CheckItem | undefined) => (
+                            current
+                              ? { ...current, endorsement_override: ov as unknown as Record<string, unknown> }
+                              : current
+                          ));
+                          // 2) Then generate final deposit image (forces re-composite with latest override)
+                          console.log("[ENDORSEMENT-DEBUG] triggering composite regeneration");
+                          await ensureDepositReadyBackImage();
+                          console.log("[ENDORSEMENT-DEBUG] composite regeneration complete, new composite generated");
+                          toast({ title: "Endorsement saved & deposit image generated" });
+                          setShowEndorsementAdjuster(false);
+                          qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+                          qc.invalidateQueries({ queryKey: ["check-back-img"] });
+                        }}
+                      />
+                    </Suspense>
                   )}
                 </>
               )}
