@@ -2579,7 +2579,9 @@ function CheckDetailPanel({
             </TabsContent>
 
             <TabsContent value="packet" className="p-4 mt-0">
-              <DepositPacketGenerator checkId={checkId} />
+              <Suspense fallback={<TabLoader />}>
+                <DepositPacketGenerator checkId={checkId} />
+              </Suspense>
             </TabsContent>
 
             <TabsContent value="audit" className="p-4 space-y-2 mt-0">
