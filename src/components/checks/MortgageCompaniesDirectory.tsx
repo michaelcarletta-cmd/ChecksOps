@@ -2,63 +2,29 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import {
-  Building2, Mail, Phone, User, Plus, Search, Pencil, Globe, Hash, MapPin,
+  Building2, Mail, Phone, User, Plus, Search, Pencil, Globe, MapPin,
 } from "lucide-react";
-import { formatPhoneNumber } from "@/lib/utils";
-
-interface MortgageCompany {
-  id: string;
-  name: string;
-  contact_name: string | null;
-  phone: string | null;
-  phone_extension: string | null;
-  email: string | null;
-  loan_number: string | null;
-  mortgage_site: string | null;
-  address_line_1: string | null;
-  address_line_2: string | null;
-  address_line_3: string | null;
-  address_line_4: string | null;
-  address_line_5: string | null;
-  is_active: boolean;
-}
-
-const emptyForm = {
-  name: "",
-  contact_name: "",
-  email: "",
-  phone: "",
-  phone_extension: "",
-  mortgage_site: "",
-  address_line_1: "",
-  address_line_2: "",
-  address_line_3: "",
-  address_line_4: "",
-  address_line_5: "",
-};
+import {
+  MortgageCompanyEditorDialog,
+  type MortgageCompanyRecord,
+} from "./MortgageCompanyEditorDialog";
 
 interface Props {
   searchQuery?: string;
 }
 
 export function MortgageCompaniesDirectory({ searchQuery: externalSearch }: Props) {
-  const [companies, setCompanies] = useState<MortgageCompany[]>([]);
+  const [companies, setCompanies] = useState<MortgageCompanyRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [localSearch, setLocalSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<MortgageCompany | null>(null);
-  const [form, setForm] = useState({ ...emptyForm });
-  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<MortgageCompanyRecord | null>(null);
 
   const search = (externalSearch ?? "") || localSearch;
 
@@ -71,7 +37,7 @@ export function MortgageCompaniesDirectory({ searchQuery: externalSearch }: Prop
     const { data, error } = await supabase
       .from("mortgage_companies")
       .select(
-        "id, name, contact_name, phone, phone_extension, email, loan_number, mortgage_site, address_line_1, address_line_2, address_line_3, address_line_4, address_line_5, is_active"
+        "id, name, contact_name, phone, phone_extension, email, mortgage_site, address_line_1, address_line_2, address_line_3, address_line_4, address_line_5, is_active"
       )
       .eq("is_active", true)
       .order("name");
@@ -79,7 +45,7 @@ export function MortgageCompaniesDirectory({ searchQuery: externalSearch }: Prop
     if (error) {
       toast.error("Failed to load mortgage companies");
     } else {
-      setCompanies((data || []) as MortgageCompany[]);
+      setCompanies((data || []) as MortgageCompanyRecord[]);
     }
     setLoading(false);
   };
@@ -98,59 +64,12 @@ export function MortgageCompaniesDirectory({ searchQuery: externalSearch }: Prop
 
   const openNew = () => {
     setEditing(null);
-    setForm({ ...emptyForm });
     setDialogOpen(true);
   };
 
-  const openEdit = (c: MortgageCompany) => {
+  const openEdit = (c: MortgageCompanyRecord) => {
     setEditing(c);
-    setForm({
-      name: c.name,
-      contact_name: c.contact_name || "",
-      email: c.email || "",
-      phone: c.phone || "",
-      phone_extension: c.phone_extension || "",
-      mortgage_site: c.mortgage_site || "",
-      address_line_1: c.address_line_1 || "",
-      address_line_2: c.address_line_2 || "",
-      address_line_3: c.address_line_3 || "",
-      address_line_4: c.address_line_4 || "",
-      address_line_5: c.address_line_5 || "",
-    });
     setDialogOpen(true);
-  };
-
-  const save = async () => {
-    if (!form.name.trim()) {
-      toast.error("Company name is required");
-      return;
-    }
-    setSaving(true);
-    const payload = {
-      name: form.name.trim(),
-      contact_name: form.contact_name.trim() || null,
-      phone: form.phone.trim() || null,
-      phone_extension: form.phone_extension.trim() || null,
-      email: form.email.trim() || null,
-      mortgage_site: form.mortgage_site.trim() || null,
-      address_line_1: form.address_line_1.trim() || null,
-      address_line_2: form.address_line_2.trim() || null,
-      address_line_3: form.address_line_3.trim() || null,
-      address_line_4: form.address_line_4.trim() || null,
-      address_line_5: form.address_line_5.trim() || null,
-    };
-    const { error } = editing
-      ? await supabase.from("mortgage_companies").update(payload).eq("id", editing.id)
-      : await supabase.from("mortgage_companies").insert([payload]);
-
-    setSaving(false);
-    if (error) {
-      toast.error(editing ? "Failed to update company" : "Failed to add company");
-      return;
-    }
-    toast.success(editing ? "Company updated" : "Company added");
-    setDialogOpen(false);
-    void fetchCompanies();
   };
 
   return (
@@ -162,7 +81,8 @@ export function MortgageCompaniesDirectory({ searchQuery: externalSearch }: Prop
             Mortgage Companies
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Maintain mortgage servicer contacts. Loss drafts auto-link to a directory entry by company name.
+            Source of truth for mortgage servicer contacts. Loss drafts auto-link by name —
+            updates here flow to every claim instantly.
           </p>
         </div>
         <Button onClick={openNew} size="sm">
@@ -206,11 +126,7 @@ export function MortgageCompaniesDirectory({ searchQuery: externalSearch }: Prop
               </TableHeader>
               <TableBody>
                 {filtered.map((c) => {
-                  const addr = [
-                    c.address_line_1,
-                    c.address_line_2,
-                    c.address_line_3,
-                  ]
+                  const addr = [c.address_line_1, c.address_line_2, c.address_line_3]
                     .filter(Boolean)
                     .join(", ");
                   return (
@@ -227,8 +143,7 @@ export function MortgageCompaniesDirectory({ searchQuery: externalSearch }: Prop
                             rel="noopener noreferrer"
                             className="text-[10px] text-primary hover:underline flex items-center gap-1 mt-0.5"
                           >
-                            <Globe className="h-2.5 w-2.5" />
-                            Portal
+                            <Globe className="h-2.5 w-2.5" /> Portal
                           </a>
                         )}
                       </TableCell>
@@ -293,137 +208,12 @@ export function MortgageCompaniesDirectory({ searchQuery: externalSearch }: Prop
         )}
       </CardContent>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editing ? "Edit Mortgage Company" : "Add Mortgage Company"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-5">
-            <div className="space-y-3">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b pb-1">
-                Company
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <Label>Company Name *</Label>
-                  <Input
-                    value={form.name}
-                    maxLength={200}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    placeholder="e.g. Mr. Cooper"
-                  />
-                </div>
-                <div>
-                  <Label>Contact Name</Label>
-                  <Input
-                    value={form.contact_name}
-                    maxLength={120}
-                    onChange={(e) => setForm({ ...form, contact_name: e.target.value })}
-                    placeholder="Loss draft dept rep"
-                  />
-                </div>
-                <div>
-                  <Label>Email</Label>
-                  <Input
-                    type="email"
-                    value={form.email}
-                    maxLength={255}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    placeholder="lossdraft@servicer.com"
-                  />
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="col-span-2">
-                    <Label>Phone</Label>
-                    <Input
-                      type="tel"
-                      value={form.phone}
-                      onChange={(e) =>
-                        setForm({ ...form, phone: formatPhoneNumber(e.target.value) })
-                      }
-                      placeholder="123-456-7890"
-                    />
-                  </div>
-                  <div>
-                    <Label>Ext</Label>
-                    <Input
-                      value={form.phone_extension}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          phone_extension: e.target.value.replace(/\D/g, "").slice(0, 6),
-                        })
-                      }
-                      placeholder="1234"
-                    />
-                  </div>
-                </div>
-                <div className="md:col-span-2">
-                  <Label className="flex items-center gap-1.5">
-                    <Globe className="h-3 w-3" /> Portal URL
-                  </Label>
-                  <Input
-                    type="url"
-                    value={form.mortgage_site}
-                    maxLength={500}
-                    onChange={(e) => setForm({ ...form, mortgage_site: e.target.value })}
-                    placeholder="https://insurance.servicer.com"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b pb-1">
-                Address
-              </h3>
-              <div className="space-y-2">
-                <Input
-                  value={form.address_line_1}
-                  maxLength={200}
-                  onChange={(e) => setForm({ ...form, address_line_1: e.target.value })}
-                  placeholder="Address line 1"
-                />
-                <Input
-                  value={form.address_line_2}
-                  maxLength={200}
-                  onChange={(e) => setForm({ ...form, address_line_2: e.target.value })}
-                  placeholder="Address line 2 (suite, attn, etc.)"
-                />
-                <Input
-                  value={form.address_line_3}
-                  maxLength={200}
-                  onChange={(e) => setForm({ ...form, address_line_3: e.target.value })}
-                  placeholder="City, State ZIP"
-                />
-                <Input
-                  value={form.address_line_4}
-                  maxLength={200}
-                  onChange={(e) => setForm({ ...form, address_line_4: e.target.value })}
-                  placeholder="Address line 4 (optional)"
-                />
-                <Input
-                  value={form.address_line_5}
-                  maxLength={200}
-                  onChange={(e) => setForm({ ...form, address_line_5: e.target.value })}
-                  placeholder="Address line 5 (optional)"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" onClick={() => setDialogOpen(false)} disabled={saving}>
-                Cancel
-              </Button>
-              <Button onClick={save} disabled={saving}>
-                {saving ? "Saving…" : editing ? "Save Changes" : "Add Company"}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <MortgageCompanyEditorDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        company={editing}
+        onSaved={() => void fetchCompanies()}
+      />
     </Card>
   );
 }

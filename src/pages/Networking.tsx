@@ -1,7 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ContractorsTab } from "@/components/networking/ContractorsTab";
 import { InsuranceCompaniesTab } from "@/components/networking/InsuranceCompaniesTab";
-import { MortgageCompaniesTab } from "@/components/networking/MortgageCompaniesTab";
+import { MortgageCompaniesDirectory } from "@/components/checks/MortgageCompaniesDirectory";
 import { AdjustersTab } from "@/components/networking/AdjustersTab";
 
 export default function Networking() {
@@ -43,7 +43,7 @@ export default function Networking() {
         </TabsContent>
 
         <TabsContent value="mortgage">
-          <MortgageCompaniesTab />
+          <MortgageCompaniesDirectory />
         </TabsContent>
       </Tabs>
     </div>
