@@ -47,7 +47,7 @@ export function MortgageContactCard({ lossDraftId, servicerName, onUpdated }: Pr
 
   // Loss-draft row (link + claim-specific fields)
   const { data: draft } = useQuery({
-    queryKey: ["loss-draft-link", lossDraftId],
+    queryKey: queryKeys.lossDraft.detail(lossDraftId),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("loss_draft_tracking")
@@ -62,7 +62,7 @@ export function MortgageContactCard({ lossDraftId, servicerName, onUpdated }: Pr
 
   // Linked directory entry
   const { data: company } = useQuery({
-    queryKey: ["mortgage-company", draft?.mortgage_company_id],
+    queryKey: queryKeys.mortgageCompany.detail(draft?.mortgage_company_id ?? ""),
     queryFn: async () => {
       if (!draft?.mortgage_company_id) return null;
       const { data } = await supabase
@@ -80,7 +80,7 @@ export function MortgageContactCard({ lossDraftId, servicerName, onUpdated }: Pr
 
   // Suggested directory match (when no link yet) — fuzzy by lowered name
   const { data: suggestion } = useQuery({
-    queryKey: ["mortgage-company-suggest", servicerName],
+    queryKey: queryKeys.mortgageCompany.suggestionForName(servicerName ?? ""),
     queryFn: async () => {
       if (!servicerName?.trim()) return null;
       const { data } = await supabase
