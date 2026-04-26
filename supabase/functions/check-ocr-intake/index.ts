@@ -470,9 +470,32 @@ Deno.serve(async (req) => {
 
     // ---- Parse request ----
     stage = "parse_request";
-    const { checkId } = (await req.json().catch(() => ({}))) as { checkId?: string };
+    const { checkId, skipAi } = (await req.json().catch(() => ({}))) as { checkId?: string; skipAi?: boolean };
     if (!checkId) return errResponse("checkId required", 400, stage);
-    log("parse_request", "Parsed", { checkId });
+    log("parse_request", "Parsed", { checkId, skipAi: !!skipAi });
+
+    // ---- Manual entry path: user opted out of AI OCR ----
+    if (skipAi) {
+      stage = "skip_ai";
+      await supabase
+        .from("check_intake_items")
+        .update({
+          ocr_status: "skipped",
+          status: "manual_review_required",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", checkId);
+      await logAudit(supabase, checkId, "ai_skipped_by_user",
+        "User chose to enter check details manually. AI OCR skipped.",
+        { reason: "user_opt_out" }, userId);
+      return new Response(JSON.stringify({
+        success: true,
+        ocr_success: false,
+        skipped: true,
+        reason: "user_opt_out",
+        message: "Check uploaded. Enter details manually.",
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     // ---- Fetch check ----
     stage = "fetch_check";
