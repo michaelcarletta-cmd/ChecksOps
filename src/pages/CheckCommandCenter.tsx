@@ -587,6 +587,13 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
+        {/* Mortgage Companies Directory Tab */}
+        {activeTab === "mortgage_cos" && (
+          <div className="mt-3">
+            <MortgageCompaniesDirectory searchQuery={searchQuery} />
+          </div>
+        )}
+
         {/* Deposit Ops Tab */}
         <TabsContent value="deposit_ops" className="mt-3">
           <DepositOperationsConsole searchQuery={searchQuery} />
