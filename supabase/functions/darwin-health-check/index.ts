@@ -27,9 +27,8 @@ function textOverlap(a: string, b: string): number {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const preflight = handleCors(req);
+  if (preflight) return preflight;
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -38,10 +37,9 @@ Deno.serve(async (req) => {
 
     const { claimId } = await req.json();
     if (!claimId) {
-      return new Response(JSON.stringify({ error: "claimId required" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return errorResponse("claimId required", 400);
     }
+
 
     // Fetch claim
     const { data: claim } = await supabase
