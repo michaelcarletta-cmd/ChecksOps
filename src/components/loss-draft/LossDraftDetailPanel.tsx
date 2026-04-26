@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { escrowStatusConfig } from "./LossDraftDashboard";
+import { MortgageContactCard } from "./MortgageContactCard";
 
 /* ------------------------------------------------------------------ */
 /*  Types (matching DB schema — no `as any`)                           */
