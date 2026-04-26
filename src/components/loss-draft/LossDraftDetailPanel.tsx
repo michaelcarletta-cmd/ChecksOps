@@ -445,11 +445,6 @@ export function LossDraftDetailPanel({
                 </div>
               )}
 
-              {/* Mortgage contact info — easy reference & inline edit */}
-              <MortgageContactCard
-                lossDraftId={lossDraftId}
-                servicerName={draft.mortgage_servicer}
-              />
 
               {/* Money summary - only for monitored */}
               {isMonitored && (
