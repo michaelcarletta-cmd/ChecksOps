@@ -1085,6 +1085,7 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
   const [claimSearch, setClaimSearch] = useState("");
   const [uploading, setUploading] = useState(false);
   const [claimDropdownOpen, setClaimDropdownOpen] = useState(false);
+  const [skipAi, setSkipAi] = useState(false);
 
   const { data: claims = [] } = useQuery({
     queryKey: ["claims-for-check-link", claimSearch],
@@ -1153,22 +1154,34 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 
       const { data: session } = await supabase.auth.getSession();
       const { data: ocrResult, error: fnErr } = await supabase.functions.invoke("check-ocr-intake", {
-        body: { checkId: check.id },
+        body: { checkId: check.id, skipAi },
         headers: { Authorization: `Bearer ${session.session?.access_token}` },
       });
 
+      const result = ocrResult as { success?: boolean; ocr_success?: boolean; skipped?: boolean; reason?: string; message?: string; error?: string } | null;
+
       if (fnErr) {
+        // Network/edge error — check is uploaded and can still be completed manually in the review queue.
         console.error("OCR invoke error:", fnErr);
-        toast({ title: "Check uploaded but OCR may have failed", description: fnErr.message });
-      } else if (ocrResult && typeof ocrResult === "object" && (("success" in ocrResult && !ocrResult.success) || ("ocr_success" in ocrResult && !ocrResult.ocr_success))) {
         toast({
-          title: "Check uploaded but OCR failed",
-          description: typeof ocrResult.error === "string"
-            ? ocrResult.error
-            : "The check was linked to the claim. Please complete the details manually.",
+          title: "Check uploaded — enter details manually",
+          description: "AI couldn't process this check. It's been added to the review queue for manual entry.",
+        });
+      } else if (result?.skipped) {
+        // User opted out, out of credits, or rate-limited — same downstream path.
+        toast({
+          title: skipAi ? "Check uploaded for manual entry" : "Check uploaded — AI unavailable",
+          description: result.message ?? "Enter the check details in the review queue.",
+        });
+      } else if (result && ((("success" in result) && !result.success) || (("ocr_success" in result) && !result.ocr_success))) {
+        toast({
+          title: "Check uploaded — enter details manually",
+          description: typeof result.error === "string"
+            ? result.error
+            : "The check is in the review queue. Please complete the details manually.",
         });
       } else {
-        toast({ title: "Check uploaded & OCR started" });
+        toast({ title: "Check uploaded & AI analysis started" });
       }
       onSuccess();
     } catch (e: unknown) {
@@ -1234,9 +1247,24 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
           )}
         </div>
       </div>
+      <div className="flex items-start gap-2 rounded-md border bg-muted/30 p-3">
+        <input
+          id="skip-ai-checkbox"
+          type="checkbox"
+          checked={skipAi}
+          onChange={(e) => setSkipAi(e.target.checked)}
+          className="mt-0.5 h-4 w-4 cursor-pointer accent-primary"
+        />
+        <label htmlFor="skip-ai-checkbox" className="text-sm cursor-pointer flex-1">
+          <span className="font-medium">Skip AI — enter details manually</span>
+          <span className="block text-xs text-muted-foreground mt-0.5">
+            Use this if you're out of AI credits or prefer to type the check info yourself. The check will go straight to the review queue.
+          </span>
+        </label>
+      </div>
       <Button onClick={handleUpload} disabled={uploading || !frontFile} className="w-full">
         {uploading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-        {uploading ? "Processing..." : "Upload & Analyze"}
+        {uploading ? "Processing..." : skipAi ? "Upload for Manual Entry" : "Upload & Analyze"}
       </Button>
     </div>
   );
