@@ -573,20 +573,13 @@ Deno.serve(async (req) => {
 
     console.log(`[get-claim-timeline] claim=${claimId} returning ${merged.length} events (verified=${summary.verified_events}, doc_backed=${summary.document_backed_events}, manual=${summary.manual_events})`);
 
-    return new Response(
-      JSON.stringify({
-        claimId,
-        claim,
-        summary,
-        events: merged,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({
+      claimId,
+      claim,
+      summary,
+      events: merged,
+    });
   } catch (e) {
-    console.error("get-claim-timeline error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return errorResponse(e instanceof Error ? e.message : "Unknown error", 500, e);
   }
 });
