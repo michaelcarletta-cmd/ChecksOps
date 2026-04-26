@@ -1,4 +1,4 @@
-import { Fragment, useState, useMemo, useCallback, useEffect } from "react";
+import { Fragment, lazy, Suspense, useState, useMemo, useCallback, useEffect } from "react";
 
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,29 +28,61 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { toast as sonnerToast } from "sonner";
 import { Pencil, Check as CheckIcon, X, Plus } from "lucide-react";
 import { format } from "date-fns";
+
+// Eager: default tab and inline panels
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
-import { EndorsementChecklist } from "@/components/check-review/EndorsementChecklist";
-import { DepositPacketGenerator } from "@/components/check-review/DepositPacketGenerator";
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards"; // kept for potential future use
-import { LossDraftDashboard } from "@/components/loss-draft/LossDraftDashboard";
-import { EndorsementAdjuster } from "@/components/checks/EndorsementAdjuster";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { EndorsementOverride } from "@/lib/endorsementLayout";
 import { LossDraftDetailPanel } from "@/components/loss-draft/LossDraftDetailPanel";
-import { DepositOperationsConsole, BranchDepositManifest } from "@/components/deposit-ops/DepositOperationsConsole";
-import { ReconciliationDashboard } from "@/components/deposit-ops/ReconciliationDashboard";
-
-
-import { DepositReports } from "@/components/deposit-ops/DepositReports";
-import { TenantPartnerManager } from "@/components/white-label/TenantPartnerManager";
-import { DepositOwnerQueue } from "@/components/deposit-ops/DepositOwnerQueue";
-import { DepositManagerCommandCenter } from "@/components/deposit-ops/DepositManagerCommandCenter";
 import { ArrowDownToLine, Scale, FileBarChart, Users as UsersIcon, Command } from "lucide-react";
 import { CheckCenterHelpButton } from "@/components/check-review/CheckCenterHelp";
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
 import { Share2 } from "lucide-react";
-import { MortgageCompaniesDirectory } from "@/components/checks/MortgageCompaniesDirectory";
+
+// Lazy-loaded: heavy tab-only / dialog-only modules (each becomes its own JS chunk)
+const LossDraftDashboard = lazy(() =>
+  import("@/components/loss-draft/LossDraftDashboard").then(m => ({ default: m.LossDraftDashboard }))
+);
+const EndorsementAdjuster = lazy(() =>
+  import("@/components/checks/EndorsementAdjuster").then(m => ({ default: m.EndorsementAdjuster }))
+);
+const EndorsementChecklist = lazy(() =>
+  import("@/components/check-review/EndorsementChecklist").then(m => ({ default: m.EndorsementChecklist }))
+);
+const DepositPacketGenerator = lazy(() =>
+  import("@/components/check-review/DepositPacketGenerator").then(m => ({ default: m.DepositPacketGenerator }))
+);
+const DepositOperationsConsole = lazy(() =>
+  import("@/components/deposit-ops/DepositOperationsConsole").then(m => ({ default: m.DepositOperationsConsole }))
+);
+const ReconciliationDashboard = lazy(() =>
+  import("@/components/deposit-ops/ReconciliationDashboard").then(m => ({ default: m.ReconciliationDashboard }))
+);
+const DepositReports = lazy(() =>
+  import("@/components/deposit-ops/DepositReports").then(m => ({ default: m.DepositReports }))
+);
+const DepositOwnerQueue = lazy(() =>
+  import("@/components/deposit-ops/DepositOwnerQueue").then(m => ({ default: m.DepositOwnerQueue }))
+);
+const DepositManagerCommandCenter = lazy(() =>
+  import("@/components/deposit-ops/DepositManagerCommandCenter").then(m => ({ default: m.DepositManagerCommandCenter }))
+);
+const TenantPartnerManager = lazy(() =>
+  import("@/components/white-label/TenantPartnerManager").then(m => ({ default: m.TenantPartnerManager }))
+);
+const MortgageCompaniesDirectory = lazy(() =>
+  import("@/components/checks/MortgageCompaniesDirectory").then(m => ({ default: m.MortgageCompaniesDirectory }))
+);
+
+/** Spinner shown while a lazy tab/section loads. */
+const TabLoader = () => (
+  <div className="flex items-center justify-center py-12">
+    <Loader2Icon className="h-5 w-5 animate-spin text-muted-foreground" />
+  </div>
+);
+
 
 
 /* ------------------------------------------------------------------ */
@@ -583,45 +615,61 @@ export default function CheckCommandCenter() {
         {/* Loss Draft Tab */}
         {activeTab === "lossdraft" && (
           <div className="mt-3">
-            <LossDraftDashboard searchQuery={searchQuery} />
+            <Suspense fallback={<TabLoader />}>
+              <LossDraftDashboard searchQuery={searchQuery} />
+            </Suspense>
           </div>
         )}
 
         {/* Mortgage Companies Directory Tab */}
         {activeTab === "mortgage_cos" && (
           <div className="mt-3">
-            <MortgageCompaniesDirectory searchQuery={searchQuery} />
+            <Suspense fallback={<TabLoader />}>
+              <MortgageCompaniesDirectory searchQuery={searchQuery} />
+            </Suspense>
           </div>
         )}
 
         {/* Deposit Ops Tab */}
         <TabsContent value="deposit_ops" className="mt-3">
-          <DepositOperationsConsole searchQuery={searchQuery} />
+          <Suspense fallback={<TabLoader />}>
+            <DepositOperationsConsole searchQuery={searchQuery} />
+          </Suspense>
         </TabsContent>
 
         {/* Reconciliation Tab */}
         <TabsContent value="reconciliation" className="mt-3">
-          <ReconciliationDashboard searchQuery={searchQuery} />
+          <Suspense fallback={<TabLoader />}>
+            <ReconciliationDashboard searchQuery={searchQuery} />
+          </Suspense>
         </TabsContent>
 
         {/* Reports Tab */}
         <TabsContent value="reports" className="mt-3">
-          <DepositReports />
+          <Suspense fallback={<TabLoader />}>
+            <DepositReports />
+          </Suspense>
         </TabsContent>
 
         {/* Work Queue Tab */}
         <TabsContent value="workqueue" className="mt-3">
-          <DepositOwnerQueue searchQuery={searchQuery} />
+          <Suspense fallback={<TabLoader />}>
+            <DepositOwnerQueue searchQuery={searchQuery} />
+          </Suspense>
         </TabsContent>
 
         {/* Manager Tab */}
         <TabsContent value="manager" className="mt-3">
-          <DepositManagerCommandCenter searchQuery={searchQuery} />
+          <Suspense fallback={<TabLoader />}>
+            <DepositManagerCommandCenter searchQuery={searchQuery} />
+          </Suspense>
         </TabsContent>
 
         {/* Partners Tab */}
         <TabsContent value="partners" className="mt-3">
-          <TenantPartnerManager />
+          <Suspense fallback={<TabLoader />}>
+            <TenantPartnerManager />
+          </Suspense>
         </TabsContent>
 
         {/* Reissue Tab */}
@@ -770,7 +818,9 @@ export default function CheckCommandCenter() {
                       />
                     </TabsContent>
                     <TabsContent value="packet" className="mt-0 p-4">
-                      <DepositPacketGenerator checkId={reviewCheckId} />
+                      <Suspense fallback={<TabLoader />}>
+                        <DepositPacketGenerator checkId={reviewCheckId} />
+                      </Suspense>
                     </TabsContent>
                   </Tabs>
                 </CardContent>
@@ -2373,11 +2423,13 @@ function CheckDetailPanel({
             </TabsContent>
 
             <TabsContent value="endorsements" className="p-4 mt-0 space-y-4">
-              <EndorsementChecklist
-                checkId={checkId}
-                onRefresh={onRefresh}
-                readOnly={isSharedView}
-              />
+              <Suspense fallback={<TabLoader />}>
+                <EndorsementChecklist
+                  checkId={checkId}
+                  onRefresh={onRefresh}
+                  readOnly={isSharedView}
+                />
+              </Suspense>
 
               {check?.back_image_path && !isSharedView && (
                 <>
@@ -2450,48 +2502,50 @@ function CheckDetailPanel({
                   </div>
 
                   {showEndorsementAdjuster && backImageUrl && (
-                    <EndorsementAdjuster
-                      checkId={checkId}
-                      imageUrl={backImageUrl}
-                      imageWidth={backImageDimensions.width}
-                      imageHeight={backImageDimensions.height}
-                      companyName="Freedom Adjustment"
-                      initialOverride={
-                        (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null
-                      }
-                      onSave={async (ov) => {
-                        console.log("[ENDORSEMENT-DEBUG] saving override", {
-                          checkId,
-                          override: ov,
-                          userScale: ov.scale,
-                          xPct: ov.xPct,
-                          yPct: ov.yPct,
-                          rotationDeg: ov.rotationDeg,
-                        });
-                        // 1) Save override to DB first
-                        const { error: saveErr } = await supabase
-                          .from("check_intake_items")
-                          .update({
-                            endorsement_override: ov as any,
-                            updated_at: new Date().toISOString(),
-                          })
-                          .eq("id", checkId);
-                        if (saveErr) throw saveErr;
-                        qc.setQueryData(["check-detail", checkId], (current: CheckItem | undefined) => (
-                          current
-                            ? { ...current, endorsement_override: ov as unknown as Record<string, unknown> }
-                            : current
-                        ));
-                        // 2) Then generate final deposit image (forces re-composite with latest override)
-                        console.log("[ENDORSEMENT-DEBUG] triggering composite regeneration");
-                        await ensureDepositReadyBackImage();
-                        console.log("[ENDORSEMENT-DEBUG] composite regeneration complete, new composite generated");
-                        toast({ title: "Endorsement saved & deposit image generated" });
-                        setShowEndorsementAdjuster(false);
-                        qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
-                        qc.invalidateQueries({ queryKey: ["check-back-img"] });
-                      }}
-                    />
+                    <Suspense fallback={<TabLoader />}>
+                      <EndorsementAdjuster
+                        checkId={checkId}
+                        imageUrl={backImageUrl}
+                        imageWidth={backImageDimensions.width}
+                        imageHeight={backImageDimensions.height}
+                        companyName="Freedom Adjustment"
+                        initialOverride={
+                          (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null
+                        }
+                        onSave={async (ov) => {
+                          console.log("[ENDORSEMENT-DEBUG] saving override", {
+                            checkId,
+                            override: ov,
+                            userScale: ov.scale,
+                            xPct: ov.xPct,
+                            yPct: ov.yPct,
+                            rotationDeg: ov.rotationDeg,
+                          });
+                          // 1) Save override to DB first
+                          const { error: saveErr } = await supabase
+                            .from("check_intake_items")
+                            .update({
+                              endorsement_override: ov as any,
+                              updated_at: new Date().toISOString(),
+                            })
+                            .eq("id", checkId);
+                          if (saveErr) throw saveErr;
+                          qc.setQueryData(["check-detail", checkId], (current: CheckItem | undefined) => (
+                            current
+                              ? { ...current, endorsement_override: ov as unknown as Record<string, unknown> }
+                              : current
+                          ));
+                          // 2) Then generate final deposit image (forces re-composite with latest override)
+                          console.log("[ENDORSEMENT-DEBUG] triggering composite regeneration");
+                          await ensureDepositReadyBackImage();
+                          console.log("[ENDORSEMENT-DEBUG] composite regeneration complete, new composite generated");
+                          toast({ title: "Endorsement saved & deposit image generated" });
+                          setShowEndorsementAdjuster(false);
+                          qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+                          qc.invalidateQueries({ queryKey: ["check-back-img"] });
+                        }}
+                      />
+                    </Suspense>
                   )}
                 </>
               )}
@@ -2525,7 +2579,9 @@ function CheckDetailPanel({
             </TabsContent>
 
             <TabsContent value="packet" className="p-4 mt-0">
-              <DepositPacketGenerator checkId={checkId} />
+              <Suspense fallback={<TabLoader />}>
+                <DepositPacketGenerator checkId={checkId} />
+              </Suspense>
             </TabsContent>
 
             <TabsContent value="audit" className="p-4 space-y-2 mt-0">
