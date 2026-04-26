@@ -115,7 +115,7 @@ export function MortgageContactCard({ lossDraftId, servicerName, onUpdated }: Pr
       return;
     }
     toast({ title: "Linked to directory" });
-    qc.invalidateQueries({ queryKey: ["loss-draft-link", lossDraftId] });
+    qc.invalidateQueries({ queryKey: queryKeys.lossDraft.detail(lossDraftId) });
     onUpdated?.();
   };
 
@@ -132,7 +132,7 @@ export function MortgageContactCard({ lossDraftId, servicerName, onUpdated }: Pr
       if (error) throw error;
       toast({ title: "Saved" });
       setEditing(false);
-      qc.invalidateQueries({ queryKey: ["loss-draft-link", lossDraftId] });
+      qc.invalidateQueries({ queryKey: queryKeys.lossDraft.detail(lossDraftId) });
       onUpdated?.();
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
@@ -344,8 +344,8 @@ export function MortgageContactCard({ lossDraftId, servicerName, onUpdated }: Pr
             // New entry — link it to this draft
             await linkCompany(saved.id);
           }
-          qc.invalidateQueries({ queryKey: ["mortgage-company", saved.id] });
-          qc.invalidateQueries({ queryKey: ["mortgage-company-suggest", servicerName] });
+          qc.invalidateQueries({ queryKey: queryKeys.mortgageCompany.detail(saved.id) });
+          qc.invalidateQueries({ queryKey: queryKeys.mortgageCompany.suggestionForName(servicerName) });
         }}
       />
     </div>
