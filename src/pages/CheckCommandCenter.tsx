@@ -1,4 +1,4 @@
-import { Fragment, useState, useMemo, useCallback, useEffect } from "react";
+import { Fragment, lazy, Suspense, useState, useMemo, useCallback, useEffect } from "react";
 
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,29 +28,61 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { toast as sonnerToast } from "sonner";
 import { Pencil, Check as CheckIcon, X, Plus } from "lucide-react";
 import { format } from "date-fns";
+
+// Eager: default tab and inline panels
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
-import { EndorsementChecklist } from "@/components/check-review/EndorsementChecklist";
-import { DepositPacketGenerator } from "@/components/check-review/DepositPacketGenerator";
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards"; // kept for potential future use
-import { LossDraftDashboard } from "@/components/loss-draft/LossDraftDashboard";
-import { EndorsementAdjuster } from "@/components/checks/EndorsementAdjuster";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { EndorsementOverride } from "@/lib/endorsementLayout";
 import { LossDraftDetailPanel } from "@/components/loss-draft/LossDraftDetailPanel";
-import { DepositOperationsConsole, BranchDepositManifest } from "@/components/deposit-ops/DepositOperationsConsole";
-import { ReconciliationDashboard } from "@/components/deposit-ops/ReconciliationDashboard";
-
-
-import { DepositReports } from "@/components/deposit-ops/DepositReports";
-import { TenantPartnerManager } from "@/components/white-label/TenantPartnerManager";
-import { DepositOwnerQueue } from "@/components/deposit-ops/DepositOwnerQueue";
-import { DepositManagerCommandCenter } from "@/components/deposit-ops/DepositManagerCommandCenter";
 import { ArrowDownToLine, Scale, FileBarChart, Users as UsersIcon, Command } from "lucide-react";
 import { CheckCenterHelpButton } from "@/components/check-review/CheckCenterHelp";
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
 import { Share2 } from "lucide-react";
-import { MortgageCompaniesDirectory } from "@/components/checks/MortgageCompaniesDirectory";
+
+// Lazy-loaded: heavy tab-only / dialog-only modules (each becomes its own JS chunk)
+const LossDraftDashboard = lazy(() =>
+  import("@/components/loss-draft/LossDraftDashboard").then(m => ({ default: m.LossDraftDashboard }))
+);
+const EndorsementAdjuster = lazy(() =>
+  import("@/components/checks/EndorsementAdjuster").then(m => ({ default: m.EndorsementAdjuster }))
+);
+const EndorsementChecklist = lazy(() =>
+  import("@/components/check-review/EndorsementChecklist").then(m => ({ default: m.EndorsementChecklist }))
+);
+const DepositPacketGenerator = lazy(() =>
+  import("@/components/check-review/DepositPacketGenerator").then(m => ({ default: m.DepositPacketGenerator }))
+);
+const DepositOperationsConsole = lazy(() =>
+  import("@/components/deposit-ops/DepositOperationsConsole").then(m => ({ default: m.DepositOperationsConsole }))
+);
+const ReconciliationDashboard = lazy(() =>
+  import("@/components/deposit-ops/ReconciliationDashboard").then(m => ({ default: m.ReconciliationDashboard }))
+);
+const DepositReports = lazy(() =>
+  import("@/components/deposit-ops/DepositReports").then(m => ({ default: m.DepositReports }))
+);
+const DepositOwnerQueue = lazy(() =>
+  import("@/components/deposit-ops/DepositOwnerQueue").then(m => ({ default: m.DepositOwnerQueue }))
+);
+const DepositManagerCommandCenter = lazy(() =>
+  import("@/components/deposit-ops/DepositManagerCommandCenter").then(m => ({ default: m.DepositManagerCommandCenter }))
+);
+const TenantPartnerManager = lazy(() =>
+  import("@/components/white-label/TenantPartnerManager").then(m => ({ default: m.TenantPartnerManager }))
+);
+const MortgageCompaniesDirectory = lazy(() =>
+  import("@/components/checks/MortgageCompaniesDirectory").then(m => ({ default: m.MortgageCompaniesDirectory }))
+);
+
+/** Spinner shown while a lazy tab/section loads. */
+const TabLoader = () => (
+  <div className="flex items-center justify-center py-12">
+    <Loader2Icon className="h-5 w-5 animate-spin text-muted-foreground" />
+  </div>
+);
+
 
 
 /* ------------------------------------------------------------------ */
