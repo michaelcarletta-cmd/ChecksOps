@@ -818,7 +818,9 @@ export default function CheckCommandCenter() {
                       />
                     </TabsContent>
                     <TabsContent value="packet" className="mt-0 p-4">
-                      <DepositPacketGenerator checkId={reviewCheckId} />
+                      <Suspense fallback={<TabLoader />}>
+                        <DepositPacketGenerator checkId={reviewCheckId} />
+                      </Suspense>
                     </TabsContent>
                   </Tabs>
                 </CardContent>
@@ -2421,11 +2423,13 @@ function CheckDetailPanel({
             </TabsContent>
 
             <TabsContent value="endorsements" className="p-4 mt-0 space-y-4">
-              <EndorsementChecklist
-                checkId={checkId}
-                onRefresh={onRefresh}
-                readOnly={isSharedView}
-              />
+              <Suspense fallback={<TabLoader />}>
+                <EndorsementChecklist
+                  checkId={checkId}
+                  onRefresh={onRefresh}
+                  readOnly={isSharedView}
+                />
+              </Suspense>
 
               {check?.back_image_path && !isSharedView && (
                 <>
