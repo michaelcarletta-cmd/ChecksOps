@@ -1,35 +1,27 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { AlertTriangle, Coins, CreditCard, History, Loader2, ShieldAlert, Zap } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { AlertTriangle, Coins, CreditCard, History, Loader2, ShieldAlert, Wrench, Zap, Settings } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
-interface CreditPack {
-  credits: number;
-  price: number;
-  label: string;
-  description: string;
-  popular?: boolean;
-}
-
-const CREDIT_PACKS: CreditPack[] = [
-  { credits: 50, price: 25, label: "Starter", description: "~50 check scans" },
-  { credits: 150, price: 50, label: "Standard", description: "~150 check scans" },
-  { credits: 500, price: 100, label: "Bulk", description: "~500 check scans", popular: true },
-];
+const QUICK_AMOUNTS = [10, 25, 50, 100, 250];
+const MIN_USD = 5;
+const MAX_USD = 5000;
 
 export function TenantCreditManager() {
   const { tenantId } = useTenantFilter();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [usdInput, setUsdInput] = useState<string>("25");
 
-  // Current balance
+  // Current balance + maintenance status
   const { data: balance, isLoading: balLoading } = useQuery({
     queryKey: ["tenant-credit-balance", tenantId],
     queryFn: async () => {
@@ -44,7 +36,6 @@ export function TenantCreditManager() {
     enabled: !!tenantId,
   });
 
-  // Transaction history
   const { data: transactions = [] } = useQuery({
     queryKey: ["tenant-credit-transactions", tenantId],
     queryFn: async () => {
@@ -60,49 +51,51 @@ export function TenantCreditManager() {
     enabled: !!tenantId,
   });
 
-  // Purchase credits (for now simulates — will integrate Stripe later)
-  const purchaseMutation = useMutation({
-    mutationFn: async (pack: typeof CREDIT_PACKS[number]) => {
-      if (!balance?.has_payment_method) {
-        throw new Error("Please add a payment method (credit card or bank account) in the Banking tab before purchasing credits.");
-      }
-      // For now, add credits directly — real Stripe integration coming
-      const newBalance = (balance?.balance ?? 0) + pack.credits;
-      const { error: updateErr } = await supabase
-        .from("tenant_credit_balances")
-        .update({
-          balance: newBalance,
-          lifetime_purchased: (balance?.lifetime_purchased ?? 0) + pack.credits,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("tenant_id", tenantId!);
-      if (updateErr) throw updateErr;
+  const usdPerCredit = Number((balance as any)?.usd_per_credit ?? 0.015);
+  const usdAmount = Math.max(0, Number(usdInput) || 0);
+  const previewCredits = usdPerCredit > 0 ? Math.floor(usdAmount / usdPerCredit) : 0;
+  const validUsd = usdAmount >= MIN_USD && usdAmount <= MAX_USD;
 
-      const { error: txErr } = await supabase
-        .from("tenant_credit_transactions")
-        .insert({
-          tenant_id: tenantId!,
-          transaction_type: "purchase",
-          amount: pack.credits,
-          balance_after: newBalance,
-          description: `Purchased ${pack.label} pack — ${pack.credits} credits ($${pack.price})`,
-          reference_type: "manual_purchase",
-        });
-      if (txErr) throw txErr;
-    },
-    onSuccess: () => {
-      toast({ title: "Credits purchased!" });
-      qc.invalidateQueries({ queryKey: ["tenant-credit-balance", tenantId] });
-      qc.invalidateQueries({ queryKey: ["tenant-credit-transactions", tenantId] });
+  // Top-up via Stripe Checkout (one-time)
+  const topupMutation = useMutation({
+    mutationFn: async (amount: number) => {
+      const { data, error } = await supabase.functions.invoke("tenant-credit-topup", {
+        body: { tenant_id: tenantId, usd_amount: amount },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      if (data?.url) window.location.href = data.url;
     },
     onError: (e: any) => {
-      toast({ title: "Purchase failed", description: e.message, variant: "destructive" });
+      toast({ title: "Top-up failed", description: e.message, variant: "destructive" });
+    },
+  });
+
+  // Maintenance subscription
+  const maintenanceMutation = useMutation({
+    mutationFn: async (action: "start" | "manage") => {
+      const body: any = { tenant_id: tenantId, action };
+      if (action === "start") {
+        // Default maintenance fee — admin can change in Stripe later, or pass a stored price_id
+        body.usd_per_month = 99;
+      }
+      const { data, error } = await supabase.functions.invoke("tenant-maintenance-subscription", {
+        body,
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      if (data?.url) window.location.href = data.url;
+    },
+    onError: (e: any) => {
+      toast({ title: "Subscription action failed", description: e.message, variant: "destructive" });
     },
   });
 
   const currentBalance = balance?.balance ?? 0;
-  const isLow = currentBalance < 10;
+  const isLow = currentBalance < 100;
   const isEmpty = currentBalance === 0;
+  const maintActive = (balance as any)?.maintenance_subscription_status === "active"
+    || (balance as any)?.maintenance_subscription_status === "trialing";
 
   return (
     <div className="space-y-6">
@@ -112,12 +105,11 @@ export function TenantCreditManager() {
           <div className="flex items-start gap-2">
             <ShieldAlert className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
             <div className="text-xs text-muted-foreground space-y-1">
-              <p className="font-medium text-amber-300">AI Usage Disclaimer</p>
+              <p className="font-medium text-amber-300">Pass-through billing</p>
               <p>
-                AI processing credits are billed separately per tenant. Freedom Claims Group is not responsible 
-                for AI usage costs incurred by your organization. Each check processed through the system consumes 
-                approximately 1 credit for OCR, matching, and eligibility analysis. You are solely responsible for 
-                maintaining a sufficient credit balance and for all charges associated with your account's AI usage.
+                You own this system. AI processing credits are billed at <strong>exact pass-through cost</strong> with
+                no markup — currently <strong>${usdPerCredit.toFixed(4)}/credit</strong>. The optional monthly
+                maintenance fee covers system support and updates only and is fully separate from credits.
               </p>
             </div>
           </div>
@@ -140,28 +132,28 @@ export function TenantCreditManager() {
                 <span className={`text-3xl font-bold tabular-nums ${isEmpty ? "text-destructive" : isLow ? "text-amber-400" : "text-emerald-400"}`}>
                   {currentBalance.toLocaleString()}
                 </span>
-                <span className="text-sm text-muted-foreground">credits remaining</span>
+                <span className="text-sm text-muted-foreground">
+                  credits (≈ ${(currentBalance * usdPerCredit).toFixed(2)} of AI usage)
+                </span>
               </div>
               {(isEmpty || isLow) && (
                 <div className={`flex items-center gap-1.5 text-xs ${isEmpty ? "text-destructive" : "text-amber-400"}`}>
                   <AlertTriangle className="h-3.5 w-3.5" />
-                  {isEmpty ? "No credits remaining — check processing is paused" : "Low credit balance — consider purchasing more"}
+                  {isEmpty ? "No credits — AI processing is paused. Top up below." : "Low balance — consider topping up."}
                 </div>
               )}
               <div className="grid grid-cols-3 gap-3 text-center pt-2">
                 <div>
                   <div className="text-lg font-semibold tabular-nums">{(balance?.lifetime_purchased ?? 0).toLocaleString()}</div>
-                  <div className="text-[10px] text-muted-foreground">Total Purchased</div>
+                  <div className="text-[10px] text-muted-foreground">Lifetime Purchased</div>
                 </div>
                 <div>
                   <div className="text-lg font-semibold tabular-nums">{(balance?.lifetime_used ?? 0).toLocaleString()}</div>
-                  <div className="text-[10px] text-muted-foreground">Total Used</div>
+                  <div className="text-[10px] text-muted-foreground">Lifetime Used</div>
                 </div>
                 <div>
-                  <div className="text-lg font-semibold tabular-nums">
-                    {balance?.has_payment_method ? "✓" : "—"}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground">Payment Method</div>
+                  <div className="text-lg font-semibold tabular-nums">${usdPerCredit.toFixed(4)}</div>
+                  <div className="text-[10px] text-muted-foreground">Cost / Credit</div>
                 </div>
               </div>
             </div>
@@ -169,65 +161,122 @@ export function TenantCreditManager() {
         </CardContent>
       </Card>
 
-      {/* Payment method notice */}
-      {!balance?.has_payment_method && (
-        <Card className="border-border/60">
-          <CardContent className="pt-4 pb-3">
-            <div className="flex items-start gap-2">
-              <CreditCard className="h-4 w-4 text-muted-foreground mt-0.5" />
-              <div className="text-xs text-muted-foreground">
-                <p className="font-medium text-foreground">Payment method required</p>
-                <p>Add a credit card or bank account in the <strong>Banking</strong> tab to enable credit purchases. 
-                Your linked bank account can also be used as a payment method.</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Credit packs */}
+      {/* Top-up: custom dollar amount */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2">
-            <Zap className="h-4 w-4" /> Purchase Credits
+            <Zap className="h-4 w-4" /> Top Up Credits
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="text-xs text-muted-foreground mb-4">
-            Each credit covers approximately 1 check scan (OCR + claim matching + eligibility check).
+        <CardContent className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Pay exactly what you use. Every dollar buys{" "}
+            <strong>{(1 / usdPerCredit).toFixed(0)} credits</strong> at the current pass-through rate.
+            Minimum top-up ${MIN_USD}.
           </p>
-          <div className="grid gap-3">
-            {CREDIT_PACKS.map((pack) => (
-              <div
-                key={pack.credits}
-                className={`flex items-center justify-between rounded-lg border px-4 py-3 ${
-                  pack.popular ? "border-primary/50 bg-primary/5" : "border-border/60"
-                }`}
+
+          <div className="flex flex-wrap gap-2">
+            {QUICK_AMOUNTS.map((amt) => (
+              <Button
+                key={amt}
+                size="sm"
+                variant={Number(usdInput) === amt ? "default" : "outline"}
+                onClick={() => setUsdInput(String(amt))}
               >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">{pack.label}</span>
-                    {pack.popular && <Badge className="text-[9px] px-1.5 py-0">Best Value</Badge>}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {pack.credits} credits · {pack.description}
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  variant={pack.popular ? "default" : "outline"}
-                  disabled={purchaseMutation.isPending}
-                  onClick={() => purchaseMutation.mutate(pack)}
-                >
-                  {purchaseMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    `$${pack.price}`
-                  )}
-                </Button>
-              </div>
+                ${amt}
+              </Button>
             ))}
           </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="usd-input" className="text-xs">Custom amount (USD)</Label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                <Input
+                  id="usd-input"
+                  type="number"
+                  min={MIN_USD}
+                  max={MAX_USD}
+                  step="1"
+                  value={usdInput}
+                  onChange={(e) => setUsdInput(e.target.value)}
+                  className="pl-7"
+                />
+              </div>
+              <Button
+                disabled={!validUsd || topupMutation.isPending}
+                onClick={() => topupMutation.mutate(usdAmount)}
+              >
+                {topupMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  `Pay $${usdAmount.toFixed(2)}`
+                )}
+              </Button>
+            </div>
+            {usdAmount > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {validUsd ? (
+                  <>You'll receive <strong className="text-foreground">{previewCredits.toLocaleString()} credits</strong> (~{previewCredits} checks).</>
+                ) : (
+                  <span className="text-amber-400">Enter ${MIN_USD}–${MAX_USD}.</span>
+                )}
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Maintenance subscription — separate from credits */}
+      <Card className="border-border/60">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Wrench className="h-4 w-4" /> System Maintenance Fee
+            {maintActive && <Badge className="text-[9px] px-1.5 py-0 bg-emerald-500/20 text-emerald-300 border-emerald-500/30">Active</Badge>}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Monthly fee for ongoing support, updates, hosting, and bug fixes.
+            <strong className="text-foreground"> Does not include AI credits</strong> — those are billed separately at pass-through cost above.
+          </p>
+
+          {maintActive ? (
+            <div className="flex items-center justify-between rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3">
+              <div>
+                <div className="text-sm font-medium">Maintenance subscription active</div>
+                {(balance as any)?.maintenance_current_period_end && (
+                  <div className="text-xs text-muted-foreground">
+                    Renews {format(new Date((balance as any).maintenance_current_period_end), "MMM d, yyyy")}
+                  </div>
+                )}
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={maintenanceMutation.isPending}
+                onClick={() => maintenanceMutation.mutate("manage")}
+              >
+                <Settings className="h-3.5 w-3.5 mr-1.5" />
+                Manage
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between rounded-lg border border-border/60 px-4 py-3">
+              <div>
+                <div className="text-sm font-medium">$99 / month</div>
+                <div className="text-xs text-muted-foreground">Cancel anytime via Stripe customer portal.</div>
+              </div>
+              <Button
+                size="sm"
+                disabled={maintenanceMutation.isPending}
+                onClick={() => maintenanceMutation.mutate("start")}
+              >
+                {maintenanceMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Start subscription"}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
