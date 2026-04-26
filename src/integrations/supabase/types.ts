@@ -12652,6 +12652,7 @@ export type Database = {
           loss_draft_fax: string | null
           loss_draft_phone: string | null
           monitoring_type: string
+          mortgage_company_id: string | null
           mortgage_servicer: string
           notes: string | null
           shipping_method_return: string | null
@@ -12685,6 +12686,7 @@ export type Database = {
           loss_draft_fax?: string | null
           loss_draft_phone?: string | null
           monitoring_type?: string
+          mortgage_company_id?: string | null
           mortgage_servicer: string
           notes?: string | null
           shipping_method_return?: string | null
@@ -12718,6 +12720,7 @@ export type Database = {
           loss_draft_fax?: string | null
           loss_draft_phone?: string | null
           monitoring_type?: string
+          mortgage_company_id?: string | null
           mortgage_servicer?: string
           notes?: string | null
           shipping_method_return?: string | null
@@ -12754,6 +12757,13 @@ export type Database = {
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loss_draft_tracking_mortgage_company_id_fkey"
+            columns: ["mortgage_company_id"]
+            isOneToOne: false
+            referencedRelation: "mortgage_companies"
             referencedColumns: ["id"]
           },
         ]
@@ -17404,6 +17414,10 @@ export type Database = {
           metadata: Json
           similarity: number
         }[]
+      }
+      normalize_mortgage_company_name: {
+        Args: { p_name: string }
+        Returns: string
       }
       ocr_commit_results: {
         Args: {
