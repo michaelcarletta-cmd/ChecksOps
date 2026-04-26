@@ -615,45 +615,61 @@ export default function CheckCommandCenter() {
         {/* Loss Draft Tab */}
         {activeTab === "lossdraft" && (
           <div className="mt-3">
-            <LossDraftDashboard searchQuery={searchQuery} />
+            <Suspense fallback={<TabLoader />}>
+              <LossDraftDashboard searchQuery={searchQuery} />
+            </Suspense>
           </div>
         )}
 
         {/* Mortgage Companies Directory Tab */}
         {activeTab === "mortgage_cos" && (
           <div className="mt-3">
-            <MortgageCompaniesDirectory searchQuery={searchQuery} />
+            <Suspense fallback={<TabLoader />}>
+              <MortgageCompaniesDirectory searchQuery={searchQuery} />
+            </Suspense>
           </div>
         )}
 
         {/* Deposit Ops Tab */}
         <TabsContent value="deposit_ops" className="mt-3">
-          <DepositOperationsConsole searchQuery={searchQuery} />
+          <Suspense fallback={<TabLoader />}>
+            <DepositOperationsConsole searchQuery={searchQuery} />
+          </Suspense>
         </TabsContent>
 
         {/* Reconciliation Tab */}
         <TabsContent value="reconciliation" className="mt-3">
-          <ReconciliationDashboard searchQuery={searchQuery} />
+          <Suspense fallback={<TabLoader />}>
+            <ReconciliationDashboard searchQuery={searchQuery} />
+          </Suspense>
         </TabsContent>
 
         {/* Reports Tab */}
         <TabsContent value="reports" className="mt-3">
-          <DepositReports />
+          <Suspense fallback={<TabLoader />}>
+            <DepositReports />
+          </Suspense>
         </TabsContent>
 
         {/* Work Queue Tab */}
         <TabsContent value="workqueue" className="mt-3">
-          <DepositOwnerQueue searchQuery={searchQuery} />
+          <Suspense fallback={<TabLoader />}>
+            <DepositOwnerQueue searchQuery={searchQuery} />
+          </Suspense>
         </TabsContent>
 
         {/* Manager Tab */}
         <TabsContent value="manager" className="mt-3">
-          <DepositManagerCommandCenter searchQuery={searchQuery} />
+          <Suspense fallback={<TabLoader />}>
+            <DepositManagerCommandCenter searchQuery={searchQuery} />
+          </Suspense>
         </TabsContent>
 
         {/* Partners Tab */}
         <TabsContent value="partners" className="mt-3">
-          <TenantPartnerManager />
+          <Suspense fallback={<TabLoader />}>
+            <TenantPartnerManager />
+          </Suspense>
         </TabsContent>
 
         {/* Reissue Tab */}
