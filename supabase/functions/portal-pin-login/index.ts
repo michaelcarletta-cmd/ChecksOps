@@ -1,14 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { handleCors, jsonResponse, errorResponse } from "../_shared/http.ts";
 
 Deno.serve(async (req: Request): Promise<Response> => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  const preflight = handleCors(req);
+  if (preflight) return preflight;
 
   try {
     const supabaseAdmin = createClient(
@@ -20,11 +15,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const { pin } = await req.json();
 
     if (!pin || !/^\d{4}$/.test(pin)) {
-      return new Response(
-        JSON.stringify({ error: "Please enter a valid 4-digit PIN" }),
-        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      return errorResponse("Please enter a valid 4-digit PIN", 400);
     }
+
 
     // Strategy 1: Check client_portal_pins table first
     const { data: pinRecord } = await supabaseAdmin
@@ -37,10 +30,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       // Found in PIN table - try to sign them in
       const result = await signInUser(supabaseAdmin, pinRecord.user_id, pinRecord.client_name);
       if (result.success) {
-        return new Response(JSON.stringify(result), {
-          status: 200,
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+        return jsonResponse(result);
       }
       // If auth user doesn't exist, fall through to Strategy 2
       console.log("PIN record found but auth user missing, trying phone lookup");
@@ -53,11 +43,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .not("phone", "is", null);
 
     if (clientsError) {
-      console.error("Error querying clients:", clientsError);
-      return new Response(
-        JSON.stringify({ error: "Login failed. Please try again." }),
-        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      return errorResponse("Login failed. Please try again.", 500, clientsError);
     }
 
     // Find client whose phone ends with the PIN
@@ -69,10 +55,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     if (!matchingClient) {
       console.log("No client found with phone ending in:", pin);
-      return new Response(
-        JSON.stringify({ error: "Invalid PIN. Please check your PIN and try again." }),
-        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      return errorResponse("Invalid PIN. Please check your PIN and try again.", 401);
     }
 
     console.log("Found client by phone match:", matchingClient.name, matchingClient.email);
@@ -113,18 +96,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
             authUserId = existing.id;
             console.log("Found existing auth user by email:", authUserId);
           } else {
-            console.error("Cannot find or create auth user for:", matchingClient.email);
-            return new Response(
-              JSON.stringify({ error: "Account setup issue. Please contact support." }),
-              { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-            );
+            return errorResponse("Account setup issue. Please contact support.", 500, {
+              email: matchingClient.email,
+            });
           }
         } else {
-          console.error("Error creating auth user:", createErr);
-          return new Response(
-            JSON.stringify({ error: "Account setup issue. Please contact support." }),
-            { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-          );
+          return errorResponse("Account setup issue. Please contact support.", 500, createErr);
         }
       } else {
         authUserId = newUser.user.id;
@@ -153,22 +130,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // Sign them in
     const result = await signInUser(supabaseAdmin, authUserId, matchingClient.name);
     if (!result.success) {
-      return new Response(
-        JSON.stringify({ error: result.error || "Login failed" }),
-        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      return errorResponse(result.error || "Login failed", 500);
     }
 
-    return new Response(JSON.stringify(result), {
-      status: 200,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
+    return jsonResponse(result);
   } catch (error: any) {
-    console.error("Error in portal-pin-login:", error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-    );
+    return errorResponse(error.message ?? "Internal error", 500, error);
   }
 });
 

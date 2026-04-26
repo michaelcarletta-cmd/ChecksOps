@@ -4,7 +4,7 @@
  * carrier_behavior_analytics and claim_outcome_learning.
  */
 
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2.39.3";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 export interface CarrierPattern {
   commonDenialReasons: string[];

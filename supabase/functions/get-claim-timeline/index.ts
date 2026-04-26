@@ -1,9 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { handleCors, jsonResponse, errorResponse } from "../_shared/http.ts";
 
 interface CanonicalTimelineEvent {
   id: string;
@@ -55,9 +51,8 @@ const pushIfDate = (
 };
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const preflight = handleCors(req);
+  if (preflight) return preflight;
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -68,10 +63,7 @@ Deno.serve(async (req) => {
     const claimId = (body as { claimId?: string }).claimId;
 
     if (!claimId) {
-      return new Response(
-        JSON.stringify({ error: "claimId required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return errorResponse("claimId required", 400);
     }
 
     const events: CanonicalTimelineEvent[] = [];
@@ -581,20 +573,13 @@ Deno.serve(async (req) => {
 
     console.log(`[get-claim-timeline] claim=${claimId} returning ${merged.length} events (verified=${summary.verified_events}, doc_backed=${summary.document_backed_events}, manual=${summary.manual_events})`);
 
-    return new Response(
-      JSON.stringify({
-        claimId,
-        claim,
-        summary,
-        events: merged,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({
+      claimId,
+      claim,
+      summary,
+      events: merged,
+    });
   } catch (e) {
-    console.error("get-claim-timeline error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return errorResponse(e instanceof Error ? e.message : "Unknown error", 500, e);
   }
 });

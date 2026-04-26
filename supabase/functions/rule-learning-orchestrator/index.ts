@@ -9,7 +9,7 @@
  *   POST { mode: "full", limit? }            → discover global + activate
  */
 
-import { createClient } from "npm:@supabase/supabase-js@2.39.3";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import {
   discoverRuleCandidatesForClaim,
   discoverGlobalRuleCandidates,
