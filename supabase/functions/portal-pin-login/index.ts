@@ -1,14 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { handleCors, jsonResponse, errorResponse } from "../_shared/http.ts";
 
 Deno.serve(async (req: Request): Promise<Response> => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  const preflight = handleCors(req);
+  if (preflight) return preflight;
 
   try {
     const supabaseAdmin = createClient(
@@ -20,11 +15,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const { pin } = await req.json();
 
     if (!pin || !/^\d{4}$/.test(pin)) {
-      return new Response(
-        JSON.stringify({ error: "Please enter a valid 4-digit PIN" }),
-        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      return errorResponse("Please enter a valid 4-digit PIN", 400);
     }
+
 
     // Strategy 1: Check client_portal_pins table first
     const { data: pinRecord } = await supabaseAdmin
