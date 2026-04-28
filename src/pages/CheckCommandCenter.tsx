@@ -1946,12 +1946,36 @@ function CheckDetailPanel({
     <>
     <Card className="overflow-hidden">
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-base">Check #{check.check_number ?? "Pending"}</CardTitle>
           <Badge className={statusColors[check.status] ?? ""}>
             {check.status.replace(/_/g, " ")}
           </Badge>
         </div>
+        {!isSharedView && (
+          <div className="flex flex-wrap gap-2 mt-2">
+            <ViewCheckImageButton
+              checkId={checkId}
+              frontImagePath={check.front_image_path}
+              checkNumber={check.check_number}
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+            />
+            <AdminDeleteCheckButton
+              checkId={checkId}
+              checkNumber={check.check_number}
+              onDeleted={() => {
+                onRefresh();
+                qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+              }}
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+            />
+          </div>
+        )}
         {check.carrier_name && (
           <p className="text-sm text-muted-foreground">{check.carrier_name}</p>
         )}
