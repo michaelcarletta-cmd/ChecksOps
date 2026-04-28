@@ -9,7 +9,7 @@ interface Props {
 
 export function LossDraftAuditTab({ audit }: Props) {
   return (
-    <ScrollArea className="h-full">
+    <ScrollArea className="h-full min-h-0">
       <div className="p-4 space-y-2">
         {audit.length === 0 ? (
           <p className="text-xs text-muted-foreground italic">No audit events yet.</p>

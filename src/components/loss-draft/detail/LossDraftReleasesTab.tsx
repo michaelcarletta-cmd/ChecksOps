@@ -9,7 +9,7 @@ interface Props {
 
 export function LossDraftReleasesTab({ releases }: Props) {
   return (
-    <ScrollArea className="h-full">
+    <ScrollArea className="h-full min-h-0">
       <div className="p-4 space-y-3">
         {releases.length === 0 ? (
           <p className="text-xs text-muted-foreground italic">No draws requested yet.</p>
