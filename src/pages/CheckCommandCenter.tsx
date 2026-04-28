@@ -33,6 +33,8 @@ import { format } from "date-fns";
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards"; // kept for potential future use
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
+import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
+import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
 import { EndorsementOverride } from "@/lib/endorsementLayout";
 import { LossDraftDetailPanel } from "@/components/loss-draft/LossDraftDetailPanel";
 import { ArrowDownToLine, Scale, FileBarChart, Users as UsersIcon, Command } from "lucide-react";
