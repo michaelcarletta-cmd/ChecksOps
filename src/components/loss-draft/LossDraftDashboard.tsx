@@ -42,9 +42,10 @@ export interface LossDraftRow {
   check_received_date: string | null;
   created_at: string;
   updated_at: string;
-  days_in_escrow: number | null;
   missing_docs_count: number;
   is_stale: boolean;
+  monitoring_type?: string | null;
+  check_status?: string | null;
 }
 
 const escrowStatusConfig: Record<string, { label: string; color: string }> = {
@@ -90,15 +91,33 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
     enabled: !!tenantId,
   });
 
-  const baseFiltered = filter === "active"
-    ? drafts.filter(d => d.escrow_status !== "final_release_complete")
-    : filter === "stale"
-    ? drafts.filter(d => d.is_stale)
-    : filter === "missing_docs"
-    ? drafts.filter(d => d.missing_docs_count > 0)
-    : filter === "overdue"
-    ? drafts.filter(d => d.follow_up_date && new Date(d.follow_up_date) < new Date())
-    : drafts;
+  // Defensive frontend filter — backend view also excludes these, but keep
+  // FE in sync so stale caches never display a check that has moved on.
+  const isVisibleInLossDraft = (d: LossDraftRow) => {
+    if (d.escrow_status === "endorsing") return false;
+    if (
+      d.monitoring_type === "not_monitored" &&
+      d.check_status &&
+      ["endorsements_in_progress", "approved_for_deposit", "deposited"].includes(d.check_status)
+    ) {
+      return false;
+    }
+    return true;
+  };
+  const isActiveLossDraft = (d: LossDraftRow) =>
+    isVisibleInLossDraft(d) && d.escrow_status !== "final_release_complete";
+  const visibleDrafts = drafts.filter(isVisibleInLossDraft);
+
+  const baseFiltered =
+    filter === "active"
+      ? visibleDrafts.filter(isActiveLossDraft)
+      : filter === "stale"
+      ? visibleDrafts.filter(d => d.is_stale)
+      : filter === "missing_docs"
+      ? visibleDrafts.filter(d => d.missing_docs_count > 0)
+      : filter === "overdue"
+      ? visibleDrafts.filter(d => d.follow_up_date && new Date(d.follow_up_date) < new Date())
+      : visibleDrafts;
 
   const q = (searchQuery ?? "").trim().toLowerCase();
   const filtered = q
@@ -108,9 +127,8 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
       )
     : baseFiltered;
 
-  const totalUnreleased = drafts
-    .filter(d => d.escrow_status !== "final_release_complete")
-    .reduce((s, d) => s + (d.unreleased_amount ?? 0), 0);
+  const activeDrafts = visibleDrafts.filter(isActiveLossDraft);
+  const totalUnreleased = activeDrafts.reduce((s, d) => s + (d.unreleased_amount ?? 0), 0);
 
   return (
     <div className="space-y-4">
@@ -121,7 +139,7 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
             Loss Draft Visibility
           </h2>
           <p className="text-xs text-muted-foreground">
-            Track lender-held funds, missing documents, follow-ups, and releases · {drafts.filter(d => d.escrow_status !== "final_release_complete").length} active ·{" "}
+            Track lender-held funds, missing documents, follow-ups, and releases · {activeDrafts.length} active ·{" "}
             ${totalUnreleased.toLocaleString("en-US", { minimumFractionDigits: 2 })} unreleased
           </p>
         </div>
@@ -152,20 +170,20 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
             onClick={() => setFilter(f.key)}
           >
             {f.label}
-            {f.key === "stale" && drafts.filter(d => d.is_stale).length > 0 && (
+            {f.key === "stale" && visibleDrafts.filter(d => d.is_stale).length > 0 && (
               <Badge variant="destructive" className="ml-1 text-[10px] px-1">
-                {drafts.filter(d => d.is_stale).length}
+                {visibleDrafts.filter(d => d.is_stale).length}
               </Badge>
             )}
           </Button>
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_28rem]">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]">
         {/* Table */}
         <Card>
           <CardContent className="p-0">
-            <ScrollArea className="h-[calc(100vh-480px)]">
+            <ScrollArea className="h-[calc(100vh-16rem)] min-h-[22rem] max-h-[42rem]">
               {isLoading ? (
                 <div className="p-8 text-center text-muted-foreground">Loading loss drafts...</div>
               ) : filtered.length === 0 ? (
@@ -182,7 +200,6 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
                       <TableHead className="text-right">Escrowed</TableHead>
                       <TableHead className="text-right">Released</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Aging</TableHead>
                       <TableHead>Alerts</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -212,9 +229,6 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
                           <TableCell>
                             <Badge className={`text-[10px] ${sc.color}`}>{sc.label}</Badge>
                           </TableCell>
-                          <TableCell className="text-sm tabular-nums">
-                            {d.days_in_escrow != null ? `${d.days_in_escrow}d` : "—"}
-                          </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
                               {d.is_stale && <span title="Stale — no contact 14+ days"><AlertTriangle className="h-3.5 w-3.5 text-red-400" /></span>}
@@ -242,7 +256,7 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
             }}
           />
         ) : (
-          <Card className="flex items-center justify-center h-[calc(100vh-480px)]">
+          <Card className="flex items-center justify-center h-[calc(100vh-16rem)] min-h-[22rem] max-h-[42rem]">
             <div className="text-center text-muted-foreground">
               <Landmark className="h-12 w-12 mx-auto mb-3 opacity-30" />
               <p className="text-sm">Select a loss draft to manage</p>
