@@ -153,7 +153,7 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
   };
 
   return (
-    <ScrollArea className="h-full">
+    <ScrollArea className="h-full min-h-0">
       <div className="p-4 space-y-3">
         {/* Monitoring Type Toggle */}
         <div className="flex items-center gap-2">
@@ -276,11 +276,11 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="w-full justify-start text-xs"
+                  className="h-auto min-h-8 w-full justify-start whitespace-normal break-words text-left text-xs leading-snug"
                   onClick={() => setPendingAction(a.action)}
                 >
-                  <a.icon className={`h-3.5 w-3.5 mr-2 ${a.color}`} />
-                  {a.label}
+                  <a.icon className={`h-3.5 w-3.5 mr-2 shrink-0 ${a.color}`} />
+                  <span className="min-w-0 break-words">{a.label}</span>
                 </Button>
               )}
             </div>

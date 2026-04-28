@@ -112,7 +112,7 @@ export function LossDraftDocsTab({ lossDraftId, claimId, docs, onChanged }: Prop
   };
 
   return (
-    <ScrollArea className="h-full">
+    <ScrollArea className="h-full min-h-0">
       <div className="p-4 space-y-3">
         <input
           ref={fileInputRef}
@@ -133,21 +133,25 @@ export function LossDraftDocsTab({ lossDraftId, claimId, docs, onChanged }: Prop
           </p>
         ) : (
           docs.map(d => (
-            <div key={d.id} className="border rounded-lg p-2 space-y-1.5">
-              <div className="flex items-center gap-2">
+            <div
+              key={d.id}
+              className="min-w-0 overflow-hidden rounded-lg border p-2 space-y-1.5"
+            >
+              <div className="flex min-w-0 items-start gap-2">
                 <Checkbox
+                  className="mt-0.5 shrink-0"
                   checked={d.is_submitted}
                   onCheckedChange={(checked) => toggleDoc(d.id, !!checked)}
                 />
                 <div className="flex-1 min-w-0">
                   <p
-                    className={`text-xs ${
+                    className={`break-words text-xs leading-snug ${
                       d.is_submitted ? "line-through text-muted-foreground" : ""
                     }`}
                   >
                     {d.document_label}
                   </p>
-                  <div className="flex items-center gap-1 mt-0.5">
+                  <div className="flex flex-wrap items-center gap-1 mt-0.5">
                     {d.is_required && !d.is_submitted && (
                       <Badge variant="destructive" className="text-[9px] px-1">
                         Required
@@ -162,15 +166,15 @@ export function LossDraftDocsTab({ lossDraftId, claimId, docs, onChanged }: Prop
                 </div>
               </div>
 
-              <div className="pl-6">
+              <div className="min-w-0 pl-6">
                 {d.file_path ? (
-                  <div className="flex items-center gap-1.5 bg-accent/30 rounded px-2 py-1">
+                  <div className="flex min-w-0 items-center gap-1.5 rounded bg-accent/30 px-2 py-1">
                     <FileText className="h-3 w-3 text-muted-foreground shrink-0" />
-                    <span className="text-[10px] truncate flex-1">{d.file_name}</span>
+                    <span className="min-w-0 flex-1 truncate text-[10px]">{d.file_name}</span>
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="h-5 w-5"
+                      className="h-5 w-5 shrink-0"
                       onClick={() => handleFileDownload(d)}
                     >
                       <Download className="h-3 w-3" />
@@ -178,7 +182,7 @@ export function LossDraftDocsTab({ lossDraftId, claimId, docs, onChanged }: Prop
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="h-5 w-5 text-destructive"
+                      className="h-5 w-5 shrink-0 text-destructive"
                       onClick={() => handleFileDelete(d)}
                     >
                       <Trash2 className="h-3 w-3" />
@@ -188,14 +192,14 @@ export function LossDraftDocsTab({ lossDraftId, claimId, docs, onChanged }: Prop
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-6 text-[10px] gap-1"
+                    className="h-auto min-h-6 max-w-full gap-1 whitespace-normal break-words text-left text-[10px] leading-snug"
                     disabled={uploadingDocId === d.id}
                     onClick={() => {
                       setUploadingDocId(d.id);
                       fileInputRef.current?.click();
                     }}
                   >
-                    <Upload className="h-3 w-3" />
+                    <Upload className="h-3 w-3 shrink-0" />
                     {uploadingDocId === d.id ? "Uploading..." : "Upload File"}
                   </Button>
                 )}

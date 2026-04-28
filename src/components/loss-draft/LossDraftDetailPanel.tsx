@@ -1,8 +1,15 @@
+import { useState } from "react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CheckCircle2, Landmark } from "lucide-react";
+import { CheckCircle2, Landmark, Pencil } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import { escrowStatusConfig } from "./LossDraftDashboard";
 import {
   useLossDraftAudit,
@@ -15,6 +22,9 @@ import { LossDraftActionsTab } from "./detail/LossDraftActionsTab";
 import { LossDraftDocsTab } from "./detail/LossDraftDocsTab";
 import { LossDraftReleasesTab } from "./detail/LossDraftReleasesTab";
 import { LossDraftAuditTab } from "./detail/LossDraftAuditTab";
+
+const isUnknownServicer = (value?: string | null) =>
+  !value || value.trim().toLowerCase().includes("unknown");
 
 /**
  * Thin orchestrator for the Loss Draft detail panel.
@@ -34,15 +44,42 @@ export function LossDraftDetailPanel({
   lossDraftId: string;
   onUpdate: () => void;
 }) {
+  const { user } = useAuth();
+  const { toast } = useToast();
   const { data: draft } = useLossDraftDetail(lossDraftId);
   const { data: releases = [] } = useLossDraftReleases(lossDraftId);
   const { data: docs = [] } = useLossDraftDocs(lossDraftId);
   const { data: audit = [] } = useLossDraftAudit(lossDraftId);
   const invalidateAll = useInvalidateLossDraft(lossDraftId);
 
+  const [editingLender, setEditingLender] = useState(false);
+  const [lenderName, setLenderName] = useState("");
+  const [savingLender, setSavingLender] = useState(false);
+
   const handleChanged = () => {
     invalidateAll();
     onUpdate();
+  };
+
+  const saveLender = async () => {
+    if (!user?.id || !lenderName.trim()) return;
+    setSavingLender(true);
+    try {
+      const { error } = await supabase.rpc("loss_draft_set_lender" as any, {
+        p_loss_draft_id: lossDraftId,
+        p_lender_name: lenderName.trim(),
+        p_actor_id: user.id,
+      });
+      if (error) throw error;
+      toast({ title: "Servicer updated", description: "Loss Draft servicer has been corrected." });
+      setEditingLender(false);
+      setLenderName("");
+      handleChanged();
+    } catch (e: any) {
+      toast({ title: "Servicer update failed", description: e.message, variant: "destructive" });
+    } finally {
+      setSavingLender(false);
+    }
   };
 
   if (!draft) return null;
@@ -56,15 +93,65 @@ export function LossDraftDetailPanel({
     `$${(v ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
 
   return (
-    <Card className="h-[calc(100vh-480px)] flex flex-col">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Landmark className="h-4 w-4 text-amber-400" />
-            {draft.mortgage_servicer}
+    <Card className="flex h-[calc(100vh-16rem)] min-h-[22rem] max-h-[42rem] min-w-0 flex-col overflow-hidden">
+      <CardHeader className="shrink-0 pb-2">
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          <CardTitle className="min-w-0 text-sm flex items-center gap-2 leading-snug">
+            <Landmark className="h-4 w-4 text-amber-400 shrink-0" />
+            <span className="min-w-0 break-words">{draft.mortgage_servicer}</span>
           </CardTitle>
-          <Badge className={`text-[10px] ${sc.color}`}>{sc.label}</Badge>
+          <Badge className={`shrink-0 text-[10px] ${sc.color}`}>{sc.label}</Badge>
         </div>
+
+        <div className="pt-1">
+          {editingLender ? (
+            <div className="space-y-2 rounded-md border border-input p-2">
+              <Label className="text-xs">Set mortgage servicer</Label>
+              <Input
+                value={lenderName}
+                onChange={(e) => setLenderName(e.target.value)}
+                placeholder="Enter mortgage servicer"
+                className="h-8 min-w-0 text-xs"
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={savingLender || !lenderName.trim()}
+                  onClick={saveLender}
+                >
+                  {savingLender ? "Saving..." : "Save"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs"
+                  onClick={() => setEditingLender(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              className={`h-6 px-1 text-[10px] ${
+                isUnknownServicer(draft.mortgage_servicer) ? "text-primary" : "text-muted-foreground"
+              }`}
+              onClick={() => {
+                setLenderName(
+                  isUnknownServicer(draft.mortgage_servicer) ? "" : draft.mortgage_servicer
+                );
+                setEditingLender(true);
+              }}
+            >
+              <Pencil className="mr-1 h-3 w-3" />
+              {isUnknownServicer(draft.mortgage_servicer) ? "Add servicer" : "Correct servicer"}
+            </Button>
+          )}
+        </div>
+
         {isMonitored ? (
           <div className="text-xs text-muted-foreground">
             Draw #{draft.draw_stage} · Holdback {fmtMoney(draft.holdback_amount)}
@@ -79,9 +166,9 @@ export function LossDraftDetailPanel({
       <Separator />
 
       {draft.escrow_status === "final_release_complete" && (
-        <div className="mx-4 my-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg flex items-start gap-3">
+        <div className="mx-4 my-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg flex items-start gap-3 shrink-0">
           <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
-          <div className="space-y-1">
+          <div className="space-y-1 min-w-0">
             <p className="text-sm font-medium text-emerald-500">
               Return to Deposit Flow Complete
             </p>
@@ -93,8 +180,8 @@ export function LossDraftDetailPanel({
         </div>
       )}
 
-      <Tabs defaultValue="actions" className="flex-1 flex flex-col">
-        <TabsList className="w-full rounded-none shrink-0">
+      <Tabs defaultValue="actions" className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <TabsList className="w-full rounded-none shrink-0 overflow-hidden">
           <TabsTrigger value="actions" className="flex-1 text-xs">
             Actions
           </TabsTrigger>
@@ -111,7 +198,10 @@ export function LossDraftDetailPanel({
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="actions" className="mt-0 flex-1 overflow-auto">
+        <TabsContent
+          value="actions"
+          className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
+        >
           <LossDraftActionsTab
             lossDraftId={lossDraftId}
             draft={draft}
@@ -119,7 +209,10 @@ export function LossDraftDetailPanel({
           />
         </TabsContent>
 
-        <TabsContent value="docs" className="mt-0 flex-1 overflow-auto">
+        <TabsContent
+          value="docs"
+          className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
+        >
           <LossDraftDocsTab
             lossDraftId={lossDraftId}
             claimId={draft.claim_id}
@@ -128,11 +221,17 @@ export function LossDraftDetailPanel({
           />
         </TabsContent>
 
-        <TabsContent value="releases" className="mt-0 flex-1 overflow-auto">
+        <TabsContent
+          value="releases"
+          className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
+        >
           <LossDraftReleasesTab releases={releases} />
         </TabsContent>
 
-        <TabsContent value="audit" className="mt-0 flex-1 overflow-auto">
+        <TabsContent
+          value="audit"
+          className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
+        >
           <LossDraftAuditTab audit={audit} />
         </TabsContent>
       </Tabs>
