@@ -26,6 +26,7 @@ export interface LossDraftRecord {
   monitoring_type: string;
   tracking_number_sent: string | null;
   notes: string | null;
+  check_intake_item_id: string | null;
 }
 
 export interface LossDraftRelease {
