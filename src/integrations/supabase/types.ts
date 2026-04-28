@@ -16492,6 +16492,7 @@ export type Database = {
         Row: {
           check_received_date: string | null
           check_sent_date: string | null
+          check_status: string | null
           claim_id: string | null
           claim_number: string | null
           created_at: string | null
@@ -16507,6 +16508,7 @@ export type Database = {
           is_stale: boolean | null
           last_contact_at: string | null
           missing_docs_count: number | null
+          monitoring_type: string | null
           mortgage_servicer: string | null
           policyholder_name: string | null
           tenant_id: string | null
@@ -17364,6 +17366,14 @@ export type Database = {
           p_extra?: Json
           p_loss_draft_id: string
           p_notes?: string
+        }
+        Returns: undefined
+      }
+      loss_draft_set_lender: {
+        Args: {
+          p_actor_id?: string
+          p_lender_name: string
+          p_loss_draft_id: string
         }
         Returns: undefined
       }
