@@ -19,6 +19,8 @@ import {
   RotateCcw, Shield, Users, FileCheck, Loader2, Merge,
   Trash2, Plus,
 } from "lucide-react";
+import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
+import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -382,25 +384,45 @@ export function ReviewDecisionPanel({
     <ScrollArea className="h-[calc(100vh-400px)]">
       <div className="p-4 space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <h3 className="text-base font-semibold">Review Check #{check.check_number || "—"}</h3>
-          <Button
-            size="sm"
-            variant={editing ? "default" : "outline"}
-            onClick={() => {
-              if (!editing) {
-                setCarrierName(check.carrier_name ?? "");
-                setCheckNumber(check.check_number ?? "");
-                setAmount(check.amount?.toString() ?? "");
-                setPayeeLine(check.payee_line ?? "");
-                markDirty();
-              }
-              setEditing(!editing);
-            }}
-          >
-            <Edit3 className="h-3 w-3 mr-1" />
-            {editing ? "Cancel Edit" : "Edit Fields"}
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <ViewCheckImageButton
+              checkId={checkId}
+              checkNumber={check.check_number}
+              size="sm"
+              variant="outline"
+            />
+            <AdminDeleteCheckButton
+              checkId={checkId}
+              checkNumber={check.check_number}
+              onDeleted={() => {
+                qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+                qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+                onComplete();
+              }}
+              size="sm"
+              variant="outline"
+            />
+            <Button
+              size="sm"
+              variant={editing ? "default" : "outline"}
+              onClick={() => {
+                if (!editing) {
+                  setCarrierName(check.carrier_name ?? "");
+                  setCheckNumber(check.check_number ?? "");
+                  setAmount(check.amount?.toString() ?? "");
+                  setPayeeLine(check.payee_line ?? "");
+                  markDirty();
+                }
+                setEditing(!editing);
+              }}
+            >
+              <Edit3 className="h-3 w-3 mr-1" />
+              {editing ? "Cancel Edit" : "Edit Fields"}
+            </Button>
+          </div>
         </div>
 
         {/* Review reasons */}
