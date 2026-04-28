@@ -16784,6 +16784,10 @@ export type Database = {
             }
             Returns: string
           }
+      admin_delete_check: {
+        Args: { p_actor_id: string; p_check_id: string }
+        Returns: Json
+      }
       assign_deposit_owner: {
         Args: {
           p_actor_id: string
