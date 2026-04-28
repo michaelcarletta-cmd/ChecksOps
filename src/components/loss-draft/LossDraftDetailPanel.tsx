@@ -22,6 +22,8 @@ import { LossDraftActionsTab } from "./detail/LossDraftActionsTab";
 import { LossDraftDocsTab } from "./detail/LossDraftDocsTab";
 import { LossDraftReleasesTab } from "./detail/LossDraftReleasesTab";
 import { LossDraftAuditTab } from "./detail/LossDraftAuditTab";
+import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
+import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
 
 const isUnknownServicer = (value?: string | null) =>
   !value || value.trim().toLowerCase().includes("unknown");
@@ -160,6 +162,24 @@ export function LossDraftDetailPanel({
           <div className="text-xs text-muted-foreground">
             Not Monitored — Mortgage endorses &amp; returns check
             {draft.check_received_back_date && " · ✅ Received back"}
+          </div>
+        )}
+
+        {draft.check_intake_item_id && (
+          <div className="flex flex-wrap gap-2 pt-2">
+            <ViewCheckImageButton
+              checkId={draft.check_intake_item_id}
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+            />
+            <AdminDeleteCheckButton
+              checkId={draft.check_intake_item_id}
+              onDeleted={handleChanged}
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+            />
           </div>
         )}
       </CardHeader>
