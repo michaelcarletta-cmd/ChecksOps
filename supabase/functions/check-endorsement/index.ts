@@ -147,19 +147,29 @@ async function reEvaluateAfterEndorsement(
 
     const originalRec = check?.deposit_recommendation ?? "";
 
-    if (check?.is_multi_payee || RESTRICTED_RECOMMENDATIONS.has(originalRec)) {
+    if (originalRec === "loss_draft_required") {
       await supabase.from("check_intake_items")
-        .update({ status: "endorsements_complete" })
+        .update({ status: "loss_draft_required" })
         .eq("id", checkId);
 
       await supabase.from("check_audit_log").insert({
         check_id: checkId,
         event_type: "all_endorsements_complete",
-        event_description: `All endorsements complete — deposit recommendation preserved: ${originalRec}`,
+        event_description: "All endorsements complete — routed to loss draft workflow",
+      });
+    } else if (originalRec === "branch_deposit_recommended") {
+      await supabase.from("check_intake_items")
+        .update({ status: "branch_deposit_required" })
+        .eq("id", checkId);
+
+      await supabase.from("check_audit_log").insert({
+        check_id: checkId,
+        event_type: "all_endorsements_complete",
+        event_description: "All endorsements complete — routed to branch deposit workflow",
       });
     } else {
       await supabase.from("check_intake_items")
-        .update({ status: "ready", deposit_recommendation: "ready_for_deposit" })
+        .update({ status: "approved_for_deposit", deposit_recommendation: "ready_for_deposit" })
         .eq("id", checkId);
 
       await supabase.from("check_audit_log").insert({
