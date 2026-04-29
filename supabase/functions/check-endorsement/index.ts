@@ -277,7 +277,13 @@ async function reEvaluateAfterEndorsement(
       console.error("Payment direction trigger failed (non-blocking):", pdErr);
     }
 
-    return { allSigned: true, newStatus: check?.is_multi_payee || RESTRICTED_RECOMMENDATIONS.has(originalRec) ? "endorsements_complete" : "ready" };
+    const finalStatus = originalRec === "loss_draft_required"
+      ? "loss_draft_required"
+      : originalRec === "branch_deposit_recommended"
+        ? "branch_deposit_required"
+        : "approved_for_deposit";
+
+    return { allSigned: true, newStatus: finalStatus };
   }
 
   await refreshCompositeBackImage(checkId);
