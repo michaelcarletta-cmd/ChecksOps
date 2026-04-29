@@ -1239,6 +1239,45 @@ export type Database = {
           },
         ]
       }
+      check_deletion_log: {
+        Row: {
+          amount: number | null
+          check_id: string
+          check_number: string | null
+          claim_id: string | null
+          deleted_at: string
+          deleted_by: string
+          id: string
+          reason: string
+          snapshot: Json | null
+          status: string | null
+        }
+        Insert: {
+          amount?: number | null
+          check_id: string
+          check_number?: string | null
+          claim_id?: string | null
+          deleted_at?: string
+          deleted_by: string
+          id?: string
+          reason: string
+          snapshot?: Json | null
+          status?: string | null
+        }
+        Update: {
+          amount?: number | null
+          check_id?: string
+          check_number?: string | null
+          claim_id?: string | null
+          deleted_at?: string
+          deleted_by?: string
+          id?: string
+          reason?: string
+          snapshot?: Json | null
+          status?: string | null
+        }
+        Relationships: []
+      }
       check_eligibility_results: {
         Row: {
           check_id: string
@@ -16785,7 +16824,7 @@ export type Database = {
             Returns: string
           }
       admin_delete_check: {
-        Args: { p_actor_id: string; p_check_id: string }
+        Args: { p_actor_id: string; p_check_id: string; p_reason: string }
         Returns: Json
       }
       assign_deposit_owner: {
