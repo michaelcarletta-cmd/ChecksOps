@@ -11,16 +11,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 
 /**
- * Admin-only "Delete Check" button.
- * Hidden for non-admins. Opens a confirmation dialog before invoking
- * the `admin_delete_check` RPC, which cascades cleanup of payees,
- * endorsements, deposit-ops rows, loss-draft references, and the check.
+ * Admin-only "Delete Check" button. Allows deleting a check from ANY status.
+ * Requires the admin to provide a reason (logged to check_deletion_log + claim_audit_log).
  */
 export function AdminDeleteCheckButton({
   checkId,
@@ -44,16 +44,29 @@ export function AdminDeleteCheckButton({
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [reason, setReason] = useState("");
 
   if (!isAdmin) return null;
 
+  const trimmed = reason.trim();
+  const reasonValid = trimmed.length >= 3;
+
   const handleDelete = async () => {
     if (!user?.id) return;
+    if (!reasonValid) {
+      toast({
+        title: "Reason required",
+        description: "Please provide a reason (min 3 characters).",
+        variant: "destructive",
+      });
+      return;
+    }
     setDeleting(true);
     try {
       const { error } = await supabase.rpc("admin_delete_check" as any, {
         p_check_id: checkId,
         p_actor_id: user.id,
+        p_reason: trimmed,
       });
       if (error) throw error;
       toast({
@@ -61,6 +74,7 @@ export function AdminDeleteCheckButton({
         description: `Check${checkNumber ? ` #${checkNumber}` : ""} and all related records were removed.`,
       });
       setOpen(false);
+      setReason("");
       onDeleted?.();
     } catch (e: any) {
       toast({
@@ -84,21 +98,43 @@ export function AdminDeleteCheckButton({
         <Trash2 className="h-3.5 w-3.5 mr-1.5" />
         {label}
       </Button>
-      <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) setReason("");
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this check?</AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently delete check
               {checkNumber ? ` #${checkNumber}` : ""} along with its payees,
-              endorsements, deposit packets, and loss-draft references. This
-              action cannot be undone.
+              endorsements, deposit packets, and loss-draft references —
+              regardless of its current status. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="delete-reason">
+              Reason for deletion <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              id="delete-reason"
+              placeholder="e.g. Duplicate intake, voided by carrier, entered in error…"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={3}
+              disabled={deleting}
+            />
+            <p className="text-xs text-muted-foreground">
+              Required. Logged to the audit trail.
+            </p>
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={deleting}
+              disabled={deleting || !reasonValid}
               onClick={(e) => {
                 e.preventDefault();
                 handleDelete();
