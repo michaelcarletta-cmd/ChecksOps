@@ -1133,7 +1133,7 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                   <TableRow>
                     <TableCell colSpan={isAdmin ? 8 : 7} className="p-0 border-0">
                       <div className="p-3 bg-muted/30">
-                        <CheckProcessingCard claimId={claimId} checkId={check.id} />
+                        <CheckProcessingCard claimId={claimId} checkId={check.id} isAdmin={isAdmin} />
                       </div>
                     </TableCell>
                   </TableRow>
