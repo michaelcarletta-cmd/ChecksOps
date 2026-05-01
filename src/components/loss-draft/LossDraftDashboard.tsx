@@ -91,19 +91,17 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
     enabled: !!tenantId,
   });
 
-  // Defensive frontend filter — backend view also excludes these, but keep
-  // FE in sync so stale caches never display a check that has moved on.
-  const isVisibleInLossDraft = (d: LossDraftRow) => {
-    if (d.escrow_status === "endorsing") return false;
-    if (
-      d.monitoring_type === "not_monitored" &&
-      d.check_status &&
-      ["endorsements_in_progress", "approved_for_deposit", "deposited"].includes(d.check_status)
-    ) {
-      return false;
-    }
-    return true;
-  };
+  // Defensive frontend filter — exclude any check that has moved into a
+  // Review/Endorsement/Deposit lane unless it's actively in an escrow-monitoring stage.
+  // This prevents the same check from appearing in BOTH Loss Draft AND Review/Deposit tabs.
+  const isEscrowMonitoringStage = (d: LossDraftRow) =>
+    ["escrowed", "first_draw_requested", "partial_release"].includes(d.escrow_status);
+  const isMovedOutCheckStatus = (d: LossDraftRow) =>
+    ["needs_review", "manual_review_required", "endorsements_in_progress", "approved_for_deposit", "ready", "deposited"]
+      .includes(d.check_status ?? "");
+  const isVisibleInLossDraft = (d: LossDraftRow) =>
+    !["endorsing", "final_release_complete"].includes(d.escrow_status) &&
+    !(isMovedOutCheckStatus(d) && !isEscrowMonitoringStage(d));
   const isActiveLossDraft = (d: LossDraftRow) =>
     isVisibleInLossDraft(d) && d.escrow_status !== "final_release_complete";
   const visibleDrafts = drafts.filter(isVisibleInLossDraft);
