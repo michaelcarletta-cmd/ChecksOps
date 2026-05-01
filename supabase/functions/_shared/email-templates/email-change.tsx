@@ -9,10 +9,14 @@ import {
   Head,
   Heading,
   Html,
+  Img,
   Link,
   Preview,
+  Section,
   Text,
 } from 'npm:@react-email/components@0.0.22'
+
+const LOGO_URL = 'https://nbcqwpysqgyxrrbgtmkw.supabase.co/storage/v1/object/public/email-assets/checksops-logo.png'
 
 interface EmailChangeEmailProps {
   siteName: string
@@ -37,6 +41,9 @@ export const EmailChangeEmail = ({
     <Preview>Confirm your email change for {siteName}</Preview>
     <Body style={main}>
       <Container style={container}>
+        <Section style={logoSection}>
+          <Img src={LOGO_URL} alt="ChecksOps" width="180" height="48" style={logo} />
+        </Section>
         <Heading style={h1}>Confirm your email change</Heading>
         <Text style={text}>
           You requested to change your email address for {siteName} from{' '}
@@ -68,6 +75,8 @@ export default EmailChangeEmail
 
 const main = { backgroundColor: '#ffffff', fontFamily: 'Arial, sans-serif' }
 const container = { padding: '20px 25px' }
+const logoSection = { padding: '0 0 24px', borderBottom: '1px solid #e5e7eb', marginBottom: '24px' }
+const logo = { display: 'block' }
 const h1 = {
   fontSize: '22px',
   fontWeight: 'bold' as const,
