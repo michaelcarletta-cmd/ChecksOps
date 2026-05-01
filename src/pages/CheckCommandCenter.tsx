@@ -37,7 +37,7 @@ import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
 import { EndorsementOverride } from "@/lib/endorsementLayout";
 import { LossDraftDetailPanel } from "@/components/loss-draft/LossDraftDetailPanel";
-import { ArrowDownToLine, Scale, FileBarChart, Users as UsersIcon, Command } from "lucide-react";
+import { ArrowDownToLine, FileBarChart } from "lucide-react";
 import { CheckCenterHelpButton } from "@/components/check-review/CheckCenterHelp";
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
@@ -59,17 +59,8 @@ const DepositPacketGenerator = lazy(() =>
 const DepositOperationsConsole = lazy(() =>
   import("@/components/deposit-ops/DepositOperationsConsole").then(m => ({ default: m.DepositOperationsConsole }))
 );
-const ReconciliationDashboard = lazy(() =>
-  import("@/components/deposit-ops/ReconciliationDashboard").then(m => ({ default: m.ReconciliationDashboard }))
-);
 const DepositReports = lazy(() =>
   import("@/components/deposit-ops/DepositReports").then(m => ({ default: m.DepositReports }))
-);
-const DepositOwnerQueue = lazy(() =>
-  import("@/components/deposit-ops/DepositOwnerQueue").then(m => ({ default: m.DepositOwnerQueue }))
-);
-const DepositManagerCommandCenter = lazy(() =>
-  import("@/components/deposit-ops/DepositManagerCommandCenter").then(m => ({ default: m.DepositManagerCommandCenter }))
 );
 const TenantPartnerManager = lazy(() =>
   import("@/components/white-label/TenantPartnerManager").then(m => ({ default: m.TenantPartnerManager }))
@@ -438,15 +429,6 @@ export default function CheckCommandCenter() {
     refetchInterval: 30_000,
   });
 
-  const operationalInsights = [
-    { label: "Awaiting endorsements", value: awaitingEndorsement.length, icon: Send, tone: "text-amber-400", onClick: () => setActiveTab("endorsements") },
-    { label: "Needs review", value: needsReview.length, icon: ClipboardCheck, tone: "text-blue-400", onClick: () => setActiveTab("review") },
-    { label: "Ready to deposit", value: readyForDeposit.length, icon: CheckCircle2, tone: "text-emerald-400", onClick: () => setActiveTab("ready") },
-    { label: "Branch deposit", value: branchDeposit.length, icon: Building2, tone: "text-sky-400", onClick: () => setActiveTab("branch") },
-    { label: "Reissue requested", value: reissueRequested.length, icon: RotateCcw, tone: "text-orange-400", onClick: () => setActiveTab("reissue") },
-    { label: "Blocked in loss draft", value: lossDraftCounts.checks_blocked_in_lender ?? 0, icon: Landmark, tone: "text-purple-400", onClick: () => setActiveTab("lossdraft") },
-    { label: "Overdue follow-up", value: lossDraftCounts.overdue_followup ?? 0, icon: Clock, tone: "text-red-400", onClick: () => setActiveTab("lossdraft") },
-  ];
 
   return (
     <div className="space-y-4">
@@ -537,36 +519,6 @@ export default function CheckCommandCenter() {
         )}
       </div>
 
-      <div className="rounded-lg border border-border/60 bg-card/70 p-3">
-        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold">Operational bottlenecks</p>
-            <p className="text-xs text-muted-foreground">Claim-centered check files, endorsements, deposit readiness, and loss draft visibility.</p>
-          </div>
-          <Badge variant="outline" className="w-fit text-[10px]">{checks.length} total checks</Badge>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-2">
-          {operationalInsights.map((item) => {
-            const Icon = item.icon;
-            const isHot = item.value > 0;
-            return (
-              <button
-                key={item.label}
-                type="button"
-                onClick={item.onClick}
-                className={`rounded-md border p-3 text-left transition-colors ${isHot ? "border-border/80 bg-muted/40 hover:border-primary/50" : "border-border/40 bg-background/40 text-muted-foreground hover:bg-muted/30"}`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <Icon className={`h-4 w-4 ${item.tone}`} />
-                  <span className="text-lg font-bold tabular-nums">{item.value}</span>
-                </div>
-                <p className="mt-1 text-[11px] leading-tight">{item.label}</p>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
         {/* Gradient nav cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3">
@@ -605,10 +557,7 @@ export default function CheckCommandCenter() {
         {/* Operations tabs */}
         <TabsList className="mt-3 w-full flex-wrap h-auto gap-1 bg-muted/50">
           <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
-          <TabsTrigger value="reconciliation" className="text-xs gap-1"><Scale className="h-3 w-3" />Reconciliation</TabsTrigger>
           <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
-          <TabsTrigger value="workqueue" className="text-xs gap-1"><UsersIcon className="h-3 w-3" />Work Queue</TabsTrigger>
-          <TabsTrigger value="manager" className="text-xs gap-1"><Command className="h-3 w-3" />Manager</TabsTrigger>
           <TabsTrigger value="reissue" className="text-xs gap-1"><RotateCcw className="h-3 w-3" />Reissue ({reissueRequested.length})</TabsTrigger>
           <TabsTrigger value="branch" className="text-xs gap-1"><Building2 className="h-3 w-3" />Branch ({branchDeposit.length})</TabsTrigger>
           <TabsTrigger value="partners" className="text-xs gap-1"><Share2 className="h-3 w-3" />Partners</TabsTrigger>
@@ -639,31 +588,10 @@ export default function CheckCommandCenter() {
           </Suspense>
         </TabsContent>
 
-        {/* Reconciliation Tab */}
-        <TabsContent value="reconciliation" className="mt-3">
-          <Suspense fallback={<TabLoader />}>
-            <ReconciliationDashboard searchQuery={searchQuery} />
-          </Suspense>
-        </TabsContent>
-
         {/* Reports Tab */}
         <TabsContent value="reports" className="mt-3">
           <Suspense fallback={<TabLoader />}>
             <DepositReports />
-          </Suspense>
-        </TabsContent>
-
-        {/* Work Queue Tab */}
-        <TabsContent value="workqueue" className="mt-3">
-          <Suspense fallback={<TabLoader />}>
-            <DepositOwnerQueue searchQuery={searchQuery} />
-          </Suspense>
-        </TabsContent>
-
-        {/* Manager Tab */}
-        <TabsContent value="manager" className="mt-3">
-          <Suspense fallback={<TabLoader />}>
-            <DepositManagerCommandCenter searchQuery={searchQuery} />
           </Suspense>
         </TabsContent>
 
@@ -839,7 +767,7 @@ export default function CheckCommandCenter() {
         )}
 
         {/* All other tabs — only render the active one */}
-        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "deposit_ops" && activeTab !== "reconciliation" && activeTab !== "reports" && activeTab !== "workqueue" && activeTab !== "manager" && activeTab !== "reissue" && activeTab !== "branch" && activeTab !== "partners" && (
+        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "deposit_ops" && activeTab !== "reports" && activeTab !== "reissue" && activeTab !== "branch" && activeTab !== "partners" && (
           <div className="mt-3 flex gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
             {/* Check list — grows when no check selected */}
             <Card
