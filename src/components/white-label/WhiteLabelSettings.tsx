@@ -83,6 +83,11 @@ export function WhiteLabelSettings() {
             <ChangePasswordCard />
           </TabsContent>
 
+          <TabsContent value="usage" className="space-y-4">
+            <CheckUsageCard />
+            {isAdmin && <BillingConfigPanel />}
+          </TabsContent>
+
           <TabsContent value="credits">
             <TenantCreditManager />
           </TabsContent>
