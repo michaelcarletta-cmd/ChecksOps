@@ -1239,6 +1239,99 @@ export type Database = {
           },
         ]
       }
+      check_billing_config: {
+        Row: {
+          active: boolean
+          created_at: string
+          currency: string
+          id: string
+          price_per_check_cents: number
+          stripe_meter_event_name: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          currency?: string
+          id?: string
+          price_per_check_cents?: number
+          stripe_meter_event_name?: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          currency?: string
+          id?: string
+          price_per_check_cents?: number
+          stripe_meter_event_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      check_billing_events: {
+        Row: {
+          billed_at: string
+          check_intake_item_id: string
+          created_at: string
+          currency: string
+          error_message: string | null
+          id: string
+          reported_at: string | null
+          status: string
+          stripe_customer_id: string | null
+          stripe_meter_event_id: string | null
+          tenant_id: string
+          unit_price_cents: number
+          updated_at: string
+        }
+        Insert: {
+          billed_at?: string
+          check_intake_item_id: string
+          created_at?: string
+          currency?: string
+          error_message?: string | null
+          id?: string
+          reported_at?: string | null
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_meter_event_id?: string | null
+          tenant_id: string
+          unit_price_cents: number
+          updated_at?: string
+        }
+        Update: {
+          billed_at?: string
+          check_intake_item_id?: string
+          created_at?: string
+          currency?: string
+          error_message?: string | null
+          id?: string
+          reported_at?: string | null
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_meter_event_id?: string | null
+          tenant_id?: string
+          unit_price_cents?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_billing_events_check_intake_item_id_fkey"
+            columns: ["check_intake_item_id"]
+            isOneToOne: true
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "check_billing_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       check_deletion_log: {
         Row: {
           amount: number | null
@@ -16947,6 +17040,7 @@ export type Database = {
         Returns: Json
       }
       auto_generate_claim_microtasks: { Args: never; Returns: number }
+      backfill_check_billing_events: { Args: never; Returns: Json }
       bulk_deposit_closeout: {
         Args: { p_actor_id: string; p_deposit_item_ids: string[] }
         Returns: Json
@@ -17428,6 +17522,10 @@ export type Database = {
       }
       get_portfolio_carrier_analytics: { Args: never; Returns: Json }
       get_portfolio_intelligence: { Args: never; Returns: Json }
+      get_tenant_check_usage: {
+        Args: { _month_end?: string; _month_start?: string; _tenant_id: string }
+        Returns: Json
+      }
       get_tenant_users_with_profiles: {
         Args: { _tenant_id: string }
         Returns: {
