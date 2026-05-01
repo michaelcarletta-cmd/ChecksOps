@@ -322,6 +322,61 @@ export function ReviewDecisionPanel({
 
   const markDirty = useCallback(() => { formDirtyRef.current = true; }, []);
 
+  const saveFieldEdits = useMutation({
+    mutationFn: async () => {
+      if (!check) throw new Error("Check not loaded");
+      const parsedAmount = amount.trim() ? Number(amount) : null;
+      if (amount.trim() && !Number.isFinite(parsedAmount)) throw new Error("Enter a valid amount");
+
+      const fieldChanges: { field: string; old_value: string | null; new_value: string | null }[] = [];
+      const updates: Record<string, string | number | null> = {};
+
+      if (carrierName !== (check.carrier_name ?? "")) {
+        updates.carrier_name = carrierName || null;
+        fieldChanges.push({ field: "carrier_name", old_value: check.carrier_name, new_value: carrierName || null });
+      }
+      if (checkNumber !== (check.check_number ?? "")) {
+        updates.check_number = checkNumber || null;
+        fieldChanges.push({ field: "check_number", old_value: check.check_number, new_value: checkNumber || null });
+      }
+      if (amount !== (check.amount?.toString() ?? "")) {
+        updates.amount = parsedAmount;
+        fieldChanges.push({ field: "amount", old_value: check.amount?.toString() ?? null, new_value: amount || null });
+      }
+      if (payeeLine !== (check.payee_line ?? "")) {
+        updates.payee_line = payeeLine || null;
+        fieldChanges.push({ field: "payee_line", old_value: check.payee_line, new_value: payeeLine || null });
+      }
+
+      if (Object.keys(updates).length === 0) throw new Error("No field changes to save");
+
+      const { error } = await supabase
+        .from("check_intake_items")
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq("id", checkId);
+      if (error) throw error;
+
+      await supabase.from("check_audit_log").insert({
+        check_id: checkId,
+        event_type: "review_fields_saved",
+        event_description: "Review fields updated without moving workflow status",
+        event_data: { field_changes: fieldChanges },
+        actor_id: user?.id ?? null,
+      });
+    },
+    onSuccess: () => {
+      formDirtyRef.current = false;
+      setEditing(false);
+      toast({ title: "Field changes saved" });
+      qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to save fields", description: err?.message ?? String(err), variant: "destructive" });
+    },
+  });
+
   const submitDecision = useMutation({
     mutationFn: async () => {
       if (!user?.id) throw new Error("Not authenticated");
@@ -461,6 +516,21 @@ export function ReviewDecisionPanel({
                 <Label className="text-xs">Payee Line</Label>
                 <Input value={payeeLine} onChange={(e) => { setPayeeLine(e.target.value); markDirty(); }} className="h-8 text-sm" />
               </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => saveFieldEdits.mutate()}
+                disabled={saveFieldEdits.isPending}
+                className="w-full"
+              >
+                {saveFieldEdits.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Save Field Changes
+              </Button>
             </>
           ) : (
             <div className="grid grid-cols-2 gap-2 text-sm">
