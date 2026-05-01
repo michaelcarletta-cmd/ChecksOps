@@ -10,11 +10,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft, Loader2, Save, Trash2, Coins } from "lucide-react";
+import { LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft, Loader2, Save, Trash2, Coins, Receipt } from "lucide-react";
 import { TenantUserManager } from "./TenantUserManager";
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { TenantCreditManager } from "./TenantCreditManager";
 import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
+import { CheckUsageCard } from "@/components/billing/CheckUsageCard";
+import { BillingConfigPanel } from "@/components/billing/BillingConfigPanel";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
@@ -34,6 +37,7 @@ const PageLoader = () => (
 export function WhiteLabelSettings() {
   const { tenant } = useTenant();
   const { user, loading } = useAuth();
+  const { isAdmin } = usePermissions();
 
   if (loading) return <PageLoader />;
   if (!user) return <Navigate to={tenant?.slug ? `${resolveTenantBase(tenant.slug)}/login` : "/login"} replace />;
@@ -66,6 +70,7 @@ export function WhiteLabelSettings() {
         <Tabs defaultValue="profile" className="space-y-6">
           <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
             <TabsTrigger value="profile" className="text-xs gap-1"><Building2 className="h-3 w-3" />Profile</TabsTrigger>
+            <TabsTrigger value="usage" className="text-xs gap-1"><Receipt className="h-3 w-3" />Usage</TabsTrigger>
             <TabsTrigger value="credits" className="text-xs gap-1"><Coins className="h-3 w-3" />Credits</TabsTrigger>
             <TabsTrigger value="users" className="text-xs gap-1"><Users className="h-3 w-3" />Users</TabsTrigger>
             <TabsTrigger value="partners" className="text-xs gap-1"><Link2 className="h-3 w-3" />Partners</TabsTrigger>
@@ -76,6 +81,11 @@ export function WhiteLabelSettings() {
           <TabsContent value="profile" className="space-y-6">
             {tenant && <ProfileSettings tenant={tenant} />}
             <ChangePasswordCard />
+          </TabsContent>
+
+          <TabsContent value="usage" className="space-y-4">
+            <CheckUsageCard />
+            {isAdmin && <BillingConfigPanel />}
           </TabsContent>
 
           <TabsContent value="credits">
