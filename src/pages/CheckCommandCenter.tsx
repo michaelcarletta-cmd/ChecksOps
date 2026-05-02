@@ -2177,6 +2177,9 @@ function CheckDetailPanel({
               Payees ({check.check_payees?.length ?? 0})
             </TabsTrigger>
             <TabsTrigger value="eligibility" className="flex-1 text-xs">Eligibility</TabsTrigger>
+            <TabsTrigger value="discussion" className="flex-1 text-xs gap-1">
+              <MessageSquare className="h-3 w-3" /> Discussion
+            </TabsTrigger>
             <TabsTrigger value="audit" className="flex-1 text-xs">Audit</TabsTrigger>
           </TabsList>
 
