@@ -19,9 +19,8 @@ interface CheckSummary {
   check_number: string | null;
   carrier_name: string | null;
   amount: number | null;
-  policyholder_name: string | null;
-  claim_number: string | null;
   status: string | null;
+  claims: { claim_number: string | null; policyholder_name: string | null } | null;
 }
 
 export function CheckMessagesPanel() {
@@ -47,10 +46,10 @@ export function CheckMessagesPanel() {
       if (checkIds.length === 0) return [] as CheckSummary[];
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("id, check_number, carrier_name, amount, policyholder_name, claim_number, status")
+        .select("id, check_number, carrier_name, amount, status, claims(claim_number, policyholder_name)")
         .in("id", checkIds);
       if (error) throw error;
-      return (data ?? []) as CheckSummary[];
+      return (data ?? []) as unknown as CheckSummary[];
     },
     enabled: checkIds.length > 0,
   });
@@ -67,8 +66,8 @@ export function CheckMessagesPanel() {
         return (
           (c.check_number ?? "").toLowerCase().includes(q) ||
           (c.carrier_name ?? "").toLowerCase().includes(q) ||
-          (c.policyholder_name ?? "").toLowerCase().includes(q) ||
-          (c.claim_number ?? "").toLowerCase().includes(q)
+          (c.claims?.policyholder_name ?? "").toLowerCase().includes(q) ||
+          (c.claims?.claim_number ?? "").toLowerCase().includes(q)
         );
       })
       .sort((a, b) => {
