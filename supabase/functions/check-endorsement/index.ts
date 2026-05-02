@@ -568,6 +568,60 @@ function buildEndorsementEmailHtml(
 </html>`;
 }
 
+function buildCombinedEndorsementEmailHtml(
+  payees: { name: string; url: string }[],
+  checkNum: string,
+  carrier: string,
+  amount: number | null,
+  branding: EndorsementBranding = {},
+): string {
+  const amountStr = amount != null
+    ? `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+    : "N/A";
+  const headerColor = branding.endorsement_email_header_color || "#1e293b";
+  const buttonColor = branding.endorsement_email_button_color || "#2563eb";
+  const companyName = branding.company_name || "Freedom Claims";
+  const logoUrl = branding.letterhead_url || "";
+  const logoBlock = logoUrl
+    ? `<img src="${escHtml(logoUrl)}" alt="${escHtml(companyName)}" style="max-height:48px;max-width:200px;object-fit:contain;" />`
+    : `<span style="font-size:20px;font-weight:700;color:#ffffff;">${escHtml(companyName)}</span>`;
+
+  const payeeBlocks = payees.map((p, i) => `
+    <table width="100%" style="margin:0 0 16px;background-color:#f8f9fb;border-radius:8px;overflow:hidden;">
+      <tr><td style="padding:16px 20px;">
+        <p style="margin:0 0 8px;color:#1a1a2e;font-size:15px;font-weight:600;">${i + 1}. ${escHtml(p.name)}</p>
+        <a href="${escHtml(p.url)}" style="display:inline-block;background-color:${buttonColor};color:#ffffff;text-decoration:none;padding:10px 24px;border-radius:6px;font-size:14px;font-weight:600;">Sign as ${escHtml(p.name)}</a>
+      </td></tr>
+    </table>`).join("");
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f0f2f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f2f5;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+        <tr><td style="background-color:${headerColor};padding:24px 32px;text-align:center;">${logoBlock}</td></tr>
+        <tr><td style="padding:32px;">
+          <p style="color:#1a1a2e;font-size:16px;font-weight:600;margin:0 0 8px;">Multiple endorsements needed</p>
+          <p style="color:#4a4a68;font-size:15px;margin:0 0 20px;line-height:1.6;">An insurance check requires endorsement from <strong>${payees.length} payees</strong> at this email address. Please complete each one below — you can sign them in any order.</p>
+          <table width="100%" style="margin:0 0 20px;background-color:#f8f9fb;border-radius:8px;overflow:hidden;">
+            <tr><td style="padding:12px 20px;color:#6b7280;font-size:13px;border-bottom:1px solid #e5e7eb;">Carrier</td><td style="padding:12px 20px;font-weight:600;color:#1a1a2e;font-size:13px;border-bottom:1px solid #e5e7eb;text-align:right;">${escHtml(carrier)}</td></tr>
+            <tr><td style="padding:12px 20px;color:#6b7280;font-size:13px;border-bottom:1px solid #e5e7eb;">Check #</td><td style="padding:12px 20px;font-weight:600;color:#1a1a2e;font-size:13px;border-bottom:1px solid #e5e7eb;text-align:right;">${escHtml(checkNum)}</td></tr>
+            <tr><td style="padding:12px 20px;color:#6b7280;font-size:13px;">Amount</td><td style="padding:12px 20px;font-weight:700;color:#16a34a;font-size:16px;text-align:right;">${escHtml(amountStr)}</td></tr>
+          </table>
+          ${payeeBlocks}
+          <p style="color:#9ca3af;font-size:12px;margin:16px 0 0;text-align:center;">After signing the first payee, you'll be guided to the next one automatically.</p>
+        </td></tr>
+        <tr><td style="padding:20px 32px;border-top:1px solid #e5e7eb;background-color:#f8f9fb;">
+          <p style="color:#6b7280;font-size:12px;margin:0 0 4px;">${escHtml(companyName)}${branding.company_phone ? ` &bull; ${escHtml(branding.company_phone)}` : ""}${branding.company_email ? ` &bull; ${escHtml(branding.company_email)}` : ""}</p>
+          <p style="color:#9ca3af;font-size:11px;margin:0;">This is an automated message. Please do not reply directly to this email.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Main handler                                                       */
 /* ------------------------------------------------------------------ */
