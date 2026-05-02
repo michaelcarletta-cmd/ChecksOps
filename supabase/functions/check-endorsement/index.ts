@@ -984,7 +984,6 @@ Deno.serve(async (req) => {
               delivery_error: null,
               email_address: endorsement.contact_email,
               phone_number: null,
-              notes: `Combined email with endorsement ${endorsementId}`,
             });
           }
         }
