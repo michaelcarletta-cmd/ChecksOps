@@ -132,14 +132,14 @@ export function CheckMessagesPanel() {
                         <span className="text-xs font-semibold truncate">
                           #{c.check_number || "—"}
                         </span>
-                        {c.claim_number && (
+                        {c.claims?.claim_number && (
                           <Badge variant="outline" className="text-[9px] h-4 px-1">
-                            {c.claim_number}
+                            {c.claims.claim_number}
                           </Badge>
                         )}
                       </div>
                       <div className="text-[11px] text-muted-foreground truncate">
-                        {c.policyholder_name || c.carrier_name || "Unknown"}
+                        {c.claims?.policyholder_name || c.carrier_name || "Unknown"}
                       </div>
                       {r.last_message_at && (
                         <div className="text-[10px] text-muted-foreground mt-0.5">
@@ -166,13 +166,13 @@ export function CheckMessagesPanel() {
           <CardTitle className="text-sm">
             {selected?.check
               ? `Check #${selected.check.check_number || "—"} • ${
-                  selected.check.policyholder_name || selected.check.carrier_name || "Unknown"
+                  selected.check.claims?.policyholder_name || selected.check.carrier_name || "Unknown"
                 }`
               : "Select a conversation"}
           </CardTitle>
           {selected?.check && (
             <div className="text-[11px] text-muted-foreground">
-              {selected.check.claim_number && `Claim ${selected.check.claim_number} • `}
+              {selected.check.claims?.claim_number && `Claim ${selected.check.claims.claim_number} • `}
               {selected.check.amount != null &&
                 `$${Number(selected.check.amount).toLocaleString()} • `}
               {selected.check.status}
