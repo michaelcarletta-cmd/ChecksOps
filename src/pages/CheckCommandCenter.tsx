@@ -43,6 +43,7 @@ import { CheckCenterHelpButton } from "@/components/check-review/CheckCenterHelp
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
 import { Share2 } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 
 // Lazy-loaded: heavy tab-only / dialog-only modules (each becomes its own JS chunk)
 const LossDraftDashboard = lazy(() =>
@@ -68,6 +69,9 @@ const TenantPartnerManager = lazy(() =>
 );
 const MortgageCompaniesDirectory = lazy(() =>
   import("@/components/checks/MortgageCompaniesDirectory").then(m => ({ default: m.MortgageCompaniesDirectory }))
+);
+const LossPreventionPanel = lazy(() =>
+  import("@/components/check-review/LossPreventionPanel").then(m => ({ default: m.LossPreventionPanel }))
 );
 
 /** Spinner shown while a lazy tab/section loads. */
@@ -559,6 +563,7 @@ export default function CheckCommandCenter() {
         <TabsList className="mt-3 w-full flex-wrap h-auto gap-1 bg-muted/50">
           <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
           <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
+          <TabsTrigger value="loss_prevention" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Loss Prevention</TabsTrigger>
           <TabsTrigger value="reissue" className="text-xs gap-1"><RotateCcw className="h-3 w-3" />Reissue ({reissueRequested.length})</TabsTrigger>
           <TabsTrigger value="branch" className="text-xs gap-1"><Building2 className="h-3 w-3" />Branch ({branchDeposit.length})</TabsTrigger>
           <TabsTrigger value="partners" className="text-xs gap-1"><Share2 className="h-3 w-3" />Partners</TabsTrigger>
@@ -593,6 +598,13 @@ export default function CheckCommandCenter() {
         <TabsContent value="reports" className="mt-3">
           <Suspense fallback={<TabLoader />}>
             <DepositReports />
+          </Suspense>
+        </TabsContent>
+
+        {/* Loss Prevention Tab */}
+        <TabsContent value="loss_prevention" className="mt-3">
+          <Suspense fallback={<TabLoader />}>
+            <LossPreventionPanel />
           </Suspense>
         </TabsContent>
 
