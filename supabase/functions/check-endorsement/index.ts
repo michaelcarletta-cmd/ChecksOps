@@ -568,6 +568,60 @@ function buildEndorsementEmailHtml(
 </html>`;
 }
 
+function buildCombinedEndorsementEmailHtml(
+  payees: { name: string; url: string }[],
+  checkNum: string,
+  carrier: string,
+  amount: number | null,
+  branding: EndorsementBranding = {},
+): string {
+  const amountStr = amount != null
+    ? `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+    : "N/A";
+  const headerColor = branding.endorsement_email_header_color || "#1e293b";
+  const buttonColor = branding.endorsement_email_button_color || "#2563eb";
+  const companyName = branding.company_name || "Freedom Claims";
+  const logoUrl = branding.letterhead_url || "";
+  const logoBlock = logoUrl
+    ? `<img src="${escHtml(logoUrl)}" alt="${escHtml(companyName)}" style="max-height:48px;max-width:200px;object-fit:contain;" />`
+    : `<span style="font-size:20px;font-weight:700;color:#ffffff;">${escHtml(companyName)}</span>`;
+
+  const payeeBlocks = payees.map((p, i) => `
+    <table width="100%" style="margin:0 0 16px;background-color:#f8f9fb;border-radius:8px;overflow:hidden;">
+      <tr><td style="padding:16px 20px;">
+        <p style="margin:0 0 8px;color:#1a1a2e;font-size:15px;font-weight:600;">${i + 1}. ${escHtml(p.name)}</p>
+        <a href="${escHtml(p.url)}" style="display:inline-block;background-color:${buttonColor};color:#ffffff;text-decoration:none;padding:10px 24px;border-radius:6px;font-size:14px;font-weight:600;">Sign as ${escHtml(p.name)}</a>
+      </td></tr>
+    </table>`).join("");
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f0f2f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f2f5;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+        <tr><td style="background-color:${headerColor};padding:24px 32px;text-align:center;">${logoBlock}</td></tr>
+        <tr><td style="padding:32px;">
+          <p style="color:#1a1a2e;font-size:16px;font-weight:600;margin:0 0 8px;">Multiple endorsements needed</p>
+          <p style="color:#4a4a68;font-size:15px;margin:0 0 20px;line-height:1.6;">An insurance check requires endorsement from <strong>${payees.length} payees</strong> at this email address. Please complete each one below — you can sign them in any order.</p>
+          <table width="100%" style="margin:0 0 20px;background-color:#f8f9fb;border-radius:8px;overflow:hidden;">
+            <tr><td style="padding:12px 20px;color:#6b7280;font-size:13px;border-bottom:1px solid #e5e7eb;">Carrier</td><td style="padding:12px 20px;font-weight:600;color:#1a1a2e;font-size:13px;border-bottom:1px solid #e5e7eb;text-align:right;">${escHtml(carrier)}</td></tr>
+            <tr><td style="padding:12px 20px;color:#6b7280;font-size:13px;border-bottom:1px solid #e5e7eb;">Check #</td><td style="padding:12px 20px;font-weight:600;color:#1a1a2e;font-size:13px;border-bottom:1px solid #e5e7eb;text-align:right;">${escHtml(checkNum)}</td></tr>
+            <tr><td style="padding:12px 20px;color:#6b7280;font-size:13px;">Amount</td><td style="padding:12px 20px;font-weight:700;color:#16a34a;font-size:16px;text-align:right;">${escHtml(amountStr)}</td></tr>
+          </table>
+          ${payeeBlocks}
+          <p style="color:#9ca3af;font-size:12px;margin:16px 0 0;text-align:center;">After signing the first payee, you'll be guided to the next one automatically.</p>
+        </td></tr>
+        <tr><td style="padding:20px 32px;border-top:1px solid #e5e7eb;background-color:#f8f9fb;">
+          <p style="color:#6b7280;font-size:12px;margin:0 0 4px;">${escHtml(companyName)}${branding.company_phone ? ` &bull; ${escHtml(branding.company_phone)}` : ""}${branding.company_email ? ` &bull; ${escHtml(branding.company_email)}` : ""}</p>
+          <p style="color:#9ca3af;font-size:11px;margin:0;">This is an automated message. Please do not reply directly to this email.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Main handler                                                       */
 /* ------------------------------------------------------------------ */
@@ -606,13 +660,41 @@ Deno.serve(async (req) => {
         const eToken = body.token as string;
         if (!eToken) return json({ error: "Token required" }, 400);
 
-        const { data: endorsement, error: eErr } = await supabase
+        let { data: endorsement } = await supabase
           .from("check_endorsements")
           .select("id, payee_name, payee_type, status, token, token_expires_at, check_id, check_intake_items(carrier_name, check_number, amount, claim_id)")
           .eq("token", eToken)
-          .single();
+          .maybeSingle();
 
-        if (eErr || !endorsement) return json({ error: "Invalid or expired endorsement link" }, 404);
+        // Resilient lookup: token may have rotated after sign/reject. Try legacy
+        // payee token, then check_payees.endorsement_token, then audit log.
+        if (!endorsement) {
+          const { data: byPayee } = await supabase
+            .from("check_payees")
+            .select("id, check_id")
+            .eq("endorsement_token", eToken)
+            .maybeSingle();
+          if (byPayee) {
+            const { data: e2 } = await supabase
+              .from("check_endorsements")
+              .select("id, payee_name, payee_type, status, token, token_expires_at, check_id, check_intake_items(carrier_name, check_number, amount, claim_id)")
+              .eq("payee_id", byPayee.id)
+              .order("updated_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (e2) endorsement = e2;
+          }
+        }
+
+        if (!endorsement) {
+          return json(
+            {
+              error: "This endorsement link has already been used or replaced.",
+              code: "token_consumed",
+            },
+            404,
+          );
+        }
 
         // Check expiry
         if (endorsement.token_expires_at && new Date(endorsement.token_expires_at) < new Date()) {
@@ -801,19 +883,58 @@ Deno.serve(async (req) => {
           .maybeSingle();
         const emailBranding: EndorsementBranding = brandingRow || {};
 
+        // Track sibling endorsements that share this contact email so we can
+        // mark them all as sent (combined email below).
+        const combinedSentIds: string[] = [];
+
         if ((method === "email" || method === "both") && endorsement.contact_email) {
           try {
+            // Find sibling unsigned endorsements on the same check sharing this email
+            const { data: siblings } = await supabase
+              .from("check_endorsements")
+              .select("id, payee_name, token, status, contact_email")
+              .eq("check_id", endorsement.check_id)
+              .eq("contact_email", endorsement.contact_email)
+              .neq("id", endorsementId)
+              .in("status", ["pending", "sent"]);
+
+            const allPayees = [
+              { id: endorsementId as string, name: endorsement.payee_name as string, url: endorsementUrl },
+              ...((siblings || []).map((s: any) => ({
+                id: s.id as string,
+                name: s.payee_name as string,
+                url: `${appUrl}/endorse?token=${s.token}`,
+              }))),
+            ];
+
+            const isCombined = allPayees.length > 1;
             const rawSubject = emailBranding.endorsement_email_subject || "Endorsement Required — Check #{check.number}";
-            const finalSubject = replaceEndorsementMergeFields(rawSubject, endorsement.payee_name, checkNum, carrier, amount, endorsementUrl, emailBranding);
+            const finalSubject = isCombined
+              ? `${allPayees.length} endorsements needed — Check #${checkNum}`
+              : replaceEndorsementMergeFields(rawSubject, endorsement.payee_name, checkNum, carrier, amount, endorsementUrl, emailBranding);
+            const finalBody = isCombined
+              ? buildCombinedEndorsementEmailHtml(
+                  allPayees.map((p) => ({ name: p.name, url: p.url })),
+                  checkNum,
+                  carrier,
+                  amount,
+                  emailBranding,
+                )
+              : buildEndorsementEmailHtml(endorsement.payee_name, checkNum, carrier, amount, endorsementUrl, emailBranding);
+
             const { error: invokeErr } = await supabase.functions.invoke("send-email", {
               body: {
                 to: endorsement.contact_email,
                 subject: finalSubject,
-                body: buildEndorsementEmailHtml(endorsement.payee_name, checkNum, carrier, amount, endorsementUrl, emailBranding),
+                body: finalBody,
               },
             });
             if (invokeErr) throw invokeErr;
             emailSent = true;
+
+            if (isCombined) {
+              combinedSentIds.push(...(siblings || []).map((s: any) => s.id as string));
+            }
           } catch (e) {
             emailError = e instanceof Error ? e.message : String(e);
           }
@@ -844,6 +965,28 @@ Deno.serve(async (req) => {
           reminder_count: endorsement.request_sent_at ? endorsement.reminder_count + 1 : 0,
           updated_at: new Date().toISOString(),
         }).eq("id", endorsementId);
+
+        // Mark sibling endorsements covered by the combined email as sent too
+        if (anyDelivered && combinedSentIds.length > 0) {
+          await supabase.from("check_endorsements").update({
+            status: "sent",
+            request_sent_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }).in("id", combinedSentIds);
+
+          for (const sid of combinedSentIds) {
+            await supabase.from("endorsement_requests").insert({
+              endorsement_id: sid,
+              check_id: endorsement.check_id,
+              method,
+              sent_by: ud.user.id,
+              delivery_status: "delivered",
+              delivery_error: null,
+              email_address: endorsement.contact_email,
+              phone_number: null,
+            });
+          }
+        }
 
         // Log the request
         await supabase.from("endorsement_requests").insert({
@@ -1107,7 +1250,40 @@ Deno.serve(async (req) => {
         }
 
         const result = await reEvaluateAfterEndorsement(supabase, endorsement.check_id);
-        return json({ success: true, ...result });
+
+        // Find next pending endorsement on the same check that shares contact
+        // info with the just-signed signer — lets a single recipient sign
+        // sequentially without returning to email/SMS.
+        let nextToken: string | null = null;
+        let nextPayeeName: string | null = null;
+        try {
+          const sharedFilters: string[] = [];
+          if (endorsement.contact_email) {
+            sharedFilters.push(`contact_email.eq.${endorsement.contact_email}`);
+          }
+          if (endorsement.contact_phone) {
+            sharedFilters.push(`contact_phone.eq.${endorsement.contact_phone}`);
+          }
+          if (sharedFilters.length > 0) {
+            const { data: nextEndorsements } = await supabase
+              .from("check_endorsements")
+              .select("token, payee_name, status, contact_email, contact_phone")
+              .eq("check_id", endorsement.check_id)
+              .neq("id", endorsement.id)
+              .in("status", ["pending", "sent"])
+              .or(sharedFilters.join(","))
+              .order("created_at", { ascending: true })
+              .limit(1);
+            if (nextEndorsements && nextEndorsements.length > 0) {
+              nextToken = nextEndorsements[0].token;
+              nextPayeeName = nextEndorsements[0].payee_name;
+            }
+          }
+        } catch (nextErr) {
+          console.error("[ENDORSEMENT] next-payee lookup failed (non-blocking):", nextErr);
+        }
+
+        return json({ success: true, next_token: nextToken, next_payee_name: nextPayeeName, ...result });
       }
 
       /* ------------------------------------------------------------ */

@@ -187,6 +187,19 @@ export default function Endorse() {
       if (!resp.ok) throw new Error(json.error || "Request failed");
 
       if (type === "approve") {
+        // If another payee at this same address still needs to sign, hop directly to them.
+        if (json.next_token) {
+          const nextName = json.next_payee_name ? ` Now signing as ${json.next_payee_name}.` : "";
+          setMessage({ text: `Signature recorded.${nextName}`, type: "success" });
+          // Reset form state for the next signer
+          setPaymentDirection(null);
+          setContractorName("");
+          setESignConsentAccepted(false);
+          clearCanvas();
+          // Hard navigate to refresh data cleanly
+          window.location.assign(`/endorse?token=${json.next_token}`);
+          return;
+        }
         // Show the thank-you state directly without re-fetching (avoids "invalid link" error)
         setData((prev) => prev ? { ...prev, status: "signed" } : prev);
       } else {
