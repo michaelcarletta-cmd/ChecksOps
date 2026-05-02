@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus } from "lucide-react";
+import { Plus, X as XIcon, Building2 } from "lucide-react";
 
 export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
   const { user } = useAuth();
@@ -26,6 +26,17 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
   const [loanNumber, setLoanNumber] = useState("");
   const [amount, setAmount] = useState("");
   const [notes, setNotes] = useState("");
+
+  // Optional 2nd mortgagee (when the same check has two mortgage companies
+  // listed on it). Creates an additional loss_draft_tracking row alongside
+  // the primary one — each independently runs its own monitored /
+  // not-monitored workflow.
+  const [showSecond, setShowSecond] = useState(false);
+  const [servicer2, setServicer2] = useState("");
+  const [contact2, setContact2] = useState("");
+  const [phone2, setPhone2] = useState("");
+  const [email2, setEmail2] = useState("");
+  const [loanNumber2, setLoanNumber2] = useState("");
 
   const { data: claims = [] } = useQuery({
     queryKey: ["claims-for-loss-draft"],
