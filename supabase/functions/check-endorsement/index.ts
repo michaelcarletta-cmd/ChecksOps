@@ -606,13 +606,41 @@ Deno.serve(async (req) => {
         const eToken = body.token as string;
         if (!eToken) return json({ error: "Token required" }, 400);
 
-        const { data: endorsement, error: eErr } = await supabase
+        let { data: endorsement } = await supabase
           .from("check_endorsements")
           .select("id, payee_name, payee_type, status, token, token_expires_at, check_id, check_intake_items(carrier_name, check_number, amount, claim_id)")
           .eq("token", eToken)
-          .single();
+          .maybeSingle();
 
-        if (eErr || !endorsement) return json({ error: "Invalid or expired endorsement link" }, 404);
+        // Resilient lookup: token may have rotated after sign/reject. Try legacy
+        // payee token, then check_payees.endorsement_token, then audit log.
+        if (!endorsement) {
+          const { data: byPayee } = await supabase
+            .from("check_payees")
+            .select("id, check_id")
+            .eq("endorsement_token", eToken)
+            .maybeSingle();
+          if (byPayee) {
+            const { data: e2 } = await supabase
+              .from("check_endorsements")
+              .select("id, payee_name, payee_type, status, token, token_expires_at, check_id, check_intake_items(carrier_name, check_number, amount, claim_id)")
+              .eq("payee_id", byPayee.id)
+              .order("updated_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (e2) endorsement = e2;
+          }
+        }
+
+        if (!endorsement) {
+          return json(
+            {
+              error: "This endorsement link has already been used or replaced.",
+              code: "token_consumed",
+            },
+            404,
+          );
+        }
 
         // Check expiry
         if (endorsement.token_expires_at && new Date(endorsement.token_expires_at) < new Date()) {
