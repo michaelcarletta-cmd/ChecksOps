@@ -883,19 +883,58 @@ Deno.serve(async (req) => {
           .maybeSingle();
         const emailBranding: EndorsementBranding = brandingRow || {};
 
+        // Track sibling endorsements that share this contact email so we can
+        // mark them all as sent (combined email below).
+        const combinedSentIds: string[] = [];
+
         if ((method === "email" || method === "both") && endorsement.contact_email) {
           try {
+            // Find sibling unsigned endorsements on the same check sharing this email
+            const { data: siblings } = await supabase
+              .from("check_endorsements")
+              .select("id, payee_name, token, status, contact_email")
+              .eq("check_id", endorsement.check_id)
+              .eq("contact_email", endorsement.contact_email)
+              .neq("id", endorsementId)
+              .in("status", ["pending", "sent"]);
+
+            const allPayees = [
+              { id: endorsementId as string, name: endorsement.payee_name as string, url: endorsementUrl },
+              ...((siblings || []).map((s: any) => ({
+                id: s.id as string,
+                name: s.payee_name as string,
+                url: `${appUrl}/endorse?token=${s.token}`,
+              }))),
+            ];
+
+            const isCombined = allPayees.length > 1;
             const rawSubject = emailBranding.endorsement_email_subject || "Endorsement Required — Check #{check.number}";
-            const finalSubject = replaceEndorsementMergeFields(rawSubject, endorsement.payee_name, checkNum, carrier, amount, endorsementUrl, emailBranding);
+            const finalSubject = isCombined
+              ? `${allPayees.length} endorsements needed — Check #${checkNum}`
+              : replaceEndorsementMergeFields(rawSubject, endorsement.payee_name, checkNum, carrier, amount, endorsementUrl, emailBranding);
+            const finalBody = isCombined
+              ? buildCombinedEndorsementEmailHtml(
+                  allPayees.map((p) => ({ name: p.name, url: p.url })),
+                  checkNum,
+                  carrier,
+                  amount,
+                  emailBranding,
+                )
+              : buildEndorsementEmailHtml(endorsement.payee_name, checkNum, carrier, amount, endorsementUrl, emailBranding);
+
             const { error: invokeErr } = await supabase.functions.invoke("send-email", {
               body: {
                 to: endorsement.contact_email,
                 subject: finalSubject,
-                body: buildEndorsementEmailHtml(endorsement.payee_name, checkNum, carrier, amount, endorsementUrl, emailBranding),
+                body: finalBody,
               },
             });
             if (invokeErr) throw invokeErr;
             emailSent = true;
+
+            if (isCombined) {
+              combinedSentIds.push(...(siblings || []).map((s: any) => s.id as string));
+            }
           } catch (e) {
             emailError = e instanceof Error ? e.message : String(e);
           }
