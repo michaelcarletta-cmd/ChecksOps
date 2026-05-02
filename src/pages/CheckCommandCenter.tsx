@@ -1016,6 +1016,9 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
   const [uploading, setUploading] = useState(false);
   const [claimDropdownOpen, setClaimDropdownOpen] = useState(false);
   const [skipAi, setSkipAi] = useState(false);
+  const [mortgagee1, setMortgagee1] = useState("");
+  const [mortgagee2, setMortgagee2] = useState("");
+  const [showSecondMortgagee, setShowSecondMortgagee] = useState(false);
 
   const { data: claims = [] } = useQuery({
     queryKey: ["claims-for-check-link", claimSearch],
