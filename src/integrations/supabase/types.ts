@@ -1875,6 +1875,50 @@ export type Database = {
           },
         ]
       }
+      check_reconciliation_alerts: {
+        Row: {
+          alert_type: string
+          check_intake_item_id: string | null
+          created_at: string
+          details: Json
+          id: string
+          resolved: boolean
+          resolved_at: string | null
+          resolved_by: string | null
+          severity: string
+        }
+        Insert: {
+          alert_type: string
+          check_intake_item_id?: string | null
+          created_at?: string
+          details?: Json
+          id?: string
+          resolved?: boolean
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+        }
+        Update: {
+          alert_type?: string
+          check_intake_item_id?: string | null
+          created_at?: string
+          details?: Json
+          id?: string
+          resolved?: boolean
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_reconciliation_alerts_check_intake_item_id_fkey"
+            columns: ["check_intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       check_reissue_requests: {
         Row: {
           check_id: string
@@ -1994,6 +2038,47 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      check_status_audit: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          check_intake_item_id: string
+          from_status: string | null
+          id: string
+          reason: string | null
+          source: string
+          to_status: string
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          check_intake_item_id: string
+          from_status?: string | null
+          id?: string
+          reason?: string | null
+          source?: string
+          to_status: string
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          check_intake_item_id?: string
+          from_status?: string | null
+          id?: string
+          reason?: string | null
+          source?: string
+          to_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_status_audit_check_intake_item_id_fkey"
+            columns: ["check_intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
             referencedColumns: ["id"]
           },
         ]
@@ -17465,6 +17550,23 @@ export type Database = {
         Returns: boolean
       }
       geomfromewkt: { Args: { "": string }; Returns: unknown }
+      get_all_checks_safety_net: {
+        Args: never
+        Returns: {
+          amount: number
+          back_image_path: string
+          carrier_name: string
+          check_number: string
+          claim_id: string
+          created_at: string
+          front_image_path: string
+          has_loss_draft: boolean
+          id: string
+          payee_line: string
+          status: string
+          updated_at: string
+        }[]
+      }
       get_all_insurance_carriers: {
         Args: never
         Returns: {
@@ -17522,6 +17624,22 @@ export type Database = {
       }
       get_portfolio_carrier_analytics: { Args: never; Returns: Json }
       get_portfolio_intelligence: { Args: never; Returns: Json }
+      get_stuck_checks: {
+        Args: never
+        Returns: {
+          amount: number
+          carrier_name: string
+          claim_id: string
+          created_at: string
+          hours_in_status: number
+          id: string
+          is_overdue: boolean
+          payee_line: string
+          sla_hours: number
+          status: string
+          updated_at: string
+        }[]
+      }
       get_tenant_check_usage: {
         Args: { _month_end?: string; _month_start?: string; _tenant_id: string }
         Returns: Json
