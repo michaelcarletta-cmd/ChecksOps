@@ -73,6 +73,9 @@ const MortgageCompaniesDirectory = lazy(() =>
 const LossPreventionPanel = lazy(() =>
   import("@/components/check-review/LossPreventionPanel").then(m => ({ default: m.LossPreventionPanel }))
 );
+const CheckMessagesPanel = lazy(() =>
+  import("@/components/check-messages/CheckMessagesPanel").then(m => ({ default: m.CheckMessagesPanel }))
+);
 
 /** Spinner shown while a lazy tab/section loads. */
 const TabLoader = () => (
@@ -564,6 +567,7 @@ export default function CheckCommandCenter() {
           <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
           <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
           <TabsTrigger value="loss_prevention" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Loss Prevention</TabsTrigger>
+          <TabsTrigger value="messages" className="text-xs gap-1"><MessageSquare className="h-3 w-3" />Messages{totalUnreadMessages > 0 && (<Badge variant="destructive" className="ml-1 h-4 min-w-4 px-1 text-[9px]">{totalUnreadMessages}</Badge>)}</TabsTrigger>
           <TabsTrigger value="reissue" className="text-xs gap-1"><RotateCcw className="h-3 w-3" />Reissue ({reissueRequested.length})</TabsTrigger>
           <TabsTrigger value="branch" className="text-xs gap-1"><Building2 className="h-3 w-3" />Branch ({branchDeposit.length})</TabsTrigger>
           <TabsTrigger value="partners" className="text-xs gap-1"><Share2 className="h-3 w-3" />Partners</TabsTrigger>
@@ -605,6 +609,13 @@ export default function CheckCommandCenter() {
         <TabsContent value="loss_prevention" className="mt-3">
           <Suspense fallback={<TabLoader />}>
             <LossPreventionPanel />
+          </Suspense>
+        </TabsContent>
+
+        {/* Messages Tab */}
+        <TabsContent value="messages" className="mt-3">
+          <Suspense fallback={<TabLoader />}>
+            <CheckMessagesPanel />
           </Suspense>
         </TabsContent>
 
