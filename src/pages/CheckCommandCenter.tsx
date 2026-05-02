@@ -76,6 +76,9 @@ const LossPreventionPanel = lazy(() =>
 const CheckMessagesPanel = lazy(() =>
   import("@/components/check-messages/CheckMessagesPanel").then(m => ({ default: m.CheckMessagesPanel }))
 );
+const CheckMessageThread = lazy(() =>
+  import("@/components/check-messages/CheckMessageThread").then(m => ({ default: m.CheckMessageThread }))
+);
 
 /** Spinner shown while a lazy tab/section loads. */
 const TabLoader = () => (
