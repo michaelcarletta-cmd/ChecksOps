@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus } from "lucide-react";
+import { Plus, X as XIcon, Building2 } from "lucide-react";
 
 export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
   const { user } = useAuth();
@@ -26,6 +26,17 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
   const [loanNumber, setLoanNumber] = useState("");
   const [amount, setAmount] = useState("");
   const [notes, setNotes] = useState("");
+
+  // Optional 2nd mortgagee (when the same check has two mortgage companies
+  // listed on it). Creates an additional loss_draft_tracking row alongside
+  // the primary one — each independently runs its own monitored /
+  // not-monitored workflow.
+  const [showSecond, setShowSecond] = useState(false);
+  const [servicer2, setServicer2] = useState("");
+  const [contact2, setContact2] = useState("");
+  const [phone2, setPhone2] = useState("");
+  const [email2, setEmail2] = useState("");
+  const [loanNumber2, setLoanNumber2] = useState("");
 
   const { data: claims = [] } = useQuery({
     queryKey: ["claims-for-loss-draft"],
@@ -133,7 +144,51 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
         notes: `Created loss draft for ${servicer}`,
       });
 
-      toast({ title: "Loss draft created" });
+      // Optionally create a 2nd loss_draft row when the same check has a
+      // second mortgage company on it. We don't fail the whole operation
+      // if the secondary insert fails — primary is already saved.
+      if (showSecond && servicer2.trim()) {
+        try {
+          const trimmed2 = servicer2.trim();
+          const { data: existing2 } = await supabase
+            .from("loss_draft_tracking")
+            .select("id")
+            .eq("claim_id", claimId)
+            .ilike("mortgage_servicer", trimmed2)
+            .neq("escrow_status", "final_release_complete")
+            .limit(1);
+          if (!existing2 || existing2.length === 0) {
+            const { data: inserted2 } = await supabase
+              .from("loss_draft_tracking")
+              .insert({
+                claim_id: claimId,
+                mortgage_servicer: trimmed2,
+                loss_draft_contact: contact2 || null,
+                loss_draft_phone: phone2 || null,
+                loss_draft_email: email2 || null,
+                loan_number: loanNumber2 || null,
+                created_by: user?.id,
+              })
+              .select("id")
+              .single();
+            if (inserted2?.id) {
+              await supabase.rpc("init_loss_draft_documents" as any, { p_loss_draft_id: inserted2.id });
+              await supabase.from("loss_draft_audit_log").insert({
+                loss_draft_id: inserted2.id,
+                action: "created",
+                actor_id: user?.id,
+                notes: `Created loss draft for ${trimmed2} (2nd mortgagee on check)`,
+              });
+            }
+          }
+        } catch (e2) {
+          console.error("Secondary loss draft creation failed:", e2);
+        }
+      }
+
+      toast({
+        title: showSecond && servicer2.trim() ? "Two loss drafts created" : "Loss draft created",
+      });
       setOpen(false);
       resetForm();
       onCreated();
@@ -147,6 +202,7 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
   const resetForm = () => {
     setClaimId(""); setMortgageCompanyId(""); setServicer(""); setContact(""); setPhone("");
     setEmail(""); setLoanNumber(""); setAmount(""); setNotes("");
+    setShowSecond(false); setServicer2(""); setContact2(""); setPhone2(""); setEmail2(""); setLoanNumber2("");
   };
 
   return (
@@ -220,8 +276,64 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
             <Label className="text-xs">Notes</Label>
             <Textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} className="text-xs" />
           </div>
+
+          {/* Optional 2nd mortgagee — for checks made out to two mortgage
+              companies. Each row gets its own monitored / not-monitored flow. */}
+          {!showSecond ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full text-xs"
+              onClick={() => setShowSecond(true)}
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              Add 2nd mortgage company on check
+            </Button>
+          ) : (
+            <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-medium">
+                  <Building2 className="h-3.5 w-3.5 text-amber-400" />
+                  2nd Mortgage Company
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => {
+                    setShowSecond(false);
+                    setServicer2(""); setContact2(""); setPhone2(""); setEmail2(""); setLoanNumber2("");
+                  }}
+                  title="Remove"
+                >
+                  <XIcon className="h-3 w-3" />
+                </Button>
+              </div>
+              <Input
+                placeholder="Servicer name *"
+                value={servicer2}
+                onChange={e => setServicer2(e.target.value)}
+                className="h-9"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <Input placeholder="Contact" value={contact2} onChange={e => setContact2(e.target.value)} className="h-9" />
+                <Input placeholder="Phone" value={phone2} onChange={e => setPhone2(e.target.value)} className="h-9" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Input placeholder="Email" value={email2} onChange={e => setEmail2(e.target.value)} className="h-9" />
+                <Input placeholder="Loan #" value={loanNumber2} onChange={e => setLoanNumber2(e.target.value)} className="h-9" />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                A separate Loss Draft entry will be created so each
+                mortgagee can be tracked independently.
+              </p>
+            </div>
+          )}
+
           <Button onClick={handleSave} disabled={saving} className="w-full">
-            {saving ? "Creating..." : "Create Loss Draft"}
+            {saving ? "Creating..." : showSecond && servicer2.trim() ? "Create Both Loss Drafts" : "Create Loss Draft"}
           </Button>
         </div>
       </DialogContent>

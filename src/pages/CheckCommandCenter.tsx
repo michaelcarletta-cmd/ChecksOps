@@ -23,6 +23,7 @@ import {
   Send, Eye, Users, Building2, Shield, ChevronRight,
   RefreshCw, Banknote, ClipboardCheck, RotateCcw, Printer, Landmark, Trash2, Search,
   Download, FileImage, Undo2, HelpCircle, X as XIcon, Loader2 as Loader2Icon,
+  Sparkles,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { toast as sonnerToast } from "sonner";
@@ -1016,6 +1017,9 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
   const [uploading, setUploading] = useState(false);
   const [claimDropdownOpen, setClaimDropdownOpen] = useState(false);
   const [skipAi, setSkipAi] = useState(false);
+  const [mortgagee1, setMortgagee1] = useState("");
+  const [mortgagee2, setMortgagee2] = useState("");
+  const [showSecondMortgagee, setShowSecondMortgagee] = useState(false);
 
   const { data: claims = [] } = useQuery({
     queryKey: ["claims-for-check-link", claimSearch],
@@ -1082,6 +1086,48 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 
       if (insErr || !check) throw new Error(insErr?.message ?? "Insert failed");
 
+      // Auto-create loss_draft_tracking rows for any mortgagees the user listed
+      // on the check. Each row independently goes through the monitored /
+      // not-monitored workflow in the Loss Draft dashboard.
+      const mortgagees = [mortgagee1.trim(), mortgagee2.trim()].filter(Boolean);
+      if (claimId && mortgagees.length > 0) {
+        try {
+          for (const servicer of mortgagees) {
+            const { data: existing } = await supabase
+              .from("loss_draft_tracking")
+              .select("id")
+              .eq("claim_id", claimId)
+              .ilike("mortgage_servicer", servicer)
+              .neq("escrow_status", "final_release_complete")
+              .limit(1);
+            if (existing && existing.length > 0) continue;
+
+            const { data: ld } = await supabase
+              .from("loss_draft_tracking")
+              .insert({
+                claim_id: claimId,
+                check_intake_item_id: check.id,
+                mortgage_servicer: servicer,
+                created_by: user.id,
+                ...(tenantId ? { tenant_id: tenantId } : {}),
+              })
+              .select("id")
+              .single();
+            if (ld?.id) {
+              await supabase.rpc("init_loss_draft_documents" as any, { p_loss_draft_id: ld.id });
+              await supabase.from("loss_draft_audit_log").insert({
+                loss_draft_id: ld.id,
+                action: "created",
+                actor_id: user.id,
+                notes: `Auto-created from check upload (${mortgagees.length > 1 ? "dual mortgagee" : "single mortgagee"})`,
+              });
+            }
+          }
+        } catch (ldErr) {
+          console.error("Loss draft auto-create failed:", ldErr);
+        }
+      }
+
       const { data: session } = await supabase.auth.getSession();
       const { data: ocrResult, error: fnErr } = await supabase.functions.invoke("check-ocr-intake", {
         body: { checkId: check.id, skipAi },
@@ -1124,6 +1170,37 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <div className="space-y-4">
+      {/* AI ON/OFF toggle — prominent at the top so the user can decide
+          before they even pick a file whether to spend AI credits. */}
+      <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/40 p-3">
+        <div className="flex items-center gap-2 min-w-0">
+          {skipAi ? (
+            <Pencil className="h-4 w-4 text-muted-foreground shrink-0" />
+          ) : (
+            <Sparkles className="h-4 w-4 text-primary shrink-0" />
+          )}
+          <div className="min-w-0">
+            <div className="text-sm font-medium leading-tight">
+              {skipAi ? "Manual entry mode" : "AI extraction enabled"}
+            </div>
+            <div className="text-[11px] text-muted-foreground leading-tight">
+              {skipAi
+                ? "You'll type the check details in the review queue. No AI credits used."
+                : "AI will read the check and pre-fill the details."}
+            </div>
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant={skipAi ? "outline" : "default"}
+          size="sm"
+          className="shrink-0 h-8"
+          onClick={() => setSkipAi((v) => !v)}
+        >
+          {skipAi ? "Turn AI On" : "Turn AI Off"}
+        </Button>
+      </div>
+
       <div>
         <Label>Front of Check *</Label>
         <Input type="file" accept="image/*" onChange={(e) => setFrontFile(e.target.files?.[0] ?? null)} />
@@ -1177,21 +1254,60 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
           )}
         </div>
       </div>
-      <div className="flex items-start gap-2 rounded-md border bg-muted/30 p-3">
-        <input
-          id="skip-ai-checkbox"
-          type="checkbox"
-          checked={skipAi}
-          onChange={(e) => setSkipAi(e.target.checked)}
-          className="mt-0.5 h-4 w-4 cursor-pointer accent-primary"
-        />
-        <label htmlFor="skip-ai-checkbox" className="text-sm cursor-pointer flex-1">
-          <span className="font-medium">Skip AI — enter details manually</span>
-          <span className="block text-xs text-muted-foreground mt-0.5">
-            Use this if you're out of AI credits or prefer to type the check info yourself. The check will go straight to the review queue.
-          </span>
-        </label>
-      </div>
+
+      {/* Mortgagees on the check — supports up to two mortgage companies.
+          Each one creates an independent Loss Draft tracking row that
+          goes through its own monitored / not-monitored process. */}
+      {claimId && (
+        <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+          <div className="flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-amber-400" />
+            <Label className="text-xs font-medium">Mortgage company on check (optional)</Label>
+          </div>
+          <Input
+            placeholder="1st mortgage company name (as listed on check)"
+            value={mortgagee1}
+            onChange={(e) => setMortgagee1(e.target.value)}
+            className="h-9"
+          />
+          {showSecondMortgagee ? (
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="2nd mortgage company name"
+                value={mortgagee2}
+                onChange={(e) => setMortgagee2(e.target.value)}
+                className="h-9"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                onClick={() => { setMortgagee2(""); setShowSecondMortgagee(false); }}
+                title="Remove second mortgagee"
+              >
+                <XIcon className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-primary hover:text-primary"
+              onClick={() => setShowSecondMortgagee(true)}
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              Add 2nd mortgage company
+            </Button>
+          )}
+          <p className="text-[11px] text-muted-foreground">
+            Each mortgagee gets its own Loss Draft entry with its own
+            monitored / not-monitored workflow.
+          </p>
+        </div>
+      )}
+
       <Button onClick={handleUpload} disabled={uploading || !frontFile} className="w-full">
         {uploading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
         {uploading ? "Processing..." : skipAi ? "Upload for Manual Entry" : "Upload & Analyze"}
