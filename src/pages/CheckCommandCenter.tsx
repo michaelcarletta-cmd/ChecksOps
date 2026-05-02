@@ -437,6 +437,16 @@ export default function CheckCommandCenter() {
     refetchInterval: 30_000,
   });
 
+  // Total unread internal messages across all check threads (for tab badge)
+  const { data: totalUnreadMessages = 0 } = useQuery({
+    queryKey: ["check-unread-total"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_total_unread_check_messages");
+      if (error) throw error;
+      return Number(data ?? 0);
+    },
+    refetchInterval: 15_000,
+  });
 
   return (
     <div className="space-y-4">
