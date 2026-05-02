@@ -276,8 +276,64 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
             <Label className="text-xs">Notes</Label>
             <Textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} className="text-xs" />
           </div>
+
+          {/* Optional 2nd mortgagee — for checks made out to two mortgage
+              companies. Each row gets its own monitored / not-monitored flow. */}
+          {!showSecond ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full text-xs"
+              onClick={() => setShowSecond(true)}
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              Add 2nd mortgage company on check
+            </Button>
+          ) : (
+            <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-medium">
+                  <Building2 className="h-3.5 w-3.5 text-amber-400" />
+                  2nd Mortgage Company
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => {
+                    setShowSecond(false);
+                    setServicer2(""); setContact2(""); setPhone2(""); setEmail2(""); setLoanNumber2("");
+                  }}
+                  title="Remove"
+                >
+                  <XIcon className="h-3 w-3" />
+                </Button>
+              </div>
+              <Input
+                placeholder="Servicer name *"
+                value={servicer2}
+                onChange={e => setServicer2(e.target.value)}
+                className="h-9"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <Input placeholder="Contact" value={contact2} onChange={e => setContact2(e.target.value)} className="h-9" />
+                <Input placeholder="Phone" value={phone2} onChange={e => setPhone2(e.target.value)} className="h-9" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Input placeholder="Email" value={email2} onChange={e => setEmail2(e.target.value)} className="h-9" />
+                <Input placeholder="Loan #" value={loanNumber2} onChange={e => setLoanNumber2(e.target.value)} className="h-9" />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                A separate Loss Draft entry will be created so each
+                mortgagee can be tracked independently.
+              </p>
+            </div>
+          )}
+
           <Button onClick={handleSave} disabled={saving} className="w-full">
-            {saving ? "Creating..." : "Create Loss Draft"}
+            {saving ? "Creating..." : showSecond && servicer2.trim() ? "Create Both Loss Drafts" : "Create Loss Draft"}
           </Button>
         </div>
       </DialogContent>
