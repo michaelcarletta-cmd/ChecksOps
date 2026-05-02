@@ -23,7 +23,7 @@ import {
   Send, Eye, Users, Building2, Shield, ChevronRight,
   RefreshCw, Banknote, ClipboardCheck, RotateCcw, Printer, Landmark, Trash2, Search,
   Download, FileImage, Undo2, HelpCircle, X as XIcon, Loader2 as Loader2Icon,
-  Sparkles,
+  Sparkles, MessageSquare,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { toast as sonnerToast } from "sonner";
@@ -72,6 +72,12 @@ const MortgageCompaniesDirectory = lazy(() =>
 );
 const LossPreventionPanel = lazy(() =>
   import("@/components/check-review/LossPreventionPanel").then(m => ({ default: m.LossPreventionPanel }))
+);
+const CheckMessagesPanel = lazy(() =>
+  import("@/components/check-messages/CheckMessagesPanel").then(m => ({ default: m.CheckMessagesPanel }))
+);
+const CheckMessageThread = lazy(() =>
+  import("@/components/check-messages/CheckMessageThread").then(m => ({ default: m.CheckMessageThread }))
 );
 
 /** Spinner shown while a lazy tab/section loads. */
@@ -434,6 +440,16 @@ export default function CheckCommandCenter() {
     refetchInterval: 30_000,
   });
 
+  // Total unread internal messages across all check threads (for tab badge)
+  const { data: totalUnreadMessages = 0 } = useQuery({
+    queryKey: ["check-unread-total"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_total_unread_check_messages");
+      if (error) throw error;
+      return Number(data ?? 0);
+    },
+    refetchInterval: 15_000,
+  });
 
   return (
     <div className="space-y-4">
@@ -564,6 +580,7 @@ export default function CheckCommandCenter() {
           <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
           <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
           <TabsTrigger value="loss_prevention" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Loss Prevention</TabsTrigger>
+          <TabsTrigger value="messages" className="text-xs gap-1"><MessageSquare className="h-3 w-3" />Messages{totalUnreadMessages > 0 && (<Badge variant="destructive" className="ml-1 h-4 min-w-4 px-1 text-[9px]">{totalUnreadMessages}</Badge>)}</TabsTrigger>
           <TabsTrigger value="reissue" className="text-xs gap-1"><RotateCcw className="h-3 w-3" />Reissue ({reissueRequested.length})</TabsTrigger>
           <TabsTrigger value="branch" className="text-xs gap-1"><Building2 className="h-3 w-3" />Branch ({branchDeposit.length})</TabsTrigger>
           <TabsTrigger value="partners" className="text-xs gap-1"><Share2 className="h-3 w-3" />Partners</TabsTrigger>
@@ -605,6 +622,13 @@ export default function CheckCommandCenter() {
         <TabsContent value="loss_prevention" className="mt-3">
           <Suspense fallback={<TabLoader />}>
             <LossPreventionPanel />
+          </Suspense>
+        </TabsContent>
+
+        {/* Messages Tab */}
+        <TabsContent value="messages" className="mt-3">
+          <Suspense fallback={<TabLoader />}>
+            <CheckMessagesPanel />
           </Suspense>
         </TabsContent>
 
@@ -2156,6 +2180,9 @@ function CheckDetailPanel({
               Payees ({check.check_payees?.length ?? 0})
             </TabsTrigger>
             <TabsTrigger value="eligibility" className="flex-1 text-xs">Eligibility</TabsTrigger>
+            <TabsTrigger value="discussion" className="flex-1 text-xs gap-1">
+              <MessageSquare className="h-3 w-3" /> Discussion
+            </TabsTrigger>
             <TabsTrigger value="audit" className="flex-1 text-xs">Audit</TabsTrigger>
           </TabsList>
 
@@ -2691,6 +2718,12 @@ function CheckDetailPanel({
             <TabsContent value="packet" className="p-4 mt-0">
               <Suspense fallback={<TabLoader />}>
                 <DepositPacketGenerator checkId={checkId} />
+              </Suspense>
+            </TabsContent>
+
+            <TabsContent value="discussion" className="p-4 mt-0">
+              <Suspense fallback={<TabLoader />}>
+                <CheckMessageThread checkId={checkId} active={detailTab === "discussion"} />
               </Suspense>
             </TabsContent>
 
