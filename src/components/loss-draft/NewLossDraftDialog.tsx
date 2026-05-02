@@ -144,7 +144,51 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
         notes: `Created loss draft for ${servicer}`,
       });
 
-      toast({ title: "Loss draft created" });
+      // Optionally create a 2nd loss_draft row when the same check has a
+      // second mortgage company on it. We don't fail the whole operation
+      // if the secondary insert fails — primary is already saved.
+      if (showSecond && servicer2.trim()) {
+        try {
+          const trimmed2 = servicer2.trim();
+          const { data: existing2 } = await supabase
+            .from("loss_draft_tracking")
+            .select("id")
+            .eq("claim_id", claimId)
+            .ilike("mortgage_servicer", trimmed2)
+            .neq("escrow_status", "final_release_complete")
+            .limit(1);
+          if (!existing2 || existing2.length === 0) {
+            const { data: inserted2 } = await supabase
+              .from("loss_draft_tracking")
+              .insert({
+                claim_id: claimId,
+                mortgage_servicer: trimmed2,
+                loss_draft_contact: contact2 || null,
+                loss_draft_phone: phone2 || null,
+                loss_draft_email: email2 || null,
+                loan_number: loanNumber2 || null,
+                created_by: user?.id,
+              })
+              .select("id")
+              .single();
+            if (inserted2?.id) {
+              await supabase.rpc("init_loss_draft_documents" as any, { p_loss_draft_id: inserted2.id });
+              await supabase.from("loss_draft_audit_log").insert({
+                loss_draft_id: inserted2.id,
+                action: "created",
+                actor_id: user?.id,
+                notes: `Created loss draft for ${trimmed2} (2nd mortgagee on check)`,
+              });
+            }
+          }
+        } catch (e2) {
+          console.error("Secondary loss draft creation failed:", e2);
+        }
+      }
+
+      toast({
+        title: showSecond && servicer2.trim() ? "Two loss drafts created" : "Loss draft created",
+      });
       setOpen(false);
       resetForm();
       onCreated();
@@ -158,6 +202,7 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
   const resetForm = () => {
     setClaimId(""); setMortgageCompanyId(""); setServicer(""); setContact(""); setPhone("");
     setEmail(""); setLoanNumber(""); setAmount(""); setNotes("");
+    setShowSecond(false); setServicer2(""); setContact2(""); setPhone2(""); setEmail2(""); setLoanNumber2("");
   };
 
   return (
