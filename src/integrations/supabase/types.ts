@@ -1738,6 +1738,70 @@ export type Database = {
           },
         ]
       }
+      check_message_reads: {
+        Row: {
+          check_id: string
+          last_read_at: string
+          user_id: string
+        }
+        Insert: {
+          check_id: string
+          last_read_at?: string
+          user_id: string
+        }
+        Update: {
+          check_id?: string
+          last_read_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_message_reads_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      check_messages: {
+        Row: {
+          body: string
+          check_id: string
+          created_at: string
+          id: string
+          is_deleted: boolean
+          sender_id: string
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          check_id: string
+          created_at?: string
+          id?: string
+          is_deleted?: boolean
+          sender_id: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          check_id?: string
+          created_at?: string
+          id?: string
+          is_deleted?: boolean
+          sender_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_messages_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       check_payees: {
         Row: {
           check_id: string
@@ -17578,6 +17642,14 @@ export type Database = {
         Args: { _tenant_id: string }
         Returns: Json
       }
+      get_check_unread_counts: {
+        Args: never
+        Returns: {
+          check_id: string
+          last_message_at: string
+          unread_count: number
+        }[]
+      }
       get_claim_money_snapshot: { Args: { p_claim_id: string }; Returns: Json }
       get_deposit_aging_summary: { Args: never; Returns: Json }
       get_deposit_exception_kpis: { Args: never; Returns: Json }
@@ -17655,6 +17727,7 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_total_unread_check_messages: { Args: never; Returns: number }
       get_user_tenant_ids: { Args: { _user_id: string }; Returns: string[] }
       get_weekly_command_review: { Args: never; Returns: Json }
       gettransactionid: { Args: never; Returns: unknown }
