@@ -3,27 +3,29 @@ import { Button } from "@/components/ui/button";
 import { Eye, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { DepositImageViewer } from "./DepositImageViewer";
+import { CheckImagesViewer } from "./CheckImagesViewer";
 
 /**
- * Reusable "View Front of Check" button.
- * Looks up the check's front_image_path, generates a signed URL,
- * and opens the existing DepositImageViewer overlay.
+ * Reusable "View Check Images" button.
+ * Fetches both front + back image paths, generates signed URLs,
+ * and opens a viewer that lets the user toggle between Front / Back.
  *
- * Pass either `frontImagePath` directly (if you already have it) or
- * `checkId` and the button will fetch it.
+ * Available at every stage including AFTER deposit — front + back are
+ * preserved on the check record so users can always re-access them.
  */
 export function ViewCheckImageButton({
   checkId,
   frontImagePath,
+  backImagePath,
   checkNumber,
   size = "sm",
   variant = "outline",
-  label = "View Front of Check",
+  label = "View Check Images",
   className,
 }: {
   checkId?: string | null;
   frontImagePath?: string | null;
+  backImagePath?: string | null;
   checkNumber?: string | null;
   size?: "default" | "sm" | "lg" | "icon";
   variant?: "default" | "outline" | "ghost" | "secondary";
@@ -32,41 +34,54 @@ export function ViewCheckImageButton({
 }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
-  const [url, setUrl] = useState<string | null>(null);
+  const [frontUrl, setFrontUrl] = useState<string | null>(null);
+  const [backUrl, setBackUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleClick = async () => {
-    if (!checkId && !frontImagePath) return;
+    if (!checkId && !frontImagePath && !backImagePath) return;
     setLoading(true);
     try {
-      let path = frontImagePath ?? null;
-      if (!path && checkId) {
+      let fPath = frontImagePath ?? null;
+      let bPath = backImagePath ?? null;
+
+      if ((!fPath || !bPath) && checkId) {
         const { data, error } = await supabase
           .from("check_intake_items")
-          .select("front_image_path")
+          .select("front_image_path, back_image_path")
           .eq("id", checkId)
           .single();
         if (error) throw error;
-        path = (data as any)?.front_image_path ?? null;
+        fPath = fPath ?? (data as any)?.front_image_path ?? null;
+        bPath = bPath ?? (data as any)?.back_image_path ?? null;
       }
-      if (!path) {
+
+      if (!fPath && !bPath) {
         toast({
-          title: "No front image",
-          description: "This check has no front image on file.",
+          title: "No images on file",
+          description: "This check has no images stored.",
           variant: "destructive",
         });
         return;
       }
-      const { data: signed, error: signErr } = await supabase.storage
-        .from("claim-files")
-        .createSignedUrl(path, 3600);
-      if (signErr) throw signErr;
-      setUrl(signed?.signedUrl ?? null);
+
+      const sign = async (p: string | null) => {
+        if (!p) return null;
+        const { data, error } = await supabase.storage
+          .from("claim-files")
+          .createSignedUrl(p, 3600);
+        if (error) throw error;
+        return data?.signedUrl ?? null;
+      };
+
+      const [fUrl, bUrl] = await Promise.all([sign(fPath), sign(bPath)]);
+      setFrontUrl(fUrl);
+      setBackUrl(bUrl);
       setOpen(true);
     } catch (e: any) {
       toast({
-        title: "Could not open image",
-        description: e?.message ?? "Failed to load check image",
+        title: "Could not open images",
+        description: e?.message ?? "Failed to load check images",
         variant: "destructive",
       });
     } finally {
@@ -80,7 +95,7 @@ export function ViewCheckImageButton({
         size={size}
         variant={variant}
         className={className}
-        disabled={loading || (!checkId && !frontImagePath)}
+        disabled={loading || (!checkId && !frontImagePath && !backImagePath)}
         onClick={handleClick}
       >
         {loading ? (
@@ -90,13 +105,15 @@ export function ViewCheckImageButton({
         )}
         {label}
       </Button>
-      <DepositImageViewer
+      <CheckImagesViewer
         open={open}
-        imageUrl={url}
-        title={`Front of Check${checkNumber ? ` #${checkNumber}` : ""}`}
+        frontUrl={frontUrl}
+        backUrl={backUrl}
+        title={`Check${checkNumber ? ` #${checkNumber}` : ""}`}
         onClose={() => {
           setOpen(false);
-          setUrl(null);
+          setFrontUrl(null);
+          setBackUrl(null);
         }}
       />
     </>
