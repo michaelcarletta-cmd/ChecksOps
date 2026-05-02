@@ -966,6 +966,29 @@ Deno.serve(async (req) => {
           updated_at: new Date().toISOString(),
         }).eq("id", endorsementId);
 
+        // Mark sibling endorsements covered by the combined email as sent too
+        if (anyDelivered && combinedSentIds.length > 0) {
+          await supabase.from("check_endorsements").update({
+            status: "sent",
+            request_sent_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }).in("id", combinedSentIds);
+
+          for (const sid of combinedSentIds) {
+            await supabase.from("endorsement_requests").insert({
+              endorsement_id: sid,
+              check_id: endorsement.check_id,
+              method,
+              sent_by: ud.user.id,
+              delivery_status: "delivered",
+              delivery_error: null,
+              email_address: endorsement.contact_email,
+              phone_number: null,
+              notes: `Combined email with endorsement ${endorsementId}`,
+            });
+          }
+        }
+
         // Log the request
         await supabase.from("endorsement_requests").insert({
           endorsement_id: endorsementId,
