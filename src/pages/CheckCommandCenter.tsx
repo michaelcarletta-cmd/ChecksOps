@@ -2718,6 +2718,12 @@ function CheckDetailPanel({
               </Suspense>
             </TabsContent>
 
+            <TabsContent value="discussion" className="p-4 mt-0">
+              <Suspense fallback={<TabLoader />}>
+                <CheckMessageThread checkId={checkId} active={detailTab === "discussion"} />
+              </Suspense>
+            </TabsContent>
+
             <TabsContent value="audit" className="p-4 space-y-2 mt-0">
               {auditLog.map((entry) => (
                 <div key={entry.id} className="flex gap-3 text-sm">
