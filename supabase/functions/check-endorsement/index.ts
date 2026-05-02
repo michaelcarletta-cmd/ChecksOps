@@ -1135,7 +1135,40 @@ Deno.serve(async (req) => {
         }
 
         const result = await reEvaluateAfterEndorsement(supabase, endorsement.check_id);
-        return json({ success: true, ...result });
+
+        // Find next pending endorsement on the same check that shares contact
+        // info with the just-signed signer — lets a single recipient sign
+        // sequentially without returning to email/SMS.
+        let nextToken: string | null = null;
+        let nextPayeeName: string | null = null;
+        try {
+          const sharedFilters: string[] = [];
+          if (endorsement.contact_email) {
+            sharedFilters.push(`contact_email.eq.${endorsement.contact_email}`);
+          }
+          if (endorsement.contact_phone) {
+            sharedFilters.push(`contact_phone.eq.${endorsement.contact_phone}`);
+          }
+          if (sharedFilters.length > 0) {
+            const { data: nextEndorsements } = await supabase
+              .from("check_endorsements")
+              .select("token, payee_name, status, contact_email, contact_phone")
+              .eq("check_id", endorsement.check_id)
+              .neq("id", endorsement.id)
+              .in("status", ["pending", "sent"])
+              .or(sharedFilters.join(","))
+              .order("created_at", { ascending: true })
+              .limit(1);
+            if (nextEndorsements && nextEndorsements.length > 0) {
+              nextToken = nextEndorsements[0].token;
+              nextPayeeName = nextEndorsements[0].payee_name;
+            }
+          }
+        } catch (nextErr) {
+          console.error("[ENDORSEMENT] next-payee lookup failed (non-blocking):", nextErr);
+        }
+
+        return json({ success: true, next_token: nextToken, next_payee_name: nextPayeeName, ...result });
       }
 
       /* ------------------------------------------------------------ */
