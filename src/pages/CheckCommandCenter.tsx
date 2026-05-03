@@ -547,15 +547,18 @@ export default function CheckCommandCenter() {
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
-        {/* Gradient nav cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3">
+        {/* Unified gradient nav cards — all primary navigation */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2 md:gap-3">
           {[
-            { key: "endorsements", label: "Endorsing", count: awaitingEndorsement.length, icon: Send, gradient: "from-amber-500/20 to-orange-500/10", accent: "text-amber-400", ring: "ring-amber-500/30" },
-            { key: "review", label: "Review", count: needsReview.length, icon: ClipboardCheck, gradient: "from-blue-500/20 to-cyan-500/10", accent: "text-blue-400", ring: "ring-blue-500/30" },
-            { key: "ready", label: "Ready for Deposit", count: readyForDeposit.length, icon: CheckCircle2, gradient: "from-emerald-500/20 to-green-500/10", accent: "text-emerald-400", ring: "ring-emerald-500/30" },
-            { key: "lossdraft", label: "Loss Draft", count: 0, icon: Landmark, gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400", ring: "ring-purple-500/30" },
-            { key: "mortgage_cos", label: "Mortgage Cos", count: 0, icon: Building2, gradient: "from-pink-500/20 to-rose-500/10", accent: "text-pink-400", ring: "ring-pink-500/30" },
-            { key: "shared", label: "Shared with Me", count: sharedChecks.length, icon: Share2, gradient: "from-sky-500/20 to-blue-500/10", accent: "text-sky-400", ring: "ring-sky-500/30" },
+            { key: "review",       label: "Review",            count: needsReview.length,         icon: ClipboardCheck, gradient: "from-blue-500/20 to-cyan-500/10",     accent: "text-blue-400",    ring: "ring-blue-500/30" },
+            { key: "endorsements", label: "Endorsing",         count: awaitingEndorsement.length, icon: Send,           gradient: "from-amber-500/20 to-orange-500/10",  accent: "text-amber-400",   ring: "ring-amber-500/30" },
+            { key: "ready",        label: "Ready for Deposit", count: readyForDeposit.length,     icon: CheckCircle2,   gradient: "from-emerald-500/20 to-green-500/10", accent: "text-emerald-400", ring: "ring-emerald-500/30" },
+            { key: "lossdraft",    label: "Loss Draft",        count: null,                       icon: Landmark,       gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400",  ring: "ring-purple-500/30" },
+            { key: "shared",       label: "Shared with Me",    count: sharedChecks.length,        icon: Share2,         gradient: "from-sky-500/20 to-blue-500/10",      accent: "text-sky-400",     ring: "ring-sky-500/30" },
+            ...(isAdmin ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield, gradient: "from-indigo-500/20 to-blue-500/10", accent: "text-indigo-400", ring: "ring-indigo-500/30" }] : []),
+            { key: "reissue",      label: "Reissue",           count: reissueRequested.length,    icon: RotateCcw,      gradient: "from-red-500/20 to-rose-500/10",      accent: "text-red-400",     ring: "ring-red-500/30" },
+            { key: "partners",     label: "Partners",          count: null,                       icon: Share2,         gradient: "from-pink-500/20 to-fuchsia-500/10",  accent: "text-pink-400",    ring: "ring-pink-500/30" },
+            { key: "branch",       label: "Branch",            count: branchDeposit.length,       icon: Building2,      gradient: "from-teal-500/20 to-cyan-500/10",     accent: "text-teal-400",    ring: "ring-teal-500/30" },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.key;
@@ -571,7 +574,7 @@ export default function CheckCommandCenter() {
               >
                 <Icon className={`h-5 w-5 ${tab.accent}`} />
                 <span className={`text-xs font-semibold ${isActive ? "text-foreground" : "text-muted-foreground"}`}>{tab.label}</span>
-                {tab.key !== "lossdraft" && tab.key !== "mortgage_cos" && (
+                {tab.count !== null && (
                   <Badge className={`text-[10px] px-1.5 py-0 ${isActive ? "bg-foreground/10 text-foreground" : "bg-muted text-muted-foreground"}`}>
                     {tab.count}
                   </Badge>
@@ -580,20 +583,6 @@ export default function CheckCommandCenter() {
             );
           })}
         </div>
-
-        {/* Operations tabs */}
-        <TabsList className="mt-3 w-full flex-wrap h-auto gap-1 bg-muted/50">
-          <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
-          {isAdmin && (
-            <TabsTrigger value="check_tracker" className="text-xs gap-1">📋 Check Tracker</TabsTrigger>
-          )}
-          <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
-          <TabsTrigger value="loss_prevention" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Loss Prevention</TabsTrigger>
-          <TabsTrigger value="messages" className="text-xs gap-1"><MessageSquare className="h-3 w-3" />Messages{totalUnreadMessages > 0 && (<Badge variant="destructive" className="ml-1 h-4 min-w-4 px-1 text-[9px]">{totalUnreadMessages}</Badge>)}</TabsTrigger>
-          <TabsTrigger value="reissue" className="text-xs gap-1"><RotateCcw className="h-3 w-3" />Reissue ({reissueRequested.length})</TabsTrigger>
-          <TabsTrigger value="branch" className="text-xs gap-1"><Building2 className="h-3 w-3" />Branch ({branchDeposit.length})</TabsTrigger>
-          <TabsTrigger value="partners" className="text-xs gap-1"><Share2 className="h-3 w-3" />Partners</TabsTrigger>
-        </TabsList>
 
         {/* Loss Draft Tab */}
         {activeTab === "lossdraft" && (
@@ -604,54 +593,58 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
-        {/* Mortgage Companies Directory Tab */}
-        {activeTab === "mortgage_cos" && (
+        {/* Manager Hub — Check Tracker + Deposit Ops + Reports + Loss Prevention + Messages + Mortgage Cos (admin only) */}
+        {activeTab === "manager" && isAdmin && (
           <div className="mt-3">
-            <Suspense fallback={<TabLoader />}>
-              <MortgageCompaniesDirectory searchQuery={searchQuery} />
-            </Suspense>
+            <Tabs defaultValue="check_tracker">
+              <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
+                <TabsTrigger value="check_tracker" className="text-xs gap-1"><ClipboardCheck className="h-3 w-3" />📋 Check Tracker</TabsTrigger>
+                <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
+                <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
+                <TabsTrigger value="loss_prevention" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Loss Prevention</TabsTrigger>
+                <TabsTrigger value="messages" className="text-xs gap-1"><MessageSquare className="h-3 w-3" />Messages{totalUnreadMessages > 0 && (<Badge variant="destructive" className="ml-1 h-4 min-w-4 px-1 text-[9px]">{totalUnreadMessages}</Badge>)}</TabsTrigger>
+                <TabsTrigger value="mortgage_cos" className="text-xs gap-1"><Building2 className="h-3 w-3" />Mortgage Cos</TabsTrigger>
+              </TabsList>
+              <TabsContent value="check_tracker" className="mt-3">
+                <AdminCheckTracker />
+              </TabsContent>
+              <TabsContent value="deposit_ops" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <DepositOperationsConsole searchQuery={searchQuery} />
+                </Suspense>
+              </TabsContent>
+              <TabsContent value="reports" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <DepositReports />
+                </Suspense>
+              </TabsContent>
+              <TabsContent value="loss_prevention" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <LossPreventionPanel />
+                </Suspense>
+              </TabsContent>
+              <TabsContent value="messages" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <CheckMessagesPanel />
+                </Suspense>
+              </TabsContent>
+              <TabsContent value="mortgage_cos" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <MortgageCompaniesDirectory searchQuery={searchQuery} />
+                </Suspense>
+              </TabsContent>
+            </Tabs>
           </div>
         )}
 
-        {/* Deposit Ops Tab */}
-        <TabsContent value="deposit_ops" className="mt-3">
-          <Suspense fallback={<TabLoader />}>
-            <DepositOperationsConsole searchQuery={searchQuery} />
-          </Suspense>
-        </TabsContent>
-
-        {/* Check Tracker Tab (admin only) */}
-        {isAdmin && (
-          <TabsContent value="check_tracker" className="mt-3">
-            <AdminCheckTracker />
-          </TabsContent>
-        )}
-        <TabsContent value="reports" className="mt-3">
-          <Suspense fallback={<TabLoader />}>
-            <DepositReports />
-          </Suspense>
-        </TabsContent>
-
-        {/* Loss Prevention Tab */}
-        <TabsContent value="loss_prevention" className="mt-3">
-          <Suspense fallback={<TabLoader />}>
-            <LossPreventionPanel />
-          </Suspense>
-        </TabsContent>
-
-        {/* Messages Tab */}
-        <TabsContent value="messages" className="mt-3">
-          <Suspense fallback={<TabLoader />}>
-            <CheckMessagesPanel />
-          </Suspense>
-        </TabsContent>
-
         {/* Partners Tab */}
-        <TabsContent value="partners" className="mt-3">
-          <Suspense fallback={<TabLoader />}>
-            <TenantPartnerManager />
-          </Suspense>
-        </TabsContent>
+        {activeTab === "partners" && (
+          <div className="mt-3">
+            <Suspense fallback={<TabLoader />}>
+              <TenantPartnerManager />
+            </Suspense>
+          </div>
+        )}
 
         {/* Reissue Tab */}
         {activeTab === "reissue" && (
@@ -818,7 +811,7 @@ export default function CheckCommandCenter() {
         )}
 
         {/* All other tabs — only render the active one */}
-        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "deposit_ops" && activeTab !== "reports" && activeTab !== "reissue" && activeTab !== "branch" && activeTab !== "partners" && (
+        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "manager" && activeTab !== "reissue" && activeTab !== "branch" && activeTab !== "partners" && (
           <div className="mt-3 flex gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
             {/* Check list — grows when no check selected */}
             <Card
