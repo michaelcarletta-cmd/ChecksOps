@@ -83,6 +83,20 @@ All colors MUST be HSL.
     font-feature-settings: "cv11", "ss01";
     background-image: radial-gradient(circle at top center, hsl(216 72% 20% / 0.28) 0%, transparent 42%);
     background-attachment: fixed;
+    overscroll-behavior-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  html {
+    overscroll-behavior-y: auto;
+  }
+
+  @media (max-width: 767px) {
+    body {
+      background-attachment: scroll;
+      overflow-y: auto;
+      min-height: 100dvh;
+    }
   }
 
   h1, h2, h3, h4, h5, h6 {
