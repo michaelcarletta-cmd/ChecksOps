@@ -52,6 +52,7 @@ import { WorkspaceList } from "@/components/workspaces/WorkspaceList";
 import { RDAutomationSettings } from "@/components/settings/RDAutomationSettings";
 import { OutlookConnectionSettings } from "@/components/settings/OutlookConnectionSettings";
 import { PhoneVerificationSettings } from "@/components/settings/PhoneVerificationSettings";
+import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
 
 interface ClaimStatus {
   id: string;
@@ -672,7 +673,14 @@ export default function Settings() {
           {isAdmin && (
             <TabsTrigger value="white-label" className="w-full md:w-auto justify-start text-base font-medium px-4">White-Label Tenants</TabsTrigger>
           )}
+          {isAdmin && (
+            <TabsTrigger value="checkalt" className="w-full md:w-auto justify-start text-base font-medium px-4">CheckAlt</TabsTrigger>
+          )}
         </TabsList>
+
+        <TabsContent value="checkalt" className="w-full">
+          <CheckAltSettings />
+        </TabsContent>
 
         <TabsContent value="profile" className="w-full">
           <ProfileSettings />

@@ -2147,6 +2147,155 @@ export type Database = {
           },
         ]
       }
+      checkalt_config: {
+        Row: {
+          base_url: string | null
+          business_unit: string | null
+          cached_jwt: string | null
+          cached_jwt_expires_at: string | null
+          created_at: string
+          default_enabled: boolean
+          depositor_account_id: string | null
+          id: string
+          notes: string | null
+          singleton: boolean
+          updated_at: string
+          updated_by: string | null
+          webhook_secret: string | null
+        }
+        Insert: {
+          base_url?: string | null
+          business_unit?: string | null
+          cached_jwt?: string | null
+          cached_jwt_expires_at?: string | null
+          created_at?: string
+          default_enabled?: boolean
+          depositor_account_id?: string | null
+          id?: string
+          notes?: string | null
+          singleton?: boolean
+          updated_at?: string
+          updated_by?: string | null
+          webhook_secret?: string | null
+        }
+        Update: {
+          base_url?: string | null
+          business_unit?: string | null
+          cached_jwt?: string | null
+          cached_jwt_expires_at?: string | null
+          created_at?: string
+          default_enabled?: boolean
+          depositor_account_id?: string | null
+          id?: string
+          notes?: string | null
+          singleton?: boolean
+          updated_at?: string
+          updated_by?: string | null
+          webhook_secret?: string | null
+        }
+        Relationships: []
+      }
+      checkalt_deposits: {
+        Row: {
+          amount: number | null
+          check_intake_item_id: string | null
+          checkalt_reference: string | null
+          claim_check_id: string | null
+          cleared_at: string | null
+          created_at: string
+          id: string
+          last_polled_at: string | null
+          last_status_payload: Json | null
+          return_reason: string | null
+          returned_at: string | null
+          status: string
+          submitted_at: string | null
+          submitted_by: string | null
+          tenant_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount?: number | null
+          check_intake_item_id?: string | null
+          checkalt_reference?: string | null
+          claim_check_id?: string | null
+          cleared_at?: string | null
+          created_at?: string
+          id?: string
+          last_polled_at?: string | null
+          last_status_payload?: Json | null
+          return_reason?: string | null
+          returned_at?: string | null
+          status?: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+          tenant_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number | null
+          check_intake_item_id?: string | null
+          checkalt_reference?: string | null
+          claim_check_id?: string | null
+          cleared_at?: string | null
+          created_at?: string
+          id?: string
+          last_polled_at?: string | null
+          last_status_payload?: Json | null
+          return_reason?: string | null
+          returned_at?: string | null
+          status?: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+          tenant_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checkalt_deposits_check_intake_item_id_fkey"
+            columns: ["check_intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      checkalt_webhook_events: {
+        Row: {
+          checkalt_reference: string | null
+          event_type: string | null
+          id: string
+          process_error: string | null
+          processed: boolean
+          processed_at: string | null
+          raw_payload: Json
+          received_at: string
+          signature_valid: boolean | null
+        }
+        Insert: {
+          checkalt_reference?: string | null
+          event_type?: string | null
+          id?: string
+          process_error?: string | null
+          processed?: boolean
+          processed_at?: string | null
+          raw_payload: Json
+          received_at?: string
+          signature_valid?: boolean | null
+        }
+        Update: {
+          checkalt_reference?: string | null
+          event_type?: string | null
+          id?: string
+          process_error?: string | null
+          processed?: boolean
+          processed_at?: string | null
+          raw_payload?: Json
+          received_at?: string
+          signature_valid?: boolean | null
+        }
+        Relationships: []
+      }
       claim_additional_contacts: {
         Row: {
           claim_id: string
@@ -2934,6 +3083,7 @@ export type Database = {
           check_intake_item_id: string | null
           check_number: string | null
           check_type: string
+          checkalt_deposit_id: string | null
           claim_id: string
           cleared_status: string | null
           created_at: string | null
@@ -2942,6 +3092,7 @@ export type Database = {
           deposit_confirmed_amount: number | null
           deposit_confirmed_at: string | null
           deposit_confirmed_by: string | null
+          deposit_method: string
           deposit_status: string | null
           eligibility_status: string | null
           endorsement_status: string | null
@@ -2966,6 +3117,7 @@ export type Database = {
           check_intake_item_id?: string | null
           check_number?: string | null
           check_type: string
+          checkalt_deposit_id?: string | null
           claim_id: string
           cleared_status?: string | null
           created_at?: string | null
@@ -2974,6 +3126,7 @@ export type Database = {
           deposit_confirmed_amount?: number | null
           deposit_confirmed_at?: string | null
           deposit_confirmed_by?: string | null
+          deposit_method?: string
           deposit_status?: string | null
           eligibility_status?: string | null
           endorsement_status?: string | null
@@ -2998,6 +3151,7 @@ export type Database = {
           check_intake_item_id?: string | null
           check_number?: string | null
           check_type?: string
+          checkalt_deposit_id?: string | null
           claim_id?: string
           cleared_status?: string | null
           created_at?: string | null
@@ -3006,6 +3160,7 @@ export type Database = {
           deposit_confirmed_amount?: number | null
           deposit_confirmed_at?: string | null
           deposit_confirmed_by?: string | null
+          deposit_method?: string
           deposit_status?: string | null
           eligibility_status?: string | null
           endorsement_status?: string | null
@@ -3029,6 +3184,13 @@ export type Database = {
             columns: ["check_intake_item_id"]
             isOneToOne: true
             referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_checks_checkalt_deposit_id_fkey"
+            columns: ["checkalt_deposit_id"]
+            isOneToOne: false
+            referencedRelation: "checkalt_deposits"
             referencedColumns: ["id"]
           },
           {
