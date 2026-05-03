@@ -74,11 +74,11 @@ export function AdminCheckTracker() {
         continue;
       }
       const isReady =
-        c.status === "approved_for_deposit" ||
-        c.status === "deposited" ||
         c.deposit_status === "ready" ||
         c.deposit_status === "submitted" ||
-        c.deposit_status === "in_transit";
+        c.deposit_status === "in_transit" ||
+        c.deposit_status === "deposited" ||
+        c.endorsement_status === "complete";
       if (isReady) {
         const ageDays = (now - new Date(c.updated_at).getTime()) / (1000 * 60 * 60 * 24);
         if (ageDays > 7) stalled.push(c);
