@@ -390,7 +390,7 @@ export default function CheckCommandCenter() {
   const filteredSharedChecks = sharedChecks.filter((c) => matchesSearch(c as CheckItem));
 
   const filteredChecks =
-    activeTab === "shared" ? filteredSharedChecks
+    (activeTab === "partners" && partnersSubTab === "shared") ? filteredSharedChecks
     : activeTab === "endorsements" ? awaitingEndorsement
     : activeTab === "ready" ? readyForDeposit
     : activeTab === "review" ? needsReview
