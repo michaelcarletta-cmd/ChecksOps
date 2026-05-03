@@ -124,13 +124,27 @@ export default function CheckCenterMarketing() {
 
     setSubmitting(true);
     try {
-      const { error } = await supabase.functions.invoke("demo-request", { body: { ...form, to: supportEmail } });
+      const idempotencyKey = `demo-request-${form.email}-${Date.now()}`;
+      const { error } = await supabase.functions.invoke("send-transactional-email", {
+        body: {
+          templateName: "demo-request",
+          recipientEmail: supportEmail,
+          idempotencyKey,
+          templateData: {
+            name: form.name,
+            email: form.email,
+            company: form.company,
+            role: form.role,
+            notes: form.notes,
+          },
+        },
+      });
       if (error) {
         window.location.href = `mailto:${supportEmail}?subject=${encodeURIComponent(subject)}&body=${body}`;
         return;
       }
 
-      toast.success(`Request received. We'll reach out from ${supportEmail}.`);
+      toast.success("Request received. We'll be in touch shortly.");
       setForm({ name: "", email: "", company: "", role: "", notes: "" });
     } catch (err) {
       window.location.href = `mailto:${supportEmail}?subject=${encodeURIComponent(subject)}&body=${body}`;
