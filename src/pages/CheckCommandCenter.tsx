@@ -620,7 +620,12 @@ export default function CheckCommandCenter() {
           </Suspense>
         </TabsContent>
 
-        {/* Reports Tab */}
+        {/* Check Tracker Tab (admin only) */}
+        {isAdmin && (
+          <TabsContent value="check_tracker" className="mt-3">
+            <AdminCheckTracker />
+          </TabsContent>
+        )}
         <TabsContent value="reports" className="mt-3">
           <Suspense fallback={<TabLoader />}>
             <DepositReports />
