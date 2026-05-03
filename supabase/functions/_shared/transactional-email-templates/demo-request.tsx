@@ -1,10 +1,11 @@
 import * as React from 'npm:react@18.3.1'
 import {
-  Body, Container, Head, Heading, Hr, Html, Preview, Section, Text,
+  Body, Container, Head, Heading, Hr, Html, Img, Preview, Section, Text,
 } from 'npm:@react-email/components@0.0.22'
 import type { TemplateEntry } from './registry.ts'
 
 const SITE_NAME = 'ChecksOps'
+const LOGO_URL = 'https://checksops.com/checksops-logo.png'
 
 interface DemoRequestProps {
   name?: string
@@ -20,6 +21,9 @@ const DemoRequestEmail = ({ name, email, company, role, notes }: DemoRequestProp
     <Preview>New {SITE_NAME} demo request from {name || 'a prospect'}</Preview>
     <Body style={main}>
       <Container style={container}>
+        <Section style={logoSection}>
+          <Img src={LOGO_URL} alt={SITE_NAME} width="180" style={logo} />
+        </Section>
         <Heading style={h1}>New demo request</Heading>
         <Text style={text}>
           Someone just submitted the live demo form on {SITE_NAME}.
@@ -65,6 +69,8 @@ export const template = {
 
 const main = { backgroundColor: '#ffffff', fontFamily: 'Arial, sans-serif' }
 const container = { padding: '24px', maxWidth: '560px' }
+const logoSection = { padding: '0 0 16px', borderBottom: '1px solid #e2e8f0', marginBottom: '16px' }
+const logo = { display: 'block', height: 'auto' }
 const h1 = { fontSize: '22px', fontWeight: 'bold' as const, color: '#0f172a', margin: '0 0 16px' }
 const h2 = { fontSize: '16px', fontWeight: 'bold' as const, color: '#0f172a', margin: '24px 0 8px' }
 const text = { fontSize: '14px', color: '#334155', lineHeight: '1.6', margin: '0 0 12px' }
