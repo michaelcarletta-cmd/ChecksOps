@@ -79,6 +79,9 @@ const CheckMessagesPanel = lazy(() =>
 const CheckMessageThread = lazy(() =>
   import("@/components/check-messages/CheckMessageThread").then(m => ({ default: m.CheckMessageThread }))
 );
+const SharedCheckThread = lazy(() =>
+  import("@/components/check-review/SharedCheckThread").then(m => ({ default: m.SharedCheckThread }))
+);
 
 /** Spinner shown while a lazy tab/section loads. */
 const TabLoader = () => (
@@ -2184,6 +2187,9 @@ function CheckDetailPanel({
               <MessageSquare className="h-3 w-3" /> Discussion
             </TabsTrigger>
             <TabsTrigger value="audit" className="flex-1 text-xs">Audit</TabsTrigger>
+            <TabsTrigger value="partners" className="flex-1 text-xs gap-1">
+              <Share2 className="h-3 w-3" /> Partners
+            </TabsTrigger>
           </TabsList>
 
           <ScrollArea className="h-[calc(100vh-520px)]">
@@ -2745,6 +2751,12 @@ function CheckDetailPanel({
               {auditLog.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">No audit events</p>
               )}
+            </TabsContent>
+
+            <TabsContent value="partners" className="p-4 mt-0">
+              <Suspense fallback={<TabLoader />}>
+                <SharedCheckThread checkId={checkId} />
+              </Suspense>
             </TabsContent>
           </ScrollArea>
         </Tabs>

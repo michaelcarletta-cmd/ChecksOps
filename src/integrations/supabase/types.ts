@@ -14414,6 +14414,33 @@ export type Database = {
           },
         ]
       }
+      shared_check_messages: {
+        Row: {
+          body: string
+          check_id: string
+          created_at: string
+          id: string
+          sender_tenant_id: string
+          sender_user_id: string
+        }
+        Insert: {
+          body: string
+          check_id: string
+          created_at?: string
+          id?: string
+          sender_tenant_id: string
+          sender_user_id: string
+        }
+        Update: {
+          body?: string
+          check_id?: string
+          created_at?: string
+          id?: string
+          sender_tenant_id?: string
+          sender_user_id?: string
+        }
+        Relationships: []
+      }
       shared_checks: {
         Row: {
           access_level: string
@@ -18681,6 +18708,10 @@ export type Database = {
       }
       user_belongs_to_tenant: {
         Args: { _tenant_id: string; _user_id: string }
+        Returns: boolean
+      }
+      user_can_access_shared_check: {
+        Args: { _check_id: string; _user_id: string }
         Returns: boolean
       }
       user_org_id: { Args: { _user_id: string }; Returns: string }
