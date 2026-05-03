@@ -2187,6 +2187,9 @@ function CheckDetailPanel({
               <MessageSquare className="h-3 w-3" /> Discussion
             </TabsTrigger>
             <TabsTrigger value="audit" className="flex-1 text-xs">Audit</TabsTrigger>
+            <TabsTrigger value="partners" className="flex-1 text-xs gap-1">
+              <Share2 className="h-3 w-3" /> Partners
+            </TabsTrigger>
           </TabsList>
 
           <ScrollArea className="h-[calc(100vh-520px)]">
