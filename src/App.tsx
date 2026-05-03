@@ -14,6 +14,7 @@ const Endorse = lazy(() => import("./pages/Endorse"));
 const PaymentDirectionPage = lazy(() => import("./pages/PaymentDirectionPage"));
 const WhiteLabelApp = lazy(() => import("./pages/WhiteLabelApp"));
 const CheckOpsLanding = lazy(() => import("./pages/checkops/CheckOpsLanding"));
+const CheckOpsPricing = lazy(() => import("./pages/checkops/CheckOpsPricing"));
 const CheckOpsLogin = lazy(() => import("./pages/checkops/CheckOpsLogin"));
 const CheckOpsForgotPassword = lazy(() => import("./pages/checkops/CheckOpsForgotPassword"));
 const CheckOpsResetPassword = lazy(() => import("./pages/checkops/CheckOpsResetPassword"));
@@ -61,6 +62,7 @@ function CheckOpsRoutes() {
       <Route path="/endorse" element={<Suspense fallback={<PageLoader />}><Endorse /></Suspense>} />
       <Route path="/payment-direction/:token" element={<Suspense fallback={<PageLoader />}><PaymentDirectionPage /></Suspense>} />
       <Route path="/unsubscribe" element={<Suspense fallback={<PageLoader />}><Unsubscribe /></Suspense>} />
+      <Route path="/pricing" element={<Suspense fallback={<PageLoader />}><CheckOpsPricing /></Suspense>} />
       <Route path="/wl/:slug/*" element={<LegacyWlRedirect />} />
       <Route path="/:slug/*" element={<Suspense fallback={<PageLoader />}><WhiteLabelApp /></Suspense>} />
       <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFound /></Suspense>} />
