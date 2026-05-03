@@ -2752,6 +2752,12 @@ function CheckDetailPanel({
                 <p className="text-sm text-muted-foreground text-center py-4">No audit events</p>
               )}
             </TabsContent>
+
+            <TabsContent value="partners" className="p-4 mt-0">
+              <Suspense fallback={<TabLoader />}>
+                <SharedCheckThread checkId={checkId} />
+              </Suspense>
+            </TabsContent>
           </ScrollArea>
         </Tabs>
       </CardContent>
