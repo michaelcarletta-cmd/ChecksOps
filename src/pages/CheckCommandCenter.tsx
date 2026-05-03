@@ -811,7 +811,7 @@ export default function CheckCommandCenter() {
         )}
 
         {/* All other tabs — only render the active one */}
-        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "deposit_ops" && activeTab !== "reports" && activeTab !== "reissue" && activeTab !== "branch" && activeTab !== "partners" && (
+        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "manager" && activeTab !== "reissue" && activeTab !== "branch" && activeTab !== "partners" && (
           <div className="mt-3 flex gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
             {/* Check list — grows when no check selected */}
             <Card
