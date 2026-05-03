@@ -79,6 +79,9 @@ const CheckMessagesPanel = lazy(() =>
 const CheckMessageThread = lazy(() =>
   import("@/components/check-messages/CheckMessageThread").then(m => ({ default: m.CheckMessageThread }))
 );
+const SharedCheckThread = lazy(() =>
+  import("@/components/check-review/SharedCheckThread").then(m => ({ default: m.SharedCheckThread }))
+);
 
 /** Spinner shown while a lazy tab/section loads. */
 const TabLoader = () => (
