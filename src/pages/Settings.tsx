@@ -52,6 +52,7 @@ import { WorkspaceList } from "@/components/workspaces/WorkspaceList";
 import { RDAutomationSettings } from "@/components/settings/RDAutomationSettings";
 import { OutlookConnectionSettings } from "@/components/settings/OutlookConnectionSettings";
 import { PhoneVerificationSettings } from "@/components/settings/PhoneVerificationSettings";
+import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
 
 interface ClaimStatus {
   id: string;
