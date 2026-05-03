@@ -2938,6 +2938,10 @@ export type Database = {
           cleared_status: string | null
           created_at: string | null
           created_by: string | null
+          deposit_confirmation_number: string | null
+          deposit_confirmed_amount: number | null
+          deposit_confirmed_at: string | null
+          deposit_confirmed_by: string | null
           deposit_status: string | null
           eligibility_status: string | null
           endorsement_status: string | null
@@ -2966,6 +2970,10 @@ export type Database = {
           cleared_status?: string | null
           created_at?: string | null
           created_by?: string | null
+          deposit_confirmation_number?: string | null
+          deposit_confirmed_amount?: number | null
+          deposit_confirmed_at?: string | null
+          deposit_confirmed_by?: string | null
           deposit_status?: string | null
           eligibility_status?: string | null
           endorsement_status?: string | null
@@ -2994,6 +3002,10 @@ export type Database = {
           cleared_status?: string | null
           created_at?: string | null
           created_by?: string | null
+          deposit_confirmation_number?: string | null
+          deposit_confirmed_amount?: number | null
+          deposit_confirmed_at?: string | null
+          deposit_confirmed_by?: string | null
           deposit_status?: string | null
           eligibility_status?: string | null
           endorsement_status?: string | null

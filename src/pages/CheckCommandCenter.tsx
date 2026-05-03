@@ -33,6 +33,8 @@ import { format } from "date-fns";
 // Eager: default tab and inline panels
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards"; // kept for potential future use
+import { AdminCheckTracker } from "@/components/check-review/AdminCheckTracker";
+import { usePermissions } from "@/hooks/usePermissions";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
@@ -212,6 +214,7 @@ export default function CheckCommandCenter() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { tenantId, isWhiteLabel, applyFilter } = useTenantFilter();
+  const { isAdmin } = usePermissions();
   const [activeTab, setActiveTab] = useState("endorsements");
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -581,6 +584,9 @@ export default function CheckCommandCenter() {
         {/* Operations tabs */}
         <TabsList className="mt-3 w-full flex-wrap h-auto gap-1 bg-muted/50">
           <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger value="check_tracker" className="text-xs gap-1">📋 Check Tracker</TabsTrigger>
+          )}
           <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
           <TabsTrigger value="loss_prevention" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Loss Prevention</TabsTrigger>
           <TabsTrigger value="messages" className="text-xs gap-1"><MessageSquare className="h-3 w-3" />Messages{totalUnreadMessages > 0 && (<Badge variant="destructive" className="ml-1 h-4 min-w-4 px-1 text-[9px]">{totalUnreadMessages}</Badge>)}</TabsTrigger>
@@ -614,7 +620,12 @@ export default function CheckCommandCenter() {
           </Suspense>
         </TabsContent>
 
-        {/* Reports Tab */}
+        {/* Check Tracker Tab (admin only) */}
+        {isAdmin && (
+          <TabsContent value="check_tracker" className="mt-3">
+            <AdminCheckTracker />
+          </TabsContent>
+        )}
         <TabsContent value="reports" className="mt-3">
           <Suspense fallback={<TabLoader />}>
             <DepositReports />
