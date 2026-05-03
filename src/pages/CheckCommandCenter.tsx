@@ -214,6 +214,7 @@ export default function CheckCommandCenter() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { tenantId, isWhiteLabel, applyFilter } = useTenantFilter();
+  const { isAdmin } = usePermissions();
   const [activeTab, setActiveTab] = useState("endorsements");
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
