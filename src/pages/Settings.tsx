@@ -673,7 +673,14 @@ export default function Settings() {
           {isAdmin && (
             <TabsTrigger value="white-label" className="w-full md:w-auto justify-start text-base font-medium px-4">White-Label Tenants</TabsTrigger>
           )}
+          {isAdmin && (
+            <TabsTrigger value="checkalt" className="w-full md:w-auto justify-start text-base font-medium px-4">CheckAlt</TabsTrigger>
+          )}
         </TabsList>
+
+        <TabsContent value="checkalt" className="w-full">
+          <CheckAltSettings />
+        </TabsContent>
 
         <TabsContent value="profile" className="w-full">
           <ProfileSettings />
