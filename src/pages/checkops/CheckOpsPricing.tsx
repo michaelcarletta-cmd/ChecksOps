@@ -198,45 +198,6 @@ export default function CheckOpsPricing() {
         </div>
       </section>
 
-      {/* Worked example */}
-      <section className="mx-auto max-w-5xl px-4 md:px-6 py-16 md:py-20">
-        <div className="text-center">
-          <Badge variant="outline" className="mb-4">Worked example</Badge>
-          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
-            What a typical first year looks like
-          </h2>
-          <p className="mt-3 text-sm md:text-base text-muted-foreground max-w-2xl mx-auto">
-            Sample firm processing 500 checks per month with annual maintenance.
-          </p>
-        </div>
-
-        <div className="mt-10 rounded-xl border border-border/60 bg-card/60 overflow-hidden">
-          <div className="divide-y divide-border/50">
-            <Row label="ChecksOps platform (one-time)" value="$10,000" sub="Unlimited users, lifetime license" />
-            <Row label="Maintenance (annual)" value="$1,000" sub="Save $200 vs monthly" />
-            <Row
-              label="Per-check processing"
-              value="$18,000"
-              sub="500 checks / mo × 12 mo × $3"
-            />
-            <div className="px-5 py-5 bg-primary/5 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold">Year 1 total</p>
-                <p className="text-xs text-muted-foreground">All-in for the example firm</p>
-              </div>
-              <p className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-primary via-blue-400 to-cyan-300 bg-clip-text text-transparent">
-                $29,000
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <p className="mt-4 text-xs text-muted-foreground text-center">
-          Year 2+ recurring cost in this example: <span className="text-foreground font-medium">$19,000/year</span>
-          {" "}(maintenance + per-check usage).
-        </p>
-      </section>
-
       {/* CTA */}
       <section className="mx-auto max-w-5xl px-4 md:px-6 pb-20">
         <div className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 via-card/60 to-card/40 p-8 md:p-12 text-center">
