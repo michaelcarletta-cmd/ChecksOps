@@ -46,7 +46,7 @@ export function AdminCheckTracker() {
     const { data, error } = await supabase
       .from("claim_checks")
       .select(
-        "id, check_number, payee_line, amount, carrier_name, status, deposit_status, deposit_confirmation_number, deposit_confirmed_amount, deposit_confirmed_at, deposit_confirmed_by, created_at, updated_at"
+        "id, check_number, payee_line, amount, carrier_name, endorsement_status, deposit_status, deposit_confirmation_number, deposit_confirmed_amount, deposit_confirmed_at, deposit_confirmed_by, created_at, updated_at"
       )
       .order("created_at", { ascending: false })
       .limit(500);
