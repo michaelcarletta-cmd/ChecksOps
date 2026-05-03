@@ -594,7 +594,7 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
-        {/* Manager Hub — Check Tracker + Deposit Ops + Reports + Loss Prevention + Messages + Mortgage Cos (admin only) */}
+        {/* Manager Hub — Check Tracker + Deposit Ops + Reports + Mortgage Cos (admin only) */}
         {activeTab === "manager" && isAdmin && (
           <div className="mt-3">
             <Tabs defaultValue="check_tracker">
@@ -602,8 +602,6 @@ export default function CheckCommandCenter() {
                 <TabsTrigger value="check_tracker" className="text-xs gap-1"><ClipboardCheck className="h-3 w-3" />📋 Check Tracker</TabsTrigger>
                 <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
                 <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
-                <TabsTrigger value="loss_prevention" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Loss Prevention</TabsTrigger>
-                <TabsTrigger value="messages" className="text-xs gap-1"><MessageSquare className="h-3 w-3" />Messages{totalUnreadMessages > 0 && (<Badge variant="destructive" className="ml-1 h-4 min-w-4 px-1 text-[9px]">{totalUnreadMessages}</Badge>)}</TabsTrigger>
                 <TabsTrigger value="mortgage_cos" className="text-xs gap-1"><Building2 className="h-3 w-3" />Mortgage Cos</TabsTrigger>
               </TabsList>
               <TabsContent value="check_tracker" className="mt-3">
@@ -619,16 +617,6 @@ export default function CheckCommandCenter() {
                   <DepositReports />
                 </Suspense>
               </TabsContent>
-              <TabsContent value="loss_prevention" className="mt-3">
-                <Suspense fallback={<TabLoader />}>
-                  <LossPreventionPanel />
-                </Suspense>
-              </TabsContent>
-              <TabsContent value="messages" className="mt-3">
-                <Suspense fallback={<TabLoader />}>
-                  <CheckMessagesPanel />
-                </Suspense>
-              </TabsContent>
               <TabsContent value="mortgage_cos" className="mt-3">
                 <Suspense fallback={<TabLoader />}>
                   <MortgageCompaniesDirectory searchQuery={searchQuery} />
@@ -638,12 +626,37 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
-        {/* Partners Tab */}
-        {activeTab === "partners" && (
+        {/* Messages Tab — top-level colored card */}
+        {activeTab === "messages" && (
           <div className="mt-3">
             <Suspense fallback={<TabLoader />}>
-              <TenantPartnerManager />
+              <CheckMessagesPanel />
             </Suspense>
+          </div>
+        )}
+
+        {/* Partners Tab — Shared with Me + Manage Partners */}
+        {activeTab === "partners" && (
+          <div className="mt-3">
+            <Tabs value={partnersSubTab} onValueChange={(v) => setPartnersSubTab(v as "shared" | "manage")}>
+              <TabsList className="w-full bg-muted/50">
+                <TabsTrigger value="shared" className="flex-1 text-xs gap-1">
+                  <Share2 className="h-3 w-3" /> Shared with Me
+                  <Badge className="ml-1 text-[10px] px-1.5 py-0 bg-muted text-muted-foreground">
+                    {sharedChecks.length}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger value="manage" className="flex-1 text-xs gap-1">
+                  <Users className="h-3 w-3" /> Manage Partners
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="manage" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <TenantPartnerManager />
+                </Suspense>
+              </TabsContent>
+              {/* "shared" sub-tab falls through to the standard check list rendered below */}
+            </Tabs>
           </div>
         )}
 
