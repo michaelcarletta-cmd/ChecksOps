@@ -216,6 +216,7 @@ export default function CheckCommandCenter() {
   const { tenantId, isWhiteLabel, applyFilter } = useTenantFilter();
   const { isAdmin } = usePermissions();
   const [activeTab, setActiveTab] = useState("endorsements");
+  const [partnersSubTab, setPartnersSubTab] = useState<"shared" | "manage">("shared");
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
