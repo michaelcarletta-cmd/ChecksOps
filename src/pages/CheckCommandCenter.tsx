@@ -216,6 +216,7 @@ export default function CheckCommandCenter() {
   const { tenantId, isWhiteLabel, applyFilter } = useTenantFilter();
   const { isAdmin } = usePermissions();
   const [activeTab, setActiveTab] = useState("endorsements");
+  const [partnersSubTab, setPartnersSubTab] = useState<"shared" | "manage">("shared");
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
@@ -389,7 +390,7 @@ export default function CheckCommandCenter() {
   const filteredSharedChecks = sharedChecks.filter((c) => matchesSearch(c as CheckItem));
 
   const filteredChecks =
-    activeTab === "shared" ? filteredSharedChecks
+    (activeTab === "partners" && partnersSubTab === "shared") ? filteredSharedChecks
     : activeTab === "endorsements" ? awaitingEndorsement
     : activeTab === "ready" ? readyForDeposit
     : activeTab === "review" ? needsReview
@@ -548,17 +549,17 @@ export default function CheckCommandCenter() {
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
         {/* Unified gradient nav cards — all primary navigation */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2 md:gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-9 gap-2 md:gap-3">
           {[
             { key: "review",       label: "Review",            count: needsReview.length,         icon: ClipboardCheck, gradient: "from-blue-500/20 to-cyan-500/10",     accent: "text-blue-400",    ring: "ring-blue-500/30" },
             { key: "endorsements", label: "Endorsing",         count: awaitingEndorsement.length, icon: Send,           gradient: "from-amber-500/20 to-orange-500/10",  accent: "text-amber-400",   ring: "ring-amber-500/30" },
             { key: "ready",        label: "Ready for Deposit", count: readyForDeposit.length,     icon: CheckCircle2,   gradient: "from-emerald-500/20 to-green-500/10", accent: "text-emerald-400", ring: "ring-emerald-500/30" },
-            { key: "lossdraft",    label: "Loss Draft",        count: null,                       icon: Landmark,       gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400",  ring: "ring-purple-500/30" },
-            { key: "shared",       label: "Shared with Me",    count: sharedChecks.length,        icon: Share2,         gradient: "from-sky-500/20 to-blue-500/10",      accent: "text-sky-400",     ring: "ring-sky-500/30" },
-            ...(isAdmin ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield, gradient: "from-indigo-500/20 to-blue-500/10", accent: "text-indigo-400", ring: "ring-indigo-500/30" }] : []),
-            { key: "reissue",      label: "Reissue",           count: reissueRequested.length,    icon: RotateCcw,      gradient: "from-red-500/20 to-rose-500/10",      accent: "text-red-400",     ring: "ring-red-500/30" },
-            { key: "partners",     label: "Partners",          count: null,                       icon: Share2,         gradient: "from-pink-500/20 to-fuchsia-500/10",  accent: "text-pink-400",    ring: "ring-pink-500/30" },
+            { key: "lossdraft",    label: "Loss Draft",        count: null as number | null,      icon: Landmark,       gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400",  ring: "ring-purple-500/30" },
             { key: "branch",       label: "Branch",            count: branchDeposit.length,       icon: Building2,      gradient: "from-teal-500/20 to-cyan-500/10",     accent: "text-teal-400",    ring: "ring-teal-500/30" },
+            { key: "reissue",      label: "Reissue",           count: reissueRequested.length,    icon: RotateCcw,      gradient: "from-red-500/20 to-rose-500/10",      accent: "text-red-400",     ring: "ring-red-500/30" },
+            { key: "partners",     label: "Partners",          count: sharedChecks.length,        icon: Share2,         gradient: "from-pink-500/20 to-fuchsia-500/10",  accent: "text-pink-400",    ring: "ring-pink-500/30" },
+            ...(isAdmin ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield, gradient: "from-indigo-500/20 to-blue-500/10", accent: "text-indigo-400", ring: "ring-indigo-500/30" }] : []),
+            { key: "messages",     label: "Messages",          count: totalUnreadMessages || null, icon: MessageSquare, gradient: "from-rose-500/20 to-pink-500/10",     accent: "text-rose-400",    ring: "ring-rose-500/30" },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.key;
@@ -593,7 +594,7 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
-        {/* Manager Hub — Check Tracker + Deposit Ops + Reports + Loss Prevention + Messages + Mortgage Cos (admin only) */}
+        {/* Manager Hub — Check Tracker + Deposit Ops + Reports + Mortgage Cos (admin only) */}
         {activeTab === "manager" && isAdmin && (
           <div className="mt-3">
             <Tabs defaultValue="check_tracker">
@@ -601,8 +602,6 @@ export default function CheckCommandCenter() {
                 <TabsTrigger value="check_tracker" className="text-xs gap-1"><ClipboardCheck className="h-3 w-3" />📋 Check Tracker</TabsTrigger>
                 <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
                 <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
-                <TabsTrigger value="loss_prevention" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Loss Prevention</TabsTrigger>
-                <TabsTrigger value="messages" className="text-xs gap-1"><MessageSquare className="h-3 w-3" />Messages{totalUnreadMessages > 0 && (<Badge variant="destructive" className="ml-1 h-4 min-w-4 px-1 text-[9px]">{totalUnreadMessages}</Badge>)}</TabsTrigger>
                 <TabsTrigger value="mortgage_cos" className="text-xs gap-1"><Building2 className="h-3 w-3" />Mortgage Cos</TabsTrigger>
               </TabsList>
               <TabsContent value="check_tracker" className="mt-3">
@@ -618,16 +617,6 @@ export default function CheckCommandCenter() {
                   <DepositReports />
                 </Suspense>
               </TabsContent>
-              <TabsContent value="loss_prevention" className="mt-3">
-                <Suspense fallback={<TabLoader />}>
-                  <LossPreventionPanel />
-                </Suspense>
-              </TabsContent>
-              <TabsContent value="messages" className="mt-3">
-                <Suspense fallback={<TabLoader />}>
-                  <CheckMessagesPanel />
-                </Suspense>
-              </TabsContent>
               <TabsContent value="mortgage_cos" className="mt-3">
                 <Suspense fallback={<TabLoader />}>
                   <MortgageCompaniesDirectory searchQuery={searchQuery} />
@@ -637,12 +626,37 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
-        {/* Partners Tab */}
-        {activeTab === "partners" && (
+        {/* Messages Tab — top-level colored card */}
+        {activeTab === "messages" && (
           <div className="mt-3">
             <Suspense fallback={<TabLoader />}>
-              <TenantPartnerManager />
+              <CheckMessagesPanel />
             </Suspense>
+          </div>
+        )}
+
+        {/* Partners Tab — Shared with Me + Manage Partners */}
+        {activeTab === "partners" && (
+          <div className="mt-3">
+            <Tabs value={partnersSubTab} onValueChange={(v) => setPartnersSubTab(v as "shared" | "manage")}>
+              <TabsList className="w-full bg-muted/50">
+                <TabsTrigger value="shared" className="flex-1 text-xs gap-1">
+                  <Share2 className="h-3 w-3" /> Shared with Me
+                  <Badge className="ml-1 text-[10px] px-1.5 py-0 bg-muted text-muted-foreground">
+                    {sharedChecks.length}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger value="manage" className="flex-1 text-xs gap-1">
+                  <Users className="h-3 w-3" /> Manage Partners
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="manage" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <TenantPartnerManager />
+                </Suspense>
+              </TabsContent>
+              {/* "shared" sub-tab falls through to the standard check list rendered below */}
+            </Tabs>
           </div>
         )}
 
@@ -811,7 +825,7 @@ export default function CheckCommandCenter() {
         )}
 
         {/* All other tabs — only render the active one */}
-        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "manager" && activeTab !== "reissue" && activeTab !== "branch" && activeTab !== "partners" && (
+        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "manager" && activeTab !== "reissue" && activeTab !== "branch" && activeTab !== "messages" && !(activeTab === "partners" && partnersSubTab === "manage") && (
           <div className="mt-3 flex gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
             {/* Check list — grows when no check selected */}
             <Card
