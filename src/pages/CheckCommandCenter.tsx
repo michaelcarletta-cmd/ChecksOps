@@ -584,6 +584,9 @@ export default function CheckCommandCenter() {
         {/* Operations tabs */}
         <TabsList className="mt-3 w-full flex-wrap h-auto gap-1 bg-muted/50">
           <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger value="check_tracker" className="text-xs gap-1">📋 Check Tracker</TabsTrigger>
+          )}
           <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
           <TabsTrigger value="loss_prevention" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Loss Prevention</TabsTrigger>
           <TabsTrigger value="messages" className="text-xs gap-1"><MessageSquare className="h-3 w-3" />Messages{totalUnreadMessages > 0 && (<Badge variant="destructive" className="ml-1 h-4 min-w-4 px-1 text-[9px]">{totalUnreadMessages}</Badge>)}</TabsTrigger>
