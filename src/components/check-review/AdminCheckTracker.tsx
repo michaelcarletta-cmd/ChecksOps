@@ -17,7 +17,7 @@ type TrackedCheck = {
   payee_line: string | null;
   amount: number | null;
   carrier_name: string | null;
-  status: string | null;
+  endorsement_status: string | null;
   deposit_status: string | null;
   deposit_confirmation_number: string | null;
   deposit_confirmed_amount: number | null;
