@@ -1,10 +1,11 @@
 import * as React from 'npm:react@18.3.1'
 import {
-  Body, Container, Head, Heading, Hr, Html, Preview, Section, Text,
+  Body, Container, Head, Heading, Hr, Html, Img, Preview, Section, Text,
 } from 'npm:@react-email/components@0.0.22'
 import type { TemplateEntry } from './registry.ts'
 
 const SITE_NAME = 'ChecksOps'
+const LOGO_URL = 'https://checksops.com/checksops-logo.png'
 
 interface DemoRequestProps {
   name?: string
@@ -20,6 +21,9 @@ const DemoRequestEmail = ({ name, email, company, role, notes }: DemoRequestProp
     <Preview>New {SITE_NAME} demo request from {name || 'a prospect'}</Preview>
     <Body style={main}>
       <Container style={container}>
+        <Section style={logoSection}>
+          <Img src={LOGO_URL} alt={SITE_NAME} width="180" style={logo} />
+        </Section>
         <Heading style={h1}>New demo request</Heading>
         <Text style={text}>
           Someone just submitted the live demo form on {SITE_NAME}.
