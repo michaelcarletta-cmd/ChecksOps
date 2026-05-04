@@ -35,8 +35,8 @@ export default function Endorse() {
 
   const endorsementConsentText = "I agree to use electronic records and electronic signatures for this endorsement. I confirm my identity as the named payee, intend my electronic signature to be legally binding, and authorize the electronic endorsement of this insurance check payment. I understand I may decline to sign electronically and request another process.";
 
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://nbcqwpysqgyxrrbgtmkw.supabase.co";
-  const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5iY3F3cHlzcWd5eHJyYmd0bWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxNDQ2NTgsImV4cCI6MjA5MjcyMDY1OH0.9GNh6OK6l6vSIBgkDY-bJuqNtfHJsLNW-dc7jfRUwgw";
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://yvagrvfkeuvzjezfsbun.supabase.co";
+  const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2YWdydmZrZXV2emplemZzYnVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NzcyMjUsImV4cCI6MjA4NzQ1MzIyNX0.1Jgm-plSdEFFnPrtA492s0jH-GQcCN08WplZS_VrtEg";
   const fnUrl = `${supabaseUrl}/functions/v1/check-endorsement`;
 
   useEffect(() => {
@@ -65,31 +65,67 @@ export default function Endorse() {
     }
   };
 
-  // Canvas setup
+  // Canvas setup — preserve drawn signature across resizes (mobile keyboard,
+  // address-bar collapse, viewport changes) so users don't lose their signature
+  // before they can submit.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const resize = () => {
+
+    const applyCtxDefaults = (ctx: CanvasRenderingContext2D, dpr: number) => {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.strokeStyle = "#1e293b";
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+    };
+
+    const resize = (preserve: boolean) => {
       const parent = canvas.parentElement;
       if (!parent) return;
       const dpr = window.devicePixelRatio || 1;
       const width = parent.clientWidth;
       const height = 140;
-      canvas.width = Math.floor(width * dpr);
-      canvas.height = Math.floor(height * dpr);
+      const newW = Math.floor(width * dpr);
+      const newH = Math.floor(height * dpr);
+
+      // Skip if no actual size change — avoids wiping the bitmap on no-op resize events.
+      if (canvas.width === newW && canvas.height === newH) {
+        canvas.style.height = `${height}px`;
+        return;
+      }
+
+      // Snapshot current pixels before changing canvas dimensions (which clears it).
+      let snapshot: HTMLCanvasElement | null = null;
+      if (preserve && canvas.width > 0 && canvas.height > 0) {
+        snapshot = document.createElement("canvas");
+        snapshot.width = canvas.width;
+        snapshot.height = canvas.height;
+        const sctx = snapshot.getContext("2d");
+        if (sctx) sctx.drawImage(canvas, 0, 0);
+      }
+
+      canvas.width = newW;
+      canvas.height = newH;
       canvas.style.height = `${height}px`;
       const ctx = canvas.getContext("2d");
       if (ctx) {
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.strokeStyle = "#1e293b";
-        ctx.lineWidth = 2;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
+        applyCtxDefaults(ctx, dpr);
+        if (snapshot) {
+          // Draw the previous signature scaled to the new canvas size in CSS pixels.
+          ctx.drawImage(snapshot, 0, 0, snapshot.width, snapshot.height, 0, 0, width, height);
+        }
       }
     };
-    resize();
-    window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
+
+    resize(false);
+    const onResize = () => resize(true);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
   }, [data]);
 
   const getCtx = () => canvasRef.current?.getContext("2d") ?? null;
@@ -187,19 +223,6 @@ export default function Endorse() {
       if (!resp.ok) throw new Error(json.error || "Request failed");
 
       if (type === "approve") {
-        // If another payee at this same address still needs to sign, hop directly to them.
-        if (json.next_token) {
-          const nextName = json.next_payee_name ? ` Now signing as ${json.next_payee_name}.` : "";
-          setMessage({ text: `Signature recorded.${nextName}`, type: "success" });
-          // Reset form state for the next signer
-          setPaymentDirection(null);
-          setContractorName("");
-          setESignConsentAccepted(false);
-          clearCanvas();
-          // Hard navigate to refresh data cleanly
-          window.location.assign(`/endorse?token=${json.next_token}`);
-          return;
-        }
         // Show the thank-you state directly without re-fetching (avoids "invalid link" error)
         setData((prev) => prev ? { ...prev, status: "signed" } : prev);
       } else {

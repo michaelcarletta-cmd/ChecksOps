@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { createClient } from "npm:@supabase/supabase-js@2.39.3";
 import { callVision } from "../_shared/ai/generate.ts";
 import { MODEL_VISION, MODEL_VISION_STRONG } from "../_shared/ai/modelRouter.ts";
 
@@ -24,6 +24,8 @@ interface OcrParsedResult {
   issue_date: string | null;
   claim_number: string | null;
   payee_line: string | null;
+  routing_number: string | null;
+  account_number: string | null;
   payees: OcrPayee[];
   confidence: number | null;
   field_confidence: Record<string, number>;
@@ -205,6 +207,14 @@ function validateOcrOutput(raw: unknown): OcrParsedResult {
     ? obj.low_confidence_fields.filter((f): f is string => typeof f === "string")
     : [];
 
+  // MICR digits-only normalization (strip everything except 0-9)
+  const digitsOnly = (k: string): string | null => {
+    const v = str(k);
+    if (!v) return null;
+    const d = v.replace(/[^0-9]/g, "");
+    return d.length >= 4 ? d : null;
+  };
+
   return {
     carrier_name: str("carrier_name"),
     check_number: str("check_number"),
@@ -212,6 +222,8 @@ function validateOcrOutput(raw: unknown): OcrParsedResult {
     issue_date: issueDate,
     claim_number: str("claim_number"),
     payee_line: str("payee_line"),
+    routing_number: digitsOnly("routing_number"),
+    account_number: digitsOnly("account_number"),
     payees,
     confidence,
     field_confidence: fieldConfidence,
@@ -262,30 +274,30 @@ function evaluateEligibility(
     return { recommendation: "manual_review_required", reasons, rules };
   }
 
+  // Mortgage on the check → always Loss Draft
   if (hasMortgage) {
     reasons.push("Mortgage company listed — routing to Loss Draft workflow");
     if (payees.length > 2) reasons.push("Complex multi-payee/mortgage structure");
     return { recommendation: "loss_draft_required", reasons, rules };
   }
 
+  // Multi-payee (no mortgage) → endorsements must be collected before deposit
   if (payees.length > 2) {
-    reasons.push("Complex multi-payee structure — branch deposit required");
-    return { recommendation: "branch_deposit_recommended", reasons, rules };
+    reasons.push("Complex multi-payee structure — collect endorsements before deposit");
+    return { recommendation: "endorsements_pending", reasons, rules };
   }
 
-  if (isMultiPayee) {
+  if (isMultiPayee || payees.length > 1) {
     reasons.push("Multi-payee check — all endorsements must be collected first");
     return { recommendation: "endorsements_pending", reasons, rules };
   }
 
-  if (payees.length === 1 && hasInsured) return { recommendation: "ready_for_deposit", reasons, rules };
-  if (payees.length === 1 && hasPa) return { recommendation: "ready_for_deposit", reasons, rules };
-  if (payees.length === 1) {
-    reasons.push("Single payee type unclear — verify deposit authority");
-    return { recommendation: "manual_review_required", reasons, rules };
-  }
-
-  return { recommendation: "ready_for_deposit", reasons, rules };
+  // Single-payee (no mortgage) → still goes to Needs Review.
+  // A check is only ever moved to "Approved for Deposit" once all required
+  // endorsements/signatures are confirmed received or waived — never directly
+  // from OCR intake.
+  reasons.push("OCR complete — manual review required before deposit");
+  return { recommendation: "manual_review_required", reasons, rules };
 }
 
 function parseStrictJson(rawText: string): unknown {
@@ -470,32 +482,9 @@ Deno.serve(async (req) => {
 
     // ---- Parse request ----
     stage = "parse_request";
-    const { checkId, skipAi } = (await req.json().catch(() => ({}))) as { checkId?: string; skipAi?: boolean };
+    const { checkId } = (await req.json().catch(() => ({}))) as { checkId?: string };
     if (!checkId) return errResponse("checkId required", 400, stage);
-    log("parse_request", "Parsed", { checkId, skipAi: !!skipAi });
-
-    // ---- Manual entry path: user opted out of AI OCR ----
-    if (skipAi) {
-      stage = "skip_ai";
-      await supabase
-        .from("check_intake_items")
-        .update({
-          ocr_status: "skipped",
-          status: "manual_review_required",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", checkId);
-      await logAudit(supabase, checkId, "ai_skipped_by_user",
-        "User chose to enter check details manually. AI OCR skipped.",
-        { reason: "user_opt_out" }, userId);
-      return new Response(JSON.stringify({
-        success: true,
-        ocr_success: false,
-        skipped: true,
-        reason: "user_opt_out",
-        message: "Check uploaded. Enter details manually.",
-      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    log("parse_request", "Parsed", { checkId });
 
     // ---- Fetch check ----
     stage = "fetch_check";
@@ -527,9 +516,32 @@ Deno.serve(async (req) => {
     }
 
     // ---- Tenant credit check (white-label only) ----
+    // Freedom Claims (system tenant) is internal — billed via the app's AI usage,
+    // NOT via per-tenant white-label credits. Skip the credit check entirely.
     stage = "credit_check";
     const tenantId = (check as Record<string, unknown>).tenant_id as string | null;
+    let isSystemTenant = false;
     if (tenantId) {
+      const { data: tenantRow, error: tenantLookupErr } = await supabase
+        .from("tenants")
+        .select("is_system_tenant, slug")
+        .eq("id", tenantId)
+        .maybeSingle();
+      if (tenantLookupErr) {
+        log("credit_check", "Tenant lookup failed — defaulting to system tenant (skip credits)", {
+          tenantId,
+          error: tenantLookupErr.message,
+        });
+        // Fail-open for credit check: if we can't verify tenant, assume internal
+        // so we never block Freedom's own check ingestion on a transient lookup error.
+        isSystemTenant = true;
+      } else {
+        const row = tenantRow as { is_system_tenant?: boolean; slug?: string } | null;
+        isSystemTenant = !!row?.is_system_tenant || row?.slug === "freedom-claims";
+      }
+      log("credit_check", "Tenant resolved", { tenantId, isSystemTenant });
+    }
+    if (tenantId && !isSystemTenant) {
       const { data: deductResult, error: deductErr } = await supabase
         .rpc("deduct_tenant_credits", {
           p_tenant_id: tenantId,
@@ -543,29 +555,16 @@ Deno.serve(async (req) => {
         // Don't block Freedom's own checks — only block if tenant
       } else if (deductResult && !(deductResult as any).success) {
         const errType = (deductResult as any).error;
-        log("credit_check", "Insufficient credits — routing to manual entry", { tenantId, error: errType });
+        log("credit_check", "Insufficient credits", { tenantId, error: errType });
         await logAudit(supabase, checkId, "credit_check_failed",
-          `AI skipped (${errType === 'insufficient_credits' ? 'insufficient credits' : 'no credit balance'}). Check routed for manual entry.`,
+          `Check processing blocked: ${errType === 'insufficient_credits' ? 'Insufficient AI credits' : 'No credit balance configured'}`,
           { tenant_id: tenantId, error: errType }, userId);
-        // Graceful degradation: route to the same manual review queue used when
-        // OCR fails or when the user opts out of AI. Downstream pipeline is identical.
-        await supabase
-          .from("check_intake_items")
-          .update({
-            ocr_status: "skipped",
-            status: "manual_review_required",
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", checkId);
-        return new Response(JSON.stringify({
-          success: true,
-          ocr_success: false,
-          skipped: true,
-          reason: errType === "insufficient_credits" ? "insufficient_credits" : "no_credit_balance",
-          message: errType === "insufficient_credits"
-            ? "AI skipped — out of credits. Enter check details manually."
-            : "AI skipped — no credit balance. Enter check details manually.",
-        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return errResponse(
+          errType === "insufficient_credits"
+            ? "Insufficient AI credits. Please purchase more credits in Settings > Credits."
+            : "No credit balance configured. Please contact your administrator.",
+          402, stage
+        );
       } else {
         log("credit_check", "Credit deducted", { tenantId, remaining: (deductResult as any)?.balance });
       }
@@ -632,22 +631,25 @@ Return ONLY a valid JSON object with these exact fields:
   "issue_date": "YYYY-MM-DD format or null",
   "claim_number": "claim/policy number if visible or null",
   "payee_line": "the full pay-to-the-order-of line exactly as written or null",
+  "routing_number": "9-digit bank routing number from the MICR line at the bottom of the check, digits only, or null",
+  "account_number": "bank account number from the MICR line at the bottom of the check, digits only, or null",
   "payees": [
     { "name": "payee name", "type": "insured|mortgage_company|contractor|public_adjuster|unknown" }
   ],
   "confidence": 85,
-  "field_confidence": { "amount": 95, "check_number": 90, "payee_line": 80, "carrier_name": 70 },
+  "field_confidence": { "amount": 95, "check_number": 90, "payee_line": 80, "carrier_name": 70, "routing_number": 95, "account_number": 90 },
   "low_confidence_fields": ["carrier_name"]
 }
 
 Rules:
 - "confidence" is 0-100 for overall extraction quality.
-- "field_confidence" gives per-field confidence for: amount, check_number, payee_line, carrier_name, issue_date.
+- "field_confidence" gives per-field confidence for: amount, check_number, payee_line, carrier_name, issue_date, routing_number, account_number.
 - "low_confidence_fields" lists fields where text was unclear.
 - Payee type: mortgage_company (banks/lending/mortgage), contractor (construction/roofing/restoration), public_adjuster (adjusting/PA), insured (individuals/homeowners), unknown otherwise.
 - CRITICAL: "payees" should ONLY contain the names of people or organizations the check is payable to. Do NOT include mailing addresses, street addresses, city/state/zip, suite numbers, PO boxes, or any address components as payees. The "payee_line" field captures the full text, but "payees" must be only the entity names (e.g. "Freedom Adjustment" and "Ildefonso Rosas", NOT "865 Route 33 Business Ste 3 Unit #231 Freehold NJ 07728").
 - Amount must be numeric only. Date must be YYYY-MM-DD.
 - CRITICAL for amount: The check amount appears in TWO places — a numeric box (usually right side) AND written out in words on the "dollars" line. Check BOTH locations. Even if one is partially obscured, use the other. The amount should almost NEVER be null for a valid check. If you can read the written-out amount (e.g. "Two thousand five hundred ten and 27/100"), convert it to numeric (2510.27). Only return null if BOTH the numeric and written amounts are completely unreadable.
+- CRITICAL for MICR (routing/account): Look at the bottom edge of the check for the magnetic ink line printed in the special MICR font. The format is typically: ⑆ROUTING⑆ ACCOUNT⑈ CHECK#  (transit/routing is 9 digits flanked by ⑆ symbols, then the account number, then the check number flanked by ⑈). Extract routing_number as the 9-digit number, account_number as the variable-length account digits. Return digits only — strip the special MICR symbols (⑆ ⑇ ⑈ ⑉) and any spaces. If the MICR line is not visible or unreadable, return null for both.
 - Return ONLY the JSON object, no markdown, no explanation.`;
 
       const content: VisionContentPart[] = [
@@ -836,7 +838,13 @@ Rules:
       ? "needs_review"
       : eligibility.recommendation === "loss_draft_required"
         ? "loss_draft_required"
-        : "ocr_complete";
+        : eligibility.recommendation === "endorsements_pending"
+          ? "endorsements_in_progress"
+          : eligibility.recommendation === "branch_deposit_recommended"
+            ? "branch_deposit_required"
+            : eligibility.recommendation === "ready_for_deposit"
+              ? "approved_for_deposit"
+              : "ocr_complete";
 
     // ---- Commit via RPC (non-fatal wrapper) ----
     stage = "rpc_commit";
@@ -893,6 +901,8 @@ Rules:
             amount: parsedAmount,
             issue_date: normalizedIssueDate,
             payee_line: parsed.payee_line,
+            routing_number: parsed.routing_number,
+            account_number: parsed.account_number,
             is_multi_payee: isMultiPayee,
             raw_ocr_front: {
               ...parsed,
@@ -903,7 +913,7 @@ Rules:
             },
             ocr_status: "completed",
             ocr_heartbeat_at: null,
-            status: needsManualReview ? "needs_review" : "ocr_complete",
+            status: checkStatus,
             deposit_recommendation: eligibility.recommendation === "loss_draft_required"
               ? "loss_draft_required"
               : eligibility.recommendation,
@@ -954,6 +964,61 @@ Rules:
       await logAudit(supabase, checkId, "ocr_rpc_failed",
         `RPC commit failed but OCR data saved directly: ${rpcError}`,
         { error: rpcError, stage: "rpc_commit" }, userId);
+    }
+
+    // ---- Persist MICR (routing/account) — RPC signature doesn't include them ----
+    if (parsed.routing_number || parsed.account_number) {
+      try {
+        await supabase.from("check_intake_items")
+          .update({
+            routing_number: parsed.routing_number,
+            account_number: parsed.account_number,
+          })
+          .eq("id", checkId);
+        log("micr_persist", "Routing/account saved to intake", {
+          routing: parsed.routing_number ? "***" + parsed.routing_number.slice(-4) : null,
+          account: parsed.account_number ? "***" + parsed.account_number.slice(-4) : null,
+        });
+        // Mirror to claim_checks if linked
+        await supabase.from("claim_checks")
+          .update({
+            routing_number: parsed.routing_number,
+            account_number: parsed.account_number,
+          })
+          .eq("check_intake_item_id", checkId);
+      } catch (micrErr) {
+        log("micr_persist", "Failed to persist MICR", {
+          error: micrErr instanceof Error ? micrErr.message : String(micrErr),
+        });
+      }
+    }
+
+    // ---- Always make sure the check is linked into claim_checks ----
+    // The RPC's Step 5 swallows errors silently, so a check could end up
+    // attached to a claim_intake row but missing from claim_checks (which is
+    // what makes the check appear under the claim's Accounting/Checks tabs).
+    // This call is idempotent — it no-ops if a link already exists.
+    stage = "claim_check_link_ensure";
+    try {
+      const { data: refreshedCheck } = await supabase
+        .from("check_intake_items")
+        .select("*")
+        .eq("id", checkId)
+        .maybeSingle();
+      if (refreshedCheck) {
+        await ensureClaimCheckLinkOnFailure(
+          supabase,
+          refreshedCheck,
+          userId,
+          rpcError
+            ? `Auto-linked after RPC failure: ${rpcError}`
+            : "Auto-linked post-OCR (safety net)",
+        );
+      }
+    } catch (linkErr) {
+      log("claim_check_link_ensure", "Safety-net link failed (non-fatal)", {
+        error: linkErr instanceof Error ? linkErr.message : String(linkErr),
+      });
     }
 
     // ---- Auto-create endorsement records (non-fatal) ----
