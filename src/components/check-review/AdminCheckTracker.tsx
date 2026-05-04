@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,9 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import {
   Loader2,
@@ -23,9 +27,13 @@ import {
   HelpCircle,
   Clock,
   ShieldAlert,
+  Pencil,
+  ArrowRightCircle,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { differenceInDays } from "date-fns";
+import { format, differenceInDays } from "date-fns";
+import { CheckAdminEditDialog } from "./CheckAdminEditDialog";
 
 type CheckRow = {
   id: string;
@@ -40,10 +48,20 @@ type CheckRow = {
   deposit_confirmed_at: string | null;
   created_at: string;
   updated_at?: string | null;
+  check_intake_item_id?: string | null;
 };
 
+const ROUTE_OPTIONS: Array<{ value: string; label: string; hint: string }> = [
+  { value: "needs_review", label: "Needs Review", hint: "Send back for staff review" },
+  { value: "manual_review_required", label: "Manual Review Required", hint: "Awaiting manual decision" },
+  { value: "endorsements_in_progress", label: "Endorsements In Progress", hint: "Awaiting signatures" },
+  { value: "loss_draft_required", label: "Loss Draft Required", hint: "Mortgage on check" },
+  { value: "approved_for_deposit", label: "Approved for Deposit", hint: "Ready to deposit" },
+  { value: "voided", label: "Voided", hint: "Cancel this check" },
+];
+
 type DepositLink = {
-  claim_check_id: string | null;
+  check_id: string | null; // points at check_intake_items.id
   status: string | null;
   bank_confirmed_at: string | null;
   reconciled_at: string | null;
@@ -52,6 +70,7 @@ type DepositLink = {
 type Bucket = "unverified" | "stuck" | "no_status" | "all";
 
 export function AdminCheckTracker() {
+  const qc = useQueryClient();
   const [checks, setChecks] = useState<CheckRow[]>([]);
   const [depositMap, setDepositMap] = useState<Record<string, DepositLink>>({});
   const [loading, setLoading] = useState(true);
@@ -60,29 +79,41 @@ export function AdminCheckTracker() {
   const [confirmation, setConfirmation] = useState("");
   const [amount, setAmount] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editingIntakeId, setEditingIntakeId] = useState<string | null>(null);
+  const [routing, setRouting] = useState<string | null>(null); // check_intake_item_id currently being routed
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CheckRow | null>(null);
 
   async function load() {
     setLoading(true);
-    const { data: checksData, error } = await supabase
+    const { data: checksData, error: checksErr } = await supabase
       .from("claim_checks")
       .select(
-        "id, claim_id, amount, check_number, carrier_name, payee_line, deposit_status, deposit_confirmation_number, deposit_confirmed_amount, deposit_confirmed_at, created_at, updated_at"
+        "id, claim_id, amount, check_number, carrier_name, payee_line, deposit_status, deposit_confirmation_number, deposit_confirmed_amount, deposit_confirmed_at, created_at, updated_at, check_intake_item_id",
       )
       .order("created_at", { ascending: false })
       .limit(1000);
-    if (error) toast.error(error.message);
+    if (checksErr) toast.error(checksErr.message);
 
+    // Cross-reference deposit_items via check_intake_item_id (the canonical link)
     const { data: depositData } = await supabase
       .from("deposit_items")
-      .select("claim_check_id, status, bank_confirmed_at, reconciled_at")
+      .select("check_id, status, bank_confirmed_at, reconciled_at")
       .limit(1000);
 
+    // Map keyed by claim_checks.id (resolved through check_intake_item_id)
     const map: Record<string, DepositLink> = {};
+    const intakeToDeposit: Record<string, DepositLink> = {};
     (depositData ?? []).forEach((d: any) => {
-      if (d?.claim_check_id) map[d.claim_check_id] = d as DepositLink;
+      if (d?.check_id) intakeToDeposit[d.check_id] = d;
+    });
+    ((checksData as any) ?? []).forEach((c: any) => {
+      if (c.check_intake_item_id && intakeToDeposit[c.check_intake_item_id]) {
+        map[c.id] = intakeToDeposit[c.check_intake_item_id];
+      }
     });
 
-    setChecks(((checksData as any) ?? []) as CheckRow[]);
+    setChecks((checksData as any) ?? []);
     setDepositMap(map);
     setLoading(false);
   }
@@ -92,9 +123,9 @@ export function AdminCheckTracker() {
   }, []);
 
   const classified = useMemo(() => {
-    const unverified: CheckRow[] = [];
-    const stuck: CheckRow[] = [];
-    const noStatus: CheckRow[] = [];
+    const unverified: CheckRow[] = []; // marked deposited locally but no bank-side record
+    const stuck: CheckRow[] = []; // sitting >14 days with no resolution
+    const noStatus: CheckRow[] = []; // null/blank deposit_status entirely
     const all: CheckRow[] = checks;
 
     for (const c of checks) {
@@ -108,8 +139,16 @@ export function AdminCheckTracker() {
         link?.status === "reconciled";
 
       if (!c.deposit_status) noStatus.push(c);
-      if ((status === "deposited" || status === "cleared") && !link) unverified.push(c);
-      if (!settled && ageDays > 14) stuck.push(c);
+
+      // Unverified: marked deposited locally but never appeared in deposit_items pipeline
+      if ((status === "deposited" || status === "cleared") && !link) {
+        unverified.push(c);
+      }
+
+      // Stuck: not settled and older than 14 days
+      if (!settled && ageDays > 14) {
+        stuck.push(c);
+      }
     }
 
     return { unverified, stuck, noStatus, all };
@@ -124,7 +163,7 @@ export function AdminCheckTracker() {
         c.carrier_name?.toLowerCase().includes(q) ||
         c.payee_line?.toLowerCase().includes(q) ||
         c.id.toLowerCase().includes(q) ||
-        String(c.amount ?? "").includes(q)
+        String(c.amount ?? "").includes(q),
     );
   };
 
@@ -159,57 +198,177 @@ export function AdminCheckTracker() {
     load();
   }
 
+  /** Permanently delete a check (claim_checks + check_intake_items + related rows). Admin only. */
+  async function deleteCheck(c: CheckRow) {
+    setDeleting(c.id);
+    try {
+      const intakeId = c.check_intake_item_id;
+      const { data: ud } = await supabase.auth.getUser();
+
+      // Audit BEFORE delete so the log survives
+      if (intakeId) {
+        await supabase.from("check_audit_log").insert({
+          check_id: intakeId,
+          event_type: "admin_deleted",
+          event_description: `Admin deleted check from Check Tracker (claim_check ${c.id})`,
+          actor_id: ud.user?.id ?? null,
+          event_data: {
+            claim_check_id: c.id,
+            check_intake_item_id: intakeId,
+            payee_line: c.payee_line,
+            amount: c.amount,
+            check_number: c.check_number,
+          },
+        });
+      }
+
+      // Best-effort cleanup of dependent rows that may not cascade
+      if (intakeId) {
+        await (supabase.from("deposit_items") as any).delete().eq("check_id", intakeId);
+        await (supabase.from("check_endorsements") as any).delete().eq("check_intake_item_id", intakeId);
+      }
+      // Delete claim_checks first (FKs may reference it)
+      const { error: ccErr } = await (supabase.from("claim_checks") as any).delete().eq("id", c.id);
+      if (ccErr) throw ccErr;
+      if (intakeId) {
+        const { error: intakeErr } = await (supabase.from("check_intake_items") as any).delete().eq("id", intakeId);
+        if (intakeErr) throw intakeErr;
+      }
+
+      toast.success("Check deleted");
+      setDeleteTarget(null);
+      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+      qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+      qc.invalidateQueries({ queryKey: ["loss-draft-checks"] });
+      load();
+    } catch (e: any) {
+      console.error("[AdminCheckTracker] deleteCheck failed", e);
+      toast.error(e?.message || "Failed to delete check");
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  /** Reroute a check to a different status. Updates check_intake_items.status if linked,
+   *  otherwise falls back to claim_checks.deposit_status mapping. */
+  async function routeTo(c: CheckRow, newStatus: string) {
+    setRouting(c.id);
+    try {
+      const intakeId = c.check_intake_item_id;
+      console.log("[AdminCheckTracker] routeTo", { checkId: c.id, intakeId, newStatus });
+      if (intakeId) {
+        const { error, data } = await supabase
+          .from("check_intake_items")
+          .update({ status: newStatus, updated_at: new Date().toISOString() })
+          .eq("id", intakeId)
+          .select("id, status");
+        if (error) throw error;
+        if (!data || data.length === 0) {
+          throw new Error("Update returned no rows — likely blocked by row-level security. Confirm you have admin access.");
+        }
+
+        // Mirror to claim_checks deposit_status when meaningful
+        const depositStatus =
+          newStatus === "approved_for_deposit" ? "ready"
+          : newStatus === "deposited" ? "deposited"
+          : newStatus === "voided" ? "voided"
+          : "pending";
+        const { error: ccErr } = await supabase
+          .from("claim_checks")
+          .update({ deposit_status: depositStatus })
+          .eq("id", c.id);
+        if (ccErr) console.warn("[AdminCheckTracker] claim_checks mirror failed", ccErr);
+
+        // Audit
+        const { data: ud } = await supabase.auth.getUser();
+        await supabase.from("check_audit_log").insert({
+          check_id: intakeId,
+          event_type: "admin_routed",
+          event_description: `Admin rerouted check to "${newStatus}" from Check Tracker`,
+          actor_id: ud.user?.id ?? null,
+          event_data: { from_tracker: true, new_status: newStatus },
+        });
+      } else {
+        // No intake item linked — fall back to claim_checks only
+        const depositStatus =
+          newStatus === "approved_for_deposit" ? "ready"
+          : newStatus === "deposited" ? "deposited"
+          : newStatus === "voided" ? "voided"
+          : "pending";
+        const { error, data } = await supabase
+          .from("claim_checks")
+          .update({ deposit_status: depositStatus })
+          .eq("id", c.id)
+          .select("id");
+        if (error) throw error;
+        if (!data || data.length === 0) {
+          throw new Error("Update returned no rows — likely blocked by row-level security.");
+        }
+      }
+      toast.success(`Routed to "${newStatus.replace(/_/g, " ")}"`);
+      // Invalidate parent caches so the Review/Endorsements/Ready tabs refresh too
+      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+      qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+      qc.invalidateQueries({ queryKey: ["loss-draft-checks"] });
+      load();
+    } catch (e: any) {
+      console.error("[AdminCheckTracker] routeTo failed", e);
+      toast.error(e?.message || "Failed to reroute check");
+    } finally {
+      setRouting(null);
+    }
+  }
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin mr-2" /> Scanning all checks...
+      <div className="flex items-center gap-2 p-6 text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> Scanning all checks...
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-sm font-semibold">
-            <ShieldAlert className="h-4 w-4 text-destructive" />
-            Check Tracker — Admin Fallback
-          </div>
-          <p className="text-xs text-muted-foreground max-w-2xl">
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold flex items-center gap-2">
+            <ShieldAlert className="h-4 w-4 text-amber-500" /> Check Tracker — Admin Fallback
+          </h2>
+          <p className="text-xs text-muted-foreground max-w-xl">
             Safety-net to find checks that fell out of the normal Deposit Ops flow. Use this when a
             check seems missing, stuck, or bypassed the pipeline. For everyday deposits, use Deposit
             Ops.
           </p>
         </div>
         <Button size="sm" variant="outline" onClick={load}>
-          <RefreshCw className="h-3.5 w-3.5 mr-1" /> Rescan
+          <RefreshCw className="h-3 w-3 mr-1" /> Rescan
         </Button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <SummaryCard
-          icon={<AlertTriangle className="h-3.5 w-3.5" />}
+          icon={<HelpCircle className="h-4 w-4" />}
           label="Unverified"
           value={classified.unverified.length}
           tone="destructive"
           hint="Marked deposited but missing from Deposit Ops"
         />
         <SummaryCard
-          icon={<Clock className="h-3.5 w-3.5" />}
+          icon={<Clock className="h-4 w-4" />}
           label="Stuck >14d"
           value={classified.stuck.length}
           tone="amber"
           hint="Old checks never resolved"
         />
         <SummaryCard
-          icon={<HelpCircle className="h-3.5 w-3.5" />}
+          icon={<AlertTriangle className="h-4 w-4" />}
           label="No Status"
           value={classified.noStatus.length}
           tone="muted"
           hint="Checks with blank deposit status"
         />
         <SummaryCard
-          icon={<CheckCircle2 className="h-3.5 w-3.5" />}
+          icon={<CheckCircle2 className="h-4 w-4" />}
           label="Total Checks"
           value={classified.all.length}
           tone="muted"
@@ -217,9 +376,9 @@ export function AdminCheckTracker() {
       </div>
 
       <div className="relative">
-        <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
         <Input
-          placeholder="Search check #, payee, carrier, amount..."
+          placeholder="Search by check #, carrier, payee, amount, or check ID..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-8 h-9 text-sm"
@@ -227,17 +386,17 @@ export function AdminCheckTracker() {
       </div>
 
       <Tabs defaultValue="unverified">
-        <TabsList className="flex-wrap h-auto">
-          <TabsTrigger value="unverified" className="text-xs">
+        <TabsList className="w-full">
+          <TabsTrigger value="unverified" className="flex-1 text-xs">
             Unverified ({classified.unverified.length})
           </TabsTrigger>
-          <TabsTrigger value="stuck" className="text-xs">
+          <TabsTrigger value="stuck" className="flex-1 text-xs">
             Stuck ({classified.stuck.length})
           </TabsTrigger>
-          <TabsTrigger value="no_status" className="text-xs">
+          <TabsTrigger value="no_status" className="flex-1 text-xs">
             No Status ({classified.noStatus.length})
           </TabsTrigger>
-          <TabsTrigger value="all" className="text-xs">
+          <TabsTrigger value="all" className="flex-1 text-xs">
             All ({classified.all.length})
           </TabsTrigger>
         </TabsList>
@@ -247,19 +406,18 @@ export function AdminCheckTracker() {
             bucket === "unverified"
               ? classified.unverified
               : bucket === "stuck"
-              ? classified.stuck
-              : bucket === "no_status"
-              ? classified.noStatus
-              : classified.all
+                ? classified.stuck
+                : bucket === "no_status"
+                  ? classified.noStatus
+                  : classified.all,
           );
           return (
             <TabsContent key={bucket} value={bucket} className="mt-3">
               <Card>
-                <CardContent className="p-0 divide-y divide-border/50">
+                <CardContent className="p-0 divide-y max-h-none overflow-x-auto overflow-y-visible lg:max-h-[600px] lg:overflow-auto">
                   {rows.length === 0 ? (
-                    <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                      {bucket === "unverified" &&
-                        "No unverified checks. Everything reconciles cleanly with Deposit Ops. ✓"}
+                    <div className="p-6 text-sm text-muted-foreground text-center">
+                      {bucket === "unverified" && "No unverified checks. Everything reconciles cleanly with Deposit Ops. ✓"}
                       {bucket === "stuck" && "No stuck checks. ✓"}
                       {bucket === "no_status" && "Every check has a deposit status. ✓"}
                       {bucket === "all" && "No checks found."}
@@ -272,6 +430,15 @@ export function AdminCheckTracker() {
                         link={depositMap[c.id]}
                         bucket={bucket}
                         onDeposit={() => openDeposit(c)}
+                        onEdit={
+                          c.check_intake_item_id
+                            ? () => setEditingIntakeId(c.check_intake_item_id!)
+                            : undefined
+                        }
+                        onRoute={(s) => routeTo(c, s)}
+                        routing={routing === c.id}
+                        onDelete={() => setDeleteTarget(c)}
+                        deleting={deleting === c.id}
                       />
                     ))
                   )}
@@ -293,28 +460,25 @@ export function AdminCheckTracker() {
           </DialogHeader>
           {target && (
             <div className="space-y-3">
-              <div className="rounded-md border border-border/60 p-3 bg-muted/30">
-                <p className="text-sm font-medium">
-                  {target.payee_line || target.carrier_name || "Check"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Check #{target.check_number ?? "—"} · Expected $
-                  {Number(target.amount ?? 0).toLocaleString()}
-                </p>
+              <div className="rounded-md bg-muted p-3 text-sm">
+                <div className="font-medium">{target.payee_line || target.carrier_name || "Check"}</div>
+                <div className="text-xs text-muted-foreground">
+                  Check #{target.check_number ?? "—"} · Expected ${Number(target.amount ?? 0).toLocaleString()}
+                </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="conf-num">Confirmation Number</Label>
+                <Label htmlFor="conf">Confirmation Number</Label>
                 <Input
-                  id="conf-num"
+                  id="conf"
                   value={confirmation}
                   onChange={(e) => setConfirmation(e.target.value)}
                   placeholder="e.g. CHK-20260503-001"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="conf-amt">Deposited Amount</Label>
+                <Label htmlFor="amt">Deposited Amount</Label>
                 <Input
-                  id="conf-amt"
+                  id="amt"
                   type="number"
                   step="0.01"
                   value={amount}
@@ -325,16 +489,62 @@ export function AdminCheckTracker() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setTarget(null)} disabled={saving}>
+            <Button variant="ghost" onClick={() => setTarget(null)} disabled={saving}>
               Cancel
             </Button>
             <Button onClick={submitDeposit} disabled={saving}>
-              {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
               Mark Reconciled
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-4 w-4" /> Permanently Delete Check?
+            </DialogTitle>
+            <DialogDescription>
+              This will remove the check from the database, including its intake record, endorsements, and any deposit_items rows. This cannot be undone. An audit log entry will be written before deletion.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteTarget && (
+            <div className="rounded-md bg-muted p-3 text-sm">
+              <div className="font-medium">{deleteTarget.payee_line || deleteTarget.carrier_name || "Check"}</div>
+              <div className="text-xs text-muted-foreground">
+                Check #{deleteTarget.check_number ?? "—"} · ${Number(deleteTarget.amount ?? 0).toLocaleString()}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)} disabled={!!deleting}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteTarget && deleteCheck(deleteTarget)}
+              disabled={!!deleting}
+            >
+              {deleting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Trash2 className="h-3 w-3 mr-1" />}
+              Delete Check
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {editingIntakeId && (
+        <CheckAdminEditDialog
+          checkId={editingIntakeId}
+          open={!!editingIntakeId}
+          onOpenChange={(o) => !o && setEditingIntakeId(null)}
+          onSaved={() => {
+            setEditingIntakeId(null);
+            load();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -356,16 +566,16 @@ function SummaryCard({
     tone === "destructive"
       ? "text-destructive"
       : tone === "amber"
-      ? "text-amber-500"
-      : "text-muted-foreground";
+        ? "text-amber-500"
+        : "text-muted-foreground";
   return (
     <Card>
       <CardContent className="p-3">
-        <div className={`flex items-center gap-1.5 text-[11px] ${toneClass}`}>
+        <div className={`flex items-center gap-2 text-xs ${toneClass}`}>
           {icon} {label}
         </div>
-        <p className="text-xl font-semibold mt-1">{value}</p>
-        {hint && <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{hint}</p>}
+        <div className="text-2xl font-semibold">{value}</div>
+        {hint && <div className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{hint}</div>}
       </CardContent>
     </Card>
   );
@@ -376,63 +586,105 @@ function Row({
   link,
   bucket,
   onDeposit,
+  onEdit,
+  onRoute,
+  routing = false,
+  onDelete,
+  deleting = false,
 }: {
   c: CheckRow;
   link?: DepositLink;
   bucket: Bucket;
   onDeposit: () => void;
+  onEdit?: () => void;
+  onRoute: (newStatus: string) => void;
+  routing?: boolean;
+  onDelete: () => void;
+  deleting?: boolean;
 }) {
   const ageDays = differenceInDays(new Date(), new Date(c.created_at));
   const status = c.deposit_status ?? "—";
 
   return (
-    <div className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
-      <div className="min-w-0 flex-1">
+    <div className="p-3 flex flex-col md:flex-row md:items-center justify-between gap-3 text-sm">
+      <div className="flex-1 min-w-0">
         <div className="font-medium truncate">
           {c.payee_line || c.carrier_name || `Check ${c.id.slice(0, 8)}`}
         </div>
-        <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 flex-wrap mt-0.5">
+        <div className="text-xs text-muted-foreground flex flex-wrap gap-x-2">
           <span>#{c.check_number ?? "—"}</span>
-          <span>·</span>
           <span>${Number(c.amount ?? 0).toLocaleString()}</span>
-          <span>·</span>
-          <span>{ageDays}d old</span>
-          <span>·</span>
-          <span>status: {status}</span>
-          {link && (
-            <>
-              <span>·</span>
-              <span>deposit_items: {link.status ?? "—"}</span>
-            </>
-          )}
+          <span>· {ageDays}d old</span>
+          <span>· status: {status}</span>
+          {link && <span>· deposit_items: {link.status ?? "—"}</span>}
           {!link && bucket === "unverified" && (
-            <>
-              <span>·</span>
-              <span className="text-destructive">no deposit_items record</span>
-            </>
+            <span className="text-destructive">· no deposit_items record</span>
+          )}
+          {!c.check_intake_item_id && (
+            <span className="text-amber-500">· no intake link</span>
           )}
         </div>
       </div>
-      <div className="flex items-center gap-2 shrink-0">
-        {bucket === "unverified" && (
-          <Badge variant="destructive" className="text-[10px]">
-            Unverified
-          </Badge>
-        )}
-        {bucket === "stuck" && (
-          <Badge className="bg-amber-500/15 text-amber-500 border-amber-500/30 text-[10px]">
-            Stuck
-          </Badge>
-        )}
-        {bucket === "no_status" && (
-          <Badge variant="outline" className="text-[10px]">
-            No Status
-          </Badge>
+      <div className="flex flex-wrap items-center gap-2">
+        {bucket === "unverified" && <Badge variant="destructive" className="text-[10px]">Unverified</Badge>}
+        {bucket === "stuck" && <Badge variant="outline" className="text-[10px] border-amber-500 text-amber-600">Stuck</Badge>}
+        {bucket === "no_status" && <Badge variant="outline" className="text-[10px]">No Status</Badge>}
+
+        {/* Route to a different status — controlled + reset so the same value can be re-selected */}
+        <RouteSelect onRoute={onRoute} routing={routing} />
+
+        {onEdit && (
+          <Button size="sm" variant="outline" onClick={onEdit} title="Open full editor">
+            <Pencil className="h-3 w-3 mr-1" /> Edit
+          </Button>
         )}
         <Button size="sm" variant="outline" onClick={onDeposit}>
           Reconcile
         </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onDelete}
+          disabled={deleting}
+          className="border-destructive/50 text-destructive hover:bg-destructive/10"
+          title="Permanently delete this check"
+        >
+          {deleting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Trash2 className="h-3 w-3 mr-1" />}
+          Delete
+        </Button>
       </div>
     </div>
+  );
+}
+
+/** Controlled wrapper around the route Select so re-selecting the same value still fires. */
+function RouteSelect({ onRoute, routing }: { onRoute: (s: string) => void; routing: boolean }) {
+  const [val, setVal] = useState<string>("");
+  return (
+    <Select
+      value={val}
+      onValueChange={(v) => {
+        setVal(v);
+        onRoute(v);
+        // Reset on next tick so the same option can be picked again later.
+        setTimeout(() => setVal(""), 0);
+      }}
+      disabled={routing}
+    >
+      <SelectTrigger className="h-8 w-[180px] text-xs">
+        <ArrowRightCircle className="h-3 w-3 mr-1" />
+        <SelectValue placeholder={routing ? "Routing…" : "Route to…"} />
+      </SelectTrigger>
+      <SelectContent>
+        {ROUTE_OPTIONS.map((o) => (
+          <SelectItem key={o.value} value={o.value} className="text-xs">
+            <div className="flex flex-col">
+              <span>{o.label}</span>
+              <span className="text-[10px] text-muted-foreground">{o.hint}</span>
+            </div>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

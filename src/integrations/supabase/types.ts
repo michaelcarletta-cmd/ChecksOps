@@ -1559,6 +1559,7 @@ export type Database = {
       }
       check_intake_items: {
         Row: {
+          account_number: string | null
           amount: number | null
           back_image_path: string | null
           carrier_name: string | null
@@ -1587,12 +1588,14 @@ export type Database = {
           review_notes: string | null
           reviewed_at: string | null
           reviewed_by: string | null
+          routing_number: string | null
           status: string | null
           tenant_id: string | null
           updated_at: string | null
           uploaded_by: string | null
         }
         Insert: {
+          account_number?: string | null
           amount?: number | null
           back_image_path?: string | null
           carrier_name?: string | null
@@ -1621,12 +1624,14 @@ export type Database = {
           review_notes?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          routing_number?: string | null
           status?: string | null
           tenant_id?: string | null
           updated_at?: string | null
           uploaded_by?: string | null
         }
         Update: {
+          account_number?: string | null
           amount?: number | null
           back_image_path?: string | null
           carrier_name?: string | null
@@ -1655,6 +1660,7 @@ export type Database = {
           review_notes?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          routing_number?: string | null
           status?: string | null
           tenant_id?: string | null
           updated_at?: string | null
@@ -3077,6 +3083,7 @@ export type Database = {
       }
       claim_checks: {
         Row: {
+          account_number: string | null
           amount: number
           carrier_name: string | null
           check_date: string
@@ -3107,10 +3114,12 @@ export type Database = {
           payee_line: string | null
           payment_direction_status: string | null
           received_date: string | null
+          routing_number: string | null
           source: string | null
           updated_at: string | null
         }
         Insert: {
+          account_number?: string | null
           amount: number
           carrier_name?: string | null
           check_date: string
@@ -3141,10 +3150,12 @@ export type Database = {
           payee_line?: string | null
           payment_direction_status?: string | null
           received_date?: string | null
+          routing_number?: string | null
           source?: string | null
           updated_at?: string | null
         }
         Update: {
+          account_number?: string | null
           amount?: number
           carrier_name?: string | null
           check_date?: string
@@ -3175,6 +3186,7 @@ export type Database = {
           payee_line?: string | null
           payment_direction_status?: string | null
           received_date?: string | null
+          routing_number?: string | null
           source?: string | null
           updated_at?: string | null
         }
@@ -18019,6 +18031,10 @@ export type Database = {
           p_loss_draft_id: string
           p_notes?: string
         }
+        Returns: undefined
+      }
+      loss_draft_admin_delete: {
+        Args: { p_actor_id: string; p_loss_draft_id: string; p_reason?: string }
         Returns: undefined
       }
       loss_draft_set_lender: {
