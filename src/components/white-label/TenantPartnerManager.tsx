@@ -83,7 +83,7 @@ export function TenantPartnerManager() {
         .rpc("lookup_tenant_by_partner_code", { _code: normalizedCode });
       if (lookupErr) throw lookupErr;
       const partnerTenant = Array.isArray(lookupRows) ? lookupRows[0] : null;
-      if (!partnerTenant) throw new Error("Invalid partner code. Check the code and try again.");
+      if (!partnerTenant) throw new Error(`Partner code "${normalizedCode}" not found. Double-check the 8-character code with your partner — note that 0/O and 1/I look similar.`);
       if (partnerTenant.id === tenantId) throw new Error("That's your own partner code!");
 
       // Check if partnership already exists
