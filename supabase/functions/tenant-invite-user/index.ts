@@ -100,11 +100,10 @@ serve(async (req) => {
         inviteSent = true;
       }
     } else {
-      // Existing user — send a recovery email so they can join the new tenant
-      const { error: resetErr } = await supabaseAdmin.auth.admin.generateLink({
-        type: "recovery",
-        email: lowerEmail,
-        options: { redirectTo: inviteRedirect },
+      // Existing user — actually send a recovery email so they can join the new tenant.
+      // generateLink only creates a link server-side and does not deliver an email.
+      const { error: resetErr } = await supabaseClient.auth.resetPasswordForEmail(lowerEmail, {
+        redirectTo: inviteRedirect,
       });
       if (!resetErr) inviteSent = true;
       else inviteError = resetErr.message;
