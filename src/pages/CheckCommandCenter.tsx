@@ -613,19 +613,15 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
-        {/* Manager Hub — Check Tracker + Deposit Ops + Reports + Mortgage Cos (admin only) */}
+        {/* Manager Hub — Deposit Ops + Reports + Mortgage Cos (admin only) */}
         {activeTab === "manager" && canAccessManager && (
           <div className="mt-3">
-            <Tabs defaultValue="check_tracker">
+            <Tabs defaultValue="deposit_ops">
               <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
-                <TabsTrigger value="check_tracker" className="text-xs gap-1"><ClipboardCheck className="h-3 w-3" />📋 Check Tracker</TabsTrigger>
                 <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
                 <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
                 <TabsTrigger value="mortgage_cos" className="text-xs gap-1"><Building2 className="h-3 w-3" />Mortgage Cos</TabsTrigger>
               </TabsList>
-              <TabsContent value="check_tracker" className="mt-3">
-                <AdminCheckTracker />
-              </TabsContent>
               <TabsContent value="deposit_ops" className="mt-3">
                 <Suspense fallback={<TabLoader />}>
                   <DepositOperationsConsole searchQuery={searchQuery} />
