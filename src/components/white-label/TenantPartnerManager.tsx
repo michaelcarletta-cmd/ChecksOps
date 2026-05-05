@@ -55,7 +55,11 @@ export function TenantPartnerManager() {
   // Redeem a partner's code
   const redeemMutation = useMutation({
     mutationFn: async (code: string) => {
-      const normalizedCode = code.toUpperCase().trim();
+      // Strip everything except A-Z and 0-9 so spaces, dashes, or pasted formatting don't break lookup
+      const normalizedCode = code.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      if (normalizedCode.length !== 8) {
+        throw new Error("Partner codes are 8 characters (letters and numbers only).");
+      }
 
       // Preflight: confirm current user is actually a member of their tenant.
       // Without this, the partnership INSERT fails with a raw RLS violation
