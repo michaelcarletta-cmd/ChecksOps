@@ -1564,6 +1564,7 @@ export type Database = {
           back_image_path: string | null
           carrier_name: string | null
           check_number: string | null
+          check_stage: Database["public"]["Enums"]["check_stage"]
           claim_id: string | null
           created_at: string | null
           deposit_recommendation: string | null
@@ -1581,6 +1582,7 @@ export type Database = {
           mortgage_sent_at: string | null
           mortgage_tracking_number: string | null
           ocr_heartbeat_at: string | null
+          ocr_needs_verification: boolean
           ocr_status: string | null
           payee_line: string | null
           raw_ocr_back: Json | null
@@ -1600,6 +1602,7 @@ export type Database = {
           back_image_path?: string | null
           carrier_name?: string | null
           check_number?: string | null
+          check_stage?: Database["public"]["Enums"]["check_stage"]
           claim_id?: string | null
           created_at?: string | null
           deposit_recommendation?: string | null
@@ -1617,6 +1620,7 @@ export type Database = {
           mortgage_sent_at?: string | null
           mortgage_tracking_number?: string | null
           ocr_heartbeat_at?: string | null
+          ocr_needs_verification?: boolean
           ocr_status?: string | null
           payee_line?: string | null
           raw_ocr_back?: Json | null
@@ -1636,6 +1640,7 @@ export type Database = {
           back_image_path?: string | null
           carrier_name?: string | null
           check_number?: string | null
+          check_stage?: Database["public"]["Enums"]["check_stage"]
           claim_id?: string | null
           created_at?: string | null
           deposit_recommendation?: string | null
@@ -1653,6 +1658,7 @@ export type Database = {
           mortgage_sent_at?: string | null
           mortgage_tracking_number?: string | null
           ocr_heartbeat_at?: string | null
+          ocr_needs_verification?: boolean
           ocr_status?: string | null
           payee_line?: string | null
           raw_ocr_back?: Json | null
@@ -3089,6 +3095,7 @@ export type Database = {
           check_date: string
           check_intake_item_id: string | null
           check_number: string | null
+          check_stage: Database["public"]["Enums"]["check_stage"]
           check_type: string
           checkalt_deposit_id: string | null
           claim_id: string
@@ -3111,6 +3118,7 @@ export type Database = {
           mortgage_sent_at: string | null
           mortgage_tracking_number: string | null
           notes: string | null
+          ocr_needs_verification: boolean
           payee_line: string | null
           payment_direction_status: string | null
           received_date: string | null
@@ -3125,6 +3133,7 @@ export type Database = {
           check_date: string
           check_intake_item_id?: string | null
           check_number?: string | null
+          check_stage?: Database["public"]["Enums"]["check_stage"]
           check_type: string
           checkalt_deposit_id?: string | null
           claim_id: string
@@ -3147,6 +3156,7 @@ export type Database = {
           mortgage_sent_at?: string | null
           mortgage_tracking_number?: string | null
           notes?: string | null
+          ocr_needs_verification?: boolean
           payee_line?: string | null
           payment_direction_status?: string | null
           received_date?: string | null
@@ -3161,6 +3171,7 @@ export type Database = {
           check_date?: string
           check_intake_item_id?: string | null
           check_number?: string | null
+          check_stage?: Database["public"]["Enums"]["check_stage"]
           check_type?: string
           checkalt_deposit_id?: string | null
           claim_id?: string
@@ -3183,6 +3194,7 @@ export type Database = {
           mortgage_sent_at?: string | null
           mortgage_tracking_number?: string | null
           notes?: string | null
+          ocr_needs_verification?: boolean
           payee_line?: string | null
           payment_direction_status?: string | null
           received_date?: string | null
@@ -18924,6 +18936,12 @@ export type Database = {
         | "read_only"
         | "guided"
       automation_mode: "active" | "passive" | "suspended" | "closed"
+      check_stage:
+        | "review"
+        | "loss_draft"
+        | "endorsing"
+        | "ready_for_deposit"
+        | "deposited"
       claim_doc_decision:
         | "deny_full"
         | "deny_partial"
@@ -19159,6 +19177,13 @@ export const Constants = {
         "guided",
       ],
       automation_mode: ["active", "passive", "suspended", "closed"],
+      check_stage: [
+        "review",
+        "loss_draft",
+        "endorsing",
+        "ready_for_deposit",
+        "deposited",
+      ],
       claim_doc_decision: [
         "deny_full",
         "deny_partial",
