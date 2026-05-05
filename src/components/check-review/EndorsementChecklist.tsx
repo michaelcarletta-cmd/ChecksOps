@@ -24,6 +24,7 @@ import {
   Landmark, PenTool, Eye, ShieldCheck, Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
+import { CheckStatusTimeline } from "./CheckStatusTimeline";
 
 interface CheckEndorsement {
   id: string;
@@ -84,6 +85,32 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false }: E
     },
   });
 
+  // Look up the assigned contractor's email (if any) for this check's claim,
+  // so we can pre-fill a "CC contractor" field on the send form.
+  const { data: contractorEmail } = useQuery({
+    queryKey: ["check-claim-contractor-email", checkId],
+    queryFn: async () => {
+      const { data: check } = await supabase
+        .from("claim_checks")
+        .select("claim_id")
+        .eq("id", checkId)
+        .maybeSingle();
+      const claimId = check?.claim_id;
+      if (!claimId) return "";
+      const { data: assignments } = await supabase
+        .from("claim_contractors")
+        .select("contractor_id")
+        .eq("claim_id", claimId);
+      const ids = (assignments ?? []).map((a: any) => a.contractor_id).filter(Boolean);
+      if (ids.length === 0) return "";
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("email")
+        .in("id", ids);
+      return profiles?.find((p: any) => p.email)?.email ?? "";
+    },
+  });
+
   const [forceCompleting, setForceCompleting] = useState(false);
 
   const allComplete = endorsements.length > 0 && endorsements.every(
@@ -127,7 +154,6 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false }: E
         if (error) throw error;
       }
 
-      // Audit log
       await supabase.from("check_audit_log").insert({
         check_id: checkId,
         event_type: "endorsements_force_completed",
@@ -169,6 +195,9 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false }: E
 
   return (
     <div className="space-y-3">
+      {/* Workflow timeline + 24h stale alert */}
+      <CheckStatusTimeline checkId={checkId} />
+
       {/* Status summary */}
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-2">
@@ -233,6 +262,7 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false }: E
           endorsement={endorsement}
           onRefresh={refresh}
           readOnly={readOnly}
+          defaultContractorCc={contractorEmail ?? ""}
         />
       ))}
     </div>
@@ -243,14 +273,18 @@ function EndorsementCard({
   endorsement,
   onRefresh,
   readOnly = false,
+  defaultContractorCc = "",
 }: {
   endorsement: CheckEndorsement;
   onRefresh: () => void;
   readOnly?: boolean;
+  defaultContractorCc?: string;
 }) {
   const { toast } = useToast();
   const [email, setEmail] = useState(endorsement.contact_email ?? "");
   const [phone, setPhone] = useState(endorsement.contact_phone ?? "");
+  const [ccContractor, setCcContractor] = useState(defaultContractorCc);
+  const [includeCc, setIncludeCc] = useState(Boolean(defaultContractorCc));
   const [sending, setSending] = useState(false);
   const [markingInternal, setMarkingInternal] = useState(false);
 
@@ -272,6 +306,7 @@ function EndorsementCard({
       const { data: session } = await supabase.auth.getSession();
       if (!session.session?.access_token) throw new Error("Not authenticated");
 
+      const ccEmail = includeCc && method === "email" ? ccContractor.trim() : "";
       const { error } = await supabase.functions.invoke("check-endorsement", {
         body: {
           action: "send_endorsement_request",
@@ -279,6 +314,7 @@ function EndorsementCard({
           method,
           email: email || undefined,
           phone: phone || undefined,
+          cc: ccEmail ? [ccEmail] : undefined,
         },
         headers: { Authorization: `Bearer ${session.session.access_token}` },
       });
@@ -404,6 +440,27 @@ function EndorsementCard({
             onChange={(e) => setPhone(e.target.value)}
             className="h-8 text-xs"
           />
+          {/* CC contractor on the endorsement email so they can follow up with the client */}
+          <div className="space-y-1 rounded-md border border-muted-foreground/20 bg-muted/30 p-2">
+            <label className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeCc}
+                onChange={(e) => setIncludeCc(e.target.checked)}
+                className="h-3 w-3"
+              />
+              <Shield className="h-3 w-3" />
+              CC contractor on email
+            </label>
+            {includeCc && (
+              <Input
+                placeholder="contractor@example.com"
+                value={ccContractor}
+                onChange={(e) => setCcContractor(e.target.value)}
+                className="h-7 text-xs"
+              />
+            )}
+          </div>
           <div className="flex gap-1">
             <Button
               size="sm"
