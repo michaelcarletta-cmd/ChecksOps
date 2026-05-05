@@ -529,6 +529,7 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
   const [users, setUsers] = useState<TenantUserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
   const [inviting, setInviting] = useState(false);
 
@@ -559,18 +560,29 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
     if (!inviteEmail.trim()) return;
     setInviting(true);
     const { data, error } = await supabase.functions.invoke("tenant-invite-user", {
-      body: { tenant_id: tenant.id, email: inviteEmail.trim().toLowerCase(), role: inviteRole },
+      body: {
+        tenant_id: tenant.id,
+        email: inviteEmail.trim().toLowerCase(),
+        role: inviteRole,
+        full_name: inviteName.trim() || null,
+      },
     });
     setInviting(false);
     if (error || (data as any)?.error) {
       toast({ title: "Invite failed", description: error?.message || (data as any)?.error, variant: "destructive" });
       return;
     }
+    const inviteSent = (data as any)?.invite_sent;
+    const inviteErrMsg = (data as any)?.invite_error;
     toast({
-      title: (data as any)?.is_new_user ? "User created & invite sent" : "User added to tenant",
-      description: (data as any)?.invite_sent ? `Reset link emailed to ${inviteEmail}` : "User added (no email sent).",
+      title: (data as any)?.is_new_user ? "User created" : "User added to tenant",
+      description: inviteSent
+        ? `Invite email sent to ${inviteEmail}`
+        : `User added but email failed${inviteErrMsg ? `: ${inviteErrMsg}` : ""}. Use the Resend button.`,
+      variant: inviteSent ? "default" : "destructive",
     });
     setInviteEmail("");
+    setInviteName("");
     load();
   };
 
@@ -606,7 +618,10 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
           <CardTitle>Invite User</CardTitle>
           <CardDescription>Adds the user to this tenant and emails them a tenant-branded reset link to set their password.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-2">
+          <div className="flex gap-2">
+            <Input placeholder="Full name (optional)" value={inviteName} onChange={(e) => setInviteName(e.target.value)} className="flex-1" />
+          </div>
           <div className="flex gap-2">
             <Input placeholder="user@example.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="flex-1" />
             <Select value={inviteRole} onValueChange={setInviteRole}>

@@ -28,7 +28,7 @@ serve(async (req) => {
     const { data: { user } } = await supabaseClient.auth.getUser(token);
     if (!user) throw new Error("Not authenticated");
 
-    const { tenant_id, email, role } = await req.json();
+    const { tenant_id, email, role, full_name } = await req.json();
     if (!tenant_id || !email || !role) throw new Error("Missing tenant_id, email, or role");
 
     // Verify caller is tenant admin or system admin
@@ -57,68 +57,94 @@ serve(async (req) => {
 
     if (!tenant) throw new Error("Tenant not found");
 
-    // Build the redirect URL — prefer custom_domain, fall back to checksops.com/{slug}
     const tenantBaseUrl = tenant.custom_domain
       ? `https://${tenant.custom_domain}`
       : `https://checksops.com/${tenant.slug}`;
     const redirectTo = `${tenantBaseUrl}/login`;
+    const inviteRedirect = `https://checksops.com/reset-password?next=${encodeURIComponent(redirectTo)}`;
+
+    const lowerEmail = email.toLowerCase();
 
     // Find or create user by email
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-    let targetUser = existingUsers?.users?.find(u => u.email === email.toLowerCase());
+    let targetUser = existingUsers?.users?.find((u) => u.email === lowerEmail);
     let isNewUser = false;
+    let inviteSent = false;
+    let inviteError: string | null = null;
 
     if (!targetUser) {
       isNewUser = true;
-      // Create user with a temporary password — they'll set their own via the recovery link
-      const tempPassword = crypto.randomUUID();
-      const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
-        email: email.toLowerCase(),
-        password: tempPassword,
-        email_confirm: true,
+      // inviteUserByEmail creates the user AND sends the invite email
+      // (triggers auth-email-hook with the 'invite' template).
+      const { data: invited, error: inviteErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+        lowerEmail,
+        {
+          redirectTo: inviteRedirect,
+          data: { full_name: full_name || null },
+        }
+      );
+      if (inviteErr) {
+        // Fall back to createUser so the user exists even if email failed
+        const tempPassword = crypto.randomUUID();
+        const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+          email: lowerEmail,
+          password: tempPassword,
+          email_confirm: true,
+          user_metadata: { full_name: full_name || null },
+        });
+        if (createErr) throw new Error(`Failed to create user: ${createErr.message}`);
+        targetUser = newUser.user;
+        inviteError = inviteErr.message;
+      } else {
+        targetUser = invited.user;
+        inviteSent = true;
+      }
+    } else {
+      // Existing user — send a recovery email so they can join the new tenant
+      const { error: resetErr } = await supabaseAdmin.auth.admin.generateLink({
+        type: "recovery",
+        email: lowerEmail,
+        options: { redirectTo: inviteRedirect },
       });
-      if (createErr) throw new Error(`Failed to create user: ${createErr.message}`);
-      targetUser = newUser.user;
+      if (!resetErr) inviteSent = true;
+      else inviteError = resetErr.message;
     }
 
     if (!targetUser) throw new Error("Failed to resolve user");
 
+    // Ensure a profile row exists so the user shows up by email/name in the UI
+    // (instead of falling back to the raw UUID).
+    await supabaseAdmin
+      .from("profiles")
+      .upsert(
+        {
+          id: targetUser.id,
+          email: lowerEmail,
+          full_name: full_name || targetUser.user_metadata?.full_name || null,
+        },
+        { onConflict: "id" }
+      );
+
     // Add to tenant
     const { error: insertErr } = await supabaseAdmin
       .from("tenant_users")
-      .upsert({
-        tenant_id,
-        user_id: targetUser.id,
-        role,
-      }, { onConflict: "tenant_id,user_id" });
+      .upsert(
+        { tenant_id, user_id: targetUser.id, role },
+        { onConflict: "tenant_id,user_id" }
+      );
 
     if (insertErr) throw new Error(`Failed to add user: ${insertErr.message}`);
 
-    // Generate a recovery link so the new user can set their password.
-    // This triggers the auth-email-hook (recovery template) and routes the
-    // confirmation URL back to the tenant's ChecksOps workspace, NOT the
-    // default project site (Freedom CRM).
-    const { error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-      type: "recovery",
-      email: email.toLowerCase(),
-      options: {
-        redirectTo: `https://checksops.com/reset-password?next=${encodeURIComponent(redirectTo)}`,
-      },
-    });
-
-    if (linkError) {
-      console.error("Failed to send invite recovery email:", linkError);
-      // Don't fail the whole invite — user is added, admin can resend
-    }
-
-    return new Response(JSON.stringify({
-      success: true,
-      user_id: targetUser.id,
-      is_new_user: isNewUser,
-      invite_sent: !linkError,
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        success: true,
+        user_id: targetUser.id,
+        is_new_user: isNewUser,
+        invite_sent: inviteSent,
+        invite_error: inviteError,
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   } catch (error) {
     return new Response(JSON.stringify({ error: (error as Error).message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
