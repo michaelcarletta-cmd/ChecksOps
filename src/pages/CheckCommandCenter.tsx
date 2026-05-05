@@ -213,6 +213,7 @@ const endorsementColors: Record<string, string> = {
 export default function CheckCommandCenter() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
   const { tenantId, isWhiteLabel, applyFilter } = useTenantFilter();
   const { isAdmin } = usePermissions();
   const [activeTab, setActiveTab] = useState("endorsements");
@@ -223,6 +224,24 @@ export default function CheckCommandCenter() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [shareCheckId, setShareCheckId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const { data: tenantMembershipRole } = useQuery({
+    queryKey: ["check-command-center-tenant-role", tenantId, user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tenant_users")
+        .select("role")
+        .eq("tenant_id", tenantId!)
+        .eq("user_id", user!.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data?.role ?? null;
+    },
+    enabled: !!tenantId && !!user?.id && isWhiteLabel,
+  });
+
+  const canAccessManager = isAdmin || (isWhiteLabel && ["admin", "owner"].includes(tenantMembershipRole ?? ""));
 
   // Admin: allow delete at any stage
   const canDeleteAnyCheck = true;
@@ -558,7 +577,7 @@ export default function CheckCommandCenter() {
             { key: "branch",       label: "Branch",            count: branchDeposit.length,       icon: Building2,      gradient: "from-teal-500/20 to-cyan-500/10",     accent: "text-teal-400",    ring: "ring-teal-500/30" },
             { key: "reissue",      label: "Reissue",           count: reissueRequested.length,    icon: RotateCcw,      gradient: "from-red-500/20 to-rose-500/10",      accent: "text-red-400",     ring: "ring-red-500/30" },
             { key: "partners",     label: "Partners",          count: sharedChecks.length,        icon: Share2,         gradient: "from-pink-500/20 to-fuchsia-500/10",  accent: "text-pink-400",    ring: "ring-pink-500/30" },
-            ...(isAdmin ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield, gradient: "from-indigo-500/20 to-blue-500/10", accent: "text-indigo-400", ring: "ring-indigo-500/30" }] : []),
+            ...(canAccessManager ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield, gradient: "from-indigo-500/20 to-blue-500/10", accent: "text-indigo-400", ring: "ring-indigo-500/30" }] : []),
             { key: "messages",     label: "Messages",          count: totalUnreadMessages || null, icon: MessageSquare, gradient: "from-rose-500/20 to-pink-500/10",     accent: "text-rose-400",    ring: "ring-rose-500/30" },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -595,7 +614,7 @@ export default function CheckCommandCenter() {
         )}
 
         {/* Manager Hub — Check Tracker + Deposit Ops + Reports + Mortgage Cos (admin only) */}
-        {activeTab === "manager" && isAdmin && (
+        {activeTab === "manager" && canAccessManager && (
           <div className="mt-3">
             <Tabs defaultValue="check_tracker">
               <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">

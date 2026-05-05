@@ -16061,6 +16061,35 @@ export type Database = {
           },
         ]
       }
+      tenant_partner_code_aliases: {
+        Row: {
+          code: string
+          created_at: string
+          id: string
+          tenant_id: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          id?: string
+          tenant_id: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_partner_code_aliases_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_partnerships: {
         Row: {
           accepted_at: string | null
