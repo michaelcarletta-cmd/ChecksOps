@@ -17,10 +17,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertTriangle, CheckCircle2, Building2, Edit3, Save,
   RotateCcw, Shield, Users, FileCheck, Loader2, Merge,
-  Trash2, Plus,
+  Trash2, Plus, FileImage,
 } from "lucide-react";
-import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
-import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
+import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -37,6 +36,7 @@ interface CheckPayee {
 
 interface ReviewCheck {
   id: string;
+  front_image_path: string | null;
   carrier_name: string | null;
   check_number: string | null;
   amount: number | null;
@@ -44,6 +44,7 @@ interface ReviewCheck {
   payee_line: string | null;
   is_multi_payee: boolean;
   ocr_status: string;
+  ocr_needs_verification?: boolean | null;
   status: string;
   deposit_recommendation: string | null;
   deposit_recommendation_reasons: string[] | null;
@@ -62,15 +63,20 @@ interface ReviewCheckGroup {
   earliestCreatedAt: string;
 }
 
-const REVIEW_STATUSES = [
-  "needs_review",
-  "manual_review_required",
+const ROUTED_STATUSES = [
+  "endorsements_in_progress",
   "endorsements_complete",
-  "branch_deposit_recommended",
+  "approved_for_deposit",
+  "branch_deposit_required",
+  "loss_draft_required",
+  "reissue_requested",
+  "ready",
+  "deposited",
+  "voided",
 ];
 
 const DEPOSIT_PATHS = [
-  { value: "approved_for_deposit", label: "Approved for Deposit", icon: CheckCircle2, color: "text-emerald-400" },
+  { value: "endorsements_in_progress", label: "Send to Endorsing", icon: Users, color: "text-amber-400" },
   { value: "loss_draft_required", label: "Loss Draft (Mortgage)", icon: Building2, color: "text-purple-400" },
   { value: "branch_deposit_required", label: "Branch Deposit Required", icon: Building2, color: "text-blue-400" },
   { value: "reissue_requested", label: "Request Reissue", icon: RotateCcw, color: "text-orange-400" },
@@ -116,9 +122,7 @@ export function CheckReviewQueue({
         .from("check_intake_items")
         .select("*, check_payees(*)")
         .eq("tenant_id", tenantId!)
-        .or(
-          `status.in.(${REVIEW_STATUSES.join(",")}),deposit_recommendation.in.(manual_review_required,branch_deposit_recommended),ocr_status.eq.failed`
-        )
+        .not("status", "in", `(${ROUTED_STATUSES.join(",")})`)
         .order("created_at", { ascending: true });
       if (error) throw error;
       return (data ?? []) as ReviewCheck[];
@@ -172,16 +176,15 @@ export function CheckReviewQueue({
 
   function getReviewReason(check: ReviewCheck): string {
     const reasons: string[] = [];
+    if (check.ocr_needs_verification) reasons.push("Needs Verification");
     if (check.ocr_status === "failed") reasons.push("OCR failed");
     if (check.deposit_recommendation === "manual_review_required") reasons.push("Manual review required");
-    if (check.deposit_recommendation === "branch_deposit_recommended") reasons.push("Branch deposit");
-    if (check.status === "needs_review") reasons.push("Low OCR confidence");
-    if (check.status === "endorsements_complete") reasons.push("Endorsements complete — needs approval");
     if (check.check_payees?.some((p) => p.endorsement_status === "rejected")) reasons.push("Rejected endorsement");
     if (check.check_payees?.some((p) => p.payee_type === "mortgage_company")) reasons.push("Mortgage payee");
     if ((check.check_payees?.length ?? 0) >= 3) reasons.push("3+ payees");
     if (check.check_payees?.some((p) => p.payee_type === "unknown")) reasons.push("Unclear payee classification");
-    return reasons.join(" · ") || "Pending review";
+    if (reasons.length === 0) reasons.push("Awaiting routing");
+    return reasons.join(" · ");
   }
 
   if (isLoading) {
@@ -202,7 +205,7 @@ export function CheckReviewQueue({
   }
 
   return (
-    <ScrollArea className="h-[calc(100vh-400px)]">
+    <ScrollArea className="max-h-none lg:h-[calc(100vh-400px)]">
       <div className="space-y-2 p-2">
         {groupedReviewChecks.map((group) => (
           <Fragment key={group.key}>
@@ -238,10 +241,16 @@ export function CheckReviewQueue({
                 {check.carrier_name || "Unknown carrier"}
               </p>
               <div className="mt-1.5 flex flex-wrap gap-1">
-                <Badge variant="outline" className="text-[10px] bg-orange-500/10 text-orange-400 border-orange-500/20">
-                  <AlertTriangle className="h-2.5 w-2.5 mr-1" />
-                  {getReviewReason(check).split(" · ")[0]}
-                </Badge>
+                {check.ocr_needs_verification ? (
+                  <Badge variant="outline" className="text-[10px] bg-amber-500/15 text-amber-500 border-amber-500/30">
+                    <AlertTriangle className="h-2.5 w-2.5 mr-1" />
+                    Needs Verification
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-400 border-blue-500/20">
+                    {getReviewReason(check).split(" · ")[0]}
+                  </Badge>
+                )}
                 {check.check_payees && check.check_payees.length > 0 && (
                   <Badge variant="outline" className="text-[10px]">
                     {check.check_payees.length} payee{check.check_payees.length > 1 ? "s" : ""}
@@ -273,7 +282,6 @@ export function ReviewDecisionPanel({
   const { user } = useAuth();
   const qc = useQueryClient();
 
-  // Track whether user has started editing to prevent refetch overwrites
   const formDirtyRef = useRef(false);
 
   const { data: check } = useQuery({
@@ -287,7 +295,6 @@ export function ReviewDecisionPanel({
       if (error) throw error;
       return data as ReviewCheck;
     },
-    // Don't refetch while user is editing
     refetchInterval: false,
     refetchOnWindowFocus: false,
   });
@@ -300,8 +307,8 @@ export function ReviewDecisionPanel({
   const [depositPath, setDepositPath] = useState("");
   const [notes, setNotes] = useState("");
   const [reissueCategory, setReissueCategory] = useState("other");
+  const [frontViewerOpen, setFrontViewerOpen] = useState(false);
 
-  // Only sync form from server when form is NOT dirty
   useEffect(() => {
     if (check && !formDirtyRef.current) {
       setCarrierName(check.carrier_name ?? "");
@@ -311,7 +318,6 @@ export function ReviewDecisionPanel({
     }
   }, [check]);
 
-  // Reset dirty flag when checkId changes
   useEffect(() => {
     formDirtyRef.current = false;
     setEditing(false);
@@ -372,8 +378,8 @@ export function ReviewDecisionPanel({
       qc.invalidateQueries({ queryKey: ["check-review-queue"] });
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
     },
-    onError: (err: any) => {
-      toast({ title: "Failed to save fields", description: err?.message ?? String(err), variant: "destructive" });
+    onError: (err) => {
+      toast({ title: "Failed to save fields", description: err.message, variant: "destructive" });
     },
   });
 
@@ -427,6 +433,17 @@ export function ReviewDecisionPanel({
     },
   });
 
+  const { data: frontImageUrl } = useQuery({
+    queryKey: ["review-check-front-img", check?.front_image_path],
+    enabled: !!check?.front_image_path,
+    queryFn: async () => {
+      const { data } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(check!.front_image_path!, 3600);
+      return data?.signedUrl ?? null;
+    },
+  });
+
   if (!check) {
     return (
       <div className="flex items-center justify-center py-12 text-muted-foreground">
@@ -436,30 +453,17 @@ export function ReviewDecisionPanel({
   }
 
   return (
-    <ScrollArea className="h-[calc(100vh-400px)]">
+    <>
+    <ScrollArea className="max-h-none lg:h-[calc(100vh-400px)]">
       <div className="p-4 space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center justify-between">
           <h3 className="text-base font-semibold">Review Check #{check.check_number || "—"}</h3>
-          <div className="flex items-center gap-2 flex-wrap">
-            <ViewCheckImageButton
-              checkId={checkId}
-              checkNumber={check.check_number}
-              size="sm"
-              variant="outline"
-            />
-            <AdminDeleteCheckButton
-              checkId={checkId}
-              checkNumber={check.check_number}
-              onDeleted={() => {
-                qc.invalidateQueries({ queryKey: ["check-review-queue"] });
-                qc.invalidateQueries({ queryKey: ["check-intake-items"] });
-                qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
-                onComplete();
-              }}
-              size="sm"
-              variant="outline"
-            />
+          <div className="flex items-center gap-2">
+            {frontImageUrl && (
+              <Button size="sm" variant="outline" onClick={() => setFrontViewerOpen(true)}>
+                <FileImage className="h-3 w-3 mr-1" /> Front
+              </Button>
+            )}
             <Button
               size="sm"
               variant={editing ? "default" : "outline"}
@@ -480,7 +484,6 @@ export function ReviewDecisionPanel({
           </div>
         </div>
 
-        {/* Review reasons */}
         {check.deposit_recommendation_reasons && check.deposit_recommendation_reasons.length > 0 && (
           <Card className="border-orange-500/20 bg-orange-500/5">
             <CardContent className="p-3">
@@ -495,7 +498,6 @@ export function ReviewDecisionPanel({
           </Card>
         )}
 
-        {/* OCR Fields */}
         <div className="space-y-3">
           <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Check Details</h4>
           {editing ? (
@@ -558,12 +560,10 @@ export function ReviewDecisionPanel({
 
         <Separator />
 
-        {/* Payee Reconciliation */}
         <PayeeReconciliation checkId={checkId} payees={check.check_payees ?? []} />
 
         <Separator />
 
-        {/* Deposit Path Decision */}
         <div className="space-y-3">
           <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Deposit Decision</h4>
           <div className="grid grid-cols-2 gap-2">
@@ -585,7 +585,6 @@ export function ReviewDecisionPanel({
           </div>
         </div>
 
-        {/* Reissue reason category - only when reissue selected */}
         {depositPath === "reissue_requested" && (
           <div>
             <Label className="text-xs">Reissue Reason Category</Label>
@@ -602,7 +601,6 @@ export function ReviewDecisionPanel({
           </div>
         )}
 
-        {/* Notes */}
         <div>
           <Label className="text-xs">Reviewer Notes</Label>
           <Textarea
@@ -613,7 +611,6 @@ export function ReviewDecisionPanel({
           />
         </div>
 
-        {/* Submit */}
         <Button
           onClick={() => submitDecision.mutate()}
           disabled={!depositPath || submitDecision.isPending}
@@ -628,6 +625,13 @@ export function ReviewDecisionPanel({
         </Button>
       </div>
     </ScrollArea>
+    <DepositImageViewer
+      open={frontViewerOpen}
+      imageUrl={frontImageUrl ?? null}
+      title={`Front of Check #${check.check_number || checkId.slice(0, 8)}`}
+      onClose={() => setFrontViewerOpen(false)}
+    />
+    </>
   );
 }
 
@@ -705,7 +709,6 @@ function PayeeReconciliation({
         throw new Error("Cannot delete a payee with active endorsement activity");
       }
 
-      // Delete related endorsement records first
       await supabase.from("check_endorsement_events").delete().eq("payee_id", payeeId);
       await supabase.from("check_endorsements").delete().eq("payee_id", payeeId);
 
