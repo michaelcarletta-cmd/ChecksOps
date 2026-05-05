@@ -1572,6 +1572,7 @@ export type Database = {
           detected_claim_number: string | null
           endorsement_override: Json | null
           endorsement_packet_path: string | null
+          external_origin: Json | null
           front_image_path: string
           id: string
           is_multi_payee: boolean | null
@@ -1610,6 +1611,7 @@ export type Database = {
           detected_claim_number?: string | null
           endorsement_override?: Json | null
           endorsement_packet_path?: string | null
+          external_origin?: Json | null
           front_image_path: string
           id?: string
           is_multi_payee?: boolean | null
@@ -1648,6 +1650,7 @@ export type Database = {
           detected_claim_number?: string | null
           endorsement_override?: Json | null
           endorsement_packet_path?: string | null
+          external_origin?: Json | null
           front_image_path?: string
           id?: string
           is_multi_payee?: boolean | null
