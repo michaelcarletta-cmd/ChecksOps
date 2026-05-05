@@ -55,7 +55,11 @@ export function TenantPartnerManager() {
   // Redeem a partner's code
   const redeemMutation = useMutation({
     mutationFn: async (code: string) => {
-      const normalizedCode = code.toUpperCase().trim();
+      // Strip everything except A-Z and 0-9 so spaces, dashes, or pasted formatting don't break lookup
+      const normalizedCode = code.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      if (normalizedCode.length !== 8) {
+        throw new Error("Partner codes are 8 characters (letters and numbers only).");
+      }
 
       // Preflight: confirm current user is actually a member of their tenant.
       // Without this, the partnership INSERT fails with a raw RLS violation
@@ -79,7 +83,7 @@ export function TenantPartnerManager() {
         .rpc("lookup_tenant_by_partner_code", { _code: normalizedCode });
       if (lookupErr) throw lookupErr;
       const partnerTenant = Array.isArray(lookupRows) ? lookupRows[0] : null;
-      if (!partnerTenant) throw new Error("Invalid partner code. Check the code and try again.");
+      if (!partnerTenant) throw new Error(`Partner code "${normalizedCode}" not found. Double-check the 8-character code with your partner — note that 0/O and 1/I look similar.`);
       if (partnerTenant.id === tenantId) throw new Error("That's your own partner code!");
 
       // Check if partnership already exists
@@ -179,7 +183,7 @@ export function TenantPartnerManager() {
             <Input
               placeholder="e.g. AB3K7X9P"
               value={redeemCode}
-              onChange={(e) => setRedeemCode(e.target.value.toUpperCase())}
+              onChange={(e) => setRedeemCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
               maxLength={8}
               className="font-mono tracking-widest uppercase"
             />
