@@ -15,8 +15,7 @@ export default function CheckOpsForgotPassword() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const sendResetEmail = async () => {
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(
@@ -34,6 +33,11 @@ export default function CheckOpsForgotPassword() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await sendResetEmail();
   };
 
   return (
@@ -59,6 +63,10 @@ export default function CheckOpsForgotPassword() {
                   reset link shortly.
                 </p>
               </div>
+              <Button variant="outline" className="w-full" onClick={sendResetEmail} disabled={loading}>
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Resend reset link
+              </Button>
               <Button variant="outline" className="w-full" asChild>
                 <Link to="/login">Back to sign in</Link>
               </Button>
