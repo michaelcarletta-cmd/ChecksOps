@@ -20,6 +20,7 @@ const CheckOpsForgotPassword = lazy(() => import("./pages/checkops/CheckOpsForgo
 const CheckOpsResetPassword = lazy(() => import("./pages/checkops/CheckOpsResetPassword"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
+const AdminTenants = lazy(() => import("./pages/admin/AdminTenants"));
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -63,6 +64,7 @@ function CheckOpsRoutes() {
       <Route path="/payment-direction/:token" element={<Suspense fallback={<PageLoader />}><PaymentDirectionPage /></Suspense>} />
       <Route path="/unsubscribe" element={<Suspense fallback={<PageLoader />}><Unsubscribe /></Suspense>} />
       <Route path="/pricing" element={<Suspense fallback={<PageLoader />}><CheckOpsPricing /></Suspense>} />
+      <Route path="/admin/tenants" element={<Suspense fallback={<PageLoader />}><AdminTenants /></Suspense>} />
       <Route path="/wl/:slug/*" element={<LegacyWlRedirect />} />
       <Route path="/:slug/*" element={<Suspense fallback={<PageLoader />}><WhiteLabelApp /></Suspense>} />
       <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFound /></Suspense>} />
