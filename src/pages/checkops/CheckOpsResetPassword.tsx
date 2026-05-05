@@ -47,7 +47,16 @@ export default function CheckOpsResetPassword() {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
       toast({ title: "Password updated", description: "Signing you in..." });
-      navigate("/login", { replace: true });
+      // Honor `next` query param so tenant invites land on their workspace login
+      const params = new URLSearchParams(window.location.search);
+      const next = params.get("next");
+      if (next && /^https?:\/\//.test(next)) {
+        window.location.replace(next);
+      } else if (next) {
+        navigate(next, { replace: true });
+      } else {
+        navigate("/login", { replace: true });
+      }
     } catch (err: any) {
       toast({
         title: "Couldn't update password",
