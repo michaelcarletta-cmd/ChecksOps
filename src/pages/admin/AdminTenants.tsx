@@ -295,11 +295,11 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
 
 function useTenantSave(tenant: Tenant, onUpdated: (t: Tenant) => void) {
   const [saving, setSaving] = useState(false);
-  const save = async (patch: Partial<Tenant>) => {
+  const save = async (patch: Record<string, any>) => {
     setSaving(true);
     const { data, error } = await supabase
       .from("tenants")
-      .update(patch)
+      .update(patch as any)
       .eq("id", tenant.id)
       .select()
       .single();
