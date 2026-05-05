@@ -44,7 +44,6 @@ export function SharedCheckThread({ checkId }: SharedCheckThreadProps) {
     enabled: !!checkId,
   });
 
-  // Resolve sender names + tenant names in one pass
   const senderUserIds = Array.from(new Set(messages.map((m) => m.sender_user_id)));
   const senderTenantIds = Array.from(new Set(messages.map((m) => m.sender_tenant_id)));
 
@@ -77,7 +76,6 @@ export function SharedCheckThread({ checkId }: SharedCheckThreadProps) {
   const profileMap = new Map(profiles.map((p: any) => [p.id, p]));
   const tenantMap = new Map(tenantNames.map((t: any) => [t.id, t.name]));
 
-  // Realtime
   useEffect(() => {
     const channel = supabase
       .channel(`shared-check-${checkId}`)
