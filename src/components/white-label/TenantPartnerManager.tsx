@@ -183,7 +183,7 @@ export function TenantPartnerManager() {
             <Input
               placeholder="e.g. AB3K7X9P"
               value={redeemCode}
-              onChange={(e) => setRedeemCode(e.target.value.toUpperCase())}
+              onChange={(e) => setRedeemCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
               maxLength={8}
               className="font-mono tracking-widest uppercase"
             />
