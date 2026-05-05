@@ -11,7 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy } from "lucide-react";
+import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X } from "lucide-react";
+import { useRef } from "react";
 
 const ALLOWED_EMAIL = "mcarletta@freedomadj.com";
 
@@ -385,7 +386,34 @@ function BrandingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Ten
   const [logoUrl, setLogoUrl] = useState(tenant.logo_url || "");
   const [primary, setPrimary] = useState(tenant.primary_color || "#3B82F6");
   const [secondary, setSecondary] = useState(tenant.secondary_color || "#1E293B");
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { saving, save } = useTenantSave(tenant, onUpdated);
+
+  const handleLogoUpload = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Invalid file", description: "Please upload an image file.", variant: "destructive" });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Logo must be under 2MB.", variant: "destructive" });
+      return;
+    }
+    setUploading(true);
+    try {
+      const ext = file.name.split(".").pop() || "png";
+      const path = `${tenant.id}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from("tenant-logos").upload(path, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data: urlData } = supabase.storage.from("tenant-logos").getPublicUrl(path);
+      setLogoUrl(urlData.publicUrl);
+      toast({ title: "Logo uploaded", description: "Click Save Branding to apply." });
+    } catch (e: any) {
+      toast({ title: "Upload failed", description: e.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
 
   return (
     <Card>
@@ -395,9 +423,47 @@ function BrandingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Ten
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label>Logo URL</Label>
-          <Input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://..." />
-          {logoUrl && <img src={logoUrl} alt="logo preview" className="h-12 mt-2 rounded border border-border bg-white p-1" />}
+          <Label>Logo</Label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleLogoUpload(file);
+            }}
+          />
+          {logoUrl ? (
+            <div className="flex items-center gap-3 rounded border border-border bg-muted/30 p-2">
+              <img src={logoUrl} alt="Logo" className="h-12 max-w-[160px] object-contain rounded bg-white p-1" onError={(e) => (e.currentTarget.style.display = "none")} />
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                  {uploading ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Upload className="w-3 h-3 mr-1" />} Replace
+                </Button>
+                <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => setLogoUrl("")}>
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="flex w-full flex-col items-center justify-center gap-2 rounded border-2 border-dashed border-border bg-muted/30 p-6 hover:bg-muted/50 transition-colors"
+            >
+              {uploading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  <Upload className="w-5 h-5 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Click to upload logo (PNG, JPG, SVG — max 2MB)</span>
+                </>
+              )}
+            </button>
+          )}
+          <Input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="...or paste a URL" className="text-xs" />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
@@ -415,7 +481,7 @@ function BrandingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Ten
             </div>
           </div>
         </div>
-        <Button onClick={() => save({ logo_url: logoUrl || null, primary_color: primary, secondary_color: secondary })} disabled={saving}>
+        <Button onClick={() => save({ logo_url: logoUrl || null, primary_color: primary, secondary_color: secondary })} disabled={saving || uploading}>
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Branding
         </Button>
       </CardContent>
