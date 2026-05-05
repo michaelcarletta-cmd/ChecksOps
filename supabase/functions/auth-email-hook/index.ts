@@ -36,7 +36,7 @@ const EMAIL_TEMPLATES: Record<string, React.ComponentType<any>> = {
 }
 
 // Configuration
-const SITE_NAME = "ChecksOps"
+const SITE_NAME = "claim-buddy-crm"
 const SENDER_DOMAIN = "notify.checksops.com"
 const ROOT_DOMAIN = "checksops.com"
 const FROM_DOMAIN = "checksops.com" // Domain shown in From address (may be root or sender subdomain)
