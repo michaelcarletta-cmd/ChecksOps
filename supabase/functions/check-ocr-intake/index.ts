@@ -698,6 +698,8 @@ Rules:
           .update({
             ocr_status: "failed",
             ocr_heartbeat_at: null,
+            check_stage: "review",
+            ocr_needs_verification: true,
             raw_ocr_front: { raw: rawText.substring(0, 2000), parse_error: (parseErr as Error).message },
           })
           .eq("id", checkId);
@@ -772,6 +774,8 @@ Rules:
           ocr_status: "failed",
           ocr_heartbeat_at: null,
           status: check.status ?? "uploaded",
+          check_stage: "review",
+          ocr_needs_verification: true,
           raw_ocr_front: { ocr_error: ocrError, stage },
         })
         .eq("id", checkId);
@@ -914,6 +918,8 @@ Rules:
             ocr_status: "completed",
             ocr_heartbeat_at: null,
             status: checkStatus,
+            check_stage: "review",
+            ocr_needs_verification: needsManualReview || parsedAmount == null,
             deposit_recommendation: eligibility.recommendation === "loss_draft_required"
               ? "loss_draft_required"
               : eligibility.recommendation,
