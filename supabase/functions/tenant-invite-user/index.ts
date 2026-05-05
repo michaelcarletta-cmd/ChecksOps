@@ -48,12 +48,29 @@ serve(async (req) => {
     const isAuthorized = callerRole?.role === "admin" || systemRole?.role === "admin";
     if (!isAuthorized) throw new Error("Not authorized — must be tenant admin or system admin");
 
+    // Look up tenant for redirect URL
+    const { data: tenant } = await supabaseAdmin
+      .from("tenants")
+      .select("slug, name, custom_domain")
+      .eq("id", tenant_id)
+      .maybeSingle();
+
+    if (!tenant) throw new Error("Tenant not found");
+
+    // Build the redirect URL — prefer custom_domain, fall back to checksops.com/{slug}
+    const tenantBaseUrl = tenant.custom_domain
+      ? `https://${tenant.custom_domain}`
+      : `https://checksops.com/${tenant.slug}`;
+    const redirectTo = `${tenantBaseUrl}/login`;
+
     // Find or create user by email
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
     let targetUser = existingUsers?.users?.find(u => u.email === email.toLowerCase());
+    let isNewUser = false;
 
     if (!targetUser) {
-      // Create user with a temporary password — they'll need to reset
+      isNewUser = true;
+      // Create user with a temporary password — they'll set their own via the recovery link
       const tempPassword = crypto.randomUUID();
       const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
         email: email.toLowerCase(),
@@ -77,7 +94,29 @@ serve(async (req) => {
 
     if (insertErr) throw new Error(`Failed to add user: ${insertErr.message}`);
 
-    return new Response(JSON.stringify({ success: true, user_id: targetUser.id }), {
+    // Generate a recovery link so the new user can set their password.
+    // This triggers the auth-email-hook (recovery template) and routes the
+    // confirmation URL back to the tenant's ChecksOps workspace, NOT the
+    // default project site (Freedom CRM).
+    const { error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: "recovery",
+      email: email.toLowerCase(),
+      options: {
+        redirectTo: `https://checksops.com/reset-password?next=${encodeURIComponent(redirectTo)}`,
+      },
+    });
+
+    if (linkError) {
+      console.error("Failed to send invite recovery email:", linkError);
+      // Don't fail the whole invite — user is added, admin can resend
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      user_id: targetUser.id,
+      is_new_user: isNewUser,
+      invite_sent: !linkError,
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
