@@ -373,7 +373,7 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
             </div>
           </div>
         )}
-        <Button onClick={() => save({ name, slug, custom_domain: customDomain || null, plan_tier: planTier as any, subscription_status: subStatus, max_checks_per_month: maxChecks })} disabled={saving}>
+        <Button onClick={() => save({ name, slug, custom_domain: customDomain || null, plan_tier: planTier as Tenant["plan_tier"], subscription_status: subStatus, max_checks_per_month: maxChecks } as any)} disabled={saving}>
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Changes
         </Button>
       </CardContent>
