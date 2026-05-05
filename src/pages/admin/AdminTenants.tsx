@@ -42,7 +42,7 @@ type TenantUserRow = {
   full_name?: string;
 };
 
-const PLAN_TIERS = ["starter", "growth", "scale", "enterprise"];
+const PLAN_TIERS = ["starter", "pro", "enterprise"] as const;
 const TENANT_ROLES = ["owner", "admin", "member", "viewer"];
 
 export default function AdminTenants() {
