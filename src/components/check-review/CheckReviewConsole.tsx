@@ -698,7 +698,16 @@ export function ReviewDecisionPanel({
         </div>
 
         <Button
-          onClick={() => submitDecision.mutate()}
+          onClick={() => {
+            const v = assessCheckValidity(check.issue_date);
+            if (isAtRisk(v.risk) && depositPath !== "reissue_requested" && depositPath !== "hold_for_claim_review") {
+              const proceed = window.confirm(
+                `⚠️ Check validity warning\n\n${v.label}\n${v.detail}\n\nThis check is at risk of being rejected at deposit. Consider 'Request Reissue' instead.\n\nProceed anyway?`,
+              );
+              if (!proceed) return;
+            }
+            submitDecision.mutate();
+          }}
           disabled={!depositPath || submitDecision.isPending}
           className="w-full"
         >
