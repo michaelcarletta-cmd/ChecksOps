@@ -37,6 +37,7 @@ import { AdminCheckTracker } from "@/components/check-review/AdminCheckTracker";
 import { usePermissions } from "@/hooks/usePermissions";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
+import { toStorageObjectPath } from "@/lib/storagePath";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
 import { EndorsementOverride } from "@/lib/endorsementLayout";
 import { LossDraftDetailPanel } from "@/components/loss-draft/LossDraftDetailPanel";
@@ -1587,9 +1588,11 @@ function CheckDetailPanel({
     queryKey: ["check-front-img", check?.front_image_path],
     enabled: !!check?.front_image_path,
     queryFn: async () => {
+      const path = toStorageObjectPath(check!.front_image_path);
+      if (!path) return null;
       const { data } = await supabase.storage
         .from("claim-files")
-        .createSignedUrl(check!.front_image_path, 3600);
+        .createSignedUrl(path, 3600);
       return data?.signedUrl ?? null;
     },
   });
@@ -1598,9 +1601,11 @@ function CheckDetailPanel({
     queryKey: ["check-back-img", check?.back_image_path],
     enabled: !!check?.back_image_path,
     queryFn: async () => {
+      const path = toStorageObjectPath(check!.back_image_path);
+      if (!path) return null;
       const { data } = await supabase.storage
         .from("claim-files")
-        .createSignedUrl(check!.back_image_path!, 3600);
+        .createSignedUrl(path, 3600);
       return data?.signedUrl ?? null;
     },
   });
