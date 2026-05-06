@@ -914,16 +914,34 @@ export default function CheckCommandCenter() {
                                   {isShared && <SharedChecksBadge sourceTenantName={sourceTenantName} />}
                                 </div>
                               </TableCell>
-                              <TableCell className="text-sm max-w-[140px] truncate">
+                              <TableCell className="text-sm max-w-[180px]">
                                 <div className="flex flex-col gap-0.5">
                                   <span className="truncate">{check.carrier_name || "Pending OCR"}</span>
                                   <CheckValidityBadge issueDate={check.issue_date} hideWhenSafe />
+                                  {check.property_address && (
+                                    <span className="text-[10px] text-muted-foreground truncate" title={check.property_address}>
+                                      📍 {check.property_address}
+                                    </span>
+                                  )}
                                 </div>
                               </TableCell>
                               <TableCell className="text-right font-semibold tabular-nums">
                                 {check.amount != null
                                   ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
                                   : "—"}
+                              </TableCell>
+                              <TableCell>
+                                {check.funds_type ? (
+                                  <Badge variant="outline" className="text-[10px] uppercase">
+                                    {check.funds_type === "recoverable_depreciation"
+                                      ? "Rec. Dep."
+                                      : check.funds_type === "overhead_and_profit"
+                                      ? "O&P"
+                                      : check.funds_type}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground">—</span>
+                                )}
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-1">
