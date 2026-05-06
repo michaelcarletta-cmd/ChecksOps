@@ -4,6 +4,7 @@ import { Eye, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { CheckImagesViewer } from "./CheckImagesViewer";
+import { toStorageObjectPath } from "@/lib/storagePath";
 
 /**
  * Reusable "View Check Images" button.
@@ -79,9 +80,11 @@ export function ViewCheckImageButton({
       }
 
       const sign = async (p: string | null) => {
+        const objectPath = toStorageObjectPath(p);
+        if (!objectPath) return null;
         const { data, error } = await supabase.storage
           .from("claim-files")
-          .createSignedUrl(p!, 3600);
+          .createSignedUrl(objectPath, 3600);
         if (error) throw error;
         return data?.signedUrl ?? null;
       };
