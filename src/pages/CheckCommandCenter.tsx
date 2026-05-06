@@ -134,6 +134,8 @@ interface CheckItem {
   review_notes: string | null;
   endorsement_packet_path: string | null;
   endorsement_override: Record<string, unknown> | null;
+  funds_type?: string | null;
+  property_address?: string | null;
   check_payees?: CheckPayee[];
 }
 
