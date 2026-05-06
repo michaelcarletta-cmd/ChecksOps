@@ -1,4 +1,4 @@
-import { Home, FileText, CheckSquare, Inbox, Users, Network, DollarSign, FileStack, Settings, LogOut, Bot, Banknote } from "lucide-react";
+import { Home, FileText, CheckSquare, Inbox, Users, Network, DollarSign, FileStack, Settings, LogOut, Bot, Banknote, Building2 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import logo from "@/assets/freedom-adjustment-logo.png";
 import { useAuth } from "@/hooks/useAuth";
