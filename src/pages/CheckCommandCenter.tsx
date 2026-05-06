@@ -37,6 +37,7 @@ import { AdminCheckTracker } from "@/components/check-review/AdminCheckTracker";
 import { usePermissions } from "@/hooks/usePermissions";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
+import { toStorageObjectPath } from "@/lib/storagePath";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
 import { EndorsementOverride } from "@/lib/endorsementLayout";
 import { LossDraftDetailPanel } from "@/components/loss-draft/LossDraftDetailPanel";
