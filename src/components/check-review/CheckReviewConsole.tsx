@@ -304,6 +304,9 @@ export function ReviewDecisionPanel({
   const [checkNumber, setCheckNumber] = useState("");
   const [amount, setAmount] = useState("");
   const [payeeLine, setPayeeLine] = useState("");
+  const [fundsType, setFundsType] = useState<string>("");
+  const [propertyAddress, setPropertyAddress] = useState<string>("");
+  const [savingMeta, setSavingMeta] = useState(false);
   const [depositPath, setDepositPath] = useState("");
   const [notes, setNotes] = useState("");
   const [reissueCategory, setReissueCategory] = useState("other");
@@ -315,8 +318,27 @@ export function ReviewDecisionPanel({
       setCheckNumber(check.check_number ?? "");
       setAmount(check.amount?.toString() ?? "");
       setPayeeLine(check.payee_line ?? "");
+      setFundsType(((check as any).funds_type as string) ?? "");
+      setPropertyAddress(((check as any).property_address as string) ?? "");
     }
   }, [check]);
+
+  const persistMeta = async (next: { funds_type?: string | null; property_address?: string | null }) => {
+    setSavingMeta(true);
+    try {
+      const { error } = await supabase
+        .from("check_intake_items")
+        .update({ ...next, updated_at: new Date().toISOString() })
+        .eq("id", checkId);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e.message, variant: "destructive" });
+    } finally {
+      setSavingMeta(false);
+    }
+  };
 
   useEffect(() => {
     formDirtyRef.current = false;
