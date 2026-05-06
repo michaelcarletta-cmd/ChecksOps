@@ -46,6 +46,8 @@ import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
 import { Share2 } from "lucide-react";
 import { ShieldCheck } from "lucide-react";
+import { CheckValidityBadge } from "@/components/checks/CheckValidityBadge";
+import { assessCheckValidity, isAtRisk } from "@/lib/checkValidity";
 
 // Lazy-loaded: heavy tab-only / dialog-only modules (each becomes its own JS chunk)
 const LossDraftDashboard = lazy(() =>
