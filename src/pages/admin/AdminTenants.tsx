@@ -11,8 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X } from "lucide-react";
+import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText } from "lucide-react";
 import { useRef } from "react";
+import { TenantDocumentsManager } from "@/components/white-label/TenantDocumentsManager";
 
 const ALLOWED_EMAIL = "mcarletta@freedomadj.com";
 
@@ -267,10 +268,11 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
 
       <div className="max-w-5xl mx-auto px-6 py-8">
         <Tabs defaultValue="company" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="company"><Building2 className="w-4 h-4 mr-1" /> Company</TabsTrigger>
             <TabsTrigger value="branding"><Settings className="w-4 h-4 mr-1" /> Branding</TabsTrigger>
             <TabsTrigger value="email"><Mail className="w-4 h-4 mr-1" /> Email</TabsTrigger>
+            <TabsTrigger value="documents"><FileText className="w-4 h-4 mr-1" /> Documents</TabsTrigger>
             <TabsTrigger value="users"><Users className="w-4 h-4 mr-1" /> Users</TabsTrigger>
           </TabsList>
 
@@ -282,6 +284,9 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           </TabsContent>
           <TabsContent value="email" className="mt-6">
             <EmailTab tenant={tenant} onUpdated={onUpdated} />
+          </TabsContent>
+          <TabsContent value="documents" className="mt-6">
+            <TenantDocumentsManager tenantId={tenant.id} />
           </TabsContent>
           <TabsContent value="users" className="mt-6">
             <UsersTab tenant={tenant} />
