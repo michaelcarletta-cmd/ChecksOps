@@ -100,6 +100,52 @@ async function repairLegacyUrlIfNeeded(
   return targetPath;
 }
 
+async function getUserAccessContext(admin: ReturnType<typeof createClient>, userId: string) {
+  const [{ data: memberships, error: membershipError }, { data: roles, error: roleError }] = await Promise.all([
+    admin
+      .from("tenant_users")
+      .select("tenant_id")
+      .eq("user_id", userId),
+    admin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId),
+  ]);
+
+  if (membershipError) throw membershipError;
+  if (roleError) throw roleError;
+
+  return {
+    tenantIds: Array.from(new Set((memberships ?? []).map((row) => row.tenant_id).filter(Boolean))),
+    isPrivileged: (roles ?? []).some((row) => row.role === "admin" || row.role === "staff"),
+  };
+}
+
+async function userCanAccessCheck(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  checkId: string,
+  checkTenantId: string | null,
+) {
+  const { tenantIds, isPrivileged } = await getUserAccessContext(admin, userId);
+
+  if (isPrivileged) return true;
+  if (checkTenantId && tenantIds.includes(checkTenantId)) return true;
+  if (tenantIds.length === 0) return false;
+
+  const { data: sharedCheck, error: shareError } = await admin
+    .from("shared_checks")
+    .select("id")
+    .eq("check_id", checkId)
+    .in("target_tenant_id", tenantIds)
+    .is("revoked_at", null)
+    .limit(1)
+    .maybeSingle();
+
+  if (shareError) throw shareError;
+  return !!sharedCheck;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -138,12 +184,21 @@ serve(async (req) => {
       });
     }
 
-    const { data: check, error: checkError } = await userClient
+    const { data: check, error: checkError } = await admin
       .from("check_intake_items")
-      .select("id, check_number, front_image_path, back_image_path")
+      .select("id, tenant_id, check_number, front_image_path, back_image_path")
       .eq("id", checkId)
-      .single();
-    if (checkError || !check) {
+      .maybeSingle();
+    if (checkError) throw checkError;
+    if (!check) {
+      return new Response(JSON.stringify({ error: "Check not found" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const canAccess = await userCanAccessCheck(admin, authData.user.id, checkId, check.tenant_id ?? null);
+    if (!canAccess) {
       return new Response(JSON.stringify({ error: "Check not accessible" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
