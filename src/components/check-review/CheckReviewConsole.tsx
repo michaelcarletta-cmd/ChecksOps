@@ -580,6 +580,47 @@ export function ReviewDecisionPanel({
           )}
         </div>
 
+        {/* Funds type + property address — visible to all partners with shared access */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Check Classification</h4>
+          <div>
+            <Label className="text-xs">Funds Type</Label>
+            <Select
+              value={fundsType || "__unset__"}
+              onValueChange={(v) => {
+                const next = v === "__unset__" ? "" : v;
+                setFundsType(next);
+                markDirty();
+                persistMeta({ funds_type: next || null });
+              }}
+              disabled={savingMeta}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="Select funds type…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__unset__" className="text-xs text-muted-foreground">Not set</SelectItem>
+                <SelectItem value="acv" className="text-xs">ACV (Actual Cash Value)</SelectItem>
+                <SelectItem value="rcv" className="text-xs">RCV (Replacement Cost Value)</SelectItem>
+                <SelectItem value="recoverable_depreciation" className="text-xs">Recoverable Depreciation</SelectItem>
+                <SelectItem value="supplement" className="text-xs">Supplement</SelectItem>
+                <SelectItem value="overhead_and_profit" className="text-xs">Overhead &amp; Profit (O&amp;P)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Property Address</Label>
+            <Input
+              value={propertyAddress}
+              onChange={(e) => { setPropertyAddress(e.target.value); markDirty(); }}
+              onBlur={() => persistMeta({ property_address: propertyAddress.trim() || null })}
+              placeholder="Address this check is for…"
+              className="h-8 text-sm"
+              disabled={savingMeta}
+            />
+          </div>
+        </div>
+
         <Separator />
 
         <PayeeReconciliation checkId={checkId} payees={check.check_payees ?? []} />
