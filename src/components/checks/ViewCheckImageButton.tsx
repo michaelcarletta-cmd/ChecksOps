@@ -4,7 +4,6 @@ import { Eye, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { CheckImagesViewer } from "./CheckImagesViewer";
-import { toStorageObjectPath } from "@/lib/storagePath";
 
 /**
  * Reusable "View Check Images" button.
@@ -43,19 +42,32 @@ export function ViewCheckImageButton({
     if (!checkId && !frontImagePath && !backImagePath) return;
     setLoading(true);
     try {
+      if (checkId) {
+        const { data, error } = await supabase.functions.invoke("get-check-image-urls", {
+          body: { checkId },
+        });
+        if (error) throw error;
+
+        const front = (data as any)?.frontUrl ?? null;
+        const back = (data as any)?.backUrl ?? null;
+
+        if (!front && !back) {
+          toast({
+            title: "No images on file",
+            description: "This check has no images stored.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        setFrontUrl(front);
+        setBackUrl(back);
+        setOpen(true);
+        return;
+      }
+
       let fPath = frontImagePath ?? null;
       let bPath = backImagePath ?? null;
-
-      if ((!fPath || !bPath) && checkId) {
-        const { data, error } = await supabase
-          .from("check_intake_items")
-          .select("front_image_path, back_image_path")
-          .eq("id", checkId)
-          .single();
-        if (error) throw error;
-        fPath = fPath ?? (data as any)?.front_image_path ?? null;
-        bPath = bPath ?? (data as any)?.back_image_path ?? null;
-      }
 
       if (!fPath && !bPath) {
         toast({
@@ -67,11 +79,9 @@ export function ViewCheckImageButton({
       }
 
       const sign = async (p: string | null) => {
-        const objectPath = toStorageObjectPath(p);
-        if (!objectPath) return null;
         const { data, error } = await supabase.storage
           .from("claim-files")
-          .createSignedUrl(objectPath, 3600);
+          .createSignedUrl(p!, 3600);
         if (error) throw error;
         return data?.signedUrl ?? null;
       };
