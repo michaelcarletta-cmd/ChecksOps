@@ -45,6 +45,7 @@ export function AppSidebar() {
 
   const visibleItems = mainItems.filter(item => {
     if ('adminOnly' in item && item.adminOnly && userRole !== 'admin') return false;
+    if ('ownerOnly' in item && item.ownerOnly && user?.email !== 'mcarletta@freedomadj.com') return false;
     return true;
   });
 
