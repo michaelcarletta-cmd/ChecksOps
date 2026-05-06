@@ -105,6 +105,23 @@ Deno.serve(async (req) => {
     let checkId: string;
     if (existingCheck) {
       checkId = existingCheck.id;
+      // Re-sync mutable fields from source so partner sees latest values
+      const updatePayload: Record<string, unknown> = {
+        updated_at: new Date().toISOString(),
+      };
+      if (body.check.carrier_name !== undefined) updatePayload.carrier_name = body.check.carrier_name ?? null;
+      if (body.check.check_number !== undefined) updatePayload.check_number = body.check.check_number ?? null;
+      if (body.check.amount !== undefined) updatePayload.amount = body.check.amount ?? null;
+      if (body.check.issue_date !== undefined) updatePayload.issue_date = body.check.issue_date ?? null;
+      if (body.check.payee_line !== undefined) updatePayload.payee_line = body.check.payee_line ?? null;
+      if (body.check.detected_claim_number !== undefined) updatePayload.detected_claim_number = body.check.detected_claim_number ?? null;
+      if (body.check.funds_type !== undefined) updatePayload.funds_type = body.check.funds_type ?? null;
+      if (body.check.property_address !== undefined) updatePayload.property_address = body.check.property_address ?? null;
+      const { error: updErr } = await supabase
+        .from("check_intake_items")
+        .update(updatePayload)
+        .eq("id", checkId);
+      if (updErr) throw updErr;
     } else {
       const { data: newCheck, error: insertErr } = await supabase
         .from("check_intake_items")
@@ -118,6 +135,8 @@ Deno.serve(async (req) => {
           issue_date: body.check.issue_date ?? null,
           payee_line: body.check.payee_line ?? null,
           detected_claim_number: body.check.detected_claim_number ?? null,
+          funds_type: body.check.funds_type ?? null,
+          property_address: body.check.property_address ?? null,
           status: "uploaded",
           ocr_status: "completed",
           external_origin: {
