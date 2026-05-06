@@ -1588,6 +1588,13 @@ function CheckDetailPanel({
     queryKey: ["check-front-img", check?.front_image_path],
     enabled: !!check?.front_image_path,
     queryFn: async () => {
+      if (isSharedView && check?.id) {
+        const { data, error } = await supabase.functions.invoke("get-check-image-urls", {
+          body: { checkId: check.id },
+        });
+        if (error) throw error;
+        return (data as any)?.frontUrl ?? null;
+      }
       const path = toStorageObjectPath(check!.front_image_path);
       if (!path) return null;
       const { data } = await supabase.storage
@@ -1601,6 +1608,13 @@ function CheckDetailPanel({
     queryKey: ["check-back-img", check?.back_image_path],
     enabled: !!check?.back_image_path,
     queryFn: async () => {
+      if (isSharedView && check?.id) {
+        const { data, error } = await supabase.functions.invoke("get-check-image-urls", {
+          body: { checkId: check.id },
+        });
+        if (error) throw error;
+        return (data as any)?.backUrl ?? null;
+      }
       const path = toStorageObjectPath(check!.back_image_path);
       if (!path) return null;
       const { data } = await supabase.storage
