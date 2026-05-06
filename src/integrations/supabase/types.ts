@@ -1574,6 +1574,7 @@ export type Database = {
           endorsement_packet_path: string | null
           external_origin: Json | null
           front_image_path: string
+          funds_type: string | null
           id: string
           is_multi_payee: boolean | null
           issue_date: string | null
@@ -1586,6 +1587,7 @@ export type Database = {
           ocr_needs_verification: boolean
           ocr_status: string | null
           payee_line: string | null
+          property_address: string | null
           raw_ocr_back: Json | null
           raw_ocr_front: Json | null
           review_notes: string | null
@@ -1613,6 +1615,7 @@ export type Database = {
           endorsement_packet_path?: string | null
           external_origin?: Json | null
           front_image_path: string
+          funds_type?: string | null
           id?: string
           is_multi_payee?: boolean | null
           issue_date?: string | null
@@ -1625,6 +1628,7 @@ export type Database = {
           ocr_needs_verification?: boolean
           ocr_status?: string | null
           payee_line?: string | null
+          property_address?: string | null
           raw_ocr_back?: Json | null
           raw_ocr_front?: Json | null
           review_notes?: string | null
@@ -1652,6 +1656,7 @@ export type Database = {
           endorsement_packet_path?: string | null
           external_origin?: Json | null
           front_image_path?: string
+          funds_type?: string | null
           id?: string
           is_multi_payee?: boolean | null
           issue_date?: string | null
@@ -1664,6 +1669,7 @@ export type Database = {
           ocr_needs_verification?: boolean
           ocr_status?: string | null
           payee_line?: string | null
+          property_address?: string | null
           raw_ocr_back?: Json | null
           raw_ocr_front?: Json | null
           review_notes?: string | null
