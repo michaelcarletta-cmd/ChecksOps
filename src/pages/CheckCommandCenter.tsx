@@ -912,8 +912,11 @@ export default function CheckCommandCenter() {
                                   {isShared && <SharedChecksBadge sourceTenantName={sourceTenantName} />}
                                 </div>
                               </TableCell>
-                              <TableCell className="text-sm max-w-[120px] truncate">
-                                {check.carrier_name || "Pending OCR"}
+                              <TableCell className="text-sm max-w-[140px] truncate">
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="truncate">{check.carrier_name || "Pending OCR"}</span>
+                                  <CheckValidityBadge issueDate={check.issue_date} hideWhenSafe />
+                                </div>
                               </TableCell>
                               <TableCell className="text-right font-semibold tabular-nums">
                                 {check.amount != null
