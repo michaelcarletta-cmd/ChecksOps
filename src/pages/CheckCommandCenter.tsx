@@ -134,6 +134,8 @@ interface CheckItem {
   review_notes: string | null;
   endorsement_packet_path: string | null;
   endorsement_override: Record<string, unknown> | null;
+  funds_type?: string | null;
+  property_address?: string | null;
   check_payees?: CheckPayee[];
 }
 
@@ -2080,16 +2082,16 @@ function CheckDetailPanel({
             {check.status.replace(/_/g, " ")}
           </Badge>
         </div>
-        {!isSharedView && (
-          <div className="flex flex-wrap gap-2 mt-2">
-            <ViewCheckImageButton
-              checkId={checkId}
-              frontImagePath={check.front_image_path}
-              checkNumber={check.check_number}
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs"
-            />
+        <div className="flex flex-wrap gap-2 mt-2">
+          <ViewCheckImageButton
+            checkId={checkId}
+            frontImagePath={check.front_image_path}
+            checkNumber={check.check_number}
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+          />
+          {!isSharedView && (
             <AdminDeleteCheckButton
               checkId={checkId}
               checkNumber={check.check_number}
@@ -2102,8 +2104,8 @@ function CheckDetailPanel({
               variant="outline"
               className="h-7 text-xs"
             />
-          </div>
-        )}
+          )}
+        </div>
         {check.carrier_name && (
           <p className="text-sm text-muted-foreground">{check.carrier_name}</p>
         )}
@@ -2297,6 +2299,21 @@ function CheckDetailPanel({
                 inputType="boolean"
                 readOnly={isSharedView}
                 displayFormatter={(v) => (v === "true" ? "Yes" : "No")}
+                onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
+              />
+              <FundsTypeField
+                checkId={checkId}
+                value={check.funds_type ?? null}
+                readOnly={isSharedView}
+                onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
+              />
+              <EditableField
+                label="Property Address"
+                checkId={checkId}
+                field="property_address"
+                value={check.property_address ?? null}
+                multiline
+                readOnly={isSharedView}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
               <DetailRow label="OCR Status" value={check.ocr_status} />
@@ -3114,6 +3131,81 @@ function EditableField({
             <Pencil className="h-3 w-3" />
           </Button>
         )}
+      </div>
+    </div>
+  );
+}
+
+const FUNDS_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: "acv", label: "ACV (Actual Cash Value)" },
+  { value: "rcv", label: "RCV (Replacement Cost Value)" },
+  { value: "recoverable_depreciation", label: "Recoverable Depreciation" },
+  { value: "supplement", label: "Supplement" },
+  { value: "overhead_and_profit", label: "Overhead & Profit (O&P)" },
+];
+
+function FundsTypeField({
+  checkId,
+  value,
+  readOnly = false,
+  onSave,
+}: {
+  checkId: string;
+  value: string | null;
+  readOnly?: boolean;
+  onSave: () => void;
+}) {
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+  const display = FUNDS_TYPE_OPTIONS.find((o) => o.value === value)?.label ?? null;
+
+  const persist = async (next: string | null) => {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("check_intake_items")
+        .update({ funds_type: next, updated_at: new Date().toISOString() })
+        .eq("id", checkId);
+      if (error) throw error;
+      toast({ title: "Funds type updated" });
+      onSave();
+    } catch (e: any) {
+      toast({ title: "Failed to update funds type", description: e.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (readOnly) {
+    return (
+      <div className="flex items-start justify-between gap-2 py-1.5 text-sm">
+        <span className="text-xs text-muted-foreground shrink-0">Funds Type</span>
+        <span className={`font-medium text-right ${!display ? "text-muted-foreground italic" : ""}`}>
+          {display ?? "Not set"}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-start justify-between gap-2 py-1.5 text-sm">
+      <span className="text-xs text-muted-foreground shrink-0 mt-2">Funds Type</span>
+      <div className="min-w-0 flex-1 max-w-[60%]">
+        <Select
+          value={value ?? "__unset__"}
+          onValueChange={(v) => persist(v === "__unset__" ? null : v)}
+          disabled={saving}
+        >
+          <SelectTrigger className="h-8 text-sm">
+            <SelectValue placeholder="Select…" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__unset__" className="text-xs text-muted-foreground">Not set</SelectItem>
+            {FUNDS_TYPE_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );

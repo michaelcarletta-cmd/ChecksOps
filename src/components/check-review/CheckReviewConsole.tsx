@@ -304,6 +304,9 @@ export function ReviewDecisionPanel({
   const [checkNumber, setCheckNumber] = useState("");
   const [amount, setAmount] = useState("");
   const [payeeLine, setPayeeLine] = useState("");
+  const [fundsType, setFundsType] = useState<string>("");
+  const [propertyAddress, setPropertyAddress] = useState<string>("");
+  const [savingMeta, setSavingMeta] = useState(false);
   const [depositPath, setDepositPath] = useState("");
   const [notes, setNotes] = useState("");
   const [reissueCategory, setReissueCategory] = useState("other");
@@ -315,8 +318,27 @@ export function ReviewDecisionPanel({
       setCheckNumber(check.check_number ?? "");
       setAmount(check.amount?.toString() ?? "");
       setPayeeLine(check.payee_line ?? "");
+      setFundsType(((check as any).funds_type as string) ?? "");
+      setPropertyAddress(((check as any).property_address as string) ?? "");
     }
   }, [check]);
+
+  const persistMeta = async (next: { funds_type?: string | null; property_address?: string | null }) => {
+    setSavingMeta(true);
+    try {
+      const { error } = await supabase
+        .from("check_intake_items")
+        .update({ ...next, updated_at: new Date().toISOString() })
+        .eq("id", checkId);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e.message, variant: "destructive" });
+    } finally {
+      setSavingMeta(false);
+    }
+  };
 
   useEffect(() => {
     formDirtyRef.current = false;
@@ -556,6 +578,47 @@ export function ReviewDecisionPanel({
               </div>
             </div>
           )}
+        </div>
+
+        {/* Funds type + property address — visible to all partners with shared access */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Check Classification</h4>
+          <div>
+            <Label className="text-xs">Funds Type</Label>
+            <Select
+              value={fundsType || "__unset__"}
+              onValueChange={(v) => {
+                const next = v === "__unset__" ? "" : v;
+                setFundsType(next);
+                markDirty();
+                persistMeta({ funds_type: next || null });
+              }}
+              disabled={savingMeta}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="Select funds type…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__unset__" className="text-xs text-muted-foreground">Not set</SelectItem>
+                <SelectItem value="acv" className="text-xs">ACV (Actual Cash Value)</SelectItem>
+                <SelectItem value="rcv" className="text-xs">RCV (Replacement Cost Value)</SelectItem>
+                <SelectItem value="recoverable_depreciation" className="text-xs">Recoverable Depreciation</SelectItem>
+                <SelectItem value="supplement" className="text-xs">Supplement</SelectItem>
+                <SelectItem value="overhead_and_profit" className="text-xs">Overhead &amp; Profit (O&amp;P)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Property Address</Label>
+            <Input
+              value={propertyAddress}
+              onChange={(e) => { setPropertyAddress(e.target.value); markDirty(); }}
+              onBlur={() => persistMeta({ property_address: propertyAddress.trim() || null })}
+              placeholder="Address this check is for…"
+              className="h-8 text-sm"
+              disabled={savingMeta}
+            />
+          </div>
         </div>
 
         <Separator />
