@@ -20,6 +20,7 @@ import {
   Trash2, Plus, FileImage,
 } from "lucide-react";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
+import { assessCheckValidity, isAtRisk } from "@/lib/checkValidity";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
