@@ -20,6 +20,7 @@ import {
   Trash2, Plus, FileImage,
 } from "lucide-react";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
+import { assessCheckValidity, isAtRisk } from "@/lib/checkValidity";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -520,6 +521,28 @@ export function ReviewDecisionPanel({
           </Card>
         )}
 
+        {(() => {
+          const v = assessCheckValidity(check.issue_date);
+          if (v.risk === "ok" || v.risk === "unknown") return null;
+          const tone =
+            v.risk === "expired"
+              ? "border-red-500/40 bg-red-500/10 text-red-400"
+              : v.risk === "stale"
+              ? "border-orange-500/40 bg-orange-500/10 text-orange-400"
+              : "border-amber-500/40 bg-amber-500/10 text-amber-400";
+          return (
+            <Card className={`border ${tone}`}>
+              <CardContent className="p-3 space-y-1">
+                <div className="flex items-center gap-2 text-xs font-semibold">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  Check validity: {v.label}
+                </div>
+                <p className="text-[11px] opacity-80 pl-5">{v.detail}</p>
+              </CardContent>
+            </Card>
+          );
+        })()}
+
         <div className="space-y-3">
           <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Check Details</h4>
           {editing ? (
@@ -675,7 +698,16 @@ export function ReviewDecisionPanel({
         </div>
 
         <Button
-          onClick={() => submitDecision.mutate()}
+          onClick={() => {
+            const v = assessCheckValidity(check.issue_date);
+            if (isAtRisk(v.risk) && depositPath !== "reissue_requested" && depositPath !== "hold_for_claim_review") {
+              const proceed = window.confirm(
+                `⚠️ Check validity warning\n\n${v.label}\n${v.detail}\n\nThis check is at risk of being rejected at deposit. Consider 'Request Reissue' instead.\n\nProceed anyway?`,
+              );
+              if (!proceed) return;
+            }
+            submitDecision.mutate();
+          }}
           disabled={!depositPath || submitDecision.isPending}
           className="w-full"
         >

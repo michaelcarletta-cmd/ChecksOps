@@ -46,6 +46,8 @@ import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
 import { Share2 } from "lucide-react";
 import { ShieldCheck } from "lucide-react";
+import { CheckValidityBadge } from "@/components/checks/CheckValidityBadge";
+import { assessCheckValidity } from "@/lib/checkValidity";
 
 // Lazy-loaded: heavy tab-only / dialog-only modules (each becomes its own JS chunk)
 const LossDraftDashboard = lazy(() =>
@@ -910,8 +912,11 @@ export default function CheckCommandCenter() {
                                   {isShared && <SharedChecksBadge sourceTenantName={sourceTenantName} />}
                                 </div>
                               </TableCell>
-                              <TableCell className="text-sm max-w-[120px] truncate">
-                                {check.carrier_name || "Pending OCR"}
+                              <TableCell className="text-sm max-w-[140px] truncate">
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="truncate">{check.carrier_name || "Pending OCR"}</span>
+                                  <CheckValidityBadge issueDate={check.issue_date} hideWhenSafe />
+                                </div>
                               </TableCell>
                               <TableCell className="text-right font-semibold tabular-nums">
                                 {check.amount != null
@@ -2115,6 +2120,27 @@ function CheckDetailPanel({
         {check.amount == null && (
           <EditableAmount checkId={checkId} currentAmount={null} readOnly={isSharedView} onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
         )}
+
+        {/* Validity assessment — issue date age vs 180-day stale threshold */}
+        {(() => {
+          const v = assessCheckValidity(check.issue_date);
+          if (v.risk === "ok" || v.risk === "unknown") return null;
+          const tone =
+            v.risk === "expired"
+              ? "border-red-500/40 bg-red-500/10 text-red-400"
+              : v.risk === "stale"
+              ? "border-orange-500/40 bg-orange-500/10 text-orange-400"
+              : "border-amber-500/40 bg-amber-500/10 text-amber-400";
+          return (
+            <div className={`mt-2 border rounded-lg p-3 space-y-1 ${tone}`}>
+              <div className="flex items-center gap-2 font-semibold text-sm">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                Check validity: {v.label}
+              </div>
+              <p className="text-xs opacity-80 pl-6">{v.detail}</p>
+            </div>
+          );
+        })()}
 
         {/* Shared / read-only banner for non-owner tenants */}
         {isSharedView && (
