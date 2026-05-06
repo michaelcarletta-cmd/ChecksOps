@@ -3136,6 +3136,81 @@ function EditableField({
   );
 }
 
+const FUNDS_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: "acv", label: "ACV (Actual Cash Value)" },
+  { value: "rcv", label: "RCV (Replacement Cost Value)" },
+  { value: "recoverable_depreciation", label: "Recoverable Depreciation" },
+  { value: "supplement", label: "Supplement" },
+  { value: "overhead_and_profit", label: "Overhead & Profit (O&P)" },
+];
+
+function FundsTypeField({
+  checkId,
+  value,
+  readOnly = false,
+  onSave,
+}: {
+  checkId: string;
+  value: string | null;
+  readOnly?: boolean;
+  onSave: () => void;
+}) {
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+  const display = FUNDS_TYPE_OPTIONS.find((o) => o.value === value)?.label ?? null;
+
+  const persist = async (next: string | null) => {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("check_intake_items")
+        .update({ funds_type: next, updated_at: new Date().toISOString() })
+        .eq("id", checkId);
+      if (error) throw error;
+      toast({ title: "Funds type updated" });
+      onSave();
+    } catch (e: any) {
+      toast({ title: "Failed to update funds type", description: e.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (readOnly) {
+    return (
+      <div className="flex items-start justify-between gap-2 py-1.5 text-sm">
+        <span className="text-xs text-muted-foreground shrink-0">Funds Type</span>
+        <span className={`font-medium text-right ${!display ? "text-muted-foreground italic" : ""}`}>
+          {display ?? "Not set"}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-start justify-between gap-2 py-1.5 text-sm">
+      <span className="text-xs text-muted-foreground shrink-0 mt-2">Funds Type</span>
+      <div className="min-w-0 flex-1 max-w-[60%]">
+        <Select
+          value={value ?? "__unset__"}
+          onValueChange={(v) => persist(v === "__unset__" ? null : v)}
+          disabled={saving}
+        >
+          <SelectTrigger className="h-8 text-sm">
+            <SelectValue placeholder="Select…" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__unset__" className="text-xs text-muted-foreground">Not set</SelectItem>
+            {FUNDS_TYPE_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Payee Manager — add / edit / remove                                */
 /* ------------------------------------------------------------------ */
