@@ -2082,16 +2082,16 @@ function CheckDetailPanel({
             {check.status.replace(/_/g, " ")}
           </Badge>
         </div>
-        {!isSharedView && (
-          <div className="flex flex-wrap gap-2 mt-2">
-            <ViewCheckImageButton
-              checkId={checkId}
-              frontImagePath={check.front_image_path}
-              checkNumber={check.check_number}
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs"
-            />
+        <div className="flex flex-wrap gap-2 mt-2">
+          <ViewCheckImageButton
+            checkId={checkId}
+            frontImagePath={check.front_image_path}
+            checkNumber={check.check_number}
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+          />
+          {!isSharedView && (
             <AdminDeleteCheckButton
               checkId={checkId}
               checkNumber={check.check_number}
@@ -2104,8 +2104,8 @@ function CheckDetailPanel({
               variant="outline"
               className="h-7 text-xs"
             />
-          </div>
-        )}
+          )}
+        </div>
         {check.carrier_name && (
           <p className="text-sm text-muted-foreground">{check.carrier_name}</p>
         )}
