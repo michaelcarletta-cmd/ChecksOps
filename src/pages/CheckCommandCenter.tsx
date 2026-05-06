@@ -2301,6 +2301,21 @@ function CheckDetailPanel({
                 displayFormatter={(v) => (v === "true" ? "Yes" : "No")}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
+              <FundsTypeField
+                checkId={checkId}
+                value={check.funds_type ?? null}
+                readOnly={isSharedView}
+                onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
+              />
+              <EditableField
+                label="Property Address"
+                checkId={checkId}
+                field="property_address"
+                value={check.property_address ?? null}
+                multiline
+                readOnly={isSharedView}
+                onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
+              />
               <DetailRow label="OCR Status" value={check.ocr_status} />
               {!isSharedView && (
                 <>
