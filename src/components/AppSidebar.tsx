@@ -1,4 +1,4 @@
-import { Home, FileText, CheckSquare, Inbox, Users, Network, DollarSign, FileStack, Settings, LogOut, Bot, Banknote } from "lucide-react";
+import { Home, FileText, CheckSquare, Inbox, Users, Network, DollarSign, FileStack, Settings, LogOut, Bot, Banknote, Building2 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import logo from "@/assets/freedom-adjustment-logo.png";
 import { useAuth } from "@/hooks/useAuth";
@@ -34,6 +34,7 @@ const mainItems = [
   { title: "Sales", url: "/sales", icon: DollarSign },
   { title: "Templates", url: "/templates", icon: FileStack },
   { title: "Settings", url: "/settings", icon: Settings },
+  { title: "Tenants", url: "/admin/tenants", icon: Building2, ownerOnly: true },
 ];
 
 const accountItems: any[] = [];
@@ -44,6 +45,7 @@ export function AppSidebar() {
 
   const visibleItems = mainItems.filter(item => {
     if ('adminOnly' in item && item.adminOnly && userRole !== 'admin') return false;
+    if ('ownerOnly' in item && item.ownerOnly && user?.email !== 'mcarletta@freedomadj.com') return false;
     return true;
   });
 
