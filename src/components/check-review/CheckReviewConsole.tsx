@@ -455,13 +455,14 @@ export function ReviewDecisionPanel({
       });
 
       if (error) throw error;
+      const result = data as { new_stage?: string } | null;
       // Guard: RPC must return a stage — if not, something went silently wrong
-      if (!data?.new_stage) {
+      if (!result?.new_stage) {
         throw new Error(
           "Routing failed: the server did not confirm a new stage. The check has NOT moved. Please try again or contact support.",
         );
       }
-      return data;
+      return result;
     },
     onSuccess: (data) => {
       formDirtyRef.current = false;
