@@ -874,8 +874,9 @@ export default function CheckCommandCenter() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Check</TableHead>
-                          <TableHead>Carrier</TableHead>
+                          <TableHead>Carrier / Property</TableHead>
                           <TableHead className="text-right">Amount</TableHead>
+                          <TableHead>Class</TableHead>
                           <TableHead>Payees</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Deposit</TableHead>
@@ -886,7 +887,7 @@ export default function CheckCommandCenter() {
                         {groupedFilteredChecks.map((group) => (
                           <Fragment key={group.key}>
                             <TableRow key={`${group.key}-header`} className="bg-muted/40 hover:bg-muted/40">
-                              <TableCell colSpan={7} className="py-3">
+                              <TableCell colSpan={8} className="py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                   <ClaimCheckFileHeader group={group} />
                                 </div>
