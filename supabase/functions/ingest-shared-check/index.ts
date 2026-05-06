@@ -26,6 +26,8 @@ interface IngestPayload {
     front_image_url?: string;    // public/signed URL we can store as a reference
     back_image_url?: string;
     detected_claim_number?: string;
+    funds_type?: string | null;
+    property_address?: string | null;
   };
 }
 
