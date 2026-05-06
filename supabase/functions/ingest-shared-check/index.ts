@@ -84,7 +84,7 @@ Deno.serve(async (req) => {
         .insert({
           name: `${body.source_tenant_name} (${body.source_app})`,
           slug: externalSlug,
-          plan_tier: "external",
+          plan_tier: "starter",
         })
         .select("id")
         .single();
