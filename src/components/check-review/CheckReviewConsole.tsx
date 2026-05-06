@@ -272,6 +272,21 @@ export function CheckReviewQueue({
 /*  Review Decision Panel — uses transactional RPC                     */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/*  Required-field checker                                             */
+/* ------------------------------------------------------------------ */
+
+function getMissingFields(check: ReviewCheck): string[] {
+  const missing: string[] = [];
+  if (!check.check_number?.trim()) missing.push("Check #");
+  if (!check.amount || check.amount <= 0) missing.push("Amount");
+  if (!check.issue_date) missing.push("Issue date");
+  if (!check.carrier_name?.trim()) missing.push("Carrier name");
+  if (!check.payee_line?.trim()) missing.push("Payee line");
+  if ((check.check_payees?.length ?? 0) === 0) missing.push("At least one payee");
+  return missing;
+}
+
 export function ReviewDecisionPanel({
   checkId,
   onComplete,
@@ -440,11 +455,26 @@ export function ReviewDecisionPanel({
       });
 
       if (error) throw error;
+      // Guard: RPC must return a stage — if not, something went silently wrong
+      if (!data?.new_stage) {
+        throw new Error(
+          "Routing failed: the server did not confirm a new stage. The check has NOT moved. Please try again or contact support.",
+        );
+      }
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       formDirtyRef.current = false;
-      toast({ title: "Review decision saved" });
+      const stageLabel: Record<string, string> = {
+        loss_draft: "Loss Draft",
+        endorsing: "Endorsing",
+        ready_for_deposit: "Ready for Deposit",
+        review: "Review",
+      };
+      toast({
+        title: "Check routed successfully",
+        description: `Moved to: ${stageLabel[data?.new_stage] ?? data?.new_stage}`,
+      });
       qc.invalidateQueries({ queryKey: ["check-review-queue"] });
       qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
@@ -650,74 +680,205 @@ export function ReviewDecisionPanel({
 
         <Separator />
 
-        <div className="space-y-3">
-          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Deposit Decision</h4>
-          <div className="grid grid-cols-2 gap-2">
-            {DEPOSIT_PATHS.map((path) => {
-              const PathIcon = path.icon;
-              return (
-                <Card
-                  key={path.value}
-                  className={`cursor-pointer transition-all p-2.5 text-center hover:bg-accent/30 ${
-                    depositPath === path.value ? "ring-1 ring-primary bg-accent/50" : ""
-                  }`}
-                  onClick={() => { setDepositPath(path.value); markDirty(); }}
-                >
-                  <PathIcon className={`h-5 w-5 mx-auto mb-1 ${path.color}`} />
-                  <p className="text-[11px] font-medium leading-tight">{path.label}</p>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
+        {/* ── Routing Decision ─────────────────────────────────────── */}
+        {(() => {
+          const hasMortgage = (check.check_payees ?? []).some(
+            (p) => p.payee_type === "mortgage_company",
+          );
+          const missingFields = getMissingFields(check);
+          const allEndorsed =
+            (check.check_payees ?? []).length > 0 &&
+            (check.check_payees ?? []).every(
+              (p) =>
+                p.endorsement_status === "signed" ||
+                p.endorsement_status === "waived" ||
+                (p.payee_type === "mortgage_company" &&
+                  p.endorsement_status === "manual_required"),
+            );
 
-        {depositPath === "reissue_requested" && (
-          <div>
-            <Label className="text-xs">Reissue Reason Category</Label>
-            <Select value={reissueCategory} onValueChange={(v) => { setReissueCategory(v); markDirty(); }}>
-              <SelectTrigger className="h-8 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {REISSUE_REASON_CATEGORIES.map((c) => (
-                  <SelectItem key={c.value} value={c.value} className="text-xs">{c.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+          return (
+            <div className="space-y-3">
+              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Routing Decision
+              </h4>
 
-        <div>
-          <Label className="text-xs">Reviewer Notes</Label>
-          <Textarea
-            value={notes}
-            onChange={(e) => { setNotes(e.target.value); markDirty(); }}
-            placeholder="Optional notes about this decision..."
-            className="text-sm min-h-[60px]"
-          />
-        </div>
+              {/* ── Missing fields warning ── */}
+              {missingFields.length > 0 && (
+                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2.5 space-y-1">
+                  <p className="text-xs font-semibold text-amber-400 flex items-center gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Complete these fields before routing:
+                  </p>
+                  <ul className="text-xs text-amber-300 list-disc list-inside">
+                    {missingFields.map((f) => (
+                      <li key={f}>{f}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
-        <Button
-          onClick={() => {
-            const v = assessCheckValidity(check.issue_date);
-            if (isAtRisk(v.risk) && depositPath !== "reissue_requested" && depositPath !== "hold_for_claim_review") {
-              const proceed = window.confirm(
-                `⚠️ Check validity warning\n\n${v.label}\n${v.detail}\n\nThis check is at risk of being rejected at deposit. Consider 'Request Reissue' instead.\n\nProceed anyway?`,
-              );
-              if (!proceed) return;
-            }
-            submitDecision.mutate();
-          }}
-          disabled={!depositPath || submitDecision.isPending}
-          className="w-full"
-        >
-          {submitDecision.isPending ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Save className="h-4 w-4 mr-2" />
-          )}
-          Submit Review Decision
-        </Button>
+              {/* ── Mortgage detected — force loss draft ── */}
+              {hasMortgage ? (
+                <div className="space-y-2">
+                  <div className="rounded-md border border-purple-500/40 bg-purple-500/10 p-2.5">
+                    <p className="text-xs font-semibold text-purple-300 flex items-center gap-1">
+                      <Building2 className="h-3.5 w-3.5" />
+                      Mortgage payee detected — this check must go to Loss Draft
+                    </p>
+                  </div>
+                  <Card
+                    className={`cursor-pointer transition-all p-2.5 text-center hover:bg-accent/30 ${
+                      depositPath === "loss_draft_required"
+                        ? "ring-1 ring-purple-500 bg-purple-500/10"
+                        : ""
+                    }`}
+                    onClick={() => {
+                      setDepositPath("loss_draft_required");
+                      markDirty();
+                    }}
+                  >
+                    <Building2 className="h-5 w-5 mx-auto mb-1 text-purple-400" />
+                    <p className="text-[11px] font-medium leading-tight">
+                      Send to Loss Draft
+                    </p>
+                  </Card>
+                </div>
+              ) : (
+                /* ── No mortgage — show endorsing + other options ── */
+                <div className="grid grid-cols-2 gap-2">
+                  {DEPOSIT_PATHS.filter(
+                    (p) => p.value !== "loss_draft_required",
+                  ).map((path) => {
+                    const PathIcon = path.icon;
+                    /* Approved-for-deposit requires all endorsements complete */
+                    const isApprove = path.value === "approved_for_deposit";
+                    const blocked = isApprove && !allEndorsed;
+                    return (
+                      <Card
+                        key={path.value}
+                        className={`transition-all p-2.5 text-center ${
+                          blocked
+                            ? "opacity-40 cursor-not-allowed"
+                            : "cursor-pointer hover:bg-accent/30"
+                        } ${
+                          depositPath === path.value
+                            ? "ring-1 ring-primary bg-accent/50"
+                            : ""
+                        }`}
+                        onClick={() => {
+                          if (blocked) {
+                            toast({
+                              title: "Endorsements required",
+                              description:
+                                "All payees must sign or waive before this check can be approved for deposit.",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
+                          setDepositPath(path.value);
+                          markDirty();
+                        }}
+                      >
+                        <PathIcon
+                          className={`h-5 w-5 mx-auto mb-1 ${path.color}`}
+                        />
+                        <p className="text-[11px] font-medium leading-tight">
+                          {path.label}
+                        </p>
+                        {blocked && (
+                          <p className="text-[9px] text-muted-foreground mt-0.5">
+                            Needs signatures
+                          </p>
+                        )}
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+
+              {depositPath === "reissue_requested" && (
+                <div>
+                  <Label className="text-xs">Reissue Reason Category</Label>
+                  <Select
+                    value={reissueCategory}
+                    onValueChange={(v) => {
+                      setReissueCategory(v);
+                      markDirty();
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {REISSUE_REASON_CATEGORIES.map((c) => (
+                        <SelectItem key={c.value} value={c.value} className="text-xs">
+                          {c.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <div>
+                <Label className="text-xs">Reviewer Notes</Label>
+                <Textarea
+                  value={notes}
+                  onChange={(e) => {
+                    setNotes(e.target.value);
+                    markDirty();
+                  }}
+                  placeholder="Optional notes about this decision..."
+                  className="text-sm min-h-[60px]"
+                />
+              </div>
+
+              <Button
+                onClick={() => {
+                  /* Hard block: required fields missing */
+                  if (missingFields.length > 0) {
+                    toast({
+                      title: "Complete all required fields first",
+                      description: `Missing: ${missingFields.join(", ")}`,
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  /* Hard block: no routing chosen */
+                  if (!depositPath) {
+                    toast({
+                      title: "Select a routing decision",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  /* Stale-date soft warning */
+                  const v = assessCheckValidity(check.issue_date);
+                  if (
+                    isAtRisk(v.risk) &&
+                    depositPath !== "reissue_requested" &&
+                    depositPath !== "hold_for_claim_review"
+                  ) {
+                    const proceed = window.confirm(
+                      `⚠️ Check validity warning\n\n${v.label}\n${v.detail}\n\nThis check may be rejected at deposit. Consider 'Request Reissue' instead.\n\nProceed anyway?`,
+                    );
+                    if (!proceed) return;
+                  }
+                  submitDecision.mutate();
+                }}
+                disabled={!depositPath || submitDecision.isPending}
+                className="w-full"
+              >
+                {submitDecision.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Submit Review Decision
+              </Button>
+            </div>
+          );
+        })()}
       </div>
     </ScrollArea>
     <DepositImageViewer
