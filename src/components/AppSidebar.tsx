@@ -34,6 +34,7 @@ const mainItems = [
   { title: "Sales", url: "/sales", icon: DollarSign },
   { title: "Templates", url: "/templates", icon: FileStack },
   { title: "Settings", url: "/settings", icon: Settings },
+  { title: "Tenants", url: "/admin/tenants", icon: Building2, ownerOnly: true },
 ];
 
 const accountItems: any[] = [];
