@@ -709,6 +709,70 @@ function DepositItemDetail({
 
   return (
     <div className="space-y-4">
+      {/* ── Original Check Info + Image Viewer ───────────────────────── */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-xs flex items-center justify-between">
+            <span className="flex items-center gap-1">
+              <Eye className="h-3 w-3" />
+              Original Check
+            </span>
+            {checkData && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => setImageViewerOpen(true)}
+              >
+                <Eye className="h-3 w-3 mr-1" />
+                View Check Image
+              </Button>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {!checkData ? (
+            <p className="text-xs text-muted-foreground">Loading check details...</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+              <div><span className="text-muted-foreground">Check #</span><span className="ml-2 font-mono font-medium">{checkData.check_number ?? "—"}</span></div>
+              <div><span className="text-muted-foreground">Amount</span><span className="ml-2 font-medium">{checkData.amount != null ? `$${Number(checkData.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}</span></div>
+              <div><span className="text-muted-foreground">Carrier</span><span className="ml-2">{checkData.carrier_name ?? "—"}</span></div>
+              <div><span className="text-muted-foreground">Issue Date</span><span className="ml-2">{checkData.issue_date ? format(new Date(checkData.issue_date), "MMM d, yyyy") : "—"}</span></div>
+              <div className="col-span-2"><span className="text-muted-foreground">Payee Line</span><span className="ml-2">{checkData.payee_line ?? "—"}</span></div>
+              {checkData.routing_number && (
+                <div><span className="text-muted-foreground">Routing</span><span className="ml-2 font-mono">{checkData.routing_number}</span></div>
+              )}
+              {checkData.account_number && (
+                <div><span className="text-muted-foreground">Account</span><span className="ml-2 font-mono">{checkData.account_number}</span></div>
+              )}
+              {(checkData.check_payees ?? []).length > 0 && (
+                <div className="col-span-2 pt-1">
+                  <span className="text-muted-foreground">Payees</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {(checkData.check_payees as Array<{ payee_name: string; payee_type: string; endorsement_status: string }>).map((p, i) => (
+                      <Badge key={i} variant="outline" className="text-[10px]">
+                        {p.payee_name}
+                        {p.payee_type === "mortgage_company" && " (Mortgage)"}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Image viewer — full screen lightbox */}
+      <CheckImagesViewer
+        open={imageViewerOpen}
+        frontUrl={imageUrls?.front ?? null}
+        backUrl={imageUrls?.back ?? null}
+        title={`Check #${checkData?.check_number ?? "—"} — ${checkData?.carrier_name ?? ""}`}
+        onClose={() => setImageViewerOpen(false)}
+      />
+
       {/* Attachment uploads */}
       <Card>
         <CardHeader className="pb-2">
