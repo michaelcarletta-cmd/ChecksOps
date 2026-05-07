@@ -287,6 +287,14 @@ function getMissingFields(check: ReviewCheck): string[] {
   return missing;
 }
 
+function getMissingFieldsForLossDraft(check: ReviewCheck): string[] {
+  const missing = getMissingFields(check);
+  if (!check.claim_id) {
+    missing.push("Claim link (check must be linked to a claim before it can go to Loss Draft)");
+  }
+  return missing;
+}
+
 export function ReviewDecisionPanel({
   checkId,
   onComplete,
@@ -686,7 +694,9 @@ export function ReviewDecisionPanel({
           const hasMortgage = (check.check_payees ?? []).some(
             (p) => p.payee_type === "mortgage_company",
           );
-          const missingFields = getMissingFields(check);
+          const missingFields = hasMortgage
+            ? getMissingFieldsForLossDraft(check)
+            : getMissingFields(check);
           const allEndorsed =
             (check.check_payees ?? []).length > 0 &&
             (check.check_payees ?? []).every(
