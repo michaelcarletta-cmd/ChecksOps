@@ -602,6 +602,50 @@ function DepositItemDetail({
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
+
+  const { data: depositItem } = useQuery({
+    queryKey: ["deposit-item", itemId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("deposit_items")
+        .select("id, check_id, check_number, carrier_name, amount, payee_line")
+        .eq("id", itemId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: checkData } = useQuery({
+    queryKey: ["deposit-check-source", depositItem?.check_id],
+    enabled: !!depositItem?.check_id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("check_intake_items")
+        .select("id, front_image_path, back_image_path, check_number, carrier_name, amount, issue_date, payee_line, routing_number, account_number, check_payees(payee_name, payee_type, endorsement_status)")
+        .eq("id", depositItem!.check_id!)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: imageUrls } = useQuery({
+    queryKey: ["deposit-check-images", checkData?.id],
+    enabled: !!checkData?.front_image_path,
+    queryFn: async () => {
+      const [front, back] = await Promise.all([
+        checkData!.front_image_path
+          ? supabase.storage.from("check-images").createSignedUrl(checkData!.front_image_path, 3600).then(r => r.data?.signedUrl ?? null)
+          : Promise.resolve(null),
+        checkData!.back_image_path
+          ? supabase.storage.from("check-images").createSignedUrl(checkData!.back_image_path, 3600).then(r => r.data?.signedUrl ?? null)
+          : Promise.resolve(null),
+      ]);
+      return { front, back };
+    },
+  });
 
   const { data: attempts = [] } = useQuery({
     queryKey: ["deposit-attempts", itemId],
