@@ -1156,6 +1156,14 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
       toast({ title: "Front image required", variant: "destructive" });
       return;
     }
+    if (!claimId) {
+      toast({
+        title: "Link to a claim first",
+        description: "Select which claim this check belongs to before uploading. Unlinked checks cannot be routed to Loss Draft or appear in a claim's history.",
+        variant: "destructive",
+      });
+      return;
+    }
     setUploading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -1195,47 +1203,10 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 
       if (insErr || !check) throw new Error(insErr?.message ?? "Insert failed");
 
-      // Auto-create loss_draft_tracking rows for any mortgagees the user listed
-      // on the check. Each row independently goes through the monitored /
-      // not-monitored workflow in the Loss Draft dashboard.
-      const mortgagees = [mortgagee1.trim(), mortgagee2.trim()].filter(Boolean);
-      if (claimId && mortgagees.length > 0) {
-        try {
-          for (const servicer of mortgagees) {
-            const { data: existing } = await supabase
-              .from("loss_draft_tracking")
-              .select("id")
-              .eq("claim_id", claimId)
-              .ilike("mortgage_servicer", servicer)
-              .neq("escrow_status", "final_release_complete")
-              .limit(1);
-            if (existing && existing.length > 0) continue;
-
-            const { data: ld } = await supabase
-              .from("loss_draft_tracking")
-              .insert({
-                claim_id: claimId,
-                check_intake_item_id: check.id,
-                mortgage_servicer: servicer,
-                created_by: user.id,
-                ...(tenantId ? { tenant_id: tenantId } : {}),
-              })
-              .select("id")
-              .single();
-            if (ld?.id) {
-              await supabase.rpc("init_loss_draft_documents" as any, { p_loss_draft_id: ld.id });
-              await supabase.from("loss_draft_audit_log").insert({
-                loss_draft_id: ld.id,
-                action: "created",
-                actor_id: user.id,
-                notes: `Auto-created from check upload (${mortgagees.length > 1 ? "dual mortgagee" : "single mortgagee"})`,
-              });
-            }
-          }
-        } catch (ldErr) {
-          console.error("Loss draft auto-create failed:", ldErr);
-        }
-      }
+      // NOTE: Loss draft tracking rows are intentionally NOT created here.
+      // They are auto-created by the DB trigger (trg_auto_create_loss_draft)
+      // when the check is routed to Loss Draft during review. Creating them
+      // at upload time caused duplicate rows in the Loss Draft dashboard.
 
       const { data: session } = await supabase.auth.getSession();
       const { data: ocrResult, error: fnErr } = await supabase.functions.invoke("check-ocr-intake", {
