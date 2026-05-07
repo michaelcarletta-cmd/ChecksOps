@@ -53,7 +53,7 @@ const VALID_PAYEE_TYPES = new Set([
 const CRITICAL_FIELDS = ["amount", "check_number", "payee_line"] as const;
 const CRITICAL_CONFIDENCE_THRESHOLD = 60;
 const OVERALL_CONFIDENCE_THRESHOLD = 50;
-const STALE_LOCK_MS = 2 * 60 * 1000;
+const STALE_LOCK_MS = 5 * 60 * 1000; // increased from 2min — OCR can take 45s per pass, 2min caused duplicate payees on retry
 const OCR_TIMEOUT_MS = 45_000;
 
 /* ------------------------------------------------------------------ */
