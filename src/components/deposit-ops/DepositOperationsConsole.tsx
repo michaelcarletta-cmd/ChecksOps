@@ -609,7 +609,7 @@ function DepositItemDetail({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deposit_items")
-        .select("id, check_id, check_number, carrier_name, amount, payee_line")
+        .select("id, check_id, check_number, carrier_name, amount")
         .eq("id", itemId)
         .single();
       if (error) throw error;
