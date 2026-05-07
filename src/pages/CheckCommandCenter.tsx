@@ -1388,10 +1388,15 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
         </div>
       )}
 
-      <Button onClick={handleUpload} disabled={uploading || !frontFile} className="w-full">
+      <Button onClick={handleUpload} disabled={uploading || !frontFile || !claimId} className="w-full">
         {uploading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
         {uploading ? "Processing..." : skipAi ? "Upload for Manual Entry" : "Upload & Analyze"}
       </Button>
+      {!claimId && (
+        <p className="text-xs text-amber-400 text-center flex items-center justify-center gap-1 mt-1">
+          <AlertTriangle className="h-3 w-3" /> Select a claim above to enable upload
+        </p>
+      )}
     </div>
   );
 }
