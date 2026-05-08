@@ -119,6 +119,8 @@ Deno.serve(async (req) => {
       if (body.check.detected_claim_number !== undefined) updatePayload.detected_claim_number = body.check.detected_claim_number ?? null;
       if (body.check.funds_type !== undefined) updatePayload.funds_type = body.check.funds_type ?? null;
       if (body.check.property_address !== undefined) updatePayload.property_address = body.check.property_address ?? null;
+      if (body.check.payment_classification !== undefined) updatePayload.payment_classification = body.check.payment_classification ?? null;
+      if (body.check.payee_address !== undefined) updatePayload.payee_address = body.check.payee_address ?? null;
       const { error: updErr } = await supabase
         .from("check_intake_items")
         .update(updatePayload)
