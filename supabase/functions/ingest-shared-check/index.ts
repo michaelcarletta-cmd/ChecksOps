@@ -28,6 +28,8 @@ interface IngestPayload {
     detected_claim_number?: string;
     funds_type?: string | null;
     property_address?: string | null;
+    payment_classification?: string | null;
+    payee_address?: string | null;
   };
 }
 
