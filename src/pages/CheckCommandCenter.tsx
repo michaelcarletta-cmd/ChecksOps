@@ -139,6 +139,8 @@ interface CheckItem {
   endorsement_override: Record<string, unknown> | null;
   funds_type?: string | null;
   property_address?: string | null;
+  payment_classification?: string | null;
+  payee_address?: string | null;
   check_payees?: CheckPayee[];
 }
 
@@ -2352,6 +2354,23 @@ function CheckDetailPanel({
                 checkId={checkId}
                 field="property_address"
                 value={check.property_address ?? null}
+                multiline
+                readOnly={isSharedView}
+                onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
+              />
+              <EditableField
+                label="Payment Classification"
+                checkId={checkId}
+                field="payment_classification"
+                value={check.payment_classification ?? null}
+                readOnly={isSharedView}
+                onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
+              />
+              <EditableField
+                label="Payee Address"
+                checkId={checkId}
+                field="payee_address"
+                value={check.payee_address ?? null}
                 multiline
                 readOnly={isSharedView}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}

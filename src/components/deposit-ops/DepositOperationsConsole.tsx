@@ -623,7 +623,7 @@ function DepositItemDetail({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("id, front_image_path, back_image_path, check_number, carrier_name, amount, issue_date, payee_line, routing_number, account_number, check_payees(payee_name, payee_type, endorsement_status)")
+        .select("id, front_image_path, back_image_path, check_number, carrier_name, amount, issue_date, payee_line, routing_number, account_number, funds_type, property_address, payment_classification, payee_address, check_payees(payee_name, payee_type, endorsement_status)")
         .eq("id", depositItem!.check_id!)
         .single();
       if (error) throw error;
@@ -745,6 +745,18 @@ function DepositItemDetail({
               )}
               {checkData.account_number && (
                 <div><span className="text-muted-foreground">Account</span><span className="ml-2 font-mono">{checkData.account_number}</span></div>
+              )}
+              {checkData.payment_classification && (
+                <div className="col-span-2"><span className="text-muted-foreground">Classification</span><span className="ml-2">{checkData.payment_classification}</span></div>
+              )}
+              {checkData.funds_type && (
+                <div><span className="text-muted-foreground">Funds Type</span><span className="ml-2">{checkData.funds_type}</span></div>
+              )}
+              {checkData.property_address && (
+                <div className="col-span-2"><span className="text-muted-foreground">Property</span><span className="ml-2">{checkData.property_address}</span></div>
+              )}
+              {checkData.payee_address && (
+                <div className="col-span-2"><span className="text-muted-foreground">Payee Address</span><span className="ml-2">{checkData.payee_address}</span></div>
               )}
               {(checkData.check_payees ?? []).length > 0 && (
                 <div className="col-span-2 pt-1">
