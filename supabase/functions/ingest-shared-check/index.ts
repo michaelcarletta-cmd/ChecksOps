@@ -141,6 +141,8 @@ Deno.serve(async (req) => {
           detected_claim_number: body.check.detected_claim_number ?? null,
           funds_type: body.check.funds_type ?? null,
           property_address: body.check.property_address ?? null,
+          payment_classification: body.check.payment_classification ?? null,
+          payee_address: body.check.payee_address ?? null,
           status: "uploaded",
           ocr_status: "completed",
           external_origin: {
