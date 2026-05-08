@@ -1586,7 +1586,9 @@ export type Database = {
           ocr_heartbeat_at: string | null
           ocr_needs_verification: boolean
           ocr_status: string | null
+          payee_address: string | null
           payee_line: string | null
+          payment_classification: string | null
           property_address: string | null
           raw_ocr_back: Json | null
           raw_ocr_front: Json | null
@@ -1627,7 +1629,9 @@ export type Database = {
           ocr_heartbeat_at?: string | null
           ocr_needs_verification?: boolean
           ocr_status?: string | null
+          payee_address?: string | null
           payee_line?: string | null
+          payment_classification?: string | null
           property_address?: string | null
           raw_ocr_back?: Json | null
           raw_ocr_front?: Json | null
@@ -1668,7 +1672,9 @@ export type Database = {
           ocr_heartbeat_at?: string | null
           ocr_needs_verification?: boolean
           ocr_status?: string | null
+          payee_address?: string | null
           payee_line?: string | null
+          payment_classification?: string | null
           property_address?: string | null
           raw_ocr_back?: Json | null
           raw_ocr_front?: Json | null
