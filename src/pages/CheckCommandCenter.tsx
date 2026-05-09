@@ -224,7 +224,6 @@ export default function CheckCommandCenter() {
   const { tenantId, isWhiteLabel, applyFilter } = useTenantFilter();
   const { isAdmin } = usePermissions();
   const [activeTab, setActiveTab] = useState("endorsements");
-  const [partnersSubTab, setPartnersSubTab] = useState<"shared" | "manage">("shared");
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
@@ -354,6 +353,8 @@ export default function CheckCommandCenter() {
     return Array.from(ids);
   }, [checks, sharedChecks]);
 
+  const allChecks = useMemo(() => [...checks, ...sharedChecks], [checks, sharedChecks]);
+
   const { data: linkedClaims = [] } = useQuery({
     queryKey: ["check-linked-claims", linkedClaimIds],
     queryFn: async () => {
@@ -391,18 +392,18 @@ export default function CheckCommandCenter() {
     return haystacks.some((v) => v && v.toString().toLowerCase().includes(q));
   }, [searchQuery, claimLookup]);
 
-  const awaitingEndorsement = checks.filter(
+  const awaitingEndorsement = allChecks.filter(
     (c) =>
       (c.deposit_recommendation === "endorsements_pending" ||
         c.status === "endorsements_in_progress") && matchesSearch(c),
   );
-  const readyForDeposit = checks.filter(
+  const readyForDeposit = allChecks.filter(
     (c) =>
       (c.status === "approved_for_deposit" ||
         (c.deposit_recommendation === "ready_for_deposit" && c.status !== "deposited")) &&
       matchesSearch(c),
   );
-  const needsReview = checks.filter(
+  const needsReview = allChecks.filter(
     (c) =>
       (c.status === "needs_review" ||
         c.status === "manual_review_required" ||
@@ -410,17 +411,14 @@ export default function CheckCommandCenter() {
         c.deposit_recommendation === "branch_deposit_recommended" ||
         c.ocr_status === "failed") && matchesSearch(c),
   );
-  const reissueRequested = checks.filter((c) => c.status === "reissue_requested" && matchesSearch(c));
-  const branchDeposit = checks.filter((c) => c.status === "branch_deposit_required" && matchesSearch(c));
-
-  const filteredSharedChecks = sharedChecks.filter((c) => matchesSearch(c as CheckItem));
+  const reissueRequested = allChecks.filter((c) => c.status === "reissue_requested" && matchesSearch(c));
+  const branchDeposit = allChecks.filter((c) => c.status === "branch_deposit_required" && matchesSearch(c));
 
   const filteredChecks =
-    (activeTab === "partners" && partnersSubTab === "shared") ? filteredSharedChecks
-    : activeTab === "endorsements" ? awaitingEndorsement
+    activeTab === "endorsements" ? awaitingEndorsement
     : activeTab === "ready" ? readyForDeposit
     : activeTab === "review" ? needsReview
-    : checks.filter(matchesSearch);
+    : allChecks.filter(matchesSearch);
 
   const buildCheckGroups = useCallback((items: CheckItem[]) => {
     const groups = new Map<string, CheckGroup>();
@@ -593,7 +591,7 @@ export default function CheckCommandCenter() {
             { key: "lossdraft",    label: "Loss Draft",        count: null as number | null,      icon: Landmark,       gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400",  ring: "ring-purple-500/30" },
             { key: "branch",       label: "Branch",            count: branchDeposit.length,       icon: Building2,      gradient: "from-teal-500/20 to-cyan-500/10",     accent: "text-teal-400",    ring: "ring-teal-500/30" },
             { key: "reissue",      label: "Reissue",           count: reissueRequested.length,    icon: RotateCcw,      gradient: "from-red-500/20 to-rose-500/10",      accent: "text-red-400",     ring: "ring-red-500/30" },
-            { key: "partners",     label: "Partners",          count: sharedChecks.length,        icon: Share2,         gradient: "from-pink-500/20 to-fuchsia-500/10",  accent: "text-pink-400",    ring: "ring-pink-500/30" },
+            { key: "partners",     label: "Partners",          count: null as number | null,      icon: Users,          gradient: "from-pink-500/20 to-fuchsia-500/10",  accent: "text-pink-400",    ring: "ring-pink-500/30" },
             ...(canAccessManager ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield, gradient: "from-indigo-500/20 to-blue-500/10", accent: "text-indigo-400", ring: "ring-indigo-500/30" }] : []),
             { key: "messages",     label: "Messages",          count: totalUnreadMessages || null, icon: MessageSquare, gradient: "from-rose-500/20 to-pink-500/10",     accent: "text-rose-400",    ring: "ring-rose-500/30" },
           ].map((tab) => {
@@ -667,28 +665,12 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
-        {/* Partners Tab — Shared with Me + Manage Partners */}
+        {/* Partners Tab — Manage Partners only (shared checks now appear in their status tabs) */}
         {activeTab === "partners" && (
           <div className="mt-3">
-            <Tabs value={partnersSubTab} onValueChange={(v) => setPartnersSubTab(v as "shared" | "manage")}>
-              <TabsList className="w-full bg-muted/50">
-                <TabsTrigger value="shared" className="flex-1 text-xs gap-1">
-                  <Share2 className="h-3 w-3" /> Shared with Me
-                  <Badge className="ml-1 text-[10px] px-1.5 py-0 bg-muted text-muted-foreground">
-                    {sharedChecks.length}
-                  </Badge>
-                </TabsTrigger>
-                <TabsTrigger value="manage" className="flex-1 text-xs gap-1">
-                  <Users className="h-3 w-3" /> Manage Partners
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="manage" className="mt-3">
-                <Suspense fallback={<TabLoader />}>
-                  <TenantPartnerManager />
-                </Suspense>
-              </TabsContent>
-              {/* "shared" sub-tab falls through to the standard check list rendered below */}
-            </Tabs>
+            <Suspense fallback={<TabLoader />}>
+              <TenantPartnerManager />
+            </Suspense>
           </div>
         )}
 
@@ -857,7 +839,7 @@ export default function CheckCommandCenter() {
         )}
 
         {/* All other tabs — only render the active one */}
-        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "manager" && activeTab !== "reissue" && activeTab !== "branch" && activeTab !== "messages" && !(activeTab === "partners" && partnersSubTab === "manage") && (
+        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "manager" && activeTab !== "reissue" && activeTab !== "branch" && activeTab !== "messages" && activeTab !== "partners" && (
           <div className="mt-3 flex gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
             {/* Check list — grows when no check selected */}
             <Card
@@ -1024,7 +1006,7 @@ export default function CheckCommandCenter() {
                 <Card className="flex flex-col items-center justify-center h-full">
                   <div className="text-center text-muted-foreground">
                     <Banknote className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                    <Badge variant="outline" className="mb-3">{checks.length} checks</Badge>
+                    <Badge variant="outline" className="mb-3">{allChecks.length} checks</Badge>
                     <p className="text-sm">Select a check to begin</p>
                   </div>
                 </Card>
