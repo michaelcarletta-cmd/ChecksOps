@@ -1141,14 +1141,6 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
       toast({ title: "Front image required", variant: "destructive" });
       return;
     }
-    if (!claimId) {
-      toast({
-        title: "Link to a claim first",
-        description: "Select which claim this check belongs to before uploading. Unlinked checks cannot be routed to Loss Draft or appear in a claim's history.",
-        variant: "destructive",
-      });
-      return;
-    }
     setUploading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -1274,114 +1266,65 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
         <Label>Back of Check</Label>
         <Input type="file" accept="image/*" onChange={(e) => setBackFile(e.target.files?.[0] ?? null)} />
       </div>
-      <div>
-        <Label>Link to Claim (optional)</Label>
-        <div className="relative">
-          <div className="flex items-center border rounded-md bg-background">
-            <Search className="h-4 w-4 ml-2 text-muted-foreground shrink-0" />
-            <Input
-              placeholder="Search by claim # or policyholder name..."
-              value={claimDropdownOpen ? claimSearch : (selectedClaim ? `${selectedClaim.claim_number ?? "—"} — ${selectedClaim.policyholder_name ?? "Unknown"}` : claimSearch)}
-              onChange={(e) => {
-                setClaimSearch(e.target.value);
-                setClaimDropdownOpen(true);
-                if (!e.target.value) setClaimId("");
-              }}
-              onFocus={() => setClaimDropdownOpen(true)}
-              onBlur={() => setTimeout(() => setClaimDropdownOpen(false), 200)}
-              className="border-0 focus-visible:ring-0 shadow-none"
-            />
-            {claimId && (
-              <Button variant="ghost" size="icon" className="h-7 w-7 mr-1 shrink-0" onClick={() => { setClaimId(""); setClaimSearch(""); }}>
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            )}
-          </div>
-          {claimDropdownOpen && claims.length > 0 && (
-            <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto rounded-md border bg-popover shadow-md">
-              {claims.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors cursor-pointer"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    setClaimId(c.id);
-                    setClaimSearch("");
-                    setClaimDropdownOpen(false);
-                  }}
-                >
-                  <span className="font-mono">{c.claim_number ?? "—"}</span>
-                  <span className="text-muted-foreground"> — {c.policyholder_name ?? "Unknown"}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Link to Claim is intentionally hidden — this product is sold as a
+          standalone check operations platform. When a tenant integrates an
+          external CRM, the claim-linking UI will be re-enabled here. */}
 
       {/* Mortgagees on the check — supports up to two mortgage companies.
           Each one creates an independent Loss Draft tracking row that
           goes through its own monitored / not-monitored process. */}
-      {claimId && (
-        <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+      <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+        <div className="flex items-center gap-2">
+          <Building2 className="h-4 w-4 text-amber-400" />
+          <Label className="text-xs font-medium">Mortgage company on check (optional)</Label>
+        </div>
+        <Input
+          placeholder="1st mortgage company name (as listed on check)"
+          value={mortgagee1}
+          onChange={(e) => setMortgagee1(e.target.value)}
+          className="h-9"
+        />
+        {showSecondMortgagee ? (
           <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-amber-400" />
-            <Label className="text-xs font-medium">Mortgage company on check (optional)</Label>
-          </div>
-          <Input
-            placeholder="1st mortgage company name (as listed on check)"
-            value={mortgagee1}
-            onChange={(e) => setMortgagee1(e.target.value)}
-            className="h-9"
-          />
-          {showSecondMortgagee ? (
-            <div className="flex items-center gap-2">
-              <Input
-                placeholder="2nd mortgage company name"
-                value={mortgagee2}
-                onChange={(e) => setMortgagee2(e.target.value)}
-                className="h-9"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0"
-                onClick={() => { setMortgagee2(""); setShowSecondMortgagee(false); }}
-                title="Remove second mortgagee"
-              >
-                <XIcon className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          ) : (
+            <Input
+              placeholder="2nd mortgage company name"
+              value={mortgagee2}
+              onChange={(e) => setMortgagee2(e.target.value)}
+              className="h-9"
+            />
             <Button
               type="button"
               variant="ghost"
-              size="sm"
-              className="h-7 text-xs text-primary hover:text-primary"
-              onClick={() => setShowSecondMortgagee(true)}
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              onClick={() => { setMortgagee2(""); setShowSecondMortgagee(false); }}
+              title="Remove second mortgagee"
             >
-              <Plus className="h-3 w-3 mr-1" />
-              Add 2nd mortgage company
+              <XIcon className="h-3.5 w-3.5" />
             </Button>
-          )}
-          <p className="text-[11px] text-muted-foreground">
-            Each mortgagee gets its own Loss Draft entry with its own
-            monitored / not-monitored workflow.
-          </p>
-        </div>
-      )}
+          </div>
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs text-primary hover:text-primary"
+            onClick={() => setShowSecondMortgagee(true)}
+          >
+            <Plus className="h-3 w-3 mr-1" />
+            Add 2nd mortgage company
+          </Button>
+        )}
+        <p className="text-[11px] text-muted-foreground">
+          Each mortgagee gets its own Loss Draft entry with its own
+          monitored / not-monitored workflow.
+        </p>
+      </div>
 
-      <Button onClick={handleUpload} disabled={uploading || !frontFile || !claimId} className="w-full">
+      <Button onClick={handleUpload} disabled={uploading || !frontFile} className="w-full">
         {uploading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
         {uploading ? "Processing..." : skipAi ? "Upload for Manual Entry" : "Upload & Analyze"}
       </Button>
-      {!claimId && (
-        <p className="text-xs text-amber-400 text-center flex items-center justify-center gap-1 mt-1">
-          <AlertTriangle className="h-3 w-3" /> Select a claim above to enable upload
-        </p>
-      )}
     </div>
   );
 }
