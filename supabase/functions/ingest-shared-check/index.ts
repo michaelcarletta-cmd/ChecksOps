@@ -30,6 +30,9 @@ interface IngestPayload {
     property_address?: string | null;
     payment_classification?: string | null;
     payee_address?: string | null;
+    status?: string | null;
+    deposit_recommendation?: string | null;
+    ocr_status?: string | null;
   };
 }
 
@@ -121,6 +124,9 @@ Deno.serve(async (req) => {
       if (body.check.property_address !== undefined) updatePayload.property_address = body.check.property_address ?? null;
       if (body.check.payment_classification !== undefined) updatePayload.payment_classification = body.check.payment_classification ?? null;
       if (body.check.payee_address !== undefined) updatePayload.payee_address = body.check.payee_address ?? null;
+      if (body.check.status !== undefined) updatePayload.status = body.check.status ?? null;
+      if (body.check.deposit_recommendation !== undefined) updatePayload.deposit_recommendation = body.check.deposit_recommendation ?? null;
+      if (body.check.ocr_status !== undefined) updatePayload.ocr_status = body.check.ocr_status ?? null;
       const { error: updErr } = await supabase
         .from("check_intake_items")
         .update(updatePayload)
@@ -143,8 +149,9 @@ Deno.serve(async (req) => {
           property_address: body.check.property_address ?? null,
           payment_classification: body.check.payment_classification ?? null,
           payee_address: body.check.payee_address ?? null,
-          status: "uploaded",
-          ocr_status: "completed",
+          status: body.check.status ?? "uploaded",
+          deposit_recommendation: body.check.deposit_recommendation ?? null,
+          ocr_status: body.check.ocr_status ?? "completed",
           external_origin: {
             source_app: body.source_app,
             source_project_ref: body.source_project_ref,
