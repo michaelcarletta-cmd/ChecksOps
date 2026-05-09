@@ -408,6 +408,7 @@ export default function CheckCommandCenter() {
       (c.status === "needs_review" ||
         c.status === "manual_review_required" ||
         c.status === "endorsements_complete" ||
+        c.status === "uploaded" ||
         c.deposit_recommendation === "branch_deposit_recommended" ||
         c.ocr_status === "failed") && matchesSearch(c),
   );
