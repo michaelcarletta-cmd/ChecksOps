@@ -1273,65 +1273,58 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
       {/* Mortgagees on the check — supports up to two mortgage companies.
           Each one creates an independent Loss Draft tracking row that
           goes through its own monitored / not-monitored process. */}
-      {claimId && (
-        <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+      <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+        <div className="flex items-center gap-2">
+          <Building2 className="h-4 w-4 text-amber-400" />
+          <Label className="text-xs font-medium">Mortgage company on check (optional)</Label>
+        </div>
+        <Input
+          placeholder="1st mortgage company name (as listed on check)"
+          value={mortgagee1}
+          onChange={(e) => setMortgagee1(e.target.value)}
+          className="h-9"
+        />
+        {showSecondMortgagee ? (
           <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-amber-400" />
-            <Label className="text-xs font-medium">Mortgage company on check (optional)</Label>
-          </div>
-          <Input
-            placeholder="1st mortgage company name (as listed on check)"
-            value={mortgagee1}
-            onChange={(e) => setMortgagee1(e.target.value)}
-            className="h-9"
-          />
-          {showSecondMortgagee ? (
-            <div className="flex items-center gap-2">
-              <Input
-                placeholder="2nd mortgage company name"
-                value={mortgagee2}
-                onChange={(e) => setMortgagee2(e.target.value)}
-                className="h-9"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0"
-                onClick={() => { setMortgagee2(""); setShowSecondMortgagee(false); }}
-                title="Remove second mortgagee"
-              >
-                <XIcon className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          ) : (
+            <Input
+              placeholder="2nd mortgage company name"
+              value={mortgagee2}
+              onChange={(e) => setMortgagee2(e.target.value)}
+              className="h-9"
+            />
             <Button
               type="button"
               variant="ghost"
-              size="sm"
-              className="h-7 text-xs text-primary hover:text-primary"
-              onClick={() => setShowSecondMortgagee(true)}
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              onClick={() => { setMortgagee2(""); setShowSecondMortgagee(false); }}
+              title="Remove second mortgagee"
             >
-              <Plus className="h-3 w-3 mr-1" />
-              Add 2nd mortgage company
+              <XIcon className="h-3.5 w-3.5" />
             </Button>
-          )}
-          <p className="text-[11px] text-muted-foreground">
-            Each mortgagee gets its own Loss Draft entry with its own
-            monitored / not-monitored workflow.
-          </p>
-        </div>
-      )}
+          </div>
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs text-primary hover:text-primary"
+            onClick={() => setShowSecondMortgagee(true)}
+          >
+            <Plus className="h-3 w-3 mr-1" />
+            Add 2nd mortgage company
+          </Button>
+        )}
+        <p className="text-[11px] text-muted-foreground">
+          Each mortgagee gets its own Loss Draft entry with its own
+          monitored / not-monitored workflow.
+        </p>
+      </div>
 
-      <Button onClick={handleUpload} disabled={uploading || !frontFile || !claimId} className="w-full">
+      <Button onClick={handleUpload} disabled={uploading || !frontFile} className="w-full">
         {uploading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
         {uploading ? "Processing..." : skipAi ? "Upload for Manual Entry" : "Upload & Analyze"}
       </Button>
-      {!claimId && (
-        <p className="text-xs text-amber-400 text-center flex items-center justify-center gap-1 mt-1">
-          <AlertTriangle className="h-3 w-3" /> Select a claim above to enable upload
-        </p>
-      )}
     </div>
   );
 }
