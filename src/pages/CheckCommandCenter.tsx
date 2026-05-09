@@ -1141,14 +1141,6 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
       toast({ title: "Front image required", variant: "destructive" });
       return;
     }
-    if (!claimId) {
-      toast({
-        title: "Link to a claim first",
-        description: "Select which claim this check belongs to before uploading. Unlinked checks cannot be routed to Loss Draft or appear in a claim's history.",
-        variant: "destructive",
-      });
-      return;
-    }
     setUploading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
