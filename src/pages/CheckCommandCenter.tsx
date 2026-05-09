@@ -1266,51 +1266,9 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
         <Label>Back of Check</Label>
         <Input type="file" accept="image/*" onChange={(e) => setBackFile(e.target.files?.[0] ?? null)} />
       </div>
-      <div>
-        <Label>Link to Claim (optional)</Label>
-        <div className="relative">
-          <div className="flex items-center border rounded-md bg-background">
-            <Search className="h-4 w-4 ml-2 text-muted-foreground shrink-0" />
-            <Input
-              placeholder="Search by claim # or policyholder name..."
-              value={claimDropdownOpen ? claimSearch : (selectedClaim ? `${selectedClaim.claim_number ?? "—"} — ${selectedClaim.policyholder_name ?? "Unknown"}` : claimSearch)}
-              onChange={(e) => {
-                setClaimSearch(e.target.value);
-                setClaimDropdownOpen(true);
-                if (!e.target.value) setClaimId("");
-              }}
-              onFocus={() => setClaimDropdownOpen(true)}
-              onBlur={() => setTimeout(() => setClaimDropdownOpen(false), 200)}
-              className="border-0 focus-visible:ring-0 shadow-none"
-            />
-            {claimId && (
-              <Button variant="ghost" size="icon" className="h-7 w-7 mr-1 shrink-0" onClick={() => { setClaimId(""); setClaimSearch(""); }}>
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            )}
-          </div>
-          {claimDropdownOpen && claims.length > 0 && (
-            <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto rounded-md border bg-popover shadow-md">
-              {claims.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors cursor-pointer"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    setClaimId(c.id);
-                    setClaimSearch("");
-                    setClaimDropdownOpen(false);
-                  }}
-                >
-                  <span className="font-mono">{c.claim_number ?? "—"}</span>
-                  <span className="text-muted-foreground"> — {c.policyholder_name ?? "Unknown"}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Link to Claim is intentionally hidden — this product is sold as a
+          standalone check operations platform. When a tenant integrates an
+          external CRM, the claim-linking UI will be re-enabled here. */}
 
       {/* Mortgagees on the check — supports up to two mortgage companies.
           Each one creates an independent Loss Draft tracking row that
