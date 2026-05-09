@@ -119,14 +119,41 @@ export function CheckReviewQueue({
   const { data: reviewChecks = [], isLoading } = useQuery({
     queryKey: ["check-review-queue", tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // 1. Tenant's own checks
+      const { data: ownChecks, error } = await supabase
         .from("check_intake_items")
         .select("*, check_payees(*)")
         .eq("tenant_id", tenantId!)
         .not("status", "in", `(${ROUTED_STATUSES.join(",")})`)
         .order("created_at", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as ReviewCheck[];
+
+      // 2. Also include partner-shared checks (different tenant_id)
+      const { data: shareRows } = await supabase
+        .from("shared_checks")
+        .select("check_id")
+        .eq("target_tenant_id", tenantId!)
+        .is("revoked_at", null);
+      const sharedIds = (shareRows ?? []).map((r: any) => r.check_id);
+
+      let sharedChecks: any[] = [];
+      if (sharedIds.length > 0) {
+        const { data: sc } = await supabase
+          .from("check_intake_items")
+          .select("*, check_payees(*)")
+          .in("id", sharedIds)
+          .not("status", "in", `(${ROUTED_STATUSES.join(",")})`)
+          .order("created_at", { ascending: true });
+        sharedChecks = sc ?? [];
+      }
+
+      // Merge & deduplicate
+      const seen = new Set<string>();
+      return [...(ownChecks ?? []), ...sharedChecks].filter((c) => {
+        if (seen.has(c.id)) return false;
+        seen.add(c.id);
+        return true;
+      }) as ReviewCheck[];
     },
     enabled: !!tenantId,
     refetchInterval: 15000,
