@@ -19029,6 +19029,11 @@ export type Database = {
           user_id: string
         }[]
       }
+      vault_create_bridge_secret: { Args: { _secret: string }; Returns: string }
+      vault_update_bridge_secret: {
+        Args: { _secret: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role:
