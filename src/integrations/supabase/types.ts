@@ -18233,6 +18233,13 @@ export type Database = {
         Args: { p_name: string }
         Returns: string
       }
+      normalize_partner_check_status: {
+        Args: {
+          _check_stage: Database["public"]["Enums"]["check_stage"]
+          _status: string
+        }
+        Returns: string
+      }
       ocr_commit_results: {
         Args: {
           p_amount: number
