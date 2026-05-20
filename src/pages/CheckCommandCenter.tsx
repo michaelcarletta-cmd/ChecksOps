@@ -459,7 +459,8 @@ export default function CheckCommandCenter() {
       const linked = check.claim_id ? claimLookup.get(check.claim_id) : null;
       const claimNumber = linked?.claim_number || check.detected_claim_number || "Unlinked claim";
       const insuredPayee = check.check_payees?.find((p) => p.payee_type === "insured")?.payee_name;
-      const policyholderName = linked?.policyholder_name || insuredPayee || check.payee_line || "Unknown insured";
+      const parsedInsured = extractInsuredName(check.payee_line);
+      const policyholderName = linked?.policyholder_name || insuredPayee || parsedInsured || "Unknown insured";
       const key = `${claimNumber.trim().toLowerCase()}::${policyholderName.trim().toLowerCase()}`;
       const existing = groups.get(key);
 
