@@ -142,7 +142,32 @@ interface CheckItem {
   payment_classification?: string | null;
   payee_address?: string | null;
   check_payees?: CheckPayee[];
+  partner_status?: string | null;
+  partner_status_label?: string | null;
+  partner_status_updated_at?: string | null;
+  external_origin?: Record<string, unknown> | null;
 }
+
+/**
+ * For checks mirrored from a partner app (e.g. FreedomClaims), the local `status`
+ * column stays at `uploaded` because ChecksOps has not processed them internally.
+ * The partner's authoritative workflow state is mirrored into `partner_status`
+ * by the receive-check-status edge function. Use that value to bucket and label
+ * mirrored checks so users see the real Freedom-side state.
+ */
+const isMirroredCheck = (c: CheckItem) =>
+  !!c.external_origin && typeof c.external_origin === "object" &&
+  (c.external_origin as any).source_app === "freedom_crm";
+
+const getEffectiveStatus = (c: CheckItem): string =>
+  isMirroredCheck(c) && c.partner_status ? c.partner_status : c.status;
+
+const getEffectiveStatusLabel = (c: CheckItem): string => {
+  if (isMirroredCheck(c) && c.partner_status) {
+    return (c.partner_status_label || c.partner_status).replace(/_/g, " ");
+  }
+  return c.status.replace(/_/g, " ");
+};
 
 interface AuditEntry {
   id: string;
