@@ -279,6 +279,34 @@ Deno.serve(async (req) => {
       }, { onConflict: "check_id,source_tenant_id,target_tenant_id" });
     if (shareErr) throw shareErr;
 
+    if (!initialPartnerStatus && body.source_app === "freedom_crm" && body.source_project_ref) {
+      try {
+        const statusPullUrl = `https://${body.source_project_ref}.supabase.co/functions/v1/push-check-status`;
+        const pullResp = await fetch(statusPullUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-bridge-secret": expected,
+          },
+          body: JSON.stringify({ check_id: body.source_check_id }),
+        });
+
+        if (!pullResp.ok) {
+          const detail = await pullResp.text();
+          console.warn("ingest-shared-check status backfill request failed", {
+            status: pullResp.status,
+            source_check_id: body.source_check_id,
+            detail,
+          });
+        }
+      } catch (statusPullError) {
+        console.warn("ingest-shared-check status backfill request errored", {
+          source_check_id: body.source_check_id,
+          error: statusPullError instanceof Error ? statusPullError.message : String(statusPullError),
+        });
+      }
+    }
+
     return new Response(JSON.stringify({
       ok: true,
       check_id: checkId,
