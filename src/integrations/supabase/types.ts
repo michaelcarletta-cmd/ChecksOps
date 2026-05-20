@@ -1573,6 +1573,9 @@ export type Database = {
           endorsement_override: Json | null
           endorsement_packet_path: string | null
           external_origin: Json | null
+          freedom_status: string | null
+          freedom_status_label: string | null
+          freedom_status_updated_at: string | null
           front_image_path: string
           funds_type: string | null
           id: string
@@ -1619,6 +1622,9 @@ export type Database = {
           endorsement_override?: Json | null
           endorsement_packet_path?: string | null
           external_origin?: Json | null
+          freedom_status?: string | null
+          freedom_status_label?: string | null
+          freedom_status_updated_at?: string | null
           front_image_path: string
           funds_type?: string | null
           id?: string
@@ -1665,6 +1671,9 @@ export type Database = {
           endorsement_override?: Json | null
           endorsement_packet_path?: string | null
           external_origin?: Json | null
+          freedom_status?: string | null
+          freedom_status_label?: string | null
+          freedom_status_updated_at?: string | null
           front_image_path?: string
           funds_type?: string | null
           id?: string
