@@ -746,9 +746,6 @@ function DepositItemDetail({
               {checkData.account_number && (
                 <div><span className="text-muted-foreground">Account</span><span className="ml-2 font-mono">{checkData.account_number}</span></div>
               )}
-              {checkData.payment_classification && (
-                <div className="col-span-2"><span className="text-muted-foreground">Classification</span><span className="ml-2">{checkData.payment_classification}</span></div>
-              )}
               {checkData.funds_type && (
                 <div><span className="text-muted-foreground">Funds Type</span><span className="ml-2">{checkData.funds_type}</span></div>
               )}

@@ -38,6 +38,14 @@ interface IngestPayload {
     partner_status_label?: string | null;
     partner_status_updated_at?: string | null;
   };
+  payees?: Array<{
+    payee_name: string;
+    payee_type?: string | null;
+    endorsement_status?: string | null;
+    endorsed_at?: string | null;
+    contact_email?: string | null;
+    contact_phone?: string | null;
+  }>;
 }
 
 function humanizeStatus(key: string): string {
@@ -265,6 +273,32 @@ Deno.serve(async (req) => {
       if (insertErr) throw insertErr;
       checkId = newCheck.id;
     }
+
+    // Mirror payee endorsement state so partners can see who has signed
+    // and who still needs to. Source-of-truth is the upstream app.
+    if (Array.isArray(body.payees)) {
+      // Replace existing payees for this check with the latest snapshot.
+      await supabase.from("check_payees").delete().eq("check_id", checkId);
+      if (body.payees.length > 0) {
+        const rows = body.payees
+          .filter((p) => p && typeof p.payee_name === "string" && p.payee_name.trim().length > 0)
+          .map((p) => ({
+            check_id: checkId,
+            tenant_id: sourceTenantId,
+            payee_name: p.payee_name.trim(),
+            payee_type: p.payee_type ?? null,
+            endorsement_status: p.endorsement_status ?? "pending",
+            endorsed_at: p.endorsed_at ?? null,
+            contact_email: p.contact_email ?? null,
+            contact_phone: p.contact_phone ?? null,
+          }));
+        if (rows.length > 0) {
+          const { error: payeeErr } = await supabase.from("check_payees").insert(rows);
+          if (payeeErr) console.warn("ingest-shared-check payee mirror failed", payeeErr);
+        }
+      }
+    }
+
 
     // Create the share (idempotent via unique constraint)
     const { error: shareErr } = await supabase
