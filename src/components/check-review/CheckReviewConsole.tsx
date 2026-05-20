@@ -268,13 +268,16 @@ export function CheckReviewQueue({
       <div className="space-y-2 p-2">
         {groupedReviewChecks.map((group) => (
           <Fragment key={group.key}>
-            <div className="rounded-lg border bg-muted/30 px-3 py-2">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-foreground">{group.policyholderName}</p>
-                  <p className="text-xs text-muted-foreground">Claim #{group.claimNumber} · {group.checks.length} {group.checks.length === 1 ? "check" : "checks"}</p>
-                </div>
-                <span className="text-sm font-semibold tabular-nums text-foreground">${group.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+            <div className="px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">Claim Check File</Badge>
+                <span className="font-semibold text-foreground truncate">{group.policyholderName}</span>
+                <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span>{group.checks.length} {group.checks.length === 1 ? "check" : "checks"}</span>
+                <span>•</span>
+                <span>Awaiting routing</span>
               </div>
             </div>
             {group.checks.map((check) => (
