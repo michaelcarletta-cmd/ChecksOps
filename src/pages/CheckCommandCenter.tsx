@@ -142,7 +142,32 @@ interface CheckItem {
   payment_classification?: string | null;
   payee_address?: string | null;
   check_payees?: CheckPayee[];
+  partner_status?: string | null;
+  partner_status_label?: string | null;
+  partner_status_updated_at?: string | null;
+  external_origin?: Record<string, unknown> | null;
 }
+
+/**
+ * For checks mirrored from a partner app (e.g. FreedomClaims), the local `status`
+ * column stays at `uploaded` because ChecksOps has not processed them internally.
+ * The partner's authoritative workflow state is mirrored into `partner_status`
+ * by the receive-check-status edge function. Use that value to bucket and label
+ * mirrored checks so users see the real Freedom-side state.
+ */
+const isMirroredCheck = (c: CheckItem) =>
+  !!c.external_origin && typeof c.external_origin === "object" &&
+  (c.external_origin as any).source_app === "freedom_crm";
+
+const getEffectiveStatus = (c: CheckItem): string =>
+  isMirroredCheck(c) && c.partner_status ? c.partner_status : c.status;
+
+const getEffectiveStatusLabel = (c: CheckItem): string => {
+  if (isMirroredCheck(c) && c.partner_status) {
+    return (c.partner_status_label || c.partner_status).replace(/_/g, " ");
+  }
+  return c.status.replace(/_/g, " ");
+};
 
 interface AuditEntry {
   id: string;
@@ -393,27 +418,33 @@ export default function CheckCommandCenter() {
   }, [searchQuery, claimLookup]);
 
   const awaitingEndorsement = allChecks.filter(
-    (c) =>
-      (c.deposit_recommendation === "endorsements_pending" ||
-        c.status === "endorsements_in_progress") && matchesSearch(c),
+    (c) => {
+      const s = getEffectiveStatus(c);
+      return (c.deposit_recommendation === "endorsements_pending" ||
+        s === "endorsements_in_progress") && matchesSearch(c);
+    },
   );
   const readyForDeposit = allChecks.filter(
-    (c) =>
-      (c.status === "approved_for_deposit" ||
-        (c.deposit_recommendation === "ready_for_deposit" && c.status !== "deposited")) &&
-      matchesSearch(c),
+    (c) => {
+      const s = getEffectiveStatus(c);
+      return (s === "approved_for_deposit" ||
+        (c.deposit_recommendation === "ready_for_deposit" && s !== "deposited")) &&
+        matchesSearch(c);
+    },
   );
   const needsReview = allChecks.filter(
-    (c) =>
-      (c.status === "needs_review" ||
-        c.status === "manual_review_required" ||
-        c.status === "endorsements_complete" ||
-        c.status === "uploaded" ||
+    (c) => {
+      const s = getEffectiveStatus(c);
+      return (s === "needs_review" ||
+        s === "manual_review_required" ||
+        s === "endorsements_complete" ||
+        s === "uploaded" ||
         c.deposit_recommendation === "branch_deposit_recommended" ||
-        c.ocr_status === "failed") && matchesSearch(c),
+        c.ocr_status === "failed") && matchesSearch(c);
+    },
   );
-  const reissueRequested = allChecks.filter((c) => c.status === "reissue_requested" && matchesSearch(c));
-  const branchDeposit = allChecks.filter((c) => c.status === "branch_deposit_required" && matchesSearch(c));
+  const reissueRequested = allChecks.filter((c) => getEffectiveStatus(c) === "reissue_requested" && matchesSearch(c));
+  const branchDeposit = allChecks.filter((c) => getEffectiveStatus(c) === "branch_deposit_required" && matchesSearch(c));
 
   const filteredChecks =
     activeTab === "endorsements" ? awaitingEndorsement
@@ -714,7 +745,7 @@ export default function CheckCommandCenter() {
                                 <TableCell className="font-mono text-sm">#{check.check_number || "—"}</TableCell>
                                 <TableCell className="text-sm">{check.carrier_name || "—"}</TableCell>
                                 <TableCell className="text-right tabular-nums">{check.amount != null ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}</TableCell>
-                                <TableCell><Badge className={`text-[10px] ${statusColors[check.status] ?? ""}`}>{check.status.replace(/_/g, " ")}</Badge></TableCell>
+                                <TableCell><Badge className={`text-[10px] ${statusColors[getEffectiveStatus(check)] ?? ""}`}>{getEffectiveStatusLabel(check)}</Badge></TableCell>
                               </TableRow>
                             ))}
                           </Fragment>
@@ -767,7 +798,7 @@ export default function CheckCommandCenter() {
                                 <TableCell className="font-mono text-sm">#{check.check_number || "—"}</TableCell>
                                 <TableCell className="text-sm">{check.carrier_name || "—"}</TableCell>
                                 <TableCell className="text-right tabular-nums">{check.amount != null ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}</TableCell>
-                                <TableCell><Badge className={`text-[10px] ${statusColors[check.status] ?? ""}`}>{check.status.replace(/_/g, " ")}</Badge></TableCell>
+                                <TableCell><Badge className={`text-[10px] ${statusColors[getEffectiveStatus(check)] ?? ""}`}>{getEffectiveStatusLabel(check)}</Badge></TableCell>
                               </TableRow>
                             ))}
                           </Fragment>
@@ -937,8 +968,8 @@ export default function CheckCommandCenter() {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <Badge className={`text-[10px] ${statusColors[check.status] ?? ""}`}>
-                                  {check.status.replace(/_/g, " ")}
+                                <Badge className={`text-[10px] ${statusColors[getEffectiveStatus(check)] ?? ""}`}>
+                                  {getEffectiveStatusLabel(check)}
                                 </Badge>
                               </TableCell>
                               <TableCell>
