@@ -38,6 +38,14 @@ interface IngestPayload {
     partner_status_label?: string | null;
     partner_status_updated_at?: string | null;
   };
+  payees?: Array<{
+    payee_name: string;
+    payee_type?: string | null;
+    endorsement_status?: string | null;
+    endorsed_at?: string | null;
+    contact_email?: string | null;
+    contact_phone?: string | null;
+  }>;
 }
 
 function humanizeStatus(key: string): string {
