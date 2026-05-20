@@ -418,27 +418,33 @@ export default function CheckCommandCenter() {
   }, [searchQuery, claimLookup]);
 
   const awaitingEndorsement = allChecks.filter(
-    (c) =>
-      (c.deposit_recommendation === "endorsements_pending" ||
-        c.status === "endorsements_in_progress") && matchesSearch(c),
+    (c) => {
+      const s = getEffectiveStatus(c);
+      return (c.deposit_recommendation === "endorsements_pending" ||
+        s === "endorsements_in_progress") && matchesSearch(c);
+    },
   );
   const readyForDeposit = allChecks.filter(
-    (c) =>
-      (c.status === "approved_for_deposit" ||
-        (c.deposit_recommendation === "ready_for_deposit" && c.status !== "deposited")) &&
-      matchesSearch(c),
+    (c) => {
+      const s = getEffectiveStatus(c);
+      return (s === "approved_for_deposit" ||
+        (c.deposit_recommendation === "ready_for_deposit" && s !== "deposited")) &&
+        matchesSearch(c);
+    },
   );
   const needsReview = allChecks.filter(
-    (c) =>
-      (c.status === "needs_review" ||
-        c.status === "manual_review_required" ||
-        c.status === "endorsements_complete" ||
-        c.status === "uploaded" ||
+    (c) => {
+      const s = getEffectiveStatus(c);
+      return (s === "needs_review" ||
+        s === "manual_review_required" ||
+        s === "endorsements_complete" ||
+        s === "uploaded" ||
         c.deposit_recommendation === "branch_deposit_recommended" ||
-        c.ocr_status === "failed") && matchesSearch(c),
+        c.ocr_status === "failed") && matchesSearch(c);
+    },
   );
-  const reissueRequested = allChecks.filter((c) => c.status === "reissue_requested" && matchesSearch(c));
-  const branchDeposit = allChecks.filter((c) => c.status === "branch_deposit_required" && matchesSearch(c));
+  const reissueRequested = allChecks.filter((c) => getEffectiveStatus(c) === "reissue_requested" && matchesSearch(c));
+  const branchDeposit = allChecks.filter((c) => getEffectiveStatus(c) === "branch_deposit_required" && matchesSearch(c));
 
   const filteredChecks =
     activeTab === "endorsements" ? awaitingEndorsement
