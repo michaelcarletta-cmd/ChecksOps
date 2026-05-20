@@ -2332,14 +2332,6 @@ function CheckDetailPanel({
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
               <EditableField
-                label="Payment Classification"
-                checkId={checkId}
-                field="payment_classification"
-                value={check.payment_classification ?? null}
-                readOnly={isSharedView}
-                onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
-              />
-              <EditableField
                 label="Payee Address"
                 checkId={checkId}
                 field="payee_address"
