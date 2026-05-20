@@ -798,7 +798,7 @@ export default function CheckCommandCenter() {
                                 <TableCell className="font-mono text-sm">#{check.check_number || "—"}</TableCell>
                                 <TableCell className="text-sm">{check.carrier_name || "—"}</TableCell>
                                 <TableCell className="text-right tabular-nums">{check.amount != null ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}</TableCell>
-                                <TableCell><Badge className={`text-[10px] ${statusColors[check.status] ?? ""}`}>{check.status.replace(/_/g, " ")}</Badge></TableCell>
+                                <TableCell><Badge className={`text-[10px] ${statusColors[getEffectiveStatus(check)] ?? ""}`}>{getEffectiveStatusLabel(check)}</Badge></TableCell>
                               </TableRow>
                             ))}
                           </Fragment>
