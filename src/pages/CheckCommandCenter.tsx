@@ -968,8 +968,8 @@ export default function CheckCommandCenter() {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <Badge className={`text-[10px] ${statusColors[check.status] ?? ""}`}>
-                                  {check.status.replace(/_/g, " ")}
+                                <Badge className={`text-[10px] ${statusColors[getEffectiveStatus(check)] ?? ""}`}>
+                                  {getEffectiveStatusLabel(check)}
                                 </Badge>
                               </TableCell>
                               <TableCell>
