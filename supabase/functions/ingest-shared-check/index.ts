@@ -31,8 +31,100 @@ interface IngestPayload {
     payment_classification?: string | null;
     payee_address?: string | null;
     status?: string | null;
+    check_stage?: string | null;
     deposit_recommendation?: string | null;
     ocr_status?: string | null;
+    partner_status?: string | null;
+    partner_status_label?: string | null;
+    partner_status_updated_at?: string | null;
+  };
+}
+
+function humanizeStatus(key: string): string {
+  return key
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function derivePartnerStatus(check: IngestPayload["check"]): {
+  partner_status: string;
+  partner_status_label: string;
+  partner_status_updated_at: string;
+} | null {
+  const explicitStatus = check.partner_status?.trim();
+  if (explicitStatus) {
+    return {
+      partner_status: explicitStatus,
+      partner_status_label: check.partner_status_label?.trim() || humanizeStatus(explicitStatus),
+      partner_status_updated_at: check.partner_status_updated_at ?? new Date().toISOString(),
+    };
+  }
+
+  const stage = (check.check_stage ?? "").trim().toLowerCase();
+  const status = (check.status ?? "").trim().toLowerCase();
+  const recommendation = (check.deposit_recommendation ?? "").trim().toLowerCase();
+
+  if (stage === "endorsing") {
+    return {
+      partner_status: "endorsements_in_progress",
+      partner_status_label: "Endorsements In Progress",
+      partner_status_updated_at: new Date().toISOString(),
+    };
+  }
+
+  if (stage === "ready_for_deposit") {
+    const normalized = status === "branch_deposit_required" || recommendation === "branch_deposit_recommended"
+      ? "branch_deposit_required"
+      : "approved_for_deposit";
+    return {
+      partner_status: normalized,
+      partner_status_label: humanizeStatus(normalized),
+      partner_status_updated_at: new Date().toISOString(),
+    };
+  }
+
+  if (stage === "loss_draft") {
+    return {
+      partner_status: "loss_draft_required",
+      partner_status_label: "Loss Draft Required",
+      partner_status_updated_at: new Date().toISOString(),
+    };
+  }
+
+  if (stage === "deposited") {
+    return {
+      partner_status: "deposited",
+      partner_status_label: "Deposited",
+      partner_status_updated_at: new Date().toISOString(),
+    };
+  }
+
+  const normalizedStatus = [
+    "endorsements_in_progress",
+    "approved_for_deposit",
+    "branch_deposit_required",
+    "loss_draft_required",
+    "deposited",
+    "manual_review_required",
+    "endorsements_complete",
+    "needs_review",
+    "reissue_requested",
+  ].includes(status)
+    ? status
+    : recommendation === "endorsements_pending"
+      ? "endorsements_in_progress"
+      : recommendation === "ready_for_deposit"
+        ? "approved_for_deposit"
+        : recommendation === "branch_deposit_recommended"
+          ? "branch_deposit_required"
+          : null;
+
+  if (!normalizedStatus) return null;
+
+  return {
+    partner_status: normalizedStatus,
+    partner_status_label: humanizeStatus(normalizedStatus),
+    partner_status_updated_at: new Date().toISOString(),
   };
 }
 
@@ -107,6 +199,8 @@ Deno.serve(async (req) => {
       .eq("external_origin->>source_check_id", body.source_check_id)
       .maybeSingle();
 
+    const initialPartnerStatus = derivePartnerStatus(body.check);
+
     let checkId: string;
     if (existingCheck) {
       checkId = existingCheck.id;
@@ -125,8 +219,10 @@ Deno.serve(async (req) => {
       if (body.check.payment_classification !== undefined) updatePayload.payment_classification = body.check.payment_classification ?? null;
       if (body.check.payee_address !== undefined) updatePayload.payee_address = body.check.payee_address ?? null;
       if (body.check.status !== undefined) updatePayload.status = body.check.status ?? null;
+      if (body.check.check_stage !== undefined) updatePayload.check_stage = body.check.check_stage ?? "review";
       if (body.check.deposit_recommendation !== undefined) updatePayload.deposit_recommendation = body.check.deposit_recommendation ?? null;
       if (body.check.ocr_status !== undefined) updatePayload.ocr_status = body.check.ocr_status ?? null;
+      if (initialPartnerStatus) Object.assign(updatePayload, initialPartnerStatus);
       const { error: updErr } = await supabase
         .from("check_intake_items")
         .update(updatePayload)
@@ -150,8 +246,10 @@ Deno.serve(async (req) => {
           payment_classification: body.check.payment_classification ?? null,
           payee_address: body.check.payee_address ?? null,
           status: body.check.status ?? "uploaded",
+          check_stage: body.check.check_stage ?? "review",
           deposit_recommendation: body.check.deposit_recommendation ?? null,
           ocr_status: body.check.ocr_status ?? "completed",
+          ...(initialPartnerStatus ?? {}),
           external_origin: {
             source_app: body.source_app,
             source_project_ref: body.source_project_ref,
