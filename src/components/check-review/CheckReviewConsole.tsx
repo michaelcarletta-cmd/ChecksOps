@@ -86,6 +86,26 @@ const isInReviewQueue = (check: ReviewCheck): boolean => {
   );
 };
 
+/**
+ * Extract a clean insured/policyholder name from a raw check payee_line.
+ * Filters out co-payees like banks, mortgage companies, public adjusters,
+ * and strips trailing address tokens.
+ */
+const extractInsuredName = (payeeLine: string | null | undefined): string | null => {
+  if (!payeeLine) return null;
+  let line = payeeLine.replace(/^\s*(pay\s+to\s+the\s+order\s+of[:\s]*|of[:\s]+)/i, "").trim();
+  // Cut off address: anything from the first digit onward (street numbers, zip)
+  const digitIdx = line.search(/\d/);
+  if (digitIdx > 0) line = line.slice(0, digitIdx).trim();
+  // Split co-payees
+  const parts = line.split(/\s*(?:&|\band\b|,|\/)\s*/i).map((p) => p.trim()).filter(Boolean);
+  const EXCLUDE = /freedom\s+adjust|adjuster|bank|mortgage|loan\s*depot|loandepot|isaoa|atima|its\s+successors|n\.?a\.?$|llc$|inc\.?$|corp|company|servicing|trust|holdings|public\s+adjust/i;
+  const insured = parts.find((p) => !EXCLUDE.test(p)) || parts[0] || null;
+  if (!insured) return null;
+  // Title case-ish: keep as-is but collapse whitespace
+  return insured.replace(/\s+/g, " ").trim();
+};
+
 const DEPOSIT_PATHS = [
   { value: "endorsements_in_progress", label: "Send to Endorsing", icon: Users, color: "text-amber-400" },
   { value: "loss_draft_required", label: "Loss Draft (Mortgage)", icon: Building2, color: "text-purple-400" },
