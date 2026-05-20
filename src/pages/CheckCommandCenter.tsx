@@ -193,6 +193,21 @@ interface CheckGroup {
   latestCreatedAt: string;
 }
 
+/**
+ * Extract a clean insured/policyholder name from a raw check payee_line.
+ * Filters out banks, mortgage companies, public adjusters, and trailing addresses.
+ */
+function extractInsuredName(payeeLine: string | null | undefined): string | null {
+  if (!payeeLine) return null;
+  let line = payeeLine.replace(/^\s*(pay\s+to\s+the\s+order\s+of[:\s]*|pay\s+to[:\s]+|of[:\s]+)/i, "").trim();
+  const digitIdx = line.search(/\d/);
+  if (digitIdx > 0) line = line.slice(0, digitIdx).trim();
+  const parts = line.split(/\s*(?:&|\band\b|,|\/)\s*/i).map((p) => p.trim()).filter(Boolean);
+  const EXCLUDE = /freedom\s+adjust|adjuster|bank|mortgage|loan\s*depot|loandepot|isaoa|atima|its\s+successors|n\.?a\.?$|llc$|inc\.?$|corp|company|servicing|trust|holdings|public\s+adjust/i;
+  const insured = parts.find((p) => !EXCLUDE.test(p)) || parts[0] || null;
+  return insured ? insured.replace(/\s+/g, " ").trim() : null;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Config maps                                                        */
 /* ------------------------------------------------------------------ */
