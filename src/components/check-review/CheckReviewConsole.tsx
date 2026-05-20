@@ -52,6 +52,9 @@ interface ReviewCheck {
   detected_claim_number: string | null;
   claim_id: string | null;
   created_at: string;
+  partner_status?: string | null;
+  partner_status_label?: string | null;
+  external_origin?: Record<string, unknown> | null;
   check_payees?: CheckPayee[];
 }
 
@@ -64,17 +67,24 @@ interface ReviewCheckGroup {
   earliestCreatedAt: string;
 }
 
-const ROUTED_STATUSES = [
-  "endorsements_in_progress",
-  "endorsements_complete",
-  "approved_for_deposit",
-  "branch_deposit_required",
-  "loss_draft_required",
-  "reissue_requested",
-  "ready",
-  "deposited",
-  "voided",
-];
+const isMirroredCheck = (check: ReviewCheck) =>
+  !!check.external_origin && typeof check.external_origin === "object" &&
+  (check.external_origin as any).source_app === "freedom_crm";
+
+const getEffectiveStatus = (check: ReviewCheck): string =>
+  isMirroredCheck(check) && check.partner_status ? check.partner_status : check.status;
+
+const isInReviewQueue = (check: ReviewCheck): boolean => {
+  const effectiveStatus = getEffectiveStatus(check);
+  return (
+    effectiveStatus === "needs_review" ||
+    effectiveStatus === "manual_review_required" ||
+    effectiveStatus === "endorsements_complete" ||
+    effectiveStatus === "uploaded" ||
+    check.deposit_recommendation === "branch_deposit_recommended" ||
+    check.ocr_status === "failed"
+  );
+};
 
 const DEPOSIT_PATHS = [
   { value: "endorsements_in_progress", label: "Send to Endorsing", icon: Users, color: "text-amber-400" },
@@ -124,7 +134,6 @@ export function CheckReviewQueue({
         .from("check_intake_items")
         .select("*, check_payees(*)")
         .eq("tenant_id", tenantId!)
-        .not("status", "in", `(${ROUTED_STATUSES.join(",")})`)
         .order("created_at", { ascending: true });
       if (error) throw error;
 
@@ -142,18 +151,19 @@ export function CheckReviewQueue({
           .from("check_intake_items")
           .select("*, check_payees(*)")
           .in("id", sharedIds)
-          .not("status", "in", `(${ROUTED_STATUSES.join(",")})`)
           .order("created_at", { ascending: true });
         sharedChecks = sc ?? [];
       }
 
       // Merge & deduplicate
       const seen = new Set<string>();
-      return [...(ownChecks ?? []), ...sharedChecks].filter((c) => {
-        if (seen.has(c.id)) return false;
-        seen.add(c.id);
-        return true;
-      }) as ReviewCheck[];
+      return [...(ownChecks ?? []), ...sharedChecks]
+        .filter((c) => {
+          if (seen.has(c.id)) return false;
+          seen.add(c.id);
+          return true;
+        })
+        .filter((c) => isInReviewQueue(c as ReviewCheck)) as ReviewCheck[];
     },
     enabled: !!tenantId,
     refetchInterval: 15000,
