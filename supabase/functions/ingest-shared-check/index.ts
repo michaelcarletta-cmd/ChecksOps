@@ -286,6 +286,7 @@ Deno.serve(async (req) => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: "Bearer bridge-status-backfill",
             "x-bridge-secret": expected,
           },
           body: JSON.stringify({ check_id: body.source_check_id }),
