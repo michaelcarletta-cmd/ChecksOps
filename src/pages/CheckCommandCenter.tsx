@@ -1044,16 +1044,28 @@ export default function CheckCommandCenter() {
               </CardContent>
             </Card>
 
-            {/* Detail panel — collapsed (20%) or expanded (60%) */}
+            {/* Detail panel — hidden on mobile when no check selected */}
             <div
-              className="transition-all duration-300 ease-in-out flex-shrink-0 overflow-hidden"
-              style={{ width: selectedCheck ? "60%" : "20%" }}
+              className={`transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${isMobile && !selectedCheck ? "hidden" : ""}`}
+              style={!isMobile ? { width: selectedCheck ? "60%" : "20%" } : undefined}
             >
               {selectedCheck ? (
-                <CheckDetailPanel
-                  checkId={selectedCheck}
-                  onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
-                />
+                <div className="space-y-2">
+                  {isMobile && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1 -ml-2"
+                      onClick={() => setSelectedCheck(null)}
+                    >
+                      <ArrowLeft className="h-4 w-4" /> Back to checks
+                    </Button>
+                  )}
+                  <CheckDetailPanel
+                    checkId={selectedCheck}
+                    onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+                  />
+                </div>
               ) : (
                 <Card className="flex flex-col items-center justify-center h-full">
                   <div className="text-center text-muted-foreground">
