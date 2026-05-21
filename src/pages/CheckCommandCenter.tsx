@@ -2956,9 +2956,9 @@ function EndorsementPacketCard({ checkId, packetPath }: { checkId: string; packe
 
 function DetailRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
-    <div className="flex justify-between gap-2 text-sm">
+    <div className="flex justify-between gap-3 text-sm">
       <span className="text-muted-foreground shrink-0">{label}</span>
-      <span className="font-medium text-right break-words min-w-0">{value ?? "—"}</span>
+      <span className="font-medium text-right break-words min-w-0 flex-1">{value ?? "—"}</span>
     </div>
   );
 }
