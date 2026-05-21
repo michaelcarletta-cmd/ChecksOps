@@ -1111,7 +1111,7 @@ function ClaimCheckFileHeader({ group, compact = false }: { group: CheckGroup; c
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">Claim Check File</Badge>
-          <span className="font-semibold text-foreground truncate">{group.policyholderName}</span>
+          <span className="font-semibold text-foreground break-words leading-tight">{group.policyholderName}</span>
           <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
         </div>
         {!compact && (
