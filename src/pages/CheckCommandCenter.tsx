@@ -541,7 +541,7 @@ export default function CheckCommandCenter() {
             {isWhiteLabel ? "Manage checks, endorsements & deposits" : "Insurance check intake, review & deposit readiness"}
           </p>
         </div>
-        <div className="flex items-center gap-1 md:gap-2">
+        <div className="flex flex-wrap items-center gap-1 md:gap-2 w-full sm:w-auto">
           {user?.email === "mcarletta@freedomadj.com" && (
             <a
               href="/admin/tenants"
