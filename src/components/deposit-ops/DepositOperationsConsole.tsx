@@ -25,6 +25,7 @@ import {
 import { format } from "date-fns";
 import { CheckImagesViewer } from "@/components/checks/CheckImagesViewer";
 import { Eye } from "lucide-react";
+import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
