@@ -782,6 +782,17 @@ function DepositItemDetail({
         onClose={() => setImageViewerOpen(false)}
       />
 
+      {/* Disbursement (Actum ACH) */}
+      {depositItem && (
+        <DisbursementConsole
+          depositItemId={depositItem.id}
+          checkIntakeItemId={depositItem.check_id ?? undefined}
+          checkAmount={Number(depositItem.amount ?? 0)}
+          checkNumber={depositItem.check_number ?? undefined}
+          carrierName={depositItem.carrier_name ?? undefined}
+        />
+      )}
+
       {/* Attachment uploads */}
       <Card>
         <CardHeader className="pb-2">
