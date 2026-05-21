@@ -593,7 +593,7 @@ export default function CheckCommandCenter() {
           </Sheet>
           <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
             <DialogTrigger asChild>
-              <Button><Upload className="h-4 w-4 mr-2" />Upload Check</Button>
+              <Button className="whitespace-nowrap"><Upload className="h-4 w-4 mr-2" /><span className="hidden sm:inline">Upload Check</span><span className="sm:hidden">Upload</span></Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
               <DialogHeader><DialogTitle>Upload Insurance Check</DialogTitle></DialogHeader>
