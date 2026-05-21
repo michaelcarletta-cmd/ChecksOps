@@ -2245,28 +2245,30 @@ function CheckDetailPanel({
       </CardHeader>
       <CardContent className="p-0">
         <Tabs value={detailTab} onValueChange={setDetailTab}>
-          <TabsList className="w-full rounded-none">
-            <TabsTrigger value="overview" className="flex-1 text-xs">Overview</TabsTrigger>
-            <TabsTrigger value="endorsements" className="flex-1 text-xs">
-              Endorsements
-              {pendingEndorsements.length > 0 && (
-                <span className="ml-1 bg-amber-500/30 text-amber-400 rounded-full text-[9px] px-1.5">
-                  {pendingEndorsements.length}
-                </span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="payees" className="flex-1 text-xs">
-              Payees ({check.check_payees?.length ?? 0})
-            </TabsTrigger>
-            <TabsTrigger value="eligibility" className="flex-1 text-xs">Eligibility</TabsTrigger>
-            <TabsTrigger value="discussion" className="flex-1 text-xs gap-1">
-              <MessageSquare className="h-3 w-3" /> Discussion
-            </TabsTrigger>
-            <TabsTrigger value="audit" className="flex-1 text-xs">Audit</TabsTrigger>
-            <TabsTrigger value="partners" className="flex-1 text-xs gap-1">
-              <Share2 className="h-3 w-3" /> Partners
-            </TabsTrigger>
-          </TabsList>
+          <div className="w-full overflow-x-auto scrollbar-hide">
+            <TabsList className="w-max min-w-full rounded-none flex-nowrap justify-start">
+              <TabsTrigger value="overview" className="text-xs whitespace-nowrap px-2 sm:px-3">Overview</TabsTrigger>
+              <TabsTrigger value="endorsements" className="text-xs whitespace-nowrap px-2 sm:px-3">
+                Endorsements
+                {pendingEndorsements.length > 0 && (
+                  <span className="ml-1 bg-amber-500/30 text-amber-400 rounded-full text-[9px] px-1.5">
+                    {pendingEndorsements.length}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="payees" className="text-xs whitespace-nowrap px-2 sm:px-3">
+                Payees ({check.check_payees?.length ?? 0})
+              </TabsTrigger>
+              <TabsTrigger value="eligibility" className="text-xs whitespace-nowrap px-2 sm:px-3">Eligibility</TabsTrigger>
+              <TabsTrigger value="discussion" className="text-xs whitespace-nowrap px-2 sm:px-3 gap-1">
+                <MessageSquare className="h-3 w-3" /> Discussion
+              </TabsTrigger>
+              <TabsTrigger value="audit" className="text-xs whitespace-nowrap px-2 sm:px-3">Audit</TabsTrigger>
+              <TabsTrigger value="partners" className="text-xs whitespace-nowrap px-2 sm:px-3 gap-1">
+                <Share2 className="h-3 w-3" /> Partners
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <ScrollArea className="h-[calc(100vh-520px)]">
             <TabsContent value="overview" className="p-4 space-y-3 mt-0">
