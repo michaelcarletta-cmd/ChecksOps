@@ -23,8 +23,9 @@ import {
   Send, Eye, Users, Building2, Shield, ChevronRight,
   RefreshCw, Banknote, ClipboardCheck, RotateCcw, Printer, Landmark, Trash2, Search,
   Download, FileImage, Undo2, HelpCircle, X as XIcon, Loader2 as Loader2Icon,
-  Sparkles, MessageSquare,
+  Sparkles, MessageSquare, ArrowLeft,
 } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { toast as sonnerToast } from "sonner";
 import { Pencil, Check as CheckIcon, X, Plus } from "lucide-react";
@@ -263,6 +264,7 @@ export default function CheckCommandCenter() {
   const { user } = useAuth();
   const { tenantId, isWhiteLabel, applyFilter } = useTenantFilter();
   const { isAdmin } = usePermissions();
+  const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState("endorsements");
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -531,15 +533,15 @@ export default function CheckCommandCenter() {
   });
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
+    <div className="space-y-4 max-w-full overflow-x-hidden">
+      <div className="flex flex-wrap items-start sm:items-center justify-between gap-2">
+        <div className="min-w-0">
           <h1 className="text-xl md:text-2xl font-bold tracking-tight">ChecksOps</h1>
           <p className="text-sm text-muted-foreground">
             {isWhiteLabel ? "Manage checks, endorsements & deposits" : "Insurance check intake, review & deposit readiness"}
           </p>
         </div>
-        <div className="flex items-center gap-1 md:gap-2">
+        <div className="flex flex-wrap items-center gap-1 md:gap-2 w-full sm:w-auto">
           {user?.email === "mcarletta@freedomadj.com" && (
             <a
               href="/admin/tenants"
@@ -591,7 +593,7 @@ export default function CheckCommandCenter() {
           </Sheet>
           <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
             <DialogTrigger asChild>
-              <Button><Upload className="h-4 w-4 mr-2" />Upload Check</Button>
+              <Button className="whitespace-nowrap"><Upload className="h-4 w-4 mr-2" /><span className="hidden sm:inline">Upload Check</span><span className="sm:hidden">Upload</span></Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
               <DialogHeader><DialogTitle>Upload Insurance Check</DialogTitle></DialogHeader>
@@ -650,6 +652,8 @@ export default function CheckCommandCenter() {
                 key={tab.key}
                 onClick={() => { setActiveTab(tab.key); setSelectedCheck(null); setReviewCheckId(null); }}
                 className={`relative flex flex-col items-center gap-1.5 rounded-xl p-4 transition-all duration-200 bg-gradient-to-br ${tab.gradient} border cursor-pointer ${
+                  tab.key === "messages" ? "col-span-2 sm:col-span-1" : ""
+                } ${
                   isActive
                     ? `border-transparent ring-2 ${tab.ring} shadow-lg scale-[1.02]`
                     : "border-border/50 hover:border-border hover:shadow-md hover:scale-[1.01]"
@@ -888,11 +892,11 @@ export default function CheckCommandCenter() {
 
         {/* All other tabs — only render the active one */}
         {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "manager" && activeTab !== "reissue" && activeTab !== "branch" && activeTab !== "messages" && activeTab !== "partners" && (
-          <div className="mt-3 flex gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
-            {/* Check list — grows when no check selected */}
+          <div className="mt-3 flex flex-col md:flex-row gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
+            {/* Check list — hidden on mobile when a check is selected */}
             <Card
-              className="overflow-hidden transition-all duration-300 ease-in-out flex-shrink-0"
-              style={{ width: selectedCheck ? "40%" : "80%" }}
+              className={`overflow-hidden transition-all duration-300 ease-in-out md:flex-shrink-0 w-full ${isMobile && selectedCheck ? "hidden" : ""}`}
+              style={!isMobile ? { width: selectedCheck ? "40%" : "80%" } : undefined}
             >
               <CardContent className="p-0 h-full">
                 <div className="overflow-x-auto h-full">
@@ -946,12 +950,12 @@ export default function CheckCommandCenter() {
                                   {isShared && <SharedChecksBadge sourceTenantName={sourceTenantName} />}
                                 </div>
                               </TableCell>
-                              <TableCell className="text-sm max-w-[180px]">
+                              <TableCell className="text-sm md:max-w-[180px]">
                                 <div className="flex flex-col gap-0.5">
-                                  <span className="truncate">{check.carrier_name || "Pending OCR"}</span>
+                                  <span className="break-words md:truncate leading-tight">{check.carrier_name || "Pending OCR"}</span>
                                   <CheckValidityBadge issueDate={check.issue_date} hideWhenSafe />
                                   {check.property_address && (
-                                    <span className="text-[10px] text-muted-foreground truncate" title={check.property_address}>
+                                    <span className="text-[10px] text-muted-foreground break-words md:truncate leading-tight" title={check.property_address}>
                                       📍 {check.property_address}
                                     </span>
                                   )}
@@ -1040,16 +1044,28 @@ export default function CheckCommandCenter() {
               </CardContent>
             </Card>
 
-            {/* Detail panel — collapsed (20%) or expanded (60%) */}
+            {/* Detail panel — hidden on mobile when no check selected */}
             <div
-              className="transition-all duration-300 ease-in-out flex-shrink-0 overflow-hidden"
-              style={{ width: selectedCheck ? "60%" : "20%" }}
+              className={`transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${isMobile && !selectedCheck ? "hidden" : ""}`}
+              style={!isMobile ? { width: selectedCheck ? "60%" : "20%" } : undefined}
             >
               {selectedCheck ? (
-                <CheckDetailPanel
-                  checkId={selectedCheck}
-                  onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
-                />
+                <div className="space-y-2">
+                  {isMobile && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1 -ml-2"
+                      onClick={() => setSelectedCheck(null)}
+                    >
+                      <ArrowLeft className="h-4 w-4" /> Back to checks
+                    </Button>
+                  )}
+                  <CheckDetailPanel
+                    checkId={selectedCheck}
+                    onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+                  />
+                </div>
               ) : (
                 <Card className="flex flex-col items-center justify-center h-full">
                   <div className="text-center text-muted-foreground">
@@ -1095,7 +1111,7 @@ function ClaimCheckFileHeader({ group, compact = false }: { group: CheckGroup; c
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">Claim Check File</Badge>
-          <span className="font-semibold text-foreground truncate">{group.policyholderName}</span>
+          <span className="font-semibold text-foreground break-words leading-tight">{group.policyholderName}</span>
           <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
         </div>
         {!compact && (
@@ -2229,28 +2245,30 @@ function CheckDetailPanel({
       </CardHeader>
       <CardContent className="p-0">
         <Tabs value={detailTab} onValueChange={setDetailTab}>
-          <TabsList className="w-full rounded-none">
-            <TabsTrigger value="overview" className="flex-1 text-xs">Overview</TabsTrigger>
-            <TabsTrigger value="endorsements" className="flex-1 text-xs">
-              Endorsements
-              {pendingEndorsements.length > 0 && (
-                <span className="ml-1 bg-amber-500/30 text-amber-400 rounded-full text-[9px] px-1.5">
-                  {pendingEndorsements.length}
-                </span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="payees" className="flex-1 text-xs">
-              Payees ({check.check_payees?.length ?? 0})
-            </TabsTrigger>
-            <TabsTrigger value="eligibility" className="flex-1 text-xs">Eligibility</TabsTrigger>
-            <TabsTrigger value="discussion" className="flex-1 text-xs gap-1">
-              <MessageSquare className="h-3 w-3" /> Discussion
-            </TabsTrigger>
-            <TabsTrigger value="audit" className="flex-1 text-xs">Audit</TabsTrigger>
-            <TabsTrigger value="partners" className="flex-1 text-xs gap-1">
-              <Share2 className="h-3 w-3" /> Partners
-            </TabsTrigger>
-          </TabsList>
+          <div className="w-full overflow-x-auto scrollbar-hide">
+            <TabsList className="w-max min-w-full rounded-none flex-nowrap justify-start">
+              <TabsTrigger value="overview" className="text-xs whitespace-nowrap px-2 sm:px-3">Overview</TabsTrigger>
+              <TabsTrigger value="endorsements" className="text-xs whitespace-nowrap px-2 sm:px-3">
+                Endorsements
+                {pendingEndorsements.length > 0 && (
+                  <span className="ml-1 bg-amber-500/30 text-amber-400 rounded-full text-[9px] px-1.5">
+                    {pendingEndorsements.length}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="payees" className="text-xs whitespace-nowrap px-2 sm:px-3">
+                Payees ({check.check_payees?.length ?? 0})
+              </TabsTrigger>
+              <TabsTrigger value="eligibility" className="text-xs whitespace-nowrap px-2 sm:px-3">Eligibility</TabsTrigger>
+              <TabsTrigger value="discussion" className="text-xs whitespace-nowrap px-2 sm:px-3 gap-1">
+                <MessageSquare className="h-3 w-3" /> Discussion
+              </TabsTrigger>
+              <TabsTrigger value="audit" className="text-xs whitespace-nowrap px-2 sm:px-3">Audit</TabsTrigger>
+              <TabsTrigger value="partners" className="text-xs whitespace-nowrap px-2 sm:px-3 gap-1">
+                <Share2 className="h-3 w-3" /> Partners
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <ScrollArea className="h-[calc(100vh-520px)]">
             <TabsContent value="overview" className="p-4 space-y-3 mt-0">
@@ -2938,9 +2956,9 @@ function EndorsementPacketCard({ checkId, packetPath }: { checkId: string; packe
 
 function DetailRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
-    <div className="flex justify-between gap-2 text-sm">
+    <div className="flex justify-between gap-3 text-sm">
       <span className="text-muted-foreground shrink-0">{label}</span>
-      <span className="font-medium text-right break-words min-w-0">{value ?? "—"}</span>
+      <span className="font-medium text-right break-words min-w-0 flex-1">{value ?? "—"}</span>
     </div>
   );
 }
