@@ -533,9 +533,9 @@ export default function CheckCommandCenter() {
   });
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
+    <div className="space-y-4 max-w-full overflow-x-hidden">
+      <div className="flex flex-wrap items-start sm:items-center justify-between gap-2">
+        <div className="min-w-0">
           <h1 className="text-xl md:text-2xl font-bold tracking-tight">ChecksOps</h1>
           <p className="text-sm text-muted-foreground">
             {isWhiteLabel ? "Manage checks, endorsements & deposits" : "Insurance check intake, review & deposit readiness"}
