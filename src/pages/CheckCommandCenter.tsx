@@ -892,11 +892,11 @@ export default function CheckCommandCenter() {
 
         {/* All other tabs — only render the active one */}
         {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "manager" && activeTab !== "reissue" && activeTab !== "branch" && activeTab !== "messages" && activeTab !== "partners" && (
-          <div className="mt-3 flex gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
-            {/* Check list — grows when no check selected */}
+          <div className="mt-3 flex flex-col md:flex-row gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
+            {/* Check list — hidden on mobile when a check is selected */}
             <Card
-              className="overflow-hidden transition-all duration-300 ease-in-out flex-shrink-0"
-              style={{ width: selectedCheck ? "40%" : "80%" }}
+              className={`overflow-hidden transition-all duration-300 ease-in-out md:flex-shrink-0 w-full ${isMobile && selectedCheck ? "hidden" : ""}`}
+              style={!isMobile ? { width: selectedCheck ? "40%" : "80%" } : undefined}
             >
               <CardContent className="p-0 h-full">
                 <div className="overflow-x-auto h-full">
