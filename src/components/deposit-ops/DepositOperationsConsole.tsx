@@ -25,6 +25,7 @@ import {
 import { format } from "date-fns";
 import { CheckImagesViewer } from "@/components/checks/CheckImagesViewer";
 import { Eye } from "lucide-react";
+import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -781,6 +782,17 @@ function DepositItemDetail({
         title={`Check #${checkData?.check_number ?? "—"} — ${checkData?.carrier_name ?? ""}`}
         onClose={() => setImageViewerOpen(false)}
       />
+
+      {/* Disbursement (Actum ACH) */}
+      {depositItem && (
+        <DisbursementConsole
+          depositItemId={depositItem.id}
+          checkIntakeItemId={depositItem.check_id ?? undefined}
+          checkAmount={Number(depositItem.amount ?? 0)}
+          checkNumber={depositItem.check_number ?? undefined}
+          carrierName={depositItem.carrier_name ?? undefined}
+        />
+      )}
 
       {/* Attachment uploads */}
       <Card>

@@ -14,6 +14,82 @@ export type Database = {
   }
   public: {
     Tables: {
+      actum_transactions: {
+        Row: {
+          actum_history_id: string | null
+          actum_order_id: string | null
+          amount: number
+          batch_id: string | null
+          consumer_unique: string | null
+          created_at: string
+          id: string
+          idempotence_key: string | null
+          mer_order_number: string | null
+          raw_response: Json | null
+          split_id: string | null
+          status: string
+          tenant_id: string
+          transaction_type: string
+          updated_at: string
+        }
+        Insert: {
+          actum_history_id?: string | null
+          actum_order_id?: string | null
+          amount: number
+          batch_id?: string | null
+          consumer_unique?: string | null
+          created_at?: string
+          id?: string
+          idempotence_key?: string | null
+          mer_order_number?: string | null
+          raw_response?: Json | null
+          split_id?: string | null
+          status?: string
+          tenant_id: string
+          transaction_type?: string
+          updated_at?: string
+        }
+        Update: {
+          actum_history_id?: string | null
+          actum_order_id?: string | null
+          amount?: number
+          batch_id?: string | null
+          consumer_unique?: string | null
+          created_at?: string
+          id?: string
+          idempotence_key?: string | null
+          mer_order_number?: string | null
+          raw_response?: Json | null
+          split_id?: string | null
+          status?: string
+          tenant_id?: string
+          transaction_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "actum_transactions_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "disbursement_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "actum_transactions_split_id_fkey"
+            columns: ["split_id"]
+            isOneToOne: false
+            referencedRelation: "disbursement_splits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "actum_transactions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       adjusters: {
         Row: {
           company: string | null
@@ -10848,6 +10924,185 @@ export type Database = {
           },
         ]
       }
+      disbursement_batches: {
+        Row: {
+          available_amount: number
+          check_amount: number
+          check_intake_item_id: string | null
+          completed_at: string | null
+          created_at: string
+          created_by: string
+          deposit_item_id: string | null
+          id: string
+          notes: string | null
+          reserve_held: number
+          status: string
+          submitted_at: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          available_amount: number
+          check_amount: number
+          check_intake_item_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by: string
+          deposit_item_id?: string | null
+          id?: string
+          notes?: string | null
+          reserve_held?: number
+          status?: string
+          submitted_at?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          available_amount?: number
+          check_amount?: number
+          check_intake_item_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string
+          deposit_item_id?: string | null
+          id?: string
+          notes?: string | null
+          reserve_held?: number
+          status?: string
+          submitted_at?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "disbursement_batches_check_intake_item_id_fkey"
+            columns: ["check_intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "disbursement_batches_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_aging_dashboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "disbursement_batches_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "disbursement_batches_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_queue_scored"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "disbursement_batches_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_reminder_queue"
+            referencedColumns: ["deposit_item_id"]
+          },
+          {
+            foreignKeyName: "disbursement_batches_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      disbursement_splits: {
+        Row: {
+          actum_consumer_unique: string | null
+          actum_history_id: string | null
+          actum_order_id: string | null
+          amount: number
+          batch_id: string
+          created_at: string
+          id: string
+          idempotence_key: string | null
+          pct_of_total: number | null
+          return_code: string | null
+          return_desc: string | null
+          returned_at: string | null
+          settled_at: string | null
+          stakeholder_account_id: string
+          status: string
+          submitted_at: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          actum_consumer_unique?: string | null
+          actum_history_id?: string | null
+          actum_order_id?: string | null
+          amount: number
+          batch_id: string
+          created_at?: string
+          id?: string
+          idempotence_key?: string | null
+          pct_of_total?: number | null
+          return_code?: string | null
+          return_desc?: string | null
+          returned_at?: string | null
+          settled_at?: string | null
+          stakeholder_account_id: string
+          status?: string
+          submitted_at?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          actum_consumer_unique?: string | null
+          actum_history_id?: string | null
+          actum_order_id?: string | null
+          amount?: number
+          batch_id?: string
+          created_at?: string
+          id?: string
+          idempotence_key?: string | null
+          pct_of_total?: number | null
+          return_code?: string | null
+          return_desc?: string | null
+          returned_at?: string | null
+          settled_at?: string | null
+          stakeholder_account_id?: string
+          status?: string
+          submitted_at?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "disbursement_splits_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "disbursement_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "disbursement_splits_stakeholder_account_id_fkey"
+            columns: ["stakeholder_account_id"]
+            isOneToOne: false
+            referencedRelation: "stakeholder_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "disbursement_splits_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       document_analysis_results: {
         Row: {
           carrier_name: string | null
@@ -14541,6 +14796,54 @@ export type Database = {
         }
         Relationships: []
       }
+      reserve_config: {
+        Row: {
+          auto_replenish: boolean
+          current_reserve_balance: number
+          id: string
+          primary_account_id: string | null
+          replenish_threshold: number
+          reserve_pct: number
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          auto_replenish?: boolean
+          current_reserve_balance?: number
+          id?: string
+          primary_account_id?: string | null
+          replenish_threshold?: number
+          reserve_pct?: number
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          auto_replenish?: boolean
+          current_reserve_balance?: number
+          id?: string
+          primary_account_id?: string | null
+          replenish_threshold?: number
+          reserve_pct?: number
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reserve_config_primary_account_id_fkey"
+            columns: ["primary_account_id"]
+            isOneToOne: false
+            referencedRelation: "stakeholder_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reserve_config_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       role_version_tracker: {
         Row: {
           updated_at: string
@@ -15335,6 +15638,65 @@ export type Database = {
           srtext?: string | null
         }
         Relationships: []
+      }
+      stakeholder_accounts: {
+        Row: {
+          account_type: string
+          acct_type: string
+          chk_aba: string
+          chk_acct: string
+          consumer_unique: string | null
+          created_at: string
+          created_by: string
+          custname: string
+          id: string
+          is_active: boolean
+          is_primary: boolean
+          nickname: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          account_type?: string
+          acct_type?: string
+          chk_aba: string
+          chk_acct: string
+          consumer_unique?: string | null
+          created_at?: string
+          created_by: string
+          custname: string
+          id?: string
+          is_active?: boolean
+          is_primary?: boolean
+          nickname: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          account_type?: string
+          acct_type?: string
+          chk_aba?: string
+          chk_acct?: string
+          consumer_unique?: string | null
+          created_at?: string
+          created_by?: string
+          custname?: string
+          id?: string
+          is_active?: boolean
+          is_primary?: boolean
+          nickname?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stakeholder_accounts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       state_insurance_regulations: {
         Row: {
