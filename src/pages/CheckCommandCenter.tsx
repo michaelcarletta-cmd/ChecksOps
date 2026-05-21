@@ -950,12 +950,12 @@ export default function CheckCommandCenter() {
                                   {isShared && <SharedChecksBadge sourceTenantName={sourceTenantName} />}
                                 </div>
                               </TableCell>
-                              <TableCell className="text-sm max-w-[180px]">
+                              <TableCell className="text-sm md:max-w-[180px]">
                                 <div className="flex flex-col gap-0.5">
-                                  <span className="truncate">{check.carrier_name || "Pending OCR"}</span>
+                                  <span className="break-words md:truncate leading-tight">{check.carrier_name || "Pending OCR"}</span>
                                   <CheckValidityBadge issueDate={check.issue_date} hideWhenSafe />
                                   {check.property_address && (
-                                    <span className="text-[10px] text-muted-foreground truncate" title={check.property_address}>
+                                    <span className="text-[10px] text-muted-foreground break-words md:truncate leading-tight" title={check.property_address}>
                                       📍 {check.property_address}
                                     </span>
                                   )}
