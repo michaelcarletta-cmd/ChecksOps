@@ -652,6 +652,8 @@ export default function CheckCommandCenter() {
                 key={tab.key}
                 onClick={() => { setActiveTab(tab.key); setSelectedCheck(null); setReviewCheckId(null); }}
                 className={`relative flex flex-col items-center gap-1.5 rounded-xl p-4 transition-all duration-200 bg-gradient-to-br ${tab.gradient} border cursor-pointer ${
+                  tab.key === "messages" ? "col-span-2 sm:col-span-1" : ""
+                } ${
                   isActive
                     ? `border-transparent ring-2 ${tab.ring} shadow-lg scale-[1.02]`
                     : "border-border/50 hover:border-border hover:shadow-md hover:scale-[1.01]"
