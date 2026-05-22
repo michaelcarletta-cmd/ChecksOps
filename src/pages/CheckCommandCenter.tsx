@@ -1648,6 +1648,39 @@ function CheckDetailPanel({
     },
   });
 
+  // Funds: payment count for this check (visible to either sender or recipient)
+  const { data: incomingPaymentCount = 0 } = useQuery({
+    queryKey: ["check-funds-count", checkId, tenantId],
+    enabled: !!checkId && !!tenantId,
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("claim_check_payments")
+        .select("id", { count: "exact", head: true })
+        .eq("check_intake_item_id", checkId);
+      return count ?? 0;
+    },
+  });
+
+  // Funds: identify the contractor partner (target tenant) when PA is viewing
+  const { data: contractorPartner } = useQuery({
+    queryKey: ["check-contractor-partner", checkId, tenantId],
+    enabled: !!checkId && !!tenantId && isOwner,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("shared_checks")
+        .select("target_tenant_id, tenants!shared_checks_target_tenant_id_fkey(id, name)")
+        .eq("check_id", checkId)
+        .eq("source_tenant_id", tenantId!)
+        .is("revoked_at", null)
+        .limit(1)
+        .maybeSingle();
+      if (!data) return null;
+      const t: any = (data as any).tenants;
+      return { id: data.target_tenant_id as string, name: t?.name as string ?? "Contractor" };
+    },
+  });
+
+
   // Fetch linked accounting entry
   const { data: accountingEntry } = useQuery({
     queryKey: ["check-accounting-link", checkId],
