@@ -151,6 +151,9 @@ interface CheckItem {
   partner_status_label?: string | null;
   partner_status_updated_at?: string | null;
   external_origin?: Record<string, unknown> | null;
+  check_source?: string | null;
+  cash_job_id?: string | null;
+  cash_job_payment_class?: string | null;
 }
 
 /**
@@ -1110,13 +1113,20 @@ function ClaimCheckFileHeader({ group, compact = false }: { group: CheckGroup; c
   const hasReady = group.checks.some((check) => check.status === "approved_for_deposit" || check.deposit_recommendation === "ready_for_deposit");
   const hasLossDraft = group.checks.some((check) => check.status === "loss_draft_required");
 
+  const isCashJobGroup = group.checks.every((c) => c.check_source === "cash_job");
   return (
     <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">Claim Check File</Badge>
+          {isCashJobGroup ? (
+            <Badge variant="secondary" className="text-[10px] uppercase tracking-wide border-amber-500/40 text-amber-500">Cash Job</Badge>
+          ) : (
+            <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">Claim Check File</Badge>
+          )}
           <span className="font-semibold text-foreground break-words leading-tight">{group.policyholderName}</span>
-          <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
+          {!isCashJobGroup && (
+            <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
+          )}
         </div>
         {!compact && (
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -2337,7 +2347,7 @@ function CheckDetailPanel({
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
               <EditableField
-                label="Carrier"
+                label={check.check_source === "cash_job" ? "Property" : "Carrier"}
                 checkId={checkId}
                 field="carrier_name"
                 value={check.carrier_name}
@@ -2354,14 +2364,26 @@ function CheckDetailPanel({
                 displayFormatter={(v) => (v ? format(new Date(v), "MMM d, yyyy") : null)}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
-              <EditableField
-                label="Detected Claim #"
-                checkId={checkId}
-                field="detected_claim_number"
-                value={check.detected_claim_number}
-                readOnly={isSharedView}
-                onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
-              />
+              {check.check_source === "cash_job" ? (
+                <div className="flex justify-between text-sm py-1">
+                  <span className="text-muted-foreground">Class</span>
+                  <span className="font-medium">
+                    {check.cash_job_payment_class === "initial_deposit" ? "Initial Deposit" :
+                     check.cash_job_payment_class === "final_payment" ? "Final Payment" :
+                     check.cash_job_payment_class === "progress_payment" ? "Progress Payment" :
+                     check.cash_job_payment_class === "other" ? "Other" : "—"}
+                  </span>
+                </div>
+              ) : (
+                <EditableField
+                  label="Detected Claim #"
+                  checkId={checkId}
+                  field="detected_claim_number"
+                  value={check.detected_claim_number}
+                  readOnly={isSharedView}
+                  onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
+                />
+              )}
               <EditableField
                 label="Payee Line"
                 checkId={checkId}

@@ -738,7 +738,13 @@ function DepositItemDetail({
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
               <div><span className="text-muted-foreground">Check #</span><span className="ml-2 font-mono font-medium">{checkData.check_number ?? "—"}</span></div>
               <div><span className="text-muted-foreground">Amount</span><span className="ml-2 font-medium">{checkData.amount != null ? `$${Number(checkData.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}</span></div>
-              <div><span className="text-muted-foreground">Carrier</span><span className="ml-2">{checkData.carrier_name ?? "—"}</span></div>
+              <div>
+                <span className="text-muted-foreground">{(checkData as any).check_source === "cash_job" ? "Property" : "Carrier"}</span>
+                <span className="ml-2">{checkData.carrier_name ?? "—"}</span>
+                {(checkData as any).check_source === "cash_job" && (
+                  <Badge variant="outline" className="ml-2 text-[9px] border-amber-500/40 text-amber-500">CASH JOB</Badge>
+                )}
+              </div>
               <div><span className="text-muted-foreground">Issue Date</span><span className="ml-2">{checkData.issue_date ? format(new Date(checkData.issue_date), "MMM d, yyyy") : "—"}</span></div>
               <div className="col-span-2"><span className="text-muted-foreground">Payee Line</span><span className="ml-2">{checkData.payee_line ?? "—"}</span></div>
               {checkData.routing_number && (

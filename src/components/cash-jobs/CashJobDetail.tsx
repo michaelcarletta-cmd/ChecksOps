@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Plus, DollarSign, Home, Phone, Mail, Pencil, Trash2, Receipt, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { CashJobForm } from "./CashJobForm";
+import { CashJobCheckUpload } from "./CashJobCheckUpload";
 
 const PAYMENT_METHODS: Record<string, string> = {
   cash: "Cash", check: "Check", zelle: "Zelle",
@@ -274,6 +275,16 @@ export function CashJobDetail({ jobId, onBack }: Props) {
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
+
+          <CashJobCheckUpload
+            cashJobId={jobId}
+            customerName={job.customer_name}
+            propertyAddress={job.property_address ?? undefined}
+            propertyCity={job.property_city ?? undefined}
+            propertyState={job.property_state ?? undefined}
+          />
+          <div className="border-t my-2" />
+
 
           {/* Record payment form */}
           {showPaymentForm && (
