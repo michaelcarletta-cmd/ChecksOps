@@ -279,11 +279,13 @@ function EndorsementCard({
   endorsement,
   onRefresh,
   readOnly = false,
+  partnerMode = false,
   defaultContractorCc = "",
 }: {
   endorsement: CheckEndorsement;
   onRefresh: () => void;
   readOnly?: boolean;
+  partnerMode?: boolean;
   defaultContractorCc?: string;
 }) {
   const { toast } = useToast();
@@ -293,6 +295,7 @@ function EndorsementCard({
   const [includeCc, setIncludeCc] = useState(Boolean(defaultContractorCc));
   const [sending, setSending] = useState(false);
   const [markingInternal, setMarkingInternal] = useState(false);
+
 
   const config = statusConfig[endorsement.status] ?? statusConfig.pending;
   const StatusIcon = config.icon;
