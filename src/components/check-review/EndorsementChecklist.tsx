@@ -225,7 +225,7 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
         )}
       </div>
 
-      {!allComplete && !readOnly && (
+      {!allComplete && !readOnly && !partnerMode && (
         <div className="px-1 space-y-2">
           <div className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
             <AlertTriangle className="h-3 w-3 shrink-0" />
