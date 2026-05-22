@@ -117,18 +117,19 @@ Deno.serve(async (req) => {
     // Replace check_payees snapshot.
     await supabase.from("check_payees").delete().eq("check_id", checkId);
     if (cleaned.length > 0) {
-      const payeeRows = cleaned.map((p) => ({
-        constSignedAt: resolveSignedAt(p),
-      })).map(({ constSignedAt, ...p }) => ({
+      const payeeRows = cleaned.map((p) => {
+        const signedAt = resolveSignedAt(p);
+        return {
         check_id: checkId,
         tenant_id: tenantId,
         payee_name: p.payee_name.trim(),
         payee_type: p.payee_type ?? null,
-        endorsement_status: normalizePayeeStatus(p.endorsement_status, constSignedAt),
-        endorsed_at: constSignedAt,
+        endorsement_status: normalizePayeeStatus(p.endorsement_status, signedAt),
+        endorsed_at: signedAt,
         contact_email: p.contact_email ?? null,
         contact_phone: p.contact_phone ?? null,
-      }));
+        };
+      });
       const { error: payeeErr } = await supabase.from("check_payees").insert(payeeRows);
       if (payeeErr) console.warn("sync-check-payees: check_payees insert failed", payeeErr);
     }
