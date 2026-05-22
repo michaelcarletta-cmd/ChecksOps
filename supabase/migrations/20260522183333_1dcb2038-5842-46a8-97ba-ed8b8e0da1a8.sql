@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "Target tenant can update shared endorsements" ON public.check_endorsements;
