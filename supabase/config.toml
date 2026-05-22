@@ -21,3 +21,5 @@ project_id = "nbcqwpysqgyxrrbgtmkw"
     verify_jwt = false
   [functions.actum-webhook]
     verify_jwt = false
+  [functions.sync-check-payees]
+    verify_jwt = false
