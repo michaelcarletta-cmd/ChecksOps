@@ -277,25 +277,48 @@ Deno.serve(async (req) => {
     // Mirror payee endorsement state so partners can see who has signed
     // and who still needs to. Source-of-truth is the upstream app.
     if (Array.isArray(body.payees)) {
-      // Replace existing payees for this check with the latest snapshot.
+      // Replace existing payees + endorsements for this check with the latest snapshot.
       await supabase.from("check_payees").delete().eq("check_id", checkId);
-      if (body.payees.length > 0) {
-        const rows = body.payees
-          .filter((p) => p && typeof p.payee_name === "string" && p.payee_name.trim().length > 0)
-          .map((p) => ({
-            check_id: checkId,
-            tenant_id: sourceTenantId,
-            payee_name: p.payee_name.trim(),
-            payee_type: p.payee_type ?? null,
-            endorsement_status: p.endorsement_status ?? "pending",
-            endorsed_at: p.endorsed_at ?? null,
-            contact_email: p.contact_email ?? null,
-            contact_phone: p.contact_phone ?? null,
-          }));
-        if (rows.length > 0) {
-          const { error: payeeErr } = await supabase.from("check_payees").insert(rows);
-          if (payeeErr) console.warn("ingest-shared-check payee mirror failed", payeeErr);
-        }
+      await supabase.from("check_endorsements").delete().eq("check_id", checkId);
+      const cleaned = body.payees.filter(
+        (p) => p && typeof p.payee_name === "string" && p.payee_name.trim().length > 0,
+      );
+      if (cleaned.length > 0) {
+        const payeeRows = cleaned.map((p) => ({
+          check_id: checkId,
+          tenant_id: sourceTenantId,
+          payee_name: p.payee_name.trim(),
+          payee_type: p.payee_type ?? null,
+          endorsement_status: p.endorsement_status ?? "pending",
+          endorsed_at: p.endorsed_at ?? null,
+          contact_email: p.contact_email ?? null,
+          contact_phone: p.contact_phone ?? null,
+        }));
+        const { error: payeeErr } = await supabase.from("check_payees").insert(payeeRows);
+        if (payeeErr) console.warn("ingest-shared-check payee mirror failed", payeeErr);
+
+        const normalizeStatus = (s?: string | null): string => {
+          const v = (s ?? "").toLowerCase().trim();
+          if (!v) return "pending";
+          if (["signed", "endorsed", "complete", "completed"].includes(v)) return "signed";
+          if (["declined", "rejected"].includes(v)) return "declined";
+          if (["sent", "requested", "awaiting", "in_progress"].includes(v)) return "requested";
+          return "pending";
+        };
+        const endorsementRows = cleaned.map((p) => ({
+          check_id: checkId,
+          tenant_id: sourceTenantId,
+          payee_name: p.payee_name.trim(),
+          payee_type: p.payee_type ?? "other",
+          status: normalizeStatus(p.endorsement_status),
+          signed_at: p.endorsed_at ?? null,
+          contact_email: p.contact_email ?? null,
+          contact_phone: p.contact_phone ?? null,
+        }));
+        const { error: endErr } = await supabase
+          .from("check_endorsements")
+          .insert(endorsementRows);
+        if (endErr) console.warn("ingest-shared-check endorsement mirror failed", endErr);
       }
     }
 
