@@ -2739,8 +2739,9 @@ function CheckDetailPanel({
                 <EndorsementChecklist
                   checkId={checkId}
                   onRefresh={onRefresh}
-                  readOnly={isSharedView}
+                  partnerMode={isSharedView}
                 />
+
               </Suspense>
 
               {check?.back_image_path && !isSharedView && (
