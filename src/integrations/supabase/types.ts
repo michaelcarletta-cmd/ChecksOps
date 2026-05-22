@@ -1231,6 +1231,267 @@ export type Database = {
         }
         Relationships: []
       }
+      cash_job_attachments: {
+        Row: {
+          attachment_type: string | null
+          cash_job_id: string
+          created_at: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          file_type: string | null
+          id: string
+          tenant_id: string
+          uploaded_by: string
+        }
+        Insert: {
+          attachment_type?: string | null
+          cash_job_id: string
+          created_at?: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          tenant_id: string
+          uploaded_by: string
+        }
+        Update: {
+          attachment_type?: string | null
+          cash_job_id?: string
+          created_at?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          tenant_id?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_job_attachments_cash_job_id_fkey"
+            columns: ["cash_job_id"]
+            isOneToOne: false
+            referencedRelation: "cash_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_job_attachments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cash_job_line_items: {
+        Row: {
+          cash_job_id: string
+          created_at: string
+          description: string
+          id: string
+          quantity: number
+          sort_order: number
+          tenant_id: string
+          total: number | null
+          unit_price: number
+        }
+        Insert: {
+          cash_job_id: string
+          created_at?: string
+          description: string
+          id?: string
+          quantity?: number
+          sort_order?: number
+          tenant_id: string
+          total?: number | null
+          unit_price?: number
+        }
+        Update: {
+          cash_job_id?: string
+          created_at?: string
+          description?: string
+          id?: string
+          quantity?: number
+          sort_order?: number
+          tenant_id?: string
+          total?: number | null
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_job_line_items_cash_job_id_fkey"
+            columns: ["cash_job_id"]
+            isOneToOne: false
+            referencedRelation: "cash_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_job_line_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cash_job_payments: {
+        Row: {
+          amount: number
+          cash_job_id: string
+          created_at: string
+          created_by: string
+          id: string
+          notes: string | null
+          payee_name: string | null
+          payment_date: string
+          payment_method: Database["public"]["Enums"]["cash_payment_method"]
+          reference_number: string | null
+          stakeholder_account_id: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          cash_job_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          notes?: string | null
+          payee_name?: string | null
+          payment_date?: string
+          payment_method?: Database["public"]["Enums"]["cash_payment_method"]
+          reference_number?: string | null
+          stakeholder_account_id?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          cash_job_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          notes?: string | null
+          payee_name?: string | null
+          payment_date?: string
+          payment_method?: Database["public"]["Enums"]["cash_payment_method"]
+          reference_number?: string | null
+          stakeholder_account_id?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_job_payments_cash_job_id_fkey"
+            columns: ["cash_job_id"]
+            isOneToOne: false
+            referencedRelation: "cash_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_job_payments_stakeholder_account_id_fkey"
+            columns: ["stakeholder_account_id"]
+            isOneToOne: false
+            referencedRelation: "stakeholder_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_job_payments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cash_jobs: {
+        Row: {
+          balance_due: number | null
+          completion_date: string | null
+          contract_amount: number
+          created_at: string
+          created_by: string
+          customer_email: string | null
+          customer_name: string
+          customer_phone: string | null
+          description: string | null
+          estimate_date: string | null
+          id: string
+          job_name: string
+          notes: string | null
+          property_address: string | null
+          property_city: string | null
+          property_state: string | null
+          property_zip: string | null
+          start_date: string | null
+          status: Database["public"]["Enums"]["cash_job_status"]
+          tenant_id: string
+          total_paid: number
+          updated_at: string
+          work_type: Database["public"]["Enums"]["cash_job_work_type"]
+        }
+        Insert: {
+          balance_due?: number | null
+          completion_date?: string | null
+          contract_amount?: number
+          created_at?: string
+          created_by: string
+          customer_email?: string | null
+          customer_name: string
+          customer_phone?: string | null
+          description?: string | null
+          estimate_date?: string | null
+          id?: string
+          job_name: string
+          notes?: string | null
+          property_address?: string | null
+          property_city?: string | null
+          property_state?: string | null
+          property_zip?: string | null
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["cash_job_status"]
+          tenant_id: string
+          total_paid?: number
+          updated_at?: string
+          work_type?: Database["public"]["Enums"]["cash_job_work_type"]
+        }
+        Update: {
+          balance_due?: number | null
+          completion_date?: string | null
+          contract_amount?: number
+          created_at?: string
+          created_by?: string
+          customer_email?: string | null
+          customer_name?: string
+          customer_phone?: string | null
+          description?: string | null
+          estimate_date?: string | null
+          id?: string
+          job_name?: string
+          notes?: string | null
+          property_address?: string | null
+          property_city?: string | null
+          property_state?: string | null
+          property_zip?: string | null
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["cash_job_status"]
+          tenant_id?: string
+          total_paid?: number
+          updated_at?: string
+          work_type?: Database["public"]["Enums"]["cash_job_work_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_jobs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       causation_rubric_weights: {
         Row: {
           category: string
@@ -19552,6 +19813,36 @@ export type Database = {
         | "read_only"
         | "guided"
       automation_mode: "active" | "passive" | "suspended" | "closed"
+      cash_job_status:
+        | "estimate"
+        | "deposit_received"
+        | "in_progress"
+        | "final_payment_due"
+        | "paid_in_full"
+        | "cancelled"
+      cash_job_work_type:
+        | "roof"
+        | "siding"
+        | "gutters"
+        | "windows"
+        | "doors"
+        | "interior"
+        | "painting"
+        | "flooring"
+        | "hvac"
+        | "plumbing"
+        | "electrical"
+        | "landscaping"
+        | "other"
+      cash_payment_method:
+        | "cash"
+        | "check"
+        | "zelle"
+        | "venmo"
+        | "cashapp"
+        | "credit_card"
+        | "bank_transfer"
+        | "other"
       check_stage:
         | "review"
         | "loss_draft"
@@ -19793,6 +20084,39 @@ export const Constants = {
         "guided",
       ],
       automation_mode: ["active", "passive", "suspended", "closed"],
+      cash_job_status: [
+        "estimate",
+        "deposit_received",
+        "in_progress",
+        "final_payment_due",
+        "paid_in_full",
+        "cancelled",
+      ],
+      cash_job_work_type: [
+        "roof",
+        "siding",
+        "gutters",
+        "windows",
+        "doors",
+        "interior",
+        "painting",
+        "flooring",
+        "hvac",
+        "plumbing",
+        "electrical",
+        "landscaping",
+        "other",
+      ],
+      cash_payment_method: [
+        "cash",
+        "check",
+        "zelle",
+        "venmo",
+        "cashapp",
+        "credit_card",
+        "bank_transfer",
+        "other",
+      ],
       check_stage: [
         "review",
         "loss_draft",
