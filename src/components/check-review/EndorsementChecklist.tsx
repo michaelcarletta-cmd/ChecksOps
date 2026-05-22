@@ -266,9 +266,11 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
           endorsement={endorsement}
           onRefresh={refresh}
           readOnly={readOnly}
+          partnerMode={partnerMode}
           defaultContractorCc={contractorEmail ?? ""}
         />
       ))}
+
     </div>
   );
 }
