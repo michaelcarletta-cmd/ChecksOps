@@ -158,13 +158,19 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
         if (error) throw error;
       }
 
-      await supabase.from("check_audit_log").insert({
-        check_id: checkId,
-        event_type: "endorsements_force_completed",
-        event_description: `All endorsements manually marked as received (${incompleteIds.length} updated)`,
-        actor_id: userId,
-        event_data: { overridden_ids: incompleteIds },
-      });
+      // Audit log is best-effort; partner tenants may not have insert rights.
+      try {
+        await supabase.from("check_audit_log").insert({
+          check_id: checkId,
+          event_type: "endorsements_force_completed",
+          event_description: `All endorsements manually marked as received (${incompleteIds.length} updated)`,
+          actor_id: userId,
+          event_data: { overridden_ids: incompleteIds, partner_mode: partnerMode },
+        });
+      } catch (auditErr) {
+        console.warn("Audit log insert skipped:", auditErr);
+      }
+
 
       toast({
         title: "Endorsements marked as complete",
