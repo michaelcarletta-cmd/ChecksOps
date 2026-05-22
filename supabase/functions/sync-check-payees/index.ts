@@ -16,6 +16,7 @@ interface PayeeInput {
   payee_type?: string | null;
   endorsement_status?: string | null;
   endorsed_at?: string | null;
+  signed_at?: string | null;
   contact_email?: string | null;
   contact_phone?: string | null;
   signature_method?: string | null;
@@ -27,13 +28,40 @@ interface Payload {
   payees: PayeeInput[];
 }
 
-function normalizeStatus(s?: string | null): string {
+function resolveSignedAt(payee: Pick<PayeeInput, "endorsed_at" | "signed_at">): string | null {
+  return payee.endorsed_at ?? payee.signed_at ?? null;
+}
+
+function normalizePayeeStatus(s?: string | null, signedAt?: string | null): string {
+  if (signedAt) return "signed";
+
+  const v = (s ?? "").toLowerCase().trim();
+  if (!v) return "pending";
+  if (["signed", "endorsed", "complete", "completed", "waived", "manual_required"].includes(v)) return "signed";
+  if (["viewed", "opened"].includes(v)) return "viewed";
+  if (["declined", "rejected"].includes(v)) return "rejected";
+  if (v === "expired") return "expired";
+  return "pending";
+}
+
+function normalizeStatus(s?: string | null, signedAt?: string | null): string {
+  if (signedAt) return "signed";
+
   const v = (s ?? "").toLowerCase().trim();
   if (!v) return "pending";
   if (["signed", "endorsed", "complete", "completed"].includes(v)) return "signed";
-  if (["declined", "rejected"].includes(v)) return "declined";
-  if (["sent", "requested", "awaiting", "in_progress"].includes(v)) return "requested";
+  if (v === "waived") return "waived";
+  if (v === "manual_required") return "manual_required";
+  if (["declined", "rejected"].includes(v)) return "rejected";
+  if (["sent", "requested", "awaiting", "in_progress", "viewed", "opened"].includes(v)) return "sent";
+  if (v === "expired") return "expired";
   return "pending";
+}
+
+function normalizeSignatureMethod(method?: string | null, signedAt?: string | null): string | null {
+  const v = (method ?? "").toLowerCase().trim();
+  if (["portal", "sms", "email", "internal", "manual"].includes(v)) return v;
+  return signedAt ? "portal" : null;
 }
 
 Deno.serve(async (req) => {
@@ -89,16 +117,19 @@ Deno.serve(async (req) => {
     // Replace check_payees snapshot.
     await supabase.from("check_payees").delete().eq("check_id", checkId);
     if (cleaned.length > 0) {
-      const payeeRows = cleaned.map((p) => ({
+      const payeeRows = cleaned.map((p) => {
+        const signedAt = resolveSignedAt(p);
+        return {
         check_id: checkId,
         tenant_id: tenantId,
         payee_name: p.payee_name.trim(),
         payee_type: p.payee_type ?? null,
-        endorsement_status: p.endorsement_status ?? "pending",
-        endorsed_at: p.endorsed_at ?? null,
+        endorsement_status: normalizePayeeStatus(p.endorsement_status, signedAt),
+        endorsed_at: signedAt,
         contact_email: p.contact_email ?? null,
         contact_phone: p.contact_phone ?? null,
-      }));
+        };
+      });
       const { error: payeeErr } = await supabase.from("check_payees").insert(payeeRows);
       if (payeeErr) console.warn("sync-check-payees: check_payees insert failed", payeeErr);
     }
@@ -106,18 +137,21 @@ Deno.serve(async (req) => {
     // Replace check_endorsements snapshot so partner endorsement UI is populated.
     await supabase.from("check_endorsements").delete().eq("check_id", checkId);
     if (cleaned.length > 0) {
-      const endorsementRows = cleaned.map((p) => ({
+      const endorsementRows = cleaned.map((p) => {
+        const signedAt = resolveSignedAt(p);
+        return {
         check_id: checkId,
         tenant_id: tenantId,
         payee_name: p.payee_name.trim(),
         payee_type: p.payee_type ?? "other",
-        status: normalizeStatus(p.endorsement_status),
-        signature_method: p.signature_method ?? null,
+        status: normalizeStatus(p.endorsement_status, signedAt),
+        signature_method: normalizeSignatureMethod(p.signature_method, signedAt),
         signature_image_url: p.signature_image_url ?? null,
-        signed_at: p.endorsed_at ?? null,
+        signed_at: signedAt,
         contact_email: p.contact_email ?? null,
         contact_phone: p.contact_phone ?? null,
-      }));
+        };
+      });
       const { error: endErr } = await supabase
         .from("check_endorsements")
         .insert(endorsementRows);

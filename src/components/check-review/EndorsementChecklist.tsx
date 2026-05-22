@@ -225,7 +225,7 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
         )}
       </div>
 
-      {!allComplete && !readOnly && (
+      {!allComplete && !readOnly && !partnerMode && (
         <div className="px-1 space-y-2">
           <div className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
             <AlertTriangle className="h-3 w-3 shrink-0" />
@@ -312,7 +312,7 @@ function EndorsementCard({
     endorsement.status !== "signed" &&
     endorsement.status !== "waived" &&
     endorsement.status !== "rejected";
-  const canMarkInternal = !readOnly && endorsement.status !== "signed" && endorsement.status !== "waived";
+  const canMarkInternal = !readOnly && !partnerMode && endorsement.status !== "signed" && endorsement.status !== "waived";
   const isResend = endorsement.request_sent_at != null;
 
 
@@ -352,19 +352,7 @@ function EndorsementCard({
   const markInternalSigned = async () => {
     setMarkingInternal(true);
     try {
-      if (partnerMode) {
-        // Partner-side direct DB update (RLS: target tenant can update shared endorsements)
-        const { error } = await supabase
-          .from("check_endorsements")
-          .update({
-            status: "signed",
-            signed_at: new Date().toISOString(),
-            signature_method: "partner_confirmed",
-            notes: "Marked as received by partner",
-          })
-          .eq("id", endorsement.id);
-        if (error) throw error;
-      } else {
+      {
         const { data: session } = await supabase.auth.getSession();
         if (!session.session?.access_token) throw new Error("Not authenticated");
         const { error } = await supabase.functions.invoke("check-endorsement", {
@@ -388,18 +376,7 @@ function EndorsementCard({
 
   const waiveEndorsement = async () => {
     try {
-      if (partnerMode) {
-        const { error } = await supabase
-          .from("check_endorsements")
-          .update({
-            status: "waived",
-            signed_at: new Date().toISOString(),
-            signature_method: "partner_waived",
-            notes: "Waived by partner",
-          })
-          .eq("id", endorsement.id);
-        if (error) throw error;
-      } else {
+      {
         const { data: session } = await supabase.auth.getSession();
         if (!session.session?.access_token) throw new Error("Not authenticated");
         const { error } = await supabase.functions.invoke("check-endorsement", {
