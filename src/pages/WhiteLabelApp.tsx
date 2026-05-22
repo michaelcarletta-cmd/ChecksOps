@@ -126,6 +126,7 @@ function WhiteLabelRoutes() {
             : isMember
               ? (
                 <div className="min-h-screen bg-background p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
+                  <SubPageHeader basePath={basePath} />
                   <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
                     <Payments />
                   </Suspense>
@@ -142,6 +143,7 @@ function WhiteLabelRoutes() {
             : isMember
               ? (
                 <div className="min-h-screen bg-background p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
+                  <SubPageHeader basePath={basePath} />
                   <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
                     <CashJobs />
                   </Suspense>
