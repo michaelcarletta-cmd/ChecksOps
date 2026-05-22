@@ -66,9 +66,13 @@ interface EndorsementChecklistProps {
   checkId: string;
   onRefresh?: () => void;
   readOnly?: boolean;
+  /** Partner-mode: hides send-request controls but keeps mark-signed/waive,
+   *  performing them as direct DB updates (no staff-only edge function). */
+  partnerMode?: boolean;
 }
 
-export function EndorsementChecklist({ checkId, onRefresh, readOnly = false }: EndorsementChecklistProps) {
+export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, partnerMode = false }: EndorsementChecklistProps) {
+
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -154,13 +158,19 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false }: E
         if (error) throw error;
       }
 
-      await supabase.from("check_audit_log").insert({
-        check_id: checkId,
-        event_type: "endorsements_force_completed",
-        event_description: `All endorsements manually marked as received (${incompleteIds.length} updated)`,
-        actor_id: userId,
-        event_data: { overridden_ids: incompleteIds },
-      });
+      // Audit log is best-effort; partner tenants may not have insert rights.
+      try {
+        await supabase.from("check_audit_log").insert({
+          check_id: checkId,
+          event_type: "endorsements_force_completed",
+          event_description: `All endorsements manually marked as received (${incompleteIds.length} updated)`,
+          actor_id: userId,
+          event_data: { overridden_ids: incompleteIds, partner_mode: partnerMode },
+        });
+      } catch (auditErr) {
+        console.warn("Audit log insert skipped:", auditErr);
+      }
+
 
       toast({
         title: "Endorsements marked as complete",
@@ -262,9 +272,11 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false }: E
           endorsement={endorsement}
           onRefresh={refresh}
           readOnly={readOnly}
+          partnerMode={partnerMode}
           defaultContractorCc={contractorEmail ?? ""}
         />
       ))}
+
     </div>
   );
 }
@@ -273,11 +285,13 @@ function EndorsementCard({
   endorsement,
   onRefresh,
   readOnly = false,
+  partnerMode = false,
   defaultContractorCc = "",
 }: {
   endorsement: CheckEndorsement;
   onRefresh: () => void;
   readOnly?: boolean;
+  partnerMode?: boolean;
   defaultContractorCc?: string;
 }) {
   const { toast } = useToast();
@@ -288,17 +302,19 @@ function EndorsementCard({
   const [sending, setSending] = useState(false);
   const [markingInternal, setMarkingInternal] = useState(false);
 
+
   const config = statusConfig[endorsement.status] ?? statusConfig.pending;
   const StatusIcon = config.icon;
   const PayeeIcon = payeeTypeIcons[endorsement.payee_type] ?? AlertTriangle;
 
   const isMortgage = endorsement.payee_type === "mortgage_company";
-  const canSendRequest = !readOnly && !isMortgage &&
+  const canSendRequest = !readOnly && !partnerMode && !isMortgage &&
     endorsement.status !== "signed" &&
     endorsement.status !== "waived" &&
     endorsement.status !== "rejected";
   const canMarkInternal = !readOnly && endorsement.status !== "signed" && endorsement.status !== "waived";
   const isResend = endorsement.request_sent_at != null;
+
 
   const sendRequest = async (method: "email" | "sms") => {
     setSending(true);
@@ -336,15 +352,27 @@ function EndorsementCard({
   const markInternalSigned = async () => {
     setMarkingInternal(true);
     try {
-      const { data: session } = await supabase.auth.getSession();
-      if (!session.session?.access_token) throw new Error("Not authenticated");
-
-      const { error } = await supabase.functions.invoke("check-endorsement", {
-        body: { action: "mark_internal_signed", endorsementId: endorsement.id },
-        headers: { Authorization: `Bearer ${session.session.access_token}` },
-      });
-
-      if (error) throw new Error(error.message);
+      if (partnerMode) {
+        // Partner-side direct DB update (RLS: target tenant can update shared endorsements)
+        const { error } = await supabase
+          .from("check_endorsements")
+          .update({
+            status: "signed",
+            signed_at: new Date().toISOString(),
+            signature_method: "partner_confirmed",
+            notes: "Marked as received by partner",
+          })
+          .eq("id", endorsement.id);
+        if (error) throw error;
+      } else {
+        const { data: session } = await supabase.auth.getSession();
+        if (!session.session?.access_token) throw new Error("Not authenticated");
+        const { error } = await supabase.functions.invoke("check-endorsement", {
+          body: { action: "mark_internal_signed", endorsementId: endorsement.id },
+          headers: { Authorization: `Bearer ${session.session.access_token}` },
+        });
+        if (error) throw new Error(error.message);
+      }
       toast({ title: `${endorsement.payee_name} marked as endorsed` });
       onRefresh();
     } catch (e: unknown) {
@@ -360,15 +388,26 @@ function EndorsementCard({
 
   const waiveEndorsement = async () => {
     try {
-      const { data: session } = await supabase.auth.getSession();
-      if (!session.session?.access_token) throw new Error("Not authenticated");
-
-      const { error } = await supabase.functions.invoke("check-endorsement", {
-        body: { action: "waive_endorsement", endorsementId: endorsement.id },
-        headers: { Authorization: `Bearer ${session.session.access_token}` },
-      });
-
-      if (error) throw new Error(error.message);
+      if (partnerMode) {
+        const { error } = await supabase
+          .from("check_endorsements")
+          .update({
+            status: "waived",
+            signed_at: new Date().toISOString(),
+            signature_method: "partner_waived",
+            notes: "Waived by partner",
+          })
+          .eq("id", endorsement.id);
+        if (error) throw error;
+      } else {
+        const { data: session } = await supabase.auth.getSession();
+        if (!session.session?.access_token) throw new Error("Not authenticated");
+        const { error } = await supabase.functions.invoke("check-endorsement", {
+          body: { action: "waive_endorsement", endorsementId: endorsement.id },
+          headers: { Authorization: `Bearer ${session.session.access_token}` },
+        });
+        if (error) throw new Error(error.message);
+      }
       toast({ title: `${endorsement.payee_name} endorsement waived` });
       onRefresh();
     } catch (e: unknown) {
@@ -379,6 +418,7 @@ function EndorsementCard({
       });
     }
   };
+
 
   return (
     <Card className="p-3 space-y-2">
