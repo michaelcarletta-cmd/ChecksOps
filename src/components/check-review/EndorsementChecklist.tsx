@@ -346,15 +346,27 @@ function EndorsementCard({
   const markInternalSigned = async () => {
     setMarkingInternal(true);
     try {
-      const { data: session } = await supabase.auth.getSession();
-      if (!session.session?.access_token) throw new Error("Not authenticated");
-
-      const { error } = await supabase.functions.invoke("check-endorsement", {
-        body: { action: "mark_internal_signed", endorsementId: endorsement.id },
-        headers: { Authorization: `Bearer ${session.session.access_token}` },
-      });
-
-      if (error) throw new Error(error.message);
+      if (partnerMode) {
+        // Partner-side direct DB update (RLS: target tenant can update shared endorsements)
+        const { error } = await supabase
+          .from("check_endorsements")
+          .update({
+            status: "signed",
+            signed_at: new Date().toISOString(),
+            signature_method: "partner_confirmed",
+            notes: "Marked as received by partner",
+          })
+          .eq("id", endorsement.id);
+        if (error) throw error;
+      } else {
+        const { data: session } = await supabase.auth.getSession();
+        if (!session.session?.access_token) throw new Error("Not authenticated");
+        const { error } = await supabase.functions.invoke("check-endorsement", {
+          body: { action: "mark_internal_signed", endorsementId: endorsement.id },
+          headers: { Authorization: `Bearer ${session.session.access_token}` },
+        });
+        if (error) throw new Error(error.message);
+      }
       toast({ title: `${endorsement.payee_name} marked as endorsed` });
       onRefresh();
     } catch (e: unknown) {
@@ -370,15 +382,26 @@ function EndorsementCard({
 
   const waiveEndorsement = async () => {
     try {
-      const { data: session } = await supabase.auth.getSession();
-      if (!session.session?.access_token) throw new Error("Not authenticated");
-
-      const { error } = await supabase.functions.invoke("check-endorsement", {
-        body: { action: "waive_endorsement", endorsementId: endorsement.id },
-        headers: { Authorization: `Bearer ${session.session.access_token}` },
-      });
-
-      if (error) throw new Error(error.message);
+      if (partnerMode) {
+        const { error } = await supabase
+          .from("check_endorsements")
+          .update({
+            status: "waived",
+            signed_at: new Date().toISOString(),
+            signature_method: "partner_waived",
+            notes: "Waived by partner",
+          })
+          .eq("id", endorsement.id);
+        if (error) throw error;
+      } else {
+        const { data: session } = await supabase.auth.getSession();
+        if (!session.session?.access_token) throw new Error("Not authenticated");
+        const { error } = await supabase.functions.invoke("check-endorsement", {
+          body: { action: "waive_endorsement", endorsementId: endorsement.id },
+          headers: { Authorization: `Bearer ${session.session.access_token}` },
+        });
+        if (error) throw new Error(error.message);
+      }
       toast({ title: `${endorsement.payee_name} endorsement waived` });
       onRefresh();
     } catch (e: unknown) {
@@ -389,6 +412,7 @@ function EndorsementCard({
       });
     }
   };
+
 
   return (
     <Card className="p-3 space-y-2">
