@@ -49,6 +49,23 @@ export function TaxSummary() {
     },
   });
 
+  const { data: cashPayments = [] } = useQuery({
+    queryKey: ["tax-summary-cash", tenant?.id, year],
+    enabled: !!tenant?.id,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("cash_job_payments")
+        .select(`id, amount, payment_date, stakeholder_account_id, payee_name,
+          stakeholder_accounts:stakeholder_account_id (id, nickname, custname, account_type, chk_acct)`)
+        .eq("tenant_id", tenant!.id)
+        .not("stakeholder_account_id", "is", null)
+        .gte("payment_date", `${year}-01-01`)
+        .lte("payment_date", `${year}-12-31`);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const recipients = useMemo(() => {
     const map: Record<string, {
       id: string; nickname: string; custname: string;
@@ -81,8 +98,32 @@ export function TaxSummary() {
       r.needs_1099 = r.requires_1099 && r.total >= THRESHOLD;
     }
 
+    for (const p of cashPayments as any[]) {
+      const acct = p.stakeholder_accounts;
+      if (!acct) continue;
+      if (!map[acct.id]) {
+        map[acct.id] = {
+          id: acct.id,
+          nickname: acct.nickname,
+          custname: acct.custname,
+          account_type: acct.account_type,
+          chk_acct: acct.chk_acct,
+          total: 0,
+          payment_count: 0,
+          requires_1099: REQUIRES_1099_TYPES.includes(acct.account_type),
+          needs_1099: false,
+        };
+      }
+      map[acct.id].total += Number(p.amount);
+      map[acct.id].payment_count += 1;
+    }
+
+    for (const r of Object.values(map)) {
+      r.needs_1099 = r.requires_1099 && r.total >= THRESHOLD;
+    }
+
     return Object.values(map).sort((a, b) => b.total - a.total);
-  }, [payments]);
+  }, [payments, cashPayments]);
 
   const flag1099Count = recipients.filter(r => r.needs_1099).length;
   const totalPaid = recipients.reduce((s, r) => s + r.total, 0);
@@ -116,6 +157,7 @@ export function TaxSummary() {
         <div>
           <h3 className="text-sm font-medium">Tax & 1099 Summary</h3>
           <p className="text-xs text-muted-foreground">Recipients paid ${THRESHOLD}+ may require a 1099-NEC filing</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Includes both insurance disbursements and cash job payments</p>
         </div>
         <div className="flex items-center gap-2">
           <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>

@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 
 const Payments = lazy(() => import("@/pages/Payments"));
+const CashJobs = lazy(() => import("@/pages/CashJobs"));
 
 /**
  * Resolves the base path for tenant routes.
@@ -125,6 +126,22 @@ function WhiteLabelRoutes() {
                 <div className="min-h-screen bg-background p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
                   <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
                     <Payments />
+                  </Suspense>
+                </div>
+              )
+              : <Navigate to={`${basePath}/login`} replace />
+        }
+      />
+      <Route
+        path="cash-jobs"
+        element={
+          !user
+            ? <Navigate to={`${basePath}/login`} replace />
+            : isMember
+              ? (
+                <div className="min-h-screen bg-background p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
+                  <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+                    <CashJobs />
                   </Suspense>
                 </div>
               )
