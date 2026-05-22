@@ -2296,7 +2296,7 @@ function CheckDetailPanel({
               <TabsTrigger value="payees" className="text-xs whitespace-nowrap px-2 sm:px-3">
                 Payees ({check.check_payees?.length ?? 0})
               </TabsTrigger>
-              <TabsTrigger value="payees" className="text-xs whitespace-nowrap px-2 sm:px-3">{/* preserved above */}</TabsTrigger>
+              
               <TabsTrigger value="funds" className="text-xs whitespace-nowrap px-2 sm:px-3 gap-1">
                 Funds
                 {incomingPaymentCount > 0 && (
