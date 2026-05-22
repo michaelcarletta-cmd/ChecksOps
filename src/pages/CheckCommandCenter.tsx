@@ -1664,7 +1664,7 @@ function CheckDetailPanel({
   // Funds: identify the contractor partner (target tenant) when PA is viewing
   const { data: contractorPartner } = useQuery({
     queryKey: ["check-contractor-partner", checkId, tenantId],
-    enabled: !!checkId && !!tenantId && isOwner,
+    enabled: !!checkId && !!tenantId && !!check && (check as any)?.tenant_id === tenantId,
     queryFn: async () => {
       const { data } = await supabase
         .from("shared_checks")
