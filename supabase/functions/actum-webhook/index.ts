@@ -34,8 +34,17 @@ serve(async (req) => {
             })
             .eq("id", splitId);
         }
+
+        // Also update claim_check_payments
+        if (orderinfo?.startsWith("payment_")) {
+          await supabase
+            .from("claim_check_payments")
+            .update({ status: "submitted", submitted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+            .eq("id", orderinfo.replace("payment_", ""));
+        }
       }
     }
+
 
     // --- Return webhook ---
     if (payload.trans_id && payload.return_desc) {
@@ -82,7 +91,24 @@ serve(async (req) => {
             .eq("id", split.batch_id);
         }
       }
+
+      // Also check claim_check_payments
+      if (orderinfo?.startsWith("payment_")) {
+        const paymentId = orderinfo.replace("payment_", "");
+        const rCode = return_desc?.match(/^(R\d+)/)?.[1] ?? null;
+        await supabase
+          .from("claim_check_payments")
+          .update({
+            status: "returned",
+            returned_at: new Date().toISOString(),
+            return_code: rCode,
+            return_desc: return_desc,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", paymentId);
+      }
     }
+
 
     // --- RTP reject webhook ---
     if (payload.trans_id && payload.return_desc?.includes("originating for ACH")) {

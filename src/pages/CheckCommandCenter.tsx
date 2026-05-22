@@ -50,6 +50,10 @@ import { Share2 } from "lucide-react";
 import { ShieldCheck } from "lucide-react";
 import { CheckValidityBadge } from "@/components/checks/CheckValidityBadge";
 import { assessCheckValidity } from "@/lib/checkValidity";
+import { SendPaymentPanel } from "@/components/payments/SendPaymentPanel";
+import { FundsTab as IncomingFundsTab } from "@/components/payments/FundsTab";
+
+
 
 // Lazy-loaded: heavy tab-only / dialog-only modules (each becomes its own JS chunk)
 const LossDraftDashboard = lazy(() =>
@@ -1648,6 +1652,39 @@ function CheckDetailPanel({
     },
   });
 
+  // Funds: payment count for this check (visible to either sender or recipient)
+  const { data: incomingPaymentCount = 0 } = useQuery({
+    queryKey: ["check-funds-count", checkId, tenantId],
+    enabled: !!checkId && !!tenantId,
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("claim_check_payments")
+        .select("id", { count: "exact", head: true })
+        .eq("check_intake_item_id", checkId);
+      return count ?? 0;
+    },
+  });
+
+  // Funds: identify the contractor partner (target tenant) when PA is viewing
+  const { data: contractorPartner } = useQuery({
+    queryKey: ["check-contractor-partner", checkId, tenantId],
+    enabled: !!checkId && !!tenantId && !!check && (check as any)?.tenant_id === tenantId,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("shared_checks")
+        .select("target_tenant_id, tenants!shared_checks_target_tenant_id_fkey(id, name)")
+        .eq("check_id", checkId)
+        .eq("source_tenant_id", tenantId!)
+        .is("revoked_at", null)
+        .limit(1)
+        .maybeSingle();
+      if (!data) return null;
+      const t: any = (data as any).tenants;
+      return { id: data.target_tenant_id as string, name: t?.name as string ?? "Contractor" };
+    },
+  });
+
+
   // Fetch linked accounting entry
   const { data: accountingEntry } = useQuery({
     queryKey: ["check-accounting-link", checkId],
@@ -2259,7 +2296,17 @@ function CheckDetailPanel({
               <TabsTrigger value="payees" className="text-xs whitespace-nowrap px-2 sm:px-3">
                 Payees ({check.check_payees?.length ?? 0})
               </TabsTrigger>
+              
+              <TabsTrigger value="funds" className="text-xs whitespace-nowrap px-2 sm:px-3 gap-1">
+                Funds
+                {incomingPaymentCount > 0 && (
+                  <span className="ml-1 bg-emerald-500/30 text-emerald-400 rounded-full text-[9px] px-1.5">
+                    {incomingPaymentCount}
+                  </span>
+                )}
+              </TabsTrigger>
               <TabsTrigger value="eligibility" className="text-xs whitespace-nowrap px-2 sm:px-3">Eligibility</TabsTrigger>
+
               <TabsTrigger value="discussion" className="text-xs whitespace-nowrap px-2 sm:px-3 gap-1">
                 <MessageSquare className="h-3 w-3" /> Discussion
               </TabsTrigger>
@@ -2800,7 +2847,33 @@ function CheckDetailPanel({
               <PayeeManager checkId={checkId} payees={check.check_payees ?? []} readOnly={isSharedView} onRefresh={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
             </TabsContent>
 
+            <TabsContent value="funds" className="p-4 mt-0">
+              {isOwner ? (
+                contractorPartner ? (
+                  <SendPaymentPanel
+                    checkIntakeItemId={checkId}
+                    checkAmount={Number(check.amount ?? 0)}
+                    checkNumber={check.check_number ?? undefined}
+                    carrierName={check.carrier_name ?? undefined}
+                    contractorTenantId={contractorPartner.id}
+                    contractorName={contractorPartner.name}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    Share this check with a contractor partner first to send funds.
+                  </p>
+                )
+              ) : (
+                <IncomingFundsTab
+                  checkIntakeItemId={checkId}
+                  checkNumber={check.check_number ?? undefined}
+                  carrierName={check.carrier_name ?? undefined}
+                />
+              )}
+            </TabsContent>
+
             <TabsContent value="eligibility" className="p-4 space-y-3 mt-0">
+
               {rec ? (
                 <>
                   <div className="flex items-center gap-2">

@@ -1,0 +1,144 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    const { payment_id } = await req.json();
+    if (!payment_id) throw new Error("payment_id is required");
+
+    // Load the payment with recipient account details
+    const { data: payment, error: payErr } = await supabase
+      .from("claim_check_payments")
+      .select(`
+        *,
+        stakeholder_accounts:recipient_stakeholder_account_id (
+          id, chk_aba, chk_acct, acct_type, custname, consumer_unique
+        )
+      `)
+      .eq("id", payment_id)
+      .single();
+
+    if (payErr) throw payErr;
+    if (!payment) throw new Error("Payment not found");
+    if (payment.status !== "pending") throw new Error(`Payment already ${payment.status}`);
+
+    const account = payment.stakeholder_accounts;
+    if (!account) throw new Error("Recipient account not found");
+
+    const actumParentId = Deno.env.get("ACTUM_PARENT_ID");
+    const actumSubId = Deno.env.get("ACTUM_SUB_ID");
+    const actumEndpoint = "https://join.actumprocessing.com/cgi-bin/dbs/man_trans.cgi";
+
+    const idempotenceKey = payment.idempotence_key ?? `pay_${payment_id}_${Date.now()}`;
+
+    const params = new URLSearchParams();
+
+    if (account.consumer_unique) {
+      // Repeat consumer — skip bank details
+      params.append("parent_id", actumParentId!);
+      params.append("sub_id", actumSubId!);
+      params.append("consumer_code", account.consumer_unique);
+      params.append("initial_amount", Number(payment.payment_amount).toFixed(2));
+      params.append("billing_cycle", "-1");
+      params.append("pmt_type", "chk");
+    } else {
+      params.append("parent_id", actumParentId!);
+      params.append("sub_id", actumSubId!);
+      params.append("pmt_type", "chk");
+      params.append("custname", account.custname);
+      params.append("chk_acct", account.chk_acct);
+      params.append("chk_aba", account.chk_aba);
+      params.append("acct_type", account.acct_type);
+      params.append("initial_amount", Number(payment.payment_amount).toFixed(2));
+      params.append("billing_cycle", "-1");
+      params.append("action_code", "P");
+      params.append("creditflag", "1");
+      params.append("currency", "US");
+      params.append("merordernumber", `payment_${payment_id}`);
+      params.append("postback", "1");
+      params.append("idempotence", idempotenceKey);
+    }
+
+    const actumRes = await fetch(actumEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
+    });
+
+    const responseText = await actumRes.text();
+    const parsed: Record<string, string> = {};
+    for (const line of responseText.split("\n").map(l => l.trim()).filter(Boolean)) {
+      const eq = line.indexOf("=");
+      if (eq > -1) parsed[line.slice(0, eq)] = line.slice(eq + 1);
+    }
+
+    const accepted = (parsed.status ?? "").toLowerCase() === "accepted";
+    const orderId = parsed.order_id;
+    const historyId = parsed.history_id;
+    const consumerUnique = parsed.consumer_unique;
+
+    // Save consumer_unique for future payments
+    if (consumerUnique && !account.consumer_unique) {
+      await supabase
+        .from("stakeholder_accounts")
+        .update({ consumer_unique: consumerUnique })
+        .eq("id", account.id);
+    }
+
+    // Log to actum_transactions
+    await supabase.from("actum_transactions").insert({
+      tenant_id: payment.tenant_id,
+      batch_id: null,
+      actum_order_id: orderId,
+      actum_history_id: historyId,
+      consumer_unique: consumerUnique,
+      mer_order_number: `payment_${payment_id}`,
+      transaction_type: "credit",
+      amount: payment.payment_amount,
+      status: accepted ? "accepted" : "declined",
+      raw_response: parsed,
+      idempotence_key: idempotenceKey,
+    });
+
+    // Update payment record
+    await supabase
+      .from("claim_check_payments")
+      .update({
+        status: accepted ? "submitted" : "failed",
+        actum_order_id: orderId ?? null,
+        actum_history_id: historyId ?? null,
+        actum_consumer_unique: consumerUnique ?? null,
+        submitted_at: accepted ? new Date().toISOString() : null,
+        idempotence_key: idempotenceKey,
+      })
+      .eq("id", payment_id);
+
+    if (!accepted) {
+      throw new Error(parsed.reason ?? parsed.authcode ?? "Actum declined the payment");
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, payment_id, actum_order_id: orderId, status: "submitted" }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+
+  } catch (err: any) {
+    console.error("[actum-send-payment]", err);
+    return new Response(
+      JSON.stringify({ success: false, error: err.message }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+});
