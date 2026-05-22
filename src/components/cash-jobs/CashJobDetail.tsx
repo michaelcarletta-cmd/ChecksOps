@@ -85,7 +85,7 @@ export function CashJobDetail({ jobId, onBack }: Props) {
         cash_job_id: jobId,
         created_by: user.id,
         amount,
-        payment_method: paymentForm.payment_method,
+        payment_method: paymentForm.payment_method as any,
         payment_date: paymentForm.payment_date,
         reference_number: paymentForm.reference_number || null,
         notes: paymentForm.notes || null,
