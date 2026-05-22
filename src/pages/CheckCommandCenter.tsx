@@ -2847,7 +2847,33 @@ function CheckDetailPanel({
               <PayeeManager checkId={checkId} payees={check.check_payees ?? []} readOnly={isSharedView} onRefresh={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
             </TabsContent>
 
+            <TabsContent value="funds" className="p-4 mt-0">
+              {isOwner ? (
+                contractorPartner ? (
+                  <SendPaymentPanel
+                    checkIntakeItemId={checkId}
+                    checkAmount={Number(check.amount ?? 0)}
+                    checkNumber={check.check_number ?? undefined}
+                    carrierName={check.carrier_name ?? undefined}
+                    contractorTenantId={contractorPartner.id}
+                    contractorName={contractorPartner.name}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    Share this check with a contractor partner first to send funds.
+                  </p>
+                )
+              ) : (
+                <IncomingFundsTab
+                  checkIntakeItemId={checkId}
+                  checkNumber={check.check_number ?? undefined}
+                  carrierName={check.carrier_name ?? undefined}
+                />
+              )}
+            </TabsContent>
+
             <TabsContent value="eligibility" className="p-4 space-y-3 mt-0">
+
               {rec ? (
                 <>
                   <div className="flex items-center gap-2">
