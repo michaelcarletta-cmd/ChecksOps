@@ -34,8 +34,17 @@ serve(async (req) => {
             })
             .eq("id", splitId);
         }
+
+        // Also update claim_check_payments
+        if (orderinfo?.startsWith("payment_")) {
+          await supabase
+            .from("claim_check_payments")
+            .update({ status: "submitted", submitted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+            .eq("id", orderinfo.replace("payment_", ""));
+        }
       }
     }
+
 
     // --- Return webhook ---
     if (payload.trans_id && payload.return_desc) {
