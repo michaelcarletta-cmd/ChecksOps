@@ -302,12 +302,13 @@ function EndorsementCard({
   const PayeeIcon = payeeTypeIcons[endorsement.payee_type] ?? AlertTriangle;
 
   const isMortgage = endorsement.payee_type === "mortgage_company";
-  const canSendRequest = !readOnly && !isMortgage &&
+  const canSendRequest = !readOnly && !partnerMode && !isMortgage &&
     endorsement.status !== "signed" &&
     endorsement.status !== "waived" &&
     endorsement.status !== "rejected";
   const canMarkInternal = !readOnly && endorsement.status !== "signed" && endorsement.status !== "waived";
   const isResend = endorsement.request_sent_at != null;
+
 
   const sendRequest = async (method: "email" | "sms") => {
     setSending(true);
