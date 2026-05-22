@@ -18317,6 +18317,7 @@ export type Database = {
         Returns: undefined
       }
       can_manage_roles: { Args: { _user_id: string }; Returns: boolean }
+      classify_payee_type: { Args: { _name: string }; Returns: string }
       cleanup_expired_ai_response_cache: { Args: never; Returns: number }
       compute_claim_last_activity: {
         Args: { p_claim_id: string }
@@ -19174,6 +19175,10 @@ export type Database = {
           settlement_notes: string
           status: string
         }[]
+      }
+      seed_endorsements_from_payee_line: {
+        Args: { _check_id: string }
+        Returns: number
       }
       st_3dclosestpoint: {
         Args: { geom1: unknown; geom2: unknown }
