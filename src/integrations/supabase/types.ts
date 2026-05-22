@@ -1900,7 +1900,10 @@ export type Database = {
           amount: number | null
           back_image_path: string | null
           carrier_name: string | null
+          cash_job_id: string | null
+          cash_job_payment_class: string | null
           check_number: string | null
+          check_source: string
           check_stage: Database["public"]["Enums"]["check_stage"]
           claim_id: string | null
           created_at: string | null
@@ -1949,7 +1952,10 @@ export type Database = {
           amount?: number | null
           back_image_path?: string | null
           carrier_name?: string | null
+          cash_job_id?: string | null
+          cash_job_payment_class?: string | null
           check_number?: string | null
+          check_source?: string
           check_stage?: Database["public"]["Enums"]["check_stage"]
           claim_id?: string | null
           created_at?: string | null
@@ -1998,7 +2004,10 @@ export type Database = {
           amount?: number | null
           back_image_path?: string | null
           carrier_name?: string | null
+          cash_job_id?: string | null
+          cash_job_payment_class?: string | null
           check_number?: string | null
+          check_source?: string
           check_stage?: Database["public"]["Enums"]["check_stage"]
           claim_id?: string | null
           created_at?: string | null
@@ -2043,6 +2052,13 @@ export type Database = {
           uploaded_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "check_intake_items_cash_job_id_fkey"
+            columns: ["cash_job_id"]
+            isOneToOne: false
+            referencedRelation: "cash_jobs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "check_intake_items_claim_id_fkey"
             columns: ["claim_id"]
