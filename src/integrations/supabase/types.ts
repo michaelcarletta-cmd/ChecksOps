@@ -3196,6 +3196,133 @@ export type Database = {
           },
         ]
       }
+      claim_check_payments: {
+        Row: {
+          actum_consumer_unique: string | null
+          actum_history_id: string | null
+          actum_order_id: string | null
+          check_amount: number
+          check_intake_item_id: string
+          created_at: string
+          disbursement_batch_id: string | null
+          id: string
+          idempotence_key: string | null
+          notes: string | null
+          pa_fee_amount: number
+          pa_fee_pct: number | null
+          payment_amount: number
+          recipient_stakeholder_account_id: string
+          recipient_tenant_id: string
+          return_code: string | null
+          return_desc: string | null
+          returned_at: string | null
+          sender_tenant_id: string
+          sender_user_id: string
+          settled_at: string | null
+          status: string
+          submitted_at: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          actum_consumer_unique?: string | null
+          actum_history_id?: string | null
+          actum_order_id?: string | null
+          check_amount: number
+          check_intake_item_id: string
+          created_at?: string
+          disbursement_batch_id?: string | null
+          id?: string
+          idempotence_key?: string | null
+          notes?: string | null
+          pa_fee_amount?: number
+          pa_fee_pct?: number | null
+          payment_amount: number
+          recipient_stakeholder_account_id: string
+          recipient_tenant_id: string
+          return_code?: string | null
+          return_desc?: string | null
+          returned_at?: string | null
+          sender_tenant_id: string
+          sender_user_id: string
+          settled_at?: string | null
+          status?: string
+          submitted_at?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          actum_consumer_unique?: string | null
+          actum_history_id?: string | null
+          actum_order_id?: string | null
+          check_amount?: number
+          check_intake_item_id?: string
+          created_at?: string
+          disbursement_batch_id?: string | null
+          id?: string
+          idempotence_key?: string | null
+          notes?: string | null
+          pa_fee_amount?: number
+          pa_fee_pct?: number | null
+          payment_amount?: number
+          recipient_stakeholder_account_id?: string
+          recipient_tenant_id?: string
+          return_code?: string | null
+          return_desc?: string | null
+          returned_at?: string | null
+          sender_tenant_id?: string
+          sender_user_id?: string
+          settled_at?: string | null
+          status?: string
+          submitted_at?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_check_payments_check_intake_item_id_fkey"
+            columns: ["check_intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_check_payments_disbursement_batch_id_fkey"
+            columns: ["disbursement_batch_id"]
+            isOneToOne: false
+            referencedRelation: "disbursement_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_check_payments_recipient_stakeholder_account_id_fkey"
+            columns: ["recipient_stakeholder_account_id"]
+            isOneToOne: false
+            referencedRelation: "stakeholder_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_check_payments_recipient_tenant_id_fkey"
+            columns: ["recipient_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_check_payments_sender_tenant_id_fkey"
+            columns: ["sender_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_check_payments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_checks: {
         Row: {
           account_number: string | null
