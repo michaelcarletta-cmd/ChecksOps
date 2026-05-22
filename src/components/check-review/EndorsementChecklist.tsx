@@ -66,9 +66,13 @@ interface EndorsementChecklistProps {
   checkId: string;
   onRefresh?: () => void;
   readOnly?: boolean;
+  /** Partner-mode: hides send-request controls but keeps mark-signed/waive,
+   *  performing them as direct DB updates (no staff-only edge function). */
+  partnerMode?: boolean;
 }
 
-export function EndorsementChecklist({ checkId, onRefresh, readOnly = false }: EndorsementChecklistProps) {
+export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, partnerMode = false }: EndorsementChecklistProps) {
+
   const qc = useQueryClient();
   const { toast } = useToast();
 
