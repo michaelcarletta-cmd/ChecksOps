@@ -2317,13 +2317,11 @@ function CheckDetailPanel({
               </TabsTrigger>
               <TabsTrigger value="eligibility" className="text-xs whitespace-nowrap px-2 sm:px-3">Eligibility</TabsTrigger>
 
-              <TabsTrigger value="discussion" className="text-xs whitespace-nowrap px-2 sm:px-3 gap-1">
-                <MessageSquare className="h-3 w-3" /> Discussion
-              </TabsTrigger>
-              <TabsTrigger value="audit" className="text-xs whitespace-nowrap px-2 sm:px-3">Audit</TabsTrigger>
               <TabsTrigger value="partners" className="text-xs whitespace-nowrap px-2 sm:px-3 gap-1">
                 <Share2 className="h-3 w-3" /> Partners
+                <MessageSquare className="h-3 w-3 ml-0.5 opacity-70" />
               </TabsTrigger>
+              <TabsTrigger value="audit" className="text-xs whitespace-nowrap px-2 sm:px-3">Audit</TabsTrigger>
             </TabsList>
           </div>
 
