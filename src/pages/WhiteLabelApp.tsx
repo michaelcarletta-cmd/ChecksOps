@@ -27,6 +27,25 @@ function useTenantBasePath(slug?: string) {
   return hostScoped ? `/${slug}` : `/wl/${slug}`;
 }
 
+function SubPageHeader({ basePath }: { basePath: string }) {
+  return (
+    <div className="flex items-center gap-2 mb-3">
+      <Button variant="ghost" size="sm" asChild className="gap-1.5 h-8 px-2 text-muted-foreground hover:text-foreground">
+        <Link to={`${basePath}/checks`}>
+          <ArrowLeft className="h-4 w-4" />
+          <span className="text-xs">Back</span>
+        </Link>
+      </Button>
+      <Button variant="ghost" size="sm" asChild className="gap-1.5 h-8 px-2 text-muted-foreground hover:text-foreground">
+        <Link to={`${basePath}/checks`}>
+          <Home className="h-4 w-4" />
+          <span className="text-xs">Home</span>
+        </Link>
+      </Button>
+    </div>
+  );
+}
+
 function WhiteLabelRoutes() {
   const { tenant, loading, error } = useTenant();
   const { user, loading: authLoading } = useAuth();
