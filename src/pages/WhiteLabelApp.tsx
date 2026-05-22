@@ -1,4 +1,5 @@
 import { useParams, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { lazy, Suspense } from "react";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { TenantThemeProvider } from "@/components/white-label/TenantThemeProvider";
 import { WhiteLabelLogin } from "@/components/white-label/WhiteLabelLogin";
@@ -9,6 +10,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
+
+const Payments = lazy(() => import("@/pages/Payments"));
 
 /**
  * Resolves the base path for tenant routes.
@@ -109,6 +112,22 @@ function WhiteLabelRoutes() {
             ? <Navigate to={`${basePath}/login`} replace />
             : isMember
               ? <WhiteLabelCheckCenter />
+              : <Navigate to={`${basePath}/login`} replace />
+        }
+      />
+      <Route
+        path="payments"
+        element={
+          !user
+            ? <Navigate to={`${basePath}/login`} replace />
+            : isMember
+              ? (
+                <div className="min-h-screen bg-background p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
+                  <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+                    <Payments />
+                  </Suspense>
+                </div>
+              )
               : <Navigate to={`${basePath}/login`} replace />
         }
       />
