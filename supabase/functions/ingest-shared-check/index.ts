@@ -43,6 +43,7 @@ interface IngestPayload {
     payee_type?: string | null;
     endorsement_status?: string | null;
     endorsed_at?: string | null;
+    signed_at?: string | null;
     contact_email?: string | null;
     contact_phone?: string | null;
   }>;
@@ -52,6 +53,36 @@ function humanizeStatus(key: string): string {
   return key
     .replace(/_/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function resolveSignedAt(payee: { endorsed_at?: string | null; signed_at?: string | null }): string | null {
+  return payee.endorsed_at ?? payee.signed_at ?? null;
+}
+
+function normalizePayeeStatus(status?: string | null, signedAt?: string | null): string {
+  if (signedAt) return "signed";
+
+  const value = (status ?? "").toLowerCase().trim();
+  if (!value) return "pending";
+  if (["signed", "endorsed", "complete", "completed", "waived", "manual_required"].includes(value)) return "signed";
+  if (["viewed", "opened"].includes(value)) return "viewed";
+  if (["declined", "rejected"].includes(value)) return "rejected";
+  if (value === "expired") return "expired";
+  return "pending";
+}
+
+function normalizeEndorsementStatus(status?: string | null, signedAt?: string | null): string {
+  if (signedAt) return "signed";
+
+  const value = (status ?? "").toLowerCase().trim();
+  if (!value) return "pending";
+  if (["signed", "endorsed", "complete", "completed"].includes(value)) return "signed";
+  if (value === "waived") return "waived";
+  if (value === "manual_required") return "manual_required";
+  if (["declined", "rejected"].includes(value)) return "rejected";
+  if (["sent", "requested", "awaiting", "in_progress", "viewed", "opened"].includes(value)) return "sent";
+  if (value === "expired") return "expired";
+  return "pending";
 }
 
 function derivePartnerStatus(check: IngestPayload["check"]): {
@@ -285,36 +316,33 @@ Deno.serve(async (req) => {
       );
       if (cleaned.length > 0) {
         const payeeRows = cleaned.map((p) => ({
+          constSignedAt: resolveSignedAt(p),
+        })).map(({ constSignedAt, ...p }) => ({
           check_id: checkId,
           tenant_id: sourceTenantId,
           payee_name: p.payee_name.trim(),
           payee_type: p.payee_type ?? null,
-          endorsement_status: p.endorsement_status ?? "pending",
-          endorsed_at: p.endorsed_at ?? null,
+          endorsement_status: normalizePayeeStatus(p.endorsement_status, constSignedAt),
+          endorsed_at: constSignedAt,
           contact_email: p.contact_email ?? null,
           contact_phone: p.contact_phone ?? null,
         }));
         const { error: payeeErr } = await supabase.from("check_payees").insert(payeeRows);
         if (payeeErr) console.warn("ingest-shared-check payee mirror failed", payeeErr);
 
-        const normalizeStatus = (s?: string | null): string => {
-          const v = (s ?? "").toLowerCase().trim();
-          if (!v) return "pending";
-          if (["signed", "endorsed", "complete", "completed"].includes(v)) return "signed";
-          if (["declined", "rejected"].includes(v)) return "declined";
-          if (["sent", "requested", "awaiting", "in_progress"].includes(v)) return "requested";
-          return "pending";
-        };
-        const endorsementRows = cleaned.map((p) => ({
+        const endorsementRows = cleaned.map((p) => {
+          const signedAt = resolveSignedAt(p);
+          return {
           check_id: checkId,
           tenant_id: sourceTenantId,
           payee_name: p.payee_name.trim(),
           payee_type: p.payee_type ?? "other",
-          status: normalizeStatus(p.endorsement_status),
-          signed_at: p.endorsed_at ?? null,
+          status: normalizeEndorsementStatus(p.endorsement_status, signedAt),
+          signed_at: signedAt,
           contact_email: p.contact_email ?? null,
           contact_phone: p.contact_phone ?? null,
-        }));
+          };
+        });
         const { error: endErr } = await supabase
           .from("check_endorsements")
           .insert(endorsementRows);
