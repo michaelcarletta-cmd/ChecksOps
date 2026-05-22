@@ -2922,12 +2922,6 @@ function CheckDetailPanel({
               </Suspense>
             </TabsContent>
 
-            <TabsContent value="discussion" className="p-4 mt-0">
-              <Suspense fallback={<TabLoader />}>
-                <CheckMessageThread checkId={checkId} active={detailTab === "discussion"} />
-              </Suspense>
-            </TabsContent>
-
             <TabsContent value="audit" className="p-4 space-y-2 mt-0">
               {auditLog.map((entry) => (
                 <div key={entry.id} className="flex gap-3 text-sm">
@@ -2948,10 +2942,23 @@ function CheckDetailPanel({
               )}
             </TabsContent>
 
-            <TabsContent value="partners" className="p-4 mt-0">
-              <Suspense fallback={<TabLoader />}>
-                <SharedCheckThread checkId={checkId} />
-              </Suspense>
+            <TabsContent value="partners" className="p-4 mt-0 space-y-4">
+              <div>
+                <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-1.5">
+                  Partner discussion
+                </div>
+                <Suspense fallback={<TabLoader />}>
+                  <SharedCheckThread checkId={checkId} />
+                </Suspense>
+              </div>
+              <div>
+                <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-1.5">
+                  Internal team notes
+                </div>
+                <Suspense fallback={<TabLoader />}>
+                  <CheckMessageThread checkId={checkId} active={detailTab === "partners"} />
+                </Suspense>
+              </div>
             </TabsContent>
           </ScrollArea>
         </Tabs>
