@@ -49,6 +49,8 @@ interface IngestPayload {
   }>;
 }
 
+type IngestPayee = NonNullable<IngestPayload["payees"]>[number];
+
 function humanizeStatus(key: string): string {
   return key
     .replace(/_/g, " ")
@@ -83,6 +85,28 @@ function normalizeEndorsementStatus(status?: string | null, signedAt?: string | 
   if (["sent", "requested", "awaiting", "in_progress", "viewed", "opened"].includes(value)) return "sent";
   if (value === "expired") return "expired";
   return "pending";
+}
+
+function derivePartnerStatusFromPayees(payees: IngestPayee[]): {
+  partner_status: string;
+  partner_status_label: string;
+  partner_status_updated_at: string;
+} | null {
+  if (payees.length === 0) return null;
+
+  const normalized = payees.map((payee) =>
+    normalizeEndorsementStatus(payee.endorsement_status, resolveSignedAt(payee))
+  );
+  const allComplete = normalized.every((status) =>
+    ["signed", "waived", "manual_required"].includes(status)
+  );
+  const partnerStatus = allComplete ? "endorsements_complete" : "endorsements_in_progress";
+
+  return {
+    partner_status: partnerStatus,
+    partner_status_label: humanizeStatus(partnerStatus),
+    partner_status_updated_at: new Date().toISOString(),
+  };
 }
 
 function derivePartnerStatus(check: IngestPayload["check"]): {
@@ -238,7 +262,12 @@ Deno.serve(async (req) => {
       .eq("external_origin->>source_check_id", body.source_check_id)
       .maybeSingle();
 
-    const initialPartnerStatus = derivePartnerStatus(body.check);
+    const cleanedPayees = Array.isArray(body.payees)
+      ? body.payees.filter(
+        (p) => p && typeof p.payee_name === "string" && p.payee_name.trim().length > 0,
+      )
+      : [];
+    const initialPartnerStatus = derivePartnerStatus(body.check) ?? derivePartnerStatusFromPayees(cleanedPayees);
 
     let checkId: string;
     if (existingCheck) {
@@ -311,11 +340,8 @@ Deno.serve(async (req) => {
       // Replace existing payees + endorsements for this check with the latest snapshot.
       await supabase.from("check_payees").delete().eq("check_id", checkId);
       await supabase.from("check_endorsements").delete().eq("check_id", checkId);
-      const cleaned = body.payees.filter(
-        (p) => p && typeof p.payee_name === "string" && p.payee_name.trim().length > 0,
-      );
-      if (cleaned.length > 0) {
-        const payeeRows = cleaned.map((p) => {
+      if (cleanedPayees.length > 0) {
+        const payeeRows = cleanedPayees.map((p) => {
           const signedAt = resolveSignedAt(p);
           return {
           check_id: checkId,
@@ -331,7 +357,7 @@ Deno.serve(async (req) => {
         const { error: payeeErr } = await supabase.from("check_payees").insert(payeeRows);
         if (payeeErr) console.warn("ingest-shared-check payee mirror failed", payeeErr);
 
-        const endorsementRows = cleaned.map((p) => {
+        const endorsementRows = cleanedPayees.map((p) => {
           const signedAt = resolveSignedAt(p);
           return {
           check_id: checkId,

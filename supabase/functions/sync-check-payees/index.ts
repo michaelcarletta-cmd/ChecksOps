@@ -28,6 +28,26 @@ interface Payload {
   payees: PayeeInput[];
 }
 
+function derivePartnerStatus(payees: PayeeInput[]): {
+  partner_status: string;
+  partner_status_label: string;
+  partner_status_updated_at: string;
+} | null {
+  if (payees.length === 0) return null;
+
+  const normalized = payees.map((payee) =>
+    normalizeStatus(payee.endorsement_status, resolveSignedAt(payee))
+  );
+  const allComplete = normalized.every((status) => ["signed", "waived", "manual_required"].includes(status));
+  const partnerStatus = allComplete ? "endorsements_complete" : "endorsements_in_progress";
+
+  return {
+    partner_status: partnerStatus,
+    partner_status_label: partnerStatus.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()),
+    partner_status_updated_at: new Date().toISOString(),
+  };
+}
+
 function resolveSignedAt(payee: Pick<PayeeInput, "endorsed_at" | "signed_at">): string | null {
   return payee.endorsed_at ?? payee.signed_at ?? null;
 }
@@ -113,6 +133,7 @@ Deno.serve(async (req) => {
     const cleaned = body.payees.filter(
       (p) => p && typeof p.payee_name === "string" && p.payee_name.trim().length > 0,
     );
+    const partnerStatus = derivePartnerStatus(cleaned);
 
     // Replace check_payees snapshot.
     await supabase.from("check_payees").delete().eq("check_id", checkId);
@@ -156,6 +177,17 @@ Deno.serve(async (req) => {
         .from("check_endorsements")
         .insert(endorsementRows);
       if (endErr) console.warn("sync-check-payees: check_endorsements insert failed", endErr);
+    }
+
+    if (partnerStatus) {
+      const { error: statusErr } = await supabase
+        .from("check_intake_items")
+        .update({
+          ...partnerStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", checkId);
+      if (statusErr) console.warn("sync-check-payees: partner status update failed", statusErr);
     }
 
     return new Response(
