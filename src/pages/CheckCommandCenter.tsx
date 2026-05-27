@@ -1569,6 +1569,7 @@ function CheckDetailPanel({
   const [bypassingEndorsements, setBypassingEndorsements] = useState(false);
   const [branchApprovedAt, setBranchApprovedAt] = useState<number | null>(null);
   const [showForceMove, setShowForceMove] = useState(false);
+  const [detailShareOpen, setDetailShareOpen] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
