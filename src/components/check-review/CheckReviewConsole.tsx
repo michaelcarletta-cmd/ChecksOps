@@ -468,6 +468,21 @@ export function ReviewDecisionPanel({
         updates.payee_line = payeeLine || null;
         fieldChanges.push({ field: "payee_line", old_value: check.payee_line, new_value: payeeLine || null });
       }
+      const trimmedDate = issueDate.trim();
+      if ((trimmedDate || null) !== (check.issue_date ?? null)) {
+        updates.issue_date = trimmedDate || null;
+        fieldChanges.push({ field: "issue_date", old_value: check.issue_date, new_value: trimmedDate || null });
+      }
+      const trimmedRouting = routingNumber.replace(/\D/g, "");
+      if ((trimmedRouting || null) !== (check.routing_number ?? null)) {
+        updates.routing_number = trimmedRouting || null;
+        fieldChanges.push({ field: "routing_number", old_value: check.routing_number, new_value: trimmedRouting || null });
+      }
+      const trimmedAccount = accountNumber.replace(/\D/g, "");
+      if ((trimmedAccount || null) !== (check.account_number ?? null)) {
+        updates.account_number = trimmedAccount || null;
+        fieldChanges.push({ field: "account_number", old_value: check.account_number, new_value: trimmedAccount || null });
+      }
 
       if (Object.keys(updates).length === 0) throw new Error("No field changes to save");
 
