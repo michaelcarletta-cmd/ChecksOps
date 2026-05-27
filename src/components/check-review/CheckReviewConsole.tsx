@@ -506,11 +506,9 @@ function getMissingFields(check: ReviewCheck): string[] {
 }
 
 function getMissingFieldsForLossDraft(check: ReviewCheck): string[] {
-  const missing = getMissingFields(check);
-  if (!check.claim_id) {
-    missing.push("Claim link (check must be linked to a claim before it can go to Loss Draft)");
-  }
-  return missing;
+  // Claim link is no longer required — checks can be moved between stages
+  // even when no claim is linked (cross-tenant / unlinked workflows).
+  return getMissingFields(check);
 }
 
 export function ReviewDecisionPanel({
