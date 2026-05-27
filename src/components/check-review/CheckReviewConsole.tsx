@@ -42,6 +42,8 @@ interface ReviewCheck {
   check_number: string | null;
   amount: number | null;
   issue_date: string | null;
+  routing_number: string | null;
+  account_number: string | null;
   payee_line: string | null;
   is_multi_payee: boolean;
   ocr_status: string;
