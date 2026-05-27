@@ -651,6 +651,7 @@ Rules:
           jsonMode: true,
           temperature: 0,
           maxTokens: 4000,
+          apiKey: tenantApiKey ?? undefined,
         });
       } catch (fetchErr) {
         const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
