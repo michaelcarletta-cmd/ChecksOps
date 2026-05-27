@@ -148,6 +148,9 @@ interface CheckItem {
   property_address?: string | null;
   payment_classification?: string | null;
   payee_address?: string | null;
+  deposited_at?: string | null;
+  deposited_by_tenant_id?: string | null;
+  updated_at?: string | null;
   check_payees?: CheckPayee[];
   partner_status?: string | null;
   partner_status_label?: string | null;
