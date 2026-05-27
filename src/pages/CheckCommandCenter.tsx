@@ -46,6 +46,8 @@ import { ArrowDownToLine, FileBarChart } from "lucide-react";
 import { CheckCenterHelpButton } from "@/components/check-review/CheckCenterHelp";
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
+import { DepositStatusPanel } from "@/components/check-review/DepositStatusPanel";
+import { SignatureStatusPanel } from "@/components/check-review/SignatureStatusPanel";
 import { Share2 } from "lucide-react";
 import { ShieldCheck } from "lucide-react";
 import { CheckValidityBadge } from "@/components/checks/CheckValidityBadge";
@@ -146,6 +148,9 @@ interface CheckItem {
   property_address?: string | null;
   payment_classification?: string | null;
   payee_address?: string | null;
+  deposited_at?: string | null;
+  deposited_by_tenant_id?: string | null;
+  updated_at?: string | null;
   check_payees?: CheckPayee[];
   partner_status?: string | null;
   partner_status_label?: string | null;
@@ -1581,6 +1586,31 @@ function CheckDetailPanel({
       return data as CheckItem;
     },
   });
+
+  // Realtime: refresh check detail + endorsements when any partner deposits or a payee signs.
+  useEffect(() => {
+    if (!checkId) return;
+    const channel = supabase
+      .channel(`check-detail-rt-${checkId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "check_intake_items", filter: `id=eq.${checkId}` },
+        () => {
+          qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "check_endorsements", filter: `check_id=eq.${checkId}` },
+        () => {
+          qc.invalidateQueries({ queryKey: ["check-endorsement-signatures", checkId] });
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [checkId, qc]);
   const savedOverride = (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null;
   const showPayToOrder = savedOverride?.showPayToOrder ?? false;
 
@@ -2327,6 +2357,13 @@ function CheckDetailPanel({
 
           <ScrollArea className="h-[calc(100vh-520px)]">
             <TabsContent value="overview" className="p-4 space-y-3 mt-0">
+              <DepositStatusPanel
+                checkId={checkId}
+                depositedAt={check.deposited_at ?? null}
+                depositedByTenantId={check.deposited_by_tenant_id ?? null}
+                lastUpdated={check.updated_at ?? null}
+              />
+              <SignatureStatusPanel checkId={checkId} />
               {check.ocr_status !== "complete" && (
                 <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
                   <div className="flex items-center gap-1.5 font-medium">
@@ -2412,15 +2449,6 @@ function CheckDetailPanel({
                 checkId={checkId}
                 field="property_address"
                 value={check.property_address ?? null}
-                multiline
-                readOnly={isSharedView}
-                onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
-              />
-              <EditableField
-                label="Payee Address"
-                checkId={checkId}
-                field="payee_address"
-                value={check.payee_address ?? null}
                 multiline
                 readOnly={isSharedView}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
