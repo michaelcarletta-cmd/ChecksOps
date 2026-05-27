@@ -228,6 +228,33 @@ export function CheckReviewQueue({
   selectedCheckId: string | null;
 }) {
   const { tenantId } = useTenantFilter();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [shareCheckId, setShareCheckId] = useState<string | null>(null);
+  const [claimEdits, setClaimEdits] = useState<Record<string, string>>({});
+  const [savingClaimId, setSavingClaimId] = useState<string | null>(null);
+
+  const saveClaimNumber = useCallback(async (checkId: string, value: string) => {
+    setSavingClaimId(checkId);
+    const { error } = await supabase
+      .from("check_intake_items")
+      .update({ detected_claim_number: value.trim() || null })
+      .eq("id", checkId);
+    setSavingClaimId(null);
+    if (error) {
+      toast({ title: "Failed to save claim #", description: error.message, variant: "destructive" });
+      return;
+    }
+    setClaimEdits((prev) => {
+      const next = { ...prev };
+      delete next[checkId];
+      return next;
+    });
+    toast({ title: "Claim # updated" });
+    qc.invalidateQueries({ queryKey: ["check-review-queue", tenantId] });
+    qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
+  }, [qc, tenantId, toast]);
+
   const { data: reviewChecks = [], isLoading } = useQuery({
     queryKey: ["check-review-queue", tenantId],
     queryFn: async () => {
