@@ -118,9 +118,11 @@ async function executeChat(
   model: string,
   body: Record<string, unknown>,
   contextLabel: string,
+  overrideKey?: string,
 ): Promise<{ data: any; resolvedModel: string }> {
-  const cfg = buildRequestConfig(model);
+  const cfg = buildRequestConfig(model, overrideKey);
   const payload = { ...body, model: cfg.bodyModel };
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS);
 
