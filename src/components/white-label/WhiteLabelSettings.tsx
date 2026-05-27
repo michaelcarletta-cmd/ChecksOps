@@ -92,9 +92,6 @@ export function WhiteLabelSettings() {
             {isAdmin && <BillingConfigPanel />}
           </TabsContent>
 
-          <TabsContent value="credits">
-            <TenantCreditManager />
-          </TabsContent>
 
           <TabsContent value="ai-key">
             <TenantAIKeySettings />
