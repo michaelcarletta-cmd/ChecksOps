@@ -857,7 +857,28 @@ Deno.serve(async (req) => {
         }
 
         const appUrl = Deno.env.get("APP_URL") || "https://freedomclaims.lovable.app";
-        const endorsementUrl = `${appUrl}/endorse?token=${endorsement.token}`;
+
+        // Ensure endorsement has an active, non-expiring token before sending.
+        // Mirrors Freedom Claims flow: links sent to payees never auto-expire —
+        // they remain valid until the endorsement is completed or rejected.
+        let activeToken: string = endorsement.token ?? "";
+        if (!activeToken) {
+          activeToken = crypto.randomUUID();
+        }
+        await supabase.from("check_endorsements").update({
+          token: activeToken,
+          token_expires_at: null,
+        }).eq("id", endorsement.id);
+        if (endorsement.payee_id) {
+          await supabase.from("check_payees").update({
+            endorsement_token: activeToken,
+            endorsement_token_expires_at: null,
+          }).eq("id", endorsement.payee_id);
+        }
+        endorsement.token = activeToken;
+        endorsement.token_expires_at = null;
+
+        const endorsementUrl = `${appUrl}/endorse?token=${activeToken}`;
         const checkNum = endorsement.check_intake_items?.check_number ?? "N/A";
         const carrier = endorsement.check_intake_items?.carrier_name ?? "Unknown";
         const amount = endorsement.check_intake_items?.amount ?? null;
