@@ -1453,17 +1453,60 @@ function StatusOverride({
     }
     setSaving(true);
     try {
+      // Map the new status to the matching stage + recommendation so the check
+      // fully moves out of its old tab (tabs filter on status AND deposit_recommendation).
+      const stageMap: Record<string, string> = {
+        uploaded: "review",
+        processing: "review",
+        ocr_complete: "review",
+        needs_review: "review",
+        manual_review_required: "review",
+        reissue_requested: "review",
+        endorsements_in_progress: "endorsing",
+        endorsements_complete: "endorsing",
+        approved_for_deposit: "ready_for_deposit",
+        branch_deposit_required: "ready_for_deposit",
+        loss_draft_required: "loss_draft",
+        deposited: "deposited",
+        voided: "review",
+      };
+      const recMap: Record<string, string | null> = {
+        endorsements_in_progress: "endorsements_pending",
+        endorsements_complete: "endorsements_pending",
+        approved_for_deposit: "ready_for_deposit",
+        branch_deposit_required: "branch_deposit_recommended",
+        loss_draft_required: "loss_draft_required",
+        reissue_requested: "request_reissue",
+        needs_review: null,
+        manual_review_required: null,
+        uploaded: null,
+        processing: null,
+        ocr_complete: null,
+        deposited: null,
+        voided: null,
+      };
+      const update: Record<string, unknown> = {
+        status: newStatus,
+        check_stage: stageMap[newStatus] ?? "review",
+        deposit_recommendation: recMap[newStatus] ?? null,
+        updated_at: new Date().toISOString(),
+      };
       const { error } = await supabase
         .from("check_intake_items")
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .update(update)
         .eq("id", checkId);
       if (error) throw error;
+      // Mirror stage to claim_checks so other views stay in sync.
+      await supabase
+        .from("claim_checks")
+        .update({ check_stage: update.check_stage, updated_at: update.updated_at })
+        .eq("check_intake_item_id", checkId);
       await supabase.from("check_audit_log").insert({
         check_id: checkId,
         event_type: "status_manual_override",
         actor_id: user?.id ?? null,
         event_description: `Status manually changed from "${currentStatus}" to "${newStatus}"`,
-        event_data: { old_status: currentStatus, new_status: newStatus },
+        event_data: { old_status: currentStatus, new_status: newStatus, new_stage: update.check_stage },
       });
       toast({ title: "Status updated", description: `Moved to ${newStatus.replace(/_/g, " ")}` });
       setEditing(false);
