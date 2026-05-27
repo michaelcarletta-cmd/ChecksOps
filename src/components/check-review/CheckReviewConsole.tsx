@@ -485,12 +485,6 @@ export function CheckReviewQueue({
     </ScrollArea>
   );
 }
-          </Fragment>
-        ))}
-      </div>
-    </ScrollArea>
-  );
-}
 
 /* ------------------------------------------------------------------ */
 /*  Review Decision Panel — uses transactional RPC                     */
