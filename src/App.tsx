@@ -103,9 +103,11 @@ const App = () => (
       <Sonner />
       <OfflineIndicator />
       <BrowserRouter>
-        <div className="dark">
-          <AppRoutes />
-        </div>
+        <AuthProvider>
+          <div className="dark">
+            <AppRoutes />
+          </div>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
