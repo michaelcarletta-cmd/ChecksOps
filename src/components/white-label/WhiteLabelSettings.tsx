@@ -73,7 +73,6 @@ export function WhiteLabelSettings() {
           <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
             <TabsTrigger value="profile" className="text-xs gap-1"><Building2 className="h-3 w-3" />Profile</TabsTrigger>
             <TabsTrigger value="usage" className="text-xs gap-1"><Receipt className="h-3 w-3" />Usage</TabsTrigger>
-            <TabsTrigger value="credits" className="text-xs gap-1"><Coins className="h-3 w-3" />Credits</TabsTrigger>
             <TabsTrigger value="ai-key" className="text-xs gap-1"><KeyRound className="h-3 w-3" />AI Key</TabsTrigger>
             <TabsTrigger value="users" className="text-xs gap-1"><Users className="h-3 w-3" />Users</TabsTrigger>
 
