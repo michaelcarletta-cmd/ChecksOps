@@ -105,7 +105,7 @@ function normalizeAmountValue(raw: string | null): string | null {
 }
 
 async function extractAmountWithFocusedPass(
-  _unused: string,
+  tenantApiKey: string | null,
   frontImageUrl: string,
   backImageUrl: string | null,
 ): Promise<AmountFallbackResult> {
