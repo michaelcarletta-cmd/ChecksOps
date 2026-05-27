@@ -408,6 +408,9 @@ export function ReviewDecisionPanel({
       setCheckNumber(check.check_number ?? "");
       setAmount(check.amount?.toString() ?? "");
       setPayeeLine(check.payee_line ?? "");
+      setIssueDate(check.issue_date ?? "");
+      setRoutingNumber(check.routing_number ?? "");
+      setAccountNumber(check.account_number ?? "");
       setFundsType(((check as any).funds_type as string) ?? "");
       setPropertyAddress(((check as any).property_address as string) ?? "");
     }
