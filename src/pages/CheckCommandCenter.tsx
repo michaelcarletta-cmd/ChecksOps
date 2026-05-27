@@ -2332,6 +2332,13 @@ function CheckDetailPanel({
 
           <ScrollArea className="h-[calc(100vh-520px)]">
             <TabsContent value="overview" className="p-4 space-y-3 mt-0">
+              <DepositStatusPanel
+                checkId={checkId}
+                depositedAt={check.deposited_at ?? null}
+                depositedByTenantId={check.deposited_by_tenant_id ?? null}
+                lastUpdated={check.updated_at ?? null}
+              />
+              <SignatureStatusPanel checkId={checkId} />
               {check.ocr_status !== "complete" && (
                 <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
                   <div className="flex items-center gap-1.5 font-medium">
