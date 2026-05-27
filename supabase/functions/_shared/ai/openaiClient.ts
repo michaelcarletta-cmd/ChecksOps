@@ -337,7 +337,7 @@ export async function callWithTools(opts: ToolCallOptions): Promise<ToolCallResu
     body.tool_choice = opts.toolChoice;
   }
 
-  const { data, resolvedModel } = await executeChat(opts.model, body, "callWithTools");
+  const { data, resolvedModel } = await executeChat(opts.model, body, "callWithTools", opts.apiKey);
   const message = data.choices?.[0]?.message;
   return {
     text: message?.content || "",
