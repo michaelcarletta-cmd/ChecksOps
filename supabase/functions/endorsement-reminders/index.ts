@@ -86,6 +86,7 @@ Deno.serve(async (req) => {
               to: endorsement.contact_email,
               subject: reminderSubject.replace(/\{check\.number\}/g, checkInfo?.check_number ?? "N/A").replace(/\{check\.amount\}/g, checkInfo?.amount ?? "N/A").replace(/\{check\.carrier\}/g, checkInfo?.carrier_name ?? "your insurance carrier").replace(/\{payee\.name\}/g, endorsement.payee_name),
               body: `<p>Hi ${endorsement.payee_name},</p><p>${reminderBody.replace(/\{check\.number\}/g, checkInfo?.check_number ?? "N/A").replace(/\{check\.amount\}/g, `$${checkInfo?.amount ?? "N/A"}`).replace(/\{check\.carrier\}/g, checkInfo?.carrier_name ?? "your insurance carrier").replace(/\{payee\.name\}/g, endorsement.payee_name).replace(/\n/g, "</p><p>")}</p><p>This is reminder #${endorsement.reminder_count + 1}.</p><p><a href="${endorsementUrl}">Click here to review &amp; endorse</a></p>`,
+              checkId: endorsement.check_id,
             },
           });
           if (!error) sent = true;
