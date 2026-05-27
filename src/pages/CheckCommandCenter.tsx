@@ -2428,15 +2428,6 @@ function CheckDetailPanel({
                 readOnly={isSharedView}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
-              <EditableField
-                label="Payee Address"
-                checkId={checkId}
-                field="payee_address"
-                value={check.payee_address ?? null}
-                multiline
-                readOnly={isSharedView}
-                onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
-              />
               <DetailRow label="OCR Status" value={check.ocr_status} />
               {!isSharedView && (
                 <>
