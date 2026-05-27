@@ -372,19 +372,48 @@ Deno.serve(async (req) => {
 
     console.log(`Sending email via Resend from "${fromAddress}" (tenant=${resolvedTenantId ?? 'default'}) to ${toEmails.join(', ')}${ccList.length > 0 ? ` (CC: ${ccList.join(', ')})` : ''}${replyToAddress ? ` (Reply-To: ${replyToAddress})` : ''} with ${emailAttachments.length} attachments`);
 
-    // Send via Resend
-    const emailResponse = await sendResendEmail(
-      resendApiKey,
-      fromAddress,
-      toEmails,
-      subject,
-      htmlContent,
-      emailAttachments.length > 0 ? emailAttachments : undefined,
-      ccList.length > 0 ? ccList : undefined,
-      replyToAddress
-    );
+    // Send via Resend — with unverified-domain fallback.
+    // If the tenant's sending domain isn't verified in Resend yet, fall back
+    // to the default Freedom sender and use the tenant's address as Reply-To
+    // so replies still route to the tenant.
+    let emailResponse: any;
+    let usedFallback = false;
+    try {
+      emailResponse = await sendResendEmail(
+        resendApiKey,
+        fromAddress,
+        toEmails,
+        subject,
+        htmlContent,
+        emailAttachments.length > 0 ? emailAttachments : undefined,
+        ccList.length > 0 ? ccList : undefined,
+        replyToAddress
+      );
+    } catch (sendErr) {
+      const msg = sendErr instanceof Error ? sendErr.message : String(sendErr);
+      const isDomainIssue =
+        fromAddress !== DEFAULT_FROM &&
+        /(domain.*not.*verified|verify.*domain|not.*found|validation_error|invalid.*from|forbidden|403)/i.test(msg);
 
-    console.log(`Email sent via Resend:`, emailResponse);
+      if (!isDomainIssue) throw sendErr;
+
+      console.warn(`Tenant domain not verified, falling back to default sender. Original error: ${msg}`);
+      usedFallback = true;
+      // Use tenant address as Reply-To so replies still go to the tenant
+      const fallbackReplyTo = replyToAddress || tenantFromAddress || undefined;
+      emailResponse = await sendResendEmail(
+        resendApiKey,
+        DEFAULT_FROM,
+        toEmails,
+        subject,
+        htmlContent,
+        emailAttachments.length > 0 ? emailAttachments : undefined,
+        ccList.length > 0 ? ccList : undefined,
+        fallbackReplyTo
+      );
+    }
+
+    console.log(`Email sent via Resend${usedFallback ? ' (fallback sender)' : ''}:`, emailResponse);
 
     // Log email to database for each recipient if claimId provided
     if (claimId) {
