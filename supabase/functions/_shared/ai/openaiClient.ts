@@ -147,9 +147,12 @@ async function executeChat(
   // Only fall back when an OpenAI key is configured; otherwise surface the
   // original gateway error so callers see the real cause (and we don't mask it
   // with a misleading 401 from a stale OpenAI key).
-  const isLovable = pickProvider(model) === "lovable";
-  const openAIKey = Deno.env.get("OPENAI_API_KEY");
+  // BYOK: if caller supplied a tenant key, never silently fall back to the
+  // platform's OpenAI key — that would leak platform spend onto a tenant request.
+  const isLovable = pickProvider(model) === "lovable" && !overrideKey;
+  const openAIKey = overrideKey ? null : Deno.env.get("OPENAI_API_KEY");
   if (isLovable && (res.status === 402 || res.status === 429) && openAIKey) {
+
     const fbModel = fallbackOpenAIModel(model);
     console.warn(
       `[aiClient] ${contextLabel}: Lovable gateway returned ${res.status} for ${model}. Falling back to OpenAI ${fbModel}.`,
