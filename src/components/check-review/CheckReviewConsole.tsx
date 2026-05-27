@@ -576,7 +576,7 @@ export function ReviewDecisionPanel({
       const parsedAmount = amount.trim() ? Number(amount) : null;
       if (amount.trim() && !Number.isFinite(parsedAmount)) throw new Error("Enter a valid amount");
 
-      const { fieldChanges } = buildReviewFieldUpdatePayload(check, {
+      const { updates, fieldChanges } = buildReviewFieldUpdatePayload(check, {
         carrierName,
         checkNumber,
         amount,
@@ -596,6 +596,14 @@ export function ReviewDecisionPanel({
         accountNumber,
       });
 
+      if (Object.keys(updates).length > 0) {
+        const { error: updateError } = await supabase
+          .from("check_intake_items")
+          .update({ ...updates, updated_at: new Date().toISOString() })
+          .eq("id", checkId);
+        if (updateError) throw updateError;
+      }
+
       const { data, error } = await supabase.rpc("submit_check_review_decision", {
         p_check_id: checkId,
         p_reviewer_id: user.id,
@@ -605,9 +613,6 @@ export function ReviewDecisionPanel({
         p_confirmed_check_number: effectiveCheck.check_number,
         p_confirmed_amount: effectiveCheck.amount,
         p_confirmed_payee_line: effectiveCheck.payee_line,
-        p_confirmed_issue_date: effectiveCheck.issue_date,
-        p_confirmed_routing_number: effectiveCheck.routing_number,
-        p_confirmed_account_number: effectiveCheck.account_number,
         p_field_changes: fieldChanges,
         p_reissue_reason: depositPath === "reissue_requested" ? (notes || "Check not practically depositable") : null,
         p_reissue_reason_category: depositPath === "reissue_requested" ? reissueCategory : "other",
