@@ -704,7 +704,7 @@ Rules:
       if (!parsed.amount) {
         stage = "amount_fallback";
         try {
-          const fallback = await extractAmountWithFocusedPass(lovableKey, frontImageUrl, backImageUrl);
+          const fallback = await extractAmountWithFocusedPass(tenantApiKey, frontImageUrl, backImageUrl);
           if (fallback.amount) {
             parsed.amount = fallback.amount;
             if (fallback.confidence !== null) {
