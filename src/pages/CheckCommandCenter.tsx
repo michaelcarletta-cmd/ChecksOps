@@ -1586,6 +1586,31 @@ function CheckDetailPanel({
       return data as CheckItem;
     },
   });
+
+  // Realtime: refresh check detail + endorsements when any partner deposits or a payee signs.
+  useEffect(() => {
+    if (!checkId) return;
+    const channel = supabase
+      .channel(`check-detail-rt-${checkId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "check_intake_items", filter: `id=eq.${checkId}` },
+        () => {
+          qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "check_endorsements", filter: `check_id=eq.${checkId}` },
+        () => {
+          qc.invalidateQueries({ queryKey: ["check-endorsement-signatures", checkId] });
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [checkId, qc]);
   const savedOverride = (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null;
   const showPayToOrder = savedOverride?.showPayToOrder ?? false;
 
