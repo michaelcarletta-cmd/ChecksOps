@@ -2180,6 +2180,17 @@ function CheckDetailPanel({
             className="h-7 text-xs"
           />
           {!isSharedView && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => setDetailShareOpen(true)}
+              title="Share with partner"
+            >
+              <Share2 className="h-3 w-3" /> Share
+            </Button>
+          )}
+          {!isSharedView && (
             <AdminDeleteCheckButton
               checkId={checkId}
               checkNumber={check.check_number}
