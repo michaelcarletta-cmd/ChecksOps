@@ -624,7 +624,7 @@ function DepositItemDetail({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("id, front_image_path, back_image_path, check_number, carrier_name, amount, issue_date, payee_line, routing_number, account_number, funds_type, property_address, payment_classification, payee_address, check_payees(payee_name, payee_type, endorsement_status)")
+        .select("id, front_image_path, back_image_path, check_number, carrier_name, amount, issue_date, payee_line, routing_number, account_number, funds_type, property_address, payment_classification, check_payees(payee_name, payee_type, endorsement_status)")
         .eq("id", depositItem!.check_id!)
         .single();
       if (error) throw error;
