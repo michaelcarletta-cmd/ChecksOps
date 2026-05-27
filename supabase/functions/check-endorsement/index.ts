@@ -927,6 +927,7 @@ Deno.serve(async (req) => {
                 to: endorsement.contact_email,
                 subject: finalSubject,
                 body: finalBody,
+                checkId: endorsement.check_id,
               },
             });
             if (invokeErr) throw invokeErr;
@@ -1218,6 +1219,8 @@ Deno.serve(async (req) => {
                       body: {
                         to: notifEmail,
                         subject: `Payment Direction Received — Claim ${claimLabel}`,
+                        claimId: linkedCheck.claim_id,
+                        checkId: linkedCheck.id,
                         body: `
                           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                             <h2 style="color: #1a1a2e; margin-bottom: 16px;">Payment Direction Received</h2>

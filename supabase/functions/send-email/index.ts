@@ -24,6 +24,7 @@ interface ResendAttachment {
 
 async function sendResendEmail(
   apiKey: string,
+  fromAddress: string,
   toEmails: string[],
   subject: string,
   htmlContent: string,
@@ -32,7 +33,7 @@ async function sendResendEmail(
   replyTo?: string
 ) {
 const payload: any = {
-    from: "Freedom Claims <claims@freedomclaims.work>",
+    from: fromAddress,
     to: toEmails,
     subject: subject,
     html: htmlContent,
@@ -96,7 +97,7 @@ Deno.serve(async (req) => {
       }];
     }
     
-    const { subject, body, claimId, attachments, claimEmailCc } = requestBody;
+    const { subject, body, claimId, attachments, claimEmailCc, tenantId, checkId } = requestBody;
 
     if (recipients.length === 0 || !subject || !body) {
       throw new Error("Missing required fields: recipients, subject, and body are required");
@@ -283,12 +284,62 @@ Deno.serve(async (req) => {
     // Extract all email addresses for the 'to' field
     const toEmails = recipients.map(r => r.email);
 
+    // ============================================================
+    // Resolve tenant-specific sender (From / Reply-To / footer)
+    // ============================================================
+    // Precedence for resolving the tenant:
+    //   1. explicit tenantId in body
+    //   2. checkId → check_intake_items.tenant_id
+    //   3. claimId → claims.tenant_id
+    // Falls back to the Freedom Claims default sender.
+    let resolvedTenantId: string | null = tenantId ?? null;
+    if (!resolvedTenantId && checkId) {
+      const { data: ck } = await supabaseAdmin
+        .from('check_intake_items')
+        .select('tenant_id')
+        .eq('id', checkId)
+        .maybeSingle();
+      resolvedTenantId = (ck as any)?.tenant_id ?? null;
+    }
+    if (!resolvedTenantId && claimId) {
+      const { data: cl } = await supabaseAdmin
+        .from('claims')
+        .select('tenant_id')
+        .eq('id', claimId)
+        .maybeSingle();
+      resolvedTenantId = (cl as any)?.tenant_id ?? null;
+    }
+
+    let tenantFromName: string | null = null;
+    let tenantFromAddress: string | null = null;
+    let tenantReplyTo: string | null = null;
+    let tenantDisplayName = 'Freedom Claims';
+    if (resolvedTenantId) {
+      const { data: tenant } = await supabaseAdmin
+        .from('tenants')
+        .select('name, email_from_name, email_from_address, email_reply_to')
+        .eq('id', resolvedTenantId)
+        .maybeSingle();
+      if (tenant) {
+        tenantFromName = (tenant as any).email_from_name ?? null;
+        tenantFromAddress = (tenant as any).email_from_address ?? null;
+        tenantReplyTo = (tenant as any).email_reply_to ?? null;
+        tenantDisplayName = (tenant as any).name ?? tenantDisplayName;
+      }
+    }
+
+    const DEFAULT_FROM = 'Freedom Claims <claims@freedomclaims.work>';
+    const fromAddress = tenantFromAddress
+      ? `${tenantFromName || tenantDisplayName} <${tenantFromAddress}>`
+      : DEFAULT_FROM;
+    const footerOrg = tenantDisplayName;
+
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="white-space: pre-wrap;">${fullBody}</div>
         <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
         <p style="color: #999; font-size: 11px;">
-          This email was sent from Freedom Claims CRM.
+          This email was sent from ${footerOrg}.
         </p>
       </div>
     `;
@@ -299,32 +350,32 @@ Deno.serve(async (req) => {
       ccList.push(claimEmailCc);
     }
 
-    // Build Reply-To address from claim's email so replies come back to the CRM
-    let replyToAddress: string | undefined;
-    if (claimId) {
+    // Resolve Reply-To: tenant override > claim inbox > none
+    let replyToAddress: string | undefined = tenantReplyTo || undefined;
+    if (!replyToAddress && claimId) {
       const { data: claimForReply } = await supabaseAdmin
         .from('claims')
         .select('claim_email_id, policy_number')
         .eq('id', claimId)
         .single();
-      
+
       if (claimForReply) {
-        const emailId = claimForReply.claim_email_id || 
-          (claimForReply.policy_number 
+        const emailId = claimForReply.claim_email_id ||
+          (claimForReply.policy_number
             ? claimForReply.policy_number.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
             : null);
         if (emailId) {
           replyToAddress = `claim-${emailId}@freedomclaims.work`;
-          console.log(`Setting Reply-To: ${replyToAddress}`);
         }
       }
     }
 
-    console.log(`Sending email via Resend to ${toEmails.join(', ')}${ccList.length > 0 ? ` (CC: ${ccList.join(', ')})` : ''}${replyToAddress ? ` (Reply-To: ${replyToAddress})` : ''} with ${emailAttachments.length} attachments`);
+    console.log(`Sending email via Resend from "${fromAddress}" (tenant=${resolvedTenantId ?? 'default'}) to ${toEmails.join(', ')}${ccList.length > 0 ? ` (CC: ${ccList.join(', ')})` : ''}${replyToAddress ? ` (Reply-To: ${replyToAddress})` : ''} with ${emailAttachments.length} attachments`);
 
     // Send via Resend
     const emailResponse = await sendResendEmail(
       resendApiKey,
+      fromAddress,
       toEmails,
       subject,
       htmlContent,
