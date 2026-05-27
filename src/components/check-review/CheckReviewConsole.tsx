@@ -69,6 +69,85 @@ interface ReviewCheckGroup {
   earliestCreatedAt: string;
 }
 
+type ReviewFieldChange = {
+  field: string;
+  old_value: string | null;
+  new_value: string | null;
+};
+
+interface ReviewFieldDraft {
+  carrierName: string;
+  checkNumber: string;
+  amount: string;
+  payeeLine: string;
+  issueDate: string;
+  routingNumber: string;
+  accountNumber: string;
+}
+
+function buildReviewDraftCheck(check: ReviewCheck, draft: ReviewFieldDraft): ReviewCheck {
+  const parsedAmount = draft.amount.trim() ? Number(draft.amount) : null;
+
+  return {
+    ...check,
+    carrier_name: draft.carrierName.trim() || null,
+    check_number: draft.checkNumber.trim() || null,
+    amount: Number.isFinite(parsedAmount) ? parsedAmount : null,
+    payee_line: draft.payeeLine.trim() || null,
+    issue_date: draft.issueDate.trim() || null,
+    routing_number: draft.routingNumber.replace(/\D/g, "").slice(0, 9) || null,
+    account_number: draft.accountNumber.replace(/\D/g, "").slice(0, 20) || null,
+  };
+}
+
+function buildReviewFieldUpdatePayload(
+  check: ReviewCheck,
+  draft: ReviewFieldDraft,
+): { updates: Record<string, string | number | null>; fieldChanges: ReviewFieldChange[] } {
+  const parsedAmount = draft.amount.trim() ? Number(draft.amount) : null;
+  const nextCarrierName = draft.carrierName.trim() || null;
+  const nextCheckNumber = draft.checkNumber.trim() || null;
+  const nextAmount = draft.amount.trim() ? parsedAmount : null;
+  const nextPayeeLine = draft.payeeLine.trim() || null;
+  const nextIssueDate = draft.issueDate.trim() || null;
+  const nextRoutingNumber = draft.routingNumber.replace(/\D/g, "").slice(0, 9) || null;
+  const nextAccountNumber = draft.accountNumber.replace(/\D/g, "").slice(0, 20) || null;
+
+  const updates: Record<string, string | number | null> = {};
+  const fieldChanges: ReviewFieldChange[] = [];
+
+  if (nextCarrierName !== (check.carrier_name ?? null)) {
+    updates.carrier_name = nextCarrierName;
+    fieldChanges.push({ field: "carrier_name", old_value: check.carrier_name, new_value: nextCarrierName });
+  }
+  if (nextCheckNumber !== (check.check_number ?? null)) {
+    updates.check_number = nextCheckNumber;
+    fieldChanges.push({ field: "check_number", old_value: check.check_number, new_value: nextCheckNumber });
+  }
+  if (nextAmount !== (check.amount ?? null)) {
+    updates.amount = nextAmount;
+    fieldChanges.push({ field: "amount", old_value: check.amount?.toString() ?? null, new_value: draft.amount.trim() || null });
+  }
+  if (nextPayeeLine !== (check.payee_line ?? null)) {
+    updates.payee_line = nextPayeeLine;
+    fieldChanges.push({ field: "payee_line", old_value: check.payee_line, new_value: nextPayeeLine });
+  }
+  if (nextIssueDate !== (check.issue_date ?? null)) {
+    updates.issue_date = nextIssueDate;
+    fieldChanges.push({ field: "issue_date", old_value: check.issue_date, new_value: nextIssueDate });
+  }
+  if (nextRoutingNumber !== (check.routing_number ?? null)) {
+    updates.routing_number = nextRoutingNumber;
+    fieldChanges.push({ field: "routing_number", old_value: check.routing_number, new_value: nextRoutingNumber });
+  }
+  if (nextAccountNumber !== (check.account_number ?? null)) {
+    updates.account_number = nextAccountNumber;
+    fieldChanges.push({ field: "account_number", old_value: check.account_number, new_value: nextAccountNumber });
+  }
+
+  return { updates, fieldChanges };
+}
+
 const isMirroredCheck = (check: ReviewCheck) =>
   !!check.external_origin && typeof check.external_origin === "object" &&
   (check.external_origin as any).source_app === "freedom_crm";
