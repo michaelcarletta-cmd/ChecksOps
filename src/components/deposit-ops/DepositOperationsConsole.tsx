@@ -759,9 +759,6 @@ function DepositItemDetail({
               {checkData.property_address && (
                 <div className="col-span-2"><span className="text-muted-foreground">Property</span><span className="ml-2">{checkData.property_address}</span></div>
               )}
-              {checkData.payee_address && (
-                <div className="col-span-2"><span className="text-muted-foreground">Payee Address</span><span className="ml-2">{checkData.payee_address}</span></div>
-              )}
               {(checkData.check_payees ?? []).length > 0 && (
                 <div className="col-span-2 pt-1">
                   <span className="text-muted-foreground">Payees</span>
