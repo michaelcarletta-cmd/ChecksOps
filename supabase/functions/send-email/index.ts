@@ -24,6 +24,7 @@ interface ResendAttachment {
 
 async function sendResendEmail(
   apiKey: string,
+  fromAddress: string,
   toEmails: string[],
   subject: string,
   htmlContent: string,
@@ -32,7 +33,7 @@ async function sendResendEmail(
   replyTo?: string
 ) {
 const payload: any = {
-    from: "Freedom Claims <claims@freedomclaims.work>",
+    from: fromAddress,
     to: toEmails,
     subject: subject,
     html: htmlContent,
