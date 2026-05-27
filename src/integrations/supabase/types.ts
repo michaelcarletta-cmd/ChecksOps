@@ -1909,6 +1909,8 @@ export type Database = {
           created_at: string | null
           deposit_recommendation: string | null
           deposit_recommendation_reasons: Json | null
+          deposited_at: string | null
+          deposited_by_tenant_id: string | null
           detected_claim_number: string | null
           endorsement_override: Json | null
           endorsement_packet_path: string | null
@@ -1961,6 +1963,8 @@ export type Database = {
           created_at?: string | null
           deposit_recommendation?: string | null
           deposit_recommendation_reasons?: Json | null
+          deposited_at?: string | null
+          deposited_by_tenant_id?: string | null
           detected_claim_number?: string | null
           endorsement_override?: Json | null
           endorsement_packet_path?: string | null
@@ -2013,6 +2017,8 @@ export type Database = {
           created_at?: string | null
           deposit_recommendation?: string | null
           deposit_recommendation_reasons?: Json | null
+          deposited_at?: string | null
+          deposited_by_tenant_id?: string | null
           detected_claim_number?: string | null
           endorsement_override?: Json | null
           endorsement_packet_path?: string | null
@@ -2078,6 +2084,13 @@ export type Database = {
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "check_intake_items_deposited_by_tenant_id_fkey"
+            columns: ["deposited_by_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
           {
