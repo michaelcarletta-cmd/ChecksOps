@@ -98,6 +98,11 @@ export function WhiteLabelSettings() {
             <TenantCreditManager />
           </TabsContent>
 
+          <TabsContent value="ai-key">
+            <TenantAIKeySettings />
+          </TabsContent>
+
+
           <TabsContent value="users">
             {tenant && <TenantUserManager tenantId={tenant.id} />}
           </TabsContent>
