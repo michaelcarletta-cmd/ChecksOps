@@ -391,6 +391,9 @@ export function ReviewDecisionPanel({
   const [checkNumber, setCheckNumber] = useState("");
   const [amount, setAmount] = useState("");
   const [payeeLine, setPayeeLine] = useState("");
+  const [issueDate, setIssueDate] = useState("");
+  const [routingNumber, setRoutingNumber] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
   const [fundsType, setFundsType] = useState<string>("");
   const [propertyAddress, setPropertyAddress] = useState<string>("");
   const [savingMeta, setSavingMeta] = useState(false);
