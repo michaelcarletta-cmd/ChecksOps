@@ -3015,6 +3015,11 @@ function CheckDetailPanel({
         setDepositViewerUrl(null);
       }}
     />
+    <ShareCheckDialog
+      checkId={checkId}
+      open={detailShareOpen}
+      onOpenChange={setDetailShareOpen}
+    />
     </>
   );
 }
