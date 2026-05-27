@@ -352,6 +352,35 @@ function BrandingSettings({ tenant }: { tenant: any }) {
   const [secondaryColor, setSecondaryColor] = useState(tenant.secondary_color || "#1E40AF");
   const [logoUrl, setLogoUrl] = useState(tenant.logo_url || "");
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const handleLogoUpload = async (file: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Invalid file", description: "Please choose an image file (PNG, JPG, SVG).", variant: "destructive" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Logo must be under 5MB.", variant: "destructive" });
+      return;
+    }
+    setUploading(true);
+    try {
+      const ext = file.name.split(".").pop() || "png";
+      const path = `${tenant.id}/logo-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("tenant-logos")
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) throw upErr;
+      const { data } = supabase.storage.from("tenant-logos").getPublicUrl(path);
+      setLogoUrl(data.publicUrl);
+      toast({ title: "Logo uploaded", description: "Click Save to apply." });
+    } catch (e: any) {
+      toast({ title: "Upload failed", description: e.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -378,10 +407,40 @@ function BrandingSettings({ tenant }: { tenant: any }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label className="text-xs">Logo URL</Label>
-          <Input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://..." />
+          <Label className="text-xs">Logo</Label>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              id="logo-upload-input"
+              type="file"
+              accept="image/png,image/jpeg,image/svg+xml,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleLogoUpload(f);
+                e.target.value = "";
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={uploading}
+              onClick={() => document.getElementById("logo-upload-input")?.click()}
+            >
+              {uploading ? "Uploading..." : logoUrl ? "Replace logo" : "Upload logo"}
+            </Button>
+            {logoUrl && (
+              <Button type="button" variant="ghost" size="sm" onClick={() => setLogoUrl("")}>
+                Remove
+              </Button>
+            )}
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase text-muted-foreground">Or paste a URL</Label>
+            <Input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://..." />
+          </div>
           {logoUrl && (
-            <div className="mt-2 p-3 border border-border/60 rounded-md inline-block">
+            <div className="mt-2 p-3 border border-border/60 rounded-md inline-block bg-white">
               <img src={logoUrl} alt="Logo preview" className="h-10 object-contain" />
             </div>
           )}
