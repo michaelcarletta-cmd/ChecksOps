@@ -927,6 +927,7 @@ Deno.serve(async (req) => {
                 to: endorsement.contact_email,
                 subject: finalSubject,
                 body: finalBody,
+                checkId: endorsement.check_id,
               },
             });
             if (invokeErr) throw invokeErr;
