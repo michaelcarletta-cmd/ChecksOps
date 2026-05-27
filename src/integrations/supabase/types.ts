@@ -16926,6 +16926,50 @@ export type Database = {
           },
         ]
       }
+      tenant_openai_credentials: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          encrypted_key: string
+          key_last_4: string
+          last_error: string | null
+          last_validated_at: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          encrypted_key: string
+          key_last_4: string
+          last_error?: string | null
+          last_validated_at?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          encrypted_key?: string
+          key_last_4?: string
+          last_error?: string | null
+          last_validated_at?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_openai_credentials_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_partner_code_aliases: {
         Row: {
           code: string
@@ -18542,6 +18586,7 @@ export type Database = {
         Args: { p_ciphertext: string; p_key_name?: string }
         Returns: string
       }
+      decrypt_tenant_openai_key: { Args: { p_tenant: string }; Returns: string }
       deduct_tenant_credits: {
         Args: {
           p_amount: number
@@ -18606,6 +18651,7 @@ export type Database = {
         Args: { p_key_name?: string; p_plaintext: string }
         Returns: string
       }
+      encrypt_tenant_openai_key: { Args: { p_key: string }; Returns: string }
       enqueue_email: {
         Args: { payload: Json; queue_name: string }
         Returns: number

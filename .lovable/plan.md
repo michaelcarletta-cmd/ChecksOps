@@ -1,137 +1,89 @@
-# Plan: Make ChecksOps the Industry-Leading Insurance Check Command Center
+# Pure BYOK: Tenants Pay OpenAI Directly
 
-## Goal
-Keep **FreedomClaims.work** as the internal CRM and make **ChecksOps.com** the standalone white-label platform for insurance check intake, endorsement control, deposit readiness, and loss draft visibility.
+Each tenant pastes their own OpenAI API key. All AI calls in their tenant use *their* key → bills to *their* OpenAI account → you never see the invoice. The Stripe credit-purchase system gets removed from the tenant-facing UI.
 
-This will not rebuild what already exists. It will sharpen, organize, and expand the ChecksOps experience around the strongest competitive position: **control, transparency, auditability, and white-label operations**.
+## What the tenant sees
 
-## What will change
+1. **Settings → AI Provider** (new panel)
+2. Walkthrough card: "Create OpenAI account → add card → create API key → paste below"
+3. Masked input + **Test key** button (validates against `https://api.openai.com/v1/models`)
+4. Green status pill once saved + last-validated timestamp
+5. **Remove key** button
+6. If no key is set: every AI feature shows "AI not configured — add your OpenAI key in Settings" instead of running
 
-### 1. Strengthen the ChecksOps public positioning
-Update the ChecksOps marketing page so it clearly competes as a full operating system, not just a payment tool.
+## What you (platform owner) see
 
-Messaging will emphasize:
-- Insurance check command center
-- Digital endorsement workflows
-- Claim-centered check files
-- Loss draft visibility without taking control away from the professional
-- White-label portals for PAs, contractors, mitigation companies, and claim teams
-- Secure audit trail and partner sharing
+- No more tenant credit top-ups, no Stripe Checkout for AI
+- `TenantCreditManager` panel hidden from tenant view (kept in code for admin-only / legacy reference)
+- Your `OPENAI_API_KEY` and `LOVABLE_API_KEY` continue to work for the **main Freedom CRM** (non-tenant) flows — only `/wl/*` white-label tenants are BYOK
 
-I will avoid positioning ChecksOps as if it directly handles mortgage companies. Instead, the message will be:
+## Architecture
 
-> ChecksOps gives you visibility, documentation, and workflow control over mortgage/loss-draft funds without forcing you to hand the claim relationship to a third-party payment middleman.
-
-### 2. Turn current check grouping into stronger “Claim Check Files”
-The Check Command Center already groups checks by claim number and policyholder. I will make that feel more intentional and powerful.
-
-Updates:
-- Rename claim group headers visually into **Claim Check File** sections.
-- Add group-level indicators such as:
-  - total check value
-  - number of checks
-  - endorsement progress
-  - blocked / pending / ready status
-  - loss draft required indicator when applicable
-- Make grouped rows easier to scan on desktop and mobile.
-
-This makes ChecksOps feel claim-centered rather than transaction-centered.
-
-### 3. Add bottleneck intelligence inside ChecksOps
-Add an operational intelligence strip near the top of the Check Command Center.
-
-It will surface practical issues like:
-- checks waiting on endorsements
-- checks needing manual review
-- checks ready for deposit
-- checks requiring branch deposit
-- reissue requests
-- funds blocked in loss draft
-- stale or overdue loss draft follow-ups
-
-Where possible, this will reuse the existing tenant-scoped dashboard functions already in the backend. If an extra metric is needed, I will add it through a safe backend migration with tenant isolation.
-
-### 4. Reframe the Loss Draft area as “Loss Draft Visibility”
-The existing Loss Draft Tracker is already strong. I will refine the UI language so it does not imply ChecksOps personally handles mortgage companies.
-
-Language will shift from “we handle mortgage disbursements” to:
-- track lender-held funds
-- document every follow-up
-- monitor missing documents
-- record draw requests and releases
-- prove where funds are stuck
-- keep the professional in control
-
-The workflow stays intact, but the competitive positioning becomes cleaner.
-
-### 5. Improve white-label tenant polish
-Make tenant workspaces feel more standalone and branded.
-
-Updates:
-- Improve the header subtitle inside tenant ChecksOps workspaces.
-- Keep tenant logo/name/plan badge visible.
-- Add clearer settings language for tenant branding.
-- Show the correct ChecksOps-style URL guidance on `checksops.com` and the `/wl/:slug` fallback on FreedomClaims/preview routes.
-
-This helps ChecksOps feel like a licensed platform, not an internal CRM page.
-
-### 6. Preserve domain separation
-No CRM data will be moved.
-
-Routing remains:
-
+### 1. Storage (new table)
 ```text
-FreedomClaims.work
-  Internal CRM: claims, clients, tasks, Darwin, estimates, documents, settings
-
-ChecksOps.com
-  Public ChecksOps landing page
-  Tenant login
-  Tenant white-label check workspaces at /:tenantSlug/checks
+tenant_openai_credentials
+├── tenant_id (PK, FK → tenants)
+├── encrypted_key (bytea, pgsodium/pgcrypto encrypted)
+├── key_last_4 (text, for display)
+├── status (active | invalid | unverified)
+├── last_validated_at (timestamptz)
+├── created_at, updated_at
 ```
+Encrypted with `pgp_sym_encrypt` using a DB secret. Decryption only via a `SECURITY DEFINER` function callable from edge functions, never returned to the client.
 
-I will only adjust copy and UI behavior where needed to reinforce this split.
+### 2. Key-resolution helper (new)
+`supabase/functions/_shared/ai/tenantKeyResolver.ts`
+- `resolveTenantOpenAIKey(supabase, tenantId): Promise<string | null>`
+- Edge functions call this at request start, pass result into AI calls
 
-## Technical implementation
+### 3. AI client changes
+`openaiClient.ts` — add optional `apiKey?: string` to `callOpenAI`, `callVision`, `callWithTools`. When provided, override `OPENAI_API_KEY` and force `provider = "openai"` (skip Lovable gateway — tenant's key is OpenAI-only). No fallback to platform key.
 
-Planned areas to update:
-- `src/pages/marketing/CheckCenterMarketing.tsx`
-  - stronger competitive copy
-  - refined hero/sections
-  - new “not a payment middleman” positioning
-- `src/pages/CheckCommandCenter.tsx`
-  - Claim Check File group headers
-  - operational intelligence strip
-  - improved tab counts/labels where needed
-- `src/components/check-review/CheckDashboardCards.tsx`
-  - likely reuse or adapt for the new intelligence strip
-- `src/components/loss-draft/LossDraftDashboard.tsx`
-  - refine language around tracking and visibility
-- `src/components/loss-draft/LossDraftDashboardCards.tsx`
-  - keep the strong blocked/stale/unreleased metrics, with clearer labels
-- `src/components/white-label/WhiteLabelCheckCenter.tsx`
-  - stronger standalone tenant header/subtitle if needed
-- `src/components/white-label/WhiteLabelSettings.tsx`
-  - clearer branding/domain wording
+### 4. Edge functions (new)
+- `tenant-set-openai-key` — accepts key, validates via OpenAI `/v1/models`, encrypts, stores
+- `tenant-validate-openai-key` — re-tests stored key, updates `status`
+- `tenant-remove-openai-key` — deletes row
 
-Possible backend change:
-- If current counts are not enough for the new intelligence strip, add a tenant-scoped backend function or extend the existing tenant dashboard count function.
-- Any backend change will preserve tenant isolation and existing access rules.
+### 5. AI edge function wiring
+All 20+ functions that call AI get a small change at entry:
+```ts
+const tenantId = await resolveTenantFromRequest(req, supabase);
+const tenantKey = tenantId ? await resolveTenantOpenAIKey(supabase, tenantId) : null;
+if (tenantId && !tenantKey) return 400 "AI not configured for this tenant";
+// pass tenantKey into every call: callOpenAI({ ..., apiKey: tenantKey })
+```
+Non-tenant (Freedom CRM main app) requests keep using `OPENAI_API_KEY` as today.
 
-## What will not change
+### 6. Frontend
+- New `src/components/white-label/TenantAIKeySettings.tsx` panel
+- Add to `WhiteLabelSettings.tsx` as a new tab/section "AI Provider"
+- Hide `TenantCreditManager` from tenant-facing settings (keep it on the admin/platform-owner view only)
+- Show "AI not configured" banner across tenant pages when no key is set
 
-- FreedomClaims.work will not be replaced by ChecksOps.
-- Claim files will not be moved out of the CRM.
-- ChecksOps will not claim to directly handle mortgage companies.
-- Existing check upload, OCR, endorsement, deposit, partner sharing, and loss draft workflows will remain.
-- Tenant isolation will remain enforced through tenant IDs and backend access rules.
+## Rollout in 3 commits
 
-## Result
-ChecksOps.com will look and feel like a focused industry platform:
+**Commit 1 — Foundation (no breaking changes)**
+- Migration: `tenant_openai_credentials` table + encrypt/decrypt functions
+- 3 edge functions: set / validate / remove
+- Settings UI panel
+- `apiKey` parameter added to `openaiClient.ts` (optional, backwards compatible)
+- *Result: tenants can save keys, but nothing uses them yet*
 
-- public-facing product brand
-- tenant-branded workspaces
-- claim-centered check files
-- endorsement and deposit command center
-- loss draft visibility and bottleneck tracking
-- stronger competitor positioning against iink without copying their mortgage-company handling model
+**Commit 2 — Wire AI flows**
+- `tenantKeyResolver.ts` helper
+- Update all ~20 AI edge functions to resolve and pass tenant key
+- For tenant requests without a key → return clear error; UI shows "Configure AI in Settings"
+- *Result: tenant AI calls now bill to the tenant's OpenAI account*
+
+**Commit 3 — Hide credit purchase**
+- Remove `TenantCreditManager` from tenant settings view
+- Keep table + Stripe functions intact (for refunds/admin)
+- Update "Pricing" / marketing copy if any references credits
+- *Result: tenants no longer see Stripe; pure BYOK UX*
+
+## Trade-offs to confirm
+
+- **Tenant friction:** they need an OpenAI account + credit card before first AI use (~10 min). No way around this for true zero-money BYOK.
+- **No platform fallback:** if a tenant's key is invalid/expired, their AI just stops with a clear error. We do **not** silently use your key.
+- **Model choice limited to OpenAI:** Tenants can't use Gemini. The Lovable gateway path is bypassed for tenant flows. (Your main app keeps both.)
+- **Existing Stripe credit data preserved** — no destructive cleanup; tables remain for audit/refunds.
