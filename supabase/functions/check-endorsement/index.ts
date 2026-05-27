@@ -39,6 +39,12 @@ const RESTRICTED_RECOMMENDATIONS = new Set([
   "branch_deposit_recommended",
 ]);
 
+function getAppUrl(supabaseUrl: string): string {
+  return Deno.env.get("APP_URL")
+    || Deno.env.get("PUBLIC_SITE_URL")
+    || "https://checksops.com";
+}
+
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
@@ -650,7 +656,7 @@ Deno.serve(async (req) => {
 
     // GET with token → redirect to frontend endorsement page
     if (req.method === "GET" && tokenParam) {
-      const appUrl = Deno.env.get("APP_URL") || "https://freedomclaims.lovable.app";
+      const appUrl = getAppUrl(supabaseUrl);
       return new Response(null, {
         status: 302,
         headers: { ...corsHeaders, Location: `${appUrl}/endorse?token=${tokenParam}` },
@@ -864,7 +870,7 @@ Deno.serve(async (req) => {
           }
         }
 
-        const appUrl = Deno.env.get("APP_URL") || "https://freedomclaims.lovable.app";
+        const appUrl = getAppUrl(supabaseUrl);
 
         // Ensure endorsement has an active, non-expiring token before sending.
         // Mirrors Freedom Claims flow: links sent to payees never auto-expire —
