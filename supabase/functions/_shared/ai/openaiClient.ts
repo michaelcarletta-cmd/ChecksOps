@@ -299,7 +299,7 @@ export async function callVision(opts: VisionChatOptions): Promise<VisionResult>
     body.response_format = { type: "json_object" };
   }
 
-  const { data, resolvedModel } = await executeChat(opts.model, body, "callVision");
+  const { data, resolvedModel } = await executeChat(opts.model, body, "callVision", opts.apiKey);
   return {
     text: data.choices?.[0]?.message?.content || "",
     model: resolvedModel,
