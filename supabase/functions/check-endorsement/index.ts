@@ -57,6 +57,14 @@ function htmlResp(body: string, status = 200) {
   });
 }
 
+function hasLegacyExpiredToken(endorsement: { status: string | null; token_expires_at: string | null }) {
+  return Boolean(
+    endorsement.token_expires_at &&
+    ["signed", "rejected", "waived"].includes(endorsement.status ?? "") === false &&
+    new Date(endorsement.token_expires_at) < new Date(),
+  );
+}
+
 function escHtml(s: string | number | null | undefined): string {
   if (s == null) return "";
   return String(s)
@@ -697,7 +705,7 @@ Deno.serve(async (req) => {
         }
 
         // Check expiry
-        if (endorsement.token_expires_at && new Date(endorsement.token_expires_at) < new Date()) {
+        if (hasLegacyExpiredToken(endorsement)) {
           await supabase.from("check_endorsements").update({ status: "expired" }).eq("id", endorsement.id);
           return json({ error: "This endorsement link has expired" }, 410);
         }
@@ -1089,7 +1097,7 @@ Deno.serve(async (req) => {
 
         if (eErr || !endorsement) return json({ error: "Invalid or already-used token" }, 404);
 
-        if (endorsement.token_expires_at && new Date(endorsement.token_expires_at) < new Date()) {
+        if (hasLegacyExpiredToken(endorsement)) {
           await supabase.from("check_endorsements").update({ status: "expired" }).eq("id", endorsement.id);
           return json({ error: "Token expired" }, 410);
         }
