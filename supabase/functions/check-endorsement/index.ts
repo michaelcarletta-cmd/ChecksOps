@@ -921,15 +921,36 @@ Deno.serve(async (req) => {
             // Find sibling unsigned endorsements on the same check sharing this email
             const { data: siblings } = await supabase
               .from("check_endorsements")
-              .select("id, payee_name, token, status, contact_email")
+              .select("id, payee_id, payee_name, token, status, contact_email")
               .eq("check_id", endorsement.check_id)
               .eq("contact_email", endorsement.contact_email)
               .neq("id", endorsementId)
               .in("status", ["pending", "sent"]);
 
+            const refreshedSiblings = (siblings || []).map((s: any) => ({
+              ...s,
+              token: s.token || crypto.randomUUID(),
+            }));
+
+            if (refreshedSiblings.length > 0) {
+              for (const sibling of refreshedSiblings) {
+                await supabase.from("check_endorsements").update({
+                  token: sibling.token,
+                  token_expires_at: null,
+                }).eq("id", sibling.id);
+
+                if (sibling.payee_id) {
+                  await supabase.from("check_payees").update({
+                    endorsement_token: sibling.token,
+                    endorsement_token_expires_at: null,
+                  }).eq("id", sibling.payee_id);
+                }
+              }
+            }
+
             const allPayees = [
               { id: endorsementId as string, name: endorsement.payee_name as string, url: endorsementUrl },
-              ...((siblings || []).map((s: any) => ({
+              ...(refreshedSiblings.map((s: any) => ({
                 id: s.id as string,
                 name: s.payee_name as string,
                 url: `${appUrl}/endorse?token=${s.token}`,
