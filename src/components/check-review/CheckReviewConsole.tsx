@@ -69,6 +69,85 @@ interface ReviewCheckGroup {
   earliestCreatedAt: string;
 }
 
+type ReviewFieldChange = {
+  field: string;
+  old_value: string | null;
+  new_value: string | null;
+};
+
+interface ReviewFieldDraft {
+  carrierName: string;
+  checkNumber: string;
+  amount: string;
+  payeeLine: string;
+  issueDate: string;
+  routingNumber: string;
+  accountNumber: string;
+}
+
+function buildReviewDraftCheck(check: ReviewCheck, draft: ReviewFieldDraft): ReviewCheck {
+  const parsedAmount = draft.amount.trim() ? Number(draft.amount) : null;
+
+  return {
+    ...check,
+    carrier_name: draft.carrierName.trim() || null,
+    check_number: draft.checkNumber.trim() || null,
+    amount: Number.isFinite(parsedAmount) ? parsedAmount : null,
+    payee_line: draft.payeeLine.trim() || null,
+    issue_date: draft.issueDate.trim() || null,
+    routing_number: draft.routingNumber.replace(/\D/g, "").slice(0, 9) || null,
+    account_number: draft.accountNumber.replace(/\D/g, "").slice(0, 20) || null,
+  };
+}
+
+function buildReviewFieldUpdatePayload(
+  check: ReviewCheck,
+  draft: ReviewFieldDraft,
+): { updates: Record<string, string | number | null>; fieldChanges: ReviewFieldChange[] } {
+  const parsedAmount = draft.amount.trim() ? Number(draft.amount) : null;
+  const nextCarrierName = draft.carrierName.trim() || null;
+  const nextCheckNumber = draft.checkNumber.trim() || null;
+  const nextAmount = draft.amount.trim() ? parsedAmount : null;
+  const nextPayeeLine = draft.payeeLine.trim() || null;
+  const nextIssueDate = draft.issueDate.trim() || null;
+  const nextRoutingNumber = draft.routingNumber.replace(/\D/g, "").slice(0, 9) || null;
+  const nextAccountNumber = draft.accountNumber.replace(/\D/g, "").slice(0, 20) || null;
+
+  const updates: Record<string, string | number | null> = {};
+  const fieldChanges: ReviewFieldChange[] = [];
+
+  if (nextCarrierName !== (check.carrier_name ?? null)) {
+    updates.carrier_name = nextCarrierName;
+    fieldChanges.push({ field: "carrier_name", old_value: check.carrier_name, new_value: nextCarrierName });
+  }
+  if (nextCheckNumber !== (check.check_number ?? null)) {
+    updates.check_number = nextCheckNumber;
+    fieldChanges.push({ field: "check_number", old_value: check.check_number, new_value: nextCheckNumber });
+  }
+  if (nextAmount !== (check.amount ?? null)) {
+    updates.amount = nextAmount;
+    fieldChanges.push({ field: "amount", old_value: check.amount?.toString() ?? null, new_value: draft.amount.trim() || null });
+  }
+  if (nextPayeeLine !== (check.payee_line ?? null)) {
+    updates.payee_line = nextPayeeLine;
+    fieldChanges.push({ field: "payee_line", old_value: check.payee_line, new_value: nextPayeeLine });
+  }
+  if (nextIssueDate !== (check.issue_date ?? null)) {
+    updates.issue_date = nextIssueDate;
+    fieldChanges.push({ field: "issue_date", old_value: check.issue_date, new_value: nextIssueDate });
+  }
+  if (nextRoutingNumber !== (check.routing_number ?? null)) {
+    updates.routing_number = nextRoutingNumber;
+    fieldChanges.push({ field: "routing_number", old_value: check.routing_number, new_value: nextRoutingNumber });
+  }
+  if (nextAccountNumber !== (check.account_number ?? null)) {
+    updates.account_number = nextAccountNumber;
+    fieldChanges.push({ field: "account_number", old_value: check.account_number, new_value: nextAccountNumber });
+  }
+
+  return { updates, fieldChanges };
+}
+
 const isMirroredCheck = (check: ReviewCheck) =>
   !!check.external_origin && typeof check.external_origin === "object" &&
   (check.external_origin as any).source_app === "freedom_crm";
@@ -449,40 +528,15 @@ export function ReviewDecisionPanel({
       const parsedAmount = amount.trim() ? Number(amount) : null;
       if (amount.trim() && !Number.isFinite(parsedAmount)) throw new Error("Enter a valid amount");
 
-      const fieldChanges: { field: string; old_value: string | null; new_value: string | null }[] = [];
-      const updates: Record<string, string | number | null> = {};
-
-      if (carrierName !== (check.carrier_name ?? "")) {
-        updates.carrier_name = carrierName || null;
-        fieldChanges.push({ field: "carrier_name", old_value: check.carrier_name, new_value: carrierName || null });
-      }
-      if (checkNumber !== (check.check_number ?? "")) {
-        updates.check_number = checkNumber || null;
-        fieldChanges.push({ field: "check_number", old_value: check.check_number, new_value: checkNumber || null });
-      }
-      if (amount !== (check.amount?.toString() ?? "")) {
-        updates.amount = parsedAmount;
-        fieldChanges.push({ field: "amount", old_value: check.amount?.toString() ?? null, new_value: amount || null });
-      }
-      if (payeeLine !== (check.payee_line ?? "")) {
-        updates.payee_line = payeeLine || null;
-        fieldChanges.push({ field: "payee_line", old_value: check.payee_line, new_value: payeeLine || null });
-      }
-      const trimmedDate = issueDate.trim();
-      if ((trimmedDate || null) !== (check.issue_date ?? null)) {
-        updates.issue_date = trimmedDate || null;
-        fieldChanges.push({ field: "issue_date", old_value: check.issue_date, new_value: trimmedDate || null });
-      }
-      const trimmedRouting = routingNumber.replace(/\D/g, "");
-      if ((trimmedRouting || null) !== (check.routing_number ?? null)) {
-        updates.routing_number = trimmedRouting || null;
-        fieldChanges.push({ field: "routing_number", old_value: check.routing_number, new_value: trimmedRouting || null });
-      }
-      const trimmedAccount = accountNumber.replace(/\D/g, "");
-      if ((trimmedAccount || null) !== (check.account_number ?? null)) {
-        updates.account_number = trimmedAccount || null;
-        fieldChanges.push({ field: "account_number", old_value: check.account_number, new_value: trimmedAccount || null });
-      }
+      const { updates, fieldChanges } = buildReviewFieldUpdatePayload(check, {
+        carrierName,
+        checkNumber,
+        amount,
+        payeeLine,
+        issueDate,
+        routingNumber,
+        accountNumber,
+      });
 
       if (Object.keys(updates).length === 0) throw new Error("No field changes to save");
 
@@ -519,17 +573,35 @@ export function ReviewDecisionPanel({
       if (!depositPath) throw new Error("Select a deposit path");
       if (!check) throw new Error("Check not loaded");
 
-      const fieldChanges: { field: string; old_value: string | null; new_value: string | null }[] = [];
+      const parsedAmount = amount.trim() ? Number(amount) : null;
+      if (amount.trim() && !Number.isFinite(parsedAmount)) throw new Error("Enter a valid amount");
 
-      if (editing) {
-        if (carrierName !== (check.carrier_name ?? ""))
-          fieldChanges.push({ field: "carrier_name", old_value: check.carrier_name, new_value: carrierName || null });
-        if (checkNumber !== (check.check_number ?? ""))
-          fieldChanges.push({ field: "check_number", old_value: check.check_number, new_value: checkNumber || null });
-        if (amount !== (check.amount?.toString() ?? ""))
-          fieldChanges.push({ field: "amount", old_value: check.amount?.toString() ?? null, new_value: amount || null });
-        if (payeeLine !== (check.payee_line ?? ""))
-          fieldChanges.push({ field: "payee_line", old_value: check.payee_line, new_value: payeeLine || null });
+      const { updates, fieldChanges } = buildReviewFieldUpdatePayload(check, {
+        carrierName,
+        checkNumber,
+        amount,
+        payeeLine,
+        issueDate,
+        routingNumber,
+        accountNumber,
+      });
+
+      const effectiveCheck = buildReviewDraftCheck(check, {
+        carrierName,
+        checkNumber,
+        amount,
+        payeeLine,
+        issueDate,
+        routingNumber,
+        accountNumber,
+      });
+
+      if (Object.keys(updates).length > 0) {
+        const { error: updateError } = await supabase
+          .from("check_intake_items")
+          .update({ ...updates, updated_at: new Date().toISOString() })
+          .eq("id", checkId);
+        if (updateError) throw updateError;
       }
 
       const { data, error } = await supabase.rpc("submit_check_review_decision", {
@@ -537,10 +609,10 @@ export function ReviewDecisionPanel({
         p_reviewer_id: user.id,
         p_deposit_path: depositPath,
         p_reviewer_notes: notes || null,
-        p_confirmed_carrier_name: editing ? (carrierName || null) : null,
-        p_confirmed_check_number: editing ? (checkNumber || null) : null,
-        p_confirmed_amount: editing && amount ? parseFloat(amount) : null,
-        p_confirmed_payee_line: editing ? (payeeLine || null) : null,
+        p_confirmed_carrier_name: effectiveCheck.carrier_name,
+        p_confirmed_check_number: effectiveCheck.check_number,
+        p_confirmed_amount: effectiveCheck.amount,
+        p_confirmed_payee_line: effectiveCheck.payee_line,
         p_field_changes: fieldChanges,
         p_reissue_reason: depositPath === "reissue_requested" ? (notes || "Check not practically depositable") : null,
         p_reissue_reason_category: depositPath === "reissue_requested" ? reissueCategory : "other",
@@ -810,12 +882,21 @@ export function ReviewDecisionPanel({
 
         {/* ── Routing Decision ─────────────────────────────────────── */}
         {(() => {
+          const effectiveCheck = buildReviewDraftCheck(check, {
+            carrierName,
+            checkNumber,
+            amount,
+            payeeLine,
+            issueDate,
+            routingNumber,
+            accountNumber,
+          });
           const hasMortgage = (check.check_payees ?? []).some(
             (p) => p.payee_type === "mortgage_company",
           );
           const missingFields = hasMortgage
-            ? getMissingFieldsForLossDraft(check)
-            : getMissingFields(check);
+            ? getMissingFieldsForLossDraft(effectiveCheck)
+            : getMissingFields(effectiveCheck);
           const allEndorsed =
             (check.check_payees ?? []).length > 0 &&
             (check.check_payees ?? []).every(
@@ -983,7 +1064,7 @@ export function ReviewDecisionPanel({
                     return;
                   }
                   /* Stale-date soft warning */
-                  const v = assessCheckValidity(check.issue_date);
+                  const v = assessCheckValidity(effectiveCheck.issue_date);
                   if (
                     isAtRisk(v.risk) &&
                     depositPath !== "reissue_requested" &&
