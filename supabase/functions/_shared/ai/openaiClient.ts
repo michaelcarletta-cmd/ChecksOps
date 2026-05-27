@@ -74,7 +74,20 @@ interface RequestConfig {
   bodyModel: string; // model name to send in payload
 }
 
-function buildRequestConfig(model: string): RequestConfig {
+function buildRequestConfig(model: string, overrideKey?: string): RequestConfig {
+  // If a tenant-supplied key is passed, always go direct to OpenAI with that key.
+  if (overrideKey) {
+    return {
+      url: OPENAI_URL,
+      headers: {
+        Authorization: `Bearer ${overrideKey}`,
+        "Content-Type": "application/json",
+      },
+      // Strip the "openai/" prefix used by the Lovable gateway; the OpenAI API
+      // expects bare model names like "gpt-5" or "gpt-4o-mini".
+      bodyModel: model.startsWith("openai/") ? model.slice("openai/".length) : model,
+    };
+  }
   const provider = pickProvider(model);
   if (provider === "lovable") {
     return {
@@ -95,6 +108,7 @@ function buildRequestConfig(model: string): RequestConfig {
     bodyModel: model,
   };
 }
+
 
 /**
  * Execute a chat-completions POST. On 402/429 from the Lovable gateway,
