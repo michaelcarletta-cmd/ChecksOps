@@ -1569,6 +1569,7 @@ function CheckDetailPanel({
   const [bypassingEndorsements, setBypassingEndorsements] = useState(false);
   const [branchApprovedAt, setBranchApprovedAt] = useState<number | null>(null);
   const [showForceMove, setShowForceMove] = useState(false);
+  const [detailShareOpen, setDetailShareOpen] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -2178,6 +2179,17 @@ function CheckDetailPanel({
             variant="outline"
             className="h-7 text-xs"
           />
+          {!isSharedView && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => setDetailShareOpen(true)}
+              title="Share with partner"
+            >
+              <Share2 className="h-3 w-3" /> Share
+            </Button>
+          )}
           {!isSharedView && (
             <AdminDeleteCheckButton
               checkId={checkId}
@@ -3002,6 +3014,11 @@ function CheckDetailPanel({
         setDepositViewerOpen(false);
         setDepositViewerUrl(null);
       }}
+    />
+    <ShareCheckDialog
+      checkId={checkId}
+      open={detailShareOpen}
+      onOpenChange={setDetailShareOpen}
     />
     </>
   );

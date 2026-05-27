@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, createContext, useContext, ReactNode, useMemo } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -42,17 +42,25 @@ function setCachedRole(role: string | null, userId: string) {
 
 function resolveHighestRole(roles: string[]): string | null {
   if (!roles.length) return null;
-
   for (const role of ROLE_PRIORITY) {
-    if (roles.includes(role)) {
-      return role;
-    }
+    if (roles.includes(role)) return role;
   }
-
   return roles[0] ?? null;
 }
 
-export function useAuth() {
+interface AuthContextValue {
+  user: User | null;
+  session: Session | null;
+  userRole: string | null;
+  loading: boolean;
+  signOut: () => Promise<void>;
+  sessionExpiredReason: string | null;
+  clearSessionExpiredReason: () => void;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -75,7 +83,7 @@ export function useAuth() {
         setUserRole(null);
         setCachedRole(null, userId);
       } else {
-        const roles = Array.from(new Set((data ?? []).map((entry) => entry.role).filter(Boolean)));
+        const roles = Array.from(new Set((data ?? []).map((e) => e.role).filter(Boolean)));
         const role = resolveHighestRole(roles);
         setUserRole(role);
         setCachedRole(role, userId);
@@ -95,9 +103,7 @@ export function useAuth() {
 
     if (nextSession?.user) {
       const cachedRole = getCachedRole(nextSession.user.id);
-      if (cachedRole) {
-        setUserRole(cachedRole);
-      }
+      if (cachedRole) setUserRole(cachedRole);
       fetchUserRole(nextSession.user.id);
       return;
     }
@@ -127,7 +133,7 @@ export function useAuth() {
     return () => subscription.unsubscribe();
   }, [hydrateAuthState]);
 
-  return {
+  const value = useMemo<AuthContextValue>(() => ({
     user,
     session,
     userRole,
@@ -135,5 +141,23 @@ export function useAuth() {
     signOut,
     sessionExpiredReason,
     clearSessionExpiredReason,
+  }), [user, session, userRole, loading, signOut, sessionExpiredReason, clearSessionExpiredReason]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext);
+  if (ctx) return ctx;
+  // Fallback (e.g. tests / out-of-tree usage) — returns safe defaults.
+  // In normal app flow AuthProvider wraps everything, so this branch is rare.
+  return {
+    user: null,
+    session: null,
+    userRole: null,
+    loading: true,
+    signOut: async () => { await supabase.auth.signOut(); },
+    sessionExpiredReason: null,
+    clearSessionExpiredReason: () => {},
   };
 }

@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useCustomDomainTenant } from "./hooks/useCustomDomainTenant";
 import { CustomDomainWhiteLabelApp } from "./components/white-label/CustomDomainWhiteLabelApp";
+import { AuthProvider } from "./hooks/useAuth";
 
 // ChecksOps-only route tree
 const Sign = lazy(() => import("./pages/Sign"));
@@ -102,9 +103,11 @@ const App = () => (
       <Sonner />
       <OfflineIndicator />
       <BrowserRouter>
-        <div className="dark">
-          <AppRoutes />
-        </div>
+        <AuthProvider>
+          <div className="dark">
+            <AppRoutes />
+          </div>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
