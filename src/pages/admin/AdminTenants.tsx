@@ -125,6 +125,9 @@ export default function AdminTenants() {
       <div className="border-b border-border bg-card">
         <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
+              <ArrowLeft className="w-4 h-4 mr-1" /> Home
+            </Button>
             <Building2 className="w-6 h-6 text-primary" />
             <div>
               <h1 className="text-xl font-semibold">Tenant Management</h1>
