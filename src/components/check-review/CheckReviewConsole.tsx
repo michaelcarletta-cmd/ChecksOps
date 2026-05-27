@@ -605,6 +605,9 @@ export function ReviewDecisionPanel({
         p_confirmed_check_number: effectiveCheck.check_number,
         p_confirmed_amount: effectiveCheck.amount,
         p_confirmed_payee_line: effectiveCheck.payee_line,
+        p_confirmed_issue_date: effectiveCheck.issue_date,
+        p_confirmed_routing_number: effectiveCheck.routing_number,
+        p_confirmed_account_number: effectiveCheck.account_number,
         p_field_changes: fieldChanges,
         p_reissue_reason: depositPath === "reissue_requested" ? (notes || "Check not practically depositable") : null,
         p_reissue_reason_category: depositPath === "reissue_requested" ? reissueCategory : "other",
@@ -874,12 +877,21 @@ export function ReviewDecisionPanel({
 
         {/* ── Routing Decision ─────────────────────────────────────── */}
         {(() => {
+          const effectiveCheck = buildReviewDraftCheck(check, {
+            carrierName,
+            checkNumber,
+            amount,
+            payeeLine,
+            issueDate,
+            routingNumber,
+            accountNumber,
+          });
           const hasMortgage = (check.check_payees ?? []).some(
             (p) => p.payee_type === "mortgage_company",
           );
           const missingFields = hasMortgage
-            ? getMissingFieldsForLossDraft(check)
-            : getMissingFields(check);
+            ? getMissingFieldsForLossDraft(effectiveCheck)
+            : getMissingFields(effectiveCheck);
           const allEndorsed =
             (check.check_payees ?? []).length > 0 &&
             (check.check_payees ?? []).every(
@@ -1047,7 +1059,7 @@ export function ReviewDecisionPanel({
                     return;
                   }
                   /* Stale-date soft warning */
-                  const v = assessCheckValidity(check.issue_date);
+                  const v = assessCheckValidity(effectiveCheck.issue_date);
                   if (
                     isAtRisk(v.risk) &&
                     depositPath !== "reissue_requested" &&
