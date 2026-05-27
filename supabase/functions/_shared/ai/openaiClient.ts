@@ -264,7 +264,10 @@ export interface VisionChatOptions {
   temperature?: number;
   maxTokens?: number;
   jsonMode?: boolean;
+  /** Tenant-supplied OpenAI key (BYOK). */
+  apiKey?: string;
 }
+
 
 export interface VisionResult {
   text: string;
