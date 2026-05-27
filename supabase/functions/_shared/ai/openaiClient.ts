@@ -77,17 +77,26 @@ interface RequestConfig {
 function buildRequestConfig(model: string, overrideKey?: string): RequestConfig {
   // If a tenant-supplied key is passed, always go direct to OpenAI with that key.
   if (overrideKey) {
+    // Tenant keys only work with OpenAI models. Map gateway/Gemini models to an
+    // OpenAI equivalent so calls like check OCR (which default to
+    // google/gemini-2.5-pro via MODEL_VISION_STRONG) don't fail with
+    // "invalid model ID".
+    let bodyModel = model;
+    if (model.startsWith("openai/")) {
+      bodyModel = model.slice("openai/".length);
+    } else if (model.startsWith("google/")) {
+      bodyModel = fallbackOpenAIModel(model); // gpt-4o for vision-strong, gpt-4o-mini otherwise
+    }
     return {
       url: OPENAI_URL,
       headers: {
         Authorization: `Bearer ${overrideKey}`,
         "Content-Type": "application/json",
       },
-      // Strip the "openai/" prefix used by the Lovable gateway; the OpenAI API
-      // expects bare model names like "gpt-5" or "gpt-4o-mini".
-      bodyModel: model.startsWith("openai/") ? model.slice("openai/".length) : model,
+      bodyModel,
     };
   }
+
   const provider = pickProvider(model);
   if (provider === "lovable") {
     return {
