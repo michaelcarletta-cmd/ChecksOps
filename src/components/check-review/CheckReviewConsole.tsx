@@ -428,9 +428,63 @@ export function CheckReviewQueue({
                   </Badge>
                 )}
               </div>
+              <div
+                className="mt-2 flex items-center gap-1.5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Label className="text-[10px] text-muted-foreground shrink-0">Claim #</Label>
+                <Input
+                  value={claimEdits[check.id] ?? check.detected_claim_number ?? ""}
+                  onChange={(e) => setClaimEdits((p) => ({ ...p, [check.id]: e.target.value }))}
+                  placeholder="Add claim #"
+                  className="h-7 text-xs font-mono"
+                  disabled={savingClaimId === check.id}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const v = claimEdits[check.id] ?? check.detected_claim_number ?? "";
+                      saveClaimNumber(check.id, v);
+                    }
+                  }}
+                />
+                {claimEdits[check.id] !== undefined &&
+                  claimEdits[check.id] !== (check.detected_claim_number ?? "") && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 shrink-0"
+                    disabled={savingClaimId === check.id}
+                    onClick={() => saveClaimNumber(check.id, claimEdits[check.id] ?? "")}
+                    title="Save claim #"
+                  >
+                    {savingClaimId === check.id
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <Save className="h-3.5 w-3.5" />}
+                  </Button>
+                )}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                  onClick={() => setShareCheckId(check.id)}
+                  title="Share with partner"
+                >
+                  <Share2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
                 </CardContent>
               </Card>
             ))}
+          </Fragment>
+        ))}
+      </div>
+      <ShareCheckDialog
+        checkId={shareCheckId ?? ""}
+        open={!!shareCheckId}
+        onOpenChange={(open) => { if (!open) setShareCheckId(null); }}
+      />
+    </ScrollArea>
+  );
+}
           </Fragment>
         ))}
       </div>
