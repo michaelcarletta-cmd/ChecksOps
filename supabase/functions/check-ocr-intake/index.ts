@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
 import { callVision } from "../_shared/ai/generate.ts";
 import { MODEL_VISION, MODEL_VISION_STRONG } from "../_shared/ai/modelRouter.ts";
+import { resolveTenantOpenAIKey } from "../_shared/ai/tenantKeyResolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
