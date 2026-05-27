@@ -217,6 +217,8 @@ export interface OpenAIChatOptions {
   temperature?: number;
   maxTokens?: number;
   jsonMode?: boolean;
+  /** Tenant-supplied OpenAI key (BYOK). When set, bypasses the Lovable gateway and bills the tenant directly. */
+  apiKey?: string;
 }
 
 export interface OpenAIResult {
@@ -239,7 +241,7 @@ export async function callOpenAI(opts: OpenAIChatOptions): Promise<OpenAIResult>
     body.response_format = { type: "json_object" };
   }
 
-  const { data, resolvedModel } = await executeChat(opts.model, body, "callOpenAI");
+  const { data, resolvedModel } = await executeChat(opts.model, body, "callOpenAI", opts.apiKey);
   return {
     text: data.choices?.[0]?.message?.content || "",
     model: resolvedModel,
@@ -247,6 +249,7 @@ export async function callOpenAI(opts: OpenAIChatOptions): Promise<OpenAIResult>
     completionTokens: data.usage?.completion_tokens ?? 0,
   };
 }
+
 
 // ── Vision / Multimodal ──────────────────────────────────────────────
 
