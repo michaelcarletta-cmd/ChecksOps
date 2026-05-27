@@ -1525,7 +1525,7 @@ async function handlePublicEndorsementPage(
     );
   }
 
-  if (endorsement.token_expires_at && new Date(endorsement.token_expires_at) < new Date()) {
+  if (hasLegacyExpiredToken(endorsement)) {
     await supabase.from("check_endorsements").update({ status: "expired" }).eq("id", endorsement.id);
     endorsement.status = "expired";
   }
