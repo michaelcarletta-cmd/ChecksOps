@@ -74,7 +74,20 @@ interface RequestConfig {
   bodyModel: string; // model name to send in payload
 }
 
-function buildRequestConfig(model: string): RequestConfig {
+function buildRequestConfig(model: string, overrideKey?: string): RequestConfig {
+  // If a tenant-supplied key is passed, always go direct to OpenAI with that key.
+  if (overrideKey) {
+    return {
+      url: OPENAI_URL,
+      headers: {
+        Authorization: `Bearer ${overrideKey}`,
+        "Content-Type": "application/json",
+      },
+      // Strip the "openai/" prefix used by the Lovable gateway; the OpenAI API
+      // expects bare model names like "gpt-5" or "gpt-4o-mini".
+      bodyModel: model.startsWith("openai/") ? model.slice("openai/".length) : model,
+    };
+  }
   const provider = pickProvider(model);
   if (provider === "lovable") {
     return {
@@ -96,6 +109,7 @@ function buildRequestConfig(model: string): RequestConfig {
   };
 }
 
+
 /**
  * Execute a chat-completions POST. On 402/429 from the Lovable gateway,
  * retry once against direct OpenAI with an equivalent fallback model.
@@ -104,9 +118,11 @@ async function executeChat(
   model: string,
   body: Record<string, unknown>,
   contextLabel: string,
+  overrideKey?: string,
 ): Promise<{ data: any; resolvedModel: string }> {
-  const cfg = buildRequestConfig(model);
+  const cfg = buildRequestConfig(model, overrideKey);
   const payload = { ...body, model: cfg.bodyModel };
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS);
 
@@ -131,9 +147,12 @@ async function executeChat(
   // Only fall back when an OpenAI key is configured; otherwise surface the
   // original gateway error so callers see the real cause (and we don't mask it
   // with a misleading 401 from a stale OpenAI key).
-  const isLovable = pickProvider(model) === "lovable";
-  const openAIKey = Deno.env.get("OPENAI_API_KEY");
+  // BYOK: if caller supplied a tenant key, never silently fall back to the
+  // platform's OpenAI key — that would leak platform spend onto a tenant request.
+  const isLovable = pickProvider(model) === "lovable" && !overrideKey;
+  const openAIKey = overrideKey ? null : Deno.env.get("OPENAI_API_KEY");
   if (isLovable && (res.status === 402 || res.status === 429) && openAIKey) {
+
     const fbModel = fallbackOpenAIModel(model);
     console.warn(
       `[aiClient] ${contextLabel}: Lovable gateway returned ${res.status} for ${model}. Falling back to OpenAI ${fbModel}.`,
@@ -198,6 +217,8 @@ export interface OpenAIChatOptions {
   temperature?: number;
   maxTokens?: number;
   jsonMode?: boolean;
+  /** Tenant-supplied OpenAI key (BYOK). When set, bypasses the Lovable gateway and bills the tenant directly. */
+  apiKey?: string;
 }
 
 export interface OpenAIResult {
@@ -220,7 +241,7 @@ export async function callOpenAI(opts: OpenAIChatOptions): Promise<OpenAIResult>
     body.response_format = { type: "json_object" };
   }
 
-  const { data, resolvedModel } = await executeChat(opts.model, body, "callOpenAI");
+  const { data, resolvedModel } = await executeChat(opts.model, body, "callOpenAI", opts.apiKey);
   return {
     text: data.choices?.[0]?.message?.content || "",
     model: resolvedModel,
@@ -228,6 +249,7 @@ export async function callOpenAI(opts: OpenAIChatOptions): Promise<OpenAIResult>
     completionTokens: data.usage?.completion_tokens ?? 0,
   };
 }
+
 
 // ── Vision / Multimodal ──────────────────────────────────────────────
 
@@ -242,7 +264,10 @@ export interface VisionChatOptions {
   temperature?: number;
   maxTokens?: number;
   jsonMode?: boolean;
+  /** Tenant-supplied OpenAI key (BYOK). */
+  apiKey?: string;
 }
+
 
 export interface VisionResult {
   text: string;
@@ -274,7 +299,7 @@ export async function callVision(opts: VisionChatOptions): Promise<VisionResult>
     body.response_format = { type: "json_object" };
   }
 
-  const { data, resolvedModel } = await executeChat(opts.model, body, "callVision");
+  const { data, resolvedModel } = await executeChat(opts.model, body, "callVision", opts.apiKey);
   return {
     text: data.choices?.[0]?.message?.content || "",
     model: resolvedModel,
@@ -290,7 +315,10 @@ export interface ToolCallOptions {
   toolChoice?: any;
   temperature?: number;
   maxTokens?: number;
+  /** Tenant-supplied OpenAI key (BYOK). */
+  apiKey?: string;
 }
+
 
 export interface ToolCallResult {
   text: string;
@@ -309,7 +337,7 @@ export async function callWithTools(opts: ToolCallOptions): Promise<ToolCallResu
     body.tool_choice = opts.toolChoice;
   }
 
-  const { data, resolvedModel } = await executeChat(opts.model, body, "callWithTools");
+  const { data, resolvedModel } = await executeChat(opts.model, body, "callWithTools", opts.apiKey);
   const message = data.choices?.[0]?.message;
   return {
     text: message?.content || "",
