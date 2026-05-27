@@ -315,7 +315,10 @@ export interface ToolCallOptions {
   toolChoice?: any;
   temperature?: number;
   maxTokens?: number;
+  /** Tenant-supplied OpenAI key (BYOK). */
+  apiKey?: string;
 }
+
 
 export interface ToolCallResult {
   text: string;
