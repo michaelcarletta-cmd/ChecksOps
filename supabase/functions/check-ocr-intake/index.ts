@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
 import { callVision } from "../_shared/ai/generate.ts";
 import { MODEL_VISION, MODEL_VISION_STRONG } from "../_shared/ai/modelRouter.ts";
+import { resolveTenantOpenAIKey } from "../_shared/ai/tenantKeyResolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -104,7 +105,7 @@ function normalizeAmountValue(raw: string | null): string | null {
 }
 
 async function extractAmountWithFocusedPass(
-  _unused: string,
+  tenantApiKey: string | null,
   frontImageUrl: string,
   backImageUrl: string | null,
 ): Promise<AmountFallbackResult> {
@@ -143,6 +144,7 @@ Rules:
       model: MODEL_VISION_STRONG,
       messages: [{ role: "user", content }],
       jsonMode: true,
+      apiKey: tenantApiKey ?? undefined,
     });
 
     const rawText = visionResult.text;
@@ -515,60 +517,33 @@ Deno.serve(async (req) => {
         { stale_since: heartbeat, lock_age_ms: lockAge }, userId);
     }
 
-    // ---- Tenant credit check (white-label only) ----
-    // Freedom Claims (system tenant) is internal — billed via the app's AI usage,
-    // NOT via per-tenant white-label credits. Skip the credit check entirely.
-    stage = "credit_check";
+    // ---- Tenant OpenAI key resolution (Pure BYOK) ----
+    // White-label tenants must bring their own OpenAI key (billed to their OpenAI account).
+    // Freedom Claims (system tenant) continues to use the platform OPENAI_API_KEY.
+    stage = "tenant_key";
     const tenantId = (check as Record<string, unknown>).tenant_id as string | null;
-    let isSystemTenant = false;
-    if (tenantId) {
-      const { data: tenantRow, error: tenantLookupErr } = await supabase
-        .from("tenants")
-        .select("is_system_tenant, slug")
-        .eq("id", tenantId)
-        .maybeSingle();
-      if (tenantLookupErr) {
-        log("credit_check", "Tenant lookup failed — defaulting to system tenant (skip credits)", {
-          tenantId,
-          error: tenantLookupErr.message,
-        });
-        // Fail-open for credit check: if we can't verify tenant, assume internal
-        // so we never block Freedom's own check ingestion on a transient lookup error.
-        isSystemTenant = true;
-      } else {
-        const row = tenantRow as { is_system_tenant?: boolean; slug?: string } | null;
-        isSystemTenant = !!row?.is_system_tenant || row?.slug === "freedom-claims";
-      }
-      log("credit_check", "Tenant resolved", { tenantId, isSystemTenant });
+    const keyResult = await resolveTenantOpenAIKey(supabase, tenantId);
+    const tenantApiKey: string | null = keyResult.key;
+    log("tenant_key", "Resolved", {
+      tenantId,
+      isSystemTenant: keyResult.isSystemTenant,
+      status: keyResult.status,
+      hasKey: !!tenantApiKey,
+    });
+
+    if (!keyResult.isSystemTenant && !tenantApiKey) {
+      const reason =
+        keyResult.status === "missing"
+          ? "No OpenAI API key configured for this tenant. Add one in Settings → AI Key."
+          : keyResult.status === "invalid"
+          ? "Stored OpenAI API key is invalid. Re-enter it in Settings → AI Key."
+          : "OpenAI API key not active. Verify it in Settings → AI Key.";
+      await logAudit(supabase, checkId, "byok_key_missing",
+        `Check OCR blocked: ${reason}`,
+        { tenant_id: tenantId, status: keyResult.status }, userId);
+      return errResponse(reason, 402, stage);
     }
-    if (tenantId && !isSystemTenant) {
-      const { data: deductResult, error: deductErr } = await supabase
-        .rpc("deduct_tenant_credits", {
-          p_tenant_id: tenantId,
-          p_amount: 1,
-          p_description: "Check OCR processing",
-          p_reference_id: checkId,
-          p_reference_type: "check_ocr",
-        });
-      if (deductErr) {
-        log("credit_check", "Deduction RPC error", { error: deductErr.message });
-        // Don't block Freedom's own checks — only block if tenant
-      } else if (deductResult && !(deductResult as any).success) {
-        const errType = (deductResult as any).error;
-        log("credit_check", "Insufficient credits", { tenantId, error: errType });
-        await logAudit(supabase, checkId, "credit_check_failed",
-          `Check processing blocked: ${errType === 'insufficient_credits' ? 'Insufficient AI credits' : 'No credit balance configured'}`,
-          { tenant_id: tenantId, error: errType }, userId);
-        return errResponse(
-          errType === "insufficient_credits"
-            ? "Insufficient AI credits. Please purchase more credits in Settings > Credits."
-            : "No credit balance configured. Please contact your administrator.",
-          402, stage
-        );
-      } else {
-        log("credit_check", "Credit deducted", { tenantId, remaining: (deductResult as any)?.balance });
-      }
-    }
+
 
     // ---- Check active endorsements ----
     stage = "check_endorsements";
@@ -676,6 +651,7 @@ Rules:
           jsonMode: true,
           temperature: 0,
           maxTokens: 4000,
+          apiKey: tenantApiKey ?? undefined,
         });
       } catch (fetchErr) {
         const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
@@ -728,7 +704,7 @@ Rules:
       if (!parsed.amount) {
         stage = "amount_fallback";
         try {
-          const fallback = await extractAmountWithFocusedPass(lovableKey, frontImageUrl, backImageUrl);
+          const fallback = await extractAmountWithFocusedPass(tenantApiKey, frontImageUrl, backImageUrl);
           if (fallback.amount) {
             parsed.amount = fallback.amount;
             if (fallback.confidence !== null) {

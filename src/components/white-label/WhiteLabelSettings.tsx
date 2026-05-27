@@ -10,11 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft, Loader2, Save, Trash2, Coins, Receipt, Banknote, KeyRound } from "lucide-react";
+import { LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft, Loader2, Save, Trash2, Receipt, Banknote, KeyRound } from "lucide-react";
 import { StakeholderAccountSettings } from "@/components/disbursement/StakeholderAccountSettings";
 import { TenantUserManager } from "./TenantUserManager";
 import { TenantPartnerManager } from "./TenantPartnerManager";
-import { TenantCreditManager } from "./TenantCreditManager";
 import { TenantAIKeySettings } from "./TenantAIKeySettings";
 
 import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
@@ -74,7 +73,6 @@ export function WhiteLabelSettings() {
           <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
             <TabsTrigger value="profile" className="text-xs gap-1"><Building2 className="h-3 w-3" />Profile</TabsTrigger>
             <TabsTrigger value="usage" className="text-xs gap-1"><Receipt className="h-3 w-3" />Usage</TabsTrigger>
-            <TabsTrigger value="credits" className="text-xs gap-1"><Coins className="h-3 w-3" />Credits</TabsTrigger>
             <TabsTrigger value="ai-key" className="text-xs gap-1"><KeyRound className="h-3 w-3" />AI Key</TabsTrigger>
             <TabsTrigger value="users" className="text-xs gap-1"><Users className="h-3 w-3" />Users</TabsTrigger>
 
@@ -94,9 +92,6 @@ export function WhiteLabelSettings() {
             {isAdmin && <BillingConfigPanel />}
           </TabsContent>
 
-          <TabsContent value="credits">
-            <TenantCreditManager />
-          </TabsContent>
 
           <TabsContent value="ai-key">
             <TenantAIKeySettings />
