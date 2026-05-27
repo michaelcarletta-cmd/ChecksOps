@@ -814,17 +814,10 @@ Rules:
         eligibility.reasons.unshift("Check amount could not be extracted automatically — manual review required");
       }
     }
-    const checkStatus = needsManualReview
-      ? "needs_review"
-      : eligibility.recommendation === "loss_draft_required"
-        ? "loss_draft_required"
-        : eligibility.recommendation === "endorsements_pending"
-          ? "endorsements_in_progress"
-          : eligibility.recommendation === "branch_deposit_recommended"
-            ? "branch_deposit_required"
-            : eligibility.recommendation === "ready_for_deposit"
-              ? "approved_for_deposit"
-              : "ocr_complete";
+    // Always land checks in Review first — never auto-advance to Endorsing/Deposit.
+    // The reviewer explicitly decides the next stage via the Review console.
+    // The deposit_recommendation is still persisted so the reviewer sees the AI suggestion.
+    const checkStatus = needsManualReview ? "needs_review" : "needs_review";
 
     // ---- Commit via RPC (non-fatal wrapper) ----
     stage = "rpc_commit";
