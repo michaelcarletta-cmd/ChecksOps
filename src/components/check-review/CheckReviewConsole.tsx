@@ -689,6 +689,38 @@ export function ReviewDecisionPanel({
                 <Label className="text-xs">Payee Line</Label>
                 <Input value={payeeLine} onChange={(e) => { setPayeeLine(e.target.value); markDirty(); }} className="h-8 text-sm" />
               </div>
+              <div>
+                <Label className="text-xs">Issue Date</Label>
+                <Input
+                  type="date"
+                  value={issueDate}
+                  onChange={(e) => { setIssueDate(e.target.value); markDirty(); }}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">Routing #</Label>
+                  <Input
+                    inputMode="numeric"
+                    maxLength={9}
+                    placeholder="9 digits"
+                    value={routingNumber}
+                    onChange={(e) => { setRoutingNumber(e.target.value.replace(/\D/g, "").slice(0, 9)); markDirty(); }}
+                    className="h-8 text-sm font-mono"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Account #</Label>
+                  <Input
+                    inputMode="numeric"
+                    maxLength={20}
+                    value={accountNumber}
+                    onChange={(e) => { setAccountNumber(e.target.value.replace(/\D/g, "").slice(0, 20)); markDirty(); }}
+                    className="h-8 text-sm font-mono"
+                  />
+                </div>
+              </div>
               <Button
                 type="button"
                 size="sm"
