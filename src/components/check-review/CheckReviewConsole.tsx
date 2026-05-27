@@ -17,10 +17,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertTriangle, CheckCircle2, Building2, Edit3, Save,
   RotateCcw, Shield, Users, FileCheck, Loader2, Merge,
-  Trash2, Plus, FileImage,
+  Trash2, Plus, FileImage, Share2,
 } from "lucide-react";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { assessCheckValidity, isAtRisk } from "@/lib/checkValidity";
+import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
