@@ -144,6 +144,7 @@ Rules:
       model: MODEL_VISION_STRONG,
       messages: [{ role: "user", content }],
       jsonMode: true,
+      apiKey: tenantApiKey ?? undefined,
     });
 
     const rawText = visionResult.text;
