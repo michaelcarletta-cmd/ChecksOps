@@ -42,6 +42,8 @@ interface ReviewCheck {
   check_number: string | null;
   amount: number | null;
   issue_date: string | null;
+  routing_number: string | null;
+  account_number: string | null;
   payee_line: string | null;
   is_multi_payee: boolean;
   ocr_status: string;
@@ -389,6 +391,9 @@ export function ReviewDecisionPanel({
   const [checkNumber, setCheckNumber] = useState("");
   const [amount, setAmount] = useState("");
   const [payeeLine, setPayeeLine] = useState("");
+  const [issueDate, setIssueDate] = useState("");
+  const [routingNumber, setRoutingNumber] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
   const [fundsType, setFundsType] = useState<string>("");
   const [propertyAddress, setPropertyAddress] = useState<string>("");
   const [savingMeta, setSavingMeta] = useState(false);
@@ -403,6 +408,9 @@ export function ReviewDecisionPanel({
       setCheckNumber(check.check_number ?? "");
       setAmount(check.amount?.toString() ?? "");
       setPayeeLine(check.payee_line ?? "");
+      setIssueDate(check.issue_date ?? "");
+      setRoutingNumber(check.routing_number ?? "");
+      setAccountNumber(check.account_number ?? "");
       setFundsType(((check as any).funds_type as string) ?? "");
       setPropertyAddress(((check as any).property_address as string) ?? "");
     }
@@ -459,6 +467,21 @@ export function ReviewDecisionPanel({
       if (payeeLine !== (check.payee_line ?? "")) {
         updates.payee_line = payeeLine || null;
         fieldChanges.push({ field: "payee_line", old_value: check.payee_line, new_value: payeeLine || null });
+      }
+      const trimmedDate = issueDate.trim();
+      if ((trimmedDate || null) !== (check.issue_date ?? null)) {
+        updates.issue_date = trimmedDate || null;
+        fieldChanges.push({ field: "issue_date", old_value: check.issue_date, new_value: trimmedDate || null });
+      }
+      const trimmedRouting = routingNumber.replace(/\D/g, "");
+      if ((trimmedRouting || null) !== (check.routing_number ?? null)) {
+        updates.routing_number = trimmedRouting || null;
+        fieldChanges.push({ field: "routing_number", old_value: check.routing_number, new_value: trimmedRouting || null });
+      }
+      const trimmedAccount = accountNumber.replace(/\D/g, "");
+      if ((trimmedAccount || null) !== (check.account_number ?? null)) {
+        updates.account_number = trimmedAccount || null;
+        fieldChanges.push({ field: "account_number", old_value: check.account_number, new_value: trimmedAccount || null });
       }
 
       if (Object.keys(updates).length === 0) throw new Error("No field changes to save");
@@ -596,6 +619,9 @@ export function ReviewDecisionPanel({
                   setCheckNumber(check.check_number ?? "");
                   setAmount(check.amount?.toString() ?? "");
                   setPayeeLine(check.payee_line ?? "");
+                  setIssueDate(check.issue_date ?? "");
+                  setRoutingNumber(check.routing_number ?? "");
+                  setAccountNumber(check.account_number ?? "");
                   markDirty();
                 }
                 setEditing(!editing);
@@ -662,6 +688,38 @@ export function ReviewDecisionPanel({
               <div>
                 <Label className="text-xs">Payee Line</Label>
                 <Input value={payeeLine} onChange={(e) => { setPayeeLine(e.target.value); markDirty(); }} className="h-8 text-sm" />
+              </div>
+              <div>
+                <Label className="text-xs">Issue Date</Label>
+                <Input
+                  type="date"
+                  value={issueDate}
+                  onChange={(e) => { setIssueDate(e.target.value); markDirty(); }}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">Routing #</Label>
+                  <Input
+                    inputMode="numeric"
+                    maxLength={9}
+                    placeholder="9 digits"
+                    value={routingNumber}
+                    onChange={(e) => { setRoutingNumber(e.target.value.replace(/\D/g, "").slice(0, 9)); markDirty(); }}
+                    className="h-8 text-sm font-mono"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Account #</Label>
+                  <Input
+                    inputMode="numeric"
+                    maxLength={20}
+                    value={accountNumber}
+                    onChange={(e) => { setAccountNumber(e.target.value.replace(/\D/g, "").slice(0, 20)); markDirty(); }}
+                    className="h-8 text-sm font-mono"
+                  />
+                </div>
               </div>
               <Button
                 type="button"
