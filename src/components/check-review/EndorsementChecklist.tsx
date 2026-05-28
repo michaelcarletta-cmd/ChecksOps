@@ -100,20 +100,30 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
         .eq("id", checkId)
         .maybeSingle();
       const claimId = check?.claim_id;
-      if (!claimId) return "";
+      if (!claimId) return { claimId: null, email: "" };
+      // Prefer a previously-saved CC on the claim
+      const { data: claim } = await supabase
+        .from("claims")
+        .select("signature_cc_email")
+        .eq("id", claimId)
+        .maybeSingle();
+      if ((claim as any)?.signature_cc_email) {
+        return { claimId, email: (claim as any).signature_cc_email as string };
+      }
       const { data: assignments } = await supabase
         .from("claim_contractors")
         .select("contractor_id")
         .eq("claim_id", claimId);
       const ids = (assignments ?? []).map((a: any) => a.contractor_id).filter(Boolean);
-      if (ids.length === 0) return "";
+      if (ids.length === 0) return { claimId, email: "" };
       const { data: profiles } = await supabase
         .from("profiles")
         .select("email")
         .in("id", ids);
-      return profiles?.find((p: any) => p.email)?.email ?? "";
+      return { claimId, email: profiles?.find((p: any) => p.email)?.email ?? "" };
     },
   });
+
 
   const [forceCompleting, setForceCompleting] = useState(false);
 
