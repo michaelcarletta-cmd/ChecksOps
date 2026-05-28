@@ -167,9 +167,11 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
               return (
                 <button
                   key={r.check_id}
-                  type="button"
-                  onClick={() => setSelectedId(r.check_id)}
-                  className={`w-full text-left p-2 rounded-md transition-colors border ${
+                  onClick={() => {
+                    if (onOpenCheck) onOpenCheck(r.check_id);
+                    else setSelectedId(r.check_id);
+                  }}
+
                     isActive
                       ? "bg-primary/10 border-primary/40"
                       : "border-transparent hover:bg-muted/50"
