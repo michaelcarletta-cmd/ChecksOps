@@ -33,6 +33,7 @@ import { SignaturePresetsSettings } from "@/components/settings/SignaturePresets
 import { ImportSettings } from "@/components/settings/ImportSettings";
 import { UserManagementSettings } from "@/components/settings/UserManagementSettings";
 import { ProfileSettings } from "@/components/settings/ProfileSettings";
+import { CheckCenterHelpPanel } from "@/components/check-review/CheckCenterHelp";
 import { AIKnowledgeBaseSettings } from "@/components/settings/AIKnowledgeBaseSettings";
 import { CounterArgumentsSettings } from "@/components/settings/CounterArgumentsSettings";
 import { QuickBooksSettings } from "@/components/settings/QuickBooksSettings";
@@ -648,6 +649,7 @@ export default function Settings() {
       <Tabs defaultValue="workflow" className="space-y-6">
         <TabsList className="flex flex-col md:flex-row md:flex-wrap h-auto w-full bg-muted/40 p-2 gap-1">
           <TabsTrigger value="profile" className="w-full md:w-auto justify-start text-base font-medium px-4">My Profile</TabsTrigger>
+          <TabsTrigger value="checks-guide" className="w-full md:w-auto justify-start text-base font-medium px-4">ChecksOps Guide</TabsTrigger>
           <TabsTrigger value="workflow" className="w-full md:w-auto justify-start text-base font-medium px-4">Workflow Management</TabsTrigger>
           <TabsTrigger value="users" className="w-full md:w-auto justify-start text-base font-medium px-4">User Management</TabsTrigger>
           <TabsTrigger value="automations" className="w-full md:w-auto justify-start text-base font-medium px-4">Automations</TabsTrigger>
@@ -684,6 +686,10 @@ export default function Settings() {
 
         <TabsContent value="profile" className="w-full">
           <ProfileSettings />
+        </TabsContent>
+
+        <TabsContent value="checks-guide" className="w-full">
+          <CheckCenterHelpPanel />
         </TabsContent>
 
         <TabsContent value="workflow" className="w-full space-y-4">

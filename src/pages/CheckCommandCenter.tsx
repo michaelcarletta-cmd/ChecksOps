@@ -43,7 +43,7 @@ import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButt
 import { EndorsementOverride } from "@/lib/endorsementLayout";
 import { LossDraftDetailPanel } from "@/components/loss-draft/LossDraftDetailPanel";
 import { ArrowDownToLine, FileBarChart } from "lucide-react";
-import { CheckCenterHelpButton } from "@/components/check-review/CheckCenterHelp";
+// Help moved to Settings → ChecksOps Guide
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
 import { DepositStatusPanel } from "@/components/check-review/DepositStatusPanel";
@@ -281,7 +281,7 @@ export default function CheckCommandCenter() {
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
-  const [helpOpen, setHelpOpen] = useState(false);
+  // helpOpen state removed — help moved to Settings → ChecksOps Guide
   const [shareCheckId, setShareCheckId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -567,45 +567,7 @@ export default function CheckCommandCenter() {
               Tenant Admin
             </a>
           )}
-          <Sheet open={helpOpen} onOpenChange={setHelpOpen}>
-            <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="h-9 w-9">
-                <HelpCircle className="h-4 w-4" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right" className="w-[320px] sm:w-[320px]">
-              <SheetHeader>
-                <SheetTitle>How to Use ChecksOps</SheetTitle>
-              </SheetHeader>
-              <div className="mt-6 space-y-6">
-                <HelpStep
-                  step={1}
-                  title="Endorsing"
-                  description="When a check arrives, all payees must sign before it can be deposited. The endorsement checklist tracks each payee's signature status. Send requests via email or SMS."
-                />
-                <HelpStep
-                  step={2}
-                  title="Review"
-                  description="Verify the OCR-extracted data — amount, check number, carrier, and payees. Approve the check to move it forward or flag issues."
-                />
-                <HelpStep
-                  step={3}
-                  title="Ready for Deposit"
-                  description="Fully endorsed and verified checks land here. Generate a deposit packet or batch them for electronic or branch deposit."
-                />
-                <HelpStep
-                  step={4}
-                  title="Loss Draft"
-                  description="Manage mortgage company escrow holds, track disbursement schedules, and follow up on held funds until fully released."
-                />
-              </div>
-              <div className="mt-8">
-                <Button variant="outline" className="w-full" onClick={() => setHelpOpen(false)}>
-                  Dismiss
-                </Button>
-              </div>
-            </SheetContent>
-          </Sheet>
+          {/* Help moved to Settings → ChecksOps Guide */}
           <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
             <DialogTrigger asChild>
               <Button className="whitespace-nowrap"><Upload className="h-4 w-4 mr-2" /><span className="hidden sm:inline">Upload Check</span><span className="sm:hidden">Upload</span></Button>
@@ -620,7 +582,6 @@ export default function CheckCommandCenter() {
               />
             </DialogContent>
           </Dialog>
-          <CheckCenterHelpButton />
         </div>
       </div>
 
