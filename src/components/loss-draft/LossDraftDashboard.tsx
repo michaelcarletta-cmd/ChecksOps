@@ -24,7 +24,7 @@ import { useTenantFilter } from "@/hooks/useTenantFilter";
 
 export interface LossDraftRow {
   id: string;
-  claim_id: string;
+  claim_id: string | null;
   claim_number: string | null;
   policyholder_name: string | null;
   insurance_company: string | null;
@@ -46,6 +46,11 @@ export interface LossDraftRow {
   is_stale: boolean;
   monitoring_type?: string | null;
   check_status?: string | null;
+  check_intake_item_id?: string | null;
+  check_number?: string | null;
+  check_amount?: number | null;
+  payee_line?: string | null;
+  carrier_name?: string | null;
 }
 
 const escrowStatusConfig: Record<string, { label: string; color: string }> = {
@@ -212,10 +217,18 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
                           onClick={() => setSelectedId(d.id)}
                         >
                           <TableCell>
-                            <div className="text-sm font-medium">{d.claim_number || "—"}</div>
-                            <div className="text-xs text-muted-foreground truncate max-w-[120px]">
-                              {d.policyholder_name}
+                            <div className="text-sm font-medium">
+                              {d.claim_number || (d.check_number ? `Check #${d.check_number}` : "No claim")}
                             </div>
+                            <div className="text-xs text-muted-foreground truncate max-w-[160px]">
+                              {d.policyholder_name || d.payee_line || "—"}
+                            </div>
+                            {!d.claim_number && (
+                              <div className="text-[10px] text-muted-foreground truncate max-w-[160px]">
+                                {d.insurance_company || d.carrier_name}
+                                {d.check_amount ? ` · $${Number(d.check_amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : ""}
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell className="text-sm max-w-[120px] truncate">{d.mortgage_servicer}</TableCell>
                           <TableCell className="text-right font-semibold tabular-nums text-sm">

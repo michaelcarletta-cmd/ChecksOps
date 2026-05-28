@@ -18045,6 +18045,10 @@ export type Database = {
       }
       loss_draft_dashboard: {
         Row: {
+          carrier_name: string | null
+          check_amount: number | null
+          check_intake_item_id: string | null
+          check_number: string | null
           check_received_date: string | null
           check_sent_date: string | null
           check_status: string | null
@@ -18065,6 +18069,7 @@ export type Database = {
           missing_docs_count: number | null
           monitoring_type: string | null
           mortgage_servicer: string | null
+          payee_line: string | null
           policyholder_name: string | null
           tenant_id: string | null
           total_escrowed: number | null
@@ -18072,6 +18077,13 @@ export type Database = {
           updated_at: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "loss_draft_tracking_check_intake_item_id_fkey"
+            columns: ["check_intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "loss_draft_tracking_claim_id_fkey"
             columns: ["claim_id"]

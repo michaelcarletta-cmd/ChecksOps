@@ -154,6 +154,32 @@ export function LossDraftDetailPanel({
           )}
         </div>
 
+        {draft.check_intake_items && (
+          <div className="rounded-md border border-border/60 bg-muted/30 p-2 text-xs space-y-0.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-medium">
+                {draft.check_intake_items.check_number
+                  ? `Check #${draft.check_intake_items.check_number}`
+                  : "Check"}
+              </span>
+              {draft.check_intake_items.amount != null && (
+                <span className="tabular-nums">
+                  ${Number(draft.check_intake_items.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                </span>
+              )}
+            </div>
+            {draft.check_intake_items.payee_line && (
+              <div className="text-muted-foreground truncate">{draft.check_intake_items.payee_line}</div>
+            )}
+            {draft.check_intake_items.carrier_name && (
+              <div className="text-muted-foreground truncate">{draft.check_intake_items.carrier_name}</div>
+            )}
+            {!draft.claim_id && (
+              <div className="text-[10px] text-amber-400 pt-0.5">No claim linked — managing from check intake</div>
+            )}
+          </div>
+        )}
+
         {isMonitored ? (
           <div className="text-xs text-muted-foreground">
             Draw #{draft.draw_stage} · Holdback {fmtMoney(draft.holdback_amount)}
