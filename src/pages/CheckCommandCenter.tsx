@@ -43,7 +43,7 @@ import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButt
 import { EndorsementOverride } from "@/lib/endorsementLayout";
 import { LossDraftDetailPanel } from "@/components/loss-draft/LossDraftDetailPanel";
 import { ArrowDownToLine, FileBarChart } from "lucide-react";
-import { CheckCenterHelpButton } from "@/components/check-review/CheckCenterHelp";
+// Help moved to Settings → ChecksOps Guide
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
 import { DepositStatusPanel } from "@/components/check-review/DepositStatusPanel";
