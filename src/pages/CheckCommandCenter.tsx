@@ -970,7 +970,15 @@ export default function CheckCommandCenter() {
                               </TableCell>
                               <TableCell>
                                 {RecIcon && (
-                                  <RecIcon className={`h-4 w-4 ${rec!.color}`} />
+                                  <span
+                                    className="inline-flex items-center gap-1"
+                                    title={rec!.label}
+                                  >
+                                    <RecIcon className={`h-4 w-4 ${rec!.color}`} />
+                                    <span className={`text-[10px] ${rec!.color} hidden md:inline`}>
+                                      {rec!.label}
+                                    </span>
+                                  </span>
                                 )}
                               </TableCell>
                               <TableCell>
