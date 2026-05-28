@@ -649,6 +649,7 @@ export default function Settings() {
       <Tabs defaultValue="workflow" className="space-y-6">
         <TabsList className="flex flex-col md:flex-row md:flex-wrap h-auto w-full bg-muted/40 p-2 gap-1">
           <TabsTrigger value="profile" className="w-full md:w-auto justify-start text-base font-medium px-4">My Profile</TabsTrigger>
+          <TabsTrigger value="checks-guide" className="w-full md:w-auto justify-start text-base font-medium px-4">ChecksOps Guide</TabsTrigger>
           <TabsTrigger value="workflow" className="w-full md:w-auto justify-start text-base font-medium px-4">Workflow Management</TabsTrigger>
           <TabsTrigger value="users" className="w-full md:w-auto justify-start text-base font-medium px-4">User Management</TabsTrigger>
           <TabsTrigger value="automations" className="w-full md:w-auto justify-start text-base font-medium px-4">Automations</TabsTrigger>
