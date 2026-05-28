@@ -217,10 +217,18 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
                           onClick={() => setSelectedId(d.id)}
                         >
                           <TableCell>
-                            <div className="text-sm font-medium">{d.claim_number || "—"}</div>
-                            <div className="text-xs text-muted-foreground truncate max-w-[120px]">
-                              {d.policyholder_name}
+                            <div className="text-sm font-medium">
+                              {d.claim_number || (d.check_number ? `Check #${d.check_number}` : "No claim")}
                             </div>
+                            <div className="text-xs text-muted-foreground truncate max-w-[160px]">
+                              {d.policyholder_name || d.payee_line || "—"}
+                            </div>
+                            {!d.claim_number && (
+                              <div className="text-[10px] text-muted-foreground truncate max-w-[160px]">
+                                {d.insurance_company || d.carrier_name}
+                                {d.check_amount ? ` · $${Number(d.check_amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : ""}
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell className="text-sm max-w-[120px] truncate">{d.mortgage_servicer}</TableCell>
                           <TableCell className="text-right font-semibold tabular-nums text-sm">
