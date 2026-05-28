@@ -467,7 +467,7 @@ export default function CheckCommandCenter() {
   const needsReview = allChecks.filter(
     (c) => {
       const s = getEffectiveStatus(c);
-      const s = getEffectiveStatus(c);
+
       const stage = (c as any).check_stage as string | undefined;
       // Exclude checks already routed to a downstream stage (loss draft, reissue,
       // branch, deposited, endorsing) so they don't double-list in Review.
