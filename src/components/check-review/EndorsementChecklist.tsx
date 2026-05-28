@@ -44,6 +44,17 @@ interface CheckEndorsement {
   created_at: string;
 }
 
+interface CheckPayee {
+  id: string;
+  payee_name: string;
+  payee_type: string | null;
+  endorsement_status: string | null;
+  endorsed_at: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  created_at: string;
+}
+
 const statusConfig: Record<string, { label: string; color: string; icon: typeof CheckCircle2 }> = {
   pending: { label: "Pending", color: "bg-muted text-muted-foreground", icon: Clock },
   sent: { label: "Sent", color: "bg-blue-500/20 text-blue-400", icon: Send },
@@ -62,6 +73,74 @@ const payeeTypeIcons: Record<string, typeof Users> = {
   other: AlertTriangle,
 };
 
+const normalizeName = (value?: string | null) => (value ?? "").trim().toLowerCase();
+const normalizeType = (value?: string | null) => (value ?? "other").trim().toLowerCase();
+
+const normalizeEndorsementStatus = (status?: string | null, signedAt?: string | null) => {
+  if (signedAt) return "signed";
+
+  const value = (status ?? "").trim().toLowerCase();
+  if (["signed", "endorsed", "complete", "completed"].includes(value)) return "signed";
+  if (value === "waived") return "waived";
+  if (value === "manual_required") return "manual_required";
+  if (["declined", "rejected"].includes(value)) return "rejected";
+  if (["sent", "requested", "awaiting", "in_progress", "viewed", "opened"].includes(value)) return "sent";
+  if (value === "expired") return "expired";
+  return "pending";
+};
+
+function mergeEndorsementsWithPayees(checkId: string, endorsements: CheckEndorsement[], payees: CheckPayee[]): CheckEndorsement[] {
+  if (payees.length === 0) return endorsements;
+
+  const usedEndorsementIds = new Set<string>();
+  const byExactKey = new Map<string, CheckEndorsement[]>();
+  const byName = new Map<string, CheckEndorsement[]>();
+
+  for (const endorsement of endorsements) {
+    const exactKey = `${normalizeName(endorsement.payee_name)}::${normalizeType(endorsement.payee_type)}`;
+    const nameKey = normalizeName(endorsement.payee_name);
+    byExactKey.set(exactKey, [...(byExactKey.get(exactKey) ?? []), endorsement]);
+    byName.set(nameKey, [...(byName.get(nameKey) ?? []), endorsement]);
+  }
+
+  const merged = payees.map((payee) => {
+    const exactKey = `${normalizeName(payee.payee_name)}::${normalizeType(payee.payee_type)}`;
+    const nameKey = normalizeName(payee.payee_name);
+    const match =
+      byExactKey.get(exactKey)?.find((row) => !usedEndorsementIds.has(row.id)) ??
+      byName.get(nameKey)?.find((row) => !usedEndorsementIds.has(row.id));
+
+    if (match) {
+      usedEndorsementIds.add(match.id);
+      return match;
+    }
+
+    return {
+      id: `payee-${payee.id}`,
+      check_id: checkId,
+      payee_name: payee.payee_name,
+      payee_type: payee.payee_type ?? "other",
+      status: normalizeEndorsementStatus(payee.endorsement_status, payee.endorsed_at),
+      signature_method: "",
+      signed_at: payee.endorsed_at,
+      request_sent_at: null,
+      last_reminder_at: null,
+      reminder_count: 0,
+      contact_email: payee.contact_email,
+      contact_phone: payee.contact_phone,
+      notes: null,
+      loss_draft_task_created: false,
+      created_at: payee.created_at,
+    } satisfies CheckEndorsement;
+  });
+
+  for (const endorsement of endorsements) {
+    if (!usedEndorsementIds.has(endorsement.id)) merged.push(endorsement);
+  }
+
+  return merged;
+}
+
 interface EndorsementChecklistProps {
   checkId: string;
   onRefresh?: () => void;
@@ -79,13 +158,27 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
   const { data: endorsements = [], isLoading } = useQuery({
     queryKey: ["check-endorsements", checkId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("check_endorsements")
-        .select("*")
-        .eq("check_id", checkId)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as CheckEndorsement[];
+      const [{ data: endorsementData, error: endorsementError }, { data: payeeData, error: payeeError }] = await Promise.all([
+        supabase
+          .from("check_endorsements")
+          .select("*")
+          .eq("check_id", checkId)
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("check_payees")
+          .select("id, payee_name, payee_type, endorsement_status, endorsed_at, contact_email, contact_phone, created_at")
+          .eq("check_id", checkId)
+          .order("created_at", { ascending: true }),
+      ]);
+
+      if (endorsementError) throw endorsementError;
+      if (payeeError) throw payeeError;
+
+      return mergeEndorsementsWithPayees(
+        checkId,
+        (endorsementData ?? []) as CheckEndorsement[],
+        (payeeData ?? []) as CheckPayee[],
+      );
     },
   });
 
@@ -323,11 +416,12 @@ function EndorsementCard({
   const PayeeIcon = payeeTypeIcons[endorsement.payee_type] ?? AlertTriangle;
 
   const isMortgage = endorsement.payee_type === "mortgage_company";
-  const canSendRequest = !readOnly && !partnerMode && !isMortgage &&
+  const isSynthetic = endorsement.id.startsWith("payee-");
+  const canSendRequest = !readOnly && !partnerMode && !isMortgage && !isSynthetic &&
     endorsement.status !== "signed" &&
     endorsement.status !== "waived" &&
     endorsement.status !== "rejected";
-  const canMarkInternal = !readOnly && !partnerMode && endorsement.status !== "signed" && endorsement.status !== "waived";
+  const canMarkInternal = !readOnly && !partnerMode && !isSynthetic && endorsement.status !== "signed" && endorsement.status !== "waived";
   const isResend = endorsement.request_sent_at != null;
 
 
@@ -462,6 +556,12 @@ function EndorsementCard({
         <p className="text-[10px] text-muted-foreground">
           Last sent {format(new Date(endorsement.request_sent_at), "MMM d h:mm a")}
           {endorsement.reminder_count > 0 && ` · ${endorsement.reminder_count} reminder(s)`}
+        </p>
+      )}
+
+      {isSynthetic && (
+        <p className="text-[10px] text-muted-foreground">
+          Showing from payee record while endorsement tracking sync catches up
         </p>
       )}
 
