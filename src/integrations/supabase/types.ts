@@ -8818,6 +8818,7 @@ export type Database = {
           policyholder_name: string | null
           policyholder_phone: string | null
           referrer_id: string | null
+          signature_cc_email: string | null
           signed_pdf_url: string | null
           ssn_last_four: string | null
           state_code: string | null
@@ -8892,6 +8893,7 @@ export type Database = {
           policyholder_name?: string | null
           policyholder_phone?: string | null
           referrer_id?: string | null
+          signature_cc_email?: string | null
           signed_pdf_url?: string | null
           ssn_last_four?: string | null
           state_code?: string | null
@@ -8966,6 +8968,7 @@ export type Database = {
           policyholder_name?: string | null
           policyholder_phone?: string | null
           referrer_id?: string | null
+          signature_cc_email?: string | null
           signed_pdf_url?: string | null
           ssn_last_four?: string | null
           state_code?: string | null
@@ -18482,6 +18485,7 @@ export type Database = {
               policyholder_name: string | null
               policyholder_phone: string | null
               referrer_id: string | null
+              signature_cc_email: string | null
               signed_pdf_url: string | null
               ssn_last_four: string | null
               state_code: string | null
@@ -18581,6 +18585,7 @@ export type Database = {
               policyholder_name: string | null
               policyholder_phone: string | null
               referrer_id: string | null
+              signature_cc_email: string | null
               signed_pdf_url: string | null
               ssn_last_four: string | null
               state_code: string | null

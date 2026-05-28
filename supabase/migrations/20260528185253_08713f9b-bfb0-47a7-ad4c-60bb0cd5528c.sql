@@ -1,0 +1,1 @@
+ALTER TABLE public.claims ADD COLUMN IF NOT EXISTS signature_cc_email text;
