@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft, Loader2, Save, Trash2, Receipt, Banknote, KeyRound } from "lucide-react";
+import { LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft, Loader2, Save, Trash2, Receipt, Banknote, KeyRound, HelpCircle } from "lucide-react";
+import { CheckCenterHelpPanel } from "@/components/check-review/CheckCenterHelp";
 import { StakeholderAccountSettings } from "@/components/disbursement/StakeholderAccountSettings";
 import { TenantUserManager } from "./TenantUserManager";
 import { TenantPartnerManager } from "./TenantPartnerManager";
@@ -80,7 +81,9 @@ export function WhiteLabelSettings() {
             <TabsTrigger value="banking" className="text-xs gap-1"><CreditCard className="h-3 w-3" />Banking</TabsTrigger>
             <TabsTrigger value="disbursement" className="text-xs gap-1"><Banknote className="h-3 w-3" />Disbursement</TabsTrigger>
             <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding</TabsTrigger>
+            <TabsTrigger value="guide" className="text-xs gap-1"><HelpCircle className="h-3 w-3" />ChecksOps Guide</TabsTrigger>
           </TabsList>
+
 
           <TabsContent value="profile" className="space-y-6">
             {tenant && <ProfileSettings tenant={tenant} />}
@@ -117,7 +120,12 @@ export function WhiteLabelSettings() {
           <TabsContent value="branding">
             {tenant && <BrandingSettings tenant={tenant} />}
           </TabsContent>
+
+          <TabsContent value="guide">
+            <CheckCenterHelpPanel />
+          </TabsContent>
         </Tabs>
+
       </main>
     </div>
   );
