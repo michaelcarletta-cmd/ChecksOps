@@ -401,3 +401,104 @@ function Stat({
     </div>
   );
 }
+
+function EndorsedCheckUpload({
+  checkId,
+  highlighted,
+  onUploaded,
+}: {
+  checkId: string;
+  highlighted: boolean;
+  onUploaded: () => void;
+}) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFile = async (file: File) => {
+    setUploading(true);
+    try {
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const newPath = `checks/${checkId}/back-${Date.now()}.${ext}`;
+      const { error: uploadErr } = await supabase.storage
+        .from("claim-files")
+        .upload(newPath, file, {
+          cacheControl: "31536000",
+          upsert: false,
+          contentType: file.type || "image/jpeg",
+        });
+      if (uploadErr) throw uploadErr;
+
+      const { data: existing } = await supabase
+        .from("check_intake_items")
+        .select("back_image_path")
+        .eq("id", checkId)
+        .maybeSingle();
+
+      const { error: updateErr } = await supabase
+        .from("check_intake_items")
+        .update({ back_image_path: newPath })
+        .eq("id", checkId);
+      if (updateErr) throw updateErr;
+
+      await supabase.from("check_audit_log").insert({
+        check_id: checkId,
+        event_type: "back_image_reuploaded",
+        actor_id: user?.id ?? null,
+        event_description: "Endorsed back of check uploaded from Loss Draft",
+        event_data: { old_path: existing?.back_image_path ?? null, new_path: newPath },
+      });
+
+      toast({
+        title: "Endorsed check uploaded",
+        description: "Back of check updated with mortgage endorsement.",
+      });
+      onUploaded();
+    } catch (e: any) {
+      toast({ title: "Upload failed", description: e.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div
+      className={`rounded-lg border p-2 space-y-1.5 ${
+        highlighted
+          ? "border-emerald-500/40 bg-emerald-500/5"
+          : "border-border bg-accent/20"
+      }`}
+    >
+      <p className="text-xs font-medium flex items-center gap-1.5">
+        <PackageCheck className="h-3.5 w-3.5 text-emerald-400" />
+        Endorsed Check from Mortgage
+      </p>
+      <p className="text-[10px] text-muted-foreground">
+        Upload the back of the check once received and endorsed by the mortgage company.
+      </p>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*,.pdf"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleFile(f);
+          e.target.value = "";
+        }}
+      />
+      <Button
+        size="sm"
+        variant={highlighted ? "default" : "outline"}
+        className="w-full text-xs"
+        disabled={uploading}
+        onClick={() => inputRef.current?.click()}
+      >
+        <Upload className={`h-3.5 w-3.5 mr-1.5 ${uploading ? "animate-spin" : ""}`} />
+        {uploading ? "Uploading..." : "Upload Endorsed Back of Check"}
+      </Button>
+    </div>
+  );
+}
+
