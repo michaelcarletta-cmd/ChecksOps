@@ -24,7 +24,7 @@ import { useTenantFilter } from "@/hooks/useTenantFilter";
 
 export interface LossDraftRow {
   id: string;
-  claim_id: string;
+  claim_id: string | null;
   claim_number: string | null;
   policyholder_name: string | null;
   insurance_company: string | null;
@@ -46,6 +46,11 @@ export interface LossDraftRow {
   is_stale: boolean;
   monitoring_type?: string | null;
   check_status?: string | null;
+  check_intake_item_id?: string | null;
+  check_number?: string | null;
+  check_amount?: number | null;
+  payee_line?: string | null;
+  carrier_name?: string | null;
 }
 
 const escrowStatusConfig: Record<string, { label: string; color: string }> = {
