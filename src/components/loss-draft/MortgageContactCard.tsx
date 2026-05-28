@@ -46,8 +46,13 @@ export function MortgageContactCard({ lossDraftId, servicerName, onUpdated }: Pr
   const [loanForm, setLoanForm] = useState({ loan_number: "", lender_website_url: "" });
 
   // Loss-draft row (link + claim-specific fields)
+  // NOTE: This query intentionally uses its OWN cache key — not
+  // queryKeys.lossDraft.detail — because it selects a narrower set of
+  // columns. Sharing the key with useLossDraftDetail would clobber the
+  // parent panel's `draft` cache (e.g. mortgage_servicer would disappear
+  // after any action that invalidates the detail key).
   const { data: draft } = useQuery({
-    queryKey: queryKeys.lossDraft.detail(lossDraftId),
+    queryKey: ["loss-draft-mortgage-contact", lossDraftId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("loss_draft_tracking")
@@ -59,6 +64,7 @@ export function MortgageContactCard({ lossDraftId, servicerName, onUpdated }: Pr
     },
     staleTime: STALE_MS,
   });
+
 
   // Linked directory entry
   const { data: company } = useQuery({
@@ -115,7 +121,9 @@ export function MortgageContactCard({ lossDraftId, servicerName, onUpdated }: Pr
       return;
     }
     toast({ title: "Linked to directory" });
+    qc.invalidateQueries({ queryKey: ["loss-draft-mortgage-contact", lossDraftId] });
     qc.invalidateQueries({ queryKey: queryKeys.lossDraft.detail(lossDraftId) });
+
     onUpdated?.();
   };
 
@@ -132,7 +140,9 @@ export function MortgageContactCard({ lossDraftId, servicerName, onUpdated }: Pr
       if (error) throw error;
       toast({ title: "Saved" });
       setEditing(false);
+      qc.invalidateQueries({ queryKey: ["loss-draft-mortgage-contact", lossDraftId] });
       qc.invalidateQueries({ queryKey: queryKeys.lossDraft.detail(lossDraftId) });
+
       onUpdated?.();
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
