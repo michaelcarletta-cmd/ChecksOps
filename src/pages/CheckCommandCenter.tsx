@@ -467,6 +467,27 @@ export default function CheckCommandCenter() {
   const needsReview = allChecks.filter(
     (c) => {
       const s = getEffectiveStatus(c);
+
+      const stage = (c as any).check_stage as string | undefined;
+      // Exclude checks already routed to a downstream stage (loss draft, reissue,
+      // branch, deposited, endorsing) so they don't double-list in Review.
+      if (
+        stage === "loss_draft" ||
+        stage === "reissue" ||
+        stage === "branch" ||
+        stage === "deposited" ||
+        stage === "endorsing" ||
+        s === "loss_draft_required" ||
+        s === "reissue_requested" ||
+        s === "branch_deposit_required" ||
+        s === "deposited" ||
+        s === "endorsements_in_progress" ||
+        s === "approved_for_deposit"
+      ) {
+        return false;
+      }
+
+
       return (s === "needs_review" ||
         s === "manual_review_required" ||
         s === "endorsements_complete" ||
@@ -475,6 +496,7 @@ export default function CheckCommandCenter() {
         c.ocr_status === "failed") && matchesSearch(c);
     },
   );
+
   const reissueRequested = allChecks.filter((c) => getEffectiveStatus(c) === "reissue_requested" && matchesSearch(c));
   const branchDeposit = allChecks.filter((c) => getEffectiveStatus(c) === "branch_deposit_required" && matchesSearch(c));
 
