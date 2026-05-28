@@ -158,15 +158,33 @@ const getEffectiveStatus = (check: ReviewCheck): string =>
 
 const isInReviewQueue = (check: ReviewCheck): boolean => {
   const effectiveStatus = getEffectiveStatus(check);
+  const stage = (check as any).check_stage as string | undefined;
+  // Exclude checks already routed downstream so they don't double-list
+  // alongside Loss Draft, Endorsing, Branch, Reissue, or Deposited.
+  if (
+    stage === "loss_draft" ||
+    stage === "reissue" ||
+    stage === "branch" ||
+    stage === "deposited" ||
+    stage === "endorsing" ||
+    effectiveStatus === "loss_draft_required" ||
+    effectiveStatus === "reissue_requested" ||
+    effectiveStatus === "branch_deposit_required" ||
+    effectiveStatus === "deposited" ||
+    effectiveStatus === "endorsements_in_progress" ||
+    effectiveStatus === "approved_for_deposit"
+  ) {
+    return false;
+  }
   return (
     effectiveStatus === "needs_review" ||
     effectiveStatus === "manual_review_required" ||
     effectiveStatus === "endorsements_complete" ||
     effectiveStatus === "uploaded" ||
-    check.deposit_recommendation === "branch_deposit_recommended" ||
     check.ocr_status === "failed"
   );
 };
+
 
 /**
  * Extract a clean insured/policyholder name from a raw check payee_line.
