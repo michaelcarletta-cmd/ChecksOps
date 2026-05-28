@@ -13904,7 +13904,7 @@ export type Database = {
           check_received_back_date: string | null
           check_received_date: string | null
           check_sent_date: string | null
-          claim_id: string
+          claim_id: string | null
           created_at: string
           created_by: string | null
           draw_amount_released: number | null
@@ -13938,7 +13938,7 @@ export type Database = {
           check_received_back_date?: string | null
           check_received_date?: string | null
           check_sent_date?: string | null
-          claim_id: string
+          claim_id?: string | null
           created_at?: string
           created_by?: string | null
           draw_amount_released?: number | null
@@ -13972,7 +13972,7 @@ export type Database = {
           check_received_back_date?: string | null
           check_received_date?: string | null
           check_sent_date?: string | null
-          claim_id?: string
+          claim_id?: string | null
           created_at?: string
           created_by?: string | null
           draw_amount_released?: number | null
