@@ -8,7 +8,7 @@ import { queryKeys } from "@/lib/queryKeys";
 
 export interface LossDraftRecord {
   id: string;
-  claim_id: string;
+  claim_id: string | null;
   mortgage_servicer: string;
   loss_draft_contact: string | null;
   escrow_status: string;
@@ -27,6 +27,13 @@ export interface LossDraftRecord {
   tracking_number_sent: string | null;
   notes: string | null;
   check_intake_item_id: string | null;
+  check_intake_items?: {
+    check_number: string | null;
+    amount: number | null;
+    payee_line: string | null;
+    carrier_name: string | null;
+    status: string | null;
+  } | null;
 }
 
 export interface LossDraftRelease {
