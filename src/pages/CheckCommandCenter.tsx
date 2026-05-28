@@ -1220,6 +1220,10 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
         if (bErr) throw new Error(`Back upload failed: ${bErr.message}`);
       }
 
+      // If loaded inside Freedom CRM (?embed=1&freedom_claim_id=...), tag the
+      // check so Freedom can later list it via partner-checks-by-claim.
+      const embedCtx = (await import("@/lib/embedContext")).getEmbedContext();
+
       const { data: check, error: insErr } = await supabase
         .from("check_intake_items")
         .insert({
@@ -1228,6 +1232,8 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
           claim_id: claimId || null,
           uploaded_by: user.id,
           ...(tenantId ? { tenant_id: tenantId } : {}),
+          ...(embedCtx.freedomClaimId ? { freedom_claim_id: embedCtx.freedomClaimId } : {}),
+          ...(embedCtx.claimNumber ? { freedom_claim_number: embedCtx.claimNumber } : {}),
         })
         .select()
         .single();
