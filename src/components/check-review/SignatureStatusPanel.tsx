@@ -16,6 +16,14 @@ interface EndorsementRow {
   signed_at: string | null;
 }
 
+interface PayeeRow {
+  id: string;
+  payee_name: string;
+  payee_type: string | null;
+  endorsement_status: string | null;
+  endorsed_at: string | null;
+}
+
 const PAYEE_TYPE_LABEL: Record<string, string> = {
   insured: "Insured",
   public_adjuster: "Public Adjuster",
@@ -24,17 +32,84 @@ const PAYEE_TYPE_LABEL: Record<string, string> = {
   other: "Other",
 };
 
+const normalizeName = (value?: string | null) => (value ?? "").trim().toLowerCase();
+const normalizeType = (value?: string | null) => (value ?? "other").trim().toLowerCase();
+
+const normalizeStatus = (status?: string | null, signedAt?: string | null) => {
+  if (signedAt) return "signed";
+
+  const value = (status ?? "").trim().toLowerCase();
+  if (["signed", "endorsed", "complete", "completed"].includes(value)) return "signed";
+  if (value === "waived") return "waived";
+  if (value === "manual_required") return "manual_required";
+  if (["declined", "rejected"].includes(value)) return "rejected";
+  if (["sent", "requested", "awaiting", "in_progress", "viewed", "opened"].includes(value)) return "sent";
+  if (value === "expired") return "expired";
+  return "pending";
+};
+
 export function SignatureStatusPanel({ checkId }: SignatureStatusPanelProps) {
   const { data: rows, isLoading } = useQuery<EndorsementRow[]>({
     queryKey: ["check-endorsement-signatures", checkId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("check_endorsements")
-        .select("id, payee_name, payee_type, status, signed_at")
-        .eq("check_id", checkId)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as EndorsementRow[];
+      const [{ data: endorsements, error: endorsementError }, { data: payees, error: payeeError }] = await Promise.all([
+        supabase
+          .from("check_endorsements")
+          .select("id, payee_name, payee_type, status, signed_at")
+          .eq("check_id", checkId)
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("check_payees")
+          .select("id, payee_name, payee_type, endorsement_status, endorsed_at")
+          .eq("check_id", checkId)
+          .order("created_at", { ascending: true }),
+      ]);
+
+      if (endorsementError) throw endorsementError;
+      if (payeeError) throw payeeError;
+
+      const endorsementRows = (endorsements ?? []) as EndorsementRow[];
+      const payeeRows = (payees ?? []) as PayeeRow[];
+
+      if (payeeRows.length === 0) return endorsementRows;
+
+      const usedEndorsements = new Set<string>();
+      const byExactKey = new Map<string, EndorsementRow[]>();
+      const byName = new Map<string, EndorsementRow[]>();
+
+      for (const row of endorsementRows) {
+        const exactKey = `${normalizeName(row.payee_name)}::${normalizeType(row.payee_type)}`;
+        const nameKey = normalizeName(row.payee_name);
+        byExactKey.set(exactKey, [...(byExactKey.get(exactKey) ?? []), row]);
+        byName.set(nameKey, [...(byName.get(nameKey) ?? []), row]);
+      }
+
+      const merged = payeeRows.map((payee) => {
+        const exactKey = `${normalizeName(payee.payee_name)}::${normalizeType(payee.payee_type)}`;
+        const nameKey = normalizeName(payee.payee_name);
+        const match =
+          byExactKey.get(exactKey)?.find((row) => !usedEndorsements.has(row.id)) ??
+          byName.get(nameKey)?.find((row) => !usedEndorsements.has(row.id));
+
+        if (match) {
+          usedEndorsements.add(match.id);
+          return match;
+        }
+
+        return {
+          id: `payee-${payee.id}`,
+          payee_name: payee.payee_name,
+          payee_type: payee.payee_type ?? "other",
+          status: normalizeStatus(payee.endorsement_status, payee.endorsed_at),
+          signed_at: payee.endorsed_at,
+        } satisfies EndorsementRow;
+      });
+
+      for (const row of endorsementRows) {
+        if (!usedEndorsements.has(row.id)) merged.push(row);
+      }
+
+      return merged;
     },
   });
 
