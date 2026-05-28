@@ -487,7 +487,7 @@ export default function CheckCommandCenter() {
         return false;
       }
 
-      }
+
       return (s === "needs_review" ||
         s === "manual_review_required" ||
         s === "endorsements_complete" ||
