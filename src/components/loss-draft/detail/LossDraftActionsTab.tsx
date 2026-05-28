@@ -193,6 +193,18 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
           servicerName={draft.mortgage_servicer}
         />
 
+        {draft.check_intake_item_id && (
+          <EndorsedCheckUpload
+            checkId={draft.check_intake_item_id}
+            highlighted={
+              draft.escrow_status === "check_received_back" ||
+              !!draft.check_received_back_date
+            }
+            onUploaded={onChanged}
+          />
+        )}
+
+
         {isMonitored && (
           <div className="grid grid-cols-2 gap-2">
             <Stat label="Total Escrowed" value={fmtMoney(draft.total_escrowed)} />
