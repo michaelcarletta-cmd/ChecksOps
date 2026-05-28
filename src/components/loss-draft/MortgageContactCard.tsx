@@ -121,7 +121,9 @@ export function MortgageContactCard({ lossDraftId, servicerName, onUpdated }: Pr
       return;
     }
     toast({ title: "Linked to directory" });
+    qc.invalidateQueries({ queryKey: ["loss-draft-mortgage-contact", lossDraftId] });
     qc.invalidateQueries({ queryKey: queryKeys.lossDraft.detail(lossDraftId) });
+
     onUpdated?.();
   };
 
