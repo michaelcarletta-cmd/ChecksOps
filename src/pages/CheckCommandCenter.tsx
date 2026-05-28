@@ -449,8 +449,11 @@ export default function CheckCommandCenter() {
   const awaitingEndorsement = allChecks.filter(
     (c) => {
       const s = getEffectiveStatus(c);
-      return (c.deposit_recommendation === "endorsements_pending" ||
-        s === "endorsements_in_progress") && matchesSearch(c);
+      // Only show checks the reviewer has explicitly routed to Endorsing.
+      // deposit_recommendation === "endorsements_pending" is just an AI hint
+      // surfaced inside the Review console — it must NOT auto-bucket checks
+      // into Endorsing before a reviewer has approved that path.
+      return s === "endorsements_in_progress" && matchesSearch(c);
     },
   );
   const readyForDeposit = allChecks.filter(
