@@ -89,7 +89,7 @@ const normalizeEndorsementStatus = (status?: string | null, signedAt?: string | 
   return "pending";
 };
 
-function mergeEndorsementsWithPayees(endorsements: CheckEndorsement[], payees: CheckPayee[]): CheckEndorsement[] {
+function mergeEndorsementsWithPayees(checkId: string, endorsements: CheckEndorsement[], payees: CheckPayee[]): CheckEndorsement[] {
   if (payees.length === 0) return endorsements;
 
   const usedEndorsementIds = new Set<string>();
@@ -175,6 +175,7 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
       if (payeeError) throw payeeError;
 
       return mergeEndorsementsWithPayees(
+        checkId,
         (endorsementData ?? []) as CheckEndorsement[],
         (payeeData ?? []) as CheckPayee[],
       );
@@ -415,11 +416,12 @@ function EndorsementCard({
   const PayeeIcon = payeeTypeIcons[endorsement.payee_type] ?? AlertTriangle;
 
   const isMortgage = endorsement.payee_type === "mortgage_company";
-  const canSendRequest = !readOnly && !partnerMode && !isMortgage &&
+  const isSynthetic = endorsement.id.startsWith("payee-");
+  const canSendRequest = !readOnly && !partnerMode && !isMortgage && !isSynthetic &&
     endorsement.status !== "signed" &&
     endorsement.status !== "waived" &&
     endorsement.status !== "rejected";
-  const canMarkInternal = !readOnly && !partnerMode && endorsement.status !== "signed" && endorsement.status !== "waived";
+  const canMarkInternal = !readOnly && !partnerMode && !isSynthetic && endorsement.status !== "signed" && endorsement.status !== "waived";
   const isResend = endorsement.request_sent_at != null;
 
 
@@ -554,6 +556,12 @@ function EndorsementCard({
         <p className="text-[10px] text-muted-foreground">
           Last sent {format(new Date(endorsement.request_sent_at), "MMM d h:mm a")}
           {endorsement.reminder_count > 0 && ` · ${endorsement.reminder_count} reminder(s)`}
+        </p>
+      )}
+
+      {isSynthetic && (
+        <p className="text-[10px] text-muted-foreground">
+          Showing from payee record while endorsement tracking sync catches up
         </p>
       )}
 
