@@ -168,15 +168,13 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
                 <button
                   key={r.check_id}
                   type="button"
-                  onClick={() => {
-                    if (onOpenCheck) onOpenCheck(r.check_id);
-                    else setSelectedId(r.check_id);
-                  }}
+                  onClick={() => setSelectedId(r.check_id)}
                   className={`w-full text-left p-2 rounded-md transition-colors border ${
                     isActive
                       ? "bg-primary/10 border-primary/40"
                       : "border-transparent hover:bg-muted/50"
                   }`}
+
 
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -216,22 +214,36 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
       {/* Active thread */}
       <Card className="bg-card border-border h-[70vh] flex flex-col">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">
-            {selected?.check
-              ? `Check #${selected.check.check_number || "—"} • ${
-                  selected.check.claims?.policyholder_name || selected.check.carrier_name || "Unknown"
-                }`
-              : "Select a conversation"}
-          </CardTitle>
-          {selected?.check && (
-            <div className="text-[11px] text-muted-foreground">
-              {selected.check.claims?.claim_number && `Claim ${selected.check.claims.claim_number} • `}
-              {selected.check.amount != null &&
-                `$${Number(selected.check.amount).toLocaleString()} • `}
-              {selected.check.status}
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <CardTitle className="text-sm">
+                {selected?.check
+                  ? `Check #${selected.check.check_number || "—"} • ${
+                      selected.check.claims?.policyholder_name || selected.check.carrier_name || "Unknown"
+                    }`
+                  : "Select a conversation"}
+              </CardTitle>
+              {selected?.check && (
+                <div className="text-[11px] text-muted-foreground">
+                  {selected.check.claims?.claim_number && `Claim ${selected.check.claims.claim_number} • `}
+                  {selected.check.amount != null &&
+                    `$${Number(selected.check.amount).toLocaleString()} • `}
+                  {selected.check.status}
+                </div>
+              )}
             </div>
-          )}
+            {selected?.check && onOpenCheck && (
+              <button
+                type="button"
+                onClick={() => onOpenCheck(selected.check_id)}
+                className="text-[11px] font-medium text-primary hover:underline whitespace-nowrap"
+              >
+                Open check file →
+              </button>
+            )}
+          </div>
         </CardHeader>
+
         <CardContent className="flex-1 p-3 pt-0">
           {selected?.check ? (
             <CheckMessageThread checkId={selected.check_id} />
