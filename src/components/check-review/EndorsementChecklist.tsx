@@ -283,7 +283,9 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
           onRefresh={refresh}
           readOnly={readOnly}
           partnerMode={partnerMode}
-          defaultContractorCc={contractorEmail ?? ""}
+          defaultContractorCc={contractorEmail?.email ?? ""}
+          claimId={contractorEmail?.claimId ?? null}
+
         />
       ))}
 
