@@ -100,20 +100,30 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
         .eq("id", checkId)
         .maybeSingle();
       const claimId = check?.claim_id;
-      if (!claimId) return "";
+      if (!claimId) return { claimId: null, email: "" };
+      // Prefer a previously-saved CC on the claim
+      const { data: claim } = await supabase
+        .from("claims")
+        .select("signature_cc_email")
+        .eq("id", claimId)
+        .maybeSingle();
+      if ((claim as any)?.signature_cc_email) {
+        return { claimId, email: (claim as any).signature_cc_email as string };
+      }
       const { data: assignments } = await supabase
         .from("claim_contractors")
         .select("contractor_id")
         .eq("claim_id", claimId);
       const ids = (assignments ?? []).map((a: any) => a.contractor_id).filter(Boolean);
-      if (ids.length === 0) return "";
+      if (ids.length === 0) return { claimId, email: "" };
       const { data: profiles } = await supabase
         .from("profiles")
         .select("email")
         .in("id", ids);
-      return profiles?.find((p: any) => p.email)?.email ?? "";
+      return { claimId, email: profiles?.find((p: any) => p.email)?.email ?? "" };
     },
   });
+
 
   const [forceCompleting, setForceCompleting] = useState(false);
 
@@ -273,7 +283,9 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
           onRefresh={refresh}
           readOnly={readOnly}
           partnerMode={partnerMode}
-          defaultContractorCc={contractorEmail ?? ""}
+          defaultContractorCc={contractorEmail?.email ?? ""}
+          claimId={contractorEmail?.claimId ?? null}
+
         />
       ))}
 
@@ -287,13 +299,16 @@ function EndorsementCard({
   readOnly = false,
   partnerMode = false,
   defaultContractorCc = "",
+  claimId = null,
 }: {
   endorsement: CheckEndorsement;
   onRefresh: () => void;
   readOnly?: boolean;
   partnerMode?: boolean;
   defaultContractorCc?: string;
+  claimId?: string | null;
 }) {
+
   const { toast } = useToast();
   const [email, setEmail] = useState(endorsement.contact_email ?? "");
   const [phone, setPhone] = useState(endorsement.contact_phone ?? "");
@@ -336,8 +351,16 @@ function EndorsementCard({
       });
 
       if (error) throw new Error(error.message);
+      // Remember CC email on the claim so we don't re-enter it next time
+      if (ccEmail && claimId) {
+        await supabase
+          .from("claims")
+          .update({ signature_cc_email: ccEmail } as any)
+          .eq("id", claimId);
+      }
       toast({ title: `Endorsement request ${isResend ? "resent" : "sent"} via ${method}` });
       onRefresh();
+
     } catch (e: unknown) {
       toast({
         title: "Failed to send",
