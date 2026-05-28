@@ -299,13 +299,16 @@ function EndorsementCard({
   readOnly = false,
   partnerMode = false,
   defaultContractorCc = "",
+  claimId = null,
 }: {
   endorsement: CheckEndorsement;
   onRefresh: () => void;
   readOnly?: boolean;
   partnerMode?: boolean;
   defaultContractorCc?: string;
+  claimId?: string | null;
 }) {
+
   const { toast } = useToast();
   const [email, setEmail] = useState(endorsement.contact_email ?? "");
   const [phone, setPhone] = useState(endorsement.contact_phone ?? "");
