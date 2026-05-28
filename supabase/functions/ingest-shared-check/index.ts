@@ -321,6 +321,8 @@ Deno.serve(async (req) => {
           check_stage: body.check.check_stage ?? "review",
           deposit_recommendation: body.check.deposit_recommendation ?? null,
           ocr_status: body.check.ocr_status ?? "completed",
+          freedom_claim_id: body.freedom_claim_id ?? null,
+          freedom_claim_number: body.freedom_claim_number ?? null,
           ...(initialPartnerStatus ?? {}),
           external_origin: {
             source_app: body.source_app,
