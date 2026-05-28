@@ -19022,17 +19022,31 @@ export type Database = {
           name: string
         }[]
       }
-      loss_draft_action: {
-        Args: {
-          p_action: string
-          p_actor_id: string
-          p_amount?: number
-          p_extra?: Json
-          p_loss_draft_id: string
-          p_notes?: string
-        }
-        Returns: undefined
-      }
+      loss_draft_action:
+        | {
+            Args: {
+              p_action: string
+              p_actor_id: string
+              p_amount?: number
+              p_extra?: Json
+              p_loss_draft_id: string
+              p_notes?: string
+            }
+            Returns: undefined
+          }
+        | {
+            Args: {
+              p_action: string
+              p_actor_id: string
+              p_amount?: number
+              p_loss_draft_id: string
+              p_monitoring_type?: string
+              p_notes?: string
+              p_target_status?: string
+              p_tracking_number?: string
+            }
+            Returns: Json
+          }
       loss_draft_admin_delete: {
         Args: { p_actor_id: string; p_loss_draft_id: string; p_reason?: string }
         Returns: undefined
