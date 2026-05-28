@@ -688,6 +688,10 @@ export default function Settings() {
           <ProfileSettings />
         </TabsContent>
 
+        <TabsContent value="checks-guide" className="w-full">
+          <CheckCenterHelpPanel />
+        </TabsContent>
+
         <TabsContent value="workflow" className="w-full space-y-4">
           {/* Claim Statuses - Collapsible */}
           <Collapsible open={statusesOpen} onOpenChange={setStatusesOpen}>
