@@ -17,6 +17,8 @@ interface IngestPayload {
   source_check_id: string;       // original check uuid in the source app
   target_partner_code: string;   // ChecksOps tenant partner code receiving the share
   shared_by_email?: string;      // for audit
+  freedom_claim_id?: string | null;     // Freedom CRM claim uuid (join key)
+  freedom_claim_number?: string | null; // Freedom CRM claim number (display)
   check: {
     carrier_name?: string;
     check_number?: string;
