@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -11,11 +11,12 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Send, Building2, ArrowRightLeft, DollarSign, CheckCircle2,
-  Clock, AlertTriangle, Eye, EyeOff, Shield, RotateCcw, PackageCheck,
+  Clock, AlertTriangle, Eye, EyeOff, Shield, RotateCcw, PackageCheck, Upload,
 } from "lucide-react";
 import { format } from "date-fns";
 import { MortgageContactCard } from "../MortgageContactCard";
 import type { LossDraftRecord } from "@/hooks/queries/useLossDraft";
+
 
 /* Not Monitored = mortgage endorses & releases check, no escrow/draws */
 const NOT_MONITORED_ACTIONS: ActionDef[] = [
