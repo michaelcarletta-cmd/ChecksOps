@@ -33,6 +33,7 @@ import { SignaturePresetsSettings } from "@/components/settings/SignaturePresets
 import { ImportSettings } from "@/components/settings/ImportSettings";
 import { UserManagementSettings } from "@/components/settings/UserManagementSettings";
 import { ProfileSettings } from "@/components/settings/ProfileSettings";
+import { CheckCenterHelpPanel } from "@/components/check-review/CheckCenterHelp";
 import { AIKnowledgeBaseSettings } from "@/components/settings/AIKnowledgeBaseSettings";
 import { CounterArgumentsSettings } from "@/components/settings/CounterArgumentsSettings";
 import { QuickBooksSettings } from "@/components/settings/QuickBooksSettings";
