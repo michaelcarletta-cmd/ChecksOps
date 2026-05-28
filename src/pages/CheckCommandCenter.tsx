@@ -281,7 +281,7 @@ export default function CheckCommandCenter() {
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
-  const [helpOpen, setHelpOpen] = useState(false);
+  // helpOpen state removed — help moved to Settings → ChecksOps Guide
   const [shareCheckId, setShareCheckId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
