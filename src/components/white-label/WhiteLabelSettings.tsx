@@ -81,7 +81,9 @@ export function WhiteLabelSettings() {
             <TabsTrigger value="banking" className="text-xs gap-1"><CreditCard className="h-3 w-3" />Banking</TabsTrigger>
             <TabsTrigger value="disbursement" className="text-xs gap-1"><Banknote className="h-3 w-3" />Disbursement</TabsTrigger>
             <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding</TabsTrigger>
+            <TabsTrigger value="guide" className="text-xs gap-1"><HelpCircle className="h-3 w-3" />ChecksOps Guide</TabsTrigger>
           </TabsList>
+
 
           <TabsContent value="profile" className="space-y-6">
             {tenant && <ProfileSettings tenant={tenant} />}
