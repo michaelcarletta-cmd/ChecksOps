@@ -17,6 +17,8 @@ interface IngestPayload {
   source_check_id: string;       // original check uuid in the source app
   target_partner_code: string;   // ChecksOps tenant partner code receiving the share
   shared_by_email?: string;      // for audit
+  freedom_claim_id?: string | null;     // Freedom CRM claim uuid (join key)
+  freedom_claim_number?: string | null; // Freedom CRM claim number (display)
   check: {
     carrier_name?: string;
     check_number?: string;
@@ -290,6 +292,8 @@ Deno.serve(async (req) => {
       if (body.check.check_stage !== undefined) updatePayload.check_stage = body.check.check_stage ?? "review";
       if (body.check.deposit_recommendation !== undefined) updatePayload.deposit_recommendation = body.check.deposit_recommendation ?? null;
       if (body.check.ocr_status !== undefined) updatePayload.ocr_status = body.check.ocr_status ?? null;
+      if (body.freedom_claim_id !== undefined) updatePayload.freedom_claim_id = body.freedom_claim_id ?? null;
+      if (body.freedom_claim_number !== undefined) updatePayload.freedom_claim_number = body.freedom_claim_number ?? null;
       if (initialPartnerStatus) Object.assign(updatePayload, initialPartnerStatus);
       const { error: updErr } = await supabase
         .from("check_intake_items")
@@ -317,6 +321,8 @@ Deno.serve(async (req) => {
           check_stage: body.check.check_stage ?? "review",
           deposit_recommendation: body.check.deposit_recommendation ?? null,
           ocr_status: body.check.ocr_status ?? "completed",
+          freedom_claim_id: body.freedom_claim_id ?? null,
+          freedom_claim_number: body.freedom_claim_number ?? null,
           ...(initialPartnerStatus ?? {}),
           external_origin: {
             source_app: body.source_app,

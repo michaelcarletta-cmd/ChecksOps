@@ -8,6 +8,11 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useCustomDomainTenant } from "./hooks/useCustomDomainTenant";
 import { CustomDomainWhiteLabelApp } from "./components/white-label/CustomDomainWhiteLabelApp";
 import { AuthProvider } from "./hooks/useAuth";
+import { bootstrapEmbedContext } from "./lib/embedContext";
+
+// Capture Freedom CRM embed params (?embed=1&partner=...&freedom_claim_id=...)
+// on first script execution, before any route or upload component reads them.
+bootstrapEmbedContext();
 
 // ChecksOps-only route tree
 const Sign = lazy(() => import("./pages/Sign"));

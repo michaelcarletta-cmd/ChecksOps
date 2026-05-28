@@ -1915,6 +1915,8 @@ export type Database = {
           endorsement_override: Json | null
           endorsement_packet_path: string | null
           external_origin: Json | null
+          freedom_claim_id: string | null
+          freedom_claim_number: string | null
           freedom_status: string | null
           freedom_status_label: string | null
           freedom_status_updated_at: string | null
@@ -1969,6 +1971,8 @@ export type Database = {
           endorsement_override?: Json | null
           endorsement_packet_path?: string | null
           external_origin?: Json | null
+          freedom_claim_id?: string | null
+          freedom_claim_number?: string | null
           freedom_status?: string | null
           freedom_status_label?: string | null
           freedom_status_updated_at?: string | null
@@ -2023,6 +2027,8 @@ export type Database = {
           endorsement_override?: Json | null
           endorsement_packet_path?: string | null
           external_origin?: Json | null
+          freedom_claim_id?: string | null
+          freedom_claim_number?: string | null
           freedom_status?: string | null
           freedom_status_label?: string | null
           freedom_status_updated_at?: string | null
@@ -18967,6 +18973,30 @@ export type Database = {
       is_tenant_member: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
+      }
+      list_checks_by_freedom_claim: {
+        Args: { _freedom_claim_id: string; _partner_code: string }
+        Returns: {
+          amount: number
+          back_image_path: string
+          carrier_name: string
+          check_number: string
+          check_stage: Database["public"]["Enums"]["check_stage"]
+          created_at: string
+          deposit_recommendation: string
+          detected_claim_number: string
+          freedom_claim_id: string
+          freedom_claim_number: string
+          front_image_path: string
+          id: string
+          issue_date: string
+          partner_status: string
+          partner_status_label: string
+          partner_status_updated_at: string
+          payee_line: string
+          status: string
+          updated_at: string
+        }[]
       }
       log_audit: {
         Args: {
