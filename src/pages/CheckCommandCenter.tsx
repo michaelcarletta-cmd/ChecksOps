@@ -161,6 +161,80 @@ interface CheckItem {
   cash_job_payment_class?: string | null;
 }
 
+interface CheckEndorsementSummary {
+  id: string;
+  payee_name: string;
+  payee_type: string;
+  status: string;
+  signature_image_url?: string | null;
+  signature_method?: string | null;
+  signed_at: string | null;
+}
+
+const normalizeEndorsementName = (value?: string | null) => (value ?? "").trim().toLowerCase();
+const normalizeEndorsementType = (value?: string | null) => (value ?? "other").trim().toLowerCase();
+
+const normalizeEndorsementStatus = (status?: string | null, signedAt?: string | null) => {
+  if (signedAt) return "signed";
+
+  const value = (status ?? "").trim().toLowerCase();
+  if (["signed", "endorsed", "complete", "completed"].includes(value)) return "signed";
+  if (value === "waived") return "waived";
+  if (value === "manual_required") return "manual_required";
+  if (["declined", "rejected"].includes(value)) return "rejected";
+  if (["sent", "requested", "awaiting", "in_progress", "viewed", "opened"].includes(value)) return "sent";
+  if (value === "expired") return "expired";
+  return "pending";
+};
+
+function mergeEndorsementSummaryRows(
+  checkId: string,
+  endorsements: CheckEndorsementSummary[],
+  payees: CheckPayee[],
+): CheckEndorsementSummary[] {
+  if (payees.length === 0) return endorsements;
+
+  const usedEndorsementIds = new Set<string>();
+  const byExactKey = new Map<string, CheckEndorsementSummary[]>();
+  const byName = new Map<string, CheckEndorsementSummary[]>();
+
+  for (const endorsement of endorsements) {
+    const exactKey = `${normalizeEndorsementName(endorsement.payee_name)}::${normalizeEndorsementType(endorsement.payee_type)}`;
+    const nameKey = normalizeEndorsementName(endorsement.payee_name);
+    byExactKey.set(exactKey, [...(byExactKey.get(exactKey) ?? []), endorsement]);
+    byName.set(nameKey, [...(byName.get(nameKey) ?? []), endorsement]);
+  }
+
+  const merged = payees.map((payee) => {
+    const exactKey = `${normalizeEndorsementName(payee.payee_name)}::${normalizeEndorsementType(payee.payee_type)}`;
+    const nameKey = normalizeEndorsementName(payee.payee_name);
+    const match =
+      byExactKey.get(exactKey)?.find((row) => !usedEndorsementIds.has(row.id)) ??
+      byName.get(nameKey)?.find((row) => !usedEndorsementIds.has(row.id));
+
+    if (match) {
+      usedEndorsementIds.add(match.id);
+      return match;
+    }
+
+    return {
+      id: `payee-${checkId}-${payee.id}`,
+      payee_name: payee.payee_name,
+      payee_type: payee.payee_type ?? "other",
+      status: normalizeEndorsementStatus(payee.endorsement_status, payee.endorsed_at),
+      signed_at: payee.endorsed_at,
+      signature_image_url: null,
+      signature_method: null,
+    } satisfies CheckEndorsementSummary;
+  });
+
+  for (const endorsement of endorsements) {
+    if (!usedEndorsementIds.has(endorsement.id)) merged.push(endorsement);
+  }
+
+  return merged;
+}
+
 /**
  * For checks mirrored from a partner app (e.g. FreedomClaims), the local `status`
  * column stays at `uploaded` because ChecksOps has not processed them internally.
@@ -1736,11 +1810,25 @@ function CheckDetailPanel({
   const { data: endorsements = [] } = useQuery({
     queryKey: ["check-endorsements-summary", checkId],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("check_endorsements")
-        .select("id, payee_name, payee_type, status, signature_image_url, signature_method, signed_at")
-        .eq("check_id", checkId);
-      return data ?? [];
+      const [{ data: endorsementData, error: endorsementError }, { data: payeeData, error: payeeError }] = await Promise.all([
+        supabase
+          .from("check_endorsements")
+          .select("id, payee_name, payee_type, status, signature_image_url, signature_method, signed_at")
+          .eq("check_id", checkId),
+        supabase
+          .from("check_payees")
+          .select("id, payee_name, payee_type, endorsement_status, endorsed_at, contact_email, contact_phone, notification_sent_via, notification_sent_at")
+          .eq("check_id", checkId),
+      ]);
+
+      if (endorsementError) throw endorsementError;
+      if (payeeError) throw payeeError;
+
+      return mergeEndorsementSummaryRows(
+        checkId,
+        (endorsementData ?? []) as CheckEndorsementSummary[],
+        (payeeData ?? []) as CheckPayee[],
+      );
     },
   });
 
