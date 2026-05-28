@@ -351,8 +351,16 @@ function EndorsementCard({
       });
 
       if (error) throw new Error(error.message);
+      // Remember CC email on the claim so we don't re-enter it next time
+      if (ccEmail && claimId) {
+        await supabase
+          .from("claims")
+          .update({ signature_cc_email: ccEmail } as any)
+          .eq("id", claimId);
+      }
       toast({ title: `Endorsement request ${isResend ? "resent" : "sent"} via ${method}` });
       onRefresh();
+
     } catch (e: unknown) {
       toast({
         title: "Failed to send",
