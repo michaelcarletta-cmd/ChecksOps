@@ -104,7 +104,7 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
 
   const rows = useMemo(() => {
     const checkMap = new Map(checks.map((c) => [c.id, c]));
-    return unreadRows
+    return mergedRows
       .map((u) => ({ ...u, check: checkMap.get(u.check_id) }))
       .filter((r) => r.check)
       .filter((r) => {
@@ -127,10 +127,11 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
         const bt = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
         return bt - at;
       });
-  }, [unreadRows, checks, search]);
+  }, [mergedRows, checks, search]);
 
-  const isLoading = unreadLoading || checksLoading;
+  const isLoading = unreadLoading || sharedLoading || checksLoading;
   const selected = rows.find((r) => r.check_id === selectedId) ?? rows[0];
+
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3">
