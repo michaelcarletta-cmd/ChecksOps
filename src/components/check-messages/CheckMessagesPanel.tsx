@@ -23,11 +23,15 @@ interface CheckSummary {
   claims: { claim_number: string | null; policyholder_name: string | null } | null;
 }
 
-export function CheckMessagesPanel() {
+interface CheckMessagesPanelProps {
+  onOpenCheck?: (checkId: string) => void;
+}
+
+export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}) {
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // All checks that have at least one message
+  // Internal check_messages — unread + last activity (per current user)
   const { data: unreadRows = [], isLoading: unreadLoading } = useQuery({
     queryKey: ["check-unread-counts"],
     queryFn: async () => {
@@ -38,7 +42,51 @@ export function CheckMessagesPanel() {
     refetchInterval: 15000,
   });
 
-  const checkIds = unreadRows.map((r) => r.check_id);
+  // Shared partner discussion messages — show every check that has any message
+  const { data: sharedRows = [], isLoading: sharedLoading } = useQuery({
+    queryKey: ["shared-check-message-summaries"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shared_check_messages")
+        .select("check_id, created_at")
+        .order("created_at", { ascending: false })
+        .limit(1000);
+      if (error) throw error;
+      const map = new Map<string, { check_id: string; last_message_at: string }>();
+      for (const row of (data ?? []) as { check_id: string; created_at: string }[]) {
+        if (!map.has(row.check_id)) {
+          map.set(row.check_id, { check_id: row.check_id, last_message_at: row.created_at });
+        }
+      }
+      return Array.from(map.values());
+    },
+    refetchInterval: 15000,
+  });
+
+  // Merge both sources by check_id
+  const mergedRows: UnreadRow[] = useMemo(() => {
+    const map = new Map<string, UnreadRow>();
+    for (const r of unreadRows) {
+      map.set(r.check_id, { ...r });
+    }
+    for (const s of sharedRows) {
+      const existing = map.get(s.check_id);
+      if (existing) {
+        const a = existing.last_message_at ? new Date(existing.last_message_at).getTime() : 0;
+        const b = new Date(s.last_message_at).getTime();
+        if (b > a) existing.last_message_at = s.last_message_at;
+      } else {
+        map.set(s.check_id, {
+          check_id: s.check_id,
+          unread_count: 0,
+          last_message_at: s.last_message_at,
+        });
+      }
+    }
+    return Array.from(map.values());
+  }, [unreadRows, sharedRows]);
+
+  const checkIds = mergedRows.map((r) => r.check_id);
 
   const { data: checks = [], isLoading: checksLoading } = useQuery({
     queryKey: ["check-messages-checks", checkIds.sort().join(",")],
@@ -56,7 +104,7 @@ export function CheckMessagesPanel() {
 
   const rows = useMemo(() => {
     const checkMap = new Map(checks.map((c) => [c.id, c]));
-    return unreadRows
+    return mergedRows
       .map((u) => ({ ...u, check: checkMap.get(u.check_id) }))
       .filter((r) => r.check)
       .filter((r) => {
@@ -79,10 +127,11 @@ export function CheckMessagesPanel() {
         const bt = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
         return bt - at;
       });
-  }, [unreadRows, checks, search]);
+  }, [mergedRows, checks, search]);
 
-  const isLoading = unreadLoading || checksLoading;
+  const isLoading = unreadLoading || sharedLoading || checksLoading;
   const selected = rows.find((r) => r.check_id === selectedId) ?? rows[0];
+
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3">
@@ -119,12 +168,16 @@ export function CheckMessagesPanel() {
                 <button
                   key={r.check_id}
                   type="button"
-                  onClick={() => setSelectedId(r.check_id)}
+                  onClick={() => {
+                    if (onOpenCheck) onOpenCheck(r.check_id);
+                    else setSelectedId(r.check_id);
+                  }}
                   className={`w-full text-left p-2 rounded-md transition-colors border ${
                     isActive
                       ? "bg-primary/10 border-primary/40"
                       : "border-transparent hover:bg-muted/50"
                   }`}
+
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">

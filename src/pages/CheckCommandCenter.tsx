@@ -688,7 +688,13 @@ export default function CheckCommandCenter() {
         {activeTab === "messages" && (
           <div className="mt-3">
             <Suspense fallback={<TabLoader />}>
-              <CheckMessagesPanel />
+              <CheckMessagesPanel
+                onOpenCheck={(id) => {
+                  setActiveTab("endorsements");
+                  setSelectedCheck(id);
+                }}
+              />
+
             </Suspense>
           </div>
         )}
