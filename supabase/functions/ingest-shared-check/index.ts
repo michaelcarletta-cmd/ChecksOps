@@ -292,6 +292,8 @@ Deno.serve(async (req) => {
       if (body.check.check_stage !== undefined) updatePayload.check_stage = body.check.check_stage ?? "review";
       if (body.check.deposit_recommendation !== undefined) updatePayload.deposit_recommendation = body.check.deposit_recommendation ?? null;
       if (body.check.ocr_status !== undefined) updatePayload.ocr_status = body.check.ocr_status ?? null;
+      if (body.freedom_claim_id !== undefined) updatePayload.freedom_claim_id = body.freedom_claim_id ?? null;
+      if (body.freedom_claim_number !== undefined) updatePayload.freedom_claim_number = body.freedom_claim_number ?? null;
       if (initialPartnerStatus) Object.assign(updatePayload, initialPartnerStatus);
       const { error: updErr } = await supabase
         .from("check_intake_items")
