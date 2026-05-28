@@ -120,7 +120,12 @@ export function WhiteLabelSettings() {
           <TabsContent value="branding">
             {tenant && <BrandingSettings tenant={tenant} />}
           </TabsContent>
+
+          <TabsContent value="guide">
+            <CheckCenterHelpPanel />
+          </TabsContent>
         </Tabs>
+
       </main>
     </div>
   );
