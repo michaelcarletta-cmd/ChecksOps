@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Send, Trash2 } from "lucide-react";
@@ -15,7 +16,7 @@ interface Props {
   className?: string;
 }
 
-interface Msg {
+interface InternalMsg {
   id: string;
   check_id: string;
   sender_id: string;
@@ -24,14 +25,33 @@ interface Msg {
   created_at: string;
 }
 
+interface SharedMsg {
+  id: string;
+  check_id: string;
+  sender_user_id: string;
+  sender_tenant_id: string | null;
+  body: string;
+  created_at: string;
+}
+
+interface MergedMsg {
+  id: string;
+  source: "internal" | "shared";
+  sender_id: string;
+  sender_tenant_id: string | null;
+  body: string;
+  created_at: string;
+}
+
 export function CheckMessageThread({ checkId, active = true, className }: Props) {
   const { user } = useAuth();
+  const { tenantId } = useTenantFilter();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { data: messages = [], isLoading } = useQuery({
+  const { data: internal = [], isLoading: internalLoading } = useQuery({
     queryKey: ["check-messages", checkId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -41,10 +61,49 @@ export function CheckMessageThread({ checkId, active = true, className }: Props)
         .eq("is_deleted", false)
         .order("created_at", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as Msg[];
+      return (data ?? []) as InternalMsg[];
     },
     refetchInterval: active ? 15000 : false,
   });
+
+  const { data: shared = [], isLoading: sharedLoading } = useQuery({
+    queryKey: ["shared-check-messages", checkId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shared_check_messages")
+        .select("id, check_id, sender_user_id, sender_tenant_id, body, created_at")
+        .eq("check_id", checkId)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as SharedMsg[];
+    },
+    refetchInterval: active ? 15000 : false,
+  });
+
+  const messages: MergedMsg[] = useMemo(() => {
+    const a: MergedMsg[] = internal.map((m) => ({
+      id: `i-${m.id}`,
+      source: "internal",
+      sender_id: m.sender_id,
+      sender_tenant_id: null,
+      body: m.body,
+      created_at: m.created_at,
+    }));
+    const b: MergedMsg[] = shared.map((m) => ({
+      id: `s-${m.id}`,
+      source: "shared",
+      sender_id: m.sender_user_id,
+      sender_tenant_id: m.sender_tenant_id,
+      body: m.body,
+      created_at: m.created_at,
+    }));
+    return [...a, ...b].sort(
+      (x, y) => new Date(x.created_at).getTime() - new Date(y.created_at).getTime(),
+    );
+  }, [internal, shared]);
+
+  const isLoading = internalLoading || sharedLoading;
+  const preferShared = shared.length > 0 && internal.length === 0;
 
   // Map sender_id -> profile (best-effort)
   const senderIds = Array.from(new Set(messages.map((m) => m.sender_id)));
@@ -63,6 +122,21 @@ export function CheckMessageThread({ checkId, active = true, className }: Props)
       return map;
     },
     enabled: senderIds.length > 0,
+  });
+
+  const tenantIds = Array.from(new Set(messages.map((m) => m.sender_tenant_id).filter(Boolean) as string[]));
+  const { data: tenants = {} } = useQuery({
+    queryKey: ["check-message-tenants", tenantIds.sort().join(",")],
+    queryFn: async () => {
+      if (tenantIds.length === 0) return {} as Record<string, string>;
+      const { data } = await supabase.from("tenants").select("id, name").in("id", tenantIds);
+      const map: Record<string, string> = {};
+      (data ?? []).forEach((t: any) => {
+        map[t.id] = t.name;
+      });
+      return map;
+    },
+    enabled: tenantIds.length > 0,
   });
 
   // Mark thread as read whenever messages load/change
@@ -91,30 +165,54 @@ export function CheckMessageThread({ checkId, active = true, className }: Props)
       const trimmed = body.trim();
       if (!trimmed) throw new Error("Message is empty");
       if (trimmed.length > 5000) throw new Error("Message too long");
+      // If the existing conversation is in the shared/partner thread, post there
+      // so replies stay in the same thread the user is reading.
+      if (preferShared && tenantId) {
+        const { error } = await supabase.from("shared_check_messages").insert({
+          check_id: checkId,
+          sender_user_id: user.id,
+          sender_tenant_id: tenantId,
+          body: trimmed,
+        });
+        if (error) throw error;
+        return "shared" as const;
+      }
       const { error } = await supabase.from("check_messages").insert({
         check_id: checkId,
         sender_id: user.id,
         body: trimmed,
       });
       if (error) throw error;
+      return "internal" as const;
     },
-    onSuccess: () => {
+    onSuccess: (kind) => {
       setDraft("");
-      qc.invalidateQueries({ queryKey: ["check-messages", checkId] });
-      qc.invalidateQueries({ queryKey: ["check-unread-counts"] });
+      if (kind === "shared") {
+        qc.invalidateQueries({ queryKey: ["shared-check-messages", checkId] });
+        qc.invalidateQueries({ queryKey: ["shared-check-message-summaries"] });
+      } else {
+        qc.invalidateQueries({ queryKey: ["check-messages", checkId] });
+        qc.invalidateQueries({ queryKey: ["check-unread-counts"] });
+      }
     },
     onError: (e: any) => toast({ title: "Couldn't send message", description: e.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("check_messages")
-        .update({ is_deleted: true })
-        .eq("id", id);
-      if (error) throw error;
+    mutationFn: async (mergedId: string) => {
+      if (mergedId.startsWith("i-")) {
+        const realId = mergedId.slice(2);
+        const { error } = await supabase
+          .from("check_messages")
+          .update({ is_deleted: true })
+          .eq("id", realId);
+        if (error) throw error;
+      } else {
+        throw new Error("Shared messages can't be deleted from here");
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["check-messages", checkId] }),
+    onError: (e: any) => toast({ title: "Couldn't delete", description: e.message, variant: "destructive" }),
   });
 
   return (
@@ -135,6 +233,7 @@ export function CheckMessageThread({ checkId, active = true, className }: Props)
           messages.map((m) => {
             const isMe = m.sender_id === user?.id;
             const profile = profiles[m.sender_id];
+            const tenantName = m.sender_tenant_id ? tenants[m.sender_tenant_id] : null;
             const displayName = profile?.name || profile?.email || (isMe ? "You" : "Teammate");
             return (
               <div key={m.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
@@ -145,12 +244,18 @@ export function CheckMessageThread({ checkId, active = true, className }: Props)
                       : "bg-card border border-border text-foreground"
                   }`}
                 >
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="text-[10px] font-medium opacity-80">{displayName}</span>
+                    {tenantName && (
+                      <span className="text-[10px] opacity-70">· {tenantName}</span>
+                    )}
+                    {m.source === "shared" && (
+                      <span className="text-[9px] uppercase tracking-wide opacity-60">Partner</span>
+                    )}
                     <span className="text-[10px] opacity-60">
                       {format(new Date(m.created_at), "MMM d, h:mm a")}
                     </span>
-                    {isMe && (
+                    {isMe && m.source === "internal" && (
                       <button
                         type="button"
                         onClick={() => deleteMutation.mutate(m.id)}
@@ -178,7 +283,7 @@ export function CheckMessageThread({ checkId, active = true, className }: Props)
         <Textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Type a message…"
+          placeholder={preferShared ? "Reply in partner discussion…" : "Type a message…"}
           rows={2}
           maxLength={5000}
           className="resize-none text-sm"
