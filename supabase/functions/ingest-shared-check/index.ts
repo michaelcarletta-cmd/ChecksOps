@@ -403,18 +403,21 @@ Deno.serve(async (req) => {
     }
 
 
-    // Create the share (idempotent via unique constraint)
-    const { error: shareErr } = await supabase
-      .from("shared_checks")
-      .upsert({
-        check_id: checkId,
-        source_tenant_id: sourceTenantId,
-        target_tenant_id: targetTenantId,
-        shared_by: "00000000-0000-0000-0000-000000000000",
-        access_level: "read_only",
-        revoked_at: null,
-      }, { onConflict: "check_id,source_tenant_id,target_tenant_id" });
-    if (shareErr) throw shareErr;
+    // Create the share (idempotent via unique constraint).
+    // Skip for native-paired partners — they own the check directly, no mirror share needed.
+    if (!isNativePaired) {
+      const { error: shareErr } = await supabase
+        .from("shared_checks")
+        .upsert({
+          check_id: checkId,
+          source_tenant_id: sourceTenantId,
+          target_tenant_id: targetTenantId,
+          shared_by: "00000000-0000-0000-0000-000000000000",
+          access_level: "read_only",
+          revoked_at: null,
+        }, { onConflict: "check_id,source_tenant_id,target_tenant_id" });
+      if (shareErr) throw shareErr;
+    }
 
     if (!initialPartnerStatus && body.source_app === "freedom_crm" && body.source_project_ref) {
       try {
