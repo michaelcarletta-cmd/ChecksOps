@@ -66,6 +66,23 @@ export function TaxSummary() {
     },
   });
 
+  const { data: depositedChecks = [] } = useQuery({
+    queryKey: ["tax-summary-income", tenant?.id, year],
+    enabled: !!tenant?.id,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("check_intake_items")
+        .select("id, amount, deposited_at, status")
+        .eq("tenant_id", tenant!.id)
+        .eq("status", "deposited")
+        .gte("deposited_at", startOfYear(new Date(year, 0, 1)).toISOString())
+        .lte("deposited_at", endOfYear(new Date(year, 0, 1)).toISOString());
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+
   const recipients = useMemo(() => {
     const map: Record<string, {
       id: string; nickname: string; custname: string;
@@ -128,6 +145,11 @@ export function TaxSummary() {
   const flag1099Count = recipients.filter(r => r.needs_1099).length;
   const totalPaid = recipients.reduce((s, r) => s + r.total, 0);
   const totalSubsPaid = recipients.filter(r => r.account_type === "subcontractor").reduce((s, r) => s + r.total, 0);
+  const totalIncome = (depositedChecks as any[]).reduce((s, c) => s + Number(c.amount ?? 0), 0);
+  const depositedCount = (depositedChecks as any[]).length;
+  const netRetained = totalIncome - totalPaid;
+  const payoutRatio = totalIncome > 0 ? (totalPaid / totalIncome) * 100 : 0;
+
 
   const exportCSV = () => {
     const headers = ["Recipient Nickname", "Account Holder Name", "Type", "Account (last 4)", `Total Paid ${year}`, "Payment Count", "May Require 1099"];
@@ -186,6 +208,36 @@ export function TaxSummary() {
         </div>
       )}
 
+      <Card className="border-emerald-500/30 bg-emerald-500/5">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Income vs. Disbursements — {year}</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div>
+            <p className="text-[11px] text-muted-foreground">Total income (deposited checks)</p>
+            <p className="text-lg font-semibold text-emerald-600">${totalIncome.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
+            <p className="text-[10px] text-muted-foreground">{depositedCount} check{depositedCount !== 1 ? "s" : ""} deposited</p>
+          </div>
+          <div>
+            <p className="text-[11px] text-muted-foreground">Total disbursed</p>
+            <p className="text-lg font-semibold">${totalPaid.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
+            <p className="text-[10px] text-muted-foreground">to subs, vendors & reps</p>
+          </div>
+          <div>
+            <p className="text-[11px] text-muted-foreground">Net retained</p>
+            <p className={`text-lg font-semibold ${netRetained >= 0 ? "text-foreground" : "text-destructive"}`}>
+              ${netRetained.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+            </p>
+            <p className="text-[10px] text-muted-foreground">income − disbursements</p>
+          </div>
+          <div>
+            <p className="text-[11px] text-muted-foreground">Payout ratio</p>
+            <p className="text-lg font-semibold">{payoutRatio.toFixed(1)}%</p>
+            <p className="text-[10px] text-muted-foreground">disbursed of income</p>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-3 gap-3">
         <Card><CardContent className="pt-3 pb-3 text-center">
           <p className="text-xs text-muted-foreground mb-1">Total paid out</p>
@@ -200,6 +252,7 @@ export function TaxSummary() {
           <p className={`text-base font-semibold ${flag1099Count > 0 ? "text-amber-500" : "text-emerald-500"}`}>{flag1099Count}</p>
         </CardContent></Card>
       </div>
+
 
       <div className="rounded-md border bg-muted/30 p-2.5 flex items-start gap-2">
         <Info className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
