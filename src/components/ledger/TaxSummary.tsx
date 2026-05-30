@@ -66,6 +66,23 @@ export function TaxSummary() {
     },
   });
 
+  const { data: depositedChecks = [] } = useQuery({
+    queryKey: ["tax-summary-income", tenant?.id, year],
+    enabled: !!tenant?.id,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("check_intake_items")
+        .select("id, amount, deposited_at, status")
+        .eq("tenant_id", tenant!.id)
+        .eq("status", "deposited")
+        .gte("deposited_at", startOfYear(new Date(year, 0, 1)).toISOString())
+        .lte("deposited_at", endOfYear(new Date(year, 0, 1)).toISOString());
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+
   const recipients = useMemo(() => {
     const map: Record<string, {
       id: string; nickname: string; custname: string;
