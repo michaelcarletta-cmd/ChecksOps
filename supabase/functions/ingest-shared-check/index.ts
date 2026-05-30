@@ -234,29 +234,44 @@ Deno.serve(async (req) => {
     }
     const targetTenantId = targetTenant.id ?? targetTenant.tenant_id;
 
-    // Resolve OR auto-create a placeholder source tenant locally so FK works.
-    // We mark these tenants with is_external in metadata; partner_code is set to a synthetic value.
-    const externalSlug = `ext-${body.source_app}-${body.source_tenant_id.slice(0, 8)}`;
-    let { data: extTenant } = await supabase
-      .from("tenants")
-      .select("id")
-      .eq("slug", externalSlug)
-      .maybeSingle();
+    // Native-tenant pairing: certain source partner codes map to a native
+    // ChecksOps tenant. When matched, the check is routed directly into that
+    // tenant (not a read-only mirror), unlocking endorsements and editing.
+    const NATIVE_TENANT_MAP: Record<string, string> = {
+      // Freedom Adjustment (Freedom CRM embeds ChecksOps in an iframe)
+      DF9CC985: "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    };
+    const sourcePartnerCode = body.source_partner_code?.trim().toUpperCase() ?? "";
+    const nativeTenantId = NATIVE_TENANT_MAP[sourcePartnerCode] ?? null;
+    const isNativePaired = !!nativeTenantId;
 
-    if (!extTenant) {
-      const { data: created, error: createErr } = await supabase
+    let sourceTenantId: string;
+    if (isNativePaired) {
+      sourceTenantId = nativeTenantId!;
+    } else {
+      // Resolve OR auto-create a placeholder source tenant locally so FK works.
+      const externalSlug = `ext-${body.source_app}-${body.source_tenant_id.slice(0, 8)}`;
+      let { data: extTenant } = await supabase
         .from("tenants")
-        .insert({
-          name: `${body.source_tenant_name} (${body.source_app})`,
-          slug: externalSlug,
-          plan_tier: "starter",
-        })
         .select("id")
-        .single();
-      if (createErr) throw createErr;
-      extTenant = created;
+        .eq("slug", externalSlug)
+        .maybeSingle();
+
+      if (!extTenant) {
+        const { data: created, error: createErr } = await supabase
+          .from("tenants")
+          .insert({
+            name: `${body.source_tenant_name} (${body.source_app})`,
+            slug: externalSlug,
+            plan_tier: "starter",
+          })
+          .select("id")
+          .single();
+        if (createErr) throw createErr;
+        extTenant = created;
+      }
+      sourceTenantId = extTenant!.id;
     }
-    const sourceTenantId = extTenant!.id;
 
     // Idempotent check mirror: lookup by external_origin->>source_check_id
     const { data: existingCheck } = await supabase
