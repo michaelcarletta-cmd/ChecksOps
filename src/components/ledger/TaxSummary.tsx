@@ -145,6 +145,11 @@ export function TaxSummary() {
   const flag1099Count = recipients.filter(r => r.needs_1099).length;
   const totalPaid = recipients.reduce((s, r) => s + r.total, 0);
   const totalSubsPaid = recipients.filter(r => r.account_type === "subcontractor").reduce((s, r) => s + r.total, 0);
+  const totalIncome = (depositedChecks as any[]).reduce((s, c) => s + Number(c.amount ?? 0), 0);
+  const depositedCount = (depositedChecks as any[]).length;
+  const netRetained = totalIncome - totalPaid;
+  const payoutRatio = totalIncome > 0 ? (totalPaid / totalIncome) * 100 : 0;
+
 
   const exportCSV = () => {
     const headers = ["Recipient Nickname", "Account Holder Name", "Type", "Account (last 4)", `Total Paid ${year}`, "Payment Count", "May Require 1099"];
