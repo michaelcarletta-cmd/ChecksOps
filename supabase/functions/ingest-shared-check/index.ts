@@ -15,6 +15,7 @@ interface IngestPayload {
   source_tenant_id: string;      // tenant uuid in the source app
   source_tenant_name: string;    // display name of the source tenant
   source_check_id: string;       // original check uuid in the source app
+  source_partner_code?: string;  // partner code of the SOURCE app's tenant (for native-pairing)
   target_partner_code: string;   // ChecksOps tenant partner code receiving the share
   shared_by_email?: string;      // for audit
   freedom_claim_id?: string | null;     // Freedom CRM claim uuid (join key)
@@ -233,29 +234,44 @@ Deno.serve(async (req) => {
     }
     const targetTenantId = targetTenant.id ?? targetTenant.tenant_id;
 
-    // Resolve OR auto-create a placeholder source tenant locally so FK works.
-    // We mark these tenants with is_external in metadata; partner_code is set to a synthetic value.
-    const externalSlug = `ext-${body.source_app}-${body.source_tenant_id.slice(0, 8)}`;
-    let { data: extTenant } = await supabase
-      .from("tenants")
-      .select("id")
-      .eq("slug", externalSlug)
-      .maybeSingle();
+    // Native-tenant pairing: certain source partner codes map to a native
+    // ChecksOps tenant. When matched, the check is routed directly into that
+    // tenant (not a read-only mirror), unlocking endorsements and editing.
+    const NATIVE_TENANT_MAP: Record<string, string> = {
+      // Freedom Adjustment (Freedom CRM embeds ChecksOps in an iframe)
+      DF9CC985: "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    };
+    const sourcePartnerCode = body.source_partner_code?.trim().toUpperCase() ?? "";
+    const nativeTenantId = NATIVE_TENANT_MAP[sourcePartnerCode] ?? null;
+    const isNativePaired = !!nativeTenantId;
 
-    if (!extTenant) {
-      const { data: created, error: createErr } = await supabase
+    let sourceTenantId: string;
+    if (isNativePaired) {
+      sourceTenantId = nativeTenantId!;
+    } else {
+      // Resolve OR auto-create a placeholder source tenant locally so FK works.
+      const externalSlug = `ext-${body.source_app}-${body.source_tenant_id.slice(0, 8)}`;
+      let { data: extTenant } = await supabase
         .from("tenants")
-        .insert({
-          name: `${body.source_tenant_name} (${body.source_app})`,
-          slug: externalSlug,
-          plan_tier: "starter",
-        })
         .select("id")
-        .single();
-      if (createErr) throw createErr;
-      extTenant = created;
+        .eq("slug", externalSlug)
+        .maybeSingle();
+
+      if (!extTenant) {
+        const { data: created, error: createErr } = await supabase
+          .from("tenants")
+          .insert({
+            name: `${body.source_tenant_name} (${body.source_app})`,
+            slug: externalSlug,
+            plan_tier: "starter",
+          })
+          .select("id")
+          .single();
+        if (createErr) throw createErr;
+        extTenant = created;
+      }
+      sourceTenantId = extTenant!.id;
     }
-    const sourceTenantId = extTenant!.id;
 
     // Idempotent check mirror: lookup by external_origin->>source_check_id
     const { data: existingCheck } = await supabase
@@ -317,19 +333,22 @@ Deno.serve(async (req) => {
           property_address: body.check.property_address ?? null,
           payment_classification: body.check.payment_classification ?? null,
           payee_address: body.check.payee_address ?? null,
-          status: body.check.status ?? "uploaded",
-          check_stage: body.check.check_stage ?? "review",
+          status: isNativePaired ? (body.check.status ?? "needs_review") : (body.check.status ?? "uploaded"),
+          check_stage: isNativePaired ? "review" : (body.check.check_stage ?? "review"),
+          check_source: "insurance",
           deposit_recommendation: body.check.deposit_recommendation ?? null,
           ocr_status: body.check.ocr_status ?? "completed",
           freedom_claim_id: body.freedom_claim_id ?? null,
           freedom_claim_number: body.freedom_claim_number ?? null,
-          ...(initialPartnerStatus ?? {}),
+          ...(isNativePaired ? {} : (initialPartnerStatus ?? {})),
           external_origin: {
             source_app: body.source_app,
             source_project_ref: body.source_project_ref,
             source_tenant_id: body.source_tenant_id,
             source_tenant_name: body.source_tenant_name,
             source_check_id: body.source_check_id,
+            source_partner_code: sourcePartnerCode || null,
+            native_paired: isNativePaired,
             ingested_at: new Date().toISOString(),
             shared_by_email: body.shared_by_email ?? null,
           },
@@ -384,18 +403,21 @@ Deno.serve(async (req) => {
     }
 
 
-    // Create the share (idempotent via unique constraint)
-    const { error: shareErr } = await supabase
-      .from("shared_checks")
-      .upsert({
-        check_id: checkId,
-        source_tenant_id: sourceTenantId,
-        target_tenant_id: targetTenantId,
-        shared_by: "00000000-0000-0000-0000-000000000000",
-        access_level: "read_only",
-        revoked_at: null,
-      }, { onConflict: "check_id,source_tenant_id,target_tenant_id" });
-    if (shareErr) throw shareErr;
+    // Create the share (idempotent via unique constraint).
+    // Skip for native-paired partners — they own the check directly, no mirror share needed.
+    if (!isNativePaired) {
+      const { error: shareErr } = await supabase
+        .from("shared_checks")
+        .upsert({
+          check_id: checkId,
+          source_tenant_id: sourceTenantId,
+          target_tenant_id: targetTenantId,
+          shared_by: "00000000-0000-0000-0000-000000000000",
+          access_level: "read_only",
+          revoked_at: null,
+        }, { onConflict: "check_id,source_tenant_id,target_tenant_id" });
+      if (shareErr) throw shareErr;
+    }
 
     if (!initialPartnerStatus && body.source_app === "freedom_crm" && body.source_project_ref) {
       try {
