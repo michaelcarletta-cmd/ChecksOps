@@ -15,6 +15,7 @@ interface IngestPayload {
   source_tenant_id: string;      // tenant uuid in the source app
   source_tenant_name: string;    // display name of the source tenant
   source_check_id: string;       // original check uuid in the source app
+  source_partner_code?: string;  // partner code of the SOURCE app's tenant (for native-pairing)
   target_partner_code: string;   // ChecksOps tenant partner code receiving the share
   shared_by_email?: string;      // for audit
   freedom_claim_id?: string | null;     // Freedom CRM claim uuid (join key)
