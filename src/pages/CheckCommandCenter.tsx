@@ -913,7 +913,7 @@ export default function CheckCommandCenter() {
         {/* Review Tab — only renders when active */}
         {activeTab === "review" && (
           <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_28rem]">
-            <Card>
+            <Card className={isMobile && reviewCheckId ? "hidden" : ""}>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <ClipboardCheck className="h-4 w-4 text-orange-400" />
@@ -931,6 +931,16 @@ export default function CheckCommandCenter() {
             {reviewCheckId ? (
               <Card>
                 <CardHeader className="pb-2">
+                  {isMobile && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1 -ml-2 mb-1 self-start"
+                      onClick={() => setReviewCheckId(null)}
+                    >
+                      <ArrowLeft className="h-4 w-4" /> Back
+                    </Button>
+                  )}
                   <CardTitle className="text-sm">Review & Decision</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -958,7 +968,7 @@ export default function CheckCommandCenter() {
                 </CardContent>
               </Card>
             ) : (
-              <Card className="flex items-center justify-center h-[calc(100vh-400px)]">
+              <Card className={`flex items-center justify-center h-[calc(100vh-400px)] ${isMobile ? "hidden" : ""}`}>
                 <div className="text-center text-muted-foreground">
                   <ClipboardCheck className="h-12 w-12 mx-auto mb-3 opacity-30" />
                   <p className="text-sm">Select a check to review</p>
@@ -966,6 +976,7 @@ export default function CheckCommandCenter() {
               </Card>
             )}
           </div>
+
         )}
 
         {/* All other tabs — only render the active one */}
