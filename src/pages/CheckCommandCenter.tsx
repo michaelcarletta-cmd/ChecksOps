@@ -359,6 +359,13 @@ export default function CheckCommandCenter() {
   const [shareCheckId, setShareCheckId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
+  // On mobile, scroll to top when a check is opened or review check is opened
+  useEffect(() => {
+    if (isMobile && (selectedCheck || reviewCheckId)) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [selectedCheck, reviewCheckId, isMobile]);
+
   const { data: tenantMembershipRole } = useQuery({
     queryKey: ["check-command-center-tenant-role", tenantId, user?.id],
     queryFn: async () => {
