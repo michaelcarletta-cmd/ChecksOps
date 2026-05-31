@@ -474,10 +474,12 @@ function MessageBubble({ message, onRetry }: { message: CopilotMessage; onRetry?
             ? "bg-destructive/10 text-destructive border border-destructive/20"
             : "bg-muted/80 text-foreground"
       )}>
-        <div className="whitespace-pre-wrap break-words leading-relaxed" dangerouslySetInnerHTML={isUser ? { __html: message.content } : undefined}>
-          {!isUser ? (message.content || (
-            <span className="text-muted-foreground italic">Generating…</span>
-          )) : undefined}
+        <div className="whitespace-pre-wrap break-words leading-relaxed">
+          {isUser
+            ? message.content
+            : (message.content || (
+                <span className="text-muted-foreground italic">Generating…</span>
+              ))}
         </div>
         {sources && (
           <div className="mt-2 pt-1.5 border-t border-border/30 space-y-0.5">
