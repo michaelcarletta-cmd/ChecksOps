@@ -59,7 +59,38 @@ Deno.serve(async (req: Request): Promise<Response> => {
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
+    // Require admin or staff caller
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+    const userClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: caller, error: callerErr } = await userClient.auth.getUser();
+    if (callerErr || !caller?.user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+    const { data: callerRoles } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", caller.user.id);
+    const allowed = callerRoles?.some((r: any) => r.role === "admin" || r.role === "staff");
+    if (!allowed) {
+      return new Response(JSON.stringify({ error: "Forbidden: admin or staff required" }), {
+        status: 403, headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
     const { email, password, fullName, role, phone }: CreatePortalUserRequest = await req.json();
+    if (!["client", "contractor", "referrer"].includes(role)) {
+      return new Response(JSON.stringify({ error: "Invalid role" }), {
+        status: 400, headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
 
     if (!email || !password || !fullName || !role) {
       return new Response(

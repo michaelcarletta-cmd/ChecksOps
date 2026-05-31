@@ -190,7 +190,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
         success: true,
         user_id: userId,
         email,
-        password,
         userName: full_name,
       }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
