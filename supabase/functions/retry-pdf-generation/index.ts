@@ -203,10 +203,18 @@ Deno.serve(async (req) => {
 
     await sb.from("signature_requests").update({ completion_status: "pending", last_error: null }).eq("id", requestId);
 
+    const claimId = request.claim_id;
+    const checkIntakeItemId = request.check_intake_item_id;
+    if (!claimId && !checkIntakeItemId) {
+      throw new Error("Signature request is not linked to a claim or check");
+    }
+
     const flattenedBytes = await generateFlattenedPdf(sb, request, allSigners || []);
     const blob = new Blob([flattenedBytes], { type: "application/pdf" });
-    const claimId = request.claim_id;
-    const storagePath = `signed/${claimId}/${requestId}-final.pdf`;
+
+    const storagePath = claimId
+      ? `signed/${claimId}/${requestId}-final.pdf`
+      : `check-intake/${checkIntakeItemId}/files/${requestId}-final.pdf`;
 
     const { error: uploadError } = await sb.storage
       .from("claim-files")
@@ -220,22 +228,43 @@ Deno.serve(async (req) => {
       last_error: null,
     }).eq("id", requestId);
 
-    // Attach to claim files
     const signedFileName = `SIGNED - ${request.document_name}`;
-    const { data: existingFile } = await sb
-      .from("claim_files")
-      .select("id")
-      .eq("claim_id", claimId)
-      .eq("file_name", signedFileName)
-      .maybeSingle();
 
-    if (!existingFile) {
-      await sb.from("claim_files").insert({
-        claim_id: claimId,
-        file_name: signedFileName,
-        file_path: storagePath,
-        file_type: "application/pdf",
-      });
+    if (claimId) {
+      const { data: existingFile } = await sb
+        .from("claim_files")
+        .select("id")
+        .eq("claim_id", claimId)
+        .eq("file_name", signedFileName)
+        .maybeSingle();
+
+      if (!existingFile) {
+        await sb.from("claim_files").insert({
+          claim_id: claimId,
+          file_name: signedFileName,
+          file_path: storagePath,
+          file_type: "application/pdf",
+        });
+      }
+    } else if (checkIntakeItemId) {
+      const { data: existingCheckFile } = await sb
+        .from("check_files")
+        .select("id")
+        .eq("signature_request_id", requestId)
+        .maybeSingle();
+
+      if (!existingCheckFile) {
+        await sb.from("check_files").insert({
+          check_intake_item_id: checkIntakeItemId,
+          file_name: `${signedFileName}.pdf`,
+          file_path: storagePath,
+          file_type: "application/pdf",
+          file_size: flattenedBytes.byteLength,
+          category: "signed_dtp",
+          source: "system",
+          signature_request_id: requestId,
+        });
+      }
     }
 
     return respond({ ok: true, final_pdf_path: storagePath });
