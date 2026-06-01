@@ -502,8 +502,11 @@ Deno.serve(async (req) => {
 
       // Attempt PDF flattening
       try {
-        if (!claimId) {
-          throw new Error("Cannot generate final PDF: claim_id is missing on the signature request");
+        const checkIntakeItemId = (request as any).check_intake_item_id ?? null;
+        if (!claimId && !checkIntakeItemId) {
+          throw new Error(
+            "Cannot generate final PDF: signature request is not linked to a claim or check",
+          );
         }
 
         const flattenedBytes = await generateFlattenedPdf(sb, request, allSigners!);
@@ -511,9 +514,13 @@ Deno.serve(async (req) => {
         // Upload to storage
         const blob = new Blob([flattenedBytes.buffer as ArrayBuffer], { type: "application/pdf" });
 
+        const storagePath = claimId
+          ? `signed/${claimId}/${request.id}-final.pdf`
+          : `check-intake/${checkIntakeItemId}/files/${request.id}-final.pdf`;
+
         const { error: uploadError } = await sb.storage
           .from("claim-files")
-          .upload(`signed/${claimId}/${request.id}-final.pdf`, blob, {
+          .upload(storagePath, blob, {
             contentType: "application/pdf",
             upsert: true,
           });
@@ -522,37 +529,58 @@ Deno.serve(async (req) => {
           throw new Error(`Upload failed: ${uploadError.message}`);
         }
 
-        const storagePath = `signed/${claimId}/${request.id}-final.pdf`;
-
         await sb.from("signature_requests").update({
           final_pdf_path: storagePath,
           completion_status: "completed",
         }).eq("id", request.id);
 
-        // Attach to claim files
         const signedFileName = `SIGNED - ${request.document_name}`;
-        const { data: existingFile } = await sb
-          .from("claim_files")
-          .select("id")
-          .eq("claim_id", claimId)
-          .eq("file_name", signedFileName)
-          .maybeSingle();
 
-        if (!existingFile) {
-          await sb.from("claim_files").insert({
+        if (claimId) {
+          // Attach to claim files (existing behavior)
+          const { data: existingFile } = await sb
+            .from("claim_files")
+            .select("id")
+            .eq("claim_id", claimId)
+            .eq("file_name", signedFileName)
+            .maybeSingle();
+
+          if (!existingFile) {
+            await sb.from("claim_files").insert({
+              claim_id: claimId,
+              file_name: signedFileName,
+              file_path: storagePath,
+              file_type: "application/pdf",
+            });
+          }
+
+          // Claim timeline
+          await sb.from("claim_updates").insert({
             claim_id: claimId,
-            file_name: signedFileName,
-            file_path: storagePath,
-            file_type: "application/pdf",
+            content: `✅ All signatures completed for "${request.document_name}" — signed PDF generated`,
+            update_type: "esign",
           });
-        }
+        } else if (checkIntakeItemId) {
+          // Attach to the check's Files section
+          const { data: existingCheckFile } = await sb
+            .from("check_files")
+            .select("id")
+            .eq("signature_request_id", request.id)
+            .maybeSingle();
 
-        // Claim timeline
-        await sb.from("claim_updates").insert({
-          claim_id: claimId,
-          content: `✅ All signatures completed for "${request.document_name}" — signed PDF generated`,
-          update_type: "esign",
-        });
+          if (!existingCheckFile) {
+            await sb.from("check_files").insert({
+              check_intake_item_id: checkIntakeItemId,
+              file_name: `${signedFileName}.pdf`,
+              file_path: storagePath,
+              file_type: "application/pdf",
+              file_size: flattenedBytes.byteLength,
+              category: "signed_dtp",
+              source: "system",
+              signature_request_id: request.id,
+            });
+          }
+        }
 
         await log(sb, {
           request_id: request.id, signer_id: null, claim_id: claimId,
@@ -576,13 +604,16 @@ Deno.serve(async (req) => {
           payload: null,
         });
 
-        // Still log timeline entry — signatures are captured
-        await sb.from("claim_updates").insert({
-          claim_id: claimId,
-          content: `⚠️ Signatures completed for "${request.document_name}" but PDF generation failed — retry available`,
-          update_type: "esign",
-        });
+        // Still log timeline entry when there is a claim — signatures are captured
+        if (claimId) {
+          await sb.from("claim_updates").insert({
+            claim_id: claimId,
+            content: `⚠️ Signatures completed for "${request.document_name}" but PDF generation failed — retry available`,
+            update_type: "esign",
+          });
+        }
       }
+
     } else {
       await sb.from("signature_requests").update({ status: "in_progress" }).eq("id", request.id);
     }
