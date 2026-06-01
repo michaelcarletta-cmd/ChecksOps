@@ -15625,7 +15625,8 @@ export type Database = {
       }
       signature_requests: {
         Row: {
-          claim_id: string
+          check_intake_item_id: string | null
+          claim_id: string | null
           completed_at: string | null
           completion_status: string | null
           created_at: string | null
@@ -15647,7 +15648,8 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
-          claim_id: string
+          check_intake_item_id?: string | null
+          claim_id?: string | null
           completed_at?: string | null
           completion_status?: string | null
           created_at?: string | null
@@ -15669,7 +15671,8 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
-          claim_id?: string
+          check_intake_item_id?: string | null
+          claim_id?: string | null
           completed_at?: string | null
           completion_status?: string | null
           created_at?: string | null
@@ -15691,6 +15694,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "signature_requests_check_intake_item_id_fkey"
+            columns: ["check_intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "signature_requests_claim_id_fkey"
             columns: ["claim_id"]
