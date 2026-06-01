@@ -322,9 +322,12 @@ Deno.serve(async (req) => {
     blockTop = Math.round(blockCenterY - blockHeight / 2);
     blockBottom = blockTop + blockHeight;
 
-    // If still overflowing, reduce scale slightly and recalc once
-    if (blockBottom > zoneBottom) {
-      const adjustedScale = Math.max(0.72, (measured.scale ?? 1) - 0.05);
+    // If still overflowing, iteratively reduce scale until the block fits the zone.
+    // Caps at 0.5 to avoid unreadably small endorsements; if it still doesn't fit
+    // there, we accept the smallest size and let the overflow check below decide.
+    let safetyIters = 0;
+    while (blockBottom > zoneBottom && (measured.scale ?? 1) > 0.5 && safetyIters < 40) {
+      const adjustedScale = Math.max(0.5, (measured.scale ?? 1) - 0.05);
       measured = fitLayout(renderableEndorsements.length, zoneHeight, adjustedScale);
       blockHeight = measured.estimatedHeight;
       blockCenterY = Math.max(
@@ -333,6 +336,14 @@ Deno.serve(async (req) => {
       );
       blockTop = Math.round(blockCenterY - blockHeight / 2);
       blockBottom = blockTop + blockHeight;
+      safetyIters += 1;
+    }
+    if (safetyIters > 0) {
+      console.log("[COMPOSITE] auto-shrunk scale to fit zone", {
+        finalScale: measured.scale,
+        iterations: safetyIters,
+        originalScale: appliedOverride.scale,
+      });
     }
 
     console.log("[COMPOSITE] blockTop/blockBottom/zoneBottom", { blockTop, blockBottom, zoneBottom });
