@@ -1718,6 +1718,20 @@ function CheckDetailPanel({
   const [openingDepositView, setOpeningDepositView] = useState(false);
   const [frontImageDimensions, setFrontImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [backImageDimensions, setBackImageDimensions] = useState<{ width: number; height: number } | null>(null);
+
+  // Count of explicit payees on this check — used to decide whether to show
+  // the fallback email-based endorsement composer.
+  const { data: payeesCount = 0 } = useQuery({
+    queryKey: ["check-payees-count", checkId],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("check_payees")
+        .select("id", { count: "exact", head: true })
+        .eq("check_id", checkId);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
   const [movingToDeposited, setMovingToDeposited] = useState(false);
   const [bypassingEndorsements, setBypassingEndorsements] = useState(false);
   const [branchApprovedAt, setBranchApprovedAt] = useState<number | null>(null);
