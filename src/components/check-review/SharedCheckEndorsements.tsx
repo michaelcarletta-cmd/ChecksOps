@@ -78,6 +78,7 @@ export function SharedCheckEndorsements({
         signer_name: s.name,
         signer_email: s.email.toLowerCase(),
         signing_order: idx + 1,
+        signer_type: "payee",
         status: "pending" as const,
       }));
       const { error: signerErr } = await supabase
