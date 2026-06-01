@@ -70,6 +70,9 @@ const EndorsementChecklist = lazy(() =>
 const SharedCheckEndorsements = lazy(() =>
   import("@/components/check-review/SharedCheckEndorsements").then(m => ({ default: m.SharedCheckEndorsements }))
 );
+const SharedCheckPaymentDirection = lazy(() =>
+  import("@/components/check-review/SharedCheckPaymentDirection").then(m => ({ default: m.SharedCheckPaymentDirection }))
+);
 const DepositPacketGenerator = lazy(() =>
   import("@/components/check-review/DepositPacketGenerator").then(m => ({ default: m.DepositPacketGenerator }))
 );
@@ -2971,6 +2974,13 @@ function CheckDetailPanel({
                 <SharedCheckEndorsements
                   checkIntakeItemId={checkId}
                   documentName={`Check #${check?.check_number || ""} endorsement`.trim()}
+                />
+              </Suspense>
+
+              <Suspense fallback={<TabLoader />}>
+                <SharedCheckPaymentDirection
+                  checkIntakeItemId={checkId}
+                  checkNumber={check?.check_number}
                 />
               </Suspense>
 
