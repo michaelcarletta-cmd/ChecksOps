@@ -73,6 +73,7 @@ const SharedCheckEndorsements = lazy(() =>
 const SharedCheckPaymentDirection = lazy(() =>
   import("@/components/check-review/SharedCheckPaymentDirection").then(m => ({ default: m.SharedCheckPaymentDirection }))
 );
+import { DTPStatusIndicator } from "@/components/check-review/DTPStatusIndicator";
 const DepositPacketGenerator = lazy(() =>
   import("@/components/check-review/DepositPacketGenerator").then(m => ({ default: m.DepositPacketGenerator }))
 );
@@ -2329,9 +2330,12 @@ function CheckDetailPanel({
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-base">Check #{check.check_number ?? "Pending"}</CardTitle>
-          <Badge className={statusColors[check.status] ?? ""}>
-            {check.status.replace(/_/g, " ")}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <DTPStatusIndicator checkIntakeItemId={checkId} />
+            <Badge className={statusColors[check.status] ?? ""}>
+              {check.status.replace(/_/g, " ")}
+            </Badge>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2 mt-2">
           <ViewCheckImageButton
