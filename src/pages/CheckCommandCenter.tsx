@@ -3163,6 +3163,14 @@ function CheckDetailPanel({
               )}
             </TabsContent>
 
+            <TabsContent value="files" className="p-4 mt-0">
+              <Suspense fallback={<TabLoader />}>
+                <CheckFilesSection checkIntakeItemId={checkId} />
+              </Suspense>
+            </TabsContent>
+
+
+
             <TabsContent value="packet" className="p-4 mt-0">
               <Suspense fallback={<TabLoader />}>
                 <DepositPacketGenerator checkId={checkId} />
