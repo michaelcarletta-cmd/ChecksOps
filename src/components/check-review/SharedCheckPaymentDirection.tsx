@@ -152,6 +152,19 @@ export function SharedCheckPaymentDirection({
       const email = insuredEmail.trim().toLowerCase();
 
       const docName = `Direction to Pay - ${recipient}${checkNumber ? ` (Check #${checkNumber})` : ""}`;
+      const docPath = `check-intake/${checkIntakeItemId}/payment-direction-${crypto.randomUUID()}.pdf`;
+
+      // 1. Generate and upload the DTP PDF so the signing page has a real document.
+      const pdfBlob = buildDtpPdf({
+        recipientName: recipient,
+        insuredName: name,
+        insuredEmail: email,
+        checkNumber,
+      });
+      const { error: uploadErr } = await supabase.storage
+        .from("claim-files")
+        .upload(docPath, pdfBlob, { contentType: "application/pdf", upsert: true });
+      if (uploadErr) throw new Error(`Could not upload DTP PDF: ${uploadErr.message}`);
 
       const { data: req, error: reqErr } = await supabase
         .from("signature_requests")
@@ -159,7 +172,7 @@ export function SharedCheckPaymentDirection({
           claim_id: null,
           check_intake_item_id: checkIntakeItemId,
           document_name: docName,
-          document_path: `check-intake/${checkIntakeItemId}/payment-direction`,
+          document_path: docPath,
           status: "draft",
         })
         .select()
