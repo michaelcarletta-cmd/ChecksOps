@@ -132,7 +132,11 @@ export function SharedCheckPaymentDirection({
         signer_type: "policyholder",
         status: "pending",
       });
-      if (signerErr) throw signerErr;
+      if (signerErr) {
+        // Roll back the parent request so we don't leave an orphan that breaks Resend.
+        await supabase.from("signature_requests").delete().eq("id", req.id);
+        throw signerErr;
+      }
 
       const { data, error } = await supabase.functions.invoke("send-signature-request", {
         body: { requestId: req.id },
