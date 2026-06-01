@@ -12,33 +12,53 @@ interface DTPStatusIndicatorProps {
 
 type DerivedStatus = "not_requested" | "pending" | "signed" | "expired" | "syncing";
 
-const STATUS_STYLES: Record<DerivedStatus, { label: (extra?: string) => string; className: string; pulse?: boolean }> = {
+const STATUS_STYLES: Record<DerivedStatus, { label: string; className: string; pulse?: boolean }> = {
   not_requested: {
-    label: () => "DTP: Not Requested",
+    label: "Not Requested",
     className: "bg-muted text-muted-foreground border-border",
   },
   syncing: {
-    label: () => "DTP: Syncing…",
+    label: "Syncing…",
     className: "bg-muted text-muted-foreground border-border animate-pulse",
   },
   pending: {
-    label: () => "DTP: Pending",
+    label: "Pending",
     className: "bg-amber-500/15 text-amber-400 border-amber-500/30",
     pulse: true,
   },
   signed: {
-    label: (extra) => (extra ? `DTP: Signed (${extra})` : "DTP: Signed"),
+    label: "Signed",
     className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
   },
   expired: {
-    label: () => "DTP: Expired",
+    label: "Expired",
     className: "bg-destructive/15 text-destructive border-destructive/30",
   },
 };
 
+interface DTPRecord {
+  id: string;
+  status: string | null;
+  created_at: string | null;
+  signature_signers: Array<{
+    signer_name?: string;
+    signer_email?: string;
+    status?: string;
+    signed_at?: string;
+  }> | null;
+}
+
+function deriveStatus(row: DTPRecord): DerivedStatus {
+  const signer = row.signature_signers?.[0];
+  if (signer?.status === "signed") return "signed";
+  if (row.status === "failed" || row.status === "expired") return "expired";
+  return "pending";
+}
+
 /**
- * Live DTP status pill driven by signature_requests + signature_signers
- * scoped to a single check_intake_item. Polls every 30s while pending.
+ * Live DTP status pills driven by signature_requests + signature_signers
+ * scoped to a single check_intake_item. Renders one pill per DTP request
+ * with the recipient name and individual status.
  */
 export function DTPStatusIndicator({ checkIntakeItemId, className }: DTPStatusIndicatorProps) {
   const { data, isLoading } = useQuery({
@@ -49,16 +69,14 @@ export function DTPStatusIndicator({ checkIntakeItemId, className }: DTPStatusIn
         .select("id, status, created_at, signature_signers(signer_name, signer_email, status, signed_at)")
         .eq("check_intake_item_id", checkIntakeItemId)
         .ilike("document_name", "Direction to Pay%")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .order("created_at", { ascending: false });
       if (error) throw error;
-      return data;
+      return (data ?? []) as DTPRecord[];
     },
     refetchInterval: (q) => {
-      const row: any = q.state.data;
-      const signer = row?.signature_signers?.[0];
-      return signer?.status === "pending" ? 30_000 : false;
+      const rows = (q.state.data ?? []) as DTPRecord[];
+      const anyPending = rows.some((r) => deriveStatus(r) === "pending");
+      return anyPending ? 30_000 : false;
     },
   });
 
@@ -67,67 +85,71 @@ export function DTPStatusIndicator({ checkIntakeItemId, className }: DTPStatusIn
     return (
       <Badge variant="outline" className={cn("gap-1.5", style.className, className)}>
         <Loader2 className="h-3 w-3 animate-spin" />
-        {style.label()}
+        DTP: {style.label}
       </Badge>
     );
   }
 
-  const signer = data?.signature_signers?.[0] as
-    | { signer_name?: string; signer_email?: string; status?: string; signed_at?: string }
-    | undefined;
-
-  let derived: DerivedStatus = "not_requested";
-  if (data) {
-    if (signer?.status === "signed") derived = "signed";
-    else if (data.status === "failed") derived = "expired";
-    else derived = "pending";
+  if (!data || data.length === 0) {
+    const style = STATUS_STYLES.not_requested;
+    return (
+      <Badge variant="outline" className={cn("gap-1.5 font-medium", style.className, className)}>
+        <FileSignature className="h-3 w-3" />
+        DTP: {style.label}
+      </Badge>
+    );
   }
-
-  const style = STATUS_STYLES[derived];
-  const badge = (
-    <Badge
-      variant="outline"
-      className={cn(
-        "gap-1.5 font-medium",
-        style.className,
-        style.pulse && "animate-pulse",
-        className,
-      )}
-    >
-      <FileSignature className="h-3 w-3" />
-      <span className="truncate max-w-[180px]">{style.label(signer?.signer_name)}</span>
-    </Badge>
-  );
-
-  if (derived === "not_requested") return badge;
 
   return (
     <TooltipProvider delayDuration={150}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span>{badge}</span>
-        </TooltipTrigger>
-        <TooltipContent side="bottom" className="text-xs space-y-1">
-          {data?.created_at && (
-            <div>
-              <span className="text-muted-foreground">Sent:</span>{" "}
-              {new Date(data.created_at).toLocaleString()}
-            </div>
-          )}
-          {signer?.signer_email && (
-            <div>
-              <span className="text-muted-foreground">Recipient:</span> {signer.signer_email}
-            </div>
-          )}
-          {signer?.signed_at && (
-            <div>
-              <span className="text-muted-foreground">Signed:</span>{" "}
-              {new Date(signer.signed_at).toLocaleString()}
-              {signer.signer_name ? ` by ${signer.signer_name}` : ""}
-            </div>
-          )}
-        </TooltipContent>
-      </Tooltip>
+      <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
+        {data.map((row) => {
+          const derived = deriveStatus(row);
+          const style = STATUS_STYLES[derived];
+          const signer = row.signature_signers?.[0];
+          const recipient = signer?.signer_name || signer?.signer_email || "Recipient";
+          return (
+            <Tooltip key={row.id}>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "gap-1.5 font-medium",
+                    style.className,
+                    style.pulse && "animate-pulse",
+                  )}
+                >
+                  <FileSignature className="h-3 w-3" />
+                  <span className="truncate max-w-[160px]">{recipient}</span>
+                  <span className="text-[10px] uppercase tracking-wide opacity-80">
+                    {style.label}
+                  </span>
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs space-y-1">
+                {row.created_at && (
+                  <div>
+                    <span className="text-muted-foreground">Sent:</span>{" "}
+                    {new Date(row.created_at).toLocaleString()}
+                  </div>
+                )}
+                {signer?.signer_email && (
+                  <div>
+                    <span className="text-muted-foreground">Recipient:</span> {signer.signer_email}
+                  </div>
+                )}
+                {signer?.signed_at && (
+                  <div>
+                    <span className="text-muted-foreground">Signed:</span>{" "}
+                    {new Date(signer.signed_at).toLocaleString()}
+                    {signer.signer_name ? ` by ${signer.signer_name}` : ""}
+                  </div>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
     </TooltipProvider>
   );
 }
