@@ -1,89 +1,71 @@
-# Pure BYOK: Tenants Pay OpenAI Directly
+# Send Endorsements from ChecksOps on Shared Checks
 
-Each tenant pastes their own OpenAI API key. All AI calls in their tenant use *their* key → bills to *their* OpenAI account → you never see the invoice. The Stripe credit-purchase system gets removed from the tenant-facing UI.
+## Problem
 
-## What the tenant sees
+Check `1717358927` was uploaded in Freedom CRM and shared into ChecksOps as a `check_intake_items` row (id `369d5d7f…`). It has no `claim_id` in this project, so the existing endorsement flow — which is keyed off `signature_requests.claim_id → claims.id` — cannot run here. Today, signatures can only be sent from Freedom CRM (where the originating claim lives).
 
-1. **Settings → AI Provider** (new panel)
-2. Walkthrough card: "Create OpenAI account → add card → create API key → paste below"
-3. Masked input + **Test key** button (validates against `https://api.openai.com/v1/models`)
-4. Green status pill once saved + last-validated timestamp
-5. **Remove key** button
-6. If no key is set: every AI feature shows "AI not configured — add your OpenAI key in Settings" instead of running
+You want **both** apps to be able to send endorsement emails on the same check.
 
-## What you (platform owner) see
+## Approach
 
-- No more tenant credit top-ups, no Stripe Checkout for AI
-- `TenantCreditManager` panel hidden from tenant view (kept in code for admin-only / legacy reference)
-- Your `OPENAI_API_KEY` and `LOVABLE_API_KEY` continue to work for the **main Freedom CRM** (non-tenant) flows — only `/wl/*` white-label tenants are BYOK
+Make endorsements work in ChecksOps directly against a `check_intake_items` row, with results mirrored back to Freedom via the existing cross-project sync.
 
-## Architecture
+### Database changes (this project)
 
-### 1. Storage (new table)
+1. `signature_requests`
+   - Make `claim_id` nullable.
+   - Add `check_intake_item_id uuid REFERENCES check_intake_items(id) ON DELETE CASCADE`.
+   - Add CHECK constraint: at least one of `claim_id` or `check_intake_item_id` must be set.
+   - Index on `check_intake_item_id`.
+2. RLS: extend existing policies so admins/staff in the tenant that owns the intake item can read/write signature_requests + signature_signers + esign_event_logs scoped to that intake item.
+
+### Edge function: `send-signature-request`
+
+- When `signature_requests.claim_id` is null, load metadata from `check_intake_items` instead (carrier_name → "claim number" surrogate, payee_line → policyholder name, etc.) so the email merge fields still render.
+- Email subject/body merge fields fall back gracefully when no claim is present.
+- Push the resulting `signature_signers` rows back to Freedom CRM via a new outbound webhook call so the original `claim_checks` row in Freedom stays in sync.
+
+### UI in ChecksOps (`CheckCommandCenter`)
+
+- In the check detail panel for any check (claim-backed OR shared intake), surface an **Endorsements** section that:
+  - Lists existing signers + statuses (read existing rows by `check_intake_item_id` OR `claim_id`).
+  - Lets admins add signers (name, email, role) and click **Send for signature**.
+  - Invokes `send-signature-request` with the new payload shape.
+  - Shows the same resend / generate-link-only actions already in `SignatureDiagnostics`.
+
+### Freedom CRM unblock (separate project — not edited here)
+
+The Freedom CRM "Send for signature" button is currently disabled on shared checks. To let Freedom also send, that condition needs to be relaxed in the Freedom codebase. I'll flag this clearly in the final message — it needs a separate task spawned against the Freedom repo.
+
+## Out of scope (for this round)
+
+- Building the Freedom-side UI change (separate project).
+- Restructuring how endorsement images get composited into the check PDF for non-claim checks — current `composite-endorsement-signatures` already works off check_id, should be reusable.
+- Sales-rep / contractor signer auto-suggest (we'll start with manual add).
+
+## Technical details
+
 ```text
-tenant_openai_credentials
-├── tenant_id (PK, FK → tenants)
-├── encrypted_key (bytea, pgsodium/pgcrypto encrypted)
-├── key_last_4 (text, for display)
-├── status (active | invalid | unverified)
-├── last_validated_at (timestamptz)
-├── created_at, updated_at
+check_intake_items (ChecksOps)
+        │ id = 369d…
+        ▼
+signature_requests (claim_id NULL, check_intake_item_id = 369d…)
+        │
+        ├── signature_signers (name, email, token_hash)
+        └── esign_event_logs
+        
+        send-signature-request edge function
+        ├── if claim_id → existing claims-based merge
+        └── if check_intake_item_id → intake-based merge
 ```
-Encrypted with `pgp_sym_encrypt` using a DB secret. Decryption only via a `SECURITY DEFINER` function callable from edge functions, never returned to the client.
 
-### 2. Key-resolution helper (new)
-`supabase/functions/_shared/ai/tenantKeyResolver.ts`
-- `resolveTenantOpenAIKey(supabase, tenantId): Promise<string | null>`
-- Edge functions call this at request start, pass result into AI calls
+Files touched:
+- New migration: nullable claim_id + new column + RLS update on `signature_requests` / `signature_signers` / `esign_event_logs`.
+- `supabase/functions/send-signature-request/index.ts` — branch on null claim_id.
+- `src/pages/CheckCommandCenter.tsx` — surface endorsement controls for shared checks.
+- New `src/components/check-review/SharedCheckEndorsements.tsx` — composer + signer list.
 
-### 3. AI client changes
-`openaiClient.ts` — add optional `apiKey?: string` to `callOpenAI`, `callVision`, `callWithTools`. When provided, override `OPENAI_API_KEY` and force `provider = "openai"` (skip Lovable gateway — tenant's key is OpenAI-only). No fallback to platform key.
+## Confirm before I build
 
-### 4. Edge functions (new)
-- `tenant-set-openai-key` — accepts key, validates via OpenAI `/v1/models`, encrypts, stores
-- `tenant-validate-openai-key` — re-tests stored key, updates `status`
-- `tenant-remove-openai-key` — deletes row
-
-### 5. AI edge function wiring
-All 20+ functions that call AI get a small change at entry:
-```ts
-const tenantId = await resolveTenantFromRequest(req, supabase);
-const tenantKey = tenantId ? await resolveTenantOpenAIKey(supabase, tenantId) : null;
-if (tenantId && !tenantKey) return 400 "AI not configured for this tenant";
-// pass tenantKey into every call: callOpenAI({ ..., apiKey: tenantKey })
-```
-Non-tenant (Freedom CRM main app) requests keep using `OPENAI_API_KEY` as today.
-
-### 6. Frontend
-- New `src/components/white-label/TenantAIKeySettings.tsx` panel
-- Add to `WhiteLabelSettings.tsx` as a new tab/section "AI Provider"
-- Hide `TenantCreditManager` from tenant-facing settings (keep it on the admin/platform-owner view only)
-- Show "AI not configured" banner across tenant pages when no key is set
-
-## Rollout in 3 commits
-
-**Commit 1 — Foundation (no breaking changes)**
-- Migration: `tenant_openai_credentials` table + encrypt/decrypt functions
-- 3 edge functions: set / validate / remove
-- Settings UI panel
-- `apiKey` parameter added to `openaiClient.ts` (optional, backwards compatible)
-- *Result: tenants can save keys, but nothing uses them yet*
-
-**Commit 2 — Wire AI flows**
-- `tenantKeyResolver.ts` helper
-- Update all ~20 AI edge functions to resolve and pass tenant key
-- For tenant requests without a key → return clear error; UI shows "Configure AI in Settings"
-- *Result: tenant AI calls now bill to the tenant's OpenAI account*
-
-**Commit 3 — Hide credit purchase**
-- Remove `TenantCreditManager` from tenant settings view
-- Keep table + Stripe functions intact (for refunds/admin)
-- Update "Pricing" / marketing copy if any references credits
-- *Result: tenants no longer see Stripe; pure BYOK UX*
-
-## Trade-offs to confirm
-
-- **Tenant friction:** they need an OpenAI account + credit card before first AI use (~10 min). No way around this for true zero-money BYOK.
-- **No platform fallback:** if a tenant's key is invalid/expired, their AI just stops with a clear error. We do **not** silently use your key.
-- **Model choice limited to OpenAI:** Tenants can't use Gemini. The Lovable gateway path is bypassed for tenant flows. (Your main app keeps both.)
-- **Existing Stripe credit data preserved** — no destructive cleanup; tables remain for audit/refunds.
+1. OK to make `signature_requests.claim_id` nullable? (Yes is the only path that works without forging fake claims.)
+2. OK to ship only the ChecksOps half now and open a separate task for the Freedom-side button? Or do you want me to stop until both projects can be coordinated?
