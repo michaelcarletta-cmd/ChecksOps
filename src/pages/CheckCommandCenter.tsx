@@ -490,6 +490,26 @@ export default function CheckCommandCenter() {
     enabled: !!tenantId,
   });
 
+  // Realtime: when the source tenant updates a shared check (e.g. marks it
+  // deposited), invalidate the partner's shared-checks list so the new status
+  // shows up without a manual refresh.
+  useEffect(() => {
+    if (!tenantId || sharedChecks.length === 0) return;
+    const ids = sharedChecks.map((c) => c.id);
+    const channel = supabase
+      .channel(`shared-checks-${tenantId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "check_intake_items", filter: `id=in.(${ids.join(",")})` },
+        () => {
+          qc.invalidateQueries({ queryKey: ["shared-with-me-checks", tenantId] });
+          qc.invalidateQueries({ queryKey: ["check-detail"] });
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [tenantId, sharedChecks.map((c) => c.id).join(","), qc]);
+
   // Fetch claim numbers + policyholder names for any linked claims so search works on them
   const linkedClaimIds = useMemo(() => {
     const ids = new Set<string>();
