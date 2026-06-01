@@ -16,6 +16,21 @@ import { useAuth } from "@/hooks/useAuth";
 import { DTPStatusIndicator } from "./DTPStatusIndicator";
 import { cn } from "@/lib/utils";
 
+const isRequestExpired = (request: any) => {
+  const signers = request.signature_signers ?? [];
+  const hasSignedSigner = signers.some((signer: any) => signer.status === "signed");
+  if (hasSignedSigner) return false;
+
+  const now = Date.now();
+  const hasExpiredSigner = signers.some((signer: any) => {
+    if (!signer.expires_at) return false;
+    const expiresAt = new Date(signer.expires_at).getTime();
+    return Number.isFinite(expiresAt) && expiresAt <= now;
+  });
+
+  return request.status === "expired" || hasExpiredSigner;
+};
+
 function buildDtpPdf(opts: {
   recipientName: string;
   insuredName: string;
@@ -385,7 +400,8 @@ export function SharedCheckPaymentDirection({
           <div className="space-y-2 pt-2 border-t">
             <p className="text-xs font-medium">Sent DTP requests ({requests.length})</p>
             {requests.map((req: any) => {
-              const isExpired = req.status === "failed";
+              const isExpired = isRequestExpired(req);
+              const statusLabel = req.status === "completed" ? "completed" : isExpired ? "expired" : "sent";
               return (
                 <div key={req.id} className="rounded border p-2 space-y-2 text-xs">
                   <div className="flex items-center justify-between gap-2">
@@ -400,7 +416,7 @@ export function SharedCheckPaymentDirection({
                               : "secondary"
                         }
                       >
-                        {isExpired ? "expired" : req.status}
+                          {statusLabel}
                       </Badge>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
