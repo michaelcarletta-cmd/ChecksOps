@@ -1894,6 +1894,66 @@ export type Database = {
           },
         ]
       }
+      check_files: {
+        Row: {
+          category: string
+          check_intake_item_id: string
+          created_at: string
+          description: string | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          file_type: string | null
+          id: string
+          signature_request_id: string | null
+          source: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          category?: string
+          check_intake_item_id: string
+          created_at?: string
+          description?: string | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          signature_request_id?: string | null
+          source?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          category?: string
+          check_intake_item_id?: string
+          created_at?: string
+          description?: string | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          signature_request_id?: string | null
+          source?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_files_check_intake_item_id_fkey"
+            columns: ["check_intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "check_files_signature_request_id_fkey"
+            columns: ["signature_request_id"]
+            isOneToOne: false
+            referencedRelation: "signature_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       check_intake_items: {
         Row: {
           account_number: string | null
