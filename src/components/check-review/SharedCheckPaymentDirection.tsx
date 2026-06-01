@@ -241,6 +241,35 @@ export function SharedCheckPaymentDirection({
         throw signerErr;
       }
 
+      // Insert signature + date fields for the insured (signer_index 0) so the
+      // signing page actually prompts for a signature.
+      const sigPct = pctRect(SIG_BOX);
+      const datePct = pctRect(DATE_BOX);
+      const { error: fieldsErr } = await supabase.from("signature_fields").insert([
+        {
+          signature_request_id: req.id,
+          signer_index: 0,
+          field_type: "signature",
+          label: "Insured Signature",
+          page: 1,
+          required: true,
+          ...sigPct,
+        },
+        {
+          signature_request_id: req.id,
+          signer_index: 0,
+          field_type: "date",
+          label: "Date",
+          page: 1,
+          required: true,
+          ...datePct,
+        },
+      ]);
+      if (fieldsErr) {
+        await supabase.from("signature_requests").delete().eq("id", req.id);
+        throw fieldsErr;
+      }
+
       const { data, error } = await supabase.functions.invoke("send-signature-request", {
         body: { requestId: req.id },
       });
