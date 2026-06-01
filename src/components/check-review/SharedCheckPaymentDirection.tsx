@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
+import jsPDF from "jspdf";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,61 @@ import { useAuditLog } from "@/hooks/useAuditLog";
 import { useAuth } from "@/hooks/useAuth";
 import { DTPStatusIndicator } from "./DTPStatusIndicator";
 import { cn } from "@/lib/utils";
+
+function buildDtpPdf(opts: {
+  recipientName: string;
+  insuredName: string;
+  insuredEmail: string;
+  checkNumber?: string | null;
+}): Blob {
+  const doc = new jsPDF({ unit: "pt", format: "letter" });
+  const margin = 54;
+  let y = margin;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text("Direction to Pay", margin, y);
+  y += 28;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  doc.text(`Date: ${new Date().toLocaleDateString()}`, margin, y);
+  y += 16;
+  if (opts.checkNumber) {
+    doc.text(`Check Number: ${opts.checkNumber}`, margin, y);
+    y += 16;
+  }
+  y += 8;
+
+  const body =
+    `I, ${opts.insuredName} (the "Insured"), hereby authorize and direct that ` +
+    `proceeds from the referenced insurance claim check be paid to ` +
+    `${opts.recipientName} for work performed and/or services rendered in connection ` +
+    `with my property loss claim.\n\n` +
+    `This Direction to Pay constitutes my express written authorization to release ` +
+    `the indicated funds to ${opts.recipientName}. I understand that this direction ` +
+    `does not assign my insurance policy or any rights thereunder, and that I remain ` +
+    `the policyholder of record.\n\n` +
+    `By signing below, I confirm that the information above is accurate and that I ` +
+    `am authorized to issue this direction.`;
+
+  const lines = doc.splitTextToSize(body, 504);
+  doc.text(lines, margin, y);
+  y += lines.length * 14 + 32;
+
+  doc.setFont("helvetica", "bold");
+  doc.text("Insured Signature:", margin, y);
+  doc.setFont("helvetica", "normal");
+  doc.line(margin + 120, y + 2, margin + 420, y + 2);
+  y += 28;
+  doc.text(`Name: ${opts.insuredName}`, margin, y);
+  y += 16;
+  doc.text(`Email: ${opts.insuredEmail}`, margin, y);
+  y += 16;
+  doc.text(`Date: __________________________`, margin, y);
+
+  return doc.output("blob");
+}
 
 interface SharedCheckPaymentDirectionProps {
   checkIntakeItemId: string;
