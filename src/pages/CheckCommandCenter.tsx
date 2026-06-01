@@ -73,6 +73,9 @@ const SharedCheckEndorsements = lazy(() =>
 const SharedCheckPaymentDirection = lazy(() =>
   import("@/components/check-review/SharedCheckPaymentDirection").then(m => ({ default: m.SharedCheckPaymentDirection }))
 );
+const CheckFilesSection = lazy(() =>
+  import("@/components/check-review/CheckFilesSection").then(m => ({ default: m.CheckFilesSection }))
+);
 import { DTPStatusIndicator } from "@/components/check-review/DTPStatusIndicator";
 const DepositPacketGenerator = lazy(() =>
   import("@/components/check-review/DepositPacketGenerator").then(m => ({ default: m.DepositPacketGenerator }))
@@ -2549,6 +2552,7 @@ function CheckDetailPanel({
                 )}
               </TabsTrigger>
               <TabsTrigger value="eligibility" className="text-xs whitespace-nowrap px-2 sm:px-3">Eligibility</TabsTrigger>
+              <TabsTrigger value="files" className="text-xs whitespace-nowrap px-2 sm:px-3">Files</TabsTrigger>
 
               <TabsTrigger value="partners" className="text-xs whitespace-nowrap px-2 sm:px-3 gap-1">
                 <Share2 className="h-3 w-3" /> Partners
@@ -3161,6 +3165,14 @@ function CheckDetailPanel({
                 </p>
               )}
             </TabsContent>
+
+            <TabsContent value="files" className="p-4 mt-0">
+              <Suspense fallback={<TabLoader />}>
+                <CheckFilesSection checkIntakeItemId={checkId} />
+              </Suspense>
+            </TabsContent>
+
+
 
             <TabsContent value="packet" className="p-4 mt-0">
               <Suspense fallback={<TabLoader />}>
