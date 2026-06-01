@@ -2549,6 +2549,7 @@ function CheckDetailPanel({
                 )}
               </TabsTrigger>
               <TabsTrigger value="eligibility" className="text-xs whitespace-nowrap px-2 sm:px-3">Eligibility</TabsTrigger>
+              <TabsTrigger value="files" className="text-xs whitespace-nowrap px-2 sm:px-3">Files</TabsTrigger>
 
               <TabsTrigger value="partners" className="text-xs whitespace-nowrap px-2 sm:px-3 gap-1">
                 <Share2 className="h-3 w-3" /> Partners
