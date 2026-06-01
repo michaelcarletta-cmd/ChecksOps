@@ -73,6 +73,9 @@ const SharedCheckEndorsements = lazy(() =>
 const SharedCheckPaymentDirection = lazy(() =>
   import("@/components/check-review/SharedCheckPaymentDirection").then(m => ({ default: m.SharedCheckPaymentDirection }))
 );
+const CheckFilesSection = lazy(() =>
+  import("@/components/check-review/CheckFilesSection").then(m => ({ default: m.CheckFilesSection }))
+);
 import { DTPStatusIndicator } from "@/components/check-review/DTPStatusIndicator";
 const DepositPacketGenerator = lazy(() =>
   import("@/components/check-review/DepositPacketGenerator").then(m => ({ default: m.DepositPacketGenerator }))
