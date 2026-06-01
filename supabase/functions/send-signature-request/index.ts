@@ -272,10 +272,10 @@ Deno.serve(async (req) => {
       payload: { requestId, skipEmail },
     });
 
-    // Load request + signers + claim
+    // Load request + signers (claim joined separately so null claim_id works for shared intake checks)
     const { data: request, error: reqErr } = await sb
       .from("signature_requests")
-      .select("*, signature_signers(*), claims!signature_requests_claim_id_fkey(id, claim_number, policyholder_name, policyholder_email, policy_number)")
+      .select("*, signature_signers(*)")
       .eq("id", requestId)
       .single();
 
@@ -283,6 +283,34 @@ Deno.serve(async (req) => {
       const msg = reqErr?.message || "Request not found";
       await log(sb, { request_id: requestId, signer_id: null, claim_id: null, stage: "fetch_request", status: "error", message: msg, payload: null });
       throw new Error(msg);
+    }
+
+    // Load claim OR check_intake_item context for email merge fields.
+    // Shared checks ingested from Freedom CRM live in check_intake_items
+    // and have no claim_id in this project — fall back to that row.
+    if (request.claim_id) {
+      const { data: claimRow } = await sb
+        .from("claims")
+        .select("id, claim_number, policyholder_name, policyholder_email, policy_number")
+        .eq("id", request.claim_id)
+        .maybeSingle();
+      request.claims = claimRow || {};
+    } else if (request.check_intake_item_id) {
+      const { data: intakeRow } = await sb
+        .from("check_intake_items")
+        .select("id, check_number, detected_claim_number, payee_line, carrier_name")
+        .eq("id", request.check_intake_item_id)
+        .maybeSingle();
+      request.claims = intakeRow
+        ? {
+            claim_number: intakeRow.detected_claim_number || `Check #${intakeRow.check_number || ""}`,
+            policyholder_name: intakeRow.payee_line || "",
+            policy_number: null,
+            policyholder_email: null,
+          }
+        : {};
+    } else {
+      request.claims = {};
     }
 
     // Load company branding for email customization
@@ -299,8 +327,8 @@ Deno.serve(async (req) => {
     await log(sb, {
       request_id: requestId, signer_id: null, claim_id: claimId,
       stage: "request_loaded", status: "ok",
-      message: `${request.document_name} — ${signersArr.length} signers`,
-      payload: { document_name: request.document_name },
+      message: `${request.document_name} — ${signersArr.length} signers${request.check_intake_item_id ? " (shared check)" : ""}`,
+      payload: { document_name: request.document_name, check_intake_item_id: request.check_intake_item_id || null },
     });
 
     // Generate tokens for each signer, store hash, keep raw for link
