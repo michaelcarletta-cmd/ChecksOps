@@ -610,11 +610,17 @@ export default function CheckCommandCenter() {
 
   const reissueRequested = allChecks.filter((c) => getEffectiveStatus(c) === "reissue_requested" && matchesSearch(c));
   const branchDeposit = allChecks.filter((c) => getEffectiveStatus(c) === "branch_deposit_required" && matchesSearch(c));
+  const depositedChecks = allChecks.filter((c) => {
+    const s = getEffectiveStatus(c);
+    const stage = (c as any).check_stage as string | undefined;
+    return (s === "deposited" || stage === "deposited") && matchesSearch(c);
+  });
 
   const filteredChecks =
     activeTab === "endorsements" ? awaitingEndorsement
     : activeTab === "ready" ? readyForDeposit
     : activeTab === "review" ? needsReview
+    : activeTab === "deposited" ? depositedChecks
     : allChecks.filter(matchesSearch);
 
   const buildCheckGroups = useCallback((items: CheckItem[]) => {
