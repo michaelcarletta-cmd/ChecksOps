@@ -31,6 +31,24 @@ const isRequestExpired = (request: any) => {
   return request.status === "expired" || hasExpiredSigner;
 };
 
+// Page geometry — letter, points (jsPDF default for letter/pt)
+const PDF_PAGE_W = 612;
+const PDF_PAGE_H = 792;
+
+// Fixed signature region near the bottom of page 1 so field coords always match.
+const SIG_LABEL_Y = 640; // top-of-text baseline-ish
+const SIG_BOX = { x: 54, y: 655, w: 300, h: 40 };
+const DATE_BOX = { x: 400, y: 655, w: 150, h: 40 };
+
+function pctRect(box: { x: number; y: number; w: number; h: number }) {
+  return {
+    x: (box.x / PDF_PAGE_W) * 100,
+    y: (box.y / PDF_PAGE_H) * 100,
+    width: (box.w / PDF_PAGE_W) * 100,
+    height: (box.h / PDF_PAGE_H) * 100,
+  };
+}
+
 function buildDtpPdf(opts: {
   recipientName: string;
   insuredName: string;
@@ -70,18 +88,19 @@ function buildDtpPdf(opts: {
 
   const lines = doc.splitTextToSize(body, 504);
   doc.text(lines, margin, y);
-  y += lines.length * 14 + 32;
 
+  // Fixed signature region (so the signature_fields rows always match).
   doc.setFont("helvetica", "bold");
-  doc.text("Insured Signature:", margin, y);
+  doc.text("Insured Signature:", margin, SIG_LABEL_Y);
   doc.setFont("helvetica", "normal");
-  doc.line(margin + 120, y + 2, margin + 420, y + 2);
-  y += 28;
-  doc.text(`Name: ${opts.insuredName}`, margin, y);
-  y += 16;
-  doc.text(`Email: ${opts.insuredEmail}`, margin, y);
-  y += 16;
-  doc.text(`Date: __________________________`, margin, y);
+  // Visual placeholder boxes
+  doc.setDrawColor(160);
+  doc.rect(SIG_BOX.x, SIG_BOX.y, SIG_BOX.w, SIG_BOX.h);
+  doc.text("Date:", DATE_BOX.x, SIG_LABEL_Y);
+  doc.rect(DATE_BOX.x, DATE_BOX.y, DATE_BOX.w, DATE_BOX.h);
+
+  doc.text(`Name: ${opts.insuredName}`, margin, SIG_BOX.y + SIG_BOX.h + 18);
+  doc.text(`Email: ${opts.insuredEmail}`, margin, SIG_BOX.y + SIG_BOX.h + 34);
 
   return doc.output("blob");
 }
@@ -220,6 +239,35 @@ export function SharedCheckPaymentDirection({
         // Roll back the parent request so we don't leave an orphan that breaks Resend.
         await supabase.from("signature_requests").delete().eq("id", req.id);
         throw signerErr;
+      }
+
+      // Insert signature + date fields for the insured (signer_index 0) so the
+      // signing page actually prompts for a signature.
+      const sigPct = pctRect(SIG_BOX);
+      const datePct = pctRect(DATE_BOX);
+      const { error: fieldsErr } = await supabase.from("signature_fields").insert([
+        {
+          signature_request_id: req.id,
+          signer_index: 0,
+          field_type: "signature",
+          label: "Insured Signature",
+          page: 1,
+          required: true,
+          ...sigPct,
+        },
+        {
+          signature_request_id: req.id,
+          signer_index: 0,
+          field_type: "date",
+          label: "Date",
+          page: 1,
+          required: true,
+          ...datePct,
+        },
+      ]);
+      if (fieldsErr) {
+        await supabase.from("signature_requests").delete().eq("id", req.id);
+        throw fieldsErr;
       }
 
       const { data, error } = await supabase.functions.invoke("send-signature-request", {
