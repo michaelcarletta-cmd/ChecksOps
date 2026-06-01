@@ -2978,12 +2978,16 @@ function CheckDetailPanel({
                 />
               </Suspense>
 
-              <Suspense fallback={<TabLoader />}>
-                <SharedCheckEndorsements
-                  checkIntakeItemId={checkId}
-                  documentName={`Check #${check?.check_number || ""} endorsement`.trim()}
-                />
-              </Suspense>
+              {/* Fallback email-based endorsement composer — only shown when no payees
+                  are listed on the check, since the checklist above handles signers. */}
+              {payeesCount === 0 && (
+                <Suspense fallback={<TabLoader />}>
+                  <SharedCheckEndorsements
+                    checkIntakeItemId={checkId}
+                    documentName={`Check #${check?.check_number || ""} endorsement`.trim()}
+                  />
+                </Suspense>
+              )}
 
               <Suspense fallback={<TabLoader />}>
                 <SharedCheckPaymentDirection
