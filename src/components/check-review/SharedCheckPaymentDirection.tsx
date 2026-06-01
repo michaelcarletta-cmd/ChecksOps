@@ -129,7 +129,7 @@ export function SharedCheckPaymentDirection({
         signer_name: name,
         signer_email: email,
         signing_order: 1,
-        signer_type: "insured",
+        signer_type: "policyholder",
         status: "pending",
       });
       if (signerErr) throw signerErr;
