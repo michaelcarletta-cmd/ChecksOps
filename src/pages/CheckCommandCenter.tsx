@@ -67,6 +67,9 @@ const EndorsementAdjuster = lazy(() =>
 const EndorsementChecklist = lazy(() =>
   import("@/components/check-review/EndorsementChecklist").then(m => ({ default: m.EndorsementChecklist }))
 );
+const SharedCheckEndorsements = lazy(() =>
+  import("@/components/check-review/SharedCheckEndorsements").then(m => ({ default: m.SharedCheckEndorsements }))
+);
 const DepositPacketGenerator = lazy(() =>
   import("@/components/check-review/DepositPacketGenerator").then(m => ({ default: m.DepositPacketGenerator }))
 );
