@@ -344,10 +344,19 @@ Deno.serve(async (req) => {
       </div>
     `;
 
-    // Build CC list with claim email if provided
+    // Build CC list with claim email and explicit cc array if provided
     const ccList: string[] = [];
     if (claimEmailCc) {
       ccList.push(claimEmailCc);
+    }
+    if (Array.isArray(cc)) {
+      for (const addr of cc) {
+        if (typeof addr === 'string' && addr.trim() && !ccList.includes(addr.trim())) {
+          ccList.push(addr.trim());
+        }
+      }
+    } else if (typeof cc === 'string' && cc.trim() && !ccList.includes(cc.trim())) {
+      ccList.push(cc.trim());
     }
 
     // Resolve Reply-To: tenant override > claim inbox > none
