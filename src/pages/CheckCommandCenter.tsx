@@ -653,10 +653,19 @@ export default function CheckCommandCenter() {
       }
     });
 
-    return Array.from(groups.values()).sort(
+    const sorted = Array.from(groups.values()).sort(
       (a, b) => new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime(),
     );
+    // Newest check always at the top within each group, regardless of how
+    // items were iterated when building the group.
+    sorted.forEach((g) => {
+      g.checks.sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      );
+    });
+    return sorted;
   }, [claimLookup]);
+
 
   const groupedFilteredChecks = useMemo<CheckGroup[]>(() => buildCheckGroups(filteredChecks as CheckItem[]), [buildCheckGroups, filteredChecks]);
   const groupedReissueRequested = useMemo<CheckGroup[]>(() => buildCheckGroups(reissueRequested), [buildCheckGroups, reissueRequested]);
