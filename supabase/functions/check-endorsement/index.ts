@@ -978,12 +978,18 @@ Deno.serve(async (req) => {
                 )
               : buildEndorsementEmailHtml(endorsement.payee_name, checkNum, carrier, amount, endorsementUrl, emailBranding);
 
+            const ccRaw = body.cc;
+            const ccArray: string[] = Array.isArray(ccRaw)
+              ? ccRaw.filter((v: any) => typeof v === 'string' && v.trim()).map((v: string) => v.trim())
+              : (typeof ccRaw === 'string' && ccRaw.trim() ? [ccRaw.trim()] : []);
+
             const { error: invokeErr } = await supabase.functions.invoke("send-email", {
               body: {
                 to: endorsement.contact_email,
                 subject: finalSubject,
                 body: finalBody,
                 checkId: endorsement.check_id,
+                cc: ccArray.length > 0 ? ccArray : undefined,
               },
             });
             if (invokeErr) throw invokeErr;
