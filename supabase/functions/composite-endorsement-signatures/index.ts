@@ -19,7 +19,17 @@ const ZONE_TOP_PCT = 0.15;
 const ZONE_BOTTOM_PCT = 0.92;
 const ENDORSEMENT_LEFT_PCT = 0.38;
 const ENDORSEMENT_WIDTH_PCT = 0.22;
-const MAX_RASTER_PIXELS = 8_000_000;
+// Resvg rasterization on the edge runtime hits the per-invocation CPU
+// budget around the ~5 MP mark when the SVG also embeds a multi-MB
+// base64 source image and applies rotation/scale transforms (which is
+// the common deposit case). When we exceed this, the render technically
+// returns but the function is killed before the upload + DB commit can
+// finish — leaving the check with no endorsed back image and surfacing
+// the generic "Could not generate or find the final endorsed back image"
+// toast to the user. Cap conservatively so anything bigger falls back to
+// the SVG path (which embeds the original JPEG + signatures and renders
+// fine in the browser-based deposit viewer).
+const MAX_RASTER_PIXELS = 3_000_000;
 
 type OverrideShape = {
   xPct: number;
