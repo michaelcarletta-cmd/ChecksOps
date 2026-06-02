@@ -518,7 +518,18 @@ export default function CheckCommandCenter() {
     return Array.from(ids);
   }, [checks, sharedChecks]);
 
-  const allChecks = useMemo(() => [...checks, ...sharedChecks], [checks, sharedChecks]);
+  // Always keep allChecks sorted newest-first by created_at so any list
+  // derived from it (every tab, search results, ungrouped fallbacks) renders
+  // the most recently uploaded check at the top.
+  const allChecks = useMemo(
+    () =>
+      [...checks, ...sharedChecks].sort(
+        (a, b) =>
+          new Date(b.created_at ?? 0).getTime() -
+          new Date(a.created_at ?? 0).getTime(),
+      ),
+    [checks, sharedChecks],
+  );
 
   const { data: linkedClaims = [] } = useQuery({
     queryKey: ["check-linked-claims", linkedClaimIds],
