@@ -98,19 +98,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const hydrateAuthState = useCallback((nextSession: Session | null) => {
-    setSession(nextSession);
-    setUser(nextSession?.user ?? null);
+    // Avoid re-rendering / refetching when the session hasn't actually changed.
+    // Supabase emits TOKEN_REFRESHED / SIGNED_IN events whenever the tab
+    // regains focus, which previously caused every consumer of `user` to
+    // re-mount and the active page to "reload" back to its default tab.
+    setSession((prev) => {
+      const sameUser = prev?.user?.id === nextSession?.user?.id;
+      const sameToken = prev?.access_token === nextSession?.access_token;
+      if (sameUser && sameToken) return prev;
 
-    if (nextSession?.user) {
-      const cachedRole = getCachedRole(nextSession.user.id);
-      if (cachedRole) setUserRole(cachedRole);
-      fetchUserRole(nextSession.user.id);
-      return;
-    }
+      // Keep `user` reference stable when it's the same user id.
+      setUser((prevUser) => {
+        if (sameUser && prevUser) return prevUser;
+        return nextSession?.user ?? null;
+      });
 
-    setUserRole(null);
-    localStorage.removeItem(ROLE_CACHE_KEY);
-    setLoading(false);
+      if (nextSession?.user) {
+        if (!sameUser) {
+          const cachedRole = getCachedRole(nextSession.user.id);
+          if (cachedRole) setUserRole(cachedRole);
+          fetchUserRole(nextSession.user.id);
+        } else {
+          setLoading(false);
+        }
+      } else {
+        setUserRole(null);
+        localStorage.removeItem(ROLE_CACHE_KEY);
+        setLoading(false);
+      }
+
+      return nextSession;
+    });
   }, [fetchUserRole]);
 
   const signOut = useCallback(async () => {
