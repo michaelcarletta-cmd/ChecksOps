@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CheckCircle2, Landmark, Pencil } from "lucide-react";
+import { CheckCircle2, Landmark, Pencil, Share2, MessageSquare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -24,6 +24,9 @@ import { LossDraftReleasesTab } from "./detail/LossDraftReleasesTab";
 import { LossDraftAuditTab } from "./detail/LossDraftAuditTab";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
+import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
+import { CheckMessageThread } from "@/components/check-messages/CheckMessageThread";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const isUnknownServicer = (value?: string | null) =>
   !value || value.trim().toLowerCase().includes("unknown");
@@ -57,6 +60,8 @@ export function LossDraftDetailPanel({
   const [editingLender, setEditingLender] = useState(false);
   const [lenderName, setLenderName] = useState("");
   const [savingLender, setSavingLender] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("actions");
 
   const handleChanged = () => {
     invalidateAll();
@@ -199,6 +204,15 @@ export function LossDraftDetailPanel({
               variant="outline"
               className="h-7 text-xs"
             />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => setShareDialogOpen(true)}
+              title="Share with partner"
+            >
+              <Share2 className="h-3 w-3" /> Share
+            </Button>
             <AdminDeleteCheckButton
               checkId={draft.check_intake_item_id}
               onDeleted={handleChanged}
@@ -226,7 +240,7 @@ export function LossDraftDetailPanel({
         </div>
       )}
 
-      <Tabs defaultValue="actions" className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <TabsList className="w-full rounded-none shrink-0 overflow-hidden">
           <TabsTrigger value="actions" className="flex-1 text-xs">
             Actions
@@ -239,6 +253,9 @@ export function LossDraftDetailPanel({
               Draws ({releases.length})
             </TabsTrigger>
           )}
+          <TabsTrigger value="partners" className="flex-1 text-xs gap-1">
+            <Share2 className="h-3 w-3" /> Partners
+          </TabsTrigger>
           <TabsTrigger value="audit" className="flex-1 text-xs">
             Audit
           </TabsTrigger>
@@ -275,12 +292,41 @@ export function LossDraftDetailPanel({
         </TabsContent>
 
         <TabsContent
+          value="partners"
+          className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
+        >
+          <div className="flex h-full flex-col p-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" /> Partner Discussion
+              </h3>
+            </div>
+            <ScrollArea className="flex-1 pr-3">
+              {draft.check_intake_item_id && (
+                <CheckMessageThread 
+                  checkId={draft.check_intake_item_id} 
+                  active={activeTab === "partners"} 
+                />
+              )}
+            </ScrollArea>
+          </div>
+        </TabsContent>
+
+        <TabsContent
           value="audit"
           className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
         >
           <LossDraftAuditTab audit={audit} />
         </TabsContent>
       </Tabs>
+
+      {draft.check_intake_item_id && (
+        <ShareCheckDialog
+          checkId={draft.check_intake_item_id}
+          open={shareDialogOpen}
+          onOpenChange={setShareDialogOpen}
+        />
+      )}
     </Card>
   );
 }
