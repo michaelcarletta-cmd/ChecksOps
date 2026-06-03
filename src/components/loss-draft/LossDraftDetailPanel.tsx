@@ -204,6 +204,15 @@ export function LossDraftDetailPanel({
               variant="outline"
               className="h-7 text-xs"
             />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => setShareDialogOpen(true)}
+              title="Share with partner"
+            >
+              <Share2 className="h-3 w-3" /> Share
+            </Button>
             <AdminDeleteCheckButton
               checkId={draft.check_intake_item_id}
               onDeleted={handleChanged}
