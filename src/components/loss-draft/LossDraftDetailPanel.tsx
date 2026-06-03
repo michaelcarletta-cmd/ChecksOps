@@ -60,6 +60,8 @@ export function LossDraftDetailPanel({
   const [editingLender, setEditingLender] = useState(false);
   const [lenderName, setLenderName] = useState("");
   const [savingLender, setSavingLender] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("actions");
 
   const handleChanged = () => {
     invalidateAll();
