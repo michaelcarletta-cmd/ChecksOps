@@ -17,6 +17,7 @@ const ICONS: Record<CheckValidityRisk, typeof Clock> = {
 
 interface CheckValidityBadgeProps {
   issueDate: string | null | undefined;
+  expirationDays?: number | null;
   /** Hide when risk is "ok" or "unknown" — useful in dense lists. */
   hideWhenSafe?: boolean;
   className?: string;
@@ -25,11 +26,12 @@ interface CheckValidityBadgeProps {
 
 export function CheckValidityBadge({
   issueDate,
+  expirationDays,
   hideWhenSafe = false,
   className = "",
   size = "xs",
 }: CheckValidityBadgeProps) {
-  const assessment = assessCheckValidity(issueDate);
+  const assessment = assessCheckValidity(issueDate, { staleThresholdDays: expirationDays });
 
   if (hideWhenSafe && (assessment.risk === "ok" || assessment.risk === "unknown")) {
     return null;

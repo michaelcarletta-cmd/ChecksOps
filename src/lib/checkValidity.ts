@@ -36,7 +36,7 @@ export function assessCheckValidity(
   issueDate: string | Date | null | undefined,
   options: {
     referenceDate?: Date;
-    staleThresholdDays?: number;
+    staleThresholdDays?: number | null;
     warningWindowDays?: number;
   } = {},
 ): CheckValidityAssessment {
