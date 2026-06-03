@@ -1,0 +1,2 @@
+ALTER TABLE public.check_intake_items ADD COLUMN expiration_days INTEGER;
+COMMENT ON COLUMN public.check_intake_items.expiration_days IS 'Custom expiration period for the check in days (e.g., 90, 180, 365). If null, defaults to 180.';
