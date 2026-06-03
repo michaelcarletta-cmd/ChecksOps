@@ -140,6 +140,7 @@ interface CheckItem {
   check_number: string | null;
   amount: number | null;
   issue_date: string | null;
+  expiration_days: number | null;
   detected_claim_number: string | null;
   payee_line: string | null;
   is_multi_payee: boolean;
@@ -1106,7 +1107,7 @@ export default function CheckCommandCenter() {
                               <TableCell className="text-sm md:max-w-[180px]">
                                 <div className="flex flex-col gap-0.5">
                                   <span className="break-words md:truncate leading-tight">{check.carrier_name || "Pending OCR"}</span>
-                                  <CheckValidityBadge issueDate={check.issue_date} hideWhenSafe />
+                                  <CheckValidityBadge issueDate={check.issue_date} expirationDays={check.expiration_days} hideWhenSafe />
                                   {check.property_address && (
                                     <span className="text-[10px] text-muted-foreground break-words md:truncate leading-tight" title={check.property_address}>
                                       📍 {check.property_address}
@@ -2472,7 +2473,7 @@ function CheckDetailPanel({
 
         {/* Validity assessment — issue date age vs 180-day stale threshold */}
         {(() => {
-          const v = assessCheckValidity(check.issue_date);
+          const v = assessCheckValidity(check.issue_date, { staleThresholdDays: check.expiration_days });
           if (v.risk === "ok" || v.risk === "unknown") return null;
           const tone =
             v.risk === "expired"
@@ -2665,6 +2666,16 @@ function CheckDetailPanel({
                 inputType="date"
                 readOnly={isSharedView}
                 displayFormatter={(v) => (v ? format(new Date(v), "MMM d, yyyy") : null)}
+                onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
+              />
+              <EditableField
+                label="Expiration (Days)"
+                checkId={checkId}
+                field="expiration_days"
+                value={check.expiration_days?.toString() ?? null}
+                inputType="number"
+                readOnly={isSharedView}
+                displayFormatter={(v) => (v ? `${v} days` : "Default (180 days)")}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
               {check.check_source === "cash_job" ? (
