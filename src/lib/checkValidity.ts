@@ -39,7 +39,7 @@ export function assessCheckValidity(
     staleThresholdDays?: number | null;
     warningWindowDays?: number;
   } = {},
-) {
+): CheckValidityAssessment {
   const staleThresholdDays = options.staleThresholdDays ?? DEFAULT_STALE_DAYS;
   const warningWindowDays = options.warningWindowDays ?? DEFAULT_WARNING_WINDOW;
   const reference = options.referenceDate ?? new Date();

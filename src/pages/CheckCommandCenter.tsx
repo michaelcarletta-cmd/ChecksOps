@@ -3505,7 +3505,7 @@ function EditableField({
   checkId: string;
   field: string;
   value: string | null;
-  inputType?: "text" | "date" | "boolean";
+  inputType?: "text" | "date" | "boolean" | "number";
   multiline?: boolean;
   displayFormatter?: (v: string | null) => string | null;
   onSave: () => void;
@@ -3528,6 +3528,9 @@ function EditableField({
         outValue = draft === "true";
       } else if (inputType === "date") {
         outValue = draft ? draft : null;
+      } else if (inputType === "number") {
+        const n = parseInt(draft, 10);
+        outValue = isNaN(n) ? null : n;
       } else {
         const trimmed = draft.trim();
         outValue = trimmed === "" ? null : trimmed;
@@ -3574,7 +3577,7 @@ function EditableField({
           ) : (
             <Input
               autoFocus
-              type={inputType === "date" ? "date" : "text"}
+              type={inputType === "date" ? "date" : inputType === "number" ? "number" : "text"}
               value={inputType === "date" && draft ? draft.slice(0, 10) : draft}
               onChange={(e) => setDraft(e.target.value)}
               className="h-8 text-sm flex-1"
