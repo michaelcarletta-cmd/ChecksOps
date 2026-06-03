@@ -292,12 +292,41 @@ export function LossDraftDetailPanel({
         </TabsContent>
 
         <TabsContent
+          value="partners"
+          className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
+        >
+          <div className="flex h-full flex-col p-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" /> Partner Discussion
+              </h3>
+            </div>
+            <ScrollArea className="flex-1 pr-3">
+              {draft.check_intake_item_id && (
+                <CheckMessageThread 
+                  checkId={draft.check_intake_item_id} 
+                  active={activeTab === "partners"} 
+                />
+              )}
+            </ScrollArea>
+          </div>
+        </TabsContent>
+
+        <TabsContent
           value="audit"
           className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
         >
           <LossDraftAuditTab audit={audit} />
         </TabsContent>
       </Tabs>
+
+      {draft.check_intake_item_id && (
+        <ShareCheckDialog
+          checkId={draft.check_intake_item_id}
+          open={shareDialogOpen}
+          onOpenChange={setShareDialogOpen}
+        />
+      )}
     </Card>
   );
 }
