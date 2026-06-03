@@ -240,7 +240,7 @@ export function LossDraftDetailPanel({
         </div>
       )}
 
-      <Tabs defaultValue="actions" className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <TabsList className="w-full rounded-none shrink-0 overflow-hidden">
           <TabsTrigger value="actions" className="flex-1 text-xs">
             Actions
@@ -253,6 +253,9 @@ export function LossDraftDetailPanel({
               Draws ({releases.length})
             </TabsTrigger>
           )}
+          <TabsTrigger value="partners" className="flex-1 text-xs gap-1">
+            <Share2 className="h-3 w-3" /> Partners
+          </TabsTrigger>
           <TabsTrigger value="audit" className="flex-1 text-xs">
             Audit
           </TabsTrigger>
