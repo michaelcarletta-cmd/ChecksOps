@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CheckCircle2, Landmark, Pencil } from "lucide-react";
+import { CheckCircle2, Landmark, Pencil, Share2, MessageSquare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -24,6 +24,9 @@ import { LossDraftReleasesTab } from "./detail/LossDraftReleasesTab";
 import { LossDraftAuditTab } from "./detail/LossDraftAuditTab";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
+import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
+import { CheckMessageThread } from "@/components/check-messages/CheckMessageThread";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const isUnknownServicer = (value?: string | null) =>
   !value || value.trim().toLowerCase().includes("unknown");
