@@ -825,7 +825,7 @@ Deno.serve(async (req) => {
 
         const { data: endorsement, error: eErr } = await supabase
           .from("check_endorsements")
-          .select("*, check_intake_items(check_number, carrier_name, amount)")
+          .select("*, check_intake_items(check_number, carrier_name, amount, tenant_id)")
           .eq("id", endorsementId)
           .single();
 
@@ -911,9 +911,11 @@ Deno.serve(async (req) => {
         }
 
         // Load branding for email customization
+        const tenantId = (endorsement as any).check_intake_items?.tenant_id;
         const { data: brandingRow } = await supabase
           .from("company_branding")
           .select("company_name, company_email, company_phone, endorsement_email_subject, endorsement_email_body, endorsement_email_header_color, endorsement_email_button_color, letterhead_url")
+          .eq("tenant_id", tenantId)
           .limit(1)
           .maybeSingle();
         const emailBranding: EndorsementBranding = brandingRow || {};
@@ -989,6 +991,7 @@ Deno.serve(async (req) => {
                 subject: finalSubject,
                 body: finalBody,
                 checkId: endorsement.check_id,
+                tenantId: tenantId,
                 cc: ccArray.length > 0 ? ccArray : undefined,
               },
             });

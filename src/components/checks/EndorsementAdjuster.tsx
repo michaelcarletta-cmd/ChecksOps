@@ -449,7 +449,7 @@ export function EndorsementAdjuster({
               ) : (
                 <img
                   src={visibleCompanyEndorsement.signature_image_url}
-                  alt="Freedom Adjustment signature"
+                  alt={`${companyName} signature`}
                   style={{ height: sigHeightPx }}
                   className="object-contain"
                   draggable={false}
