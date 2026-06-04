@@ -89,17 +89,9 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
 
   useEffect(() => {
     const fetchBranding = async () => {
-      // First get the claim's tenant_id
-      const { data: claimData } = await supabase
-        .from("claims")
-        .select("tenant_id")
-        .eq("id", claimId)
-        .maybeSingle();
-
       const { data } = await supabase
         .from("company_branding" as any)
         .select("company_name, letterhead_url")
-        .eq("tenant_id", claimData?.tenant_id)
         .limit(1)
         .maybeSingle();
       if (data) setCompanyBranding(data as any);
