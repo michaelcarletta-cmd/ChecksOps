@@ -144,11 +144,25 @@ Deno.serve(async (req) => {
 
     const { data: check, error: checkErr } = await supabase
       .from("check_intake_items")
-      .select("id, back_image_path, front_image_path, check_number, carrier_name, amount, endorsement_override")
+      .select("id, back_image_path, front_image_path, check_number, carrier_name, amount, endorsement_override, tenant_id")
       .eq("id", checkId)
       .single();
 
     if (checkErr || !check) throw new Error(`Check not found: ${checkErr?.message}`);
+    
+    // Fetch tenant name for branding
+    let companyName = "Freedom Adjustment";
+    if (check.tenant_id) {
+      const { data: tenant } = await supabase
+        .from("tenants")
+        .select("name")
+        .eq("id", check.tenant_id)
+        .maybeSingle();
+      if (tenant?.name) {
+        companyName = tenant.name;
+      }
+    }
+
     if (!check.back_image_path) throw new Error("No back image to composite onto");
 
     let backImagePath = check.back_image_path as string;
@@ -279,7 +293,7 @@ Deno.serve(async (req) => {
 
     const isFreedomOrCarletta = (name: string) => {
       const lc = name.toLowerCase();
-      return lc.includes("freedom") || lc.includes("carletta");
+      return lc.includes("freedom") || lc.includes("carletta") || lc.includes(companyName.toLowerCase());
     };
 
     const hasRenderableSignature = (endorsement: EndorsementRecord) => {
@@ -408,14 +422,14 @@ Deno.serve(async (req) => {
     // Header
     if (appliedOverride.showPayToOrder) {
       if (compactText) {
-        endorsementSvg += svgText(localCenterX, curY + fontSize, fontSize, "#111111", "bold", "Pay to Freedom Adjustment");
+        endorsementSvg += svgText(localCenterX, curY + fontSize, fontSize, "#111111", "bold", `Pay to ${companyName}`);
         curY += fontSize + fitLineGap;
         endorsementSvg += svgText(localCenterX, curY + fontSize, fontSize, "#111111", "bold", "Mobile Deposit Only");
         curY += fontSize + fitLineGap;
       } else {
         endorsementSvg += svgText(localCenterX, curY + fontSize, fontSize, "#111111", "bold", "Pay to the order of");
         curY += fontSize + fitLineGap;
-        endorsementSvg += svgText(localCenterX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
+        endorsementSvg += svgText(localCenterX, curY + companyFont, companyFont, "#111111", "bold", companyName);
         curY += companyFont + fitLineGap;
         endorsementSvg += svgText(localCenterX, curY + fontSize, fontSize, "#111111", "bold", "For Mobile Deposit Only");
         curY += fontSize + fitLineGap;
@@ -467,7 +481,7 @@ Deno.serve(async (req) => {
 
     // Footer: company + signature
     if (visibleCompanySignature) {
-      endorsementSvg += svgText(localCenterX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
+      endorsementSvg += svgText(localCenterX, curY + companyFont, companyFont, "#111111", "bold", companyName);
       curY += companyFont + fitLineGap;
     }
 
@@ -480,7 +494,7 @@ Deno.serve(async (req) => {
       endorsementSvg += `<image href="${escHtml(visibleCompanySignature.resolvedSignatureImageUrl)}" x="${Math.round(localCenterX - sigWidth / 2)}" y="${curY}" width="${sigWidth}" height="${fitSigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${coSigFilterId})"/>`;
       curY += fitSigHeight + fitLineGap;
     } else if (visibleCompanySignature?.typedSignatureText) {
-      endorsementSvg += `<text x="${localCenterX}" y="${curY + byLineFont}" font-family="serif" font-size="${byLineFont}" fill="#111111" font-style="italic" text-anchor="middle">Freedom Adjustment</text>`;
+      endorsementSvg += `<text x="${localCenterX}" y="${curY + byLineFont}" font-family="serif" font-size="${byLineFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(companyName)}</text>`;
       curY += byLineFont + fitLineGap;
     }
 

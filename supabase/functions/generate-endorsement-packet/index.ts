@@ -37,6 +37,7 @@ function renderPacketSvg(
   carrierName: string,
   amount: number | null,
   endorsements: EndorsementRow[],
+  companyName: string = "Freedom Adjustment",
 ): string {
   const amountStr = amount != null
     ? `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
@@ -108,7 +109,7 @@ function renderPacketSvg(
   <text x="40" y="140" font-family="Arial, sans-serif" font-size="13" fill="#64748b">Amount</text>
   <text x="200" y="140" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#16a34a">${escHtml(amountStr)}</text>
 
-  <text x="40" y="170" font-family="Arial, sans-serif" font-size="12" fill="#1e293b" font-weight="bold">Pay to the Order of — Freedom Adjustment LLC — For Mobile Deposit Only</text>
+  <text x="40" y="170" font-family="Arial, sans-serif" font-size="12" fill="#1e293b" font-weight="bold">Pay to the Order of — ${escHtml(companyName)} — For Mobile Deposit Only</text>
 
   <line x1="40" y1="185" x2="${width - 40}" y2="185" stroke="#e2e8f0" stroke-width="2"/>
 
@@ -173,7 +174,7 @@ Deno.serve(async (req) => {
     // Fetch check details
     const { data: check, error: checkErr } = await supabase
       .from("check_intake_items")
-      .select("id, check_number, carrier_name, amount")
+      .select("id, check_number, carrier_name, amount, tenant_id")
       .eq("id", checkId)
       .single();
 
@@ -182,6 +183,19 @@ Deno.serve(async (req) => {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Fetch tenant name for branding
+    let companyName = "Freedom Adjustment";
+    if (check.tenant_id) {
+      const { data: tenant } = await supabase
+        .from("tenants")
+        .select("name")
+        .eq("id", check.tenant_id)
+        .maybeSingle();
+      if (tenant?.name) {
+        companyName = tenant.name;
+      }
     }
 
     // Fetch all endorsements
@@ -218,6 +232,7 @@ Deno.serve(async (req) => {
       check.carrier_name ?? "Unknown",
       check.amount,
       endorsements as EndorsementRow[],
+      companyName,
     );
 
     // Upload to storage
