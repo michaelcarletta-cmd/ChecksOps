@@ -82,7 +82,7 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("*, check_payees(*)")
+        .select("*, check_payees(*), tenants(name)")
         .eq("id", checkId)
         .single();
       if (error) throw error;
@@ -153,6 +153,7 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
     ).join("");
 
     const reviewerName = reviewerProfile?.full_name || reviewerProfile?.email || "Staff";
+    const companyName = (check as any).tenants?.name || "Freedom Adjustment";
     const latestDecision = reviewDecisions[0];
     const decisionHtml = latestDecision ? `
       <h2>Reviewer Decision</h2>
@@ -216,7 +217,7 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
       ${reviewNotesHtml}
       ${frontImgHtml}
       ${backImgHtml}
-      <div class="footer">Generated ${esc(new Date().toLocaleString())} · Freedom Adjustment Deposit Packet</div>
+      <div class="footer">Generated ${esc(new Date().toLocaleString())} · ${esc(companyName)} Deposit Packet</div>
     </body></html>`);
     printWindow.document.close();
     printWindow.print();
