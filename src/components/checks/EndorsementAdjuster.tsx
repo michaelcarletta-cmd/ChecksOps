@@ -83,7 +83,7 @@ export function EndorsementAdjuster({
 
   const isFreedomOrCarletta = (name: string) => {
     const lc = name.toLowerCase();
-    return lc.includes("freedom") || lc.includes("carletta");
+    return lc.includes("freedom") || lc.includes("carletta") || lc.includes(companyName.toLowerCase());
   };
 
   const hasVisibleSignature = (endorsement: SignedEndorsementAsset) => {
@@ -382,7 +382,7 @@ export function EndorsementAdjuster({
             compactText ? (
               <>
                 <div style={{ fontSize: payToFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
-                  Pay to Freedom Adjustment
+                  Pay to {companyName}
                 </div>
                 <div style={{ fontSize: payToFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
                   Mobile Deposit Only
