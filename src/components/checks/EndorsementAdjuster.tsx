@@ -644,7 +644,7 @@ export function EndorsementAdjuster({
                     clampEndorsementOverride({ ...prev, showPayToOrder: true }),
                   )
                 }
-                title="Show 'Pay to the Order of Freedom Adjustment' text"
+                title={`Show 'Pay to the Order of ${companyName}' text`}
               >
                 Add Pay to Order Text
               </Button>
@@ -658,7 +658,7 @@ export function EndorsementAdjuster({
                     clampEndorsementOverride({ ...prev, showPayToOrder: false }),
                   )
                 }
-                title="Remove 'Pay to the Order of Freedom Adjustment' text"
+                title={`Remove 'Pay to the Order of ${companyName}' text`}
               >
                 Remove Pay to Order Text
               </Button>
