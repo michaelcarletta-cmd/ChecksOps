@@ -83,7 +83,7 @@ export function EndorsementAdjuster({
 
   const isFreedomOrCarletta = (name: string) => {
     const lc = name.toLowerCase();
-    return lc.includes("freedom") || lc.includes("carletta");
+    return lc.includes("freedom") || lc.includes("carletta") || lc.includes(companyName.toLowerCase());
   };
 
   const hasVisibleSignature = (endorsement: SignedEndorsementAsset) => {
@@ -382,7 +382,7 @@ export function EndorsementAdjuster({
             compactText ? (
               <>
                 <div style={{ fontSize: payToFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
-                  Pay to Freedom Adjustment
+                  Pay to {companyName}
                 </div>
                 <div style={{ fontSize: payToFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
                   Mobile Deposit Only
@@ -449,7 +449,7 @@ export function EndorsementAdjuster({
               ) : (
                 <img
                   src={visibleCompanyEndorsement.signature_image_url}
-                  alt="Freedom Adjustment signature"
+                  alt={`${companyName} signature`}
                   style={{ height: sigHeightPx }}
                   className="object-contain"
                   draggable={false}
@@ -644,7 +644,7 @@ export function EndorsementAdjuster({
                     clampEndorsementOverride({ ...prev, showPayToOrder: true }),
                   )
                 }
-                title="Show 'Pay to the Order of Freedom Adjustment' text"
+                title={`Show 'Pay to the Order of ${companyName}' text`}
               >
                 Add Pay to Order Text
               </Button>
@@ -658,7 +658,7 @@ export function EndorsementAdjuster({
                     clampEndorsementOverride({ ...prev, showPayToOrder: false }),
                   )
                 }
-                title="Remove 'Pay to the Order of Freedom Adjustment' text"
+                title={`Remove 'Pay to the Order of ${companyName}' text`}
               >
                 Remove Pay to Order Text
               </Button>

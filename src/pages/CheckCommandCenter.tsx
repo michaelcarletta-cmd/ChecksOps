@@ -3146,7 +3146,7 @@ function CheckDetailPanel({
                         imageUrl={backImageUrl}
                         imageWidth={backImageDimensions.width}
                         imageHeight={backImageDimensions.height}
-                        companyName="Freedom Adjustment"
+                        companyName={check?.external_origin?.tenant_name as string || "Freedom Adjustment"}
                         initialOverride={
                           (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null
                         }
