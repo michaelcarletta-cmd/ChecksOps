@@ -23,6 +23,9 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   vendor: "Vendor",
   subcontractor: "Subcontractor",
   overhead: "Overhead",
+  insured: "Insured",
+  contractor: "Contractor",
+  supplier: "Supplier",
   other: "Other",
 };
 

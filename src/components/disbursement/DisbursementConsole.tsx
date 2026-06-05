@@ -20,11 +20,25 @@ interface Props {
   onComplete?: () => void;
 }
 
+const ACCOUNT_TYPE_LABELS: Record<string, string> = {
+  operating: "Operating",
+  vendor: "Vendor",
+  subcontractor: "Subcontractor",
+  overhead: "Overhead",
+  insured: "Insured",
+  contractor: "Contractor",
+  supplier: "Supplier",
+  other: "Other",
+};
+
 const ACCOUNT_TYPE_COLORS: Record<string, string> = {
   operating: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20",
   vendor: "bg-blue-500/10 text-blue-700 border-blue-500/20",
   subcontractor: "bg-purple-500/10 text-purple-700 border-purple-500/20",
   overhead: "bg-amber-500/10 text-amber-700 border-amber-500/20",
+  insured: "bg-rose-500/10 text-rose-700 border-rose-500/20",
+  contractor: "bg-indigo-500/10 text-indigo-700 border-indigo-500/20",
+  supplier: "bg-cyan-500/10 text-cyan-700 border-cyan-500/20",
   other: "bg-muted text-muted-foreground border-border",
 };
 
@@ -305,7 +319,7 @@ export function DisbursementConsole({
                 <div className="flex items-center gap-1.5">
                   <p className="text-xs font-medium truncate">{acct.nickname}</p>
                   <Badge variant="outline" className={`text-[9px] px-1 flex-shrink-0 ${ACCOUNT_TYPE_COLORS[acct.account_type]}`}>
-                    {acct.account_type}
+                    {ACCOUNT_TYPE_LABELS[acct.account_type] || acct.account_type}
                   </Badge>
                 </div>
                 <p className="text-[10px] text-muted-foreground font-mono">••••{acct.chk_acct.slice(-4)}</p>
