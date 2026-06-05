@@ -193,6 +193,7 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
   const [copilotExpanded, setCopilotExpanded] = useState(false);
   const [copilotView, setCopilotView] = useState<'conversation' | 'dismantler'>('conversation');
   const [activeWorkspace, setActiveWorkspace] = useState<DarwinWorkspaceKey>("claim-control-center");
+  const [activeTab, setActiveTab] = useState("overview");
   const [autoAnalyses, setAutoAnalyses] = useState<Array<{ id: string; analysis_type: string; created_at: string; input_summary: string }>>([]);
   const [dismissedAnalyses, setDismissedAnalyses] = useState<Set<string>>(new Set());
   const [liveCarrierDismantler, setLiveCarrierDismantler] = useState<{
@@ -298,6 +299,12 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
     if (targetWorkspace) {
       setActiveWorkspace(targetWorkspace);
     }
+    
+    if (section === "funds") {
+      setActiveWorkspace("claim-control-center");
+      setActiveTab("funds");
+    }
+
     const workspace = document.getElementById("darwin-workspace");
     workspace?.scrollIntoView({ behavior: "smooth", block: "start" });
   };

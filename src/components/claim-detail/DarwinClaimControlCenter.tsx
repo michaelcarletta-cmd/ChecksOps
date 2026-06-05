@@ -5,6 +5,7 @@ import { ClaimCashFlowCard } from "@/components/loss-draft/ClaimCashFlowCard";
 import { CheckStatusWorkflow } from "@/components/check-review/CheckStatusWorkflow";
 import { ClaimAssigned } from "@/components/claim-detail/ClaimAssigned";
 import { ClaimActivity } from "@/components/claim-detail/ClaimActivity";
+import { ClaimAccounting } from "@/components/claim-detail/ClaimAccounting";
 import { ClaimTasks } from "@/components/claim-detail/ClaimTasks";
 import { ClaimInspections } from "@/components/claim-detail/ClaimInspections";
 import { ChevronDown, Loader2 } from "lucide-react";
