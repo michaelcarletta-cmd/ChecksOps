@@ -30,11 +30,27 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 
+const DepositOperationsConsole = lazy(() =>
+  import("@/components/deposit-ops/DepositOperationsConsole").then(m => ({ default: m.DepositOperationsConsole }))
+);
+const DepositReports = lazy(() =>
+  import("@/components/deposit-ops/DepositReports").then(m => ({ default: m.DepositReports }))
+);
+const MortgageCompaniesDirectory = lazy(() =>
+  import("@/components/checks/MortgageCompaniesDirectory").then(m => ({ default: m.MortgageCompaniesDirectory }))
+);
+
 function resolveTenantBase(slug?: string | null): string {
   if (!slug) return "";
   if (isCheckOpsHost()) return `/${slug}`;
   return `/wl/${slug}`;
 }
+
+const TabLoader = () => (
+  <div className="flex items-center justify-center py-12">
+    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+  </div>
+);
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center">
