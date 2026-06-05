@@ -1609,7 +1609,7 @@ export type Database = {
       check_billing_events: {
         Row: {
           billed_at: string
-          check_intake_item_id: string
+          check_intake_item_id: string | null
           created_at: string
           currency: string
           disbursement_split_id: string | null
@@ -1626,7 +1626,7 @@ export type Database = {
         }
         Insert: {
           billed_at?: string
-          check_intake_item_id: string
+          check_intake_item_id?: string | null
           created_at?: string
           currency?: string
           disbursement_split_id?: string | null
@@ -1643,7 +1643,7 @@ export type Database = {
         }
         Update: {
           billed_at?: string
-          check_intake_item_id?: string
+          check_intake_item_id?: string | null
           created_at?: string
           currency?: string
           disbursement_split_id?: string | null
