@@ -176,7 +176,7 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
       </div>
 
       {/* Settlement Details */}
-      <SettlementSection claimId={claim.id} settlement={settlement} isAdmin={isAdmin} />
+      <SettlementSection claimId={claim.id} settlement={settlement} isAdmin={isAdmin} checks={checks || []} />
 
       {/* Insurance Checks */}
       <ChecksSection claimId={claim.id} checks={checks || []} isAdmin={isAdmin} claim={claim} expectedChecks={expectedChecks} />
@@ -224,7 +224,7 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
 }
 
 // Settlement Section Component with Tabs
-function SettlementSection({ claimId, settlement, isAdmin }: any) {
+function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
   const [activeTab, setActiveTab] = useState("dwelling");
   const [open, setOpen] = useState(false);
   const [editingType, setEditingType] = useState<"dwelling" | "other_structures" | "pwi" | "personal_property">("dwelling");
@@ -404,7 +404,8 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
     type: "dwelling" | "other_structures" | "pwi" | "personal_property",
     estimateAmount?: number,
     priorOffer?: number,
-    notes?: string
+    notes?: string,
+    checks: any[] = []
   ) => {
     const hasData = rcv > 0 || recDep > 0 || nonRecDep > 0 || deductible > 0;
 
