@@ -154,6 +154,7 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
                             <span>ID: {e.check_intake_item_id}</span>
                             {e.check_number && <span>· Check #{e.check_number}</span>}
                             {e.payee_name && <span className="truncate max-w-[150px]">· {e.payee_name}</span>}
+                            {e.processed_by && <span className="text-primary/80">· By: {e.processed_by}</span>}
                           </div>
                         </div>
                         <div className="text-right space-y-1">
