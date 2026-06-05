@@ -688,3 +688,67 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
     </div>
   );
 }
+
+function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tenant) => void }) {
+  const [enabled, setEnabled] = useState(tenant.per_check_billing_enabled || false);
+  const [rate, setRate] = useState(tenant.per_check_rate_cents || 0);
+  const { saving, save } = useTenantSave(tenant, onUpdated);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Per-Check Billing</CardTitle>
+        <CardDescription>Configure how much this tenant is billed per check processed.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label>Enable Per-Check Billing</Label>
+            <p className="text-xs text-muted-foreground">If enabled, every check that reaches "deposited" status generates a billing event.</p>
+          </div>
+          <Switch checked={enabled} onCheckedChange={setEnabled} />
+        </div>
+        
+        <div className="space-y-2">
+          <Label>Standard Check Rate (cents)</Label>
+          <div className="flex items-center gap-2">
+            <Input 
+              type="number" 
+              value={rate} 
+              onChange={(e) => setRate(parseInt(e.target.value) || 0)} 
+              disabled={!enabled}
+              className="max-w-[200px]"
+            />
+            <span className="text-sm text-muted-foreground font-mono">
+              = ${(rate / 100).toFixed(2)} per check
+            </span>
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-4">
+          <h3 className="text-sm font-medium">Actum Credit Usage Fees</h3>
+          <p className="text-xs text-muted-foreground">These fees are tracked for visibility. Tenants pay these directly to Actum.</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label className="text-xs">Same Day Credit</Label>
+              <Input value="$1.00" disabled className="bg-muted/50" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Instant Credit</Label>
+              <Input value="$1.50" disabled className="bg-muted/50" />
+            </div>
+          </div>
+        </div>
+
+        <Button 
+          onClick={() => save({ per_check_billing_enabled: enabled, per_check_rate_cents: rate })} 
+          disabled={saving}
+        >
+          {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Billing Settings
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
