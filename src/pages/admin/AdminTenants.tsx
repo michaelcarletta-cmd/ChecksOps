@@ -756,3 +756,121 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
     </Card>
   );
 }
+
+/* ---------------- Usage Tab ---------------- */
+
+function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+    const { data: res, error: e } = await supabase.rpc("get_tenant_check_usage", {
+      _tenant_id: tenantId,
+      _month_start: monthStart,
+      _month_end: monthEnd,
+    } as any);
+    if (e) setError(e.message);
+    else setData(res);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [tenantId]);
+
+  const events: any[] = data?.events || [];
+  const checkCount = events.filter((e) => e.event_type === "check_processing").length;
+  const sameDay = events.filter((e) => e.event_type === "actum_same_day").length;
+  const instant = events.filter((e) => e.event_type === "actum_instant").length;
+  const fmt = (cents: number) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: (data?.currency || "usd").toUpperCase() }).format((cents || 0) / 100);
+  const monthLabel = new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Usage Tracking — {monthLabel}</CardTitle>
+            <CardDescription>
+              Live check processing & Actum disbursement activity for {tenantName}.
+            </CardDescription>
+          </div>
+          <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
+            <RefreshCw className={`w-4 h-4 mr-1 ${loading ? "animate-spin" : ""}`} /> Refresh
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {error ? (
+          <div className="text-sm text-destructive">{error}</div>
+        ) : loading ? (
+          <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="rounded-xl border bg-card p-4">
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Checks Processed</div>
+                <div className="text-3xl font-bold">{checkCount}</div>
+                <div className="text-[10px] text-muted-foreground mt-2">Standard endorsement workflow</div>
+              </div>
+              <div className="rounded-xl border bg-card p-4">
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Actum Same Day</div>
+                <div className="text-3xl font-bold">{sameDay}</div>
+                <div className="text-[10px] text-muted-foreground mt-2">$1.00 pass-through fee</div>
+              </div>
+              <div className="rounded-xl border bg-card p-4">
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Actum Instant</div>
+                <div className="text-3xl font-bold">{instant}</div>
+                <div className="text-[10px] text-muted-foreground mt-2">$1.50 pass-through fee</div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 flex items-center justify-between">
+              <div>
+                <div className="text-xs text-primary uppercase tracking-wider mb-1">Total Estimated Fees</div>
+                <div className="text-3xl font-bold text-primary">{fmt(data?.amount_cents ?? 0)}</div>
+              </div>
+              <Badge variant="outline">{monthLabel}</Badge>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-semibold mb-2">Detailed Log ({events.length})</h4>
+              <div className="border rounded-lg max-h-72 overflow-y-auto divide-y">
+                {events.length === 0 ? (
+                  <div className="p-6 text-center text-sm text-muted-foreground italic">No usage events recorded this month.</div>
+                ) : (
+                  events.map((e) => (
+                    <div key={e.id} className="flex items-center justify-between px-3 py-2 text-xs">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{new Date(e.billed_at).toLocaleString()}</span>
+                          <Badge variant="secondary" className="text-[9px] h-4 px-1 uppercase">
+                            {(e.event_type || "processing").replace("_", " ")}
+                          </Badge>
+                        </div>
+                        <div className="text-[10px] text-muted-foreground font-mono">
+                          {e.check_number && <>Check #{e.check_number} · </>}
+                          {e.payee_name && <>{e.payee_name} · </>}
+                          {e.processed_by && <span className="text-primary/80">By: {e.processed_by}</span>}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-semibold">{fmt(e.unit_price_cents)}</div>
+                        <Badge variant="outline" className="text-[9px] h-4 mt-0.5">{e.status}</Badge>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
