@@ -36,6 +36,31 @@ export function CheckUsageCard() {
   const [open, setOpen] = useState(false);
   const qc = useQueryClient();
 
+  const { data: tenant } = useQuery({
+    queryKey: ["tenant-billing-status", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tenants")
+        .select("per_check_billing_enabled, name")
+        .eq("id", tenantId!)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!tenantId,
+  });
+
+  const { data: user } = useQuery({
+    queryKey: ["current-user-email"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      return user;
+    },
+  });
+
+  const isFreedomAdjustment = user?.email === "mcarletta@freedomadj.com";
+  const showBillingAmounts = isFreedomAdjustment || tenant?.per_check_billing_enabled;
+
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["check-usage-current-month", tenantId],
     queryFn: async () => {
