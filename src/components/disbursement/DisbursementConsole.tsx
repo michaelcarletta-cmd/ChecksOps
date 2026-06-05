@@ -220,8 +220,39 @@ export function DisbursementConsole({
               </div>
             </div>
           ))}
-          <div className="pt-2 border-t text-xs text-muted-foreground">
-            Reserve held: ${Number(existingBatch.reserve_held).toLocaleString("en-US", { minimumFractionDigits: 2 })} — releases after 3 banking days with no returns
+          <div className="pt-2 border-t flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">
+              Reserve held: ${Number(existingBatch.reserve_held).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+            </span>
+            {!existingBatch.reserve_released_at && existingBatch.status === "submitted" && (
+              <Button 
+                size="sm" 
+                variant="outline" 
+                className="h-7 text-xs border-amber-500/50 text-amber-600 hover:bg-amber-50"
+                onClick={() => {
+                  if (confirm("Release reserve funds? This should only be done if the 3-day return window has passed.")) {
+                    supabase.rpc("deposit_action", {
+                      p_action: "release_reserve",
+                      p_actor_id: user?.id,
+                      p_extra: { batch_id: existingBatch.id }
+                    }).then(({ error }) => {
+                      if (error) toast({ title: "Release failed", description: error.message, variant: "destructive" });
+                      else {
+                        toast({ title: "Reserve released" });
+                        qc.invalidateQueries({ queryKey: ["disbursement-batch"] });
+                      }
+                    });
+                  }
+                }}
+              >
+                Release Funds
+              </Button>
+            )}
+            {existingBatch.reserve_released_at && (
+              <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-600">
+                Reserve Released
+              </Badge>
+            )}
           </div>
         </CardContent>
       </Card>
