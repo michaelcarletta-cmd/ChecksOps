@@ -47,6 +47,9 @@ export function ActumSettings() {
       setForm({
         actum_parent_id: tenantDetails.actum_parent_id ?? "",
         actum_sub_id: tenantDetails.actum_sub_id ?? "",
+        actum_syspass: (tenantDetails as any).actum_syspass ?? "",
+        actum_username: (tenantDetails as any).actum_username ?? "",
+        actum_password: (tenantDetails as any).actum_password ?? "",
         actum_webhook_secret: tenantDetails.actum_webhook_secret ?? "",
       });
     }
