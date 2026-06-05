@@ -5,6 +5,7 @@ import { ClaimCashFlowCard } from "@/components/loss-draft/ClaimCashFlowCard";
 import { CheckStatusWorkflow } from "@/components/check-review/CheckStatusWorkflow";
 import { ClaimAssigned } from "@/components/claim-detail/ClaimAssigned";
 import { ClaimActivity } from "@/components/claim-detail/ClaimActivity";
+import { ClaimAccounting } from "@/components/claim-detail/ClaimAccounting";
 import { ClaimTasks } from "@/components/claim-detail/ClaimTasks";
 import { ClaimInspections } from "@/components/claim-detail/ClaimInspections";
 import { ChevronDown, Loader2 } from "lucide-react";
@@ -26,6 +27,8 @@ interface DarwinClaimControlCenterProps {
   userRole: string | null;
   isStaffOrAdmin: boolean;
   onClaimUpdated?: (claim: any) => void;
+  defaultTab?: string;
+  onTabChange?: (tab: string) => void;
 }
 
 interface ControlTab {
@@ -40,6 +43,7 @@ const controlTabs: ControlTab[] = [
   { value: "activity", label: "Notes & Activity" },
   { value: "tasks", label: "Tasks", staffOnly: true },
   { value: "inspections", label: "Inspections" },
+  { value: "funds", label: "Funds" },
   { value: "access", label: "Portal Access", staffOnly: true },
 ];
 
@@ -49,8 +53,19 @@ export function DarwinClaimControlCenter({
   userRole,
   isStaffOrAdmin,
   onClaimUpdated,
+  defaultTab = "overview",
+  onTabChange,
 }: DarwinClaimControlCenterProps) {
-  const [activeControlTab, setActiveControlTab] = useState("overview");
+  const [internalTab, setInternalTab] = useState(defaultTab);
+  const activeControlTab = onTabChange ? defaultTab : internalTab;
+
+  const handleTabChange = (value: string) => {
+    if (onTabChange) {
+      onTabChange(value);
+    } else {
+      setInternalTab(value);
+    }
+  };
 
   const visibleTabs = useMemo(
     () => controlTabs.filter((tab) => !tab.staffOnly || isStaffOrAdmin),
@@ -58,12 +73,12 @@ export function DarwinClaimControlCenter({
   );
 
   useEffect(() => {
-    setActiveControlTab("overview");
-  }, [claimId]);
+    if (!onTabChange) setInternalTab("overview");
+  }, [claimId, onTabChange]);
 
   useEffect(() => {
     if (!visibleTabs.some((tab) => tab.value === activeControlTab)) {
-      setActiveControlTab(visibleTabs[0]?.value ?? "overview");
+      handleTabChange(visibleTabs[0]?.value ?? "overview");
     }
   }, [visibleTabs, activeControlTab]);
 
@@ -72,7 +87,7 @@ export function DarwinClaimControlCenter({
 
   return (
     <div className="space-y-4">
-      <Tabs value={activeControlTab} onValueChange={setActiveControlTab} className="w-full">
+      <Tabs value={activeControlTab} onValueChange={handleTabChange} className="w-full">
         {isMobile ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -85,7 +100,7 @@ export function DarwinClaimControlCenter({
               {visibleTabs.map((tab) => (
                 <DropdownMenuItem
                   key={tab.value}
-                  onClick={() => setActiveControlTab(tab.value)}
+                  onClick={() => handleTabChange(tab.value)}
                   className={`cursor-pointer ${activeControlTab === tab.value ? 'bg-accent text-accent-foreground' : ''}`}
                 >
                   {tab.label}
@@ -139,6 +154,10 @@ export function DarwinClaimControlCenter({
 
         <TabsContent value="inspections" className="mt-6">
           <ClaimInspections claimId={claimId} />
+        </TabsContent>
+
+        <TabsContent value="funds" className="mt-6">
+          <ClaimAccounting claim={claim} userRole={userRole} />
         </TabsContent>
 
         {isStaffOrAdmin && (

@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy, FileOutput, Home, Warehouse, Package, Pencil, Trash2, Sofa, Upload, CheckCircle } from "lucide-react";
+import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy, FileOutput, Home, Warehouse, Package, Pencil, Trash2, Sofa, Upload, CheckCircle, Wallet } from "lucide-react";
 import { format } from "date-fns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -176,10 +176,12 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
       </div>
 
       {/* Settlement Details */}
-      <SettlementSection claimId={claim.id} settlement={settlement} isAdmin={isAdmin} />
+      <SettlementSection claimId={claim.id} settlement={settlement} isAdmin={isAdmin} checks={checks || []} />
 
       {/* Insurance Checks */}
-      <ChecksSection claimId={claim.id} checks={checks || []} isAdmin={isAdmin} claim={claim} expectedChecks={expectedChecks} />
+      <div id="claim-checks-section">
+        <ChecksSection claimId={claim.id} checks={checks || []} isAdmin={isAdmin} claim={claim} expectedChecks={expectedChecks} />
+      </div>
 
       {/* Mortgage Releases is now integrated into ChecksSection */}
 
@@ -224,7 +226,7 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
 }
 
 // Settlement Section Component with Tabs
-function SettlementSection({ claimId, settlement, isAdmin }: any) {
+function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
   const [activeTab, setActiveTab] = useState("dwelling");
   const [open, setOpen] = useState(false);
   const [editingType, setEditingType] = useState<"dwelling" | "other_structures" | "pwi" | "personal_property">("dwelling");
@@ -404,7 +406,8 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
     type: "dwelling" | "other_structures" | "pwi" | "personal_property",
     estimateAmount?: number,
     priorOffer?: number,
-    notes?: string
+    notes?: string,
+    settlementChecks: any[] = []
   ) => {
     const hasData = rcv > 0 || recDep > 0 || nonRecDep > 0 || deductible > 0;
 
@@ -438,6 +441,24 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
             </div>
           )}
         </div>
+        
+        {type === "dwelling" && (
+          <div className="mt-4 border-t pt-4">
+            <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+              <Wallet className="h-4 w-4" />
+              Funds Tracking & Actum Controls
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {settlementChecks?.map((check: any) => (
+                <CheckProcessingCard key={check.id} claimId={claimId} checkId={check.id} isAdmin={isAdmin} />
+              ))}
+              {(!settlementChecks || settlementChecks.length === 0) && (
+                <p className="text-xs text-muted-foreground italic col-span-2">No checks recorded for this claim to display Actum controls.</p>
+              )}
+            </div>
+          </div>
+        )}
+
         
         <div className="p-4 bg-muted/50 rounded-lg space-y-2">
           <div className="flex justify-between text-sm">
@@ -539,7 +560,8 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
               "dwelling",
               Number(settlement?.estimate_amount || 0),
               Number(settlement?.prior_offer || 0),
-              settlement?.notes
+              settlement?.notes,
+              props.checks
             )}
           </TabsContent>
 
@@ -558,7 +580,11 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
               Number(settlement?.other_structures_non_recoverable_depreciation || 0),
               Number(settlement?.other_structures_deductible || 0),
               otherStructuresAcv,
-              "other_structures"
+              "other_structures",
+              undefined,
+              undefined,
+              undefined,
+              props.checks
             )}
           </TabsContent>
 
@@ -577,7 +603,11 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
               Number(settlement?.pwi_non_recoverable_depreciation || 0),
               0,
               pwiAcv,
-              "pwi"
+              "pwi",
+              undefined,
+              undefined,
+              undefined,
+              props.checks
             )}
           </TabsContent>
 
@@ -596,7 +626,11 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
               Number(settlement?.personal_property_non_recoverable_depreciation || 0),
               0,
               personalPropertyAcv,
-              "personal_property"
+              "personal_property",
+              undefined,
+              undefined,
+              undefined,
+              props.checks
             )}
           </TabsContent>
         </Tabs>
@@ -1086,7 +1120,11 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                 <Fragment key={check.id}>
                 <TableRow 
                   className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => setExpandedCheckId(expandedCheckId === check.id ? null : check.id)}
+                  onClick={() => {
+                    if (check.deposit_status === "deposited") {
+                      setExpandedCheckId(expandedCheckId === check.id ? null : check.id);
+                    }
+                  }}
                 >
                   <TableCell className="font-medium">{check.check_number || "—"}</TableCell>
                   <TableCell className="capitalize">{check.check_type.replace("_", " ")}</TableCell>
@@ -1129,10 +1167,16 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                     </TableCell>
                   )}
                 </TableRow>
-                {expandedCheckId === check.id && (
+                {expandedCheckId === check.id && check.deposit_status === "deposited" && (
                   <TableRow>
                     <TableCell colSpan={isAdmin ? 8 : 7} className="p-0 border-0">
                       <div className="p-3 bg-muted/30">
+                        <div className="mb-3 px-1">
+                          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                            <Wallet className="h-3 w-3" />
+                            Funds Tracking & Actum Controls
+                          </h4>
+                        </div>
                         <CheckProcessingCard claimId={claimId} checkId={check.id} isAdmin={isAdmin} />
                       </div>
                     </TableCell>
