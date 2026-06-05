@@ -176,7 +176,10 @@ export function CheckProcessingCard({ claimId, checkId, isAdmin = false }: Props
       metadata_json: { check_id: checkId },
     });
 
-    load();
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["claim-checks", claimId] }),
+      load()
+    ]);
   }
 
   async function markCleared() {
@@ -194,7 +197,10 @@ export function CheckProcessingCard({ claimId, checkId, isAdmin = false }: Props
       metadata_json: { check_id: checkId },
     });
 
-    load();
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["claim-checks", claimId] }),
+      load()
+    ]);
   }
 
   async function saveAdminCorrections() {
