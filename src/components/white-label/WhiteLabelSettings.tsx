@@ -16,6 +16,7 @@ import { StakeholderAccountSettings } from "@/components/disbursement/Stakeholde
 import { TenantUserManager } from "./TenantUserManager";
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { TenantAIKeySettings } from "./TenantAIKeySettings";
+import { ActumSettings } from "@/components/settings/ActumSettings";
 
 import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
 import { CheckUsageCard } from "@/components/billing/CheckUsageCard";
@@ -79,6 +80,7 @@ export function WhiteLabelSettings() {
 
             <TabsTrigger value="partners" className="text-xs gap-1"><Link2 className="h-3 w-3" />Partners</TabsTrigger>
             <TabsTrigger value="banking" className="text-xs gap-1"><CreditCard className="h-3 w-3" />Banking</TabsTrigger>
+            <TabsTrigger value="integrations" className="text-xs gap-1"><Link2 className="h-3 w-3" />Integrations</TabsTrigger>
             <TabsTrigger value="disbursement" className="text-xs gap-1"><Banknote className="h-3 w-3" />Disbursement</TabsTrigger>
             <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding</TabsTrigger>
             <TabsTrigger value="guide" className="text-xs gap-1"><HelpCircle className="h-3 w-3" />ChecksOps Guide</TabsTrigger>
@@ -111,6 +113,10 @@ export function WhiteLabelSettings() {
 
           <TabsContent value="banking">
             {tenant && <BankingSettings tenantId={tenant.id} />}
+          </TabsContent>
+
+          <TabsContent value="integrations">
+            <ActumSettings />
           </TabsContent>
 
           <TabsContent value="disbursement">
