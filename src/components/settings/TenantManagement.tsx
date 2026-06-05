@@ -618,6 +618,14 @@ export function TenantManagement() {
           onClose={() => setUsersTarget(null)}
         />
       )}
+      {usageTarget && (
+        <TenantUsageDashboard
+          tenantId={usageTarget.id}
+          tenantName={usageTarget.name}
+          isOpen={true}
+          onClose={() => setUsageTarget(null)}
+        />
+      )}
     </div>
   );
 }
