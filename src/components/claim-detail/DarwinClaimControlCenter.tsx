@@ -27,6 +27,8 @@ interface DarwinClaimControlCenterProps {
   userRole: string | null;
   isStaffOrAdmin: boolean;
   onClaimUpdated?: (claim: any) => void;
+  defaultTab?: string;
+  onTabChange?: (tab: string) => void;
 }
 
 interface ControlTab {
