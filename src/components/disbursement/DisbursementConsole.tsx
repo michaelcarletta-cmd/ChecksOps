@@ -59,6 +59,7 @@ export function DisbursementConsole({
 
   const [allocations, setAllocations] = useState<Record<string, string>>({});
   const [usePercent, setUsePercent] = useState(false);
+  const [deliverySpeed, setDeliverySpeed] = useState<"same_day" | "instant">("same_day");
 
   // Load reserve config
   const { data: reserveConfig } = useQuery({
