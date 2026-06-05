@@ -149,6 +149,37 @@ export function ActumSettings() {
                 onChange={(e) => setForm({ ...form, actum_sub_id: e.target.value })}
               />
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="actum_syspass">Syspass Secret (API Key)</Label>
+              <Input
+                id="actum_syspass"
+                placeholder="Actum Syspass"
+                type={showSecrets ? "text" : "password"}
+                value={form.actum_syspass}
+                onChange={(e) => setForm({ ...form, actum_syspass: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="actum_username">API Username</Label>
+              <Input
+                id="actum_username"
+                placeholder="Actum API Username"
+                type={showSecrets ? "text" : "password"}
+                value={form.actum_username}
+                onChange={(e) => setForm({ ...form, actum_username: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="actum_password">API Password</Label>
+              <Input
+                id="actum_password"
+                placeholder="Actum API Password"
+                type={showSecrets ? "text" : "password"}
+                value={form.actum_password}
+                onChange={(e) => setForm({ ...form, actum_password: e.target.value })}
+              />
+            </div>
+            <div className="hidden md:block"></div>
             <div className="space-y-1.5 md:col-span-2">
               <Label htmlFor="actum_webhook_secret">Webhook Secret Key</Label>
               <div className="relative">
