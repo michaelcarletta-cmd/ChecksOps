@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,7 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft, Loader2, Save, Trash2, Receipt, Banknote, KeyRound, HelpCircle } from "lucide-react";
+import { 
+  LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft, 
+  Loader2, Save, Trash2, Receipt, Banknote, KeyRound, HelpCircle,
+  ArrowDownToLine, FileBarChart
+} from "lucide-react";
 import { CheckCenterHelpPanel } from "@/components/check-review/CheckCenterHelp";
 import { StakeholderAccountSettings } from "@/components/disbursement/StakeholderAccountSettings";
 import { TenantUserManager } from "./TenantUserManager";
