@@ -16,6 +16,7 @@ interface UsageEvent {
   unit_price_cents: number;
   currency: string;
   status: string;
+  event_type?: "check_processing" | "actum_same_day" | "actum_instant";
 }
 
 interface UsagePayload {
