@@ -3,21 +3,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 serve(async (req) => {
   try {
-    // Validate shared-secret signature header before doing anything else
-    const expectedSecret = Deno.env.get("ACTUM_WEBHOOK_SECRET");
-    if (!expectedSecret) {
-      console.error("[actum-webhook] ACTUM_WEBHOOK_SECRET not configured");
-      return new Response("server not configured", { status: 503 });
-    }
-    const provided =
-      req.headers.get("x-actum-signature") ||
-      req.headers.get("x-webhook-secret") ||
-      new URL(req.url).searchParams.get("secret");
-    if (!provided || provided !== expectedSecret) {
-      console.warn("[actum-webhook] unauthorized webhook call");
-      return new Response("unauthorized", { status: 401 });
-    }
-
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -25,6 +10,42 @@ serve(async (req) => {
 
     const payload = await req.json();
     console.log("[actum-webhook] received:", JSON.stringify(payload));
+
+    // Try to identify tenant from orderinfo (merordernumber)
+    let tenantId: string | null = null;
+    const orderInfo = payload.orderinfo || "";
+
+    if (orderInfo.startsWith("split_")) {
+      const splitId = orderInfo.replace("split_", "");
+      const { data } = await supabase.from("disbursement_splits").select("tenant_id").eq("id", splitId).single();
+      tenantId = data?.tenant_id;
+    } else if (orderInfo.startsWith("payment_")) {
+      const paymentId = orderInfo.replace("payment_", "");
+      const { data } = await supabase.from("claim_check_payments").select("tenant_id").eq("id", paymentId).single();
+      tenantId = data?.tenant_id;
+    }
+
+    // Validate signature
+    const provided =
+      req.headers.get("x-actum-signature") ||
+      req.headers.get("x-webhook-secret") ||
+      new URL(req.url).searchParams.get("secret");
+
+    if (tenantId) {
+      const { data: tenant } = await supabase.from("tenants").select("actum_webhook_secret").eq("id", tenantId).single();
+      const expectedSecret = tenant?.actum_webhook_secret || Deno.env.get("ACTUM_WEBHOOK_SECRET");
+      if (!expectedSecret || provided !== expectedSecret) {
+        console.warn(`[actum-webhook] unauthorized for tenant ${tenantId}`);
+        return new Response("unauthorized", { status: 401 });
+      }
+    } else {
+      // Fallback to global secret if tenant not yet known
+      const globalSecret = Deno.env.get("ACTUM_WEBHOOK_SECRET");
+      if (!globalSecret || provided !== globalSecret) {
+        console.warn("[actum-webhook] unauthorized (no tenant context)");
+        return new Response("unauthorized", { status: 401 });
+      }
+    }
 
     // --- Origination webhook ---
     if (payload.originations) {
