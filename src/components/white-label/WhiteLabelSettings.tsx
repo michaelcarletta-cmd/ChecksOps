@@ -148,6 +148,31 @@ export function WhiteLabelSettings() {
             {tenant && <BrandingSettings tenant={tenant} />}
           </TabsContent>
 
+          <TabsContent value="manager" className="mt-3">
+            <Tabs defaultValue="deposit_ops">
+              <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
+                <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
+                <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
+                <TabsTrigger value="mortgage_cos" className="text-xs gap-1"><Building2 className="h-3 w-3" />Mortgage Cos</TabsTrigger>
+              </TabsList>
+              <TabsContent value="deposit_ops" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <DepositOperationsConsole />
+                </Suspense>
+              </TabsContent>
+              <TabsContent value="reports" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <DepositReports />
+                </Suspense>
+              </TabsContent>
+              <TabsContent value="mortgage_cos" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <MortgageCompaniesDirectory />
+                </Suspense>
+              </TabsContent>
+            </Tabs>
+          </TabsContent>
+
           <TabsContent value="guide">
             <CheckCenterHelpPanel />
           </TabsContent>
