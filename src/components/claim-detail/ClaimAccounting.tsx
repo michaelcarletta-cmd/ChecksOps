@@ -558,7 +558,8 @@ function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
               "dwelling",
               Number(settlement?.estimate_amount || 0),
               Number(settlement?.prior_offer || 0),
-              settlement?.notes
+              settlement?.notes,
+              props.checks
             )}
           </TabsContent>
 
@@ -577,7 +578,11 @@ function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
               Number(settlement?.other_structures_non_recoverable_depreciation || 0),
               Number(settlement?.other_structures_deductible || 0),
               otherStructuresAcv,
-              "other_structures"
+              "other_structures",
+              undefined,
+              undefined,
+              undefined,
+              props.checks
             )}
           </TabsContent>
 
@@ -596,7 +601,11 @@ function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
               Number(settlement?.pwi_non_recoverable_depreciation || 0),
               0,
               pwiAcv,
-              "pwi"
+              "pwi",
+              undefined,
+              undefined,
+              undefined,
+              props.checks
             )}
           </TabsContent>
 
@@ -615,7 +624,11 @@ function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
               Number(settlement?.personal_property_non_recoverable_depreciation || 0),
               0,
               personalPropertyAcv,
-              "personal_property"
+              "personal_property",
+              undefined,
+              undefined,
+              undefined,
+              props.checks
             )}
           </TabsContent>
         </Tabs>
