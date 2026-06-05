@@ -137,10 +137,11 @@ export function CheckUsageCard() {
         <div className="rounded-lg bg-primary/5 p-3 border border-primary/10">
           <div className="text-xs text-muted-foreground">Total estimated fees this month</div>
           <div className="text-2xl font-bold text-primary">
-            {isLoading ? "—" : formatCents(data?.amount_cents ?? 0, data?.currency)}
+            {isLoading ? "—" : showBillingAmounts ? formatCents(data?.amount_cents ?? 0, data?.currency) : "$—"}
           </div>
           <p className="text-[10px] text-muted-foreground mt-1">
             * Actum fees ($1.00 same day, $1.50 instant) are paid directly to Actum.
+            {!showBillingAmounts && " Processing fees are managed by Freedom Adjustment."}
           </p>
         </div>
 
