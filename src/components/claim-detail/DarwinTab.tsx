@@ -463,6 +463,8 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
             userRole={userRole}
             isStaffOrAdmin={isStaffOrAdmin}
             onClaimUpdated={onClaimUpdated}
+            defaultTab={activeTab}
+            onTabChange={setActiveTab}
           />
         );
       case "claim-intelligence":
