@@ -1118,7 +1118,11 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                 <Fragment key={check.id}>
                 <TableRow 
                   className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => setExpandedCheckId(expandedCheckId === check.id ? null : check.id)}
+                  onClick={() => {
+                    if (check.deposit_status === "deposited") {
+                      setExpandedCheckId(expandedCheckId === check.id ? null : check.id);
+                    }
+                  }}
                 >
                   <TableCell className="font-medium">{check.check_number || "—"}</TableCell>
                   <TableCell className="capitalize">{check.check_type.replace("_", " ")}</TableCell>
@@ -1161,10 +1165,16 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                     </TableCell>
                   )}
                 </TableRow>
-                {expandedCheckId === check.id && (
+                {expandedCheckId === check.id && check.deposit_status === "deposited" && (
                   <TableRow>
                     <TableCell colSpan={isAdmin ? 8 : 7} className="p-0 border-0">
                       <div className="p-3 bg-muted/30">
+                        <div className="mb-3 px-1">
+                          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                            <Wallet className="h-3 w-3" />
+                            Funds Tracking & Actum Controls
+                          </h4>
+                        </div>
                         <CheckProcessingCard claimId={claimId} checkId={check.id} isAdmin={isAdmin} />
                       </div>
                     </TableCell>
