@@ -59,6 +59,7 @@ export function TenantManagement() {
   const [uploading, setUploading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [usersTarget, setUsersTarget] = useState<{ id: string; name: string } | null>(null);
+  const [usageTarget, setUsageTarget] = useState<{ id: string; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: tenants, isLoading } = useQuery({
