@@ -117,7 +117,7 @@ export function WhiteLabelSettings() {
 
           <TabsContent value="usage" className="space-y-4">
             <CheckUsageCard />
-            {isAdmin && <BillingConfigPanel />}
+            {isAdmin && user?.email === FREEDOM_ADJUSTMENT_EMAIL && <BillingConfigPanel />}
           </TabsContent>
 
 
