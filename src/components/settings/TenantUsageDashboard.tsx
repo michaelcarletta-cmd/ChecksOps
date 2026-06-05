@@ -28,6 +28,7 @@ interface UsageEvent {
   event_type?: "check_processing" | "actum_same_day" | "actum_instant";
   check_number?: string;
   payee_name?: string;
+  processed_by?: string;
 }
 
 interface UsagePayload {
