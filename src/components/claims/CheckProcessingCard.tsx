@@ -10,6 +10,7 @@ import { Loader2 } from "lucide-react";
 import { MortgageMonitoringSection } from "./MortgageMonitoringSection";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
 
 const WORKFLOW_STATUS_OPTIONS = [
   { value: "uploaded", label: "Uploaded" },
@@ -515,6 +516,22 @@ export function CheckProcessingCard({ claimId, checkId, isAdmin = false }: Props
               {savingCorrections && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save admin corrections
             </Button>
+          </div>
+        )}
+
+        {/* Actum Disbursement section - Only shows when check is deposited */}
+        {check?.deposit_status === "deposited" && (
+          <div className="pt-4 border-t space-y-4">
+            <h4 className="text-sm font-semibold flex items-center gap-2">
+              Financial Disbursement (Actum)
+            </h4>
+            <DisbursementConsole
+              checkAmount={Number(check.amount)}
+              checkNumber={check.check_number}
+              carrierName={check.carrier_name}
+              checkIntakeItemId={check.check_intake_item_id}
+              onComplete={load}
+            />
           </div>
         )}
 
