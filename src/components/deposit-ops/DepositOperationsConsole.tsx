@@ -452,7 +452,7 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
                             {item.status === "pending_assignment" && (
                               <Button size="sm" variant="outline" className="text-xs h-7"
                                 onClick={(e) => { e.stopPropagation(); setActionDialog({ action: "assign_provider", itemId: item.id }); }}>
-                                Assign
+                                Assign Route
                               </Button>
                             )}
                             {item.status === "provider_assigned" && (item.provider === "manual_branch" || item.provider === "internal_ready") && (
