@@ -197,6 +197,24 @@ serve(async (req) => {
           })
           .eq("id", split.id);
 
+        // Record usage fee for Actum credit
+        if (actumStatus === "accepted") {
+          const speed = (batch as any).delivery_speed || 'same_day';
+          const feeCents = speed === 'instant' ? 150 : 100;
+          const eventType = speed === 'instant' ? 'actum_instant' : 'actum_same_day';
+
+          await supabase.from("check_billing_events").insert({
+            tenant_id: batch.tenant_id,
+            check_intake_item_id: batch.check_intake_item_id,
+            disbursement_split_id: split.id,
+            unit_price_cents: feeCents,
+            currency: 'usd',
+            status: 'recorded',
+            event_type: eventType
+          });
+        }
+
+
       } catch (fetchErr: any) {
         errorMsg = fetchErr.message;
         await supabase
