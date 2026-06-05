@@ -319,7 +319,7 @@ export function DisbursementConsole({
                 <div className="flex items-center gap-1.5">
                   <p className="text-xs font-medium truncate">{acct.nickname}</p>
                   <Badge variant="outline" className={`text-[9px] px-1 flex-shrink-0 ${ACCOUNT_TYPE_COLORS[acct.account_type]}`}>
-                    {acct.account_type}
+                    {ACCOUNT_TYPE_LABELS[acct.account_type] || acct.account_type}
                   </Badge>
                 </div>
                 <p className="text-[10px] text-muted-foreground font-mono">••••{acct.chk_acct.slice(-4)}</p>
