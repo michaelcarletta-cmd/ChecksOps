@@ -33,6 +33,8 @@ type Tenant = {
   email_reply_to: string | null;
   partner_code: string | null;
   is_system_tenant: boolean | null;
+  per_check_billing_enabled?: boolean | null;
+  per_check_rate_cents?: number | null;
   created_at: string;
 };
 
