@@ -82,6 +82,7 @@ export function WhiteLabelSettings() {
             <TabsTrigger value="banking" className="text-xs gap-1"><CreditCard className="h-3 w-3" />Banking</TabsTrigger>
             <TabsTrigger value="integrations" className="text-xs gap-1"><Link2 className="h-3 w-3" />Integrations</TabsTrigger>
             <TabsTrigger value="disbursement" className="text-xs gap-1"><Banknote className="h-3 w-3" />Disbursement</TabsTrigger>
+            <TabsTrigger value="manager" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Manager Hub</TabsTrigger>
             <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding</TabsTrigger>
             <TabsTrigger value="guide" className="text-xs gap-1"><HelpCircle className="h-3 w-3" />ChecksOps Guide</TabsTrigger>
           </TabsList>
