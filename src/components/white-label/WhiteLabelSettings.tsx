@@ -16,6 +16,7 @@ import { StakeholderAccountSettings } from "@/components/disbursement/Stakeholde
 import { TenantUserManager } from "./TenantUserManager";
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { TenantAIKeySettings } from "./TenantAIKeySettings";
+import { ActumSettings } from "@/components/settings/ActumSettings";
 
 import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
 import { CheckUsageCard } from "@/components/billing/CheckUsageCard";
