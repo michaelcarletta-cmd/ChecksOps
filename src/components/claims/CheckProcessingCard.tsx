@@ -319,6 +319,7 @@ export function CheckProcessingCard({ claimId, checkId, isAdmin = false }: Props
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-3 text-sm">
+          <StatusRow label="Workflow" value={intakeCheck?.status ?? "not linked"} />
           <StatusRow label="Endorsement" value={check?.endorsement_status ?? "pending"} />
           <StatusRow label="Payment Direction" value={check?.payment_direction_status ?? "not_requested"} />
           <StatusRow label="Deposit" value={check?.deposit_status ?? "pending"} />
@@ -525,12 +526,17 @@ export function CheckProcessingCard({ claimId, checkId, isAdmin = false }: Props
           </div>
         )}
 
-        {/* Actum Disbursement section - Only shows when check is deposited */}
-        {check?.deposit_status === "deposited" && (
+        {/* Actum Disbursement section - Shows when check is deposited OR status is deposited */}
+        {(check?.deposit_status === "deposited" || intakeCheck?.status === "deposited") && (
           <div className="pt-4 border-t space-y-4">
-            <h4 className="text-sm font-semibold flex items-center gap-2">
-              Financial Disbursement (Actum)
-            </h4>
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold flex items-center gap-2">
+                Financial Disbursement (Actum)
+              </h4>
+              <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                Deposit Confirmed
+              </Badge>
+            </div>
             <DisbursementConsole
               checkAmount={Number(check.amount)}
               checkNumber={check.check_number}
