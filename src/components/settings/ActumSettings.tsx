@@ -223,10 +223,13 @@ export function ActumSettings() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div>
-            <Label className="text-xs text-muted-foreground">Webhook URL</Label>
+            <Label className="text-xs text-muted-foreground">Postback (Callback) URL</Label>
             <code className="block mt-1 rounded-md bg-muted px-3 py-2 text-xs font-mono break-all">
-              {`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/actum-webhook`}
+              {`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/actum-webhook?secret=${form.actum_webhook_secret}`}
             </code>
+            <p className="text-[10px] text-muted-foreground mt-1 italic">
+              Use this for "Postback URL" or "Callback URL" in your Actum portal to receive real-time updates.
+            </p>
           </div>
           <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-3 text-xs text-blue-700 dark:text-blue-300">
             <p className="font-medium mb-1">Actum Order IDs</p>
