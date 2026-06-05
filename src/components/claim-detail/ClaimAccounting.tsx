@@ -450,7 +450,7 @@ function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
               {checks?.map((check: any) => (
                 <CheckProcessingCard key={check.id} claimId={claimId} checkId={check.id} isAdmin={isAdmin} />
               ))}
-              {checks?.length === 0 && (
+              {(!checks || checks.length === 0) && (
                 <p className="text-xs text-muted-foreground italic col-span-2">No checks recorded for this claim to display Actum controls.</p>
               )}
             </div>
