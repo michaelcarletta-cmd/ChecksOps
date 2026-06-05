@@ -21,6 +21,9 @@ export function ActumSettings() {
   const [form, setForm] = useState({
     actum_parent_id: "",
     actum_sub_id: "",
+    actum_syspass: "",
+    actum_username: "",
+    actum_password: "",
     actum_webhook_secret: "",
   });
 
@@ -30,7 +33,7 @@ export function ActumSettings() {
       if (!tenant?.id) return null;
       const { data, error } = await supabase
         .from("tenants")
-        .select("actum_parent_id, actum_sub_id, actum_webhook_secret")
+        .select("actum_parent_id, actum_sub_id, actum_syspass, actum_username, actum_password, actum_webhook_secret")
         .eq("id", tenant.id)
         .single();
       if (error) throw error;
@@ -44,6 +47,9 @@ export function ActumSettings() {
       setForm({
         actum_parent_id: tenantDetails.actum_parent_id ?? "",
         actum_sub_id: tenantDetails.actum_sub_id ?? "",
+        actum_syspass: (tenantDetails as any).actum_syspass ?? "",
+        actum_username: (tenantDetails as any).actum_username ?? "",
+        actum_password: (tenantDetails as any).actum_password ?? "",
         actum_webhook_secret: tenantDetails.actum_webhook_secret ?? "",
       });
     }
@@ -57,6 +63,9 @@ export function ActumSettings() {
         .update({
           actum_parent_id: form.actum_parent_id.trim() || null,
           actum_sub_id: form.actum_sub_id.trim() || null,
+          actum_syspass: form.actum_syspass.trim() || null,
+          actum_username: form.actum_username.trim() || null,
+          actum_password: form.actum_password.trim() || null,
           actum_webhook_secret: form.actum_webhook_secret.trim() || null,
         })
         .eq("id", tenant.id);
@@ -140,6 +149,37 @@ export function ActumSettings() {
                 onChange={(e) => setForm({ ...form, actum_sub_id: e.target.value })}
               />
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="actum_syspass">Syspass Secret (API Key)</Label>
+              <Input
+                id="actum_syspass"
+                placeholder="Actum Syspass"
+                type={showSecrets ? "text" : "password"}
+                value={form.actum_syspass}
+                onChange={(e) => setForm({ ...form, actum_syspass: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="actum_username">API Username</Label>
+              <Input
+                id="actum_username"
+                placeholder="Actum API Username"
+                type={showSecrets ? "text" : "password"}
+                value={form.actum_username}
+                onChange={(e) => setForm({ ...form, actum_username: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="actum_password">API Password</Label>
+              <Input
+                id="actum_password"
+                placeholder="Actum API Password"
+                type={showSecrets ? "text" : "password"}
+                value={form.actum_password}
+                onChange={(e) => setForm({ ...form, actum_password: e.target.value })}
+              />
+            </div>
+            <div className="hidden md:block"></div>
             <div className="space-y-1.5 md:col-span-2">
               <Label htmlFor="actum_webhook_secret">Webhook Secret Key</Label>
               <div className="relative">

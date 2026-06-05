@@ -17170,7 +17170,10 @@ export type Database = {
       tenants: {
         Row: {
           actum_parent_id: string | null
+          actum_password: string | null
           actum_sub_id: string | null
+          actum_syspass: string | null
+          actum_username: string | null
           actum_webhook_secret: string | null
           created_at: string
           custom_domain: string | null
@@ -17195,7 +17198,10 @@ export type Database = {
         }
         Insert: {
           actum_parent_id?: string | null
+          actum_password?: string | null
           actum_sub_id?: string | null
+          actum_syspass?: string | null
+          actum_username?: string | null
           actum_webhook_secret?: string | null
           created_at?: string
           custom_domain?: string | null
@@ -17220,7 +17226,10 @@ export type Database = {
         }
         Update: {
           actum_parent_id?: string | null
+          actum_password?: string | null
           actum_sub_id?: string | null
+          actum_syspass?: string | null
+          actum_username?: string | null
           actum_webhook_secret?: string | null
           created_at?: string
           custom_domain?: string | null
