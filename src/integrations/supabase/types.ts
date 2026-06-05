@@ -11430,6 +11430,7 @@ export type Database = {
           completed_at: string | null
           created_at: string
           created_by: string
+          delivery_speed: string | null
           deposit_item_id: string | null
           id: string
           notes: string | null
@@ -11447,6 +11448,7 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           created_by: string
+          delivery_speed?: string | null
           deposit_item_id?: string | null
           id?: string
           notes?: string | null
@@ -11464,6 +11466,7 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           created_by?: string
+          delivery_speed?: string | null
           deposit_item_id?: string | null
           id?: string
           notes?: string | null
