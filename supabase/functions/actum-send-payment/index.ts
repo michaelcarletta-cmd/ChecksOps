@@ -71,21 +71,26 @@ serve(async (req) => {
       throw new Error("Actum API credentials (Parent ID / Sub ID) not configured for this tenant.");
     }
 
+    const syspass = (tenantData as any)?.actum_syspass;
+    const apiUser = (tenantData as any)?.actum_username;
+    const apiPass = (tenantData as any)?.actum_password;
+
     const idempotenceKey = payment.idempotence_key ?? `pay_${payment_id}_${Date.now()}`;
 
     const params = new URLSearchParams();
+    params.append("parent_id", actumParentId!);
+    params.append("sub_id", actumSubId!);
+    if (syspass) params.append("syspass", syspass);
+    if (apiUser) params.append("api_user", apiUser);
+    if (apiPass) params.append("api_password", apiPass);
 
     if (account.consumer_unique) {
       // Repeat consumer — skip bank details
-      params.append("parent_id", actumParentId!);
-      params.append("sub_id", actumSubId!);
       params.append("consumer_code", account.consumer_unique);
       params.append("initial_amount", Number(payment.payment_amount).toFixed(2));
       params.append("billing_cycle", "-1");
       params.append("pmt_type", "chk");
     } else {
-      params.append("parent_id", actumParentId!);
-      params.append("sub_id", actumSubId!);
       params.append("pmt_type", "chk");
       params.append("custname", account.custname);
       params.append("chk_acct", account.chk_acct);
