@@ -10974,6 +10974,7 @@ export type Database = {
           increase_raw_response: Json | null
           increase_status: string | null
           increase_submitted_at: string | null
+          last_synced_at: string | null
           next_action: string | null
           next_action_generated_at: string | null
           next_action_reason: string | null
@@ -10984,6 +10985,7 @@ export type Database = {
           provider_payload: Json | null
           provider_reference: string | null
           provider_response: Json | null
+          provider_status_raw: Json | null
           reconciled_amount: number | null
           reconciled_at: string | null
           reconciled_by: string | null
@@ -11021,6 +11023,7 @@ export type Database = {
           increase_raw_response?: Json | null
           increase_status?: string | null
           increase_submitted_at?: string | null
+          last_synced_at?: string | null
           next_action?: string | null
           next_action_generated_at?: string | null
           next_action_reason?: string | null
@@ -11031,6 +11034,7 @@ export type Database = {
           provider_payload?: Json | null
           provider_reference?: string | null
           provider_response?: Json | null
+          provider_status_raw?: Json | null
           reconciled_amount?: number | null
           reconciled_at?: string | null
           reconciled_by?: string | null
@@ -11068,6 +11072,7 @@ export type Database = {
           increase_raw_response?: Json | null
           increase_status?: string | null
           increase_submitted_at?: string | null
+          last_synced_at?: string | null
           next_action?: string | null
           next_action_generated_at?: string | null
           next_action_reason?: string | null
@@ -11078,6 +11083,7 @@ export type Database = {
           provider_payload?: Json | null
           provider_reference?: string | null
           provider_response?: Json | null
+          provider_status_raw?: Json | null
           reconciled_amount?: number | null
           reconciled_at?: string | null
           reconciled_by?: string | null
@@ -11425,6 +11431,7 @@ export type Database = {
           id: string
           notes: string | null
           reserve_held: number
+          reserve_released_at: string | null
           status: string
           submitted_at: string | null
           tenant_id: string
@@ -11441,6 +11448,7 @@ export type Database = {
           id?: string
           notes?: string | null
           reserve_held?: number
+          reserve_released_at?: string | null
           status?: string
           submitted_at?: string | null
           tenant_id: string
@@ -11457,6 +11465,7 @@ export type Database = {
           id?: string
           notes?: string | null
           reserve_held?: number
+          reserve_released_at?: string | null
           status?: string
           submitted_at?: string | null
           tenant_id?: string
