@@ -88,22 +88,40 @@ export function CheckUsageCard() {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="rounded-lg bg-muted/30 p-3">
             <div className="text-xs text-muted-foreground">Checks processed</div>
-            <div className="text-2xl font-bold">{isLoading ? "—" : data?.count ?? 0}</div>
+            <div className="text-2xl font-bold">
+              {isLoading ? "—" : data?.events?.filter(e => e.event_type === 'check_processing').length ?? 0}
+            </div>
           </div>
-          <div className="rounded-lg bg-primary/5 p-3 border border-primary/10">
-            <div className="text-xs text-muted-foreground">Amount this month</div>
-            <div className="text-2xl font-bold text-primary">
-              {isLoading ? "—" : formatCents(data?.amount_cents ?? 0, data?.currency)}
+          <div className="rounded-lg bg-muted/30 p-3">
+            <div className="text-xs text-muted-foreground">Actum Same Day</div>
+            <div className="text-2xl font-bold">
+              {isLoading ? "—" : data?.events?.filter(e => e.event_type === 'actum_same_day').length ?? 0}
+            </div>
+          </div>
+          <div className="rounded-lg bg-muted/30 p-3">
+            <div className="text-xs text-muted-foreground">Actum Instant</div>
+            <div className="text-2xl font-bold">
+              {isLoading ? "—" : data?.events?.filter(e => e.event_type === 'actum_instant').length ?? 0}
             </div>
           </div>
         </div>
 
+        <div className="rounded-lg bg-primary/5 p-3 border border-primary/10">
+          <div className="text-xs text-muted-foreground">Total estimated fees this month</div>
+          <div className="text-2xl font-bold text-primary">
+            {isLoading ? "—" : formatCents(data?.amount_cents ?? 0, data?.currency)}
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1">
+            * Actum fees ($1.00 same day, $1.50 instant) are paid directly to Actum.
+          </p>
+        </div>
+
         <p className="text-[11px] text-muted-foreground leading-snug flex items-start gap-1.5">
           <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
-          Billed automatically each check that reaches deposited status. You'll be invoiced at the end of your billing cycle.
+          Usage is tracked automatically as checks are processed and disbursements are triggered.
         </p>
 
         <Button
@@ -121,8 +139,13 @@ export function CheckUsageCard() {
           <div className="border rounded-lg max-h-72 overflow-y-auto divide-y">
             {data.events.map((e) => (
               <div key={e.id} className="flex items-center justify-between px-3 py-2 text-xs">
-                <div>
-                  <div className="font-medium">{format(new Date(e.billed_at), "MMM d, h:mm a")}</div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{format(new Date(e.billed_at), "MMM d, h:mm a")}</span>
+                    <Badge variant="outline" className="text-[9px] h-4 px-1 py-0 uppercase">
+                      {e.event_type?.replace('_', ' ') || 'processing'}
+                    </Badge>
+                  </div>
                   <div className="text-muted-foreground font-mono text-[10px]">
                     {e.check_intake_item_id.slice(0, 8)}…
                   </div>
