@@ -21,6 +21,9 @@ export function ActumSettings() {
   const [form, setForm] = useState({
     actum_parent_id: "",
     actum_sub_id: "",
+    actum_syspass: "",
+    actum_username: "",
+    actum_password: "",
     actum_webhook_secret: "",
   });
 
