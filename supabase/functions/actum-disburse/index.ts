@@ -59,7 +59,7 @@ serve(async (req) => {
     // Get tenant's Actum credentials
     const { data: tenantData, error: tenantErr } = await supabase
       .from("tenants")
-      .select("actum_parent_id, actum_sub_id")
+      .select("actum_parent_id, actum_sub_id, actum_syspass, actum_username, actum_password")
       .eq("id", batch.tenant_id)
       .single();
 
@@ -72,6 +72,10 @@ serve(async (req) => {
     if (!actumParentId || !actumSubId) {
       throw new Error("Actum API credentials (Parent ID / Sub ID) not configured for this tenant.");
     }
+
+    const syspass = (tenantData as any)?.actum_syspass;
+    const apiUser = (tenantData as any)?.actum_username;
+    const apiPass = (tenantData as any)?.actum_password;
 
     const results: Array<{
       split_id: string;
@@ -101,16 +105,18 @@ serve(async (req) => {
 
       // Use consumer_unique for repeat accounts (skips re-sending bank details)
       const params = new URLSearchParams();
+      params.append("parent_id", actumParentId!);
+      params.append("sub_id", actumSubId!);
+      if (syspass) params.append("syspass", syspass);
+      if (apiUser) params.append("api_user", apiUser);
+      if (apiPass) params.append("api_password", apiPass);
+
       if (account.consumer_unique) {
-        params.append("parent_id", actumParentId!);
-        params.append("sub_id", actumSubId!);
         params.append("consumer_code", account.consumer_unique);
         params.append("initial_amount", split.amount.toFixed(2));
         params.append("billing_cycle", "-1");
         params.append("pmt_type", "chk");
       } else {
-        params.append("parent_id", actumParentId!);
-        params.append("sub_id", actumSubId!);
         params.append("pmt_type", "chk");
         params.append("custname", account.custname);
         params.append("chk_acct", account.chk_acct);
