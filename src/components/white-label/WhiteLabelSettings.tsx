@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,7 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft, Loader2, Save, Trash2, Receipt, Banknote, KeyRound, HelpCircle } from "lucide-react";
+import { 
+  LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft, 
+  Loader2, Save, Trash2, Receipt, Banknote, KeyRound, HelpCircle,
+  ArrowDownToLine, FileBarChart
+} from "lucide-react";
 import { CheckCenterHelpPanel } from "@/components/check-review/CheckCenterHelp";
 import { StakeholderAccountSettings } from "@/components/disbursement/StakeholderAccountSettings";
 import { TenantUserManager } from "./TenantUserManager";
@@ -26,11 +30,27 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 
+const DepositOperationsConsole = lazy(() =>
+  import("@/components/deposit-ops/DepositOperationsConsole").then(m => ({ default: m.DepositOperationsConsole }))
+);
+const DepositReports = lazy(() =>
+  import("@/components/deposit-ops/DepositReports").then(m => ({ default: m.DepositReports }))
+);
+const MortgageCompaniesDirectory = lazy(() =>
+  import("@/components/checks/MortgageCompaniesDirectory").then(m => ({ default: m.MortgageCompaniesDirectory }))
+);
+
 function resolveTenantBase(slug?: string | null): string {
   if (!slug) return "";
   if (isCheckOpsHost()) return `/${slug}`;
   return `/wl/${slug}`;
 }
+
+const TabLoader = () => (
+  <div className="flex items-center justify-center py-12">
+    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+  </div>
+);
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center">
@@ -82,6 +102,7 @@ export function WhiteLabelSettings() {
             <TabsTrigger value="banking" className="text-xs gap-1"><CreditCard className="h-3 w-3" />Banking</TabsTrigger>
             <TabsTrigger value="integrations" className="text-xs gap-1"><Link2 className="h-3 w-3" />Integrations</TabsTrigger>
             <TabsTrigger value="disbursement" className="text-xs gap-1"><Banknote className="h-3 w-3" />Disbursement</TabsTrigger>
+            <TabsTrigger value="manager" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Manager Hub</TabsTrigger>
             <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding</TabsTrigger>
             <TabsTrigger value="guide" className="text-xs gap-1"><HelpCircle className="h-3 w-3" />ChecksOps Guide</TabsTrigger>
           </TabsList>
@@ -125,6 +146,31 @@ export function WhiteLabelSettings() {
 
           <TabsContent value="branding">
             {tenant && <BrandingSettings tenant={tenant} />}
+          </TabsContent>
+
+          <TabsContent value="manager" className="mt-3">
+            <Tabs defaultValue="deposit_ops">
+              <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
+                <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
+                <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
+                <TabsTrigger value="mortgage_cos" className="text-xs gap-1"><Building2 className="h-3 w-3" />Mortgage Cos</TabsTrigger>
+              </TabsList>
+              <TabsContent value="deposit_ops" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <DepositOperationsConsole />
+                </Suspense>
+              </TabsContent>
+              <TabsContent value="reports" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <DepositReports />
+                </Suspense>
+              </TabsContent>
+              <TabsContent value="mortgage_cos" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <MortgageCompaniesDirectory />
+                </Suspense>
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           <TabsContent value="guide">
