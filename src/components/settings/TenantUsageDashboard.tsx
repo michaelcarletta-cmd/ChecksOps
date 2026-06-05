@@ -26,6 +26,8 @@ interface UsageEvent {
   currency: string;
   status: string;
   event_type?: "check_processing" | "actum_same_day" | "actum_instant";
+  check_number?: string;
+  payee_name?: string;
 }
 
 interface UsagePayload {
@@ -147,8 +149,10 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
                               {e.event_type?.replace('_', ' ') || 'processing'}
                             </Badge>
                           </div>
-                          <div className="text-[10px] text-muted-foreground font-mono">
-                            Check ID: {e.check_intake_item_id}
+                          <div className="text-[10px] text-muted-foreground font-mono flex gap-2">
+                            <span>ID: {e.check_intake_item_id}</span>
+                            {e.check_number && <span>· Check #{e.check_number}</span>}
+                            {e.payee_name && <span className="truncate max-w-[150px]">· {e.payee_name}</span>}
                           </div>
                         </div>
                         <div className="text-right space-y-1">
