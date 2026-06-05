@@ -1613,6 +1613,7 @@ export type Database = {
           created_at: string
           currency: string
           error_message: string | null
+          event_type: string | null
           id: string
           reported_at: string | null
           status: string
@@ -1628,6 +1629,7 @@ export type Database = {
           created_at?: string
           currency?: string
           error_message?: string | null
+          event_type?: string | null
           id?: string
           reported_at?: string | null
           status?: string
@@ -1643,6 +1645,7 @@ export type Database = {
           created_at?: string
           currency?: string
           error_message?: string | null
+          event_type?: string | null
           id?: string
           reported_at?: string | null
           status?: string
@@ -17197,6 +17200,8 @@ export type Database = {
           max_checks_per_month: number | null
           name: string
           partner_code: string
+          per_check_billing_enabled: boolean | null
+          per_check_rate_cents: number | null
           plan_tier: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color: string | null
           secondary_color: string | null
@@ -17225,6 +17230,8 @@ export type Database = {
           max_checks_per_month?: number | null
           name: string
           partner_code?: string
+          per_check_billing_enabled?: boolean | null
+          per_check_rate_cents?: number | null
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color?: string | null
           secondary_color?: string | null
@@ -17253,6 +17260,8 @@ export type Database = {
           max_checks_per_month?: number | null
           name?: string
           partner_code?: string
+          per_check_billing_enabled?: boolean | null
+          per_check_rate_cents?: number | null
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color?: string | null
           secondary_color?: string | null
