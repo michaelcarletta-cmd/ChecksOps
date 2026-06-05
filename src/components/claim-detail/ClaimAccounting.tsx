@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy, FileOutput, Home, Warehouse, Package, Pencil, Trash2, Sofa, Upload, CheckCircle } from "lucide-react";
+import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy, FileOutput, Home, Warehouse, Package, Pencil, Trash2, Sofa, Upload, CheckCircle, Wallet } from "lucide-react";
 import { format } from "date-fns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -438,6 +438,24 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
             </div>
           )}
         </div>
+        
+        {type === "dwelling" && (
+          <div className="mt-4 border-t pt-4">
+            <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+              <Wallet className="h-4 w-4" />
+              Funds Tracking & Actum Controls
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {checks?.map((check: any) => (
+                <CheckProcessingCard key={check.id} claimId={claimId} checkId={check.id} isAdmin={isAdmin} />
+              ))}
+              {checks?.length === 0 && (
+                <p className="text-xs text-muted-foreground italic col-span-2">No checks recorded for this claim to display Actum controls.</p>
+              )}
+            </div>
+          </div>
+        )}
+
         
         <div className="p-4 bg-muted/50 rounded-lg space-y-2">
           <div className="flex justify-between text-sm">
