@@ -470,6 +470,10 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
                             {(item.status === "submitted" || item.status === "processing") && (
                               <>
                                 <Button size="sm" variant="outline" className="text-xs h-7"
+                                  onClick={(e) => { e.stopPropagation(); setActionDialog({ action: "sync_provider_status", itemId: item.id }); }}>
+                                  <RefreshCw className="h-3 w-3 mr-1" />Sync
+                                </Button>
+                                <Button size="sm" variant="outline" className="text-xs h-7"
                                   onClick={(e) => { e.stopPropagation(); setActionDialog({ action: "record_success", itemId: item.id }); }}>
                                   <CheckCircle2 className="h-3 w-3" />
                                 </Button>
@@ -478,6 +482,12 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
                                   <XCircle className="h-3 w-3" />
                                 </Button>
                               </>
+                            )}
+                            {item.status === "failed" && (
+                              <Button size="sm" variant="outline" className="text-xs h-7 border-amber-500/50 text-amber-500"
+                                onClick={(e) => { e.stopPropagation(); setActionDialog({ action: "resubmit_payment", itemId: item.id }); }}>
+                                <RotateCcw className="h-3 w-3 mr-1" />Resubmit
+                              </Button>
                             )}
                             {item.status === "succeeded" && !item.bank_confirmed_at && (
                               <Button size="sm" variant="outline" className="text-xs h-7"
