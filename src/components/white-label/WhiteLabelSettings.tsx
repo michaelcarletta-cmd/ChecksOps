@@ -114,6 +114,10 @@ export function WhiteLabelSettings() {
             {tenant && <BankingSettings tenantId={tenant.id} />}
           </TabsContent>
 
+          <TabsContent value="integrations">
+            <ActumSettings />
+          </TabsContent>
+
           <TabsContent value="disbursement">
             <StakeholderAccountSettings />
           </TabsContent>
