@@ -412,12 +412,12 @@ export function DisbursementConsole({
         <Button
           className="w-full"
           onClick={() => submitBatch.mutate()}
-          disabled={submitBatch.isPending || !isBalanced || totalAllocatedDollars === 0}
+          disabled={submitBatch.isPending || isOverAllocated || totalAllocatedDollars === 0}
         >
           {submitBatch.isPending ? (
             <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Submitting...</>
           ) : (
-            <><Send className="h-4 w-4 mr-2" />Send all disbursements</>
+            <><Send className="h-4 w-4 mr-2" />{isBalanced ? "Send all disbursements" : `Send $${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })} (partial)`}</>
           )}
         </Button>
 
