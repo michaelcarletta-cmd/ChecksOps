@@ -54,6 +54,7 @@ import { CheckValidityBadge } from "@/components/checks/CheckValidityBadge";
 import { assessCheckValidity } from "@/lib/checkValidity";
 import { SendPaymentPanel } from "@/components/payments/SendPaymentPanel";
 import { FundsTab as IncomingFundsTab } from "@/components/payments/FundsTab";
+import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
 
 
 
