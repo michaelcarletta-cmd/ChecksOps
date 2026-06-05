@@ -164,6 +164,7 @@ export function DisbursementConsole({
           check_amount: checkAmount,
           reserve_held: reserveHeld,
           available_amount: availableAmount,
+          delivery_speed: deliverySpeed,
           status: "pending",
         })
         .select("id")
