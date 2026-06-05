@@ -43,7 +43,6 @@ const controlTabs: ControlTab[] = [
   { value: "activity", label: "Notes & Activity" },
   { value: "tasks", label: "Tasks", staffOnly: true },
   { value: "inspections", label: "Inspections" },
-  { value: "funds", label: "Funds" },
   { value: "access", label: "Portal Access", staffOnly: true },
 ];
 
@@ -154,10 +153,6 @@ export function DarwinClaimControlCenter({
 
         <TabsContent value="inspections" className="mt-6">
           <ClaimInspections claimId={claimId} />
-        </TabsContent>
-
-        <TabsContent value="funds" className="mt-6">
-          <ClaimAccounting claim={claim} userRole={userRole} />
         </TabsContent>
 
         {isStaffOrAdmin && (

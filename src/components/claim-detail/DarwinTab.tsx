@@ -125,7 +125,7 @@ const workspaceSections: DarwinWorkspaceSection[] = [
   {
     key: "claim-intelligence",
     title: "Claim Intelligence",
-    description: "Insights, accounting, strategic command, and quick actions",
+    description: "Insights, strategic command, and quick actions",
     icon: Search,
   },
   {
@@ -300,11 +300,6 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
       setActiveWorkspace(targetWorkspace);
     }
     
-    if (section === "funds") {
-      setActiveWorkspace("claim-control-center");
-      setActiveTab("funds");
-    }
-
     const workspace = document.getElementById("darwin-workspace");
     workspace?.scrollIntoView({ behavior: "smooth", block: "start" });
   };

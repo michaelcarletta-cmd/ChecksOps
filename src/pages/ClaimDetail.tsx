@@ -431,9 +431,6 @@ const ClaimDetail = () => {
               <TabsTrigger value="files" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
                 Files
               </TabsTrigger>
-              <TabsTrigger value="accounting" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
-                Accounting
-              </TabsTrigger>
             </TabsList>
           )}
 
@@ -459,10 +456,6 @@ const ClaimDetail = () => {
 
           <TabsContent value="files" className="mt-6">
             <ClaimFiles claimId={id || ""} claim={claim} isStaffOrAdmin={isStaffOrAdmin} />
-          </TabsContent>
-
-          <TabsContent value="accounting" className="mt-6">
-            <ClaimAccounting claim={claim} userRole={userRole} />
           </TabsContent>
         </Tabs>
       )}
