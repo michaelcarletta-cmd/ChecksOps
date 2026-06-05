@@ -29,6 +29,7 @@ import { LossTypesSettings } from "@/components/settings/LossTypesSettings";
 import { AutomationsSettings } from "@/components/settings/AutomationsSettings";
 import { CustomFieldsSettings } from "@/components/settings/CustomFieldsSettings";
 import { SignaturePresetsSettings } from "@/components/settings/SignaturePresetsSettings";
+import { ActumSettings } from "@/components/settings/ActumSettings";
 
 import { ImportSettings } from "@/components/settings/ImportSettings";
 import { UserManagementSettings } from "@/components/settings/UserManagementSettings";
@@ -678,10 +679,17 @@ export default function Settings() {
           {isAdmin && (
             <TabsTrigger value="checkalt" className="w-full md:w-auto justify-start text-base font-medium px-4">CheckAlt</TabsTrigger>
           )}
+          {isAdmin && (
+            <TabsTrigger value="actum" className="w-full md:w-auto justify-start text-base font-medium px-4">Actum</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="checkalt" className="w-full">
           <CheckAltSettings />
+        </TabsContent>
+
+        <TabsContent value="actum" className="w-full">
+          <ActumSettings />
         </TabsContent>
 
         <TabsContent value="profile" className="w-full">
