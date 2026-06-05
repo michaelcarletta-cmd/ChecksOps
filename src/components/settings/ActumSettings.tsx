@@ -33,7 +33,7 @@ export function ActumSettings() {
       if (!tenant?.id) return null;
       const { data, error } = await supabase
         .from("tenants")
-        .select("actum_parent_id, actum_sub_id, actum_webhook_secret")
+        .select("actum_parent_id, actum_sub_id, actum_syspass, actum_username, actum_password, actum_webhook_secret")
         .eq("id", tenant.id)
         .single();
       if (error) throw error;
