@@ -3194,30 +3194,69 @@ function CheckDetailPanel({
               <PayeeManager checkId={checkId} payees={check.check_payees ?? []} readOnly={isSharedView} onRefresh={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
             </TabsContent>
 
-            <TabsContent value="funds" className="p-4 mt-0">
-              {isOwner ? (
-                contractorPartner ? (
-                  <SendPaymentPanel
-                    checkIntakeItemId={checkId}
-                    checkAmount={Number(check.amount ?? 0)}
-                    checkNumber={check.check_number ?? undefined}
-                    carrierName={check.carrier_name ?? undefined}
-                    contractorTenantId={contractorPartner.id}
-                    contractorName={contractorPartner.name}
-                  />
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-6">
-                    Share this check with a contractor partner first to send funds.
-                  </p>
-                )
-              ) : (
-                <IncomingFundsTab
-                  checkIntakeItemId={checkId}
-                  checkNumber={check.check_number ?? undefined}
-                  carrierName={check.carrier_name ?? undefined}
-                />
-              )}
+            <TabsContent value="funds" className="p-4 mt-0 space-y-4">
+              {(() => {
+                const stage = (check as any).check_stage ?? null;
+                const status = (check as any).status ?? null;
+                const isDeposited = stage === "deposited" || status === "deposited";
+                const checkAmt = Number(check.amount ?? 0);
+
+                if (!isOwner) {
+                  return (
+                    <IncomingFundsTab
+                      checkIntakeItemId={checkId}
+                      checkNumber={check.check_number ?? undefined}
+                      carrierName={check.carrier_name ?? undefined}
+                    />
+                  );
+                }
+
+                if (!isDeposited) {
+                  return (
+                    <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-300">
+                      <p className="font-medium mb-1">Check must be deposited first</p>
+                      <p className="text-xs">
+                        Actum disbursement controls become available once this check is marked as
+                        Deposited (via CheckAlt RDC or branch deposit).
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <>
+                    {contractorPartner ? (
+                      <SendPaymentPanel
+                        checkIntakeItemId={checkId}
+                        checkAmount={checkAmt}
+                        checkNumber={check.check_number ?? undefined}
+                        carrierName={check.carrier_name ?? undefined}
+                        contractorTenantId={contractorPartner.id}
+                        contractorName={contractorPartner.name}
+                      />
+                    ) : null}
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                          Disburse via Actum
+                        </p>
+                      </div>
+                      <DisbursementConsole
+                        checkIntakeItemId={checkId}
+                        checkAmount={checkAmt}
+                        checkNumber={check.check_number ?? undefined}
+                        carrierName={check.carrier_name ?? undefined}
+                        onComplete={() => {
+                          qc.invalidateQueries({ queryKey: ["check-funds-count", checkId, tenantId] });
+                        }}
+                      />
+                    </div>
+                  </>
+                );
+              })()}
             </TabsContent>
+
 
             <TabsContent value="eligibility" className="p-4 space-y-3 mt-0">
 
