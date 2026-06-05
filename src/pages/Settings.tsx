@@ -864,6 +864,12 @@ export default function Settings() {
                   <OutlookConnectionSettings embedded />
                   <ZapierIntegrationSettings embedded />
                   <QuickBooksSettings embedded />
+                  <div className="pt-6 border-t">
+                    <h3 className="text-lg font-medium mb-4">Payment Processing</h3>
+                    <div className="space-y-6">
+                      <ActumSettings />
+                    </div>
+                  </div>
                   
                 </CardContent>
               </CollapsibleContent>
