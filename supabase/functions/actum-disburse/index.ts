@@ -56,9 +56,22 @@ serve(async (req) => {
     if (!batch) throw new Error("Batch not found");
     if (batch.status !== "pending") throw new Error(`Batch is already ${batch.status}`);
 
-    const actumParentId = Deno.env.get("ACTUM_PARENT_ID");
-    const actumSubId = Deno.env.get("ACTUM_SUB_ID");
+    // Get tenant's Actum credentials
+    const { data: tenantData, error: tenantErr } = await supabase
+      .from("tenants")
+      .select("actum_parent_id, actum_sub_id")
+      .eq("id", batch.tenant_id)
+      .single();
+
+    if (tenantErr) throw new Error(`Could not load tenant Actum config: ${tenantErr.message}`);
+
+    const actumParentId = tenantData?.actum_parent_id || Deno.env.get("ACTUM_PARENT_ID");
+    const actumSubId = tenantData?.actum_sub_id || Deno.env.get("ACTUM_SUB_ID");
     const actumEndpoint = "https://join.actumprocessing.com/cgi-bin/dbs/man_trans.cgi";
+
+    if (!actumParentId || !actumSubId) {
+      throw new Error("Actum API credentials (Parent ID / Sub ID) not configured for this tenant.");
+    }
 
     const results: Array<{
       split_id: string;
