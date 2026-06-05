@@ -591,6 +591,15 @@ export function TenantManagement() {
                   >
                     <Users className="h-4 w-4" />
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    title="Usage Tracking"
+                    onClick={() => setUsageTarget({ id: t.id, name: t.name })}
+                  >
+                    <Receipt className="h-4 w-4 text-primary" />
+                  </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={() => openEdit(t)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
