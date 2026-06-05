@@ -1119,11 +1119,9 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
               {checks.map((check: any) => (
                 <Fragment key={check.id}>
                 <TableRow 
-                  className="cursor-pointer hover:bg-muted/50"
+                  className={`cursor-pointer hover:bg-muted/50 transition-colors ${expandedCheckId === check.id ? 'bg-muted/40' : ''}`}
                   onClick={() => {
-                    if (check.deposit_status === "deposited") {
-                      setExpandedCheckId(expandedCheckId === check.id ? null : check.id);
-                    }
+                    setExpandedCheckId(expandedCheckId === check.id ? null : check.id);
                   }}
                 >
                   <TableCell className="font-medium">{check.check_number || "—"}</TableCell>
@@ -1167,8 +1165,8 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                     </TableCell>
                   )}
                 </TableRow>
-                {expandedCheckId === check.id && check.deposit_status === "deposited" && (
-                  <TableRow>
+                {expandedCheckId === check.id && (
+                  <TableRow className="hover:bg-transparent">
                     <TableCell colSpan={isAdmin ? 8 : 7} className="p-0 border-0">
                       <div className="p-3 bg-muted/30">
                         <div className="mb-3 px-1">
