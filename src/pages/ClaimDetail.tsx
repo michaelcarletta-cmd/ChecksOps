@@ -457,10 +457,6 @@ const ClaimDetail = () => {
           <TabsContent value="files" className="mt-6">
             <ClaimFiles claimId={id || ""} claim={claim} isStaffOrAdmin={isStaffOrAdmin} />
           </TabsContent>
-
-          <TabsContent value="accounting" className="mt-6">
-            <ClaimAccounting claim={claim} userRole={userRole} />
-          </TabsContent>
         </Tabs>
       )}
 
