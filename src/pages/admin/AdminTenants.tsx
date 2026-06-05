@@ -14,6 +14,7 @@ import { toast } from "@/hooks/use-toast";
 import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt } from "lucide-react";
 import { useRef } from "react";
 import { TenantDocumentsManager } from "@/components/white-label/TenantDocumentsManager";
+import { Switch } from "@/components/ui/switch";
 
 const ALLOWED_EMAIL = "mcarletta@freedomadj.com";
 
