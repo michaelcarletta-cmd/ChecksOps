@@ -30,6 +30,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 
+const FREEDOM_ADJUSTMENT_EMAIL = "mcarletta@freedomadj.com";
+
 const DepositOperationsConsole = lazy(() =>
   import("@/components/deposit-ops/DepositOperationsConsole").then(m => ({ default: m.DepositOperationsConsole }))
 );
