@@ -1609,10 +1609,12 @@ export type Database = {
       check_billing_events: {
         Row: {
           billed_at: string
-          check_intake_item_id: string
+          check_intake_item_id: string | null
           created_at: string
           currency: string
+          disbursement_split_id: string | null
           error_message: string | null
+          event_type: string | null
           id: string
           reported_at: string | null
           status: string
@@ -1624,10 +1626,12 @@ export type Database = {
         }
         Insert: {
           billed_at?: string
-          check_intake_item_id: string
+          check_intake_item_id?: string | null
           created_at?: string
           currency?: string
+          disbursement_split_id?: string | null
           error_message?: string | null
+          event_type?: string | null
           id?: string
           reported_at?: string | null
           status?: string
@@ -1639,10 +1643,12 @@ export type Database = {
         }
         Update: {
           billed_at?: string
-          check_intake_item_id?: string
+          check_intake_item_id?: string | null
           created_at?: string
           currency?: string
+          disbursement_split_id?: string | null
           error_message?: string | null
+          event_type?: string | null
           id?: string
           reported_at?: string | null
           status?: string
@@ -1656,8 +1662,15 @@ export type Database = {
           {
             foreignKeyName: "check_billing_events_check_intake_item_id_fkey"
             columns: ["check_intake_item_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "check_billing_events_disbursement_split_id_fkey"
+            columns: ["disbursement_split_id"]
+            isOneToOne: false
+            referencedRelation: "disbursement_splits"
             referencedColumns: ["id"]
           },
           {
@@ -11427,6 +11440,7 @@ export type Database = {
           completed_at: string | null
           created_at: string
           created_by: string
+          delivery_speed: string | null
           deposit_item_id: string | null
           id: string
           notes: string | null
@@ -11444,6 +11458,7 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           created_by: string
+          delivery_speed?: string | null
           deposit_item_id?: string | null
           id?: string
           notes?: string | null
@@ -11461,6 +11476,7 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           created_by?: string
+          delivery_speed?: string | null
           deposit_item_id?: string | null
           id?: string
           notes?: string | null
@@ -17197,6 +17213,8 @@ export type Database = {
           max_checks_per_month: number | null
           name: string
           partner_code: string
+          per_check_billing_enabled: boolean | null
+          per_check_rate_cents: number | null
           plan_tier: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color: string | null
           secondary_color: string | null
@@ -17225,6 +17243,8 @@ export type Database = {
           max_checks_per_month?: number | null
           name: string
           partner_code?: string
+          per_check_billing_enabled?: boolean | null
+          per_check_rate_cents?: number | null
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color?: string | null
           secondary_color?: string | null
@@ -17253,6 +17273,8 @@ export type Database = {
           max_checks_per_month?: number | null
           name?: string
           partner_code?: string
+          per_check_billing_enabled?: boolean | null
+          per_check_rate_cents?: number | null
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color?: string | null
           secondary_color?: string | null

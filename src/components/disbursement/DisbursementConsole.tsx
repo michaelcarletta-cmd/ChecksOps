@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { AlertTriangle, CheckCircle2, Send, Building2, Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Send, Building2, Loader2, RefreshCw, Zap, Clock } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 
 interface Props {
   checkIntakeItemId?: string;
@@ -57,6 +59,7 @@ export function DisbursementConsole({
 
   const [allocations, setAllocations] = useState<Record<string, string>>({});
   const [usePercent, setUsePercent] = useState(false);
+  const [deliverySpeed, setDeliverySpeed] = useState<"same_day" | "instant">("same_day");
 
   // Load reserve config
   const { data: reserveConfig } = useQuery({
@@ -161,6 +164,7 @@ export function DisbursementConsole({
           check_amount: checkAmount,
           reserve_held: reserveHeld,
           available_amount: availableAmount,
+          delivery_speed: deliverySpeed,
           status: "pending",
         })
         .select("id")
@@ -309,6 +313,49 @@ export function DisbursementConsole({
             <span className="font-semibold text-emerald-600">${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
           </div>
           <Progress value={((totalAllocatedDollars / availableAmount) * 100)} className="h-1.5" />
+        </div>
+
+        {/* Delivery Speed Selector */}
+        <div className="space-y-3 pt-2 border-t">
+          <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+            <Clock className="h-3 w-3" /> Delivery Speed
+          </p>
+          <RadioGroup 
+            value={deliverySpeed} 
+            onValueChange={(v) => setDeliverySpeed(v as any)}
+            className="grid grid-cols-2 gap-3"
+          >
+            <div>
+              <RadioGroupItem
+                value="same_day"
+                id="same_day"
+                className="peer sr-only"
+              />
+              <Label
+                htmlFor="same_day"
+                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+              >
+                <Clock className="mb-2 h-5 w-5" />
+                <span className="text-[11px] font-semibold">Same Day</span>
+                <span className="text-[10px] text-muted-foreground">$1.00 fee</span>
+              </Label>
+            </div>
+            <div>
+              <RadioGroupItem
+                value="instant"
+                id="instant"
+                className="peer sr-only"
+              />
+              <Label
+                htmlFor="instant"
+                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+              >
+                <Zap className="mb-2 h-5 w-5 text-amber-500" />
+                <span className="text-[11px] font-semibold">Instant</span>
+                <span className="text-[10px] text-muted-foreground">$1.50 fee</span>
+              </Label>
+            </div>
+          </RadioGroup>
         </div>
 
         {/* Allocation inputs */}

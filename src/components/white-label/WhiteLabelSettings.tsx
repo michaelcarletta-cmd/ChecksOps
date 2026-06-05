@@ -30,6 +30,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 
+const FREEDOM_ADJUSTMENT_EMAIL = "mcarletta@freedomadj.com";
+
 const DepositOperationsConsole = lazy(() =>
   import("@/components/deposit-ops/DepositOperationsConsole").then(m => ({ default: m.DepositOperationsConsole }))
 );
@@ -115,7 +117,7 @@ export function WhiteLabelSettings() {
 
           <TabsContent value="usage" className="space-y-4">
             <CheckUsageCard />
-            {isAdmin && <BillingConfigPanel />}
+            {isAdmin && user?.email === FREEDOM_ADJUSTMENT_EMAIL && <BillingConfigPanel />}
           </TabsContent>
 
 

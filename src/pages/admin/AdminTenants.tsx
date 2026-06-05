@@ -11,9 +11,10 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText } from "lucide-react";
+import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt } from "lucide-react";
 import { useRef } from "react";
 import { TenantDocumentsManager } from "@/components/white-label/TenantDocumentsManager";
+import { Switch } from "@/components/ui/switch";
 
 const ALLOWED_EMAIL = "mcarletta@freedomadj.com";
 
@@ -33,6 +34,8 @@ type Tenant = {
   email_reply_to: string | null;
   partner_code: string | null;
   is_system_tenant: boolean | null;
+  per_check_billing_enabled?: boolean | null;
+  per_check_rate_cents?: number | null;
   created_at: string;
 };
 
@@ -271,11 +274,12 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
 
       <div className="max-w-5xl mx-auto px-6 py-8">
         <Tabs defaultValue="company" className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="company"><Building2 className="w-4 h-4 mr-1" /> Company</TabsTrigger>
             <TabsTrigger value="branding"><Settings className="w-4 h-4 mr-1" /> Branding</TabsTrigger>
             <TabsTrigger value="email"><Mail className="w-4 h-4 mr-1" /> Email</TabsTrigger>
             <TabsTrigger value="documents"><FileText className="w-4 h-4 mr-1" /> Documents</TabsTrigger>
+            <TabsTrigger value="billing"><Receipt className="w-4 h-4 mr-1" /> Billing</TabsTrigger>
             <TabsTrigger value="users"><Users className="w-4 h-4 mr-1" /> Users</TabsTrigger>
           </TabsList>
 
@@ -290,6 +294,9 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           </TabsContent>
           <TabsContent value="documents" className="mt-6">
             <TenantDocumentsManager tenantId={tenant.id} />
+          </TabsContent>
+          <TabsContent value="billing" className="mt-6">
+            <BillingTab tenant={tenant} onUpdated={onUpdated} />
           </TabsContent>
           <TabsContent value="users" className="mt-6">
             <UsersTab tenant={tenant} />
@@ -679,5 +686,69 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tenant) => void }) {
+  const [enabled, setEnabled] = useState(tenant.per_check_billing_enabled || false);
+  const [rate, setRate] = useState(tenant.per_check_rate_cents || 0);
+  const { saving, save } = useTenantSave(tenant, onUpdated);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Per-Check Billing</CardTitle>
+        <CardDescription>Configure how much this tenant is billed per check processed.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label>Enable Per-Check Billing</Label>
+            <p className="text-xs text-muted-foreground">If enabled, every check that reaches "deposited" status generates a billing event.</p>
+          </div>
+          <Switch checked={enabled} onCheckedChange={setEnabled} />
+        </div>
+        
+        <div className="space-y-2">
+          <Label>Standard Check Rate (cents)</Label>
+          <div className="flex items-center gap-2">
+            <Input 
+              type="number" 
+              value={rate} 
+              onChange={(e) => setRate(parseInt(e.target.value) || 0)} 
+              disabled={!enabled}
+              className="max-w-[200px]"
+            />
+            <span className="text-sm text-muted-foreground font-mono">
+              = ${(rate / 100).toFixed(2)} per check
+            </span>
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-4">
+          <h3 className="text-sm font-medium">Actum Credit Usage Fees</h3>
+          <p className="text-xs text-muted-foreground">These fees are tracked for visibility. Tenants pay these directly to Actum.</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label className="text-xs">Same Day Credit</Label>
+              <Input value="$1.00" disabled className="bg-muted/50" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Instant Credit</Label>
+              <Input value="$1.50" disabled className="bg-muted/50" />
+            </div>
+          </div>
+        </div>
+
+        <Button 
+          onClick={() => save({ per_check_billing_enabled: enabled, per_check_rate_cents: rate })} 
+          disabled={saving}
+        >
+          {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Billing Settings
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
