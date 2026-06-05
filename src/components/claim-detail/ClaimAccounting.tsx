@@ -405,7 +405,7 @@ function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
     estimateAmount?: number,
     priorOffer?: number,
     notes?: string,
-    checks: any[] = []
+    settlementChecks: any[] = []
   ) => {
     const hasData = rcv > 0 || recDep > 0 || nonRecDep > 0 || deductible > 0;
 
@@ -447,10 +447,10 @@ function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
               Funds Tracking & Actum Controls
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {checks?.map((check: any) => (
+              {settlementChecks?.map((check: any) => (
                 <CheckProcessingCard key={check.id} claimId={claimId} checkId={check.id} isAdmin={isAdmin} />
               ))}
-              {(!checks || checks.length === 0) && (
+              {(!settlementChecks || settlementChecks.length === 0) && (
                 <p className="text-xs text-muted-foreground italic col-span-2">No checks recorded for this claim to display Actum controls.</p>
               )}
             </div>
