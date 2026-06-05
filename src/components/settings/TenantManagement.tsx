@@ -11,8 +11,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Building2, ExternalLink, Loader2, Pencil, Power, Upload, X, Trash2, Users } from "lucide-react";
+import { Plus, Building2, ExternalLink, Loader2, Pencil, Power, Upload, X, Trash2, Users, Receipt } from "lucide-react";
 import { TenantUserManagement } from "./TenantUserManagement";
+import { TenantUsageDashboard } from "./TenantUsageDashboard";
 
 interface TenantForm {
   name: string;
@@ -58,6 +59,7 @@ export function TenantManagement() {
   const [uploading, setUploading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [usersTarget, setUsersTarget] = useState<{ id: string; name: string } | null>(null);
+  const [usageTarget, setUsageTarget] = useState<{ id: string; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: tenants, isLoading } = useQuery({
@@ -589,6 +591,15 @@ export function TenantManagement() {
                   >
                     <Users className="h-4 w-4" />
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    title="Usage Tracking"
+                    onClick={() => setUsageTarget({ id: t.id, name: t.name })}
+                  >
+                    <Receipt className="h-4 w-4 text-primary" />
+                  </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={() => openEdit(t)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
@@ -605,6 +616,14 @@ export function TenantManagement() {
           tenantName={usersTarget.name}
           isOpen={true}
           onClose={() => setUsersTarget(null)}
+        />
+      )}
+      {usageTarget && (
+        <TenantUsageDashboard
+          tenantId={usageTarget.id}
+          tenantName={usageTarget.name}
+          isOpen={true}
+          onClose={() => setUsageTarget(null)}
         />
       )}
     </div>
