@@ -63,12 +63,9 @@ function htmlResp(body: string, status = 200) {
   });
 }
 
-function hasLegacyExpiredToken(endorsement: { status: string | null; token_expires_at: string | null }) {
-  return Boolean(
-    endorsement.token_expires_at &&
-    ["signed", "rejected", "waived"].includes(endorsement.status ?? "") === false &&
-    new Date(endorsement.token_expires_at) < new Date(),
-  );
+// Tokens never expire — links are always valid until signed, waived, or rejected
+function hasLegacyExpiredToken(_endorsement: { status: string | null; token_expires_at: string | null }) {
+  return false;
 }
 
 function escHtml(s: string | number | null | undefined): string {
@@ -320,7 +317,7 @@ function renderEndorsementPage(endorsement: Endorsement, supabaseUrl: string): s
 
   const alreadySigned = endorsement.status === "signed" || endorsement.status === "waived";
   const isRejected = endorsement.status === "rejected";
-  const isExpired = endorsement.status === "expired";
+  const isExpired = false; // Tokens never expire
 
   return `<!DOCTYPE html>
 <html lang="en">

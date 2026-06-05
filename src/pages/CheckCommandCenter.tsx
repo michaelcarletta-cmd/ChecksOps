@@ -998,14 +998,16 @@ export default function CheckCommandCenter() {
               <Card>
                 <CardHeader className="pb-2">
                   {isMobile && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="gap-1 -ml-2 mb-1 self-start"
-                      onClick={() => setReviewCheckId(null)}
-                    >
-                      <ArrowLeft className="h-4 w-4" /> Back
-                    </Button>
+                    <div className="sticky top-0 z-10 bg-background border-b pb-2 mb-2 -mx-4 px-4">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1 -ml-2 h-8 text-xs"
+                        onClick={() => setReviewCheckId(null)}
+                      >
+                        <ArrowLeft className="h-4 w-4" /> Back
+                      </Button>
+                    </div>
                   )}
                   <CardTitle className="text-sm">Review & Decision</CardTitle>
                 </CardHeader>
@@ -1215,14 +1217,16 @@ export default function CheckCommandCenter() {
               {selectedCheck ? (
                 <div className="space-y-2">
                   {isMobile && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="gap-1 -ml-2"
-                      onClick={() => setSelectedCheck(null)}
-                    >
-                      <ArrowLeft className="h-4 w-4" /> Back to checks
-                    </Button>
+                    <div className="sticky top-0 z-10 bg-background border-b pb-2 mb-2 -mx-4 px-4">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1 -ml-2 h-8 text-xs"
+                        onClick={() => setSelectedCheck(null)}
+                      >
+                        <ArrowLeft className="h-4 w-4" /> Back to checks
+                      </Button>
+                    </div>
                   )}
                   <CheckDetailPanel
                     checkId={selectedCheck}
