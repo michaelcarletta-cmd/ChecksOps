@@ -1612,6 +1612,7 @@ export type Database = {
           check_intake_item_id: string
           created_at: string
           currency: string
+          disbursement_split_id: string | null
           error_message: string | null
           event_type: string | null
           id: string
@@ -1628,6 +1629,7 @@ export type Database = {
           check_intake_item_id: string
           created_at?: string
           currency?: string
+          disbursement_split_id?: string | null
           error_message?: string | null
           event_type?: string | null
           id?: string
@@ -1644,6 +1646,7 @@ export type Database = {
           check_intake_item_id?: string
           created_at?: string
           currency?: string
+          disbursement_split_id?: string | null
           error_message?: string | null
           event_type?: string | null
           id?: string
@@ -1659,8 +1662,15 @@ export type Database = {
           {
             foreignKeyName: "check_billing_events_check_intake_item_id_fkey"
             columns: ["check_intake_item_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "check_billing_events_disbursement_split_id_fkey"
+            columns: ["disbursement_split_id"]
+            isOneToOne: false
+            referencedRelation: "disbursement_splits"
             referencedColumns: ["id"]
           },
           {
