@@ -180,7 +180,9 @@ export function CheckUsageCard() {
                   <Badge variant={e.status === "reported" ? "secondary" : "outline"} className="text-[10px] h-5">
                     {e.status}
                   </Badge>
-                  <span className="font-semibold">{formatCents(e.unit_price_cents, e.currency)}</span>
+                  {showBillingAmounts && (
+                    <span className="font-semibold">{formatCents(e.unit_price_cents, e.currency)}</span>
+                  )}
                 </div>
               </div>
             ))}
