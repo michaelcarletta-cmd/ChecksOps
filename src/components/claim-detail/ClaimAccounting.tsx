@@ -1121,9 +1121,7 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                 <TableRow 
                   className="cursor-pointer hover:bg-muted/50"
                   onClick={() => {
-                    if (check.deposit_status === "deposited") {
-                      setExpandedCheckId(expandedCheckId === check.id ? null : check.id);
-                    }
+                    setExpandedCheckId(expandedCheckId === check.id ? null : check.id);
                   }}
                 >
                   <TableCell className="font-medium">{check.check_number || "—"}</TableCell>
@@ -1167,7 +1165,7 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                     </TableCell>
                   )}
                 </TableRow>
-                {expandedCheckId === check.id && check.deposit_status === "deposited" && (
+                {expandedCheckId === check.id && (
                   <TableRow>
                     <TableCell colSpan={isAdmin ? 8 : 7} className="p-0 border-0">
                       <div className="p-3 bg-muted/30">
