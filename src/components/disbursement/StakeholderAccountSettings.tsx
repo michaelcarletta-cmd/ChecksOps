@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -11,8 +11,9 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { AlertTriangle, Building2, Plus, Trash2, Star, CreditCard, ShieldCheck, MailCheck, Lock, Loader2 } from "lucide-react";
+import { AlertTriangle, Building2, Plus, Trash2, Star, CreditCard, ShieldCheck, MailCheck, Lock, Loader2, Info } from "lucide-react";
 import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
+import { AchAuthorizationForm } from "./AchAuthorizationForm";
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   operating: "Operating",
@@ -247,6 +248,13 @@ export function StakeholderAccountSettings() {
           )}
 
           {/* Account list */}
+          <div className="flex items-center gap-2 px-1 mb-2">
+            <Info className="h-3.5 w-3.5 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground">
+              Your primary account requires ACH debit authorization before disbursements can be sent.
+            </p>
+          </div>
+
           {accounts.length === 0 && !showForm && (
             <p className="text-xs text-muted-foreground text-center py-4">
               No stakeholder accounts yet. Add one to start disbursing.
@@ -256,7 +264,8 @@ export function StakeholderAccountSettings() {
           {accounts.map((acct: any) => {
             const vStatus = (acct.verification_status ?? "unverified") as VerificationStatus;
             return (
-              <div key={acct.id} className="flex items-center justify-between gap-2 p-2.5 rounded-md border bg-background">
+              <React.Fragment key={acct.id}>
+                <div className="flex items-center justify-between gap-2 p-2.5 rounded-md border bg-background">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   {acct.is_primary && <Star className="h-3 w-3 text-amber-400 flex-shrink-0" />}
                   <div className="min-w-0 flex-1">
@@ -301,8 +310,17 @@ export function StakeholderAccountSettings() {
                   </Button>
                 </div>
               </div>
-            );
-          })}
+              {acct.is_primary && (
+                <AchAuthorizationForm
+                  stakeholderAccountId={acct.id}
+                  accountNickname={acct.nickname}
+                  accountLast4={acct.chk_acct.slice(-4)}
+                  custname={acct.custname}
+                />
+              )}
+            </React.Fragment>
+          );
+        })}
         </CardContent>
       </Card>
     </div>
