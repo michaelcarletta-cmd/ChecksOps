@@ -281,7 +281,7 @@ export function CheckReviewQueue({
         .from("check_intake_items")
         .select("*, check_payees(*)")
         .eq("tenant_id", tenantId!)
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: false });
       if (error) throw error;
 
       // 2. Also include partner-shared checks (different tenant_id)
@@ -298,7 +298,7 @@ export function CheckReviewQueue({
           .from("check_intake_items")
           .select("*, check_payees(*)")
           .in("id", sharedIds)
-          .order("created_at", { ascending: true });
+          .order("created_at", { ascending: false });
         sharedChecks = sc ?? [];
       }
 
