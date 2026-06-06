@@ -79,43 +79,46 @@ serve(async (req) => {
     // Use the tenant-specific credentials if available, otherwise fallback to env
     const { data: tenantData } = await supabase
       .from("tenants")
-      .select("actum_parent_id, actum_sub_id, actum_password")
+      .select("actum_parent_id, actum_sub_id, actum_syspass, actum_username, actum_password")
       .eq("id", account.tenant_id)
       .single();
 
     const parentId = tenantData?.actum_parent_id || Deno.env.get("ACTUM_PARENT_ID");
     const subId = tenantData?.actum_sub_id || Deno.env.get("ACTUM_SUB_ID");
-    const pass = tenantData?.actum_password || Deno.env.get("ACTUM_PASSWORD");
 
-    if (!parentId || !subId || !pass) {
+    if (!parentId || !subId) {
       throw new Error("Actum credentials not configured for this tenant.");
     }
 
-    const ACTUM_API_URL = "https://transit.actumprocessing.com/cgi-bin/process.cgi";
+    const ACTUM_API_URL = "https://join.actumprocessing.com/cgi-bin/dbs/man_trans.cgi";
 
-    // Common params for both credits
-    const baseParams = new URLSearchParams({
-      parentid: parentId,
-      subid: subId,
-      password: pass,
-      action: "init",
-      creditflag: "1", // This makes it an ACH credit (deposit into customer account)
-      custname: account.custname,
-      chk_aba: account.chk_aba,
-      chk_acct: account.chk_acct,
-      acct_type: account.acct_type || "C",
-      initial_funding: "0",
-    });
+    function buildParams(amountCents: number, label: string) {
+      const p = new URLSearchParams();
+      p.append("parent_id", parentId!);
+      p.append("sub_id", subId!);
+      if ((tenantData as any)?.actum_syspass) p.append("syspass", (tenantData as any).actum_syspass);
+      if ((tenantData as any)?.actum_username) p.append("api_user", (tenantData as any).actum_username);
+      if ((tenantData as any)?.actum_password) p.append("api_password", (tenantData as any).actum_password);
+      p.append("pmt_type", "chk");
+      p.append("custname", account.custname);
+      p.append("chk_acct", account.chk_acct);
+      p.append("chk_aba", account.chk_aba);
+      p.append("acct_type", account.acct_type || "C");
+      p.append("initial_amount", (amountCents / 100).toFixed(2));
+      p.append("billing_cycle", "-1");
+      p.append("action_code", "P");
+      p.append("creditflag", "1");
+      p.append("currency", "US");
+      p.append("merordernumber", `verify_${account.id}_${label}_${Date.now()}`);
+      p.append("postback", "1");
+      return p;
+    }
 
     // Credit 1
-    const params1 = new URLSearchParams(baseParams);
-    params1.append("amount", (amount1Cents / 100).toFixed(2));
-    params1.append("mer_order_number", `VER1_${account.id.slice(0, 8)}`);
-    
+    const params1 = buildParams(amount1Cents, "1");
+
     // Credit 2
-    const params2 = new URLSearchParams(baseParams);
-    params2.append("amount", (amount2Cents / 100).toFixed(2));
-    params2.append("mer_order_number", `VER2_${account.id.slice(0, 8)}`);
+    const params2 = buildParams(amount2Cents, "2");
 
     console.log(`Sending micro-deposits for account ${account.id}: ${amount1Cents}¢ and ${amount2Cents}¢`);
     
@@ -124,9 +127,11 @@ serve(async (req) => {
       callActum(ACTUM_API_URL, params2),
     ]);
 
-    if (res1.status !== "Accepted" || res2.status !== "Accepted") {
+    const r1ok = (res1.status ?? "").toLowerCase() === "accepted";
+    const r2ok = (res2.status ?? "").toLowerCase() === "accepted";
+    if (!r1ok || !r2ok) {
       console.error("Actum micro-deposit failed:", { res1, res2 });
-      throw new Error(`Actum rejected micro-deposits: ${res1.error_msg || res2.error_msg || "Unknown error"}`);
+      throw new Error(`Actum rejected micro-deposits: ${res1.reason || res1.error_msg || res2.reason || res2.error_msg || "Unknown error"}`);
     }
 
     // Record the verification
@@ -136,10 +141,10 @@ serve(async (req) => {
         tenant_id: account.tenant_id,
         stakeholder_account_id: account.id,
         initiated_by: userData.user.id,
-        actum_order_id_1: res1.ordernum,
-        actum_history_id_1: res1.historyid,
-        actum_order_id_2: res2.ordernum,
-        actum_history_id_2: res2.historyid,
+        actum_order_id_1: res1.ordernum || res1.order_id || null,
+        actum_history_id_1: res1.historyid || res1.history_id || null,
+        actum_order_id_2: res2.ordernum || res2.order_id || null,
+        actum_history_id_2: res2.historyid || res2.history_id || null,
         amount_1_cents: amount1Cents,
         amount_2_cents: amount2Cents,
         status: "pending",
