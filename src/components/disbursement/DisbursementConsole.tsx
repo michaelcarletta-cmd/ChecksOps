@@ -76,37 +76,41 @@ export function DisbursementConsole({
     },
   });
 
-  // Load stakeholder accounts
+  // Load stakeholder accounts whitelisted for THIS check
   const { data: accounts = [], isLoading } = useQuery({
-    queryKey: ["stakeholder-accounts", tenant?.id],
-    enabled: !!tenant?.id,
+    queryKey: ["disbursement-accounts", checkIntakeItemId, tenant?.id],
+    enabled: !!tenant?.id && !!checkIntakeItemId,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("stakeholder_accounts")
-        .select("*")
-        .eq("tenant_id", tenant!.id)
-        .eq("is_active", true)
-        .order("is_primary", { ascending: false })
-        .order("created_at", { ascending: true });
+        .from("check_stakeholders")
+        .select(`
+          added_via,
+          stakeholder_accounts:stakeholder_account_id (
+            id, nickname, account_type, chk_acct, is_active, is_primary, created_at
+          )
+        `)
+        .eq("check_intake_item_id", checkIntakeItemId!);
       if (error) throw error;
-      return data ?? [];
+      return (data ?? [])
+        .map((row: any) => row.stakeholder_accounts ? { ...row.stakeholder_accounts, added_via: row.added_via } : null)
+        .filter((a: any) => a && a.is_active)
+        .sort((a: any, b: any) => Number(b.is_primary) - Number(a.is_primary));
     },
   });
 
-  // Load existing batch for this check if any
-  const { data: existingBatch } = useQuery({
-    queryKey: ["disbursement-batch", checkIntakeItemId ?? depositItemId],
+  // Load all past splits for this check (running total of what's already disbursed)
+  const { data: pastBatches = [] } = useQuery({
+    queryKey: ["disbursement-batch-history", checkIntakeItemId ?? depositItemId],
     enabled: !!(checkIntakeItemId || depositItemId),
     queryFn: async () => {
       const query = supabase
         .from("disbursement_batches")
-        .select(`*, disbursement_splits(*, stakeholder_accounts(nickname, account_type))`)
-        .order("created_at", { ascending: false })
-        .limit(1);
+        .select(`id, status, created_at, delivery_speed, disbursement_splits(id, amount, status, return_code, stakeholder_accounts(nickname, account_type))`)
+        .order("created_at", { ascending: false });
       if (checkIntakeItemId) query.eq("check_intake_item_id", checkIntakeItemId);
       else if (depositItemId) query.eq("deposit_item_id", depositItemId);
       const { data } = await query;
-      return data?.[0] ?? null;
+      return data ?? [];
     },
   });
 
