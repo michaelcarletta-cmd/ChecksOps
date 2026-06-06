@@ -70,13 +70,6 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName }: Props)
   const totalDisbursed = outgoingSplits
     .filter((s: any) => s.status !== "failed" && s.status !== "cancelled" && s.status !== "returned")
     .reduce((sum: number, s: any) => sum + Number(s.amount || 0), 0);
-        .eq("check_intake_item_id", checkIntakeItemId)
-        .eq("recipient_tenant_id", tenant!.id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
 
   const totalReceived = incomingPayments
     .filter((p: any) => p.status === "settled")
