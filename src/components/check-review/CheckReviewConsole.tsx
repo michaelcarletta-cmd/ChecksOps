@@ -298,7 +298,7 @@ export function CheckReviewQueue({
           .from("check_intake_items")
           .select("*, check_payees(*)")
           .in("id", sharedIds)
-          .order("created_at", { ascending: true });
+          .order("created_at", { ascending: false });
         sharedChecks = sc ?? [];
       }
 
