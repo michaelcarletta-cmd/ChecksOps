@@ -186,7 +186,7 @@ export function DisbursementConsole({
         throw new Error(
           `Allocation exceeds available by $${over.toLocaleString("en-US", { minimumFractionDigits: 2 })}. ` +
           `Available to disburse: $${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} ` +
-          `(check $${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} − already disbursed $${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })} − reserve $${reserveHeld.toLocaleString("en-US", { minimumFractionDigits: 2 })}).`
+          `(check $${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} − already disbursed $${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })}).`
         );
       }
       // Race-condition guard: re-check server-side totals before insert
