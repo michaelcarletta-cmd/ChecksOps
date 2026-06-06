@@ -162,6 +162,17 @@ export function DisbursementConsole({
   const isBalanced = Math.abs(remaining) < 0.01;
   const isOverAllocated = remaining < -0.01;
 
+  // Unverified accounts that the user has actually allocated money to
+  const unverifiedAllocated = useMemo(() => {
+    return (accounts as any[]).filter((a) => {
+      const v = parseFloat(allocations[a.id] || "0");
+      if (isNaN(v) || v <= 0) return false;
+      const status = a.verification_status as VerificationStatus | null;
+      return status !== "verified" && status !== "admin_override";
+    });
+  }, [accounts, allocations]);
+  const hasUnverifiedAllocations = unverifiedAllocated.length > 0;
+
   const submitBatch = useMutation({
     mutationFn: async () => {
       if (!user || !tenant) throw new Error("Not authenticated");
