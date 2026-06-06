@@ -15,7 +15,7 @@ import { AlertTriangle, CheckCircle2, Send, Building2, Loader2, RefreshCw, Zap, 
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { CheckStakeholdersManager } from "./CheckStakeholdersManager";
-import { VERIFICATION_STATUS_LABELS, VERIFICATION_STATUS_BADGE_CLASSES } from "@/lib/banking";
+import { VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 
 interface Props {
   checkIntakeItemId?: string;
