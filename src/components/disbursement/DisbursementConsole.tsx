@@ -67,19 +67,6 @@ export function DisbursementConsole({
   const [adminOverride, setAdminOverride] = useState(false);
   const { isAdmin } = usePermissions();
 
-  // Load reserve config
-  const { data: reserveConfig } = useQuery({
-    queryKey: ["reserve-config", tenant?.id],
-    enabled: !!tenant?.id,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("reserve_config")
-        .select("*")
-        .eq("tenant_id", tenant!.id)
-        .single();
-      return data;
-    },
-  });
 
   // Load stakeholder accounts whitelisted for THIS check
   const { data: accounts = [], isLoading } = useQuery({
@@ -119,8 +106,6 @@ export function DisbursementConsole({
     },
   });
 
-  const reservePct = reserveConfig?.reserve_pct ?? 0.10;
-  const reserveHeld = checkAmount * reservePct;
 
   // Sum all prior split amounts that aren't failed/cancelled (counts pending + submitted + settled)
   const alreadyDisbursed = useMemo(() => {
@@ -135,7 +120,7 @@ export function DisbursementConsole({
     return total;
   }, [pastBatches]);
 
-  const availableAmount = Math.max(0, checkAmount - reserveHeld - alreadyDisbursed);
+  const availableAmount = Math.max(0, checkAmount - alreadyDisbursed);
 
   const allSplits = useMemo(() => {
     const rows: any[] = [];
@@ -201,7 +186,7 @@ export function DisbursementConsole({
         throw new Error(
           `Allocation exceeds available by $${over.toLocaleString("en-US", { minimumFractionDigits: 2 })}. ` +
           `Available to disburse: $${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} ` +
-          `(check $${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} − already disbursed $${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })} − reserve $${reserveHeld.toLocaleString("en-US", { minimumFractionDigits: 2 })}).`
+          `(check $${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} − already disbursed $${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })}).`
         );
       }
       // Race-condition guard: re-check server-side totals before insert
@@ -217,7 +202,7 @@ export function DisbursementConsole({
           }
           return sum;
         }, 0);
-        const freshAvailable = Math.max(0, checkAmount - reserveHeld - freshDisbursed);
+        const freshAvailable = Math.max(0, checkAmount - freshDisbursed);
         const allocSum = splits.reduce((s, x) => s + x.amount, 0);
         if (allocSum > freshAvailable + 0.01) {
           throw new Error(
@@ -235,7 +220,7 @@ export function DisbursementConsole({
           deposit_item_id: depositItemId ?? null,
           created_by: user.id,
           check_amount: checkAmount,
-          reserve_held: reserveHeld,
+          reserve_held: 0,
           available_amount: availableAmount,
           delivery_speed: deliverySpeed,
           status: "pending",
@@ -296,7 +281,7 @@ export function DisbursementConsole({
       </CardHeader>
       <CardContent className="space-y-4">
 
-        {/* Reserve & balance summary */}
+        {/* Balance summary */}
         <div className="rounded-md bg-muted/50 p-3 space-y-2">
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Check amount</span>
@@ -308,10 +293,6 @@ export function DisbursementConsole({
               <span className="text-blue-600 font-medium">− ${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
             </div>
           )}
-          <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">Reserve held ({Math.round(reservePct * 100)}%)</span>
-            <span className="text-amber-600 font-medium">− ${reserveHeld.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-          </div>
           <div className="border-t pt-2 flex justify-between text-sm">
             <span className="font-medium">Available to disburse</span>
             <span className="font-semibold text-emerald-600">${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
@@ -510,7 +491,7 @@ export function DisbursementConsole({
                 You're trying to send ${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })}, but only ${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} is available on this check.
               </p>
               <p className="text-[11px] opacity-90">
-                Check ${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} − already disbursed ${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })} − reserve ${reserveHeld.toLocaleString("en-US", { minimumFractionDigits: 2 })} = ${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} remaining.
+                Check ${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} − already disbursed ${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })} = ${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} remaining.
               </p>
             </div>
           </div>
