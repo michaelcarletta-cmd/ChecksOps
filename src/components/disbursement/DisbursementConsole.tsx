@@ -162,6 +162,19 @@ export function DisbursementConsole({
     mutationFn: async () => {
       if (!user || !tenant) throw new Error("Not authenticated");
 
+      const unverifiedWithAmount = accounts.filter((a: any) => {
+        const val = parseFloat(allocations[a.id] || "0");
+        const status = a.verification_status as VerificationStatus | null;
+        const isVerified = status === "verified" || status === "admin_override";
+        return !isVerified && !isNaN(val) && val > 0;
+      });
+
+      if (unverifiedWithAmount.length > 0 && !adminOverride) {
+        throw new Error(
+          `Unverified accounts: ${unverifiedWithAmount.map((a: any) => a.nickname).join(", ")} — please verify before disbursing.`
+        );
+      }
+
       // Build splits array
       const splits = accounts
         .filter((a: any) => {
@@ -391,7 +404,12 @@ export function DisbursementConsole({
               <div key={acct.id} className="flex items-center gap-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <p className="text-xs font-medium truncate">{acct.nickname}</p>
+                    <p className="text-xs font-medium truncate">
+                      {acct.nickname}
+                      {!isVerified && (
+                        <span className="text-[9px] text-amber-500 ml-1">(unverified)</span>
+                      )}
+                    </p>
                     <Badge variant="outline" className={`text-[9px] px-1 flex-shrink-0 ${ACCOUNT_TYPE_COLORS[acct.account_type]}`}>
                       {ACCOUNT_TYPE_LABELS[acct.account_type] || acct.account_type}
                     </Badge>
