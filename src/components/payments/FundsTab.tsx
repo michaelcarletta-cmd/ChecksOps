@@ -48,6 +48,36 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName }: Props)
     },
   });
 
+  // Disbursements this tenant sent out from this check (Actum)
+  const { data: outgoingBatches = [] } = useQuery({
+    queryKey: ["funds-tab-disbursements", checkIntakeItemId, tenant?.id],
+    enabled: !!checkIntakeItemId && !!tenant?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("disbursement_batches")
+        .select(`id, created_at, status, disbursement_splits(id, amount, status, return_code, created_at, stakeholder_accounts(nickname))`)
+        .eq("check_intake_item_id", checkIntakeItemId)
+        .eq("tenant_id", tenant!.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const outgoingSplits = outgoingBatches.flatMap((b: any) =>
+    (b.disbursement_splits ?? []).map((s: any) => ({ ...s, batch_id: b.id }))
+  );
+  const totalDisbursed = outgoingSplits
+    .filter((s: any) => s.status !== "failed" && s.status !== "cancelled" && s.status !== "returned")
+    .reduce((sum: number, s: any) => sum + Number(s.amount || 0), 0);
+        .eq("check_intake_item_id", checkIntakeItemId)
+        .eq("recipient_tenant_id", tenant!.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const totalReceived = incomingPayments
     .filter((p: any) => p.status === "settled")
     .reduce((sum: number, p: any) => sum + Number(p.payment_amount), 0);
