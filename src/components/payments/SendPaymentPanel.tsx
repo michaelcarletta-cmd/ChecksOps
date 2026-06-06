@@ -298,38 +298,78 @@ export function SendPaymentPanel({
           />
         </div>
 
-        {/* Confirm toggle */}
-        {!confirmed ? (
-          <Button
-            className="w-full"
-            variant="outline"
-            disabled={paymentAmount <= 0}
-            onClick={() => setConfirmed(true)}
-          >
-            <DollarSign className="h-4 w-4 mr-2" />
-            Review & confirm payment
-          </Button>
-        ) : (
-          <div className="space-y-2">
-            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-700 dark:text-amber-300">
-              You are about to send <strong>${paymentAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong> to {contractorName} for check #{checkNumber ?? "—"}. This cannot be undone once submitted.
-            </div>
-            <div className="flex gap-2">
-              <Button
-                className="flex-1"
-                onClick={() => sendPayment.mutate()}
-                disabled={sendPayment.isPending}
-              >
-                {sendPayment.isPending ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sending...</>
-                ) : (
-                  <><Send className="h-4 w-4 mr-2" />Confirm & send</>
-                )}
-              </Button>
-              <Button variant="outline" onClick={() => setConfirmed(false)}>Cancel</Button>
-            </div>
-          </div>
-        )}
+        {/* Verification gate */}
+        {(() => {
+          const vStatus = ((contractorAccount as any).verification_status ?? "unverified") as VerificationStatus;
+          const isVerified = vStatus === "verified" || vStatus === "admin_override";
+          const blocked = !isVerified && !(isAdmin && adminOverride);
+          return (
+            <>
+              {!isVerified && (
+                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 space-y-2 text-xs">
+                  <div className="flex items-start gap-2 text-amber-700 dark:text-amber-300">
+                    <ShieldAlert className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    <div className="space-y-1">
+                      <p className="font-medium">{contractorName}'s bank account hasn't been verified yet.</p>
+                      <p className="text-[11px] opacity-90">
+                        Status: <span className="font-medium">{VERIFICATION_LABEL[vStatus]}</span>. Have them confirm the two micro-deposits before sending, or an admin can override below.
+                      </p>
+                    </div>
+                  </div>
+                  {isAdmin && (
+                    <label className="flex items-start gap-2 pt-1 cursor-pointer">
+                      <Checkbox
+                        checked={adminOverride}
+                        onCheckedChange={(v) => setAdminOverride(v === true)}
+                        className="mt-0.5"
+                      />
+                      <span className="text-[11px] text-amber-800 dark:text-amber-200">
+                        <span className="font-semibold">Admin override:</span> send anyway. This is audit-logged.
+                      </span>
+                    </label>
+                  )}
+                </div>
+              )}
+
+              {/* Confirm toggle */}
+              {!confirmed ? (
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  disabled={paymentAmount <= 0 || blocked}
+                  onClick={() => setConfirmed(true)}
+                >
+                  {blocked ? (
+                    <><ShieldAlert className="h-4 w-4 mr-2" />Verify account to send</>
+                  ) : (
+                    <><DollarSign className="h-4 w-4 mr-2" />Review & confirm payment</>
+                  )}
+                </Button>
+              ) : (
+                <div className="space-y-2">
+                  <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-700 dark:text-amber-300">
+                    You are about to send <strong>${paymentAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong> to {contractorName} for check #{checkNumber ?? "—"}. This cannot be undone once submitted.
+                    {!isVerified && adminOverride && <div className="mt-1 font-semibold">Admin override active — verification will be bypassed and logged.</div>}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1"
+                      onClick={() => sendPayment.mutate()}
+                      disabled={sendPayment.isPending || blocked}
+                    >
+                      {sendPayment.isPending ? (
+                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sending...</>
+                      ) : (
+                        <><Send className="h-4 w-4 mr-2" />Confirm & send{!isVerified && adminOverride ? " (override)" : ""}</>
+                      )}
+                    </Button>
+                    <Button variant="outline" onClick={() => setConfirmed(false)}>Cancel</Button>
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
 
       </CardContent>
     </Card>
