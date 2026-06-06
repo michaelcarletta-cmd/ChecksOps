@@ -106,8 +106,6 @@ export function DisbursementConsole({
     },
   });
 
-  const reservePct = reserveConfig?.reserve_pct ?? 0.10;
-  const reserveHeld = checkAmount * reservePct;
 
   // Sum all prior split amounts that aren't failed/cancelled (counts pending + submitted + settled)
   const alreadyDisbursed = useMemo(() => {
