@@ -49,25 +49,32 @@ const emptyForm = {
   recipient_email: "",
 };
 
-export function StakeholderAccountSettings() {
+interface StakeholderAccountSettingsProps {
+  mode?: "banking" | "disbursement";
+}
+
+export function StakeholderAccountSettings({ mode = "disbursement" }: StakeholderAccountSettingsProps) {
   const { user } = useAuth();
   const { tenant } = useTenant();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(emptyForm);
+  const isBanking = mode === "banking";
+  const [form, setForm] = useState({ ...emptyForm, is_primary: isBanking });
 
   const { data: accounts = [], isLoading } = useQuery({
-    queryKey: ["stakeholder-accounts", tenant?.id],
+    queryKey: ["stakeholder-accounts", tenant?.id, mode],
     enabled: !!tenant?.id,
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("stakeholder_accounts")
         .select("id, nickname, account_type, chk_acct, acct_type, is_primary, is_active, custname, verification_status, verified_at")
         .eq("tenant_id", tenant!.id)
         .eq("is_active", true)
         .order("is_primary", { ascending: false })
         .order("created_at", { ascending: true });
+      if (isBanking) query = query.eq("is_primary", true);
+      const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
     },

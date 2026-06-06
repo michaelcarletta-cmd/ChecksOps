@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { 
-  LogOut, Building2, Users, Link2, Palette, ArrowLeft,
+  LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft,
   Loader2, Save, Trash2, Receipt, Banknote, KeyRound, HelpCircle,
   ArrowDownToLine, FileBarChart
 } from "lucide-react";
@@ -104,6 +104,7 @@ export function WhiteLabelSettings() {
             <TabsTrigger value="partners" className="text-xs gap-1"><Link2 className="h-3 w-3" />Partners</TabsTrigger>
             <TabsTrigger value="banking" className="text-xs gap-1"><Banknote className="h-3 w-3" />Bank Accounts</TabsTrigger>
             <TabsTrigger value="integrations" className="text-xs gap-1"><Link2 className="h-3 w-3" />Integrations</TabsTrigger>
+            <TabsTrigger value="disbursement" className="text-xs gap-1"><CreditCard className="h-3 w-3" />Disbursement</TabsTrigger>
             
             <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding</TabsTrigger>
             <TabsTrigger value="guide" className="text-xs gap-1"><HelpCircle className="h-3 w-3" />ChecksOps Guide</TabsTrigger>
@@ -140,11 +141,15 @@ export function WhiteLabelSettings() {
           </TabsContent>
 
           <TabsContent value="banking">
-            <StakeholderAccountSettings />
+            <StakeholderAccountSettings mode="banking" />
           </TabsContent>
 
           <TabsContent value="integrations">
             <ActumSettings />
+          </TabsContent>
+
+          <TabsContent value="disbursement">
+            <StakeholderAccountSettings mode="disbursement" />
           </TabsContent>
 
           <TabsContent value="branding">
