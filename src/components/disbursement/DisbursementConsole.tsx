@@ -254,6 +254,7 @@ export function DisbursementConsole({
       qc.invalidateQueries({ queryKey: ["disbursement-batch-history", checkIntakeItemId ?? depositItemId] });
       qc.invalidateQueries({ queryKey: ["disbursement-batch"] });
       setAllocations({});
+      setAdminOverride(false);
       onComplete?.();
     },
     onError: (e: any) => toast({ title: "Disbursement failed", description: e.message, variant: "destructive" }),
