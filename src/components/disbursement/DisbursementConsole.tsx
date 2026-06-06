@@ -9,9 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { AlertTriangle, CheckCircle2, Send, Building2, Loader2, RefreshCw, Zap, Clock } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Send, Building2, Loader2, RefreshCw, Zap, Clock, History } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { CheckStakeholdersManager } from "./CheckStakeholdersManager";
 
 interface Props {
   checkIntakeItemId?: string;
