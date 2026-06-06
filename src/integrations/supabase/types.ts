@@ -2599,6 +2599,71 @@ export type Database = {
           },
         ]
       }
+      check_stakeholders: {
+        Row: {
+          added_by: string | null
+          added_via: string
+          check_intake_item_id: string
+          created_at: string
+          id: string
+          partner_tenant_id: string | null
+          stakeholder_account_id: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          added_by?: string | null
+          added_via?: string
+          check_intake_item_id: string
+          created_at?: string
+          id?: string
+          partner_tenant_id?: string | null
+          stakeholder_account_id: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          added_by?: string | null
+          added_via?: string
+          check_intake_item_id?: string
+          created_at?: string
+          id?: string
+          partner_tenant_id?: string | null
+          stakeholder_account_id?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_stakeholders_check_intake_item_id_fkey"
+            columns: ["check_intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "check_stakeholders_partner_tenant_id_fkey"
+            columns: ["partner_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "check_stakeholders_stakeholder_account_id_fkey"
+            columns: ["stakeholder_account_id"]
+            isOneToOne: false
+            referencedRelation: "stakeholder_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "check_stakeholders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       check_status_audit: {
         Row: {
           changed_at: string
