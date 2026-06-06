@@ -116,7 +116,31 @@ export function DisbursementConsole({
 
   const reservePct = reserveConfig?.reserve_pct ?? 0.10;
   const reserveHeld = checkAmount * reservePct;
-  const availableAmount = checkAmount - reserveHeld;
+
+  // Sum all prior split amounts that aren't failed/cancelled (counts pending + submitted + settled)
+  const alreadyDisbursed = useMemo(() => {
+    let total = 0;
+    for (const b of pastBatches as any[]) {
+      for (const s of (b.disbursement_splits ?? [])) {
+        if (s.status !== "failed" && s.status !== "cancelled" && s.status !== "returned") {
+          total += Number(s.amount) || 0;
+        }
+      }
+    }
+    return total;
+  }, [pastBatches]);
+
+  const availableAmount = Math.max(0, checkAmount - reserveHeld - alreadyDisbursed);
+
+  const allSplits = useMemo(() => {
+    const rows: any[] = [];
+    for (const b of pastBatches as any[]) {
+      for (const s of (b.disbursement_splits ?? [])) {
+        rows.push({ ...s, batch_created_at: b.created_at, batch_id: b.id });
+      }
+    }
+    return rows;
+  }, [pastBatches]);
 
   const totalAllocated = useMemo(() => {
     return Object.values(allocations).reduce((sum, v) => {
