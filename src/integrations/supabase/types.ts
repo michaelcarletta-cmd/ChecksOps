@@ -16228,6 +16228,57 @@ export type Database = {
         }
         Relationships: []
       }
+      stakeholder_account_verification_log: {
+        Row: {
+          actor_user_id: string | null
+          created_at: string
+          details: Json | null
+          event_type: string
+          id: string
+          ip_address: string | null
+          stakeholder_account_id: string
+          tenant_id: string
+          user_agent: string | null
+        }
+        Insert: {
+          actor_user_id?: string | null
+          created_at?: string
+          details?: Json | null
+          event_type: string
+          id?: string
+          ip_address?: string | null
+          stakeholder_account_id: string
+          tenant_id: string
+          user_agent?: string | null
+        }
+        Update: {
+          actor_user_id?: string | null
+          created_at?: string
+          details?: Json | null
+          event_type?: string
+          id?: string
+          ip_address?: string | null
+          stakeholder_account_id?: string
+          tenant_id?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stakeholder_account_verification_lo_stakeholder_account_id_fkey"
+            columns: ["stakeholder_account_id"]
+            isOneToOne: false
+            referencedRelation: "stakeholder_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stakeholder_account_verification_log_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stakeholder_accounts: {
         Row: {
           account_type: string
@@ -16244,6 +16295,16 @@ export type Database = {
           nickname: string
           tenant_id: string
           updated_at: string
+          verification_amount_1_cents: number | null
+          verification_amount_2_cents: number | null
+          verification_attempts: number
+          verification_completed_at: string | null
+          verification_failure_reason: string | null
+          verification_initiated_at: string | null
+          verification_recipient_email: string | null
+          verification_status: string
+          verification_token: string | null
+          verification_token_expires_at: string | null
         }
         Insert: {
           account_type?: string
@@ -16260,6 +16321,16 @@ export type Database = {
           nickname: string
           tenant_id: string
           updated_at?: string
+          verification_amount_1_cents?: number | null
+          verification_amount_2_cents?: number | null
+          verification_attempts?: number
+          verification_completed_at?: string | null
+          verification_failure_reason?: string | null
+          verification_initiated_at?: string | null
+          verification_recipient_email?: string | null
+          verification_status?: string
+          verification_token?: string | null
+          verification_token_expires_at?: string | null
         }
         Update: {
           account_type?: string
@@ -16276,6 +16347,16 @@ export type Database = {
           nickname?: string
           tenant_id?: string
           updated_at?: string
+          verification_amount_1_cents?: number | null
+          verification_amount_2_cents?: number | null
+          verification_attempts?: number
+          verification_completed_at?: string | null
+          verification_failure_reason?: string | null
+          verification_initiated_at?: string | null
+          verification_recipient_email?: string | null
+          verification_status?: string
+          verification_token?: string | null
+          verification_token_expires_at?: string | null
         }
         Relationships: [
           {
