@@ -10,10 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, Banknote, Plus, Trash2, ShieldCheck, MailCheck, Lock, Loader2 } from "lucide-react";
+import { AlertTriangle, Banknote, Plus, Trash2, ShieldCheck, MailCheck, Lock, Loader2, ShieldAlert } from "lucide-react";
 import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 import { AchAuthorizationForm } from "@/components/disbursement/AchAuthorizationForm";
 import { MicroDepositVerification } from "@/components/disbursement/MicroDepositVerification";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const emptyForm = {
   nickname: "",
@@ -28,6 +29,7 @@ export function TenantBankAccountSettings() {
   const { user } = useAuth();
   const { tenant } = useTenant();
   const { toast } = useToast();
+  const { isAdmin } = usePermissions();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -118,6 +120,21 @@ export function TenantBankAccountSettings() {
       toast({ title: "Bank account removed" });
       qc.invalidateQueries({ queryKey: ["tenant-primary-accounts"] });
     },
+  });
+
+  const adminOverride = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("stakeholder_accounts")
+        .update({ verification_status: "admin_override", verified_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Account marked as verified (admin override)" });
+      qc.invalidateQueries({ queryKey: ["tenant-primary-accounts"] });
+    },
+    onError: (e: any) => toast({ title: "Override failed", description: e.message, variant: "destructive" }),
   });
 
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading...</div>;
@@ -266,6 +283,18 @@ export function TenantBankAccountSettings() {
                         disabled={resendVerification.isPending}
                       >
                         <MailCheck className="h-3 w-3 mr-1" /> Resend
+                      </Button>
+                    )}
+                    {isAdmin && vStatus !== "verified" && vStatus !== "admin_override" && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                        onClick={() => adminOverride.mutate(acct.id)}
+                        disabled={adminOverride.isPending}
+                        title="Admin override: mark as verified without micro-deposits"
+                      >
+                        <ShieldAlert className="h-3 w-3 mr-1" /> Override
                       </Button>
                     )}
                     <Button
