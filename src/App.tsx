@@ -27,6 +27,7 @@ const CheckOpsResetPassword = lazy(() => import("./pages/checkops/CheckOpsResetP
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
 const AdminTenants = lazy(() => import("./pages/admin/AdminTenants"));
+const VerifyAccount = lazy(() => import("./pages/VerifyAccount"));
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -68,6 +69,7 @@ function CheckOpsRoutes() {
       <Route path="/sign" element={<Suspense fallback={<PageLoader />}><Sign /></Suspense>} />
       <Route path="/endorse" element={<Suspense fallback={<PageLoader />}><Endorse /></Suspense>} />
       <Route path="/payment-direction/:token" element={<Suspense fallback={<PageLoader />}><PaymentDirectionPage /></Suspense>} />
+      <Route path="/verify-account/:token" element={<Suspense fallback={<PageLoader />}><VerifyAccount /></Suspense>} />
       <Route path="/unsubscribe" element={<Suspense fallback={<PageLoader />}><Unsubscribe /></Suspense>} />
       <Route path="/pricing" element={<Suspense fallback={<PageLoader />}><CheckOpsPricing /></Suspense>} />
       <Route path="/admin/tenants" element={<Suspense fallback={<PageLoader />}><AdminTenants /></Suspense>} />
