@@ -316,19 +316,18 @@ export function StakeholderAccountSettings() {
                   </Button>
                 </div>
               </div>
-              {acct.is_primary ? (
+              <MicroDepositVerification
+                accountId={acct.id}
+                accountNickname={acct.nickname}
+                accountLast4={acct.chk_acct.slice(-4)}
+                verificationStatus={acct.verification_status ?? "unverified"}
+              />
+              {acct.is_primary && (
                 <AchAuthorizationForm
                   stakeholderAccountId={acct.id}
                   accountNickname={acct.nickname}
                   accountLast4={acct.chk_acct.slice(-4)}
                   custname={acct.custname}
-                />
-              ) : (
-                <MicroDepositVerification
-                  accountId={acct.id}
-                  accountNickname={acct.nickname}
-                  accountLast4={acct.chk_acct.slice(-4)}
-                  verificationStatus={acct.verification_status ?? "unverified"}
                 />
               )}
             </React.Fragment>
