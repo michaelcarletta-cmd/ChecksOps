@@ -14349,6 +14349,81 @@ export type Database = {
         }
         Relationships: []
       }
+      micro_deposit_verifications: {
+        Row: {
+          actum_history_id_1: string | null
+          actum_history_id_2: string | null
+          actum_order_id_1: string | null
+          actum_order_id_2: string | null
+          amount_1_cents: number
+          amount_2_cents: number
+          attempts: number
+          created_at: string
+          expires_at: string
+          id: string
+          initiated_by: string
+          max_attempts: number
+          stakeholder_account_id: string
+          status: string
+          tenant_id: string
+          updated_at: string
+          verified_at: string | null
+        }
+        Insert: {
+          actum_history_id_1?: string | null
+          actum_history_id_2?: string | null
+          actum_order_id_1?: string | null
+          actum_order_id_2?: string | null
+          amount_1_cents: number
+          amount_2_cents: number
+          attempts?: number
+          created_at?: string
+          expires_at?: string
+          id?: string
+          initiated_by: string
+          max_attempts?: number
+          stakeholder_account_id: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          verified_at?: string | null
+        }
+        Update: {
+          actum_history_id_1?: string | null
+          actum_history_id_2?: string | null
+          actum_order_id_1?: string | null
+          actum_order_id_2?: string | null
+          amount_1_cents?: number
+          amount_2_cents?: number
+          attempts?: number
+          created_at?: string
+          expires_at?: string
+          id?: string
+          initiated_by?: string
+          max_attempts?: number
+          stakeholder_account_id?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "micro_deposit_verifications_stakeholder_account_id_fkey"
+            columns: ["stakeholder_account_id"]
+            isOneToOne: false
+            referencedRelation: "stakeholder_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "micro_deposit_verifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mortgage_companies: {
         Row: {
           address_line_1: string | null
@@ -16390,6 +16465,7 @@ export type Database = {
           verification_status: string
           verification_token: string | null
           verification_token_expires_at: string | null
+          verified_at: string | null
         }
         Insert: {
           account_type?: string
@@ -16416,6 +16492,7 @@ export type Database = {
           verification_status?: string
           verification_token?: string | null
           verification_token_expires_at?: string | null
+          verified_at?: string | null
         }
         Update: {
           account_type?: string
@@ -16442,6 +16519,7 @@ export type Database = {
           verification_status?: string
           verification_token?: string | null
           verification_token_expires_at?: string | null
+          verified_at?: string | null
         }
         Relationships: [
           {
@@ -20295,6 +20373,14 @@ export type Database = {
       vault_update_bridge_secret: {
         Args: { _secret: string }
         Returns: boolean
+      }
+      verify_micro_deposits: {
+        Args: {
+          p_amount_1: number
+          p_amount_2: number
+          p_verification_id: string
+        }
+        Returns: Json
       }
     }
     Enums: {
