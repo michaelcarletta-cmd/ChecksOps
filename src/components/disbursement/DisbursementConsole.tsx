@@ -218,7 +218,9 @@ export function DisbursementConsole({
     },
     onSuccess: () => {
       toast({ title: "Disbursements submitted", description: "Credits are on their way to each account." });
+      qc.invalidateQueries({ queryKey: ["disbursement-batch-history", checkIntakeItemId ?? depositItemId] });
       qc.invalidateQueries({ queryKey: ["disbursement-batch"] });
+      setAllocations({});
       onComplete?.();
     },
     onError: (e: any) => toast({ title: "Disbursement failed", description: e.message, variant: "destructive" }),
