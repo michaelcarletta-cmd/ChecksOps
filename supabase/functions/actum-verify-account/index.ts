@@ -166,8 +166,8 @@ serve(async (req) => {
     );
   } catch (error: any) {
     console.error("Error in actum-verify-account:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return new Response(JSON.stringify({ success: false, error: error.message }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

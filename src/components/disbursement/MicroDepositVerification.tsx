@@ -56,7 +56,14 @@ export function MicroDepositVerification({
       const { data, error } = await supabase.functions.invoke("actum-verify-account", {
         body: { account_id: accountId },
       });
-      if (error) throw error;
+      if (error) {
+        let msg = error.message ?? "Failed to send micro-deposits";
+        try {
+          const body = await (error as any).context?.json?.();
+          if (body?.error) msg = body.error;
+        } catch {}
+        throw new Error(msg);
+      }
       if (data?.error) throw new Error(data.error);
       return data;
     },
