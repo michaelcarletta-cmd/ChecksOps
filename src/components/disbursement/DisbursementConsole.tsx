@@ -202,7 +202,7 @@ export function DisbursementConsole({
           }
           return sum;
         }, 0);
-        const freshAvailable = Math.max(0, checkAmount - reserveHeld - freshDisbursed);
+        const freshAvailable = Math.max(0, checkAmount - freshDisbursed);
         const allocSum = splits.reduce((s, x) => s + x.amount, 0);
         if (allocSum > freshAvailable + 0.01) {
           throw new Error(
@@ -220,7 +220,7 @@ export function DisbursementConsole({
           deposit_item_id: depositItemId ?? null,
           created_by: user.id,
           check_amount: checkAmount,
-          reserve_held: reserveHeld,
+          reserve_held: 0,
           available_amount: availableAmount,
           delivery_speed: deliverySpeed,
           status: "pending",
