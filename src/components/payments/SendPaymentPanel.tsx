@@ -115,9 +115,9 @@ export function SendPaymentPanel({
 
       if (payErr) throw payErr;
 
-      // Invoke Actum disburse edge function
+      // Invoke Actum disburse edge function (admin_override only honored server-side if caller is admin)
       const { error: invokeErr } = await supabase.functions.invoke("actum-send-payment", {
-        body: { payment_id: payment.id },
+        body: { payment_id: payment.id, admin_override: adminOverride && isAdmin },
       });
 
       if (invokeErr) throw invokeErr;
@@ -127,6 +127,7 @@ export function SendPaymentPanel({
       toast({ title: "Payment sent", description: `$${paymentAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} sent to ${contractorName}` });
       qc.invalidateQueries({ queryKey: ["claim-check-payment"] });
       setConfirmed(false);
+      setAdminOverride(false);
     },
     onError: (e: any) => toast({ title: "Payment failed", description: e.message, variant: "destructive" }),
   });
