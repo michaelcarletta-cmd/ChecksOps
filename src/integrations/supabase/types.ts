@@ -14,6 +14,72 @@ export type Database = {
   }
   public: {
     Tables: {
+      ach_authorizations: {
+        Row: {
+          authorized_by: string
+          authorized_name: string
+          created_at: string
+          form_text: string
+          id: string
+          ip_address: string | null
+          is_active: boolean
+          revoke_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          stakeholder_account_id: string
+          tenant_id: string
+          updated_at: string
+          user_agent: string | null
+        }
+        Insert: {
+          authorized_by: string
+          authorized_name: string
+          created_at?: string
+          form_text: string
+          id?: string
+          ip_address?: string | null
+          is_active?: boolean
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          stakeholder_account_id: string
+          tenant_id: string
+          updated_at?: string
+          user_agent?: string | null
+        }
+        Update: {
+          authorized_by?: string
+          authorized_name?: string
+          created_at?: string
+          form_text?: string
+          id?: string
+          ip_address?: string | null
+          is_active?: boolean
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          stakeholder_account_id?: string
+          tenant_id?: string
+          updated_at?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ach_authorizations_stakeholder_account_id_fkey"
+            columns: ["stakeholder_account_id"]
+            isOneToOne: false
+            referencedRelation: "stakeholder_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ach_authorizations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       actum_transactions: {
         Row: {
           actum_history_id: string | null
@@ -11505,6 +11571,10 @@ export type Database = {
           completed_at: string | null
           created_at: string
           created_by: string
+          debit_account_id: string | null
+          debit_actum_history_id: string | null
+          debit_actum_order_id: string | null
+          debit_status: string | null
           delivery_speed: string | null
           deposit_item_id: string | null
           id: string
@@ -11523,6 +11593,10 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           created_by: string
+          debit_account_id?: string | null
+          debit_actum_history_id?: string | null
+          debit_actum_order_id?: string | null
+          debit_status?: string | null
           delivery_speed?: string | null
           deposit_item_id?: string | null
           id?: string
@@ -11541,6 +11615,10 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           created_by?: string
+          debit_account_id?: string | null
+          debit_actum_history_id?: string | null
+          debit_actum_order_id?: string | null
+          debit_status?: string | null
           delivery_speed?: string | null
           deposit_item_id?: string | null
           id?: string
@@ -11558,6 +11636,13 @@ export type Database = {
             columns: ["check_intake_item_id"]
             isOneToOne: false
             referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "disbursement_batches_debit_account_id_fkey"
+            columns: ["debit_account_id"]
+            isOneToOne: false
+            referencedRelation: "stakeholder_accounts"
             referencedColumns: ["id"]
           },
           {
