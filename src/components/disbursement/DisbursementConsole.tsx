@@ -180,7 +180,35 @@ export function DisbursementConsole({
         });
 
       if (splits.length === 0) throw new Error("No allocations entered");
-      if (isOverAllocated) throw new Error("Total exceeds available amount");
+      if (isOverAllocated) {
+        const over = Math.abs(remaining);
+        throw new Error(
+          `Allocation exceeds available by $${over.toLocaleString("en-US", { minimumFractionDigits: 2 })}. ` +
+          `Available to disburse: $${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} ` +
+          `(check $${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} − already disbursed $${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })} − reserve $${reserveHeld.toLocaleString("en-US", { minimumFractionDigits: 2 })}).`
+        );
+      }
+      // Race-condition guard: re-check server-side totals before insert
+      if (checkIntakeItemId) {
+        const { data: freshBatches } = await supabase
+          .from("disbursement_batches")
+          .select("disbursement_splits(amount,status)")
+          .eq("check_intake_item_id", checkIntakeItemId)
+          .eq("tenant_id", tenant.id);
+        const freshDisbursed = (freshBatches ?? []).reduce((sum: number, b: any) => {
+          for (const s of b.disbursement_splits ?? []) {
+            if (!["failed", "cancelled", "returned"].includes(s.status)) sum += Number(s.amount) || 0;
+          }
+          return sum;
+        }, 0);
+        const freshAvailable = Math.max(0, checkAmount - reserveHeld - freshDisbursed);
+        const allocSum = splits.reduce((s, x) => s + x.amount, 0);
+        if (allocSum > freshAvailable + 0.01) {
+          throw new Error(
+            `Another disbursement was just sent. Only $${freshAvailable.toLocaleString("en-US", { minimumFractionDigits: 2 })} is available now (you tried $${allocSum.toLocaleString("en-US", { minimumFractionDigits: 2 })}).`
+          );
+        }
+      }
 
       // Create the batch
       const { data: batch, error: batchErr } = await supabase
