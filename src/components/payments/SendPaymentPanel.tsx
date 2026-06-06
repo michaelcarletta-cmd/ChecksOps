@@ -205,15 +205,28 @@ export function SendPaymentPanel({
       <CardContent className="space-y-4">
 
         {/* Contractor account info */}
-        <div className="rounded-md bg-muted/50 p-2.5 flex items-center gap-2">
-          <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          <div>
-            <p className="text-xs font-medium">{contractorName}</p>
-            <p className="text-xs text-muted-foreground font-mono">
-              {contractorAccount.nickname} · ••••{contractorAccount.chk_acct.slice(-4)}
-            </p>
-          </div>
-        </div>
+        {(() => {
+          const vStatus = ((contractorAccount as any).verification_status ?? "unverified") as VerificationStatus;
+          const isVerified = vStatus === "verified" || vStatus === "admin_override";
+          return (
+            <div className="rounded-md bg-muted/50 p-2.5 flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium">{contractorName}</p>
+                <p className="text-xs text-muted-foreground font-mono">
+                  {contractorAccount.nickname} · ••••{contractorAccount.chk_acct.slice(-4)}
+                </p>
+              </div>
+              <Badge
+                variant="outline"
+                className={`text-[10px] flex items-center gap-1 ${VERIFICATION_BADGE_CLASS[vStatus]}`}
+              >
+                {isVerified ? <ShieldCheck className="h-3 w-3" /> : <ShieldAlert className="h-3 w-3" />}
+                {VERIFICATION_LABEL[vStatus]}
+              </Badge>
+            </div>
+          );
+        })()}
 
         {/* Fee input */}
         <div className="space-y-2">
