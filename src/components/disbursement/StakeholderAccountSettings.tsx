@@ -11,7 +11,6 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Slider } from "@/components/ui/slider";
 import { AlertTriangle, Building2, Plus, Trash2, Star, CreditCard, ShieldCheck, MailCheck, Lock, Loader2 } from "lucide-react";
 import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 
@@ -72,18 +71,6 @@ export function StakeholderAccountSettings() {
     },
   });
 
-  const { data: reserveConfig } = useQuery({
-    queryKey: ["reserve-config", tenant?.id],
-    enabled: !!tenant?.id,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("reserve_config")
-        .select("*")
-        .eq("tenant_id", tenant!.id)
-        .single();
-      return data;
-    },
-  });
 
   const addAccount = useMutation({
     mutationFn: async (values: typeof emptyForm) => {
@@ -141,94 +128,12 @@ export function StakeholderAccountSettings() {
     },
   });
 
-  const updateReserve = useMutation({
-    mutationFn: async (values: { reserve_pct: number; auto_replenish: boolean; replenish_threshold: number }) => {
-      const { error } = await supabase
-        .from("reserve_config")
-        .upsert({ tenant_id: tenant!.id, ...values }, { onConflict: "tenant_id" });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast({ title: "Reserve settings saved" });
-      qc.invalidateQueries({ queryKey: ["reserve-config"] });
-    },
-  });
-
-  const [reservePct, setReservePct] = useState((reserveConfig?.reserve_pct ?? 0.10) * 100);
-  const [autoReplenish, setAutoReplenish] = useState(reserveConfig?.auto_replenish ?? true);
-  const [replenishThreshold, setReplenishThreshold] = useState(reserveConfig?.replenish_threshold ?? 500);
 
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading accounts...</div>;
 
   return (
     <div className="space-y-6">
 
-      {/* Reserve Configuration */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <CreditCard className="h-4 w-4 text-amber-400" />
-            Reserve Configuration
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
-            <p className="text-xs text-amber-700 dark:text-amber-300">
-              A small reserve is held from each cleared check to cover potential ACH returns.
-              It releases automatically after 3 banking days with no returns.
-            </p>
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Reserve percentage</Label>
-              <span className="text-sm font-medium">{reservePct.toFixed(0)}%</span>
-            </div>
-            <Slider
-              min={5} max={25} step={1}
-              value={[reservePct]}
-              onValueChange={([v]) => setReservePct(v)}
-            />
-            <p className="text-xs text-muted-foreground">
-              On a $14,200 check: ${((reservePct / 100) * 14200).toLocaleString("en-US", { minimumFractionDigits: 2 })} held, ${((1 - reservePct / 100) * 14200).toLocaleString("en-US", { minimumFractionDigits: 2 })} available
-            </p>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <Label className="text-xs">Auto-replenish reserve</Label>
-              <p className="text-xs text-muted-foreground">Automatically top up when balance drops below threshold</p>
-            </div>
-            <Switch checked={autoReplenish} onCheckedChange={setAutoReplenish} />
-          </div>
-
-          {autoReplenish && (
-            <div className="space-y-1">
-              <Label className="text-xs">Replenish threshold ($)</Label>
-              <Input
-                type="number"
-                value={replenishThreshold}
-                onChange={(e) => setReplenishThreshold(Number(e.target.value))}
-                className="h-8 text-sm w-32"
-              />
-            </div>
-          )}
-
-          <Button
-            size="sm"
-            onClick={() =>
-              updateReserve.mutate({
-                reserve_pct: reservePct / 100,
-                auto_replenish: autoReplenish,
-                replenish_threshold: replenishThreshold,
-              })
-            }
-            disabled={updateReserve.isPending}
-          >
-            {updateReserve.isPending ? "Saving..." : "Save reserve settings"}
-          </Button>
-        </CardContent>
-      </Card>
 
       {/* Stakeholder Accounts */}
       <Card>
