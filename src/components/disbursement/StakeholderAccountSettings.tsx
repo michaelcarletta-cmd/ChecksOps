@@ -274,6 +274,11 @@ export function StakeholderAccountSettings() {
                 <div className="space-y-1">
                   <Label className="text-xs">Routing number (ABA)</Label>
                   <Input className="h-8 text-sm font-mono" placeholder="9 digits" maxLength={9} value={form.chk_aba} onChange={(e) => setForm({ ...form, chk_aba: e.target.value.replace(/\D/g, "") })} />
+                  {form.chk_aba.length === 9 && !isValidRoutingNumber(form.chk_aba) && (
+                    <p className="text-[11px] text-rose-600 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" /> Routing number failed checksum — please double-check.
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Account number</Label>
@@ -289,16 +294,29 @@ export function StakeholderAccountSettings() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-1 col-span-2">
+                  <Label className="text-xs">Recipient email for verification</Label>
+                  <Input
+                    className="h-8 text-sm"
+                    type="email"
+                    placeholder="who-owns-this-account@example.com"
+                    value={form.recipient_email}
+                    onChange={(e) => setForm({ ...form, recipient_email: e.target.value })}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    We'll send two small deposits to this account, then email this address with a link to confirm the amounts.
+                  </p>
+                </div>
                 <div className="flex items-center gap-2 pt-4">
                   <Switch checked={form.is_primary} onCheckedChange={(v) => setForm({ ...form, is_primary: v })} />
                   <Label className="text-xs">Set as primary account</Label>
                 </div>
               </div>
 
-              {(!form.nickname || !form.custname || !form.chk_aba || !form.chk_acct) && (
+              {(!form.nickname || !form.custname || !form.chk_aba || !form.chk_acct || !form.recipient_email) && (
                 <div className="flex items-center gap-1 text-xs text-amber-600">
                   <AlertTriangle className="h-3 w-3" />
-                  All fields required
+                  All fields required (including recipient email)
                 </div>
               )}
 
@@ -306,9 +324,17 @@ export function StakeholderAccountSettings() {
                 <Button
                   size="sm"
                   onClick={() => addAccount.mutate(form)}
-                  disabled={addAccount.isPending || !form.nickname || !form.custname || !form.chk_aba || !form.chk_acct}
+                  disabled={
+                    addAccount.isPending ||
+                    !form.nickname ||
+                    !form.custname ||
+                    !form.chk_aba ||
+                    !form.chk_acct ||
+                    !form.recipient_email ||
+                    !isValidRoutingNumber(form.chk_aba)
+                  }
                 >
-                  {addAccount.isPending ? "Saving..." : "Add account"}
+                  {addAccount.isPending ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Sending micro-deposits...</> : "Add & verify account"}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => { setShowForm(false); setForm(emptyForm); }}>Cancel</Button>
               </div>
