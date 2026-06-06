@@ -6,15 +6,35 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+async function callActum(
+  endpoint: string,
+  params: URLSearchParams,
+): Promise<Record<string, string>> {
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params.toString(),
+  });
+  const text = await res.text();
+  const parsed: Record<string, string> = {};
+  for (const line of text.split("\n").map((l) => l.trim()).filter(Boolean)) {
+    const eq = line.indexOf("=");
+    if (eq > -1) parsed[line.slice(0, eq)] = line.slice(eq + 1);
+  }
+  return parsed;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    // Require admin auth
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
+
     const authClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
@@ -22,22 +42,20 @@ serve(async (req) => {
     );
     const { data: userData, error: userErr } = await authClient.auth.getUser();
     if (userErr || !userData?.user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-    const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userData.user.id);
-    if (!roles?.some((r: any) => r.role === "admin")) {
-      return new Response(JSON.stringify({ error: "Forbidden: admin role required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
 
-    const body = await req.json();
-    const { batch_id, admin_override } = body ?? {};
+    const { batch_id } = await req.json();
     if (!batch_id) throw new Error("batch_id is required");
 
-    // Load the batch and all its splits with account details
+    // Load batch + splits + accounts
     const { data: batch, error: batchErr } = await supabase
       .from("disbursement_batches")
       .select(`
@@ -46,7 +64,7 @@ serve(async (req) => {
           *,
           stakeholder_accounts (
             id, nickname, chk_aba, chk_acct, acct_type,
-            custname, consumer_unique, account_type, verification_status
+            custname, consumer_unique, account_type, is_primary
           )
         )
       `)
@@ -57,228 +75,146 @@ serve(async (req) => {
     if (!batch) throw new Error("Batch not found");
     if (batch.status !== "pending") throw new Error(`Batch is already ${batch.status}`);
 
-    // Verification gate — block unverified accounts unless admin override is set.
-    if (!admin_override) {
-      const unverified = (batch.disbursement_splits ?? [])
-        .map((s: any) => s.stakeholder_accounts)
-        .filter((a: any) => a && a.verification_status !== "verified" && a.verification_status !== "admin_override");
-      if (unverified.length > 0) {
-        const names = unverified.map((a: any) => a.nickname).join(", ");
-        throw new Error(
-          `These accounts haven't completed bank verification yet: ${names}. ` +
-          `Have the recipient confirm the micro-deposits, or pass admin_override to send anyway.`
-        );
-      }
-    } else {
-      // Log admin overrides for each unverified split
-      for (const s of (batch.disbursement_splits ?? [])) {
-        const a = s.stakeholder_accounts;
-        if (a && a.verification_status !== "verified") {
-          await supabase.from("stakeholder_account_verification_log").insert({
-            stakeholder_account_id: a.id,
-            tenant_id: batch.tenant_id,
-            event_type: "admin_override",
-            actor_user_id: userData.user.id,
-            details: { batch_id, split_id: s.id, amount: s.amount },
-          });
-        }
-      }
+    // Identify primary account for debit
+    const primaryAccount = batch.disbursement_splits?.find(s => s.stakeholder_accounts?.is_primary)?.stakeholder_accounts;
+    if (!primaryAccount) {
+      throw new Error("No primary stakeholder account found to debit funds from.");
     }
 
-
-    // Get tenant's Actum credentials
-    const { data: tenantData, error: tenantErr } = await supabase
-      .from("tenants")
-      .select("actum_parent_id, actum_sub_id, actum_syspass, actum_username, actum_password")
-      .eq("id", batch.tenant_id)
+    // Load tenant Actum credentials
+    const { data: settings, error: settingsErr } = await supabase
+      .from("tenant_settings")
+      .select("*")
+      .eq("tenant_id", batch.tenant_id)
       .single();
 
-    if (tenantErr) throw new Error(`Could not load tenant Actum config: ${tenantErr.message}`);
-
-    const actumParentId = tenantData?.actum_parent_id || Deno.env.get("ACTUM_PARENT_ID");
-    const actumSubId = tenantData?.actum_sub_id || Deno.env.get("ACTUM_SUB_ID");
-    const actumEndpoint = "https://join.actumprocessing.com/cgi-bin/dbs/man_trans.cgi";
-
-    if (!actumParentId || !actumSubId) {
-      throw new Error("Actum API credentials (Parent ID / Sub ID) not configured for this tenant.");
+    if (settingsErr || !settings?.actum_parent_id) {
+      throw new Error("Actum credentials not configured for this tenant.");
     }
 
-    const syspass = (tenantData as any)?.actum_syspass;
-    const apiUser = (tenantData as any)?.actum_username;
-    const apiPass = (tenantData as any)?.actum_password;
+    // Authorization check: Verify active ACH authorization for the primary account
+    const { data: authRecord, error: authErr } = await supabase
+      .from("ach_authorizations")
+      .select("*")
+      .eq("stakeholder_account_id", primaryAccount.id)
+      .eq("is_active", true)
+      .limit(1)
+      .single();
 
-    const results: Array<{
-      split_id: string;
-      status: "accepted" | "declined";
-      actum_order_id?: string;
-      actum_history_id?: string;
-      consumer_unique?: string;
-      error?: string;
-    }> = [];
-
-    // Mark batch as submitted
-    await supabase
-      .from("disbursement_batches")
-      .update({ status: "submitted", submitted_at: new Date().toISOString() })
-      .eq("id", batch_id);
-
-    // Send each split as a separate Actum credit
-    for (const split of batch.disbursement_splits) {
-      const account = split.stakeholder_accounts;
-      if (!account) {
-        results.push({ split_id: split.id, status: "declined", error: "Account not found" });
-        continue;
-      }
-
-      // Build idempotence key so retries are safe
-      const idempotenceKey = split.idempotence_key ?? `split_${split.id}_${Date.now()}`;
-
-      // Use consumer_unique for repeat accounts (skips re-sending bank details)
-      const params = new URLSearchParams();
-      params.append("parent_id", actumParentId!);
-      params.append("sub_id", actumSubId!);
-      if (syspass) params.append("syspass", syspass);
-      if (apiUser) params.append("api_user", apiUser);
-      if (apiPass) params.append("api_password", apiPass);
-
-      if (account.consumer_unique) {
-        params.append("consumer_code", account.consumer_unique);
-        params.append("initial_amount", split.amount.toFixed(2));
-        params.append("billing_cycle", "-1");
-        params.append("pmt_type", "chk");
-      } else {
-        params.append("pmt_type", "chk");
-        params.append("custname", account.custname);
-        params.append("chk_acct", account.chk_acct);
-        params.append("chk_aba", account.chk_aba);
-        params.append("acct_type", account.acct_type);
-        params.append("initial_amount", split.amount.toFixed(2));
-        params.append("billing_cycle", "-1");
-        params.append("action_code", "P");
-        params.append("creditflag", "1");
-        params.append("currency", "US");
-        // Store claim/check reference in addenda for bank statement
-        params.append("merordernumber", `split_${split.id}`);
-        params.append("postback", "1");
-        params.append("idempotence", idempotenceKey);
-      }
-
-      let actumStatus: "accepted" | "declined" = "declined";
-      let orderId: string | undefined;
-      let historyId: string | undefined;
-      let consumerUnique: string | undefined;
-      let errorMsg: string | undefined;
-
-      try {
-        const actumRes = await fetch(actumEndpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: params.toString(),
-        });
-
-        const responseText = await actumRes.text();
-        const lines = responseText.split("\n").map((l) => l.trim()).filter(Boolean);
-        const parsed: Record<string, string> = {};
-        for (const line of lines) {
-          const eq = line.indexOf("=");
-          if (eq > -1) parsed[line.slice(0, eq)] = line.slice(eq + 1);
-        }
-
-        actumStatus = (parsed.status ?? "").toLowerCase() === "accepted" ? "accepted" : "declined";
-        orderId = parsed.order_id;
-        historyId = parsed.history_id;
-        consumerUnique = parsed.consumer_unique;
-        if (actumStatus === "declined") errorMsg = parsed.reason ?? parsed.authcode ?? "Declined by Actum";
-
-        // Save consumer_unique for future repeat transactions
-        if (consumerUnique && !account.consumer_unique) {
-          await supabase
-            .from("stakeholder_accounts")
-            .update({ consumer_unique: consumerUnique })
-            .eq("id", account.id);
-        }
-
-        // Log to actum_transactions
-        await supabase.from("actum_transactions").insert({
-          tenant_id: batch.tenant_id,
-          split_id: split.id,
-          batch_id: batch.id,
-          actum_order_id: orderId,
-          actum_history_id: historyId,
-          consumer_unique: consumerUnique,
-          mer_order_number: `split_${split.id}`,
-          transaction_type: "credit",
-          amount: split.amount,
-          status: actumStatus,
-          raw_response: parsed,
-          idempotence_key: idempotenceKey,
-        });
-
-        // Update split status
-        await supabase
-          .from("disbursement_splits")
-          .update({
-            status: actumStatus === "accepted" ? "submitted" : "failed",
-            actum_order_id: orderId,
-            actum_history_id: historyId,
-            actum_consumer_unique: consumerUnique,
-            submitted_at: new Date().toISOString(),
-            idempotence_key: idempotenceKey,
-          })
-          .eq("id", split.id);
-
-        // Record usage fee for Actum credit
-        if (actumStatus === "accepted") {
-          const speed = (batch as any).delivery_speed || 'same_day';
-          const feeCents = speed === 'instant' ? 150 : 100;
-          const eventType = speed === 'instant' ? 'actum_instant' : 'actum_same_day';
-
-          await supabase.from("check_billing_events").insert({
-            tenant_id: batch.tenant_id,
-            check_intake_item_id: batch.check_intake_item_id,
-            disbursement_split_id: split.id,
-            unit_price_cents: feeCents,
-            currency: 'usd',
-            status: 'recorded',
-            event_type: eventType
-          });
-        }
-
-
-      } catch (fetchErr: any) {
-        errorMsg = fetchErr.message;
-        await supabase
-          .from("disbursement_splits")
-          .update({ status: "failed" })
-          .eq("id", split.id);
-      }
-
-      results.push({ split_id: split.id, status: actumStatus, actum_order_id: orderId, actum_history_id: historyId, consumer_unique: consumerUnique, error: errorMsg });
+    if (authErr || !authRecord) {
+      throw new Error("ACH debit authorization not found or inactive for the primary account. Please sign the authorization in Settings.");
     }
 
-    // Update batch status based on results
-    const allAccepted = results.every((r) => r.status === "accepted");
-    const anyAccepted = results.some((r) => r.status === "accepted");
-    const batchFinalStatus = allAccepted ? "completed" : anyAccepted ? "partially_returned" : "failed";
+    // Step 1: Debit the primary account for the total batch amount
+    console.log(`Initiating debit of $${batch.total_amount} from primary account ${primaryAccount.nickname}`);
+    
+    const debitParams = new URLSearchParams({
+      parent_id: settings.actum_parent_id,
+      sub_id: settings.actum_sub_id || "",
+      pass_auth: settings.actum_pass_auth || "",
+      action: "initiate",
+      custname: primaryAccount.custname,
+      chk_aba: primaryAccount.chk_aba,
+      chk_acct: primaryAccount.chk_acct,
+      acct_type: primaryAccount.acct_type,
+      amount: batch.total_amount.toString(),
+      trans_type: "7", // Standard ACH Debit
+      trans_modifier: "S", // Same-day ACH
+      merch_orderid: `DEBIT-${batch_id.slice(0, 8)}`,
+      consumer_unique: primaryAccount.consumer_unique || `CUST-${primaryAccount.id.slice(0, 8)}`,
+    });
 
-    await supabase
-      .from("disbursement_batches")
-      .update({
-        status: batchFinalStatus,
-        completed_at: allAccepted ? new Date().toISOString() : null,
-      })
-      .eq("id", batch_id);
+    const debitResult = await callActum("https://rmapi.actumprocessing.com/cgi-bin/process.cgi", debitParams);
+    
+    // Log the debit transaction
+    const { error: debitLogErr } = await supabase.from("actum_transactions").insert({
+      tenant_id: batch.tenant_id,
+      disbursement_batch_id: batch.id,
+      stakeholder_account_id: primaryAccount.id,
+      transaction_type: "debit",
+      amount: batch.total_amount,
+      actum_order_id: debitResult.orderid || "FAILED",
+      status: debitResult.status === "Accepted" ? "accepted" : "declined",
+      raw_response: JSON.stringify(debitResult),
+    });
 
-    return new Response(
-      JSON.stringify({ success: true, batch_id, status: batchFinalStatus, results }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    if (debitLogErr) console.error("Failed to log debit transaction:", debitLogErr);
 
-  } catch (err: any) {
-    console.error("[actum-disburse]", err);
-    return new Response(
-      JSON.stringify({ success: false, error: err.message }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    if (debitResult.status !== "Accepted") {
+      const errorMsg = debitResult.reason || "Debit declined by processor";
+      await supabase.from("disbursement_batches").update({
+        status: "failed",
+        error_message: `Primary account debit failed: ${errorMsg}`,
+      }).eq("id", batch_id);
+      
+      throw new Error(`Funding debit failed: ${errorMsg}`);
+    }
+
+    // Step 2: Proceed with credits to payees
+    const results = [];
+    const splits = batch.disbursement_splits || [];
+
+    for (const split of splits) {
+      const acct = split.stakeholder_accounts;
+      if (!acct) continue;
+      
+      // Skip the primary account since it's the source of funds
+      if (acct.is_primary) continue;
+
+      const creditParams = new URLSearchParams({
+        parent_id: settings.actum_parent_id,
+        sub_id: settings.actum_sub_id || "",
+        pass_auth: settings.actum_pass_auth || "",
+        action: "initiate",
+        custname: acct.custname,
+        chk_aba: acct.chk_aba,
+        chk_acct: acct.chk_acct,
+        acct_type: acct.acct_type,
+        amount: split.amount.toString(),
+        trans_type: "7",
+        creditflag: "1", // Credit transaction
+        merch_orderid: `SPLIT-${split.id.slice(0, 8)}`,
+        consumer_unique: acct.consumer_unique || `CUST-${acct.id.slice(0, 8)}`,
+      });
+
+      const actumRes = await callActum("https://rmapi.actumprocessing.com/cgi-bin/process.cgi", creditParams);
+      
+      // Update split status
+      await supabase.from("disbursement_splits").update({
+        actum_order_id: actumRes.orderid,
+        status: actumRes.status === "Accepted" ? "processed" : "failed",
+        error_message: actumRes.status === "Accepted" ? null : actumRes.reason,
+      }).eq("id", split.id);
+
+      // Log credit transaction
+      await supabase.from("actum_transactions").insert({
+        tenant_id: batch.tenant_id,
+        disbursement_batch_id: batch.id,
+        stakeholder_account_id: acct.id,
+        transaction_type: "credit",
+        amount: split.amount,
+        actum_order_id: actumRes.orderid || "FAILED",
+        status: actumRes.status === "Accepted" ? "accepted" : "declined",
+        raw_response: JSON.stringify(actumRes),
+      });
+
+      results.push({ split_id: split.id, status: actumRes.status, orderid: actumRes.orderid });
+    }
+
+    // Update batch to completed
+    await supabase.from("disbursement_batches").update({
+      status: "completed",
+      processed_at: new Date().toISOString(),
+    }).eq("id", batch_id);
+
+    return new Response(JSON.stringify({ success: true, results, debit_orderid: debitResult.orderid }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
+  } catch (error: any) {
+    console.error("Disbursement error:", error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
