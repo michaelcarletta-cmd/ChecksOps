@@ -90,6 +90,7 @@ serve(async (req) => {
       throw new Error("Actum credentials not configured for this tenant.");
     }
 
+    // Ensure we use the correct Actum endpoint for manual transactions
     const ACTUM_API_URL = "https://join.actumprocessing.com/cgi-bin/dbs/man_trans.cgi";
 
     function buildParams(amountCents: number, label: string) {
