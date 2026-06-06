@@ -428,12 +428,27 @@ export function DisbursementConsole({
           "bg-muted border border-border"
         }`}>
           <span className={isBalanced ? "text-emerald-700 dark:text-emerald-300" : isOverAllocated ? "text-red-700 dark:text-red-300" : "text-muted-foreground"}>
-            {isBalanced ? "✓ Balanced" : isOverAllocated ? "⚠ Over-allocated" : `Remaining: $${remaining.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+            {isBalanced ? "✓ Balanced" : isOverAllocated ? `⚠ Over by $${Math.abs(remaining).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : `Remaining: $${remaining.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
           </span>
           <span className="font-medium">
             ${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })} of ${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
           </span>
         </div>
+
+        {/* Over-allocation error */}
+        {isOverAllocated && (
+          <div className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-300 flex items-start gap-2">
+            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+            <div className="space-y-0.5">
+              <p className="font-medium">
+                You're trying to send ${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })}, but only ${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} is available on this check.
+              </p>
+              <p className="text-[11px] opacity-90">
+                Check ${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} − already disbursed ${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })} − reserve ${reserveHeld.toLocaleString("en-US", { minimumFractionDigits: 2 })} = ${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} remaining.
+              </p>
+            </div>
+          </div>
+        )}
 
         <Button
           className="w-full"
