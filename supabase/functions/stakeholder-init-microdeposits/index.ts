@@ -118,12 +118,14 @@ serve(async (req) => {
       params.append("postback", "1");
       params.append("idempotence", `verify_${stakeholder_account_id}_${label}_${Date.now()}`);
 
+      console.log(`[stakeholder-init-microdeposits] sending micro-deposit to Actum for ${account.id} (${label}): ${amountCents}c`);
       const res = await fetch(actumEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: params.toString(),
       });
       const text = await res.text();
+      console.log(`[stakeholder-init-microdeposits] Actum response for ${account.id} (${label}):`, text);
       const parsed: Record<string, string> = {};
       for (const line of text.split("\n").map((l) => l.trim()).filter(Boolean)) {
         const eq = line.indexOf("=");
