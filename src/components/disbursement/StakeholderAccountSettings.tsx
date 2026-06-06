@@ -12,7 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
-import { AlertTriangle, Building2, Plus, Trash2, Star, CreditCard } from "lucide-react";
+import { AlertTriangle, Building2, Plus, Trash2, Star, CreditCard, ShieldCheck, MailCheck, Lock, Loader2 } from "lucide-react";
+import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   operating: "Operating",
@@ -44,6 +45,7 @@ const emptyForm = {
   chk_acct: "",
   acct_type: "C",
   is_primary: false,
+  recipient_email: "",
 };
 
 export function StakeholderAccountSettings() {
@@ -85,20 +87,44 @@ export function StakeholderAccountSettings() {
 
   const addAccount = useMutation({
     mutationFn: async (values: typeof emptyForm) => {
-      const { error } = await supabase.from("stakeholder_accounts").insert({
-        ...values,
-        tenant_id: tenant!.id,
-        created_by: user!.id,
-      });
+      const { recipient_email, ...accountValues } = values;
+      const { data: inserted, error } = await supabase
+        .from("stakeholder_accounts")
+        .insert({
+          ...accountValues,
+          tenant_id: tenant!.id,
+          created_by: user!.id,
+        })
+        .select("id")
+        .single();
       if (error) throw error;
+      // Kick off micro-deposit verification
+      const { data: initData, error: initErr } = await supabase.functions.invoke(
+        "stakeholder-init-microdeposits",
+        { body: { stakeholder_account_id: inserted.id, recipient_email } },
+      );
+      if (initErr || (initData as any)?.error) {
+        throw new Error((initData as any)?.error ?? initErr?.message ?? "Failed to start verification");
+      }
     },
     onSuccess: () => {
-      toast({ title: "Account added" });
+      toast({ title: "Account added", description: "Two small deposits are on the way. Recipient will get an email to confirm." });
       qc.invalidateQueries({ queryKey: ["stakeholder-accounts"] });
       setForm(emptyForm);
       setShowForm(false);
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const resendVerification = useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await supabase.functions.invoke("stakeholder-resend-verification", {
+        body: { stakeholder_account_id: id },
+      });
+      if (error || (data as any)?.error) throw new Error((data as any)?.error ?? error?.message);
+    },
+    onSuccess: () => toast({ title: "Verification email resent" }),
+    onError: (e: any) => toast({ title: "Couldn't resend", description: e.message, variant: "destructive" }),
   });
 
   const deleteAccount = useMutation({
@@ -248,6 +274,11 @@ export function StakeholderAccountSettings() {
                 <div className="space-y-1">
                   <Label className="text-xs">Routing number (ABA)</Label>
                   <Input className="h-8 text-sm font-mono" placeholder="9 digits" maxLength={9} value={form.chk_aba} onChange={(e) => setForm({ ...form, chk_aba: e.target.value.replace(/\D/g, "") })} />
+                  {form.chk_aba.length === 9 && !isValidRoutingNumber(form.chk_aba) && (
+                    <p className="text-[11px] text-rose-600 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" /> Routing number failed checksum — please double-check.
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Account number</Label>
@@ -263,16 +294,29 @@ export function StakeholderAccountSettings() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-1 col-span-2">
+                  <Label className="text-xs">Recipient email for verification</Label>
+                  <Input
+                    className="h-8 text-sm"
+                    type="email"
+                    placeholder="who-owns-this-account@example.com"
+                    value={form.recipient_email}
+                    onChange={(e) => setForm({ ...form, recipient_email: e.target.value })}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    We'll send two small deposits to this account, then email this address with a link to confirm the amounts.
+                  </p>
+                </div>
                 <div className="flex items-center gap-2 pt-4">
                   <Switch checked={form.is_primary} onCheckedChange={(v) => setForm({ ...form, is_primary: v })} />
                   <Label className="text-xs">Set as primary account</Label>
                 </div>
               </div>
 
-              {(!form.nickname || !form.custname || !form.chk_aba || !form.chk_acct) && (
+              {(!form.nickname || !form.custname || !form.chk_aba || !form.chk_acct || !form.recipient_email) && (
                 <div className="flex items-center gap-1 text-xs text-amber-600">
                   <AlertTriangle className="h-3 w-3" />
-                  All fields required
+                  All fields required (including recipient email)
                 </div>
               )}
 
@@ -280,9 +324,17 @@ export function StakeholderAccountSettings() {
                 <Button
                   size="sm"
                   onClick={() => addAccount.mutate(form)}
-                  disabled={addAccount.isPending || !form.nickname || !form.custname || !form.chk_aba || !form.chk_acct}
+                  disabled={
+                    addAccount.isPending ||
+                    !form.nickname ||
+                    !form.custname ||
+                    !form.chk_aba ||
+                    !form.chk_acct ||
+                    !form.recipient_email ||
+                    !isValidRoutingNumber(form.chk_aba)
+                  }
                 >
-                  {addAccount.isPending ? "Saving..." : "Add account"}
+                  {addAccount.isPending ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Sending micro-deposits...</> : "Add & verify account"}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => { setShowForm(false); setForm(emptyForm); }}>Cancel</Button>
               </div>
@@ -296,32 +348,56 @@ export function StakeholderAccountSettings() {
             </p>
           )}
 
-          {accounts.map((acct: any) => (
-            <div key={acct.id} className="flex items-center justify-between p-2.5 rounded-md border bg-background">
-              <div className="flex items-center gap-2 min-w-0">
-                {acct.is_primary && <Star className="h-3 w-3 text-amber-400 flex-shrink-0" />}
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-sm font-medium truncate">{acct.nickname}</p>
-                    <Badge variant="outline" className={`text-[10px] px-1.5 ${ACCOUNT_TYPE_COLORS[acct.account_type]}`}>
-                      {ACCOUNT_TYPE_LABELS[acct.account_type]}
-                    </Badge>
+          {accounts.map((acct: any) => {
+            const vStatus = (acct.verification_status ?? "unverified") as VerificationStatus;
+            return (
+              <div key={acct.id} className="flex items-center justify-between gap-2 p-2.5 rounded-md border bg-background">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  {acct.is_primary && <Star className="h-3 w-3 text-amber-400 flex-shrink-0" />}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-sm font-medium truncate">{acct.nickname}</p>
+                      <Badge variant="outline" className={`text-[10px] px-1.5 ${ACCOUNT_TYPE_COLORS[acct.account_type]}`}>
+                        {ACCOUNT_TYPE_LABELS[acct.account_type]}
+                      </Badge>
+                      <Badge variant="outline" className={`text-[10px] px-1.5 ${VERIFICATION_BADGE_CLASS[vStatus]}`} title={VERIFICATION_LABEL[vStatus]}>
+                        {vStatus === "verified" ? <><ShieldCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Verified</> :
+                         vStatus === "pending" ? <><MailCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Awaiting confirmation</> :
+                         vStatus === "locked" ? <><Lock className="h-2.5 w-2.5 mr-0.5 inline" /> Locked</> :
+                         vStatus === "admin_override" ? "Admin override" :
+                         vStatus === "failed" ? "Failed" :
+                         "Not verified"}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground font-mono">
+                      ••••{acct.chk_acct.slice(-4)} · {acct.acct_type === "C" ? "Checking" : "Savings"}
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground font-mono">
-                    ••••{acct.chk_acct.slice(-4)} · {acct.acct_type === "C" ? "Checking" : "Savings"}
-                  </p>
+                </div>
+                <div className="flex items-center gap-1">
+                  {vStatus === "pending" && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs"
+                      onClick={() => resendVerification.mutate(acct.id)}
+                      disabled={resendVerification.isPending}
+                    >
+                      <MailCheck className="h-3 w-3 mr-1" /> Resend
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                    onClick={() => deleteAccount.mutate(acct.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                onClick={() => deleteAccount.mutate(acct.id)}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
     </div>

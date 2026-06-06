@@ -33,7 +33,8 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Forbidden: admin role required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { batch_id } = await req.json();
+    const body = await req.json();
+    const { batch_id, admin_override } = body ?? {};
     if (!batch_id) throw new Error("batch_id is required");
 
     // Load the batch and all its splits with account details
@@ -45,7 +46,7 @@ serve(async (req) => {
           *,
           stakeholder_accounts (
             id, nickname, chk_aba, chk_acct, acct_type,
-            custname, consumer_unique, account_type
+            custname, consumer_unique, account_type, verification_status
           )
         )
       `)
@@ -55,6 +56,35 @@ serve(async (req) => {
     if (batchErr) throw batchErr;
     if (!batch) throw new Error("Batch not found");
     if (batch.status !== "pending") throw new Error(`Batch is already ${batch.status}`);
+
+    // Verification gate — block unverified accounts unless admin override is set.
+    if (!admin_override) {
+      const unverified = (batch.disbursement_splits ?? [])
+        .map((s: any) => s.stakeholder_accounts)
+        .filter((a: any) => a && a.verification_status !== "verified" && a.verification_status !== "admin_override");
+      if (unverified.length > 0) {
+        const names = unverified.map((a: any) => a.nickname).join(", ");
+        throw new Error(
+          `These accounts haven't completed bank verification yet: ${names}. ` +
+          `Have the recipient confirm the micro-deposits, or pass admin_override to send anyway.`
+        );
+      }
+    } else {
+      // Log admin overrides for each unverified split
+      for (const s of (batch.disbursement_splits ?? [])) {
+        const a = s.stakeholder_accounts;
+        if (a && a.verification_status !== "verified") {
+          await supabase.from("stakeholder_account_verification_log").insert({
+            stakeholder_account_id: a.id,
+            tenant_id: batch.tenant_id,
+            event_type: "admin_override",
+            actor_user_id: userData.user.id,
+            details: { batch_id, split_id: s.id, amount: s.amount },
+          });
+        }
+      }
+    }
+
 
     // Get tenant's Actum credentials
     const { data: tenantData, error: tenantErr } = await supabase

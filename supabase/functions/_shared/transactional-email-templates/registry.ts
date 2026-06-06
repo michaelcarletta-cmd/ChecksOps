@@ -10,7 +10,9 @@ export interface TemplateEntry {
 }
 
 import { template as demoRequest } from './demo-request.tsx'
+import { template as stakeholderVerifyAccount } from './stakeholder-verify-account.tsx'
 
 export const TEMPLATES: Record<string, TemplateEntry> = {
   'demo-request': demoRequest,
+  'stakeholder-verify-account': stakeholderVerifyAccount,
 }

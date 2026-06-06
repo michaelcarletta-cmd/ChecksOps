@@ -32,7 +32,8 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Forbidden: admin role required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { payment_id } = await req.json();
+    const body = await req.json();
+    const { payment_id, admin_override } = body ?? {};
     if (!payment_id) throw new Error("payment_id is required");
 
     // Load the payment with recipient account details
@@ -41,7 +42,7 @@ serve(async (req) => {
       .select(`
         *,
         stakeholder_accounts:recipient_stakeholder_account_id (
-          id, chk_aba, chk_acct, acct_type, custname, consumer_unique
+          id, chk_aba, chk_acct, acct_type, custname, consumer_unique, nickname, verification_status
         )
       `)
       .eq("id", payment_id)
@@ -53,6 +54,24 @@ serve(async (req) => {
 
     const account = payment.stakeholder_accounts;
     if (!account) throw new Error("Recipient account not found");
+
+    // Verification gate
+    if (!admin_override && account.verification_status !== "verified" && account.verification_status !== "admin_override") {
+      throw new Error(
+        `Bank account "${account.nickname}" hasn't been verified yet (status: ${account.verification_status}). ` +
+        `Have the recipient confirm the micro-deposits before sending, or use the admin override.`
+      );
+    }
+    if (admin_override && account.verification_status !== "verified") {
+      await supabase.from("stakeholder_account_verification_log").insert({
+        stakeholder_account_id: account.id,
+        tenant_id: payment.tenant_id,
+        event_type: "admin_override",
+        actor_user_id: userData.user.id,
+        details: { payment_id, amount: payment.payment_amount },
+      });
+    }
+
 
     // Get tenant's Actum credentials
     const { data: tenantData, error: tenantErr } = await supabase
