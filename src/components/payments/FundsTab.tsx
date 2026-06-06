@@ -122,6 +122,51 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName }: Props)
         </Card>
       </div>
 
+      {/* Disbursement balance — shows check amount minus Actum payments */}
+      {totalReceived > 0 && (
+        <Card>
+          <CardContent className="pt-3 pb-3 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Funds received</span>
+              <span className="font-medium">${totalReceived.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Disbursed via Actum</span>
+              <span className="text-blue-600 font-medium">− ${totalDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="border-t pt-2 flex items-center justify-between text-sm">
+              <span className="font-medium">Remaining</span>
+              <span className="font-semibold text-emerald-600">
+                ${Math.max(0, totalReceived - totalDisbursed).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            {outgoingSplits.length > 0 && (
+              <div className="border-t pt-2 space-y-1">
+                {outgoingSplits.map((s: any) => (
+                  <div key={s.id} className="flex items-center justify-between text-[11px]">
+                    <span className="truncate text-muted-foreground">
+                      {s.stakeholder_accounts?.nickname ?? "—"}
+                      {s.created_at && <span className="ml-1 text-muted-foreground/70">· {format(new Date(s.created_at), "MMM d")}</span>}
+                    </span>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span>${Number(s.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+                      <Badge variant="outline" className={`text-[9px] ${
+                        s.status === "settled" ? "text-emerald-600 border-emerald-500/30 bg-emerald-500/10" :
+                        s.status === "returned" || s.status === "failed" ? "text-red-600 border-red-500/30 bg-red-500/10" :
+                        s.status === "submitted" ? "text-blue-600 border-blue-500/30 bg-blue-500/10" :
+                        "text-muted-foreground"
+                      }`}>
+                        {s.status}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Payment list */}
       <div className="space-y-2">
         {incomingPayments.map((payment: any) => {
