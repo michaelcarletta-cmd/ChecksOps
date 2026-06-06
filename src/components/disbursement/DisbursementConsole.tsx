@@ -519,12 +519,21 @@ export function DisbursementConsole({
         <Button
           className="w-full"
           onClick={() => submitBatch.mutate()}
-          disabled={submitBatch.isPending || isOverAllocated || totalAllocatedDollars === 0 || accounts.length === 0 || availableAmount <= 0}
+          disabled={
+            submitBatch.isPending ||
+            isOverAllocated ||
+            totalAllocatedDollars === 0 ||
+            accounts.length === 0 ||
+            availableAmount <= 0 ||
+            (hasUnverifiedAllocations && !(isAdmin && adminOverride))
+          }
         >
           {submitBatch.isPending ? (
             <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Submitting...</>
+          ) : hasUnverifiedAllocations && !adminOverride ? (
+            <><ShieldAlert className="h-4 w-4 mr-2" />Verify accounts to send</>
           ) : (
-            <><Send className="h-4 w-4 mr-2" />{isBalanced ? "Send all disbursements" : `Send $${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })} (partial)`}</>
+            <><Send className="h-4 w-4 mr-2" />{isBalanced ? "Send all disbursements" : `Send $${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })} (partial)`}{adminOverride && hasUnverifiedAllocations ? " (override)" : ""}</>
           )}
         </Button>
 
