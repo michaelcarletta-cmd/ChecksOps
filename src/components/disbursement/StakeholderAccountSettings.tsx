@@ -92,8 +92,16 @@ export function StakeholderAccountSettings() {
         "stakeholder-init-microdeposits",
         { body: { stakeholder_account_id: inserted.id, recipient_email } },
       );
-      if (initErr || (initData as any)?.error) {
-        throw new Error((initData as any)?.error ?? initErr?.message ?? "Failed to start verification");
+      if (initErr) {
+        let msg = initErr.message ?? "Failed to start verification";
+        try {
+          const body = await (initErr as any).context?.json?.();
+          if (body?.error) msg = body.error;
+        } catch {}
+        throw new Error(msg);
+      }
+      if ((initData as any)?.error) {
+        throw new Error((initData as any).error);
       }
     },
     onSuccess: () => {
@@ -110,7 +118,15 @@ export function StakeholderAccountSettings() {
       const { data, error } = await supabase.functions.invoke("stakeholder-resend-verification", {
         body: { stakeholder_account_id: id },
       });
-      if (error || (data as any)?.error) throw new Error((data as any)?.error ?? error?.message);
+      if (error) {
+        let msg = error.message ?? "Failed to resend verification";
+        try {
+          const body = await (error as any).context?.json?.();
+          if (body?.error) msg = body.error;
+        } catch {}
+        throw new Error(msg);
+      }
+      if ((data as any)?.error) throw new Error((data as any).error);
     },
     onSuccess: () => toast({ title: "Verification email resent" }),
     onError: (e: any) => toast({ title: "Couldn't resend", description: e.message, variant: "destructive" }),
