@@ -139,11 +139,19 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
           {checkStakeholders.map((s: any) => {
             const acct = s.stakeholder_accounts;
             if (!acct) return null;
+            const vStatus = (acct.verification_status ?? "unverified") as VerificationStatus;
             return (
               <div key={s.id} className="flex items-center justify-between gap-2 rounded-md border p-2 text-xs">
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-2 min-w-0 flex-wrap">
                   <span className="font-medium truncate">{acct.nickname}</span>
                   <span className="text-muted-foreground font-mono">••••{acct.chk_acct.slice(-4)}</span>
+                  <Badge variant="outline" className={`text-[9px] px-1.5 ${VERIFICATION_BADGE_CLASS[vStatus]}`} title={VERIFICATION_LABEL[vStatus]}>
+                    {vStatus === "verified" ? <><ShieldCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Verified</> :
+                     vStatus === "pending" ? <><MailCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Awaiting</> :
+                     vStatus === "locked" ? <><Lock className="h-2.5 w-2.5 mr-0.5 inline" /> Locked</> :
+                     vStatus === "admin_override" ? "Override" :
+                     "Unverified"}
+                  </Badge>
                   {s.added_via === "partner_share" && (
                     <Badge variant="outline" className="text-[9px] border-purple-500/30 text-purple-600 bg-purple-500/10"
                       title={s.partner?.name ? `Partner: ${s.partner.name}` : "Partner share"}>
