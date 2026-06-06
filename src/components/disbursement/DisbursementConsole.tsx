@@ -120,7 +120,7 @@ export function DisbursementConsole({
     return total;
   }, [pastBatches]);
 
-  const availableAmount = Math.max(0, checkAmount - reserveHeld - alreadyDisbursed);
+  const availableAmount = Math.max(0, checkAmount - alreadyDisbursed);
 
   const allSplits = useMemo(() => {
     const rows: any[] = [];
