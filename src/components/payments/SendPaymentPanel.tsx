@@ -41,6 +41,8 @@ export function SendPaymentPanel({
   const [feeValue, setFeeValue] = useState("");
   const [notes, setNotes] = useState("");
   const [confirmed, setConfirmed] = useState(false);
+  const [adminOverride, setAdminOverride] = useState(false);
+  const { isAdmin } = usePermissions();
 
   // Load contractor's primary stakeholder account
   const { data: contractorAccount, isLoading: accountLoading } = useQuery({
@@ -49,7 +51,7 @@ export function SendPaymentPanel({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("stakeholder_accounts")
-        .select("id, nickname, chk_acct, acct_type, custname, consumer_unique")
+        .select("id, nickname, chk_acct, acct_type, custname, consumer_unique, verification_status")
         .eq("tenant_id", contractorTenantId)
         .eq("is_primary", true)
         .eq("is_active", true)
