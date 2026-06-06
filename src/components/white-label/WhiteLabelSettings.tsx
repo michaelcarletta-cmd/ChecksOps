@@ -24,6 +24,7 @@ import { ActumSettings } from "@/components/settings/ActumSettings";
 
 import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
 import { CheckUsageCard } from "@/components/billing/CheckUsageCard";
+import { TenantUsageTracker } from "@/components/billing/TenantUsageTracker";
 import { BillingConfigPanel } from "@/components/billing/BillingConfigPanel";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
@@ -116,8 +117,13 @@ export function WhiteLabelSettings() {
           </TabsContent>
 
           <TabsContent value="usage" className="space-y-4">
-            <CheckUsageCard />
-            {isAdmin && user?.email === FREEDOM_ADJUSTMENT_EMAIL && <BillingConfigPanel />}
+            <TenantUsageTracker />
+            {isAdmin && user?.email === FREEDOM_ADJUSTMENT_EMAIL && (
+              <div className="pt-8 border-t border-dashed">
+                <h3 className="text-sm font-semibold mb-4 text-muted-foreground uppercase tracking-widest">Admin Billing Control</h3>
+                <BillingConfigPanel />
+              </div>
+            )}
           </TabsContent>
 
 
