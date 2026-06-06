@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { CheckCenterHelpPanel } from "@/components/check-review/CheckCenterHelp";
 import { StakeholderAccountSettings } from "@/components/disbursement/StakeholderAccountSettings";
+import { TenantBankAccountSettings } from "@/components/settings/TenantBankAccountSettings";
 import { TenantUserManager } from "./TenantUserManager";
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { TenantAIKeySettings } from "./TenantAIKeySettings";
@@ -141,7 +142,7 @@ export function WhiteLabelSettings() {
           </TabsContent>
 
           <TabsContent value="banking">
-            <StakeholderAccountSettings mode="banking" />
+            <TenantBankAccountSettings />
           </TabsContent>
 
           <TabsContent value="integrations">
@@ -149,7 +150,7 @@ export function WhiteLabelSettings() {
           </TabsContent>
 
           <TabsContent value="disbursement">
-            <StakeholderAccountSettings mode="disbursement" />
+            <StakeholderAccountSettings />
           </TabsContent>
 
           <TabsContent value="branding">
