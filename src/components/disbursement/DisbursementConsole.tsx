@@ -4,15 +4,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
 import { useToast } from "@/hooks/use-toast";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { AlertTriangle, CheckCircle2, Send, Building2, Loader2, RefreshCw, Zap, Clock, History } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { AlertTriangle, CheckCircle2, Send, Building2, Loader2, RefreshCw, Zap, Clock, History, ShieldAlert, ShieldCheck } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { CheckStakeholdersManager } from "./CheckStakeholdersManager";
+import { VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 
 interface Props {
   checkIntakeItemId?: string;
@@ -61,6 +64,8 @@ export function DisbursementConsole({
   const [allocations, setAllocations] = useState<Record<string, string>>({});
   const [usePercent, setUsePercent] = useState(false);
   const [deliverySpeed, setDeliverySpeed] = useState<"same_day" | "instant">("same_day");
+  const [adminOverride, setAdminOverride] = useState(false);
+  const { isAdmin } = usePermissions();
 
   // Load reserve config
   const { data: reserveConfig } = useQuery({
@@ -86,7 +91,7 @@ export function DisbursementConsole({
         .select(`
           added_via,
           stakeholder_accounts:stakeholder_account_id (
-            id, nickname, account_type, chk_acct, is_active, is_primary, created_at
+            id, nickname, account_type, chk_acct, is_active, is_primary, created_at, verification_status
           )
         `)
         .eq("check_intake_item_id", checkIntakeItemId!);
@@ -156,6 +161,17 @@ export function DisbursementConsole({
   const remaining = availableAmount - totalAllocatedDollars;
   const isBalanced = Math.abs(remaining) < 0.01;
   const isOverAllocated = remaining < -0.01;
+
+  // Unverified accounts that the user has actually allocated money to
+  const unverifiedAllocated = useMemo(() => {
+    return (accounts as any[]).filter((a) => {
+      const v = parseFloat(allocations[a.id] || "0");
+      if (isNaN(v) || v <= 0) return false;
+      const status = a.verification_status as VerificationStatus | null;
+      return status !== "verified" && status !== "admin_override";
+    });
+  }, [accounts, allocations]);
+  const hasUnverifiedAllocations = unverifiedAllocated.length > 0;
 
   const submitBatch = useMutation({
     mutationFn: async () => {
@@ -236,9 +252,9 @@ export function DisbursementConsole({
 
       if (splitsErr) throw splitsErr;
 
-      // Trigger Actum disbursement
+      // Trigger Actum disbursement (admin_override only honored server-side if caller is admin)
       const { error: invokeErr } = await supabase.functions.invoke("actum-disburse", {
-        body: { batch_id: batch.id },
+        body: { batch_id: batch.id, admin_override: adminOverride && isAdmin },
       });
 
       if (invokeErr) throw invokeErr;
@@ -249,6 +265,7 @@ export function DisbursementConsole({
       qc.invalidateQueries({ queryKey: ["disbursement-batch-history", checkIntakeItemId ?? depositItemId] });
       qc.invalidateQueries({ queryKey: ["disbursement-batch"] });
       setAllocations({});
+      setAdminOverride(false);
       onComplete?.();
     },
     onError: (e: any) => toast({ title: "Disbursement failed", description: e.message, variant: "destructive" }),
@@ -386,40 +403,89 @@ export function DisbursementConsole({
 
         {/* Allocation inputs */}
         <div className="space-y-2">
-          {accounts.map((acct: any) => (
-            <div key={acct.id} className="flex items-center gap-2">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-xs font-medium truncate">{acct.nickname}</p>
-                  <Badge variant="outline" className={`text-[9px] px-1 flex-shrink-0 ${ACCOUNT_TYPE_COLORS[acct.account_type]}`}>
-                    {ACCOUNT_TYPE_LABELS[acct.account_type] || acct.account_type}
-                  </Badge>
+          {accounts.map((acct: any) => {
+            const vStatus = (acct.verification_status ?? "unverified") as VerificationStatus;
+            const isVerified = vStatus === "verified" || vStatus === "admin_override";
+            return (
+              <div key={acct.id} className="flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="text-xs font-medium truncate">{acct.nickname}</p>
+                    <Badge variant="outline" className={`text-[9px] px-1 flex-shrink-0 ${ACCOUNT_TYPE_COLORS[acct.account_type]}`}>
+                      {ACCOUNT_TYPE_LABELS[acct.account_type] || acct.account_type}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className={`text-[9px] px-1 flex items-center gap-0.5 ${VERIFICATION_BADGE_CLASS[vStatus]}`}
+                      title={VERIFICATION_LABEL[vStatus]}
+                    >
+                      {isVerified ? <ShieldCheck className="h-2.5 w-2.5" /> : <ShieldAlert className="h-2.5 w-2.5" />}
+                      {VERIFICATION_LABEL[vStatus]}
+                    </Badge>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground font-mono">••••{acct.chk_acct.slice(-4)}</p>
                 </div>
-                <p className="text-[10px] text-muted-foreground font-mono">••••{acct.chk_acct.slice(-4)}</p>
+                <div className="flex items-center gap-1 w-28 flex-shrink-0">
+                  <span className="text-xs text-muted-foreground">{usePercent ? "%" : "$"}</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step={usePercent ? "1" : "0.01"}
+                    placeholder="0"
+                    className="h-8 text-sm text-right"
+                    value={allocations[acct.id] ?? ""}
+                    onChange={(e) => setAllocations({ ...allocations, [acct.id]: e.target.value })}
+                  />
+                </div>
+                {allocations[acct.id] && parseFloat(allocations[acct.id]) > 0 && (
+                  <span className="text-xs text-muted-foreground w-20 text-right flex-shrink-0">
+                    {usePercent
+                      ? `$${((parseFloat(allocations[acct.id]) / 100) * availableAmount).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                      : `${((parseFloat(allocations[acct.id]) / availableAmount) * 100).toFixed(1)}%`
+                    }
+                  </span>
+                )}
               </div>
-              <div className="flex items-center gap-1 w-28 flex-shrink-0">
-                <span className="text-xs text-muted-foreground">{usePercent ? "%" : "$"}</span>
-                <Input
-                  type="number"
-                  min="0"
-                  step={usePercent ? "1" : "0.01"}
-                  placeholder="0"
-                  className="h-8 text-sm text-right"
-                  value={allocations[acct.id] ?? ""}
-                  onChange={(e) => setAllocations({ ...allocations, [acct.id]: e.target.value })}
-                />
-              </div>
-              {allocations[acct.id] && parseFloat(allocations[acct.id]) > 0 && (
-                <span className="text-xs text-muted-foreground w-20 text-right flex-shrink-0">
-                  {usePercent
-                    ? `$${((parseFloat(allocations[acct.id]) / 100) * availableAmount).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
-                    : `${((parseFloat(allocations[acct.id]) / availableAmount) * 100).toFixed(1)}%`
-                  }
-                </span>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
+
+        {/* Unverified-account warning + admin override */}
+        {hasUnverifiedAllocations && (
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 space-y-2 text-xs">
+            <div className="flex items-start gap-2 text-amber-700 dark:text-amber-300">
+              <ShieldAlert className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <div className="space-y-1">
+                <p className="font-medium">
+                  {unverifiedAllocated.length === 1 ? "This account hasn't" : `${unverifiedAllocated.length} accounts haven't`} completed bank verification yet:
+                </p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  {unverifiedAllocated.map((a: any) => (
+                    <li key={a.id}>
+                      <span className="font-medium">{a.nickname}</span>
+                      <span className="text-amber-600/80"> — {VERIFICATION_LABEL[(a.verification_status ?? "unverified") as VerificationStatus]}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-[11px] opacity-90">
+                  Have the recipient confirm the two micro-deposits before sending, or an admin can override below.
+                </p>
+              </div>
+            </div>
+            {isAdmin && (
+              <label className="flex items-start gap-2 pt-1 cursor-pointer">
+                <Checkbox
+                  checked={adminOverride}
+                  onCheckedChange={(v) => setAdminOverride(v === true)}
+                  className="mt-0.5"
+                />
+                <span className="text-[11px] text-amber-800 dark:text-amber-200">
+                  <span className="font-semibold">Admin override:</span> send anyway. This is audit-logged against your user and the affected accounts.
+                </span>
+              </label>
+            )}
+          </div>
+        )}
 
         {/* Balance indicator */}
         <div className={`rounded-md p-2.5 flex items-center justify-between text-xs ${
@@ -453,12 +519,21 @@ export function DisbursementConsole({
         <Button
           className="w-full"
           onClick={() => submitBatch.mutate()}
-          disabled={submitBatch.isPending || isOverAllocated || totalAllocatedDollars === 0 || accounts.length === 0 || availableAmount <= 0}
+          disabled={
+            submitBatch.isPending ||
+            isOverAllocated ||
+            totalAllocatedDollars === 0 ||
+            accounts.length === 0 ||
+            availableAmount <= 0 ||
+            (hasUnverifiedAllocations && !(isAdmin && adminOverride))
+          }
         >
           {submitBatch.isPending ? (
             <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Submitting...</>
+          ) : hasUnverifiedAllocations && !adminOverride ? (
+            <><ShieldAlert className="h-4 w-4 mr-2" />Verify accounts to send</>
           ) : (
-            <><Send className="h-4 w-4 mr-2" />{isBalanced ? "Send all disbursements" : `Send $${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })} (partial)`}</>
+            <><Send className="h-4 w-4 mr-2" />{isBalanced ? "Send all disbursements" : `Send $${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })} (partial)`}{adminOverride && hasUnverifiedAllocations ? " (override)" : ""}</>
           )}
         </Button>
 
