@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { ShieldCheck, ShieldAlert, ShieldX, Loader2, FileCheck, History } from "lucide-react";
+import { ShieldCheck, ShieldAlert, ShieldX, Loader2, FileCheck } from "lucide-react";
 import { format } from "date-fns";
 
 interface AchAuthorizationFormProps {
@@ -35,7 +35,7 @@ export function AchAuthorizationForm({
         .from("ach_authorizations")
         .select("*")
         .eq("stakeholder_account_id", stakeholderAccountId)
-        .eq("status", "active")
+        .eq("is_active", true)
         .maybeSingle();
 
       if (error) throw error;
@@ -45,14 +45,17 @@ export function AchAuthorizationForm({
 
   const authorize = useMutation({
     mutationFn: async () => {
+      const agreementText = `I, ${custname}, authorize this platform to initiate ACH debit entries from my account ending in ${accountLast4} for the purpose of funding disbursements. I understand that this authorization will remain in effect until I revoke it.`;
+      
       const { error } = await supabase.from("ach_authorizations").insert({
-        tenant_id: tenant?.id,
+        tenant_id: tenant!.id,
         stakeholder_account_id: stakeholderAccountId,
-        signer_name: custname,
-        signer_email: user?.email,
-        ip_address: "Client-side", // In a real app, we'd capture this from the request
+        authorized_name: custname,
+        authorized_by: user!.id,
+        ip_address: "Client-side",
         user_agent: navigator.userAgent,
-        agreement_text: `I, ${custname}, authorize this platform to initiate ACH debit entries from my account ending in ${accountLast4} for the purpose of funding disbursements. I understand that this authorization will remain in effect until I revoke it.`,
+        form_text: agreementText,
+        is_active: true
       });
 
       if (error) throw error;
@@ -74,9 +77,9 @@ export function AchAuthorizationForm({
     mutationFn: async () => {
       const { error } = await supabase
         .from("ach_authorizations")
-        .update({ status: "revoked", revoked_at: new Date().toISOString() })
+        .update({ is_active: false, revoked_at: new Date().toISOString(), revoked_by: user!.id })
         .eq("stakeholder_account_id", stakeholderAccountId)
-        .eq("status", "active");
+        .eq("is_active", true);
 
       if (error) throw error;
     },
@@ -113,7 +116,7 @@ export function AchAuthorizationForm({
                   </Badge>
                 </div>
                 <p className="text-xs text-emerald-600/80">
-                  Signed by {auth.signer_name} on {format(new Date(auth.created_at), "MMM d, yyyy")}
+                  Signed by {auth.authorized_name} on {format(new Date(auth.created_at), "MMM d, yyyy")}
                 </p>
               </div>
             </div>
@@ -171,3 +174,4 @@ export function AchAuthorizationForm({
     </Card>
   );
 }
+
