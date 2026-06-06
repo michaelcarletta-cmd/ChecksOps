@@ -7,7 +7,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, X, Users, Handshake } from "lucide-react";
+import { Plus, X, Users, Handshake, ShieldCheck, MailCheck, Lock } from "lucide-react";
+import { VERIFICATION_BADGE_CLASS, VERIFICATION_LABEL, type VerificationStatus } from "@/lib/banking";
 
 interface Props {
   checkIntakeItemId: string;
