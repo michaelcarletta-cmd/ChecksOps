@@ -9,9 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { AlertTriangle, CheckCircle2, Send, Building2, Loader2, RefreshCw, Zap, Clock } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Send, Building2, Loader2, RefreshCw, Zap, Clock, History } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { CheckStakeholdersManager } from "./CheckStakeholdersManager";
 
 interface Props {
   checkIntakeItemId?: string;
@@ -75,43 +76,71 @@ export function DisbursementConsole({
     },
   });
 
-  // Load stakeholder accounts
+  // Load stakeholder accounts whitelisted for THIS check
   const { data: accounts = [], isLoading } = useQuery({
-    queryKey: ["stakeholder-accounts", tenant?.id],
-    enabled: !!tenant?.id,
+    queryKey: ["disbursement-accounts", checkIntakeItemId, tenant?.id],
+    enabled: !!tenant?.id && !!checkIntakeItemId,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("stakeholder_accounts")
-        .select("*")
-        .eq("tenant_id", tenant!.id)
-        .eq("is_active", true)
-        .order("is_primary", { ascending: false })
-        .order("created_at", { ascending: true });
+        .from("check_stakeholders")
+        .select(`
+          added_via,
+          stakeholder_accounts:stakeholder_account_id (
+            id, nickname, account_type, chk_acct, is_active, is_primary, created_at
+          )
+        `)
+        .eq("check_intake_item_id", checkIntakeItemId!);
       if (error) throw error;
-      return data ?? [];
+      return (data ?? [])
+        .map((row: any) => row.stakeholder_accounts ? { ...row.stakeholder_accounts, added_via: row.added_via } : null)
+        .filter((a: any) => a && a.is_active)
+        .sort((a: any, b: any) => Number(b.is_primary) - Number(a.is_primary));
     },
   });
 
-  // Load existing batch for this check if any
-  const { data: existingBatch } = useQuery({
-    queryKey: ["disbursement-batch", checkIntakeItemId ?? depositItemId],
+  // Load all past splits for this check (running total of what's already disbursed)
+  const { data: pastBatches = [] } = useQuery({
+    queryKey: ["disbursement-batch-history", checkIntakeItemId ?? depositItemId],
     enabled: !!(checkIntakeItemId || depositItemId),
     queryFn: async () => {
       const query = supabase
         .from("disbursement_batches")
-        .select(`*, disbursement_splits(*, stakeholder_accounts(nickname, account_type))`)
-        .order("created_at", { ascending: false })
-        .limit(1);
+        .select(`id, status, created_at, delivery_speed, disbursement_splits(id, amount, status, return_code, stakeholder_accounts(nickname, account_type))`)
+        .order("created_at", { ascending: false });
       if (checkIntakeItemId) query.eq("check_intake_item_id", checkIntakeItemId);
       else if (depositItemId) query.eq("deposit_item_id", depositItemId);
       const { data } = await query;
-      return data?.[0] ?? null;
+      return data ?? [];
     },
   });
 
   const reservePct = reserveConfig?.reserve_pct ?? 0.10;
   const reserveHeld = checkAmount * reservePct;
-  const availableAmount = checkAmount - reserveHeld;
+
+  // Sum all prior split amounts that aren't failed/cancelled (counts pending + submitted + settled)
+  const alreadyDisbursed = useMemo(() => {
+    let total = 0;
+    for (const b of pastBatches as any[]) {
+      for (const s of (b.disbursement_splits ?? [])) {
+        if (s.status !== "failed" && s.status !== "cancelled" && s.status !== "returned") {
+          total += Number(s.amount) || 0;
+        }
+      }
+    }
+    return total;
+  }, [pastBatches]);
+
+  const availableAmount = Math.max(0, checkAmount - reserveHeld - alreadyDisbursed);
+
+  const allSplits = useMemo(() => {
+    const rows: any[] = [];
+    for (const b of pastBatches as any[]) {
+      for (const s of (b.disbursement_splits ?? [])) {
+        rows.push({ ...s, batch_created_at: b.created_at, batch_id: b.id });
+      }
+    }
+    return rows;
+  }, [pastBatches]);
 
   const totalAllocated = useMemo(() => {
     return Object.values(allocations).reduce((sum, v) => {
@@ -189,7 +218,9 @@ export function DisbursementConsole({
     },
     onSuccess: () => {
       toast({ title: "Disbursements submitted", description: "Credits are on their way to each account." });
+      qc.invalidateQueries({ queryKey: ["disbursement-batch-history", checkIntakeItemId ?? depositItemId] });
       qc.invalidateQueries({ queryKey: ["disbursement-batch"] });
+      setAllocations({});
       onComplete?.();
     },
     onError: (e: any) => toast({ title: "Disbursement failed", description: e.message, variant: "destructive" }),
@@ -197,85 +228,7 @@ export function DisbursementConsole({
 
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading accounts...</div>;
 
-  if (accounts.length === 0) {
-    return (
-      <Card>
-        <CardContent className="pt-4">
-          <div className="flex items-center gap-2 text-sm text-amber-600">
-            <AlertTriangle className="h-4 w-4" />
-            No stakeholder accounts set up. Go to Settings → Stakeholder Accounts to add them.
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  // Show existing batch if already submitted
-  if (existingBatch && existingBatch.status !== "pending") {
-    return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-            Disbursement {existingBatch.status === "completed" ? "Complete" : existingBatch.status}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {(existingBatch.disbursement_splits ?? []).map((split: any) => (
-            <div key={split.id} className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">{split.stakeholder_accounts?.nickname ?? "—"}</span>
-              <div className="flex items-center gap-2">
-                <span className="font-medium">${Number(split.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-                <Badge variant="outline" className={`text-[10px] ${
-                  split.status === "settled" ? "text-emerald-600 border-emerald-500/30 bg-emerald-500/10" :
-                  split.status === "returned" ? "text-red-600 border-red-500/30 bg-red-500/10" :
-                  split.status === "submitted" ? "text-blue-600 border-blue-500/30 bg-blue-500/10" :
-                  "text-muted-foreground"
-                }`}>
-                  {split.status}
-                  {split.return_code && ` · ${split.return_code}`}
-                </Badge>
-              </div>
-            </div>
-          ))}
-          <div className="pt-2 border-t flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">
-              Reserve held: ${Number(existingBatch.reserve_held).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-            </span>
-            {!existingBatch.reserve_released_at && existingBatch.status === "submitted" && (
-              <Button 
-                size="sm" 
-                variant="outline" 
-                className="h-7 text-xs border-amber-500/50 text-amber-600 hover:bg-amber-50"
-                onClick={() => {
-                  if (confirm("Release reserve funds? This should only be done if the 3-day return window has passed.")) {
-                    supabase.rpc("deposit_action", {
-                      p_action: "release_reserve",
-                      p_actor_id: user?.id,
-                      p_extra: { batch_id: existingBatch.id }
-                    }).then(({ error }) => {
-                      if (error) toast({ title: "Release failed", description: error.message, variant: "destructive" });
-                      else {
-                        toast({ title: "Reserve released" });
-                        qc.invalidateQueries({ queryKey: ["disbursement-batch"] });
-                      }
-                    });
-                  }
-                }}
-              >
-                Release Funds
-              </Button>
-            )}
-            {existingBatch.reserve_released_at && (
-              <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-600">
-                Reserve Released
-              </Badge>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const totalRemainingOfCheck = Math.max(0, checkAmount - alreadyDisbursed);
 
   return (
     <Card>
@@ -298,12 +251,18 @@ export function DisbursementConsole({
       </CardHeader>
       <CardContent className="space-y-4">
 
-        {/* Reserve summary */}
+        {/* Reserve & balance summary */}
         <div className="rounded-md bg-muted/50 p-3 space-y-2">
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Check amount</span>
             <span className="font-medium">${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
           </div>
+          {alreadyDisbursed > 0 && (
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Already disbursed</span>
+              <span className="text-blue-600 font-medium">− ${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+            </div>
+          )}
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Reserve held ({Math.round(reservePct * 100)}%)</span>
             <span className="text-amber-600 font-medium">− ${reserveHeld.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
@@ -312,8 +271,47 @@ export function DisbursementConsole({
             <span className="font-medium">Available to disburse</span>
             <span className="font-semibold text-emerald-600">${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
           </div>
-          <Progress value={((totalAllocatedDollars / availableAmount) * 100)} className="h-1.5" />
+          {availableAmount > 0 && (
+            <Progress value={((totalAllocatedDollars / availableAmount) * 100)} className="h-1.5" />
+          )}
         </div>
+
+        {/* Previous disbursements */}
+        {allSplits.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+              <History className="h-3 w-3" /> Previous disbursements
+            </p>
+            <div className="rounded-md border divide-y">
+              {allSplits.map((split: any) => (
+                <div key={split.id} className="flex items-center justify-between px-2.5 py-1.5 text-xs">
+                  <span className="truncate">{split.stakeholder_accounts?.nickname ?? "—"}</span>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="font-medium">${Number(split.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+                    <Badge variant="outline" className={`text-[9px] ${
+                      split.status === "settled" ? "text-emerald-600 border-emerald-500/30 bg-emerald-500/10" :
+                      split.status === "returned" || split.status === "failed" ? "text-red-600 border-red-500/30 bg-red-500/10" :
+                      split.status === "submitted" ? "text-blue-600 border-blue-500/30 bg-blue-500/10" :
+                      "text-muted-foreground"
+                    }`}>
+                      {split.status}{split.return_code && ` · ${split.return_code}`}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Stakeholder manager (per-check) */}
+        {checkIntakeItemId && <CheckStakeholdersManager checkIntakeItemId={checkIntakeItemId} />}
+
+        {accounts.length === 0 && (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
+            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+            Add at least one stakeholder above to start disbursing this check.
+          </div>
+        )}
 
         {/* Delivery Speed Selector */}
         <div className="space-y-3 pt-2 border-t">
@@ -412,7 +410,7 @@ export function DisbursementConsole({
         <Button
           className="w-full"
           onClick={() => submitBatch.mutate()}
-          disabled={submitBatch.isPending || isOverAllocated || totalAllocatedDollars === 0}
+          disabled={submitBatch.isPending || isOverAllocated || totalAllocatedDollars === 0 || accounts.length === 0 || availableAmount <= 0}
         >
           {submitBatch.isPending ? (
             <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Submitting...</>
