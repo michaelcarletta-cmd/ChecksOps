@@ -76,14 +76,22 @@ serve(async (req) => {
     let amount2Cents = randomCents();
     while (amount2Cents === amount1Cents) amount2Cents = randomCents();
 
-    const ACTUM_API_URL = "https://transit.actumprocessing.com/cgi-bin/process.cgi";
-    const parentId = Deno.env.get("ACTUM_PARENT_ID");
-    const subId = Deno.env.get("ACTUM_SUB_ID");
-    const pass = Deno.env.get("ACTUM_PASSWORD");
+    // Use the tenant-specific credentials if available, otherwise fallback to env
+    const { data: tenantData } = await supabase
+      .from("tenants")
+      .select("actum_parent_id, actum_sub_id, actum_password")
+      .eq("id", account.tenant_id)
+      .single();
+
+    const parentId = tenantData?.actum_parent_id || Deno.env.get("ACTUM_PARENT_ID");
+    const subId = tenantData?.actum_sub_id || Deno.env.get("ACTUM_SUB_ID");
+    const pass = tenantData?.actum_password || Deno.env.get("ACTUM_PASSWORD");
 
     if (!parentId || !subId || !pass) {
-      throw new Error("Actum credentials not configured");
+      throw new Error("Actum credentials not configured for this tenant.");
     }
+
+    const ACTUM_API_URL = "https://transit.actumprocessing.com/cgi-bin/process.cgi";
 
     // Common params for both credits
     const baseParams = new URLSearchParams({
