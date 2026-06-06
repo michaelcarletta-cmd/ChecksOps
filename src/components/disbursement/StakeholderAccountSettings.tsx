@@ -87,20 +87,44 @@ export function StakeholderAccountSettings() {
 
   const addAccount = useMutation({
     mutationFn: async (values: typeof emptyForm) => {
-      const { error } = await supabase.from("stakeholder_accounts").insert({
-        ...values,
-        tenant_id: tenant!.id,
-        created_by: user!.id,
-      });
+      const { recipient_email, ...accountValues } = values;
+      const { data: inserted, error } = await supabase
+        .from("stakeholder_accounts")
+        .insert({
+          ...accountValues,
+          tenant_id: tenant!.id,
+          created_by: user!.id,
+        })
+        .select("id")
+        .single();
       if (error) throw error;
+      // Kick off micro-deposit verification
+      const { data: initData, error: initErr } = await supabase.functions.invoke(
+        "stakeholder-init-microdeposits",
+        { body: { stakeholder_account_id: inserted.id, recipient_email } },
+      );
+      if (initErr || (initData as any)?.error) {
+        throw new Error((initData as any)?.error ?? initErr?.message ?? "Failed to start verification");
+      }
     },
     onSuccess: () => {
-      toast({ title: "Account added" });
+      toast({ title: "Account added", description: "Two small deposits are on the way. Recipient will get an email to confirm." });
       qc.invalidateQueries({ queryKey: ["stakeholder-accounts"] });
       setForm(emptyForm);
       setShowForm(false);
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const resendVerification = useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await supabase.functions.invoke("stakeholder-resend-verification", {
+        body: { stakeholder_account_id: id },
+      });
+      if (error || (data as any)?.error) throw new Error((data as any)?.error ?? error?.message);
+    },
+    onSuccess: () => toast({ title: "Verification email resent" }),
+    onError: (e: any) => toast({ title: "Couldn't resend", description: e.message, variant: "destructive" }),
   });
 
   const deleteAccount = useMutation({
