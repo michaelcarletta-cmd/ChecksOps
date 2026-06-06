@@ -281,7 +281,7 @@ export function DisbursementConsole({
       </CardHeader>
       <CardContent className="space-y-4">
 
-        {/* Reserve & balance summary */}
+        {/* Balance summary */}
         <div className="rounded-md bg-muted/50 p-3 space-y-2">
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Check amount</span>
