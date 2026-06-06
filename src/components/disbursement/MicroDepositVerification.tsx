@@ -83,7 +83,7 @@ export function MicroDepositVerification({
         p_verification_id: pendingVerification.id,
         p_amount_1: a1,
         p_amount_2: a2,
-      });
+      }) as { data: { success: boolean, error?: string }, error: any };
 
       if (error) throw error;
       if (!data.success) throw new Error(data.error || "Verification failed");
