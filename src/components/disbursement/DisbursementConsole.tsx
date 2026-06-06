@@ -180,7 +180,35 @@ export function DisbursementConsole({
         });
 
       if (splits.length === 0) throw new Error("No allocations entered");
-      if (isOverAllocated) throw new Error("Total exceeds available amount");
+      if (isOverAllocated) {
+        const over = Math.abs(remaining);
+        throw new Error(
+          `Allocation exceeds available by $${over.toLocaleString("en-US", { minimumFractionDigits: 2 })}. ` +
+          `Available to disburse: $${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} ` +
+          `(check $${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} − already disbursed $${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })} − reserve $${reserveHeld.toLocaleString("en-US", { minimumFractionDigits: 2 })}).`
+        );
+      }
+      // Race-condition guard: re-check server-side totals before insert
+      if (checkIntakeItemId) {
+        const { data: freshBatches } = await supabase
+          .from("disbursement_batches")
+          .select("disbursement_splits(amount,status)")
+          .eq("check_intake_item_id", checkIntakeItemId)
+          .eq("tenant_id", tenant.id);
+        const freshDisbursed = (freshBatches ?? []).reduce((sum: number, b: any) => {
+          for (const s of b.disbursement_splits ?? []) {
+            if (!["failed", "cancelled", "returned"].includes(s.status)) sum += Number(s.amount) || 0;
+          }
+          return sum;
+        }, 0);
+        const freshAvailable = Math.max(0, checkAmount - reserveHeld - freshDisbursed);
+        const allocSum = splits.reduce((s, x) => s + x.amount, 0);
+        if (allocSum > freshAvailable + 0.01) {
+          throw new Error(
+            `Another disbursement was just sent. Only $${freshAvailable.toLocaleString("en-US", { minimumFractionDigits: 2 })} is available now (you tried $${allocSum.toLocaleString("en-US", { minimumFractionDigits: 2 })}).`
+          );
+        }
+      }
 
       // Create the batch
       const { data: batch, error: batchErr } = await supabase
@@ -400,12 +428,27 @@ export function DisbursementConsole({
           "bg-muted border border-border"
         }`}>
           <span className={isBalanced ? "text-emerald-700 dark:text-emerald-300" : isOverAllocated ? "text-red-700 dark:text-red-300" : "text-muted-foreground"}>
-            {isBalanced ? "✓ Balanced" : isOverAllocated ? "⚠ Over-allocated" : `Remaining: $${remaining.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+            {isBalanced ? "✓ Balanced" : isOverAllocated ? `⚠ Over by $${Math.abs(remaining).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : `Remaining: $${remaining.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
           </span>
           <span className="font-medium">
             ${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })} of ${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
           </span>
         </div>
+
+        {/* Over-allocation error */}
+        {isOverAllocated && (
+          <div className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-300 flex items-start gap-2">
+            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+            <div className="space-y-0.5">
+              <p className="font-medium">
+                You're trying to send ${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })}, but only ${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} is available on this check.
+              </p>
+              <p className="text-[11px] opacity-90">
+                Check ${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} − already disbursed ${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })} − reserve ${reserveHeld.toLocaleString("en-US", { minimumFractionDigits: 2 })} = ${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} remaining.
+              </p>
+            </div>
+          </div>
+        )}
 
         <Button
           className="w-full"
