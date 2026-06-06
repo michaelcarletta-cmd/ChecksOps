@@ -249,12 +249,18 @@ export function DisbursementConsole({
       </CardHeader>
       <CardContent className="space-y-4">
 
-        {/* Reserve summary */}
+        {/* Reserve & balance summary */}
         <div className="rounded-md bg-muted/50 p-3 space-y-2">
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Check amount</span>
             <span className="font-medium">${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
           </div>
+          {alreadyDisbursed > 0 && (
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Already disbursed</span>
+              <span className="text-blue-600 font-medium">− ${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+            </div>
+          )}
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Reserve held ({Math.round(reservePct * 100)}%)</span>
             <span className="text-amber-600 font-medium">− ${reserveHeld.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
@@ -263,8 +269,47 @@ export function DisbursementConsole({
             <span className="font-medium">Available to disburse</span>
             <span className="font-semibold text-emerald-600">${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
           </div>
-          <Progress value={((totalAllocatedDollars / availableAmount) * 100)} className="h-1.5" />
+          {availableAmount > 0 && (
+            <Progress value={((totalAllocatedDollars / availableAmount) * 100)} className="h-1.5" />
+          )}
         </div>
+
+        {/* Previous disbursements */}
+        {allSplits.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+              <History className="h-3 w-3" /> Previous disbursements
+            </p>
+            <div className="rounded-md border divide-y">
+              {allSplits.map((split: any) => (
+                <div key={split.id} className="flex items-center justify-between px-2.5 py-1.5 text-xs">
+                  <span className="truncate">{split.stakeholder_accounts?.nickname ?? "—"}</span>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="font-medium">${Number(split.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+                    <Badge variant="outline" className={`text-[9px] ${
+                      split.status === "settled" ? "text-emerald-600 border-emerald-500/30 bg-emerald-500/10" :
+                      split.status === "returned" || split.status === "failed" ? "text-red-600 border-red-500/30 bg-red-500/10" :
+                      split.status === "submitted" ? "text-blue-600 border-blue-500/30 bg-blue-500/10" :
+                      "text-muted-foreground"
+                    }`}>
+                      {split.status}{split.return_code && ` · ${split.return_code}`}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Stakeholder manager (per-check) */}
+        {checkIntakeItemId && <CheckStakeholdersManager checkIntakeItemId={checkIntakeItemId} />}
+
+        {accounts.length === 0 && (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
+            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+            Add at least one stakeholder above to start disbursing this check.
+          </div>
+        )}
 
         {/* Delivery Speed Selector */}
         <div className="space-y-3 pt-2 border-t">
