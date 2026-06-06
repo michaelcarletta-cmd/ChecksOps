@@ -241,9 +241,9 @@ export function DisbursementConsole({
 
       if (splitsErr) throw splitsErr;
 
-      // Trigger Actum disbursement
+      // Trigger Actum disbursement (admin_override only honored server-side if caller is admin)
       const { error: invokeErr } = await supabase.functions.invoke("actum-disburse", {
-        body: { batch_id: batch.id },
+        body: { batch_id: batch.id, admin_override: adminOverride && isAdmin },
       });
 
       if (invokeErr) throw invokeErr;
