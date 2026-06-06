@@ -348,32 +348,56 @@ export function StakeholderAccountSettings() {
             </p>
           )}
 
-          {accounts.map((acct: any) => (
-            <div key={acct.id} className="flex items-center justify-between p-2.5 rounded-md border bg-background">
-              <div className="flex items-center gap-2 min-w-0">
-                {acct.is_primary && <Star className="h-3 w-3 text-amber-400 flex-shrink-0" />}
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-sm font-medium truncate">{acct.nickname}</p>
-                    <Badge variant="outline" className={`text-[10px] px-1.5 ${ACCOUNT_TYPE_COLORS[acct.account_type]}`}>
-                      {ACCOUNT_TYPE_LABELS[acct.account_type]}
-                    </Badge>
+          {accounts.map((acct: any) => {
+            const vStatus = (acct.verification_status ?? "unverified") as VerificationStatus;
+            return (
+              <div key={acct.id} className="flex items-center justify-between gap-2 p-2.5 rounded-md border bg-background">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  {acct.is_primary && <Star className="h-3 w-3 text-amber-400 flex-shrink-0" />}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-sm font-medium truncate">{acct.nickname}</p>
+                      <Badge variant="outline" className={`text-[10px] px-1.5 ${ACCOUNT_TYPE_COLORS[acct.account_type]}`}>
+                        {ACCOUNT_TYPE_LABELS[acct.account_type]}
+                      </Badge>
+                      <Badge variant="outline" className={`text-[10px] px-1.5 ${VERIFICATION_BADGE_CLASS[vStatus]}`} title={VERIFICATION_LABEL[vStatus]}>
+                        {vStatus === "verified" ? <><ShieldCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Verified</> :
+                         vStatus === "pending" ? <><MailCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Awaiting confirmation</> :
+                         vStatus === "locked" ? <><Lock className="h-2.5 w-2.5 mr-0.5 inline" /> Locked</> :
+                         vStatus === "admin_override" ? "Admin override" :
+                         vStatus === "failed" ? "Failed" :
+                         "Not verified"}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground font-mono">
+                      ••••{acct.chk_acct.slice(-4)} · {acct.acct_type === "C" ? "Checking" : "Savings"}
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground font-mono">
-                    ••••{acct.chk_acct.slice(-4)} · {acct.acct_type === "C" ? "Checking" : "Savings"}
-                  </p>
+                </div>
+                <div className="flex items-center gap-1">
+                  {vStatus === "pending" && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs"
+                      onClick={() => resendVerification.mutate(acct.id)}
+                      disabled={resendVerification.isPending}
+                    >
+                      <MailCheck className="h-3 w-3 mr-1" /> Resend
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                    onClick={() => deleteAccount.mutate(acct.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                onClick={() => deleteAccount.mutate(acct.id)}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
     </div>
