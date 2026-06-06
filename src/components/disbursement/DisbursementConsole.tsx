@@ -410,7 +410,7 @@ export function DisbursementConsole({
         <Button
           className="w-full"
           onClick={() => submitBatch.mutate()}
-          disabled={submitBatch.isPending || isOverAllocated || totalAllocatedDollars === 0}
+          disabled={submitBatch.isPending || isOverAllocated || totalAllocatedDollars === 0 || accounts.length === 0 || availableAmount <= 0}
         >
           {submitBatch.isPending ? (
             <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Submitting...</>
