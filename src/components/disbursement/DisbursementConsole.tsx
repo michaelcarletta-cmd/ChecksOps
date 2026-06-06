@@ -67,19 +67,6 @@ export function DisbursementConsole({
   const [adminOverride, setAdminOverride] = useState(false);
   const { isAdmin } = usePermissions();
 
-  // Load reserve config
-  const { data: reserveConfig } = useQuery({
-    queryKey: ["reserve-config", tenant?.id],
-    enabled: !!tenant?.id,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("reserve_config")
-        .select("*")
-        .eq("tenant_id", tenant!.id)
-        .single();
-      return data;
-    },
-  });
 
   // Load stakeholder accounts whitelisted for THIS check
   const { data: accounts = [], isLoading } = useQuery({
