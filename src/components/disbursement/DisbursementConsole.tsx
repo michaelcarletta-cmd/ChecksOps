@@ -293,10 +293,6 @@ export function DisbursementConsole({
               <span className="text-blue-600 font-medium">− ${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
             </div>
           )}
-          <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">Reserve held ({Math.round(reservePct * 100)}%)</span>
-            <span className="text-amber-600 font-medium">− ${reserveHeld.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-          </div>
           <div className="border-t pt-2 flex justify-between text-sm">
             <span className="font-medium">Available to disburse</span>
             <span className="font-semibold text-emerald-600">${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
