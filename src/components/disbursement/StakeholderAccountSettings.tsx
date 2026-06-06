@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { AlertTriangle, Building2, Plus, Trash2, Star, CreditCard, ShieldCheck, MailCheck, Lock, Loader2, Info } from "lucide-react";
 import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 import { AchAuthorizationForm } from "./AchAuthorizationForm";
+import { MicroDepositVerification } from "./MicroDepositVerification";
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   operating: "Operating",
@@ -62,7 +63,7 @@ export function StakeholderAccountSettings() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("stakeholder_accounts")
-        .select("*")
+        .select("id, nickname, account_type, chk_acct, acct_type, is_primary, is_active, custname, verification_status, verified_at")
         .eq("tenant_id", tenant!.id)
         .eq("is_active", true)
         .order("is_primary", { ascending: false })
@@ -315,12 +316,19 @@ export function StakeholderAccountSettings() {
                   </Button>
                 </div>
               </div>
-              {acct.is_primary && (
+              {acct.is_primary ? (
                 <AchAuthorizationForm
                   stakeholderAccountId={acct.id}
                   accountNickname={acct.nickname}
                   accountLast4={acct.chk_acct.slice(-4)}
                   custname={acct.custname}
+                />
+              ) : (
+                <MicroDepositVerification
+                  accountId={acct.id}
+                  accountNickname={acct.nickname}
+                  accountLast4={acct.chk_acct.slice(-4)}
+                  verificationStatus={acct.verification_status ?? "unverified"}
                 />
               )}
             </React.Fragment>
