@@ -2638,15 +2638,6 @@ function CheckDetailPanel({
                 lastUpdated={check.updated_at ?? null}
               />
               <SignatureStatusPanel checkId={checkId} />
-              {check.ocr_status !== "complete" && (
-                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-                  <div className="flex items-center gap-1.5 font-medium">
-                    <AlertTriangle className="h-3 w-3" />
-                    OCR not complete — fields below are editable
-                  </div>
-                  <p className="mt-1 text-amber-300/70">Hover any field and click the pencil to enter or correct it manually.</p>
-                </div>
-              )}
               <EditableField
                 label="Check #"
                 checkId={checkId}
