@@ -275,12 +275,17 @@ export function StakeholderAccountSettings() {
                         {ACCOUNT_TYPE_LABELS[acct.account_type]}
                       </Badge>
                       <Badge variant="outline" className={`text-[10px] px-1.5 ${VERIFICATION_BADGE_CLASS[vStatus]}`} title={VERIFICATION_LABEL[vStatus]}>
-                        {vStatus === "verified" ? <><ShieldCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Verified</> :
-                         vStatus === "pending" ? <><MailCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Awaiting confirmation</> :
-                         vStatus === "locked" ? <><Lock className="h-2.5 w-2.5 mr-0.5 inline" /> Locked</> :
-                         vStatus === "admin_override" ? "Admin override" :
-                         vStatus === "failed" ? "Failed" :
-                         "Not verified"}
+                        {vStatus === "verified" || vStatus === "admin_override" ? (
+                          <><ShieldCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Verified</>
+                        ) : vStatus === "pending" ? (
+                          <><MailCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Awaiting confirmation</>
+                        ) : vStatus === "locked" ? (
+                          <><Lock className="h-2.5 w-2.5 mr-0.5 inline" /> Locked</>
+                        ) : vStatus === "failed" ? (
+                          "Failed"
+                        ) : (
+                          "Not verified"
+                        )}
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground font-mono">
