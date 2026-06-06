@@ -491,7 +491,7 @@ export function DisbursementConsole({
                 You're trying to send ${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })}, but only ${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} is available on this check.
               </p>
               <p className="text-[11px] opacity-90">
-                Check ${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} − already disbursed ${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })} − reserve ${reserveHeld.toLocaleString("en-US", { minimumFractionDigits: 2 })} = ${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} remaining.
+                Check ${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} − already disbursed ${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })} = ${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} remaining.
               </p>
             </div>
           </div>
