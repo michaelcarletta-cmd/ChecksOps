@@ -23,8 +23,10 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
+    console.log("[stakeholder-init-microdeposits] starting request...");
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
+      console.error("[stakeholder-init-microdeposits] missing or invalid auth header");
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const authClient = createClient(
@@ -34,8 +36,10 @@ serve(async (req) => {
     );
     const { data: userData, error: userErr } = await authClient.auth.getUser();
     if (userErr || !userData?.user) {
+      console.error("[stakeholder-init-microdeposits] auth error:", userErr);
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+    console.log("[stakeholder-init-microdeposits] user authenticated:", userData.user.id);
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
