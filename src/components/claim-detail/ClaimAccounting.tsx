@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy, FileOutput, Home, Warehouse, Package, Pencil, Trash2, Sofa, Upload, CheckCircle, Wallet } from "lucide-react";
+import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy, FileOutput, Home, Warehouse, Package, Pencil, Trash2, Sofa, Upload, CheckCircle, Wallet, Hotel } from "lucide-react";
 import { format } from "date-fns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,6 +21,7 @@ import { EstimateUploadDialog } from "./EstimateUploadDialog";
 import { CheckProcessingCard } from "@/components/claims/CheckProcessingCard";
 import { CrudDropdown } from "./CrudDropdown";
 import { PaymentMethodForm } from "./PaymentMethodForm";
+import { ClaimFundsSummary } from "./ClaimFundsSummary";
 interface ClaimAccountingProps {
   claim: any;
   userRole: string | null;
@@ -175,6 +176,9 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
         </Card>
       </div>
 
+      {/* Claim Funds Summary — grouped by category with progress toward RCV */}
+      <ClaimFundsSummary settlement={settlement} checks={checks || []} />
+
       {/* Settlement Details */}
       <SettlementSection claimId={claim.id} settlement={settlement} isAdmin={isAdmin} checks={checks || []} />
 
@@ -229,7 +233,7 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
 function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
   const [activeTab, setActiveTab] = useState("dwelling");
   const [open, setOpen] = useState(false);
-  const [editingType, setEditingType] = useState<"dwelling" | "other_structures" | "pwi" | "personal_property">("dwelling");
+  const [editingType, setEditingType] = useState<"dwelling" | "other_structures" | "pwi" | "personal_property" | "ale">("dwelling");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -260,6 +264,13 @@ function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
         recoverable_depreciation: settlement?.pwi_recoverable_depreciation || 0,
         deductible: 0, // Paid When Incurred has no deductible
       };
+    } else if (type === "ale") {
+      return {
+        replacement_cost_value: settlement?.ale_rcv || 0,
+        non_recoverable_depreciation: settlement?.ale_non_recoverable_depreciation || 0,
+        recoverable_depreciation: settlement?.ale_recoverable_depreciation || 0,
+        deductible: 0, // ALE has no deductible
+      };
     } else {
       // personal_property
       return {
@@ -278,7 +289,8 @@ function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
   const otherStructuresRcv = Number(settlement?.other_structures_rcv || 0);
   const pwiRcv = Number(settlement?.pwi_rcv || 0);
   const personalPropertyRcv = Number(settlement?.personal_property_rcv || 0);
-  const totalRcv = dwellingRcv + otherStructuresRcv + pwiRcv + personalPropertyRcv;
+  const aleRcv = Number(settlement?.ale_rcv || 0);
+  const totalRcv = dwellingRcv + otherStructuresRcv + pwiRcv + personalPropertyRcv + aleRcv;
 
   const calculateAcv = (rcv: number, recDep: number, nonRecDep: number, deductible: number) => {
     return rcv - recDep - nonRecDep - deductible;
@@ -312,6 +324,13 @@ function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
     0  // Personal property has no deductible
   );
 
+  const aleAcv = calculateAcv(
+    aleRcv,
+    Number(settlement?.ale_recoverable_depreciation || 0),
+    Number(settlement?.ale_non_recoverable_depreciation || 0),
+    0  // ALE has no deductible
+  );
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -341,6 +360,12 @@ function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
           pwi_rcv: formData.replacement_cost_value,
           pwi_non_recoverable_depreciation: formData.non_recoverable_depreciation,
           pwi_recoverable_depreciation: formData.recoverable_depreciation,
+        };
+      } else if (editingType === "ale") {
+        updateData = {
+          ale_rcv: formData.replacement_cost_value,
+          ale_non_recoverable_depreciation: formData.non_recoverable_depreciation,
+          ale_recoverable_depreciation: formData.recoverable_depreciation,
         };
       } else {
         // personal_property
@@ -384,7 +409,7 @@ function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
     Number(formData.non_recoverable_depreciation) - 
     Number(formData.deductible);
 
-  const openEditDialog = (type: "dwelling" | "other_structures" | "pwi" | "personal_property") => {
+  const openEditDialog = (type: "dwelling" | "other_structures" | "pwi" | "personal_property" | "ale") => {
     setEditingType(type);
     setFormData(getFormDataForType(type));
     setOpen(true);
@@ -394,6 +419,7 @@ function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
     if (type === "dwelling") return "Dwelling";
     if (type === "other_structures") return "Other Structures";
     if (type === "pwi") return "Paid When Incurred";
+    if (type === "ale") return "Additional Living Expenses";
     return "Personal Property";
   };
 
@@ -540,6 +566,10 @@ function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
               <Sofa className="h-4 w-4" />
               Personal Property
             </TabsTrigger>
+            <TabsTrigger value="ale" className="inline-flex items-center gap-2 whitespace-nowrap">
+              <Hotel className="h-4 w-4" />
+              ALE
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="dwelling">
@@ -633,14 +663,38 @@ function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
               props.checks
             )}
           </TabsContent>
+
+          <TabsContent value="ale">
+            {isAdmin && (
+              <div className="flex justify-end mb-4">
+                <Button onClick={() => openEditDialog("ale")}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  {settlement?.ale_rcv ? "Edit" : "Add"} ALE
+                </Button>
+              </div>
+            )}
+            {renderSettlementContent(
+              aleRcv,
+              Number(settlement?.ale_recoverable_depreciation || 0),
+              Number(settlement?.ale_non_recoverable_depreciation || 0),
+              0,
+              aleAcv,
+              "personal_property",
+              undefined,
+              undefined,
+              undefined,
+              props.checks
+            )}
+          </TabsContent>
         </Tabs>
 
         {/* Combined Recoverable Depreciation */}
         {(() => {
-          const totalRecDep = Number(settlement?.recoverable_depreciation || 0) + 
-                              Number(settlement?.other_structures_recoverable_depreciation || 0) + 
+          const totalRecDep = Number(settlement?.recoverable_depreciation || 0) +
+                              Number(settlement?.other_structures_recoverable_depreciation || 0) +
                               Number(settlement?.pwi_recoverable_depreciation || 0) +
-                              Number(settlement?.personal_property_recoverable_depreciation || 0);
+                              Number(settlement?.personal_property_recoverable_depreciation || 0) +
+                              Number(settlement?.ale_recoverable_depreciation || 0);
           return totalRecDep > 0 ? (
             <div className="mt-4 p-4 bg-amber-500/10 rounded-lg border border-amber-500/20">
               <div className="flex justify-between items-center">
@@ -795,7 +849,17 @@ function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
   );
 }
 
-// Checks Section Component  
+const CHECK_TYPE_LABELS: Record<string, string> = {
+  initial: "Initial Payment (Dwelling ACV)",
+  recoverable_depreciation: "Recoverable Depreciation",
+  supplemental: "Supplemental Payment",
+  other_structures: "Other Structures",
+  ordinance_law: "Ordinance & Law",
+  contents: "Personal Property / Contents",
+  ale: "Additional Living Expenses",
+};
+
+// Checks Section Component
 function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any) {
   const totalChecksReceived = checks?.reduce((sum: number, check: any) => sum + Number(check.amount), 0) || 0;
   const outstandingAmount = expectedChecks - totalChecksReceived;
@@ -1030,12 +1094,13 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="initial">Initial Payment</SelectItem>
+                        <SelectItem value="initial">Initial Payment (Dwelling ACV)</SelectItem>
                         <SelectItem value="recoverable_depreciation">Recoverable Depreciation</SelectItem>
                         <SelectItem value="supplemental">Supplemental Payment</SelectItem>
-                        <SelectItem value="contents">Contents</SelectItem>
-                        <SelectItem value="ale">ALE (Additional Living Expenses)</SelectItem>
                         <SelectItem value="other_structures">Other Structures</SelectItem>
+                        <SelectItem value="ordinance_law">Ordinance &amp; Law</SelectItem>
+                        <SelectItem value="contents">Personal Property / Contents</SelectItem>
+                        <SelectItem value="ale">ALE (Additional Living Expenses)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1125,7 +1190,7 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                   }}
                 >
                   <TableCell className="font-medium">{check.check_number || "—"}</TableCell>
-                  <TableCell className="capitalize">{check.check_type.replace("_", " ")}</TableCell>
+                  <TableCell className="capitalize">{CHECK_TYPE_LABELS[check.check_type] ?? check.check_type.replace(/_/g, " ")}</TableCell>
                   <TableCell>{format(new Date(check.check_date), "MMM dd, yyyy")}</TableCell>
                   <TableCell>{check.received_date ? format(new Date(check.received_date), "MMM dd, yyyy") : "—"}</TableCell>
                   <TableCell className="text-right font-semibold text-primary">
