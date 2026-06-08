@@ -99,7 +99,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
   return (
     <div className="space-y-4 p-1">
 
-      {ledger}
+
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-2">
