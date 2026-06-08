@@ -81,11 +81,11 @@ serve(async (req) => {
       throw new Error("No primary stakeholder account found to debit funds from.");
     }
 
-    // Load tenant Actum credentials
+    // Load tenant Actum credentials from tenants table
     const { data: settings, error: settingsErr } = await supabase
-      .from("tenant_settings")
-      .select("*")
-      .eq("tenant_id", batch.tenant_id)
+      .from("tenants")
+      .select("actum_parent_id, actum_sub_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password")
+      .eq("id", batch.tenant_id)
       .single();
 
     if (settingsErr || !settings?.actum_parent_id) {
