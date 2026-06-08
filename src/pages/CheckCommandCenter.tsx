@@ -461,6 +461,7 @@ export default function CheckCommandCenter() {
       return (data ?? []) as CheckItem[];
     },
     enabled: !!tenantId,
+    refetchOnWindowFocus: false, // Prevent page jump/refresh when switching tabs
   });
 
   // Partner checks — ONLY checks explicitly shared via shared_checks table.
