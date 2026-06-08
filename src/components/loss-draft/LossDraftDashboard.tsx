@@ -94,6 +94,7 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
       return (data ?? []) as unknown as LossDraftRow[];
     },
     enabled: !!tenantId,
+    refetchOnWindowFocus: false, // Prevent page jump when switching tabs
   });
 
   // Loss Draft tab ONLY shows checks that are actively monitored by a mortgage company
