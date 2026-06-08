@@ -67,11 +67,13 @@ export function ActumSettings() {
         .update({
           actum_parent_id: form.actum_parent_id.trim() || null,
           actum_sub_id: form.actum_sub_id.trim() || null,
+          actum_sub_id_ppd: form.actum_sub_id_ppd.trim() || null,
+          actum_sub_id_ccd: form.actum_sub_id_ccd.trim() || null,
           actum_syspass: form.actum_syspass.trim() || null,
           actum_username: form.actum_username.trim() || null,
           actum_password: form.actum_password.trim() || null,
           actum_webhook_secret: form.actum_webhook_secret.trim() || null,
-        })
+        } as any)
         .eq("id", tenant.id);
       if (error) throw error;
     },
