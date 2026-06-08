@@ -81,11 +81,11 @@ serve(async (req) => {
       throw new Error("No primary stakeholder account found to debit funds from.");
     }
 
-    // Load tenant Actum credentials
+    // Load tenant Actum credentials from tenants table
     const { data: settings, error: settingsErr } = await supabase
-      .from("tenant_settings")
-      .select("*")
-      .eq("tenant_id", batch.tenant_id)
+      .from("tenants")
+      .select("actum_parent_id, actum_sub_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password")
+      .eq("id", batch.tenant_id)
       .single();
 
     if (settingsErr || !settings?.actum_parent_id) {
@@ -108,10 +108,14 @@ serve(async (req) => {
     // Step 1: Debit the primary account for the total batch amount
     console.log(`Initiating debit of $${batch.total_amount} from primary account ${primaryAccount.nickname}`);
     
+    const debitSubId = primaryAccount.account_type === 'insured' 
+      ? ((settings as any).actum_sub_id_ppd || settings.actum_sub_id || "")
+      : ((settings as any).actum_sub_id_ccd || settings.actum_sub_id || "");
+
     const debitParams = new URLSearchParams({
       parent_id: settings.actum_parent_id,
-      sub_id: settings.actum_sub_id || "",
-      pass_auth: settings.actum_pass_auth || "",
+      sub_id: debitSubId,
+      pass_auth: (settings as any).actum_syspass || "", // Use actum_syspass as pass_auth if present
       action: "initiate",
       custname: primaryAccount.custname,
       chk_aba: primaryAccount.chk_aba,
@@ -161,10 +165,14 @@ serve(async (req) => {
       // Skip the primary account since it's the source of funds
       if (acct.is_primary) continue;
 
+      const creditSubId = acct.account_type === 'insured' 
+        ? ((settings as any).actum_sub_id_ppd || settings.actum_sub_id || "")
+        : ((settings as any).actum_sub_id_ccd || settings.actum_sub_id || "");
+
       const creditParams = new URLSearchParams({
         parent_id: settings.actum_parent_id,
-        sub_id: settings.actum_sub_id || "",
-        pass_auth: settings.actum_pass_auth || "",
+        sub_id: creditSubId,
+        pass_auth: (settings as any).actum_syspass || "",
         action: "initiate",
         custname: acct.custname,
         chk_aba: acct.chk_aba,

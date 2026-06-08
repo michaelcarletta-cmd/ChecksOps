@@ -42,7 +42,7 @@ serve(async (req) => {
       .select(`
         *,
         stakeholder_accounts:recipient_stakeholder_account_id (
-          id, chk_aba, chk_acct, acct_type, custname, consumer_unique, nickname, verification_status
+          id, chk_aba, chk_acct, acct_type, account_type, custname, consumer_unique, nickname, verification_status
         )
       `)
       .eq("id", payment_id)
@@ -76,18 +76,26 @@ serve(async (req) => {
     // Get tenant's Actum credentials
     const { data: tenantData, error: tenantErr } = await supabase
       .from("tenants")
-      .select("actum_parent_id, actum_sub_id, actum_syspass, actum_username, actum_password")
+      .select("actum_parent_id, actum_sub_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password")
       .eq("id", payment.tenant_id)
       .single();
 
     if (tenantErr) throw new Error(`Could not load tenant Actum config: ${tenantErr.message}`);
 
     const actumParentId = tenantData?.actum_parent_id || Deno.env.get("ACTUM_PARENT_ID");
-    const actumSubId = tenantData?.actum_sub_id || Deno.env.get("ACTUM_SUB_ID");
+    let actumSubId = tenantData?.actum_sub_id || Deno.env.get("ACTUM_SUB_ID");
+    
+    // Choose specific Sub ID if configured
+    if (account.account_type === 'insured' && tenantData?.actum_sub_id_ppd) {
+      actumSubId = tenantData.actum_sub_id_ppd;
+    } else if (account.account_type !== 'insured' && tenantData?.actum_sub_id_ccd) {
+      actumSubId = tenantData.actum_sub_id_ccd;
+    }
+
     const actumEndpoint = "https://join.actumprocessing.com/cgi-bin/dbs/man_trans.cgi";
 
     if (!actumParentId || !actumSubId) {
-      throw new Error("Actum API credentials (Parent ID / Sub ID) not configured for this tenant.");
+      throw new Error(`Actum API credentials (Parent ID / Sub ID) not configured for this tenant. (Using ${account.account_type} type)`);
     }
 
     const syspass = (tenantData as any)?.actum_syspass;

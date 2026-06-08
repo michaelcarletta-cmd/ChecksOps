@@ -17515,6 +17515,8 @@ export type Database = {
           actum_parent_id: string | null
           actum_password: string | null
           actum_sub_id: string | null
+          actum_sub_id_ccd: string | null
+          actum_sub_id_ppd: string | null
           actum_syspass: string | null
           actum_username: string | null
           actum_webhook_secret: string | null
@@ -17545,6 +17547,8 @@ export type Database = {
           actum_parent_id?: string | null
           actum_password?: string | null
           actum_sub_id?: string | null
+          actum_sub_id_ccd?: string | null
+          actum_sub_id_ppd?: string | null
           actum_syspass?: string | null
           actum_username?: string | null
           actum_webhook_secret?: string | null
@@ -17575,6 +17579,8 @@ export type Database = {
           actum_parent_id?: string | null
           actum_password?: string | null
           actum_sub_id?: string | null
+          actum_sub_id_ccd?: string | null
+          actum_sub_id_ppd?: string | null
           actum_syspass?: string | null
           actum_username?: string | null
           actum_webhook_secret?: string | null
