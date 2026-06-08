@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { FileText, Link2, CheckCircle2, AlertCircle, Pencil } from "lucide-react";
+import { FileText, Link2, CheckCircle2, AlertCircle, Pencil, DollarSign } from "lucide-react";
 import { format } from "date-fns";
+import { ClaimSettlementEditor } from "./ClaimSettlementEditor";
 
 interface Props {
   checkIntakeItemId: string;
