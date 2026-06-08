@@ -84,7 +84,14 @@ serve(async (req) => {
       .single();
 
     const parentId = tenantData?.actum_parent_id || Deno.env.get("ACTUM_PARENT_ID");
-    const subId = tenantData?.actum_sub_id || Deno.env.get("ACTUM_SUB_ID");
+    let subId = tenantData?.actum_sub_id || Deno.env.get("ACTUM_SUB_ID");
+
+    // Choose specific Sub ID if configured
+    if (account.account_type === 'insured' && (tenantData as any)?.actum_sub_id_ppd) {
+      subId = (tenantData as any).actum_sub_id_ppd;
+    } else if (account.account_type !== 'insured' && (tenantData as any)?.actum_sub_id_ccd) {
+      subId = (tenantData as any).actum_sub_id_ccd;
+    }
 
     if (!parentId || !subId) {
       throw new Error("Actum credentials not configured for this tenant.");
