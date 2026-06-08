@@ -79,7 +79,7 @@ serve(async (req) => {
     // Use the tenant-specific credentials if available, otherwise fallback to env
     const { data: tenantData } = await supabase
       .from("tenants")
-      .select("actum_parent_id, actum_sub_id, actum_syspass, actum_username, actum_password")
+      .select("actum_parent_id, actum_sub_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password")
       .eq("id", account.tenant_id)
       .single();
 
