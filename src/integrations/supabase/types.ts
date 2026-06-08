@@ -8136,6 +8136,9 @@ export type Database = {
       }
       claim_settlements: {
         Row: {
+          ale_non_recoverable_depreciation: number | null
+          ale_rcv: number | null
+          ale_recoverable_depreciation: number | null
           claim_id: string
           created_at: string | null
           created_by: string | null
@@ -8163,6 +8166,9 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          ale_non_recoverable_depreciation?: number | null
+          ale_rcv?: number | null
+          ale_recoverable_depreciation?: number | null
           claim_id: string
           created_at?: string | null
           created_by?: string | null
@@ -8190,6 +8196,9 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          ale_non_recoverable_depreciation?: number | null
+          ale_rcv?: number | null
+          ale_recoverable_depreciation?: number | null
           claim_id?: string
           created_at?: string | null
           created_by?: string | null
