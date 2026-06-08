@@ -156,8 +156,9 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
         </CardHeader>
         <CardContent className="space-y-2">
           <p className="text-xs text-muted-foreground">
-            Tracking all funds released against a single claim number requires this check to be
-            linked. {detectedClaimNumber ? "OCR detected the number below — confirm or correct it." : "Enter the claim number from the check."}
+            {detectedClaimNumber
+              ? "OCR detected the claim number below — confirm or correct it. If a matching claim exists in the CRM we'll link to it; otherwise we'll start a new tracker so you can still enter RCV, ACV, deductible and watch funds add up."
+              : "Enter the claim number from the check. If it doesn't match a CRM claim, we'll create a tracker so you can still log RCV, ACV, ordinance & law, etc. and track every check against the same total."}
           </p>
           <div className="flex gap-2">
             <Input
