@@ -161,7 +161,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
   }
 
   // ─── Linked state ──────────────────────────────────────────────
-  const s = settlement || {};
+  const s: any = settlement || {};
   const dwellingAcv = Math.max(0,
     Number(s.replacement_cost_value || 0)
     - Number(s.recoverable_depreciation || 0)
