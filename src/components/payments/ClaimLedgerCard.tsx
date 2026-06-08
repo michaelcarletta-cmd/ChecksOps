@@ -348,10 +348,12 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
               Settlement breakdown
             </p>
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditorOpen(true)}>
-              <DollarSign className="h-3 w-3 mr-1" />
-              {breakdown.length > 0 ? "Edit amounts" : "Enter amounts"}
-            </Button>
+            {!readOnly && (
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditorOpen(true)}>
+                <DollarSign className="h-3 w-3 mr-1" />
+                {breakdown.length > 0 ? "Edit amounts" : "Enter amounts"}
+              </Button>
+            )}
           </div>
           {breakdown.length > 0 ? (
             <div className="rounded-md border border-border/50 divide-y divide-border/50">
@@ -366,19 +368,21 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
             </div>
           ) : (
             <div className="rounded-md border border-dashed border-border/60 p-3 text-center text-xs text-muted-foreground">
-              No settlement amounts entered yet. Click <span className="font-medium">Enter amounts</span> to
-              add RCV, recoverable depreciation, deductible, ordinance &amp; law, other structures, personal
-              property and ALE.
+              {readOnly
+                ? "The public adjuster hasn't entered settlement amounts yet."
+                : <>No settlement amounts entered yet. Click <span className="font-medium">Enter amounts</span> to add RCV, recoverable depreciation, deductible, ordinance &amp; law, other structures, personal property and ALE.</>}
             </div>
           )}
         </div>
 
-        <ClaimSettlementEditor
-          open={editorOpen}
-          onOpenChange={setEditorOpen}
-          claimId={claimId}
-          settlement={settlement}
-        />
+        {!readOnly && claimId && (
+          <ClaimSettlementEditor
+            open={editorOpen}
+            onOpenChange={setEditorOpen}
+            claimId={claimId}
+            settlement={settlement}
+          />
+        )}
 
 
         {/* Sibling checks */}
