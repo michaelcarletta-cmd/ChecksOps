@@ -103,8 +103,8 @@ serve(async (req) => {
       params.append("parent_id", actumParentId!);
       params.append("sub_id", actumSubId!);
       if ((tenantData as any)?.actum_syspass) params.append("syspass", (tenantData as any).actum_syspass);
-      if ((tenantData as any)?.actum_username) params.append("api_user", (tenantData as any).actum_username);
-      if ((tenantData as any)?.actum_password) params.append("api_password", (tenantData as any).actum_password);
+      if ((tenantData as any)?.actum_username) params.append("username", (tenantData as any).actum_username);
+      if ((tenantData as any)?.actum_password) params.append("password", (tenantData as any).actum_password);
       params.append("pmt_type", "chk");
       params.append("custname", account.custname);
       params.append("chk_acct", account.chk_acct);
