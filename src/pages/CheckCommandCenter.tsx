@@ -461,6 +461,7 @@ export default function CheckCommandCenter() {
       return (data ?? []) as CheckItem[];
     },
     enabled: !!tenantId,
+    refetchOnWindowFocus: false, // Prevent page jump/refresh when switching tabs
   });
 
   // Partner checks — ONLY checks explicitly shared via shared_checks table.
@@ -492,6 +493,7 @@ export default function CheckCommandCenter() {
       })) as (CheckItem & { _shared: true; _sourceTenantName: string })[];
     },
     enabled: !!tenantId,
+    refetchOnWindowFocus: false, // Prevent page jump when switching tabs
   });
 
   // Realtime: when the source tenant updates a shared check (e.g. marks it

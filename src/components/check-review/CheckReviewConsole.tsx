@@ -314,6 +314,7 @@ export function CheckReviewQueue({
     },
     enabled: !!tenantId,
     refetchInterval: 15000,
+    refetchOnWindowFocus: false, // Prevent page jump when switching tabs
   });
 
   const linkedClaimIds = useMemo(() => Array.from(new Set(reviewChecks.map((check) => check.claim_id).filter(Boolean))) as string[], [reviewChecks]);
