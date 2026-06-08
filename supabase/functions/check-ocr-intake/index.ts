@@ -909,6 +909,9 @@ Rules:
             routing_number: parsed.routing_number,
             account_number: parsed.account_number,
             is_multi_payee: isMultiPayee,
+            detected_claim_number: parsed.claim_number ?? null,
+            claim_id: autoLinkedClaimId,
+
             raw_ocr_front: {
               ...parsed,
               ocr_confidence: ocrConfidence,
