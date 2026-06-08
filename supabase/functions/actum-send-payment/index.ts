@@ -108,8 +108,8 @@ serve(async (req) => {
     params.append("parent_id", actumParentId!);
     params.append("sub_id", actumSubId!);
     if (syspass) params.append("syspass", syspass);
-    if (apiUser) params.append("api_user", apiUser);
-    if (apiPass) params.append("api_password", apiPass);
+    if (apiUser) params.append("username", apiUser);
+    if (apiPass) params.append("password", apiPass);
 
     if (account.consumer_unique) {
       // Repeat consumer — skip bank details
