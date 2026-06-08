@@ -3679,6 +3679,10 @@ const FUNDS_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "recoverable_depreciation", label: "Recoverable Depreciation" },
   { value: "supplement", label: "Supplement" },
   { value: "overhead_and_profit", label: "Overhead & Profit (O&P)" },
+  { value: "deductible", label: "Deductible" },
+  { value: "other_structures", label: "Other Structures" },
+  { value: "personal_property", label: "Personal Property" },
+  { value: "additional_living_expenses", label: "Additional Living Expenses (ALE)" },
 ];
 
 function FundsTypeField({

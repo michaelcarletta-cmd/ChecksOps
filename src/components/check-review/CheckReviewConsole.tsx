@@ -950,6 +950,10 @@ export function ReviewDecisionPanel({
                 <SelectItem value="recoverable_depreciation" className="text-xs">Recoverable Depreciation</SelectItem>
                 <SelectItem value="supplement" className="text-xs">Supplement</SelectItem>
                 <SelectItem value="overhead_and_profit" className="text-xs">Overhead &amp; Profit (O&amp;P)</SelectItem>
+                <SelectItem value="deductible" className="text-xs">Deductible</SelectItem>
+                <SelectItem value="other_structures" className="text-xs">Other Structures</SelectItem>
+                <SelectItem value="personal_property" className="text-xs">Personal Property</SelectItem>
+                <SelectItem value="additional_living_expenses" className="text-xs">Additional Living Expenses (ALE)</SelectItem>
               </SelectContent>
             </Select>
           </div>
