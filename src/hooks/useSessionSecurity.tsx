@@ -140,14 +140,22 @@ export function useSessionSecurity(options: SessionSecurityOptions = {}) {
       updateActivity();
     };
 
-    // When phone/tab wakes up, refresh the auth session and reset activity
+    // When phone/tab wakes up, reset activity and refresh JWT only if it's expiring soon
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible') {
         // Reset activity so the inactivity check doesn't fire immediately
         updateActivity();
-        // Proactively refresh the Supabase JWT so edge-function calls succeed
+        // Only refresh the Supabase JWT if it expires within the next 60 seconds.
+        // Refreshing unconditionally issues a new token every tab-switch, which
+        // triggers onAuthStateChange → hydrateAuthState → full app re-render,
+        // resetting the UI back to its default state (e.g. wrong tab selected).
         try {
-          await supabase.auth.refreshSession();
+          const { data: { session } } = await supabase.auth.getSession();
+          const expiresAt = session?.expires_at; // unix seconds
+          const needsRefresh = !expiresAt || expiresAt - Date.now() / 1000 < 60;
+          if (needsRefresh) {
+            await supabase.auth.refreshSession();
+          }
         } catch (e) {
           console.warn('Session refresh on wake failed:', e);
         }
