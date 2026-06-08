@@ -15,23 +15,38 @@ interface Props {
   checkIntakeItemId: string;
   claimId: string | null;
   detectedClaimNumber: string | null;
+  readOnly?: boolean;
 }
 
 const fmt = (n: number) =>
   `$${(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumber }: Props) {
+export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumber, readOnly = false }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [editing, setEditing] = useState(!claimId);
+  const [editing, setEditing] = useState(!claimId && !readOnly);
   const [input, setInput] = useState(detectedClaimNumber ?? "");
   const [saving, setSaving] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
 
-  // Fetch claim + settlement + all checks for this claim
-  const { data: claim } = useQuery({
+  // Read-only mode (partner viewing a shared check): fetch via SECURITY
+  // DEFINER RPC that validates access through shared_checks, so partner
+  // tenants don't need direct RLS access to claims/claim_settlements.
+  const { data: rpcData } = useQuery({
+    queryKey: ["claim-ledger-rpc", checkIntakeItemId],
+    enabled: readOnly,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc("get_check_claim_settlement", {
+        p_check_id: checkIntakeItemId,
+      });
+      if (error) throw error;
+      return data as any;
+    },
+  });
+
+  const { data: ownerClaim } = useQuery({
     queryKey: ["claim-ledger", claimId],
-    enabled: !!claimId,
+    enabled: !!claimId && !readOnly,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("claims")
@@ -43,9 +58,9 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
     },
   });
 
-  const { data: settlement } = useQuery({
+  const { data: ownerSettlement } = useQuery({
     queryKey: ["claim-ledger-settlement", claimId],
-    enabled: !!claimId,
+    enabled: !!claimId && !readOnly,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("claim_settlements")
@@ -57,9 +72,9 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
     },
   });
 
-  const { data: siblingChecks = [] } = useQuery({
+  const { data: ownerSiblingChecks = [] } = useQuery({
     queryKey: ["claim-ledger-checks", claimId],
-    enabled: !!claimId,
+    enabled: !!claimId && !readOnly,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
@@ -70,6 +85,11 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       return data ?? [];
     },
   });
+
+  const claim: any = readOnly ? rpcData?.claim : ownerClaim;
+  const settlement: any = readOnly ? rpcData?.settlement : ownerSettlement;
+  const siblingChecks: any[] = readOnly ? (rpcData?.sibling_checks ?? []) : ownerSiblingChecks;
+  const effectiveClaimId = readOnly ? (rpcData?.claim?.id ?? null) : claimId;
 
   const linkMutation = useMutation({
     mutationFn: async (claimNumber: string) => {
