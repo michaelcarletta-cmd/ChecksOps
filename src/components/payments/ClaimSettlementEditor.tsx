@@ -43,7 +43,7 @@ const COLS: Record<Category, { rcv: string; recDep: string; nonRecDep: string; d
     rcv: "pwi_rcv",
     recDep: "pwi_recoverable_depreciation",
     nonRecDep: "pwi_non_recoverable_depreciation",
-    deductible: "pwi_deductible",
+    deductible: null,
   },
   personal_property: {
     rcv: "personal_property_rcv",
