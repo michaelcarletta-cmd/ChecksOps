@@ -48,6 +48,7 @@ import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
 import { DepositStatusPanel } from "@/components/check-review/DepositStatusPanel";
 import { SignatureStatusPanel } from "@/components/check-review/SignatureStatusPanel";
+import { ReviewSettlementTab } from "@/components/check-review/ReviewSettlementTab";
 import { Share2 } from "lucide-react";
 import { ShieldCheck } from "lucide-react";
 import { CheckValidityBadge } from "@/components/checks/CheckValidityBadge";
@@ -1016,6 +1017,7 @@ export default function CheckCommandCenter() {
                   <Tabs defaultValue="review">
                     <TabsList className="w-full rounded-none">
                       <TabsTrigger value="review" className="flex-1 text-xs">Review</TabsTrigger>
+                      <TabsTrigger value="settlement" className="flex-1 text-xs">Settlement</TabsTrigger>
                       <TabsTrigger value="packet" className="flex-1 text-xs">Deposit Packet</TabsTrigger>
                     </TabsList>
                     <TabsContent value="review" className="mt-0">
@@ -1027,6 +1029,9 @@ export default function CheckCommandCenter() {
                           setReviewCheckId(null);
                         }}
                       />
+                    </TabsContent>
+                    <TabsContent value="settlement" className="mt-0 p-4">
+                      <ReviewSettlementTab checkId={reviewCheckId} />
                     </TabsContent>
                     <TabsContent value="packet" className="mt-0 p-4">
                       <Suspense fallback={<TabLoader />}>
