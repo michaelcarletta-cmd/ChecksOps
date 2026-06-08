@@ -195,8 +195,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
   const ordLawNet = Math.max(0,
     Number(s.pwi_rcv || 0)
     - Number(s.pwi_recoverable_depreciation || 0)
-    - Number(s.pwi_non_recoverable_depreciation || 0)
-    - Number(s.pwi_deductible || 0));
+    - Number(s.pwi_non_recoverable_depreciation || 0));
   const aleAcv = Math.max(0,
     Number(s.ale_rcv || 0)
     - Number(s.ale_recoverable_depreciation || 0)
