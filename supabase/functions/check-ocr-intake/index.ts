@@ -880,7 +880,7 @@ Rules:
         p_reasons: eligibility.reasons,
         p_rules: eligibility.rules,
         p_evaluated_by: userId,
-        p_claim_id: check.claim_id ?? null,
+        p_claim_id: autoLinkedClaimId,
         p_has_active_endorsements: hasActiveEndorsements,
       });
 
