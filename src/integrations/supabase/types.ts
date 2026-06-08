@@ -3710,6 +3710,7 @@ export type Database = {
           actum_consumer_unique: string | null
           actum_history_id: string | null
           actum_order_id: string | null
+          auth_code: string | null
           check_amount: number
           check_intake_item_id: string
           created_at: string
@@ -3737,6 +3738,7 @@ export type Database = {
           actum_consumer_unique?: string | null
           actum_history_id?: string | null
           actum_order_id?: string | null
+          auth_code?: string | null
           check_amount: number
           check_intake_item_id: string
           created_at?: string
@@ -3764,6 +3766,7 @@ export type Database = {
           actum_consumer_unique?: string | null
           actum_history_id?: string | null
           actum_order_id?: string | null
+          auth_code?: string | null
           check_amount?: number
           check_intake_item_id?: string
           created_at?: string
