@@ -26,7 +26,7 @@ const STATUS_CONFIG: Record<string, { label: string; icon: any; className: strin
   failed: { label: "Failed", icon: AlertCircle, className: "text-red-600 border-red-500/30 bg-red-500/10" },
 };
 
-export function FundsTab({ checkIntakeItemId, checkNumber, carrierName }: Props) {
+export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId, detectedClaimNumber }: Props) {
   const { tenant } = useTenant();
   const [showDisburse, setShowDisburse] = useState(false);
 
