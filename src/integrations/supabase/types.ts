@@ -19266,6 +19266,10 @@ export type Database = {
           carrier_name: string
         }[]
       }
+      get_check_claim_settlement: {
+        Args: { p_check_id: string }
+        Returns: Json
+      }
       get_check_dashboard_counts: { Args: never; Returns: Json }
       get_check_dashboard_counts_for_tenant: {
         Args: { _tenant_id: string }
