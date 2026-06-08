@@ -48,6 +48,7 @@ import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
 import { DepositStatusPanel } from "@/components/check-review/DepositStatusPanel";
 import { SignatureStatusPanel } from "@/components/check-review/SignatureStatusPanel";
+import { ReviewSettlementTab } from "@/components/check-review/ReviewSettlementTab";
 import { Share2 } from "lucide-react";
 import { ShieldCheck } from "lucide-react";
 import { CheckValidityBadge } from "@/components/checks/CheckValidityBadge";
