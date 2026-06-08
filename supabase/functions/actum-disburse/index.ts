@@ -108,10 +108,14 @@ serve(async (req) => {
     // Step 1: Debit the primary account for the total batch amount
     console.log(`Initiating debit of $${batch.total_amount} from primary account ${primaryAccount.nickname}`);
     
+    const debitSubId = primaryAccount.account_type === 'insured' 
+      ? ((settings as any).actum_sub_id_ppd || settings.actum_sub_id || "")
+      : ((settings as any).actum_sub_id_ccd || settings.actum_sub_id || "");
+
     const debitParams = new URLSearchParams({
       parent_id: settings.actum_parent_id,
-      sub_id: settings.actum_sub_id || "",
-      pass_auth: settings.actum_pass_auth || "",
+      sub_id: debitSubId,
+      pass_auth: (settings as any).actum_syspass || "", // Use actum_syspass as pass_auth if present
       action: "initiate",
       custname: primaryAccount.custname,
       chk_aba: primaryAccount.chk_aba,
