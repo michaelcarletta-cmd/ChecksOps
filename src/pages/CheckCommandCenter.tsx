@@ -3202,7 +3202,7 @@ function CheckDetailPanel({
                       checkIntakeItemId={checkId}
                       checkNumber={check.check_number ?? undefined}
                       carrierName={check.carrier_name ?? undefined}
-                      claimId={(check as any).claim_id ?? null}
+                      claimId={check.claim_id ?? null}
                       detectedClaimNumber={check.detected_claim_number ?? null}
                     />
 
