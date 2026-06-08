@@ -26,6 +26,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
   const [editing, setEditing] = useState(!claimId);
   const [input, setInput] = useState(detectedClaimNumber ?? "");
   const [saving, setSaving] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   // Fetch claim + settlement + all checks for this claim
   const { data: claim } = useQuery({
