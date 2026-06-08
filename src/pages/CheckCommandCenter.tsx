@@ -3190,6 +3190,13 @@ function CheckDetailPanel({
             </TabsContent>
 
             <TabsContent value="funds" className="p-4 mt-0 space-y-4">
+              {/* Claim Ledger — always visible so funds can be tracked accurately */}
+              <ClaimLedgerCard
+                checkIntakeItemId={checkId}
+                claimId={check.claim_id ?? null}
+                detectedClaimNumber={check.detected_claim_number ?? null}
+              />
+
               {(() => {
                 const stage = (check as any).check_stage ?? null;
                 const status = (check as any).status ?? null;
@@ -3208,6 +3215,7 @@ function CheckDetailPanel({
 
                   );
                 }
+
 
                 if (!isDeposited) {
                   return (
