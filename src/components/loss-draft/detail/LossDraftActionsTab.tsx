@@ -261,7 +261,7 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
           <ClaimLedgerCard
             checkIntakeItemId={draft.check_intake_item_id!}
             claimId={draft.claim_id}
-            detectedClaimNumber={draft.claim_number}
+            detectedClaimNumber={draft.check_intake_items?.detected_claim_number ?? null}
           />
           {draft.claim_id && (
             <ClaimSettlementEditor
