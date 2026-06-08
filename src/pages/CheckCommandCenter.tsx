@@ -493,6 +493,7 @@ export default function CheckCommandCenter() {
       })) as (CheckItem & { _shared: true; _sourceTenantName: string })[];
     },
     enabled: !!tenantId,
+    refetchOnWindowFocus: false, // Prevent page jump when switching tabs
   });
 
   // Realtime: when the source tenant updates a shared check (e.g. marks it
