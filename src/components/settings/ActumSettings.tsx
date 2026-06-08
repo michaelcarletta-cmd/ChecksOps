@@ -49,6 +49,8 @@ export function ActumSettings() {
       setForm({
         actum_parent_id: tenantDetails.actum_parent_id ?? "",
         actum_sub_id: tenantDetails.actum_sub_id ?? "",
+        actum_sub_id_ppd: (tenantDetails as any).actum_sub_id_ppd ?? "",
+        actum_sub_id_ccd: (tenantDetails as any).actum_sub_id_ccd ?? "",
         actum_syspass: (tenantDetails as any).actum_syspass ?? "",
         actum_username: (tenantDetails as any).actum_username ?? "",
         actum_password: (tenantDetails as any).actum_password ?? "",
