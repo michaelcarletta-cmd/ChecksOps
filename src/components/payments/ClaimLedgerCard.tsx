@@ -284,14 +284,16 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
               Claim Ledger — #{claim?.claim_number ?? "…"}
             </span>
           </CardTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-1 text-[10px]"
-            onClick={() => { setInput(claim?.claim_number ?? ""); setEditing((v) => !v); }}
-          >
-            <Pencil className="h-3 w-3 mr-1" /> Change
-          </Button>
+          {!readOnly && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-1 text-[10px]"
+              onClick={() => { setInput(claim?.claim_number ?? ""); setEditing((v) => !v); }}
+            >
+              <Pencil className="h-3 w-3 mr-1" /> Change
+            </Button>
+          )}
         </div>
         {claim?.policyholder_name && (
           <p className="text-xs text-muted-foreground truncate">{claim.policyholder_name}</p>
