@@ -164,8 +164,29 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
     linkMutation.mutate(input);
   };
 
+  // Read-only & no claim resolved → render a small placeholder so the
+  // partner still sees the section but doesn't get a link/edit form.
+  if (readOnly && !effectiveClaimId) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            Claim Ledger
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-muted-foreground">
+            The public adjuster hasn't entered settlement amounts for this claim yet. Once they do,
+            you'll see the RCV, depreciation, deductible and remaining balance here.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   // ─── Unlinked state ─────────────────────────────────────────────
-  if (!claimId) {
+  if (!readOnly && !claimId) {
     return (
       <Card className="border-amber-500/30 bg-amber-500/5">
         <CardHeader className="pb-2">
