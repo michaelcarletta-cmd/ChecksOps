@@ -214,8 +214,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
     + Number(s.ale_rcv || 0);
   const totalDeductible =
     Number(s.deductible || 0)
-    + Number(s.other_structures_deductible || 0)
-    + Number(s.pwi_deductible || 0);
+    + Number(s.other_structures_deductible || 0);
   const totalExpected = dwellingAcv + otherStructuresAcv + ppAcv + ordLawNet + aleAcv + totalRecDep
     + Number(s.supplement_expected || 0);
 
