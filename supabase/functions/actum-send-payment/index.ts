@@ -42,7 +42,7 @@ serve(async (req) => {
       .select(`
         *,
         stakeholder_accounts:recipient_stakeholder_account_id (
-          id, chk_aba, chk_acct, acct_type, custname, consumer_unique, nickname, verification_status
+          id, chk_aba, chk_acct, acct_type, account_type, custname, consumer_unique, nickname, verification_status
         )
       `)
       .eq("id", payment_id)
