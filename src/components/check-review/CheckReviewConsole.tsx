@@ -67,7 +67,7 @@ interface ReviewCheckGroup {
   policyholderName: string;
   checks: ReviewCheck[];
   totalAmount: number;
-  earliestCreatedAt: string;
+  latestCreatedAt: string;
 }
 
 type ReviewFieldChange = {
@@ -349,15 +349,15 @@ export function CheckReviewQueue({
       if (existing) {
         existing.checks.push(check);
         existing.totalAmount += check.amount ?? 0;
-        if (new Date(check.created_at).getTime() < new Date(existing.earliestCreatedAt).getTime()) {
-          existing.earliestCreatedAt = check.created_at;
+        if (new Date(check.created_at).getTime() > new Date(existing.latestCreatedAt).getTime()) {
+          existing.latestCreatedAt = check.created_at;
         }
       } else {
-        groups.set(key, { key, claimNumber, policyholderName, checks: [check], totalAmount: check.amount ?? 0, earliestCreatedAt: check.created_at });
+        groups.set(key, { key, claimNumber, policyholderName, checks: [check], totalAmount: check.amount ?? 0, latestCreatedAt: check.created_at });
       }
     });
 
-    return Array.from(groups.values()).sort((a, b) => new Date(a.earliestCreatedAt).getTime() - new Date(b.earliestCreatedAt).getTime());
+    return Array.from(groups.values()).sort((a, b) => new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime());
   }, [linkedClaims, reviewChecks]);
 
   function getReviewReason(check: ReviewCheck): string {
