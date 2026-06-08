@@ -98,16 +98,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const hydrateAuthState = useCallback((nextSession: Session | null) => {
-    // Avoid re-rendering / refetching when the session hasn't actually changed.
-    // Supabase emits TOKEN_REFRESHED / SIGNED_IN events whenever the tab
-    // regains focus, which previously caused every consumer of `user` to
-    // re-mount and the active page to "reload" back to its default tab.
     setSession((prev) => {
+      // Supabase's onAuthStateChange emits TOKEN_REFRESHED / SIGNED_IN 
+      // events frequently, often every time the browser tab regains focus.
+      // 
+      // If the underlying user ID and current access token haven't changed,
+      // we must preserve the existing session object. Returning the same
+      // object prevents React from triggering a re-render/re-mount of the
+      // entire App tree, which was causing the UI to "refresh" or jump 
+      // back to default tabs (like the Review Queue) on tab switch.
       const sameUser = prev?.user?.id === nextSession?.user?.id;
       const sameToken = prev?.access_token === nextSession?.access_token;
-      if (sameUser && sameToken) return prev;
+      
+      if (sameUser && sameToken) {
+        return prev;
+      }
 
-      // Keep `user` reference stable when it's the same user id.
+      // If it really is a new user or a forced token refresh that changed the string
       setUser((prevUser) => {
         if (sameUser && prevUser) return prevUser;
         return nextSession?.user ?? null;
