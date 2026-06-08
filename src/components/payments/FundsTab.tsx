@@ -7,12 +7,15 @@ import { Button } from "@/components/ui/button";
 import { DollarSign, ArrowDownCircle, Send, Clock, CheckCircle2, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
+import { ClaimLedgerCard } from "./ClaimLedgerCard";
 import { useState } from "react";
 
 interface Props {
   checkIntakeItemId: string;
   checkNumber?: string;
   carrierName?: string;
+  claimId?: string | null;
+  detectedClaimNumber?: string | null;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; icon: any; className: string }> = {
@@ -23,7 +26,7 @@ const STATUS_CONFIG: Record<string, { label: string; icon: any; className: strin
   failed: { label: "Failed", icon: AlertCircle, className: "text-red-600 border-red-500/30 bg-red-500/10" },
 };
 
-export function FundsTab({ checkIntakeItemId, checkNumber, carrierName }: Props) {
+export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId, detectedClaimNumber }: Props) {
   const { tenant } = useTenant();
   const [showDisburse, setShowDisburse] = useState(false);
 
@@ -83,18 +86,30 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName }: Props)
 
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading funds...</div>;
 
+  const ledger = (
+    <ClaimLedgerCard
+      checkIntakeItemId={checkIntakeItemId}
+      claimId={claimId ?? null}
+      detectedClaimNumber={detectedClaimNumber ?? null}
+    />
+  );
+
   if (incomingPayments.length === 0) {
     return (
-      <div className="p-4 text-center space-y-2">
-        <ArrowDownCircle className="h-8 w-8 text-muted-foreground mx-auto" />
-        <p className="text-sm text-muted-foreground">No incoming payments yet for this check.</p>
-        <p className="text-xs text-muted-foreground">The public adjuster will send funds here once the check clears.</p>
+      <div className="space-y-4 p-1">
+        {ledger}
+        <div className="p-4 text-center space-y-2">
+          <ArrowDownCircle className="h-8 w-8 text-muted-foreground mx-auto" />
+          <p className="text-sm text-muted-foreground">No incoming payments yet for this check.</p>
+          <p className="text-xs text-muted-foreground">The public adjuster will send funds here once the check clears.</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-4 p-1">
+      {ledger}
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-2">
