@@ -84,25 +84,39 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
         .limit(2);
       if (lookupErr) throw lookupErr;
 
-      if (!matches || matches.length === 0) {
-        // No claim found — just save the detected number; user can create the claim elsewhere
-        const { error } = await supabase
-          .from("check_intake_items")
-          .update({ detected_claim_number: trimmed })
-          .eq("id", checkIntakeItemId);
-        if (error) throw error;
-        return { linked: false as const, claimNumber: trimmed };
-      }
-      if (matches.length > 1) {
+      if (matches && matches.length > 1) {
         throw new Error(`Multiple claims match "${trimmed}". Please disambiguate.`);
       }
-      const match = matches[0];
+
+      let matched = matches?.[0];
+      let created = false;
+
+      // No CRM claim — create a lightweight tracking-only claim record so
+      // figures (RCV, ACV, deductible, etc.) can still be entered and all
+      // future checks for this claim number link to the same ledger.
+      if (!matched) {
+        const { data: newClaim, error: insertErr } = await supabase
+          .from("claims")
+          .insert({ claim_number: trimmed, status: "tracking" })
+          .select("id, claim_number, policyholder_name")
+          .single();
+        if (insertErr) throw insertErr;
+        matched = newClaim;
+        created = true;
+      }
+
       const { error } = await supabase
         .from("check_intake_items")
-        .update({ detected_claim_number: trimmed, claim_id: match.id })
+        .update({ detected_claim_number: trimmed, claim_id: matched.id })
         .eq("id", checkIntakeItemId);
       if (error) throw error;
-      return { linked: true as const, claimNumber: match.claim_number, claimId: match.id, policyholderName: match.policyholder_name };
+
+      return {
+        created,
+        claimNumber: matched.claim_number,
+        claimId: matched.id,
+        policyholderName: matched.policyholder_name,
+      };
     },
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["intake-check"] });
@@ -110,18 +124,17 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       qc.invalidateQueries({ queryKey: ["claim-ledger-settlement"] });
       qc.invalidateQueries({ queryKey: ["claim-ledger-checks"] });
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
-      if (res.linked) {
-        toast({ title: "Linked to claim", description: `${res.claimNumber} — ${res.policyholderName ?? ""}` });
-        setEditing(false);
-      } else {
-        toast({
-          title: "Claim number saved",
-          description: `No existing claim found for "${res.claimNumber}". Create the claim to start tracking funds.`,
-        });
-      }
+      qc.invalidateQueries({ queryKey: ["review-settlement-check"] });
+      setEditing(false);
+      toast({
+        title: res.created ? "Claim tracker created" : "Linked to claim",
+        description: res.created
+          ? `Now tracking funds for ${res.claimNumber}. Enter the settlement amounts to monitor releases.`
+          : `${res.claimNumber}${res.policyholderName ? ` — ${res.policyholderName}` : ""}`,
+      });
     },
     onError: (e: any) => {
-      toast({ title: "Could not link claim", description: e.message, variant: "destructive" });
+      toast({ title: "Could not save claim", description: e.message, variant: "destructive" });
     },
     onSettled: () => setSaving(false),
   });
@@ -143,8 +156,9 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
         </CardHeader>
         <CardContent className="space-y-2">
           <p className="text-xs text-muted-foreground">
-            Tracking all funds released against a single claim number requires this check to be
-            linked. {detectedClaimNumber ? "OCR detected the number below — confirm or correct it." : "Enter the claim number from the check."}
+            {detectedClaimNumber
+              ? "OCR detected the claim number below — confirm or correct it. If a matching claim exists in the CRM we'll link to it; otherwise we'll start a new tracker so you can still enter RCV, ACV, deductible and watch funds add up."
+              : "Enter the claim number from the check. If it doesn't match a CRM claim, we'll create a tracker so you can still log RCV, ACV, ordinance & law, etc. and track every check against the same total."}
           </p>
           <div className="flex gap-2">
             <Input
