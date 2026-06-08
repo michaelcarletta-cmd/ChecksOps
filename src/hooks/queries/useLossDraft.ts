@@ -32,7 +32,9 @@ export interface LossDraftRecord {
     amount: number | null;
     payee_line: string | null;
     carrier_name: string | null;
+    detected_claim_number: string | null;
     status: string | null;
+
   } | null;
 }
 
@@ -80,7 +82,7 @@ export function useLossDraftDetail(lossDraftId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("loss_draft_tracking")
-        .select("*, check_intake_items(check_number, amount, payee_line, carrier_name, status)")
+        .select("*, check_intake_items(check_number, amount, payee_line, carrier_name, detected_claim_number, status)")
         .eq("id", lossDraftId)
         .single();
       if (error) throw error;
