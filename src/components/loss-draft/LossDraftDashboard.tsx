@@ -100,7 +100,6 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
   // (we need to document mortgage releases). Non-monitored checks flow through the
   // normal Review → Endorsing → Deposit lane and never sit in Loss Draft.
   const isVisibleInLossDraft = (d: LossDraftRow) =>
-    d.monitoring_type === "monitored" &&
     !["endorsing", "final_release_complete"].includes(d.escrow_status);
   const isActiveLossDraft = (d: LossDraftRow) =>
     isVisibleInLossDraft(d) && d.escrow_status !== "final_release_complete";
