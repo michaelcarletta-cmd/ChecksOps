@@ -139,6 +139,8 @@ serve(async (req) => {
       amount: batch.total_amount,
       actum_order_id: debitResult.orderid || "FAILED",
       status: debitResult.status === "Accepted" ? "accepted" : "declined",
+      auth_code: debitResult.authcode,
+      response_reason: debitResult.reason,
       raw_response: JSON.stringify(debitResult),
     });
 
@@ -203,6 +205,8 @@ serve(async (req) => {
         amount: split.amount,
         actum_order_id: actumRes.orderid || "FAILED",
         status: actumRes.status === "Accepted" ? "accepted" : "declined",
+        auth_code: actumRes.authcode,
+        response_reason: actumRes.reason,
         raw_response: JSON.stringify(actumRes),
       });
 

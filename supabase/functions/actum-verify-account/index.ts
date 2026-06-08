@@ -145,6 +145,36 @@ serve(async (req) => {
       throw new Error(`Actum declined micro-deposit [${code}]: ${reason}`);
     }
 
+    // Log the micro-deposits
+    const microLogs = [
+      {
+        tenant_id: account.tenant_id,
+        stakeholder_account_id: account.id,
+        transaction_type: "micro-deposit-1",
+        amount: amount1Cents / 100,
+        actum_order_id: res1.ordernum || res1.order_id || "FAILED",
+        actum_history_id: res1.historyid || res1.history_id,
+        status: r1ok ? "accepted" : "declined",
+        auth_code: res1.authcode,
+        response_reason: res1.reason,
+        raw_response: res1,
+      },
+      {
+        tenant_id: account.tenant_id,
+        stakeholder_account_id: account.id,
+        transaction_type: "micro-deposit-2",
+        amount: amount2Cents / 100,
+        actum_order_id: res2.ordernum || res2.order_id || "FAILED",
+        actum_history_id: res2.historyid || res2.history_id,
+        status: r2ok ? "accepted" : "declined",
+        auth_code: res2.authcode,
+        response_reason: res2.reason,
+        raw_response: res2,
+      }
+    ];
+
+    await supabase.from("actum_transactions").insert(microLogs);
+
     // Record the verification
     const { data: verification, error: verErr } = await supabase
       .from("micro_deposit_verifications")
