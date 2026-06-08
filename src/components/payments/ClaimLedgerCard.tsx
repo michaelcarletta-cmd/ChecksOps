@@ -146,6 +146,12 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
       qc.invalidateQueries({ queryKey: ["review-settlement-check"] });
       setEditing(false);
+      
+      // Auto-open editor if this is a newly created tracker
+      if (res.created) {
+        setEditorOpen(true);
+      }
+
       toast({
         title: res.created ? "Claim tracker created" : "Linked to claim",
         description: res.created
