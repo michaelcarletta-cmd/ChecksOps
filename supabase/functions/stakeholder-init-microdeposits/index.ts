@@ -8,10 +8,7 @@ const corsHeaders = {
 
 function isValidRoutingNumber(aba: string): boolean {
   const clean = (aba ?? "").replace(/\D/g, "");
-  if (clean.length !== 9) return false;
-  const d = clean.split("").map(Number);
-  const sum = 3 * (d[0] + d[3] + d[6]) + 7 * (d[1] + d[4] + d[7]) + (d[2] + d[5] + d[8]);
-  return sum > 0 && sum % 10 === 0;
+  return clean.length === 9;
 }
 
 function randCents(): number {
