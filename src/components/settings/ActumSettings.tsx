@@ -21,6 +21,8 @@ export function ActumSettings() {
   const [form, setForm] = useState({
     actum_parent_id: "",
     actum_sub_id: "",
+    actum_sub_id_ppd: "",
+    actum_sub_id_ccd: "",
     actum_syspass: "",
     actum_username: "",
     actum_password: "",
