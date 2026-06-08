@@ -181,6 +181,7 @@ serve(async (req) => {
       .from("claim_check_payments")
       .update({
         status: accepted ? "submitted" : "failed",
+        auth_code: parsed.authcode ?? null,
         actum_order_id: orderId ?? null,
         actum_history_id: historyId ?? null,
         actum_consumer_unique: consumerUnique ?? null,
