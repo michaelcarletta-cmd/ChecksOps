@@ -118,9 +118,9 @@ serve(async (req) => {
       params.append("action_code", "P");
       params.append("creditflag", "1");
       params.append("currency", "US");
-      params.append("merordernumber", `verify_${stakeholder_account_id}_${label}_${Date.now()}`);
+      params.append("merordernumber", `v1_${stakeholder_account_id.slice(0, 8)}_${Date.now()}`);
       params.append("postback", "1");
-      params.append("idempotence", `verify_${stakeholder_account_id}_${label}_${Date.now()}`);
+      params.append("idempotence", `v1_${stakeholder_account_id.slice(0, 8)}_${Date.now()}`);
 
       console.log(`[stakeholder-init-microdeposits] sending micro-deposit to Actum for ${account.id} (${label}): ${amountCents}c`);
       const res = await fetch(actumEndpoint, {
