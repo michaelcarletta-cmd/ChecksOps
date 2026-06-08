@@ -138,11 +138,17 @@ serve(async (req) => {
 
     const r1 = await sendOne(amount1, "1");
     if (!r1.accepted) {
-      return new Response(JSON.stringify({ error: `Bank network rejected first micro-deposit: ${r1.parsed.reason ?? r1.parsed.authcode ?? "declined"}` }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const code = r1.parsed.authcode ?? "unknown";
+      const reason = r1.parsed.reason ?? "declined";
+      console.error(`[stakeholder-init-microdeposits] micro-deposit 1 rejected: authcode=${code} reason=${reason}`, r1.parsed);
+      return new Response(JSON.stringify({ error: `Actum declined micro-deposit [${code}]: ${reason}` }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const r2 = await sendOne(amount2, "2");
     if (!r2.accepted) {
-      return new Response(JSON.stringify({ error: `Bank network rejected second micro-deposit: ${r2.parsed.reason ?? r2.parsed.authcode ?? "declined"}` }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const code = r2.parsed.authcode ?? "unknown";
+      const reason = r2.parsed.reason ?? "declined";
+      console.error(`[stakeholder-init-microdeposits] micro-deposit 2 rejected: authcode=${code} reason=${reason}`, r2.parsed);
+      return new Response(JSON.stringify({ error: `Actum declined micro-deposit [${code}]: ${reason}` }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Capture consumer_unique if returned

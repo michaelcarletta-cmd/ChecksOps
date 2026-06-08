@@ -138,8 +138,11 @@ serve(async (req) => {
     const r1ok = (res1.status ?? "").toLowerCase() === "accepted";
     const r2ok = (res2.status ?? "").toLowerCase() === "accepted";
     if (!r1ok || !r2ok) {
+      const failed = !r1ok ? res1 : res2;
+      const code = failed.authcode ?? "unknown";
+      const reason = failed.reason ?? "declined";
       console.error("Actum micro-deposit failed:", { res1, res2 });
-      throw new Error(`Actum rejected micro-deposits: ${res1.reason || res1.error_msg || res2.reason || res2.error_msg || "Unknown error"}`);
+      throw new Error(`Actum declined micro-deposit [${code}]: ${reason}`);
     }
 
     // Record the verification
