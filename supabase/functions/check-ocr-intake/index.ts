@@ -819,10 +819,42 @@ Rules:
     // The deposit_recommendation is still persisted so the reviewer sees the AI suggestion.
     const checkStatus = needsManualReview ? "needs_review" : "needs_review";
 
+    // ---- Auto-link to existing claim by claim_number ----
+    // If this check isn't already linked to a claim and OCR detected a claim number,
+    // try to find an existing claim (real CRM record or tracking-only ledger) and
+    // link this check to it so all checks for the same claim aggregate together.
+    stage = "auto_link_claim";
+    let autoLinkedClaimId: string | null = check.claim_id ?? null;
+    if (!autoLinkedClaimId && parsed.claim_number) {
+      try {
+        const trimmed = String(parsed.claim_number).trim();
+        if (trimmed) {
+          const { data: matches, error: lookupErr } = await supabase
+            .from("claims")
+            .select("id, claim_number")
+            .ilike("claim_number", trimmed)
+            .limit(2);
+          if (lookupErr) {
+            log("auto_link_claim", "Lookup failed", { error: lookupErr.message });
+          } else if (matches && matches.length === 1) {
+            autoLinkedClaimId = matches[0].id;
+            log("auto_link_claim", "Linked to existing claim", { claimId: autoLinkedClaimId, claimNumber: trimmed });
+          } else if (matches && matches.length > 1) {
+            log("auto_link_claim", "Ambiguous — multiple claims match", { claimNumber: trimmed, count: matches.length });
+          } else {
+            log("auto_link_claim", "No matching claim", { claimNumber: trimmed });
+          }
+        }
+      } catch (e) {
+        log("auto_link_claim", "Exception", { error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+
     // ---- Commit via RPC (non-fatal wrapper) ----
     stage = "rpc_commit";
     let rpcResult: unknown = null;
     let rpcError: string | null = null;
+
 
     try {
       log("rpc_commit", "Starting RPC commit");
