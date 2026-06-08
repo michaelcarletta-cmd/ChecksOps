@@ -3201,6 +3201,7 @@ function CheckDetailPanel({
                 checkIntakeItemId={checkId}
                 claimId={check.claim_id ?? null}
                 detectedClaimNumber={check.detected_claim_number ?? null}
+                readOnly={isSharedView}
               />
 
               {(() => {

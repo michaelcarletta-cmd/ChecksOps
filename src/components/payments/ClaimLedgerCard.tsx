@@ -15,23 +15,38 @@ interface Props {
   checkIntakeItemId: string;
   claimId: string | null;
   detectedClaimNumber: string | null;
+  readOnly?: boolean;
 }
 
 const fmt = (n: number) =>
   `$${(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumber }: Props) {
+export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumber, readOnly = false }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [editing, setEditing] = useState(!claimId);
+  const [editing, setEditing] = useState(!claimId && !readOnly);
   const [input, setInput] = useState(detectedClaimNumber ?? "");
   const [saving, setSaving] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
 
-  // Fetch claim + settlement + all checks for this claim
-  const { data: claim } = useQuery({
+  // Read-only mode (partner viewing a shared check): fetch via SECURITY
+  // DEFINER RPC that validates access through shared_checks, so partner
+  // tenants don't need direct RLS access to claims/claim_settlements.
+  const { data: rpcData } = useQuery({
+    queryKey: ["claim-ledger-rpc", checkIntakeItemId],
+    enabled: readOnly,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc("get_check_claim_settlement", {
+        p_check_id: checkIntakeItemId,
+      });
+      if (error) throw error;
+      return data as any;
+    },
+  });
+
+  const { data: ownerClaim } = useQuery({
     queryKey: ["claim-ledger", claimId],
-    enabled: !!claimId,
+    enabled: !!claimId && !readOnly,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("claims")
@@ -43,9 +58,9 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
     },
   });
 
-  const { data: settlement } = useQuery({
+  const { data: ownerSettlement } = useQuery({
     queryKey: ["claim-ledger-settlement", claimId],
-    enabled: !!claimId,
+    enabled: !!claimId && !readOnly,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("claim_settlements")
@@ -57,9 +72,9 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
     },
   });
 
-  const { data: siblingChecks = [] } = useQuery({
+  const { data: ownerSiblingChecks = [] } = useQuery({
     queryKey: ["claim-ledger-checks", claimId],
-    enabled: !!claimId,
+    enabled: !!claimId && !readOnly,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
@@ -70,6 +85,11 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       return data ?? [];
     },
   });
+
+  const claim: any = readOnly ? rpcData?.claim : ownerClaim;
+  const settlement: any = readOnly ? rpcData?.settlement : ownerSettlement;
+  const siblingChecks: any[] = readOnly ? (rpcData?.sibling_checks ?? []) : ownerSiblingChecks;
+  const effectiveClaimId = readOnly ? (rpcData?.claim?.id ?? null) : claimId;
 
   const linkMutation = useMutation({
     mutationFn: async (claimNumber: string) => {
@@ -144,8 +164,29 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
     linkMutation.mutate(input);
   };
 
+  // Read-only & no claim resolved → render a small placeholder so the
+  // partner still sees the section but doesn't get a link/edit form.
+  if (readOnly && !effectiveClaimId) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            Claim Ledger
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-muted-foreground">
+            The public adjuster hasn't entered settlement amounts for this claim yet. Once they do,
+            you'll see the RCV, depreciation, deductible and remaining balance here.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   // ─── Unlinked state ─────────────────────────────────────────────
-  if (!claimId) {
+  if (!readOnly && !claimId) {
     return (
       <Card className="border-amber-500/30 bg-amber-500/5">
         <CardHeader className="pb-2">
@@ -243,21 +284,23 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
               Claim Ledger — #{claim?.claim_number ?? "…"}
             </span>
           </CardTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-1 text-[10px]"
-            onClick={() => { setInput(claim?.claim_number ?? ""); setEditing((v) => !v); }}
-          >
-            <Pencil className="h-3 w-3 mr-1" /> Change
-          </Button>
+          {!readOnly && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-1 text-[10px]"
+              onClick={() => { setInput(claim?.claim_number ?? ""); setEditing((v) => !v); }}
+            >
+              <Pencil className="h-3 w-3 mr-1" /> Change
+            </Button>
+          )}
         </div>
         {claim?.policyholder_name && (
           <p className="text-xs text-muted-foreground truncate">{claim.policyholder_name}</p>
         )}
       </CardHeader>
       <CardContent className="space-y-3">
-        {editing && (
+        {!readOnly && editing && (
           <div className="flex gap-2">
             <Input
               value={input}
@@ -305,10 +348,12 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
               Settlement breakdown
             </p>
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditorOpen(true)}>
-              <DollarSign className="h-3 w-3 mr-1" />
-              {breakdown.length > 0 ? "Edit amounts" : "Enter amounts"}
-            </Button>
+            {!readOnly && (
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditorOpen(true)}>
+                <DollarSign className="h-3 w-3 mr-1" />
+                {breakdown.length > 0 ? "Edit amounts" : "Enter amounts"}
+              </Button>
+            )}
           </div>
           {breakdown.length > 0 ? (
             <div className="rounded-md border border-border/50 divide-y divide-border/50">
@@ -323,19 +368,21 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
             </div>
           ) : (
             <div className="rounded-md border border-dashed border-border/60 p-3 text-center text-xs text-muted-foreground">
-              No settlement amounts entered yet. Click <span className="font-medium">Enter amounts</span> to
-              add RCV, recoverable depreciation, deductible, ordinance &amp; law, other structures, personal
-              property and ALE.
+              {readOnly
+                ? "The public adjuster hasn't entered settlement amounts yet."
+                : <>No settlement amounts entered yet. Click <span className="font-medium">Enter amounts</span> to add RCV, recoverable depreciation, deductible, ordinance &amp; law, other structures, personal property and ALE.</>}
             </div>
           )}
         </div>
 
-        <ClaimSettlementEditor
-          open={editorOpen}
-          onOpenChange={setEditorOpen}
-          claimId={claimId}
-          settlement={settlement}
-        />
+        {!readOnly && claimId && (
+          <ClaimSettlementEditor
+            open={editorOpen}
+            onOpenChange={setEditorOpen}
+            claimId={claimId}
+            settlement={settlement}
+          />
+        )}
 
 
         {/* Sibling checks */}
