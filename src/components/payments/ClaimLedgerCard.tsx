@@ -288,23 +288,43 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
         )}
 
         {/* Settlement breakdown */}
-        {breakdown.length > 0 ? (
-          <div className="rounded-md border border-border/50 divide-y divide-border/50">
-            {breakdown.map((b) => (
-              <div key={b.label} className="flex justify-between px-2 py-1.5 text-xs">
-                <span className="text-muted-foreground">{b.label}</span>
-                <span className={`tabular-nums font-medium ${b.amount < 0 ? "text-amber-600" : ""}`}>
-                  {b.amount < 0 ? "−" : ""}{fmt(Math.abs(b.amount))}
-                </span>
-              </div>
-            ))}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+              Settlement breakdown
+            </p>
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditorOpen(true)}>
+              <DollarSign className="h-3 w-3 mr-1" />
+              {breakdown.length > 0 ? "Edit amounts" : "Enter amounts"}
+            </Button>
           </div>
-        ) : (
-          <div className="rounded-md border border-dashed border-border/60 p-3 text-center text-xs text-muted-foreground">
-            No settlement amounts entered yet. Add RCV, depreciation, deductible, and other categories
-            from the claim's accounting tab to start tracking progress toward the full RCV.
-          </div>
-        )}
+          {breakdown.length > 0 ? (
+            <div className="rounded-md border border-border/50 divide-y divide-border/50">
+              {breakdown.map((b) => (
+                <div key={b.label} className="flex justify-between px-2 py-1.5 text-xs">
+                  <span className="text-muted-foreground">{b.label}</span>
+                  <span className={`tabular-nums font-medium ${b.amount < 0 ? "text-amber-600" : ""}`}>
+                    {b.amount < 0 ? "−" : ""}{fmt(Math.abs(b.amount))}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed border-border/60 p-3 text-center text-xs text-muted-foreground">
+              No settlement amounts entered yet. Click <span className="font-medium">Enter amounts</span> to
+              add RCV, recoverable depreciation, deductible, ordinance &amp; law, other structures, personal
+              property and ALE.
+            </div>
+          )}
+        </div>
+
+        <ClaimSettlementEditor
+          open={editorOpen}
+          onOpenChange={setEditorOpen}
+          claimId={claimId}
+          settlement={settlement}
+        />
+
 
         {/* Sibling checks */}
         <div>
