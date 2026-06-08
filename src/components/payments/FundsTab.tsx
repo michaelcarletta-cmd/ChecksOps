@@ -7,12 +7,15 @@ import { Button } from "@/components/ui/button";
 import { DollarSign, ArrowDownCircle, Send, Clock, CheckCircle2, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
+import { ClaimLedgerCard } from "./ClaimLedgerCard";
 import { useState } from "react";
 
 interface Props {
   checkIntakeItemId: string;
   checkNumber?: string;
   carrierName?: string;
+  claimId?: string | null;
+  detectedClaimNumber?: string | null;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; icon: any; className: string }> = {
