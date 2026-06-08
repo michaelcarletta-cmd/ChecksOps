@@ -300,7 +300,7 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
         )}
       </CardHeader>
       <CardContent className="space-y-3">
-        {editing && (
+        {!readOnly && editing && (
           <div className="flex gap-2">
             <Input
               value={input}
