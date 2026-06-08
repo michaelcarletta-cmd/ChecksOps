@@ -165,10 +165,14 @@ serve(async (req) => {
       // Skip the primary account since it's the source of funds
       if (acct.is_primary) continue;
 
+      const creditSubId = acct.account_type === 'insured' 
+        ? ((settings as any).actum_sub_id_ppd || settings.actum_sub_id || "")
+        : ((settings as any).actum_sub_id_ccd || settings.actum_sub_id || "");
+
       const creditParams = new URLSearchParams({
         parent_id: settings.actum_parent_id,
-        sub_id: settings.actum_sub_id || "",
-        pass_auth: settings.actum_pass_auth || "",
+        sub_id: creditSubId,
+        pass_auth: (settings as any).actum_syspass || "",
         action: "initiate",
         custname: acct.custname,
         chk_aba: acct.chk_aba,
