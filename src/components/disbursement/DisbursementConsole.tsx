@@ -97,7 +97,7 @@ export function DisbursementConsole({
     queryFn: async () => {
       const query = supabase
         .from("disbursement_batches")
-        .select(`id, status, created_at, delivery_speed, disbursement_splits(id, amount, status, return_code, stakeholder_accounts(nickname, account_type))`)
+        .select(`id, status, created_at, delivery_speed, disbursement_splits(id, amount, status, return_code, stakeholder_accounts(nickname, account_type), actum_transactions(auth_code, response_reason))`)
         .order("created_at", { ascending: false });
       if (checkIntakeItemId) query.eq("check_intake_item_id", checkIntakeItemId);
       else if (depositItemId) query.eq("deposit_item_id", depositItemId);
@@ -325,16 +325,24 @@ export function DisbursementConsole({
               {allSplits.map((split: any) => (
                 <div key={split.id} className="flex items-center justify-between px-2.5 py-1.5 text-xs">
                   <span className="truncate">{split.stakeholder_accounts?.nickname ?? "—"}</span>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="font-medium">${Number(split.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-                    <Badge variant="outline" className={`text-[9px] ${
-                      split.status === "settled" ? "text-emerald-600 border-emerald-500/30 bg-emerald-500/10" :
-                      split.status === "returned" || split.status === "failed" ? "text-red-600 border-red-500/30 bg-red-500/10" :
-                      split.status === "submitted" ? "text-blue-600 border-blue-500/30 bg-blue-500/10" :
-                      "text-muted-foreground"
-                    }`}>
-                      {split.status}{split.return_code && ` · ${split.return_code}`}
-                    </Badge>
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">${Number(split.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+                      <Badge variant="outline" className={`text-[9px] ${
+                        split.status === "settled" ? "text-emerald-600 border-emerald-500/30 bg-emerald-500/10" :
+                        split.status === "returned" || split.status === "failed" ? "text-red-600 border-red-500/30 bg-red-500/10" :
+                        split.status === "submitted" ? "text-blue-600 border-blue-500/30 bg-blue-500/10" :
+                        "text-muted-foreground"
+                      }`}>
+                        {split.status}{split.return_code && ` · ${split.return_code}`}
+                      </Badge>
+                    </div>
+                    {split.actum_transactions?.[0]?.auth_code && (
+                      <span className="text-[9px] text-muted-foreground font-mono">
+                        Auth: {split.actum_transactions[0].auth_code}
+                        {split.actum_transactions[0].response_reason && ` · ${split.actum_transactions[0].response_reason}`}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}

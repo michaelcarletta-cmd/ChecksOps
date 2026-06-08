@@ -1,0 +1,1 @@
+ALTER TABLE public.claim_check_payments ADD COLUMN auth_code TEXT;

@@ -38,6 +38,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
         .from("claim_check_payments")
         .select(`
           *,
+          auth_code,
           sender:sender_tenant_id (
             id,
             name
@@ -58,7 +59,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("disbursement_batches")
-        .select(`id, created_at, status, disbursement_splits(id, amount, status, return_code, created_at, stakeholder_accounts(nickname))`)
+        .select(`id, created_at, status, disbursement_splits(id, amount, status, return_code, created_at, stakeholder_accounts(nickname), actum_transactions(auth_code, response_reason))`)
         .eq("check_intake_item_id", checkIntakeItemId)
         .eq("tenant_id", tenant!.id)
         .order("created_at", { ascending: false });
@@ -153,16 +154,24 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
                       {s.stakeholder_accounts?.nickname ?? "—"}
                       {s.created_at && <span className="ml-1 text-muted-foreground/70">· {format(new Date(s.created_at), "MMM d")}</span>}
                     </span>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <span>${Number(s.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-                      <Badge variant="outline" className={`text-[9px] ${
-                        s.status === "settled" ? "text-emerald-600 border-emerald-500/30 bg-emerald-500/10" :
-                        s.status === "returned" || s.status === "failed" ? "text-red-600 border-red-500/30 bg-red-500/10" :
-                        s.status === "submitted" ? "text-blue-600 border-blue-500/30 bg-blue-500/10" :
-                        "text-muted-foreground"
-                      }`}>
-                        {s.status}
-                      </Badge>
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      <div className="flex items-center gap-1.5">
+                        <span>${Number(s.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+                        <Badge variant="outline" className={`text-[9px] ${
+                          s.status === "settled" ? "text-emerald-600 border-emerald-500/30 bg-emerald-500/10" :
+                          s.status === "returned" || s.status === "failed" ? "text-red-600 border-red-500/30 bg-red-500/10" :
+                          s.status === "submitted" ? "text-blue-600 border-blue-500/30 bg-blue-500/10" :
+                          "text-muted-foreground"
+                        }`}>
+                          {s.status}
+                        </Badge>
+                      </div>
+                      {s.actum_transactions?.[0]?.auth_code && (
+                        <span className="text-[9px] text-muted-foreground font-mono">
+                          Auth: {s.actum_transactions[0].auth_code}
+                          {s.actum_transactions[0].response_reason && ` · ${s.actum_transactions[0].response_reason}`}
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -227,6 +236,13 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
 
                 {payment.notes && (
                   <p className="text-xs text-muted-foreground italic">"{payment.notes}"</p>
+                )}
+
+                {payment.auth_code && (
+                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-mono">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                    Auth: {payment.auth_code}
+                  </div>
                 )}
 
                 {payment.return_code && (

@@ -165,11 +165,13 @@ serve(async (req) => {
       batch_id: null,
       actum_order_id: orderId,
       actum_history_id: historyId,
-      consumer_unique: consumerUnique,
+      consumer_unique: consumer_unique,
       mer_order_number: `payment_${payment_id}`,
       transaction_type: "credit",
       amount: payment.payment_amount,
       status: accepted ? "accepted" : "declined",
+      auth_code: parsed.authcode,
+      response_reason: parsed.reason,
       raw_response: parsed,
       idempotence_key: idempotenceKey,
     });
@@ -179,6 +181,7 @@ serve(async (req) => {
       .from("claim_check_payments")
       .update({
         status: accepted ? "submitted" : "failed",
+        auth_code: parsed.authcode ?? null,
         actum_order_id: orderId ?? null,
         actum_history_id: historyId ?? null,
         actum_consumer_unique: consumerUnique ?? null,
