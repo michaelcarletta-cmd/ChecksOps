@@ -78,8 +78,15 @@ export function TenantProvider({ children, slug }: { children: ReactNode; slug?:
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
-      void setTenantBySlug(slug);
+    } = supabase.auth.onAuthStateChange((event) => {
+      // TOKEN_REFRESHED fires on every JWT rotation (including routine background
+      // refreshes) and does not change tenant data. Reacting to it sets
+      // loading=true and re-renders the full provider tree, which resets all
+      // child UI state (active tabs, selections, etc.) on every tab switch.
+      // Only re-fetch on events that actually indicate a user change.
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+        void setTenantBySlug(slug);
+      }
     });
 
     return () => subscription.unsubscribe();
