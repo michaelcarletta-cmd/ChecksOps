@@ -219,7 +219,9 @@ function mergeEndorsementSummaryRows(
     byName.set(nameKey, [...(byName.get(nameKey) ?? []), endorsement]);
   }
 
-  const merged = payees.map((payee) => {
+  const merged: CheckEndorsementSummary[] = [];
+
+  payees.forEach((payee) => {
     const exactKey = `${normalizeEndorsementName(payee.payee_name)}::${normalizeEndorsementType(payee.payee_type)}`;
     const nameKey = normalizeEndorsementName(payee.payee_name);
     const match =
@@ -228,18 +230,18 @@ function mergeEndorsementSummaryRows(
 
     if (match) {
       usedEndorsementIds.add(match.id);
-      return match;
+      merged.push(match);
+    } else {
+      merged.push({
+        id: `payee-${checkId}-${payee.id}`,
+        payee_name: payee.payee_name,
+        payee_type: payee.payee_type ?? "other",
+        status: normalizeEndorsementStatus(payee.endorsement_status, payee.endorsed_at),
+        signed_at: payee.endorsed_at,
+        signature_image_url: null,
+        signature_method: null,
+      });
     }
-
-    return {
-      id: `payee-${checkId}-${payee.id}`,
-      payee_name: payee.payee_name,
-      payee_type: payee.payee_type ?? "other",
-      status: normalizeEndorsementStatus(payee.endorsement_status, payee.endorsed_at),
-      signed_at: payee.endorsed_at,
-      signature_image_url: null,
-      signature_method: null,
-    } satisfies CheckEndorsementSummary;
   });
 
   for (const endorsement of endorsements) {
