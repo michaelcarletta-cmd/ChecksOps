@@ -103,39 +103,50 @@ function mergeEndorsementsWithPayees(checkId: string, endorsements: CheckEndorse
     byName.set(nameKey, [...(byName.get(nameKey) ?? []), endorsement]);
   }
 
-  const merged = payees.map((payee) => {
+  // First, map existing real endorsements.
+  // Then, only add synthetic ones for payees that DON'T have a matching real endorsement.
+  const realEndorsementsMapped = new Set<string>();
+  
+  const merged: CheckEndorsement[] = [];
+
+  payees.forEach((payee) => {
     const exactKey = `${normalizeName(payee.payee_name)}::${normalizeType(payee.payee_type)}`;
     const nameKey = normalizeName(payee.payee_name);
+    
     const match =
       byExactKey.get(exactKey)?.find((row) => !usedEndorsementIds.has(row.id)) ??
       byName.get(nameKey)?.find((row) => !usedEndorsementIds.has(row.id));
 
     if (match) {
       usedEndorsementIds.add(match.id);
-      return match;
+      realEndorsementsMapped.add(match.id);
+      merged.push(match);
+    } else {
+      merged.push({
+        id: `payee-${payee.id}`,
+        check_id: checkId,
+        payee_name: payee.payee_name,
+        payee_type: payee.payee_type ?? "other",
+        status: normalizeEndorsementStatus(payee.endorsement_status, payee.endorsed_at),
+        signature_method: "",
+        signed_at: payee.endorsed_at,
+        request_sent_at: null,
+        last_reminder_at: null,
+        reminder_count: 0,
+        contact_email: payee.contact_email,
+        contact_phone: payee.contact_phone,
+        notes: null,
+        loss_draft_task_created: false,
+        created_at: payee.created_at,
+      });
     }
-
-    return {
-      id: `payee-${payee.id}`,
-      check_id: checkId,
-      payee_name: payee.payee_name,
-      payee_type: payee.payee_type ?? "other",
-      status: normalizeEndorsementStatus(payee.endorsement_status, payee.endorsed_at),
-      signature_method: "",
-      signed_at: payee.endorsed_at,
-      request_sent_at: null,
-      last_reminder_at: null,
-      reminder_count: 0,
-      contact_email: payee.contact_email,
-      contact_phone: payee.contact_phone,
-      notes: null,
-      loss_draft_task_created: false,
-      created_at: payee.created_at,
-    } satisfies CheckEndorsement;
   });
 
+  // Finally, add any real endorsements that weren't linked to a payee record
   for (const endorsement of endorsements) {
-    if (!usedEndorsementIds.has(endorsement.id)) merged.push(endorsement);
+    if (!usedEndorsementIds.has(endorsement.id)) {
+      merged.push(endorsement);
+    }
   }
 
   return merged;
