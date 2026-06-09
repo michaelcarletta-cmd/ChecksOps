@@ -79,19 +79,15 @@ serve(async (req) => {
     // Use the tenant-specific credentials if available, otherwise fallback to env
     const { data: tenantData } = await supabase
       .from("tenants")
-      .select("actum_parent_id, actum_sub_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password")
+      .select("actum_parent_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password")
       .eq("id", account.tenant_id)
       .single();
 
-    const parentId = tenantData?.actum_parent_id || Deno.env.get("ACTUM_PARENT_ID");
-    let subId = tenantData?.actum_sub_id || Deno.env.get("ACTUM_SUB_ID");
-
-    // Choose specific Sub ID if configured
-    if (account.account_type === 'insured' && (tenantData as any)?.actum_sub_id_ppd) {
-      subId = (tenantData as any).actum_sub_id_ppd;
-    } else if (account.account_type !== 'insured' && (tenantData as any)?.actum_sub_id_ccd) {
-      subId = (tenantData as any).actum_sub_id_ccd;
-    }
+    const parentId = tenantData?.actum_parent_id;
+    // PPD for consumers/insureds, CCD for businesses. No default fallback.
+    const subId = account.account_type === 'insured'
+      ? (tenantData as any)?.actum_sub_id_ppd
+      : (tenantData as any)?.actum_sub_id_ccd;
 
     if (!parentId || !subId) {
       throw new Error("Actum credentials not configured for this tenant.");
