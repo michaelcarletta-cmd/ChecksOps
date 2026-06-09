@@ -153,10 +153,15 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       
       setEditing(false);
       
-      // Auto-open editor if this is a newly created tracker
-      if (res.created) {
+      // If a matching claim was found or a new one created, we have a claimId now.
+      // We must ensure the UI shows the ledger and the editor can be opened.
+      qc.invalidateQueries({ queryKey: ["claim-ledger", res.claimId] });
+      qc.invalidateQueries({ queryKey: ["claim-ledger-settlement", res.claimId] });
+      
+      // Auto-open editor to allow entering amounts immediately
+      setTimeout(() => {
         setEditorOpen(true);
-      }
+      }, 100);
 
       toast({
         title: res.created ? "Claim tracker created" : "Linked to claim",
