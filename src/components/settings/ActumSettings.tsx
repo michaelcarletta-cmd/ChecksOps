@@ -47,7 +47,6 @@ export function ActumSettings() {
     if (tenantDetails) {
       setForm({
         actum_parent_id: tenantDetails.actum_parent_id ?? "",
-        actum_sub_id: tenantDetails.actum_sub_id ?? "",
         actum_sub_id_ppd: (tenantDetails as any).actum_sub_id_ppd ?? "",
         actum_sub_id_ccd: (tenantDetails as any).actum_sub_id_ccd ?? "",
         actum_syspass: (tenantDetails as any).actum_syspass ?? "",
