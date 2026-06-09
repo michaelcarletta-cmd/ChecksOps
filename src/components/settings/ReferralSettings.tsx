@@ -15,6 +15,12 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 
+type ReferralResponse = {
+  success: boolean;
+  message?: string;
+  error?: string;
+};
+
 export function ReferralSettings() {
   const { user } = useAuth();
   const { tenant } = useTenant();
@@ -63,7 +69,8 @@ export function ReferralSettings() {
         p_referring_code: referralCodeInput.trim().toUpperCase(),
         p_new_tenant_id: tenant!.id,
         p_new_user_id: user!.id,
-      });
+      }) as { data: ReferralResponse | null, error: any };
+
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error ?? "Failed to apply code");
       return data;
