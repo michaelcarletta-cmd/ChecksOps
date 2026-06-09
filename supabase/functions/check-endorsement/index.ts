@@ -152,23 +152,16 @@ async function reEvaluateAfterEndorsement(
   if (allDone) {
     const { data: check } = await supabase
       .from("check_intake_items")
-      .select("is_multi_payee, deposit_recommendation")
+      .select("is_multi_payee, deposit_recommendation, check_stage")
       .eq("id", checkId)
       .single();
 
     const originalRec = check?.deposit_recommendation ?? "";
+    const currentStage = check?.check_stage ?? "";
 
-    if (originalRec === "loss_draft_required") {
-      await supabase.from("check_intake_items")
-        .update({ status: "loss_draft_required" })
-        .eq("id", checkId);
-
-      await supabase.from("check_audit_log").insert({
-        check_id: checkId,
-        event_type: "all_endorsements_complete",
-        event_description: "All endorsements complete — routed to loss draft workflow",
-      });
-    } else if (originalRec === "branch_deposit_recommended") {
+    // If we have all signatures, the check is ready for deposit (or branch deposit)
+    // regardless of whether it was a loss draft check originally.
+    if (originalRec === "branch_deposit_recommended") {
       await supabase.from("check_intake_items")
         .update({ status: "branch_deposit_required" })
         .eq("id", checkId);
@@ -179,8 +172,12 @@ async function reEvaluateAfterEndorsement(
         event_description: "All endorsements complete — routed to branch deposit workflow",
       });
     } else {
+      // Move to approved_for_deposit / ready_for_deposit
       await supabase.from("check_intake_items")
-        .update({ status: "approved_for_deposit", deposit_recommendation: "ready_for_deposit" })
+        .update({ 
+          status: "approved_for_deposit", 
+          deposit_recommendation: "ready_for_deposit" 
+        })
         .eq("id", checkId);
 
       await supabase.from("check_audit_log").insert({
@@ -189,6 +186,7 @@ async function reEvaluateAfterEndorsement(
         event_description: "All endorsements complete — ready for deposit",
       });
     }
+
 
     // Auto-generate endorsement packet
     try {
@@ -1174,7 +1172,19 @@ Deno.serve(async (req) => {
             endorsement_token: newToken,
             endorsement_token_expires_at: null,
           }).eq("id", endorsement.payee_id);
+        } else {
+          // Fallback: match by name and check_id if payee_id is missing
+          await supabase.from("check_payees").update({
+            endorsement_status: "signed",
+            endorsed_at: new Date().toISOString(),
+            endorsement_image_path: signatureImageUrl,
+            endorsement_token: newToken,
+            endorsement_token_expires_at: null,
+          })
+          .eq("check_id", endorsement.check_id)
+          .eq("payee_name", endorsement.payee_name);
         }
+
 
         // Audit
         await supabase.from("endorsement_audit_log").insert({
@@ -1448,7 +1458,17 @@ Deno.serve(async (req) => {
             endorsed_at: new Date().toISOString(),
             endorsement_image_path: null,
           }).eq("id", endorsement.payee_id);
+        } else {
+          // Fallback: match by name and check_id if payee_id is missing
+          await supabase.from("check_payees").update({
+            endorsement_status: "signed",
+            endorsed_at: new Date().toISOString(),
+            endorsement_image_path: null,
+          })
+          .eq("check_id", endorsement.check_id)
+          .eq("payee_name", endorsement.payee_name);
         }
+
 
         await supabase.from("endorsement_audit_log").insert({
           endorsement_id: endorsementId,
