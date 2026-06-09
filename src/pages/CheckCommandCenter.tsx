@@ -994,6 +994,7 @@ export default function CheckCommandCenter() {
                 <CheckReviewQueue
                   onSelectCheck={(id) => setReviewCheckId(id)}
                   selectedCheckId={reviewCheckId}
+                  searchQuery={searchQuery}
                 />
               </CardContent>
             </Card>
