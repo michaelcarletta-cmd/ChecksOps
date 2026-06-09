@@ -15374,6 +15374,60 @@ export type Database = {
           },
         ]
       }
+      referral_events: {
+        Row: {
+          created_at: string
+          discount_applied_cents: number
+          id: string
+          notes: string | null
+          referral_code_used: string
+          referred_tenant_id: string
+          referred_user_id: string
+          referrer_tenant_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          discount_applied_cents?: number
+          id?: string
+          notes?: string | null
+          referral_code_used: string
+          referred_tenant_id: string
+          referred_user_id: string
+          referrer_tenant_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          discount_applied_cents?: number
+          id?: string
+          notes?: string | null
+          referral_code_used?: string
+          referred_tenant_id?: string
+          referred_user_id?: string
+          referrer_tenant_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_events_referred_tenant_id_fkey"
+            columns: ["referred_tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referral_events_referrer_tenant_id_fkey"
+            columns: ["referrer_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       referral_professionals: {
         Row: {
           company: string | null
@@ -17537,15 +17591,20 @@ export type Database = {
           email_provider_config: Json | null
           email_reply_to: string | null
           id: string
+          is_founding_partner: boolean
           is_system_tenant: boolean | null
           logo_url: string | null
           max_checks_per_month: number | null
+          monthly_rate_cents: number
           name: string
           partner_code: string
           per_check_billing_enabled: boolean | null
           per_check_rate_cents: number | null
           plan_tier: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color: string | null
+          referral_code: string | null
+          referral_discount_cents: number
+          referred_by_tenant_id: string | null
           secondary_color: string | null
           slug: string
           stripe_customer_id: string | null
@@ -17569,15 +17628,20 @@ export type Database = {
           email_provider_config?: Json | null
           email_reply_to?: string | null
           id?: string
+          is_founding_partner?: boolean
           is_system_tenant?: boolean | null
           logo_url?: string | null
           max_checks_per_month?: number | null
+          monthly_rate_cents?: number
           name: string
           partner_code?: string
           per_check_billing_enabled?: boolean | null
           per_check_rate_cents?: number | null
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color?: string | null
+          referral_code?: string | null
+          referral_discount_cents?: number
+          referred_by_tenant_id?: string | null
           secondary_color?: string | null
           slug: string
           stripe_customer_id?: string | null
@@ -17601,22 +17665,35 @@ export type Database = {
           email_provider_config?: Json | null
           email_reply_to?: string | null
           id?: string
+          is_founding_partner?: boolean
           is_system_tenant?: boolean | null
           logo_url?: string | null
           max_checks_per_month?: number | null
+          monthly_rate_cents?: number
           name?: string
           partner_code?: string
           per_check_billing_enabled?: boolean | null
           per_check_rate_cents?: number | null
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color?: string | null
+          referral_code?: string | null
+          referral_discount_cents?: number
+          referred_by_tenant_id?: string | null
           secondary_color?: string | null
           slug?: string
           stripe_customer_id?: string | null
           subscription_status?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tenants_referred_by_tenant_id_fkey"
+            columns: ["referred_by_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       urgency_sms_recipients: {
         Row: {
@@ -18819,6 +18896,14 @@ export type Database = {
         Args: { p_actor_id: string; p_check_id: string; p_reason: string }
         Returns: Json
       }
+      apply_referral_code: {
+        Args: {
+          p_new_tenant_id: string
+          p_new_user_id: string
+          p_referring_code: string
+        }
+        Returns: Json
+      }
       assign_deposit_owner: {
         Args: {
           p_actor_id: string
@@ -19160,6 +19245,10 @@ export type Database = {
         Returns: Json
       }
       generate_partner_code_value: { Args: never; Returns: string }
+      generate_referral_code: {
+        Args: { p_tenant_name: string }
+        Returns: string
+      }
       geometry: { Args: { "": string }; Returns: unknown }
       geometry_above: {
         Args: { geom1: unknown; geom2: unknown }
