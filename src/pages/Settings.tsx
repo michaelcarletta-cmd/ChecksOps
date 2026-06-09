@@ -685,7 +685,9 @@ export default function Settings() {
           {isAdmin && (
             <TabsTrigger value="actum" className="w-full md:w-auto justify-start text-base font-medium px-4">Actum</TabsTrigger>
           )}
+          <TabsTrigger value="referrals" className="w-full md:w-auto justify-start text-base font-medium px-4">Referrals</TabsTrigger>
         </TabsList>
+
 
         <TabsContent value="checkalt" className="w-full">
           <CheckAltSettings />
@@ -703,7 +705,13 @@ export default function Settings() {
           <CheckCenterHelpPanel />
         </TabsContent>
 
+        <TabsContent value="referrals" className="w-full">
+          <ReferralSettings />
+          <AdminReferralDashboard />
+        </TabsContent>
+
         <TabsContent value="workflow" className="w-full space-y-4">
+
           {/* Claim Statuses - Collapsible */}
           <Collapsible open={statusesOpen} onOpenChange={setStatusesOpen}>
             <Card>
