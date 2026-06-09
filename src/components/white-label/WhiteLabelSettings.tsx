@@ -13,8 +13,10 @@ import { Badge } from "@/components/ui/badge";
 import { 
   LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft,
   Loader2, Save, Trash2, Receipt, Banknote, KeyRound, HelpCircle,
-  ArrowDownToLine, FileBarChart
+  ArrowDownToLine, FileBarChart, Gift
 } from "lucide-react";
+import { ReferralSettings } from "@/components/settings/ReferralSettings";
+import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
 import { CheckCenterHelpPanel } from "@/components/check-review/CheckCenterHelp";
 import { StakeholderAccountSettings } from "@/components/disbursement/StakeholderAccountSettings";
 import { TenantBankAccountSettings } from "@/components/settings/TenantBankAccountSettings";
@@ -108,6 +110,7 @@ export function WhiteLabelSettings() {
             <TabsTrigger value="disbursement" className="text-xs gap-1"><CreditCard className="h-3 w-3" />Disbursement</TabsTrigger>
             
             <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding</TabsTrigger>
+            <TabsTrigger value="referrals" className="text-xs gap-1"><Gift className="h-3 w-3" />Referrals</TabsTrigger>
             <TabsTrigger value="guide" className="text-xs gap-1"><HelpCircle className="h-3 w-3" />ChecksOps Guide</TabsTrigger>
           </TabsList>
 
@@ -157,6 +160,10 @@ export function WhiteLabelSettings() {
             {tenant && <BrandingSettings tenant={tenant} />}
           </TabsContent>
 
+          <TabsContent value="referrals">
+            <ReferralSettings />
+            <AdminReferralDashboard />
+          </TabsContent>
 
           <TabsContent value="guide">
             <CheckCenterHelpPanel />
