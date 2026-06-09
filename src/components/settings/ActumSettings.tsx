@@ -64,7 +64,7 @@ export function ActumSettings() {
         .from("tenants")
         .update({
           actum_parent_id: form.actum_parent_id.trim() || null,
-          actum_sub_id: form.actum_sub_id.trim() || null,
+          actum_sub_id: null,
           actum_sub_id_ppd: form.actum_sub_id_ppd.trim() || null,
           actum_sub_id_ccd: form.actum_sub_id_ccd.trim() || null,
           actum_syspass: form.actum_syspass.trim() || null,
