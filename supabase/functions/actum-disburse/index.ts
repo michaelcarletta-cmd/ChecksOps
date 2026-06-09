@@ -84,7 +84,7 @@ serve(async (req) => {
     // Load tenant Actum credentials
     const { data: tenant, error: tenantErr } = await supabase
       .from("tenants")
-      .select("actum_parent_id, actum_sub_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password")
+      .select("actum_parent_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password")
       .eq("id", batch.tenant_id)
       .single();
     if (tenantErr || !tenant?.actum_parent_id) {
@@ -92,7 +92,6 @@ serve(async (req) => {
     }
 
     const parentId = tenant.actum_parent_id;
-    const defaultSubId = tenant.actum_sub_id ?? "";
     const syspass = (tenant as any).actum_syspass ?? "";
     const username = (tenant as any).actum_username ?? "";
     const password = (tenant as any).actum_password ?? "";
@@ -122,8 +121,13 @@ serve(async (req) => {
     }
 
     function subIdFor(accountType: string): string {
-      if (accountType === "insured") return (tenant as any).actum_sub_id_ppd || defaultSubId;
-      return (tenant as any).actum_sub_id_ccd || defaultSubId;
+      const sub = accountType === "insured"
+        ? (tenant as any).actum_sub_id_ppd
+        : (tenant as any).actum_sub_id_ccd;
+      if (!sub) {
+        throw new Error(`Actum Sub ID for ${accountType === "insured" ? "PPD (Personal)" : "CCD (Business)"} not configured for this tenant.`);
+      }
+      return sub;
     }
 
     function baseParams(acct: { custname: string; chk_aba: string; chk_acct: string; acct_type: string; account_type: string }): URLSearchParams {

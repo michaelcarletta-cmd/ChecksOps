@@ -20,7 +20,6 @@ export function ActumSettings() {
   const [showSecrets, setShowSecrets] = useState(false);
   const [form, setForm] = useState({
     actum_parent_id: "",
-    actum_sub_id: "",
     actum_sub_id_ppd: "",
     actum_sub_id_ccd: "",
     actum_syspass: "",
@@ -35,7 +34,7 @@ export function ActumSettings() {
       if (!tenant?.id) return null;
       const { data, error } = await supabase
         .from("tenants")
-        .select("actum_parent_id, actum_sub_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password, actum_webhook_secret")
+        .select("actum_parent_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password, actum_webhook_secret")
         .eq("id", tenant.id)
         .single();
       if (error) throw error;
@@ -48,7 +47,6 @@ export function ActumSettings() {
     if (tenantDetails) {
       setForm({
         actum_parent_id: tenantDetails.actum_parent_id ?? "",
-        actum_sub_id: tenantDetails.actum_sub_id ?? "",
         actum_sub_id_ppd: (tenantDetails as any).actum_sub_id_ppd ?? "",
         actum_sub_id_ccd: (tenantDetails as any).actum_sub_id_ccd ?? "",
         actum_syspass: (tenantDetails as any).actum_syspass ?? "",
@@ -66,7 +64,7 @@ export function ActumSettings() {
         .from("tenants")
         .update({
           actum_parent_id: form.actum_parent_id.trim() || null,
-          actum_sub_id: form.actum_sub_id.trim() || null,
+          actum_sub_id: null,
           actum_sub_id_ppd: form.actum_sub_id_ppd.trim() || null,
           actum_sub_id_ccd: form.actum_sub_id_ccd.trim() || null,
           actum_syspass: form.actum_syspass.trim() || null,
@@ -108,7 +106,7 @@ export function ActumSettings() {
     );
   }
 
-  const isConfigured = !!form.actum_parent_id && !!form.actum_sub_id;
+  const isConfigured = !!form.actum_parent_id && (!!form.actum_sub_id_ppd || !!form.actum_sub_id_ccd);
 
   return (
     <div className="space-y-6">
@@ -143,16 +141,6 @@ export function ActumSettings() {
                 type={showSecrets ? "text" : "password"}
                 value={form.actum_parent_id}
                 onChange={(e) => setForm({ ...form, actum_parent_id: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="actum_sub_id">Sub ID (Default)</Label>
-              <Input
-                id="actum_sub_id"
-                placeholder="Actum Sub ID"
-                type={showSecrets ? "text" : "password"}
-                value={form.actum_sub_id}
-                onChange={(e) => setForm({ ...form, actum_sub_id: e.target.value })}
               />
             </div>
             <div className="space-y-1.5">

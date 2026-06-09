@@ -76,21 +76,17 @@ serve(async (req) => {
     // Get tenant's Actum credentials
     const { data: tenantData, error: tenantErr } = await supabase
       .from("tenants")
-      .select("actum_parent_id, actum_sub_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password")
+      .select("actum_parent_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password")
       .eq("id", payment.tenant_id)
       .single();
 
     if (tenantErr) throw new Error(`Could not load tenant Actum config: ${tenantErr.message}`);
 
-    const actumParentId = tenantData?.actum_parent_id || Deno.env.get("ACTUM_PARENT_ID");
-    let actumSubId = tenantData?.actum_sub_id || Deno.env.get("ACTUM_SUB_ID");
-    
-    // Choose specific Sub ID if configured
-    if (account.account_type === 'insured' && tenantData?.actum_sub_id_ppd) {
-      actumSubId = tenantData.actum_sub_id_ppd;
-    } else if (account.account_type !== 'insured' && tenantData?.actum_sub_id_ccd) {
-      actumSubId = tenantData.actum_sub_id_ccd;
-    }
+    const actumParentId = tenantData?.actum_parent_id;
+    // Choose Sub ID based on account type (PPD for consumers, CCD for businesses). No default fallback.
+    const actumSubId = account.account_type === 'insured'
+      ? (tenantData as any)?.actum_sub_id_ppd
+      : (tenantData as any)?.actum_sub_id_ccd;
 
     const actumEndpoint = "https://join.actumprocessing.com/cgi-bin/dbs/man_trans.cgi";
 

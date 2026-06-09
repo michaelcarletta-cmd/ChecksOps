@@ -86,15 +86,17 @@ serve(async (req) => {
     // Load tenant Actum creds
     const { data: tenantData, error: tenantErr } = await supabase
       .from("tenants")
-      .select("actum_parent_id, actum_sub_id, actum_syspass, actum_username, actum_password")
+      .select("actum_parent_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password")
       .eq("id", account.tenant_id)
       .single();
     if (tenantErr) throw new Error(`Could not load tenant Actum config: ${tenantErr.message}`);
 
-    const actumParentId = tenantData?.actum_parent_id || Deno.env.get("ACTUM_PARENT_ID");
-    const actumSubId = tenantData?.actum_sub_id || Deno.env.get("ACTUM_SUB_ID");
+    const actumParentId = tenantData?.actum_parent_id;
+    const actumSubId = (account as any).account_type === 'insured'
+      ? (tenantData as any)?.actum_sub_id_ppd
+      : (tenantData as any)?.actum_sub_id_ccd;
     if (!actumParentId || !actumSubId) {
-      throw new Error("Actum credentials not configured for this tenant.");
+      throw new Error("Actum credentials (Parent ID and PPD/CCD Sub ID) not configured for this tenant.");
     }
     const actumEndpoint = "https://join.actumprocessing.com/cgi-bin/dbs/man_trans.cgi";
 
