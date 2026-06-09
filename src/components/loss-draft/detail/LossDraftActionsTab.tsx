@@ -262,6 +262,7 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
             checkIntakeItemId={draft.check_intake_item_id!}
             claimId={draft.claim_id}
             detectedClaimNumber={draft.check_intake_items?.detected_claim_number ?? null}
+            onLinked={onChanged}
           />
           {draft.claim_id && (
             <ClaimSettlementEditor
