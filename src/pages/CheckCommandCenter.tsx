@@ -23,7 +23,7 @@ import {
   Send, Eye, Users, Building2, Shield, ChevronRight,
   RefreshCw, Banknote, ClipboardCheck, RotateCcw, Printer, Landmark, Trash2, Search,
   Download, FileImage, Undo2, HelpCircle, X as XIcon, Loader2 as Loader2Icon,
-  Sparkles, MessageSquare, ArrowLeft,
+  Sparkles, MessageSquare, ArrowLeft, ShieldAlert,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -828,12 +828,18 @@ export default function CheckCommandCenter() {
             <Tabs defaultValue="deposit_ops">
               <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
                 <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
+                <TabsTrigger value="check_tracker" className="text-xs gap-1"><ShieldAlert className="h-3 w-3" />Check Tracker</TabsTrigger>
                 <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
                 <TabsTrigger value="mortgage_cos" className="text-xs gap-1"><Building2 className="h-3 w-3" />Mortgage Cos</TabsTrigger>
               </TabsList>
               <TabsContent value="deposit_ops" className="mt-3">
                 <Suspense fallback={<TabLoader />}>
                   <DepositOperationsConsole searchQuery={searchQuery} />
+                </Suspense>
+              </TabsContent>
+              <TabsContent value="check_tracker" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <AdminCheckTracker searchQuery={searchQuery} />
                 </Suspense>
               </TabsContent>
               <TabsContent value="reports" className="mt-3">
@@ -994,6 +1000,7 @@ export default function CheckCommandCenter() {
                 <CheckReviewQueue
                   onSelectCheck={(id) => setReviewCheckId(id)}
                   selectedCheckId={reviewCheckId}
+                  searchQuery={searchQuery}
                 />
               </CardContent>
             </Card>

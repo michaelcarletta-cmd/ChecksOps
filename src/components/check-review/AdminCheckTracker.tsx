@@ -69,12 +69,13 @@ type DepositLink = {
 
 type Bucket = "unverified" | "stuck" | "no_status" | "all";
 
-export function AdminCheckTracker() {
+export function AdminCheckTracker({ searchQuery = "" }: { searchQuery?: string }) {
   const qc = useQueryClient();
   const [checks, setChecks] = useState<CheckRow[]>([]);
   const [depositMap, setDepositMap] = useState<Record<string, DepositLink>>({});
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const [localSearch, setLocalSearch] = useState("");
+  const search = searchQuery || localSearch;
   const [target, setTarget] = useState<CheckRow | null>(null);
   const [confirmation, setConfirmation] = useState("");
   const [amount, setAmount] = useState("");
@@ -375,15 +376,17 @@ export function AdminCheckTracker() {
         />
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-        <Input
-          placeholder="Search by check #, carrier, payee, amount, or check ID..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-8 h-9 text-sm"
-        />
-      </div>
+      {!searchQuery && (
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search by check #, carrier, payee, amount, or check ID..."
+            value={localSearch}
+            onChange={(e) => setLocalSearch(e.target.value)}
+            className="pl-8 h-9 text-sm"
+          />
+        </div>
+      )}
 
       <Tabs defaultValue="unverified">
         <TabsList className="w-full">
