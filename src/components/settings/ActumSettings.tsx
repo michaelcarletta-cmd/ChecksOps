@@ -144,16 +144,6 @@ export function ActumSettings() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="actum_sub_id">Sub ID (Default)</Label>
-              <Input
-                id="actum_sub_id"
-                placeholder="Actum Sub ID"
-                type={showSecrets ? "text" : "password"}
-                value={form.actum_sub_id}
-                onChange={(e) => setForm({ ...form, actum_sub_id: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
               <Label htmlFor="actum_sub_id_ppd">Sub ID (PPD - Personal)</Label>
               <Input
                 id="actum_sub_id_ppd"
