@@ -106,7 +106,7 @@ export function ActumSettings() {
     );
   }
 
-  const isConfigured = !!form.actum_parent_id && !!form.actum_sub_id;
+  const isConfigured = !!form.actum_parent_id && (!!form.actum_sub_id_ppd || !!form.actum_sub_id_ccd);
 
   return (
     <div className="space-y-6">
