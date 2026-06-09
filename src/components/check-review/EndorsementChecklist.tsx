@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -21,7 +21,7 @@ import {
 import {
   Send, CheckCircle2, Clock, AlertTriangle, XCircle,
   Users, Building2, Shield, FileCheck, Ban, RefreshCw,
-  Landmark, PenTool, Eye, ShieldCheck, Loader2,
+  Landmark, PenTool, Eye, ShieldCheck, Loader2, Upload,
 } from "lucide-react";
 import { format } from "date-fns";
 import { CheckStatusTimeline } from "./CheckStatusTimeline";
@@ -403,12 +403,14 @@ function EndorsementCard({
 }) {
 
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState(endorsement.contact_email ?? "");
   const [phone, setPhone] = useState(endorsement.contact_phone ?? "");
   const [ccContractor, setCcContractor] = useState(defaultContractorCc);
   const [includeCc, setIncludeCc] = useState(Boolean(defaultContractorCc));
   const [sending, setSending] = useState(false);
   const [markingInternal, setMarkingInternal] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
 
   const config = statusConfig[endorsement.status] ?? statusConfig.pending;
@@ -514,6 +516,55 @@ function EndorsementCard({
   };
 
 
+  const handleBackImageUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const newPath = `checks/${endorsement.check_id}/back-${Date.now()}.${ext}`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from("claim-files")
+        .upload(newPath, file, {
+          cacheControl: "31536000",
+          upsert: false,
+          contentType: file.type || "image/jpeg",
+        });
+
+      if (uploadErr) throw uploadErr;
+
+      const { error: updateErr } = await supabase
+        .from("check_intake_items")
+        .update({ back_image_path: newPath })
+        .eq("id", endorsement.check_id);
+
+      if (updateErr) throw updateErr;
+
+      // Track re-upload event
+      const { data: session } = await supabase.auth.getSession();
+      await supabase.from("check_audit_log").insert({
+        check_id: endorsement.check_id,
+        event_type: "back_image_reuploaded",
+        actor_id: session.session?.user?.id ?? null,
+        event_description: "Endorsed back of check uploaded from Endorsement Checklist",
+        event_data: { new_path: newPath },
+      });
+
+      toast({
+        title: "Back image uploaded",
+        description: "The check's back image has been updated successfully.",
+      });
+      onRefresh();
+    } catch (e: any) {
+      toast({
+        title: "Upload failed",
+        description: e.message,
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <Card className="p-3 space-y-2">
       <div className="flex items-center justify-between">
@@ -538,9 +589,40 @@ function EndorsementCard({
 
       {/* Mortgage payee → loss draft routing */}
       {isMortgage && (
-        <div className="text-[10px] text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded px-2 py-1 flex items-center gap-1">
-          <Landmark className="h-3 w-3 shrink-0" />
-          Routed to Loss Draft workflow — requires manual endorsement
+        <div className="space-y-2">
+          <div className="text-[10px] text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded px-2 py-1 flex items-center gap-1">
+            <Landmark className="h-3 w-3 shrink-0" />
+            Routed to Loss Draft workflow — requires manual endorsement
+          </div>
+          {!readOnly && !partnerMode && (
+            <div className="pt-0.5">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,.pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleBackImageUpload(f);
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full text-[10px] h-7 border-blue-500/30 text-blue-400 hover:text-blue-300 hover:bg-blue-500/5"
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {uploading ? (
+                  <RefreshCw className="h-3 w-3 mr-1.5 animate-spin" />
+                ) : (
+                  <Upload className="h-3 w-3 mr-1.5" />
+                )}
+                {uploading ? "Uploading..." : "Upload Back of Check"}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
