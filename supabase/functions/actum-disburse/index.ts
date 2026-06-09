@@ -121,8 +121,13 @@ serve(async (req) => {
     }
 
     function subIdFor(accountType: string): string {
-      if (accountType === "insured") return (tenant as any).actum_sub_id_ppd || defaultSubId;
-      return (tenant as any).actum_sub_id_ccd || defaultSubId;
+      const sub = accountType === "insured"
+        ? (tenant as any).actum_sub_id_ppd
+        : (tenant as any).actum_sub_id_ccd;
+      if (!sub) {
+        throw new Error(`Actum Sub ID for ${accountType === "insured" ? "PPD (Personal)" : "CCD (Business)"} not configured for this tenant.`);
+      }
+      return sub;
     }
 
     function baseParams(acct: { custname: string; chk_aba: string; chk_acct: string; acct_type: string; account_type: string }): URLSearchParams {
