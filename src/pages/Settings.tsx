@@ -30,6 +30,9 @@ import { AutomationsSettings } from "@/components/settings/AutomationsSettings";
 import { CustomFieldsSettings } from "@/components/settings/CustomFieldsSettings";
 import { SignaturePresetsSettings } from "@/components/settings/SignaturePresetsSettings";
 import { ActumSettings } from "@/components/settings/ActumSettings";
+import { ReferralSettings } from "@/components/settings/ReferralSettings";
+import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
+
 
 import { ImportSettings } from "@/components/settings/ImportSettings";
 import { UserManagementSettings } from "@/components/settings/UserManagementSettings";
