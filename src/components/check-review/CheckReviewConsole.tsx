@@ -241,9 +241,11 @@ const payeeTypeIcons: Record<string, typeof Users> = {
 export function CheckReviewQueue({
   onSelectCheck,
   selectedCheckId,
+  searchQuery = "",
 }: {
   onSelectCheck: (id: string) => void;
   selectedCheckId: string | null;
+  searchQuery?: string;
 }) {
   const { tenantId } = useTenantFilter();
   const { toast } = useToast();
@@ -338,12 +340,26 @@ export function CheckReviewQueue({
     const claimLookup = new Map(linkedClaims.map((claim: any) => [claim.id, claim]));
     const groups = new Map<string, ReviewCheckGroup>();
 
+    const q = searchQuery.toLowerCase().trim();
+
     reviewChecks.forEach((check) => {
       const linked = check.claim_id ? claimLookup.get(check.claim_id) : null;
       const claimNumber = linked?.claim_number || check.detected_claim_number || "Unlinked claim";
       const insuredPayee = check.check_payees?.find((payee) => payee.payee_type === "insured")?.payee_name;
       const parsedInsured = extractInsuredName(check.payee_line);
       const policyholderName = linked?.policyholder_name || insuredPayee || parsedInsured || "Unknown insured";
+      
+      if (q) {
+        const matches = 
+          claimNumber.toLowerCase().includes(q) ||
+          policyholderName.toLowerCase().includes(q) ||
+          (check.check_number || "").toLowerCase().includes(q) ||
+          (check.carrier_name || "").toLowerCase().includes(q) ||
+          (check.payee_line || "").toLowerCase().includes(q);
+        
+        if (!matches) return;
+      }
+
       const key = `${claimNumber.trim().toLowerCase()}::${policyholderName.trim().toLowerCase()}`;
       const existing = groups.get(key);
 
@@ -359,7 +375,7 @@ export function CheckReviewQueue({
     });
 
     return Array.from(groups.values()).sort((a, b) => new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime());
-  }, [linkedClaims, reviewChecks]);
+  }, [linkedClaims, reviewChecks, searchQuery]);
 
   function getReviewReason(check: ReviewCheck): string {
     const reasons: string[] = [];
