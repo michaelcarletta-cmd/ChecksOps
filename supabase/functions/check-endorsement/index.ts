@@ -1172,7 +1172,19 @@ Deno.serve(async (req) => {
             endorsement_token: newToken,
             endorsement_token_expires_at: null,
           }).eq("id", endorsement.payee_id);
+        } else {
+          // Fallback: match by name and check_id if payee_id is missing
+          await supabase.from("check_payees").update({
+            endorsement_status: "signed",
+            endorsed_at: new Date().toISOString(),
+            endorsement_image_path: signatureImageUrl,
+            endorsement_token: newToken,
+            endorsement_token_expires_at: null,
+          })
+          .eq("check_id", endorsement.check_id)
+          .eq("payee_name", endorsement.payee_name);
         }
+
 
         // Audit
         await supabase.from("endorsement_audit_log").insert({
