@@ -16,12 +16,13 @@ interface Props {
   claimId: string | null;
   detectedClaimNumber: string | null;
   readOnly?: boolean;
+  onLinked?: (claimId: string) => void;
 }
 
 const fmt = (n: number) =>
   `$${(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumber, readOnly = false }: Props) {
+export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumber, readOnly = false, onLinked }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [editing, setEditing] = useState(!claimId && !readOnly);
@@ -139,12 +140,17 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       };
     },
     onSuccess: (res) => {
+      if (onLinked) onLinked(res.claimId);
       qc.invalidateQueries({ queryKey: ["intake-check"] });
       qc.invalidateQueries({ queryKey: ["claim-ledger"] });
       qc.invalidateQueries({ queryKey: ["claim-ledger-settlement"] });
       qc.invalidateQueries({ queryKey: ["claim-ledger-checks"] });
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
       qc.invalidateQueries({ queryKey: ["review-settlement-check"] });
+      // Invalidate loss draft queries to ensure the UI updates with the new claim link
+      qc.invalidateQueries({ queryKey: ["loss-draft"] });
+      qc.invalidateQueries({ queryKey: ["loss-drafts"] });
+      
       setEditing(false);
       
       // Auto-open editor if this is a newly created tracker
