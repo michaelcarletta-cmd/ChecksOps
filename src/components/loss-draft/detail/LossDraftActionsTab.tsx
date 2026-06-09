@@ -11,11 +11,15 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Send, Building2, ArrowRightLeft, DollarSign, CheckCircle2,
-  Clock, AlertTriangle, Eye, EyeOff, Shield, RotateCcw, PackageCheck, Upload,
+  Clock, AlertTriangle, Eye, EyeOff, Shield, RotateCcw, PackageCheck, Upload, FileText,
 } from "lucide-react";
 import { format } from "date-fns";
 import { MortgageContactCard } from "../MortgageContactCard";
 import type { LossDraftRecord } from "@/hooks/queries/useLossDraft";
+import { ClaimLedgerCard } from "@/components/payments/ClaimLedgerCard";
+import { ClaimSettlementEditor } from "@/components/payments/ClaimSettlementEditor";
+import { useQuery } from "@tanstack/react-query";
+
 
 
 /* Not Monitored = mortgage endorses & releases check, no escrow/draws */
@@ -67,6 +71,23 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
   const [showAdminEdit, setShowAdminEdit] = useState(false);
   const [adminTargetStatus, setAdminTargetStatus] = useState("");
   const [adminResetNotes, setAdminResetNotes] = useState("");
+  const [ledgerEditorOpen, setLedgerEditorOpen] = useState(false);
+
+  // Fetch settlement for the ledger editor
+  const { data: settlement } = useQuery({
+    queryKey: ["claim-ledger-settlement", draft.claim_id],
+    enabled: !!draft.claim_id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_settlements")
+        .select("*")
+        .eq("claim_id", draft.claim_id!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
 
   const isMonitored = draft.monitoring_type !== "not_monitored";
   const actionButtons = isMonitored ? MONITORED_ACTIONS : NOT_MONITORED_ACTIONS;
@@ -219,6 +240,41 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
         )}
 
         <Separator />
+
+        {/* Claim Ledger */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+              <FileText className="h-3 w-3" /> Claim Ledger
+            </p>
+            {draft.claim_id && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-[10px]"
+                onClick={() => setLedgerEditorOpen(true)}
+              >
+                <DollarSign className="h-3 w-3 mr-1" /> Edit Ledger
+              </Button>
+            )}
+          </div>
+          <ClaimLedgerCard
+            checkIntakeItemId={draft.check_intake_item_id!}
+            claimId={draft.claim_id}
+            detectedClaimNumber={draft.check_intake_items?.detected_claim_number ?? null}
+          />
+          {draft.claim_id && (
+            <ClaimSettlementEditor
+              open={ledgerEditorOpen}
+              onOpenChange={setLedgerEditorOpen}
+              claimId={draft.claim_id}
+              settlement={settlement}
+            />
+          )}
+        </div>
+
+        <Separator />
+
 
         <div className="space-y-2">
           <p className="text-xs font-medium text-muted-foreground">Available Actions</p>

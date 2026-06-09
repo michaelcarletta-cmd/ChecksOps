@@ -21,6 +21,8 @@ export function ActumSettings() {
   const [form, setForm] = useState({
     actum_parent_id: "",
     actum_sub_id: "",
+    actum_sub_id_ppd: "",
+    actum_sub_id_ccd: "",
     actum_syspass: "",
     actum_username: "",
     actum_password: "",
@@ -33,7 +35,7 @@ export function ActumSettings() {
       if (!tenant?.id) return null;
       const { data, error } = await supabase
         .from("tenants")
-        .select("actum_parent_id, actum_sub_id, actum_syspass, actum_username, actum_password, actum_webhook_secret")
+        .select("actum_parent_id, actum_sub_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password, actum_webhook_secret")
         .eq("id", tenant.id)
         .single();
       if (error) throw error;
@@ -47,6 +49,8 @@ export function ActumSettings() {
       setForm({
         actum_parent_id: tenantDetails.actum_parent_id ?? "",
         actum_sub_id: tenantDetails.actum_sub_id ?? "",
+        actum_sub_id_ppd: (tenantDetails as any).actum_sub_id_ppd ?? "",
+        actum_sub_id_ccd: (tenantDetails as any).actum_sub_id_ccd ?? "",
         actum_syspass: (tenantDetails as any).actum_syspass ?? "",
         actum_username: (tenantDetails as any).actum_username ?? "",
         actum_password: (tenantDetails as any).actum_password ?? "",
@@ -63,11 +67,13 @@ export function ActumSettings() {
         .update({
           actum_parent_id: form.actum_parent_id.trim() || null,
           actum_sub_id: form.actum_sub_id.trim() || null,
+          actum_sub_id_ppd: form.actum_sub_id_ppd.trim() || null,
+          actum_sub_id_ccd: form.actum_sub_id_ccd.trim() || null,
           actum_syspass: form.actum_syspass.trim() || null,
           actum_username: form.actum_username.trim() || null,
           actum_password: form.actum_password.trim() || null,
           actum_webhook_secret: form.actum_webhook_secret.trim() || null,
-        })
+        } as any)
         .eq("id", tenant.id);
       if (error) throw error;
     },
@@ -140,13 +146,33 @@ export function ActumSettings() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="actum_sub_id">Sub ID</Label>
+              <Label htmlFor="actum_sub_id">Sub ID (Default)</Label>
               <Input
                 id="actum_sub_id"
                 placeholder="Actum Sub ID"
                 type={showSecrets ? "text" : "password"}
                 value={form.actum_sub_id}
                 onChange={(e) => setForm({ ...form, actum_sub_id: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="actum_sub_id_ppd">Sub ID (PPD - Personal)</Label>
+              <Input
+                id="actum_sub_id_ppd"
+                placeholder="PPD Sub ID"
+                type={showSecrets ? "text" : "password"}
+                value={form.actum_sub_id_ppd}
+                onChange={(e) => setForm({ ...form, actum_sub_id_ppd: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="actum_sub_id_ccd">Sub ID (CCD - Business)</Label>
+              <Input
+                id="actum_sub_id_ccd"
+                placeholder="CCD Sub ID"
+                type={showSecrets ? "text" : "password"}
+                value={form.actum_sub_id_ccd}
+                onChange={(e) => setForm({ ...form, actum_sub_id_ccd: e.target.value })}
               />
             </div>
             <div className="space-y-1.5">

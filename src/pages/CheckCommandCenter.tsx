@@ -48,12 +48,14 @@ import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
 import { DepositStatusPanel } from "@/components/check-review/DepositStatusPanel";
 import { SignatureStatusPanel } from "@/components/check-review/SignatureStatusPanel";
+import { ReviewSettlementTab } from "@/components/check-review/ReviewSettlementTab";
 import { Share2 } from "lucide-react";
 import { ShieldCheck } from "lucide-react";
 import { CheckValidityBadge } from "@/components/checks/CheckValidityBadge";
 import { assessCheckValidity } from "@/lib/checkValidity";
 import { SendPaymentPanel } from "@/components/payments/SendPaymentPanel";
 import { FundsTab as IncomingFundsTab } from "@/components/payments/FundsTab";
+import { ClaimLedgerCard } from "@/components/payments/ClaimLedgerCard";
 import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
 
 
@@ -459,6 +461,7 @@ export default function CheckCommandCenter() {
       return (data ?? []) as CheckItem[];
     },
     enabled: !!tenantId,
+    refetchOnWindowFocus: false, // Prevent page jump/refresh when switching tabs
   });
 
   // Partner checks — ONLY checks explicitly shared via shared_checks table.
@@ -490,6 +493,7 @@ export default function CheckCommandCenter() {
       })) as (CheckItem & { _shared: true; _sourceTenantName: string })[];
     },
     enabled: !!tenantId,
+    refetchOnWindowFocus: false, // Prevent page jump when switching tabs
   });
 
   // Realtime: when the source tenant updates a shared check (e.g. marks it
@@ -1015,6 +1019,7 @@ export default function CheckCommandCenter() {
                   <Tabs defaultValue="review">
                     <TabsList className="w-full rounded-none">
                       <TabsTrigger value="review" className="flex-1 text-xs">Review</TabsTrigger>
+                      <TabsTrigger value="settlement" className="flex-1 text-xs">Settlement</TabsTrigger>
                       <TabsTrigger value="packet" className="flex-1 text-xs">Deposit Packet</TabsTrigger>
                     </TabsList>
                     <TabsContent value="review" className="mt-0">
@@ -1026,6 +1031,9 @@ export default function CheckCommandCenter() {
                           setReviewCheckId(null);
                         }}
                       />
+                    </TabsContent>
+                    <TabsContent value="settlement" className="mt-0 p-4">
+                      <ReviewSettlementTab checkId={reviewCheckId} />
                     </TabsContent>
                     <TabsContent value="packet" className="mt-0 p-4">
                       <Suspense fallback={<TabLoader />}>
@@ -3190,6 +3198,14 @@ function CheckDetailPanel({
             </TabsContent>
 
             <TabsContent value="funds" className="p-4 mt-0 space-y-4">
+              {/* Claim Ledger — always visible so funds can be tracked accurately */}
+              <ClaimLedgerCard
+                checkIntakeItemId={checkId}
+                claimId={check.claim_id ?? null}
+                detectedClaimNumber={check.detected_claim_number ?? null}
+                readOnly={isSharedView}
+              />
+
               {(() => {
                 const stage = (check as any).check_stage ?? null;
                 const status = (check as any).status ?? null;
@@ -3202,9 +3218,13 @@ function CheckDetailPanel({
                       checkIntakeItemId={checkId}
                       checkNumber={check.check_number ?? undefined}
                       carrierName={check.carrier_name ?? undefined}
+                      claimId={check.claim_id ?? null}
+                      detectedClaimNumber={check.detected_claim_number ?? null}
                     />
+
                   );
                 }
+
 
                 if (!isDeposited) {
                   return (
@@ -3661,6 +3681,10 @@ const FUNDS_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "recoverable_depreciation", label: "Recoverable Depreciation" },
   { value: "supplement", label: "Supplement" },
   { value: "overhead_and_profit", label: "Overhead & Profit (O&P)" },
+  { value: "deductible", label: "Deductible" },
+  { value: "other_structures", label: "Other Structures" },
+  { value: "personal_property", label: "Personal Property" },
+  { value: "additional_living_expenses", label: "Additional Living Expenses (ALE)" },
 ];
 
 function FundsTypeField({

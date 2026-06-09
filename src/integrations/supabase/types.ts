@@ -85,6 +85,7 @@ export type Database = {
           actum_history_id: string | null
           actum_order_id: string | null
           amount: number
+          auth_code: string | null
           batch_id: string | null
           consumer_unique: string | null
           created_at: string
@@ -92,6 +93,7 @@ export type Database = {
           idempotence_key: string | null
           mer_order_number: string | null
           raw_response: Json | null
+          response_reason: string | null
           split_id: string | null
           status: string
           tenant_id: string
@@ -102,6 +104,7 @@ export type Database = {
           actum_history_id?: string | null
           actum_order_id?: string | null
           amount: number
+          auth_code?: string | null
           batch_id?: string | null
           consumer_unique?: string | null
           created_at?: string
@@ -109,6 +112,7 @@ export type Database = {
           idempotence_key?: string | null
           mer_order_number?: string | null
           raw_response?: Json | null
+          response_reason?: string | null
           split_id?: string | null
           status?: string
           tenant_id: string
@@ -119,6 +123,7 @@ export type Database = {
           actum_history_id?: string | null
           actum_order_id?: string | null
           amount?: number
+          auth_code?: string | null
           batch_id?: string | null
           consumer_unique?: string | null
           created_at?: string
@@ -126,6 +131,7 @@ export type Database = {
           idempotence_key?: string | null
           mer_order_number?: string | null
           raw_response?: Json | null
+          response_reason?: string | null
           split_id?: string | null
           status?: string
           tenant_id?: string
@@ -3704,6 +3710,7 @@ export type Database = {
           actum_consumer_unique: string | null
           actum_history_id: string | null
           actum_order_id: string | null
+          auth_code: string | null
           check_amount: number
           check_intake_item_id: string
           created_at: string
@@ -3731,6 +3738,7 @@ export type Database = {
           actum_consumer_unique?: string | null
           actum_history_id?: string | null
           actum_order_id?: string | null
+          auth_code?: string | null
           check_amount: number
           check_intake_item_id: string
           created_at?: string
@@ -3758,6 +3766,7 @@ export type Database = {
           actum_consumer_unique?: string | null
           actum_history_id?: string | null
           actum_order_id?: string | null
+          auth_code?: string | null
           check_amount?: number
           check_intake_item_id?: string
           created_at?: string
@@ -8136,6 +8145,9 @@ export type Database = {
       }
       claim_settlements: {
         Row: {
+          ale_non_recoverable_depreciation: number | null
+          ale_rcv: number | null
+          ale_recoverable_depreciation: number | null
           claim_id: string
           created_at: string | null
           created_by: string | null
@@ -8163,6 +8175,9 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          ale_non_recoverable_depreciation?: number | null
+          ale_rcv?: number | null
+          ale_recoverable_depreciation?: number | null
           claim_id: string
           created_at?: string | null
           created_by?: string | null
@@ -8190,6 +8205,9 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          ale_non_recoverable_depreciation?: number | null
+          ale_rcv?: number | null
+          ale_recoverable_depreciation?: number | null
           claim_id?: string
           created_at?: string | null
           created_by?: string | null
@@ -17506,6 +17524,8 @@ export type Database = {
           actum_parent_id: string | null
           actum_password: string | null
           actum_sub_id: string | null
+          actum_sub_id_ccd: string | null
+          actum_sub_id_ppd: string | null
           actum_syspass: string | null
           actum_username: string | null
           actum_webhook_secret: string | null
@@ -17536,6 +17556,8 @@ export type Database = {
           actum_parent_id?: string | null
           actum_password?: string | null
           actum_sub_id?: string | null
+          actum_sub_id_ccd?: string | null
+          actum_sub_id_ppd?: string | null
           actum_syspass?: string | null
           actum_username?: string | null
           actum_webhook_secret?: string | null
@@ -17566,6 +17588,8 @@ export type Database = {
           actum_parent_id?: string | null
           actum_password?: string | null
           actum_sub_id?: string | null
+          actum_sub_id_ccd?: string | null
+          actum_sub_id_ppd?: string | null
           actum_syspass?: string | null
           actum_username?: string | null
           actum_webhook_secret?: string | null
@@ -19256,6 +19280,10 @@ export type Database = {
         Returns: {
           carrier_name: string
         }[]
+      }
+      get_check_claim_settlement: {
+        Args: { p_check_id: string }
+        Returns: Json
       }
       get_check_dashboard_counts: { Args: never; Returns: Json }
       get_check_dashboard_counts_for_tenant: {

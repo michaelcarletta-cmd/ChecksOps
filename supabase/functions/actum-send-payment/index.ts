@@ -42,7 +42,7 @@ serve(async (req) => {
       .select(`
         *,
         stakeholder_accounts:recipient_stakeholder_account_id (
-          id, chk_aba, chk_acct, acct_type, custname, consumer_unique, nickname, verification_status
+          id, chk_aba, chk_acct, acct_type, account_type, custname, consumer_unique, nickname, verification_status
         )
       `)
       .eq("id", payment_id)
@@ -76,18 +76,26 @@ serve(async (req) => {
     // Get tenant's Actum credentials
     const { data: tenantData, error: tenantErr } = await supabase
       .from("tenants")
-      .select("actum_parent_id, actum_sub_id, actum_syspass, actum_username, actum_password")
+      .select("actum_parent_id, actum_sub_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password")
       .eq("id", payment.tenant_id)
       .single();
 
     if (tenantErr) throw new Error(`Could not load tenant Actum config: ${tenantErr.message}`);
 
     const actumParentId = tenantData?.actum_parent_id || Deno.env.get("ACTUM_PARENT_ID");
-    const actumSubId = tenantData?.actum_sub_id || Deno.env.get("ACTUM_SUB_ID");
+    let actumSubId = tenantData?.actum_sub_id || Deno.env.get("ACTUM_SUB_ID");
+    
+    // Choose specific Sub ID if configured
+    if (account.account_type === 'insured' && tenantData?.actum_sub_id_ppd) {
+      actumSubId = tenantData.actum_sub_id_ppd;
+    } else if (account.account_type !== 'insured' && tenantData?.actum_sub_id_ccd) {
+      actumSubId = tenantData.actum_sub_id_ccd;
+    }
+
     const actumEndpoint = "https://join.actumprocessing.com/cgi-bin/dbs/man_trans.cgi";
 
     if (!actumParentId || !actumSubId) {
-      throw new Error("Actum API credentials (Parent ID / Sub ID) not configured for this tenant.");
+      throw new Error(`Actum API credentials (Parent ID / Sub ID) not configured for this tenant. (Using ${account.account_type} type)`);
     }
 
     const syspass = (tenantData as any)?.actum_syspass;
@@ -100,8 +108,8 @@ serve(async (req) => {
     params.append("parent_id", actumParentId!);
     params.append("sub_id", actumSubId!);
     if (syspass) params.append("syspass", syspass);
-    if (apiUser) params.append("api_user", apiUser);
-    if (apiPass) params.append("api_password", apiPass);
+    if (apiUser) params.append("username", apiUser);
+    if (apiPass) params.append("password", apiPass);
 
     if (account.consumer_unique) {
       // Repeat consumer — skip bank details
@@ -157,11 +165,13 @@ serve(async (req) => {
       batch_id: null,
       actum_order_id: orderId,
       actum_history_id: historyId,
-      consumer_unique: consumerUnique,
+      consumer_unique: consumer_unique,
       mer_order_number: `payment_${payment_id}`,
       transaction_type: "credit",
       amount: payment.payment_amount,
       status: accepted ? "accepted" : "declined",
+      auth_code: parsed.authcode,
+      response_reason: parsed.reason,
       raw_response: parsed,
       idempotence_key: idempotenceKey,
     });
@@ -171,6 +181,7 @@ serve(async (req) => {
       .from("claim_check_payments")
       .update({
         status: accepted ? "submitted" : "failed",
+        auth_code: parsed.authcode ?? null,
         actum_order_id: orderId ?? null,
         actum_history_id: historyId ?? null,
         actum_consumer_unique: consumerUnique ?? null,

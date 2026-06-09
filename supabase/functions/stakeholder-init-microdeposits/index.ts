@@ -8,10 +8,7 @@ const corsHeaders = {
 
 function isValidRoutingNumber(aba: string): boolean {
   const clean = (aba ?? "").replace(/\D/g, "");
-  if (clean.length !== 9) return false;
-  const d = clean.split("").map(Number);
-  const sum = 3 * (d[0] + d[3] + d[6]) + 7 * (d[1] + d[4] + d[7]) + (d[2] + d[5] + d[8]);
-  return sum > 0 && sum % 10 === 0;
+  return clean.length === 9;
 }
 
 function randCents(): number {
@@ -23,8 +20,10 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
+    console.log("[stakeholder-init-microdeposits] starting request...");
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
+      console.error("[stakeholder-init-microdeposits] missing or invalid auth header");
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const authClient = createClient(
@@ -34,8 +33,10 @@ serve(async (req) => {
     );
     const { data: userData, error: userErr } = await authClient.auth.getUser();
     if (userErr || !userData?.user) {
+      console.error("[stakeholder-init-microdeposits] auth error:", userErr);
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+    console.log("[stakeholder-init-microdeposits] user authenticated:", userData.user.id);
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -102,8 +103,8 @@ serve(async (req) => {
       params.append("parent_id", actumParentId!);
       params.append("sub_id", actumSubId!);
       if ((tenantData as any)?.actum_syspass) params.append("syspass", (tenantData as any).actum_syspass);
-      if ((tenantData as any)?.actum_username) params.append("api_user", (tenantData as any).actum_username);
-      if ((tenantData as any)?.actum_password) params.append("api_password", (tenantData as any).actum_password);
+      if ((tenantData as any)?.actum_username) params.append("username", (tenantData as any).actum_username);
+      if ((tenantData as any)?.actum_password) params.append("password", (tenantData as any).actum_password);
       params.append("pmt_type", "chk");
       params.append("custname", account.custname);
       params.append("chk_acct", account.chk_acct);
@@ -114,16 +115,18 @@ serve(async (req) => {
       params.append("action_code", "P");
       params.append("creditflag", "1");
       params.append("currency", "US");
-      params.append("merordernumber", `verify_${stakeholder_account_id}_${label}_${Date.now()}`);
+      params.append("merordernumber", `v1_${stakeholder_account_id.slice(0, 8)}_${Date.now()}`);
       params.append("postback", "1");
-      params.append("idempotence", `verify_${stakeholder_account_id}_${label}_${Date.now()}`);
+      params.append("idempotence", `v1_${stakeholder_account_id.slice(0, 8)}_${Date.now()}`);
 
+      console.log(`[stakeholder-init-microdeposits] sending micro-deposit to Actum for ${account.id} (${label}): ${amountCents}c`);
       const res = await fetch(actumEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: params.toString(),
       });
       const text = await res.text();
+      console.log(`[stakeholder-init-microdeposits] Actum response for ${account.id} (${label}):`, text);
       const parsed: Record<string, string> = {};
       for (const line of text.split("\n").map((l) => l.trim()).filter(Boolean)) {
         const eq = line.indexOf("=");
@@ -135,11 +138,17 @@ serve(async (req) => {
 
     const r1 = await sendOne(amount1, "1");
     if (!r1.accepted) {
-      return new Response(JSON.stringify({ error: `Bank network rejected first micro-deposit: ${r1.parsed.reason ?? r1.parsed.authcode ?? "declined"}` }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const code = r1.parsed.authcode ?? "unknown";
+      const reason = r1.parsed.reason ?? "declined";
+      console.error(`[stakeholder-init-microdeposits] micro-deposit 1 rejected: authcode=${code} reason=${reason}`, r1.parsed);
+      return new Response(JSON.stringify({ error: `Actum declined micro-deposit [${code}]: ${reason}` }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const r2 = await sendOne(amount2, "2");
     if (!r2.accepted) {
-      return new Response(JSON.stringify({ error: `Bank network rejected second micro-deposit: ${r2.parsed.reason ?? r2.parsed.authcode ?? "declined"}` }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const code = r2.parsed.authcode ?? "unknown";
+      const reason = r2.parsed.reason ?? "declined";
+      console.error(`[stakeholder-init-microdeposits] micro-deposit 2 rejected: authcode=${code} reason=${reason}`, r2.parsed);
+      return new Response(JSON.stringify({ error: `Actum declined micro-deposit [${code}]: ${reason}` }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Capture consumer_unique if returned

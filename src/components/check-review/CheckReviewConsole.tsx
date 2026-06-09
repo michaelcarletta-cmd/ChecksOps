@@ -67,7 +67,7 @@ interface ReviewCheckGroup {
   policyholderName: string;
   checks: ReviewCheck[];
   totalAmount: number;
-  earliestCreatedAt: string;
+  latestCreatedAt: string;
 }
 
 type ReviewFieldChange = {
@@ -314,6 +314,7 @@ export function CheckReviewQueue({
     },
     enabled: !!tenantId,
     refetchInterval: 15000,
+    refetchOnWindowFocus: false, // Prevent page jump when switching tabs
   });
 
   const linkedClaimIds = useMemo(() => Array.from(new Set(reviewChecks.map((check) => check.claim_id).filter(Boolean))) as string[], [reviewChecks]);
@@ -349,15 +350,15 @@ export function CheckReviewQueue({
       if (existing) {
         existing.checks.push(check);
         existing.totalAmount += check.amount ?? 0;
-        if (new Date(check.created_at).getTime() < new Date(existing.earliestCreatedAt).getTime()) {
-          existing.earliestCreatedAt = check.created_at;
+        if (new Date(check.created_at).getTime() > new Date(existing.latestCreatedAt).getTime()) {
+          existing.latestCreatedAt = check.created_at;
         }
       } else {
-        groups.set(key, { key, claimNumber, policyholderName, checks: [check], totalAmount: check.amount ?? 0, earliestCreatedAt: check.created_at });
+        groups.set(key, { key, claimNumber, policyholderName, checks: [check], totalAmount: check.amount ?? 0, latestCreatedAt: check.created_at });
       }
     });
 
-    return Array.from(groups.values()).sort((a, b) => new Date(a.earliestCreatedAt).getTime() - new Date(b.earliestCreatedAt).getTime());
+    return Array.from(groups.values()).sort((a, b) => new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime());
   }, [linkedClaims, reviewChecks]);
 
   function getReviewReason(check: ReviewCheck): string {
@@ -950,6 +951,10 @@ export function ReviewDecisionPanel({
                 <SelectItem value="recoverable_depreciation" className="text-xs">Recoverable Depreciation</SelectItem>
                 <SelectItem value="supplement" className="text-xs">Supplement</SelectItem>
                 <SelectItem value="overhead_and_profit" className="text-xs">Overhead &amp; Profit (O&amp;P)</SelectItem>
+                <SelectItem value="deductible" className="text-xs">Deductible</SelectItem>
+                <SelectItem value="other_structures" className="text-xs">Other Structures</SelectItem>
+                <SelectItem value="personal_property" className="text-xs">Personal Property</SelectItem>
+                <SelectItem value="additional_living_expenses" className="text-xs">Additional Living Expenses (ALE)</SelectItem>
               </SelectContent>
             </Select>
           </div>
