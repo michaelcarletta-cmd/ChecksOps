@@ -99,35 +99,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const hydrateAuthState = useCallback((nextSession: Session | null) => {
     setSession((prev) => {
-      // Supabase's onAuthStateChange emits TOKEN_REFRESHED / SIGNED_IN 
-      // events frequently, often every time the browser tab regains focus.
-      // 
-      // If the underlying user ID and current access token haven't changed,
-      // we must preserve the existing session object. Returning the same
-      // object prevents React from triggering a re-render/re-mount of the
-      // entire App tree, which was causing the UI to "refresh" or jump 
-      // back to default tabs (like the Review Queue) on tab switch.
       const sameUser = prev?.user?.id === nextSession?.user?.id;
-      const sameToken = prev?.access_token === nextSession?.access_token;
-      
-      if (sameUser && sameToken) {
-        return prev;
+
+      // When the user hasn't changed, preserve the existing session object even
+      // if the access token rotated. Supabase's autoRefreshToken fires an internal
+      // visibilitychange listener that refreshes the JWT every time the tab becomes
+      // visible, emitting TOKEN_REFRESHED with a new access_token string. Updating
+      // React state on every token rotation changes the memoized AuthContext value,
+      // which re-renders every useAuth() consumer and resets all local UI state
+      // (active tabs, scroll position, etc.). The Supabase client stores the live
+      // token in localStorage and uses it for all API calls — React state doesn't
+      // need to track it.
+      if (sameUser) {
+        // On first hydration prev is null — resolve loading regardless of whether
+        // there is a session (covers both logged-in and logged-out initial state).
+        if (!prev) setLoading(false);
+        return prev ?? nextSession;
       }
 
-      // If it really is a new user or a forced token refresh that changed the string
-      setUser((prevUser) => {
-        if (sameUser && prevUser) return prevUser;
-        return nextSession?.user ?? null;
-      });
+      // Actual user change (sign-in, sign-out, account switch).
+      setUser(nextSession?.user ?? null);
 
       if (nextSession?.user) {
-        if (!sameUser) {
-          const cachedRole = getCachedRole(nextSession.user.id);
-          if (cachedRole) setUserRole(cachedRole);
-          fetchUserRole(nextSession.user.id);
-        } else {
-          setLoading(false);
-        }
+        const cachedRole = getCachedRole(nextSession.user.id);
+        if (cachedRole) setUserRole(cachedRole);
+        fetchUserRole(nextSession.user.id);
       } else {
         setUserRole(null);
         localStorage.removeItem(ROLE_CACHE_KEY);
