@@ -1458,7 +1458,17 @@ Deno.serve(async (req) => {
             endorsed_at: new Date().toISOString(),
             endorsement_image_path: null,
           }).eq("id", endorsement.payee_id);
+        } else {
+          // Fallback: match by name and check_id if payee_id is missing
+          await supabase.from("check_payees").update({
+            endorsement_status: "signed",
+            endorsed_at: new Date().toISOString(),
+            endorsement_image_path: null,
+          })
+          .eq("check_id", endorsement.check_id)
+          .eq("payee_name", endorsement.payee_name);
         }
+
 
         await supabase.from("endorsement_audit_log").insert({
           endorsement_id: endorsementId,
