@@ -214,7 +214,7 @@ const DEPOSIT_PATHS = [
   { value: "hold_for_claim_review", label: "Hold for Claim Review", icon: AlertTriangle, color: "text-amber-400" },
 ];
 
-const PAYEE_TYPES = ["insured", "mortgage_company", "contractor", "public_adjuster", "unknown"];
+const PAYEE_TYPES = ["insured", "mortgage_company", "contractor", "public_adjuster", "other"];
 
 const REISSUE_REASON_CATEGORIES = [
   { value: "payee_error", label: "Payee Error" },
@@ -231,7 +231,7 @@ const payeeTypeIcons: Record<string, typeof Users> = {
   mortgage_company: Building2,
   contractor: Shield,
   public_adjuster: FileCheck,
-  unknown: AlertTriangle,
+  other: AlertTriangle,
 };
 
 /* ------------------------------------------------------------------ */
@@ -385,7 +385,7 @@ export function CheckReviewQueue({
     if (check.check_payees?.some((p) => p.endorsement_status === "rejected")) reasons.push("Rejected endorsement");
     if (check.check_payees?.some((p) => p.payee_type === "mortgage_company")) reasons.push("Mortgage payee");
     if ((check.check_payees?.length ?? 0) >= 3) reasons.push("3+ payees");
-    if (check.check_payees?.some((p) => p.payee_type === "unknown")) reasons.push("Unclear payee classification");
+    if (check.check_payees?.some((p) => p.payee_type === "other")) reasons.push("Unclear payee classification");
     if (reasons.length === 0) reasons.push("Awaiting routing");
     return reasons.join(" · ");
   }
@@ -1237,7 +1237,7 @@ function PayeeReconciliation({
   const [mergedName, setMergedName] = useState("");
   const [addingPayee, setAddingPayee] = useState(false);
   const [newPayeeName, setNewPayeeName] = useState("");
-  const [newPayeeType, setNewPayeeType] = useState("insured");
+  const [newPayeeType, setNewPayeeType] = useState("insured"); // Phone/SMS removed from endorsements
 
   const updatePayee = useMutation({
     mutationFn: async ({ payeeId, name, type }: { payeeId: string; name: string; type: string }) => {

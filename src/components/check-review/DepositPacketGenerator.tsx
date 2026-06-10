@@ -42,7 +42,7 @@ const payeeTypeLabels: Record<string, string> = {
   mortgage_company: "Mortgage Company",
   contractor: "Contractor",
   public_adjuster: "Public Adjuster",
-  unknown: "Unknown",
+  other: "Other",
 };
 
 /* ------------------------------------------------------------------ */
