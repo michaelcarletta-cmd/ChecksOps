@@ -675,12 +675,6 @@ function EndorsementCard({
             onChange={(e) => setEmail(e.target.value)}
             className="h-8 text-xs"
           />
-          <Input
-            placeholder="Phone"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="h-8 text-xs"
-          />
           {/* CC contractor on the endorsement email so they can follow up with the client */}
           <div className="space-y-1 rounded-md border border-muted-foreground/20 bg-muted/30 p-2">
             <label className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground cursor-pointer">
