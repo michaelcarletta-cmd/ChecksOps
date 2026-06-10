@@ -46,9 +46,11 @@ const isUnknownServicer = (value?: string | null) =>
 export function LossDraftDetailPanel({
   lossDraftId,
   onUpdate,
+  onSelectId,
 }: {
   lossDraftId: string;
   onUpdate: () => void;
+  onSelectId?: (id: string) => void;
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
