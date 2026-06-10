@@ -106,16 +106,7 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
     isVisibleInLossDraft(d) && d.escrow_status !== "final_release_complete";
   const visibleDrafts = drafts.filter(isVisibleInLossDraft);
 
-  const baseFiltered =
-    filter === "active"
-      ? visibleDrafts.filter(isActiveLossDraft)
-      : filter === "stale"
-      ? visibleDrafts.filter(d => d.is_stale)
-      : filter === "missing_docs"
-      ? visibleDrafts.filter(d => d.missing_docs_count > 0)
-      : filter === "overdue"
-      ? visibleDrafts.filter(d => d.follow_up_date && new Date(d.follow_up_date) < new Date())
-      : visibleDrafts;
+  const baseFiltered = visibleDrafts.filter(isActiveLossDraft);
 
   const q = (searchQuery ?? "").trim().toLowerCase();
   const filtered = q
