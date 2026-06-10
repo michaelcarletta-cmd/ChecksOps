@@ -17,6 +17,7 @@ import {
   useLossDraftDocs,
   useLossDraftReleases,
   useInvalidateLossDraft,
+  useRelatedLossDrafts,
 } from "@/hooks/queries/useLossDraft";
 import { LossDraftActionsTab } from "./detail/LossDraftActionsTab";
 import { LossDraftDocsTab } from "./detail/LossDraftDocsTab";
