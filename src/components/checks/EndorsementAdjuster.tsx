@@ -111,13 +111,16 @@ export function EndorsementAdjuster({
 
   // Use fitEndorsementLayout to match server compositor exactly
   const previewLayout = useMemo(() => {
-    const rect = wrapRef.current?.getBoundingClientRect();
-    const containerWidthPx = rect?.width ?? 900;
-    const containerHeightPx = rect?.height ?? (containerWidthPx * imageHeight / imageWidth);
-    const safeZoneHeightPx = (ZONE_BOTTOM_PCT - ZONE_TOP_PCT) * containerHeightPx;
+    // fitEndorsementLayout's font/spacing presets are absolute pixel values
+    // measured against the *actual image* resolution (matching the server
+    // compositor, which operates on imgHeight). The zone height must be in
+    // those same image-pixel units, not container/display pixels, or the
+    // wrong preset gets selected and the block height (and thus the zone
+    // overflow nudge) won't match the final composited result.
+    const safeZoneHeightImgPx = (ZONE_BOTTOM_PCT - ZONE_TOP_PCT) * imageHeight;
     return fitEndorsementLayout({
       signerCount: signedEndorsements.length || 1,
-      zoneHeightPx: safeZoneHeightPx,
+      zoneHeightPx: safeZoneHeightImgPx,
       requestedScale: override.scale || 1,
     });
   }, [imageWidth, imageHeight, override.scale, signedEndorsements.length]);
