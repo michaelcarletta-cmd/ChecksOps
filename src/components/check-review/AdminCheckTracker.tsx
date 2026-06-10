@@ -675,7 +675,7 @@ function RouteSelect({ onRoute, routing }: { onRoute: (s: string) => void; routi
     >
       <SelectTrigger className="h-8 w-[180px] text-xs">
         <ArrowRightCircle className="h-3 w-3 mr-1" />
-        <SelectValue placeholder={routing ? "Routing…" : "Route to…"} />
+        <SelectValue placeholder={routing ? "Routing…" : "Override Status (admin)"} />
       </SelectTrigger>
       <SelectContent>
         {ROUTE_OPTIONS.map((o) => (
