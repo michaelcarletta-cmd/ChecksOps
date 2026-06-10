@@ -13,19 +13,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
 
 const WORKFLOW_STATUS_OPTIONS = [
-  { value: "uploaded", label: "Uploaded" },
-  { value: "processing", label: "Processing" },
-  { value: "ocr_complete", label: "OCR Complete" },
-  { value: "needs_review", label: "Needs Review" },
-  { value: "manual_review_required", label: "Manual Review Required" },
-  { value: "endorsements_in_progress", label: "Endorsements In Progress" },
-  { value: "endorsements_complete", label: "Endorsements Complete" },
-  { value: "approved_for_deposit", label: "Approved for Deposit" },
-  { value: "branch_deposit_required", label: "Branch Deposit Required" },
-  { value: "loss_draft_required", label: "Loss Draft Required" },
-  { value: "reissue_requested", label: "Reissue Requested" },
-  { value: "deposited", label: "Deposited" },
-  { value: "voided", label: "Voided" },
+  { value: "needs_review", label: "Review" },
+  { value: "endorsements_in_progress", label: "Endorsing" },
+  { value: "loss_draft_required", label: "Loss Draft" },
+  { value: "reissue_requested", label: "Reissue" },
+  { value: "voided", label: "Void" },
 ] as const;
 
 const MORTGAGE_FLAG_OPTIONS = [
@@ -368,7 +360,7 @@ export function CheckProcessingCard({ claimId, checkId, isAdmin = false }: Props
 
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-1.5">
-                <Label className="text-xs">Workflow status</Label>
+                <Label className="text-xs">Override Status (admin)</Label>
                 <Select
                   value={adminDraft.workflowStatus}
                   onValueChange={(value) => setAdminDraft((current) => ({ ...current, workflowStatus: value }))}
