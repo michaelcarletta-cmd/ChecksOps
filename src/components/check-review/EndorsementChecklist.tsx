@@ -419,6 +419,14 @@ function EndorsementCard({
   const [phone, setPhone] = useState(endorsement.contact_phone ?? "");
   const [ccContractor, setCcContractor] = useState(defaultContractorCc);
   const [includeCc, setIncludeCc] = useState(Boolean(defaultContractorCc));
+
+  // Sync state if defaultContractorCc changes (e.g. after first send)
+  useEffect(() => {
+    if (defaultContractorCc && !ccContractor) {
+      setCcContractor(defaultContractorCc);
+      setIncludeCc(true);
+    }
+  }, [defaultContractorCc]);
   const [sending, setSending] = useState(false);
   const [markingInternal, setMarkingInternal] = useState(false);
   const [uploading, setUploading] = useState(false);
