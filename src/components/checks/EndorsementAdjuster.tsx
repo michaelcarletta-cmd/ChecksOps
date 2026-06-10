@@ -109,7 +109,7 @@ export function EndorsementAdjuster({
   const ZONE_BOTTOM_PCT = 0.92;
   const ENDORSEMENT_WIDTH_PCT = 0.22;
 
-  // Use fitEndorsementLayout to match server compositor exactly
+  // Use fitEndorsementLayout to size the on-screen preview text/signatures
   const previewLayout = useMemo(() => {
     const rect = wrapRef.current?.getBoundingClientRect();
     const containerWidthPx = rect?.width ?? 900;
@@ -121,6 +121,18 @@ export function EndorsementAdjuster({
       requestedScale: override.scale || 1,
     });
   }, [imageWidth, imageHeight, override.scale, signedEndorsements.length]);
+
+  // Separately, replicate the server compositor's preset selection (which
+  // uses image-pixel zone height) purely to compute the same overflow nudge
+  // it would apply, so the preview position matches the saved result.
+  const serverMeasuredLayout = useMemo(() => {
+    const safeZoneHeightImgPx = (ZONE_BOTTOM_PCT - ZONE_TOP_PCT) * imageHeight;
+    return fitEndorsementLayout({
+      signerCount: signedEndorsements.length || 1,
+      zoneHeightPx: safeZoneHeightImgPx,
+      requestedScale: override.scale || 1,
+    });
+  }, [imageHeight, override.scale, signedEndorsements.length]);
 
   const runNextFrame = (fn: () => void) => {
     if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
@@ -289,6 +301,23 @@ export function EndorsementAdjuster({
   const lineGapPx = lineGap * displayScale;
   const sigHeightPx = signatureHeight * displayScale;
 
+  // Replicate the server's overflow nudge/clamp so the preview shows the
+  // position that will actually be rendered onto the check, not just the
+  // raw requested position.
+  const blockHeightPx = serverMeasuredLayout.estimatedHeight * displayScale;
+  let blockCenterYPx = safeZoneTopPx + override.yPct * safeZoneHeightPx;
+  let blockTopPx = blockCenterYPx - blockHeightPx / 2;
+  let blockBottomPx = blockTopPx + blockHeightPx;
+
+  if (blockBottomPx > safeZoneBottomPx) {
+    blockCenterYPx -= (blockBottomPx - safeZoneBottomPx);
+  }
+  blockCenterYPx = Math.max(
+    safeZoneTopPx + blockHeightPx / 2,
+    Math.min(safeZoneBottomPx - blockHeightPx / 2, blockCenterYPx),
+  );
+  const wasNudged = Math.abs(blockCenterYPx - (safeZoneTopPx + override.yPct * safeZoneHeightPx)) > 0.5;
+
   if (!canGenerate && !endorsementsLoading) {
     return (
       <div className="flex items-center gap-2 p-4 rounded-lg bg-destructive/10 text-destructive font-medium">
@@ -360,6 +389,11 @@ export function EndorsementAdjuster({
         {/* Debug overlay */}
         <div className="absolute left-2 top-2 z-30 rounded bg-black/70 px-2 py-1 text-[10px] text-white pointer-events-none">
           xPct: {override.xPct.toFixed(3)} | yPct: {override.yPct.toFixed(3)} | rot: {override.rotationDeg} | scale: {override.scale?.toFixed(2)}
+          {wasNudged && (
+            <span className="ml-2 text-amber-300">
+              ⚠ position auto-adjusted to fit zone
+            </span>
+          )}
         </div>
 
         {/* draggable overlay – center-origin positioning, zone-relative Y */}
@@ -368,7 +402,7 @@ export function EndorsementAdjuster({
           className="absolute select-none"
           style={{
             left: override.xPct * containerWidthPx,
-            top: safeZoneTopPx + (override.yPct * safeZoneHeightPx),
+            top: blockCenterYPx,
             width: containerWidthPx * ENDORSEMENT_WIDTH_PCT,
             transform: `translate(-50%, -50%) rotate(${override.rotationDeg || 0}deg)`,
             transformOrigin: "center center",
