@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -419,6 +419,14 @@ function EndorsementCard({
   const [phone, setPhone] = useState(endorsement.contact_phone ?? "");
   const [ccContractor, setCcContractor] = useState(defaultContractorCc);
   const [includeCc, setIncludeCc] = useState(Boolean(defaultContractorCc));
+
+  // Sync state if defaultContractorCc changes (e.g. after first send)
+  useEffect(() => {
+    if (defaultContractorCc && !ccContractor) {
+      setCcContractor(defaultContractorCc);
+      setIncludeCc(true);
+    }
+  }, [defaultContractorCc]);
   const [sending, setSending] = useState(false);
   const [markingInternal, setMarkingInternal] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -690,7 +698,20 @@ function EndorsementCard({
               <Input
                 placeholder="contractor@example.com"
                 value={ccContractor}
-                onChange={(e) => setCcContractor(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setCcContractor(val);
+                  // Auto-save as the user types so it's not lost
+                  if (claimId && val.includes("@")) {
+                    supabase
+                      .from("claims")
+                      .update({ signature_cc_email: val } as any)
+                      .eq("id", claimId)
+                      .then(({ error }) => {
+                        if (error) console.error("Error saving CC email:", error);
+                      });
+                  }
+                }}
                 className="h-7 text-xs"
               />
             )}
