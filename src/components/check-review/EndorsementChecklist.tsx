@@ -698,7 +698,20 @@ function EndorsementCard({
               <Input
                 placeholder="contractor@example.com"
                 value={ccContractor}
-                onChange={(e) => setCcContractor(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setCcContractor(val);
+                  // Auto-save as the user types so it's not lost
+                  if (claimId && val.includes("@")) {
+                    supabase
+                      .from("claims")
+                      .update({ signature_cc_email: val } as any)
+                      .eq("id", claimId)
+                      .then(({ error }) => {
+                        if (error) console.error("Error saving CC email:", error);
+                      });
+                  }
+                }}
                 className="h-7 text-xs"
               />
             )}
