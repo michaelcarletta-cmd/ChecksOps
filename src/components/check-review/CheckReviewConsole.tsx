@@ -210,7 +210,7 @@ const extractInsuredName = (payeeLine: string | null | undefined): string | null
 const DEPOSIT_PATHS = [
   { value: "endorsements_in_progress", label: "Endorsing", icon: Users, color: "text-amber-400" },
   { value: "loss_draft_required", label: "Loss Draft", icon: Building2, color: "text-purple-400" },
-  { value: "branch_deposit_required", label: "Review", icon: Building2, color: "text-blue-400" },
+  { value: "needs_review", label: "Review", icon: Building2, color: "text-blue-400" },
   { value: "reissue_requested", label: "Reissue", icon: RotateCcw, color: "text-orange-400" },
   { value: "voided", label: "Void", icon: AlertTriangle, color: "text-red-400" },
 ];
