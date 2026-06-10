@@ -528,11 +528,11 @@ function EndorsementCard({
 
   const isMortgage = endorsement.payee_type === "mortgage_company";
   const isSynthetic = endorsement.id.startsWith("payee-");
-  const canSendRequest = !readOnly && !partnerMode && !isMortgage && !isSynthetic &&
+  const canSendRequest = !readOnly && !partnerMode && !isMortgage &&
     endorsement.status !== "signed" &&
     endorsement.status !== "waived" &&
     endorsement.status !== "rejected";
-  const canMarkInternal = !readOnly && !partnerMode && !isSynthetic && endorsement.status !== "signed" && endorsement.status !== "waived";
+  const canMarkInternal = !readOnly && !partnerMode && endorsement.status !== "signed" && endorsement.status !== "waived";
   const isResend = endorsement.request_sent_at != null;
 
 
@@ -546,7 +546,8 @@ function EndorsementCard({
       const { error } = await supabase.functions.invoke("check-endorsement", {
         body: {
           action: "send_endorsement_request",
-          endorsementId: endorsement.id,
+          endorsementId: endorsement.id.startsWith("payee-") ? undefined : endorsement.id,
+          payeeId: endorsement.id.startsWith("payee-") ? endorsement.id.replace("payee-", "") : undefined,
           method: "email",
           email: email || undefined,
           cc: ccEmail ? [ccEmail] : undefined,
@@ -584,7 +585,11 @@ function EndorsementCard({
         const { data: session } = await supabase.auth.getSession();
         if (!session.session?.access_token) throw new Error("Not authenticated");
         const { error } = await supabase.functions.invoke("check-endorsement", {
-          body: { action: "mark_internal_signed", endorsementId: endorsement.id },
+          body: { 
+            action: "mark_internal_signed", 
+            endorsementId: endorsement.id.startsWith("payee-") ? undefined : endorsement.id,
+            payeeId: endorsement.id.startsWith("payee-") ? endorsement.id.replace("payee-", "") : undefined
+          },
           headers: { Authorization: `Bearer ${session.session.access_token}` },
         });
         if (error) throw new Error(error.message);
@@ -608,7 +613,11 @@ function EndorsementCard({
         const { data: session } = await supabase.auth.getSession();
         if (!session.session?.access_token) throw new Error("Not authenticated");
         const { error } = await supabase.functions.invoke("check-endorsement", {
-          body: { action: "waive_endorsement", endorsementId: endorsement.id },
+          body: { 
+            action: "waive_endorsement", 
+            endorsementId: endorsement.id.startsWith("payee-") ? undefined : endorsement.id,
+            payeeId: endorsement.id.startsWith("payee-") ? endorsement.id.replace("payee-", "") : undefined
+          },
           headers: { Authorization: `Bearer ${session.session.access_token}` },
         });
         if (error) throw new Error(error.message);
