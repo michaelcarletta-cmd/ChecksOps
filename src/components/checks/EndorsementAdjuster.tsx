@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RotateCcw, Save, AlertCircle, ShieldCheck } from "lucide-react";
 import {
@@ -529,6 +531,73 @@ export function EndorsementAdjuster({
             >
               Right
             </Button>
+          </div>
+
+          {/* Precise numeric inputs */}
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">Precise Position</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-w-md">
+              <div className="space-y-1">
+                <Label htmlFor="endorse-x" className="text-[10px] text-muted-foreground">X (%)</Label>
+                <Input
+                  id="endorse-x"
+                  type="number"
+                  step={0.1}
+                  value={(override.xPct * 100).toFixed(1)}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    if (Number.isNaN(v)) return;
+                    setOverride((prev) => clampEndorsementOverride({ ...prev, xPct: v / 100 }));
+                  }}
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="endorse-y" className="text-[10px] text-muted-foreground">Y (%)</Label>
+                <Input
+                  id="endorse-y"
+                  type="number"
+                  step={0.1}
+                  value={(override.yPct * 100).toFixed(1)}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    if (Number.isNaN(v)) return;
+                    setOverride((prev) => clampEndorsementOverride({ ...prev, yPct: v / 100 }));
+                  }}
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="endorse-scale" className="text-[10px] text-muted-foreground">Scale (%)</Label>
+                <Input
+                  id="endorse-scale"
+                  type="number"
+                  step={1}
+                  value={Math.round(override.scale * 100)}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    if (Number.isNaN(v)) return;
+                    setOverride((prev) => clampEndorsementOverride({ ...prev, scale: v / 100 }));
+                  }}
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="endorse-rotation" className="text-[10px] text-muted-foreground">Rotation (°)</Label>
+                <Input
+                  id="endorse-rotation"
+                  type="number"
+                  step={1}
+                  value={Math.round(override.rotationDeg)}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    if (Number.isNaN(v)) return;
+                    setOverride((prev) => clampEndorsementOverride({ ...prev, rotationDeg: normalizeRotation(v) }));
+                  }}
+                  className="h-8 text-xs"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="space-y-1 max-w-[200px]">
