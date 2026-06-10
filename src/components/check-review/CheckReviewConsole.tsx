@@ -39,6 +39,7 @@ interface CheckPayee {
 interface ReviewCheck {
   id: string;
   front_image_path: string | null;
+  back_image_path: string | null;
   carrier_name: string | null;
   check_number: string | null;
   amount: number | null;
@@ -589,6 +590,7 @@ export function ReviewDecisionPanel({
   const [notes, setNotes] = useState("");
   const [reissueCategory, setReissueCategory] = useState("other");
   const [frontViewerOpen, setFrontViewerOpen] = useState(false);
+  const [backViewerOpen, setBackViewerOpen] = useState(false);
 
   useEffect(() => {
     if (check && !formDirtyRef.current) {
@@ -771,6 +773,17 @@ export function ReviewDecisionPanel({
     },
   });
 
+  const { data: backImageUrl } = useQuery({
+    queryKey: ["review-check-back-img", check?.back_image_path],
+    enabled: !!check?.back_image_path,
+    queryFn: async () => {
+      const { data } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(check!.back_image_path!, 3600);
+      return data?.signedUrl ?? null;
+    },
+  });
+
   if (!check) {
     return (
       <div className="flex items-center justify-center py-12 text-muted-foreground">
@@ -789,6 +802,11 @@ export function ReviewDecisionPanel({
             {frontImageUrl && (
               <Button size="sm" variant="outline" onClick={() => setFrontViewerOpen(true)}>
                 <FileImage className="h-3 w-3 mr-1" /> Front
+              </Button>
+            )}
+            {backImageUrl && (
+              <Button size="sm" variant="outline" onClick={() => setBackViewerOpen(true)}>
+                <FileImage className="h-3 w-3 mr-1" /> Back
               </Button>
             )}
             <Button
@@ -1210,6 +1228,12 @@ export function ReviewDecisionPanel({
       imageUrl={frontImageUrl ?? null}
       title={`Front of Check #${check.check_number || checkId.slice(0, 8)}`}
       onClose={() => setFrontViewerOpen(false)}
+    />
+    <DepositImageViewer
+      open={backViewerOpen}
+      imageUrl={backImageUrl ?? null}
+      title={`Back of Check #${check.check_number || checkId.slice(0, 8)}`}
+      onClose={() => setBackViewerOpen(false)}
     />
     </>
   );
