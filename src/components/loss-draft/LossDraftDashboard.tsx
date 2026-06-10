@@ -155,10 +155,6 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
       <div className="flex gap-2 flex-wrap">
         {[
           { key: "active", label: "Active" },
-          { key: "all", label: "All" },
-          { key: "stale", label: "Stale" },
-          { key: "missing_docs", label: "Missing Docs" },
-          { key: "overdue", label: "Overdue Follow-up" },
         ].map(f => (
           <Button
             key={f.key}
@@ -168,11 +164,6 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
             onClick={() => setFilter(f.key)}
           >
             {f.label}
-            {f.key === "stale" && visibleDrafts.filter(d => d.is_stale).length > 0 && (
-              <Badge variant="destructive" className="ml-1 text-[10px] px-1">
-                {visibleDrafts.filter(d => d.is_stale).length}
-              </Badge>
-            )}
           </Button>
         ))}
       </div>
