@@ -21,8 +21,9 @@ import {
 import {
   Send, CheckCircle2, Clock, AlertTriangle, XCircle,
   Users, Building2, Shield, FileCheck, Ban, RefreshCw,
-  Landmark, PenTool, Eye, ShieldCheck, Loader2, Upload,
+  Landmark, PenTool, Eye, ShieldCheck, Loader2, Upload, FileImage,
 } from "lucide-react";
+import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { format } from "date-fns";
 import { CheckStatusTimeline } from "./CheckStatusTimeline";
 
