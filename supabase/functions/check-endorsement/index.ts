@@ -814,9 +814,10 @@ Deno.serve(async (req) => {
           }
         }
 
-        if (!endorsementId || !method) {
-          return json({ error: `endorsementId (or payeeId) and method required. Got endorsementId=${endorsementId}, payeeId=${payeeId}, method=${method}` }, 400);
+        if (!endorsementId) {
+          return json({ error: `endorsementId (or payeeId) required. Got endorsementId=${endorsementId}, payeeId=${payeeId}` }, 400);
         }
+
 
         const { data: endorsement, error: eErr } = await supabase
           .from("check_endorsements")
@@ -896,9 +897,10 @@ Deno.serve(async (req) => {
         let emailError: string | null = null;
 
 
-        if ((method === "email" || method === "both") && !endorsement.contact_email) {
+        if (!endorsement.contact_email) {
           emailError = "Missing payee email address";
         }
+
 
 
         // Load branding for email customization
@@ -911,11 +913,8 @@ Deno.serve(async (req) => {
           .maybeSingle();
         const emailBranding: EndorsementBranding = brandingRow || {};
 
-        // Track sibling endorsements that share this contact email so we can
-        // mark them all as sent (combined email below).
-        const combinedSentIds: string[] = [];
+        if (endorsement.contact_email) {
 
-        if ((method === "email" || method === "both") && endorsement.contact_email) {
           try {
             // Find sibling unsigned endorsements on the same check sharing this email
             const { data: siblings } = await supabase
