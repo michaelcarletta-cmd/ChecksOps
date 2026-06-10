@@ -1162,6 +1162,30 @@ export function ReviewDecisionPanel({
                 </div>
               )}
 
+              {isAdmin && (
+                <div>
+                  <Label className="text-xs">Override Status (admin)</Label>
+                  <Select
+                    value={depositPath}
+                    onValueChange={(v) => {
+                      setDepositPath(v);
+                      markDirty();
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue placeholder="Select override..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DEPOSIT_PATHS.map((path) => (
+                        <SelectItem key={path.value} value={path.value} className="text-xs">
+                          {path.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               <div>
                 <Label className="text-xs">Reviewer Notes</Label>
                 <Textarea
