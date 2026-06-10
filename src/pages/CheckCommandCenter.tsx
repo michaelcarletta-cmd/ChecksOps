@@ -1700,7 +1700,7 @@ function StatusOverride({
 
   return (
     <div className="space-y-2 rounded-md border border-border/60 p-2 bg-muted/30">
-      <Label className="text-[10px] text-muted-foreground">Manually set check status</Label>
+      <Label className="text-[10px] text-muted-foreground">Override Status (admin)</Label>
       <Select value={newStatus} onValueChange={setNewStatus}>
         <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
         <SelectContent>
