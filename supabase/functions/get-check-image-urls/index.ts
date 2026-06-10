@@ -63,7 +63,8 @@ async function repairLegacyUrlIfNeeded(
   const targetPath = `checks/${checkId}/${side}-legacy-${Date.now()}.${ext}`;
   const response = await fetch(originalValue);
   if (!response.ok) {
-    throw new Error(`Legacy ${side} image could not be fetched`);
+    console.warn(`[get-check-image-urls] Warning: Legacy ${side} image could not be fetched from ${originalValue} (status: ${response.status}). Skipping repair.`);
+    return null;
   }
 
   const contentType = response.headers.get("content-type") ?? `image/${ext === "jpg" ? "jpeg" : ext}`;
