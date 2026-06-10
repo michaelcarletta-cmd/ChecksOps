@@ -208,11 +208,11 @@ const extractInsuredName = (payeeLine: string | null | undefined): string | null
 };
 
 const DEPOSIT_PATHS = [
-  { value: "endorsements_in_progress", label: "Send to Endorsing", icon: Users, color: "text-amber-400" },
-  { value: "loss_draft_required", label: "Loss Draft (Mortgage)", icon: Building2, color: "text-purple-400" },
-  { value: "branch_deposit_required", label: "Branch Deposit Required", icon: Building2, color: "text-blue-400" },
-  { value: "reissue_requested", label: "Request Reissue", icon: RotateCcw, color: "text-orange-400" },
-  { value: "hold_for_claim_review", label: "Hold for Claim Review", icon: AlertTriangle, color: "text-amber-400" },
+  { value: "endorsements_in_progress", label: "Endorsing", icon: Users, color: "text-amber-400" },
+  { value: "loss_draft_required", label: "Loss Draft", icon: Building2, color: "text-purple-400" },
+  { value: "branch_deposit_required", label: "Review", icon: Building2, color: "text-blue-400" },
+  { value: "reissue_requested", label: "Reissue", icon: RotateCcw, color: "text-orange-400" },
+  { value: "voided", label: "Void", icon: AlertTriangle, color: "text-red-400" },
 ];
 
 const PAYEE_TYPES = ["insured", "mortgage_company", "contractor", "public_adjuster", "other"];
@@ -1081,7 +1081,7 @@ export function ReviewDecisionPanel({
                   >
                     <Building2 className="h-5 w-5 mx-auto mb-1 text-purple-400" />
                     <p className="text-[11px] font-medium leading-tight">
-                      Send to Loss Draft
+                      Loss Draft
                     </p>
                   </Card>
                 </div>
