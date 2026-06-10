@@ -141,6 +141,24 @@ export function useLossDraftAudit(lossDraftId: string) {
   });
 }
 
+export function useRelatedLossDrafts(lossDraftId: string) {
+  const { data: current } = useLossDraftDetail(lossDraftId);
+  return useQuery({
+    queryKey: ["related-loss-drafts", lossDraftId],
+    queryFn: async () => {
+      if (!current) return [];
+      const { data, error } = await supabase
+        .from("loss_draft_tracking")
+        .select("id, mortgage_servicer")
+        .or(`check_intake_item_id.eq.${current.check_intake_item_id},claim_id.eq.${current.claim_id}`)
+        .neq("id", lossDraftId);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!current,
+  });
+}
+
 /**
  * Returns a function that invalidates every cached query tied to this loss draft —
  * detail, releases, docs, and audit. Use after any mutating action.
