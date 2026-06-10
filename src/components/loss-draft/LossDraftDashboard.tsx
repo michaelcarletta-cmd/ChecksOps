@@ -133,6 +133,9 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Badge variant="outline" className="h-7 px-3 text-[10px] font-medium border-amber-400/30 text-amber-400 bg-amber-400/5">
+            Active Files
+          </Badge>
           <NewLossDraftDialog onCreated={() => qc.invalidateQueries({ queryKey: ["loss-draft-dashboard"] })} />
           <Button size="sm" variant="ghost" onClick={() => qc.invalidateQueries({ queryKey: ["loss-draft-dashboard"] })}>
             <RefreshCw className="h-4 w-4" />
@@ -141,23 +144,6 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
       </div>
 
       <LossDraftDashboardCards />
-
-      {/* Filter chips */}
-      <div className="flex gap-2 flex-wrap">
-        {[
-          { key: "active", label: "Active" },
-        ].map(f => (
-          <Button
-            key={f.key}
-            size="sm"
-            variant={filter === f.key ? "default" : "outline"}
-            className="text-xs h-7"
-            onClick={() => setFilter(f.key)}
-          >
-            {f.label}
-          </Button>
-        ))}
-      </div>
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]">
         {/* Table */}
