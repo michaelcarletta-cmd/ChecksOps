@@ -1693,7 +1693,7 @@ function StatusOverride({
   if (!editing) {
     return (
       <Button variant="outline" size="sm" className="w-full text-xs h-7" onClick={() => { setNewStatus(currentStatus); setEditing(true); }}>
-        <Pencil className="h-3 w-3 mr-1" /> Override Status (Admin)
+        <Pencil className="h-3 w-3 mr-1" /> Override Status (admin)
       </Button>
     );
   }
