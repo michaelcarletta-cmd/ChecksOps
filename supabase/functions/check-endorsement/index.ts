@@ -931,7 +931,7 @@ Deno.serve(async (req) => {
               token: s.token || crypto.randomUUID(),
             }));
 
-            if (refreshedSiblings.length > 0) {
+            if (refreshedSiblings && refreshedSiblings.length > 0) {
               for (const sibling of refreshedSiblings) {
                 await supabase.from("check_endorsements").update({
                   token: sibling.token,
