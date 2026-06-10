@@ -895,6 +895,7 @@ Deno.serve(async (req) => {
 
         let emailSent = false;
         let emailError: string | null = null;
+        const combinedSentIds: string[] = [];
 
 
         if (!endorsement.contact_email) {
