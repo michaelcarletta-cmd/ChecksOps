@@ -1237,7 +1237,7 @@ function PayeeReconciliation({
   const [mergedName, setMergedName] = useState("");
   const [addingPayee, setAddingPayee] = useState(false);
   const [newPayeeName, setNewPayeeName] = useState("");
-  const [newPayeeType, setNewPayeeType] = useState("insured");
+  const [newPayeeType, setNewPayeeType] = useState("insured"); // Phone/SMS removed from endorsements
 
   const updatePayee = useMutation({
     mutationFn: async ({ payeeId, name, type }: { payeeId: string; name: string; type: string }) => {
