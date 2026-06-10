@@ -242,6 +242,7 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
               qc.invalidateQueries({ queryKey: ["loss-draft-dashboard"] });
               qc.invalidateQueries({ queryKey: ["loss-draft-counts"] });
             }}
+            onSelectId={setSelectedId}
           />
         ) : (
           <Card className="flex items-center justify-center h-[calc(100vh-16rem)] min-h-[22rem] max-h-[42rem]">
