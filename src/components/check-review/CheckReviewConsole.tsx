@@ -1081,7 +1081,7 @@ export function ReviewDecisionPanel({
                   >
                     <Building2 className="h-5 w-5 mx-auto mb-1 text-purple-400" />
                     <p className="text-[11px] font-medium leading-tight">
-                      Send to Loss Draft
+                      Loss Draft
                     </p>
                   </Card>
                 </div>
