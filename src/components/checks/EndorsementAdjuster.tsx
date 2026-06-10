@@ -289,6 +289,23 @@ export function EndorsementAdjuster({
   const lineGapPx = lineGap * displayScale;
   const sigHeightPx = signatureHeight * displayScale;
 
+  // Replicate the server's overflow nudge/clamp so the preview shows the
+  // position that will actually be rendered onto the check, not just the
+  // raw requested position.
+  const blockHeightPx = previewLayout.estimatedHeight * displayScale;
+  let blockCenterYPx = safeZoneTopPx + override.yPct * safeZoneHeightPx;
+  let blockTopPx = blockCenterYPx - blockHeightPx / 2;
+  let blockBottomPx = blockTopPx + blockHeightPx;
+
+  if (blockBottomPx > safeZoneBottomPx) {
+    blockCenterYPx -= (blockBottomPx - safeZoneBottomPx);
+  }
+  blockCenterYPx = Math.max(
+    safeZoneTopPx + blockHeightPx / 2,
+    Math.min(safeZoneBottomPx - blockHeightPx / 2, blockCenterYPx),
+  );
+  const wasNudged = Math.abs(blockCenterYPx - (safeZoneTopPx + override.yPct * safeZoneHeightPx)) > 0.5;
+
   if (!canGenerate && !endorsementsLoading) {
     return (
       <div className="flex items-center gap-2 p-4 rounded-lg bg-destructive/10 text-destructive font-medium">
@@ -360,6 +377,11 @@ export function EndorsementAdjuster({
         {/* Debug overlay */}
         <div className="absolute left-2 top-2 z-30 rounded bg-black/70 px-2 py-1 text-[10px] text-white pointer-events-none">
           xPct: {override.xPct.toFixed(3)} | yPct: {override.yPct.toFixed(3)} | rot: {override.rotationDeg} | scale: {override.scale?.toFixed(2)}
+          {wasNudged && (
+            <span className="ml-2 text-amber-300">
+              ⚠ position auto-adjusted to fit zone
+            </span>
+          )}
         </div>
 
         {/* draggable overlay – center-origin positioning, zone-relative Y */}
@@ -368,7 +390,7 @@ export function EndorsementAdjuster({
           className="absolute select-none"
           style={{
             left: override.xPct * containerWidthPx,
-            top: safeZoneTopPx + (override.yPct * safeZoneHeightPx),
+            top: blockCenterYPx,
             width: containerWidthPx * ENDORSEMENT_WIDTH_PCT,
             transform: `translate(-50%, -50%) rotate(${override.rotationDeg || 0}deg)`,
             transformOrigin: "center center",
