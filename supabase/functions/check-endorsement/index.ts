@@ -1019,6 +1019,10 @@ Deno.serve(async (req) => {
           }).in("id", combinedSentIds);
 
           for (const sid of combinedSentIds) {
+            // Find the specific endorsement to get the correct payee name for the audit log
+            const siblingEndorsement = refreshedSiblings?.find((s: any) => s.id === sid);
+            const siblingName = siblingEndorsement?.payee_name || "Payee";
+
             await supabase.from("endorsement_requests").insert({
               endorsement_id: sid,
               check_id: endorsement.check_id,
@@ -1029,20 +1033,31 @@ Deno.serve(async (req) => {
               email_address: endorsement.contact_email,
               phone_number: null,
             });
+
+            await supabase.from("endorsement_audit_log").insert({
+              endorsement_id: sid,
+              check_id: endorsement.check_id,
+              event_type: "request_sent",
+              event_description: `Endorsement request sent to ${siblingName} via combined email`,
+              event_data: { method: "email", emailSent: true, combined: true },
+              actor_id: ud.user.id,
+            });
           }
         }
 
-        // Log the request
-        await supabase.from("endorsement_requests").insert({
-          endorsement_id: endorsementId,
-          check_id: endorsement.check_id,
-          method: "email",
-          sent_by: ud.user.id,
-          delivery_status: anyDelivered ? "delivered" : "failed",
-          delivery_error: !anyDelivered ? emailError : null,
-          email_address: endorsement.contact_email,
-          phone_number: null,
-        });
+        // Log the request for the primary endorsement (only if not already covered in combinedSentIds to avoid duplicates)
+        if (!combinedSentIds.includes(endorsementId)) {
+          await supabase.from("endorsement_requests").insert({
+            endorsement_id: endorsementId,
+            check_id: endorsement.check_id,
+            method: "email",
+            sent_by: ud.user.id,
+            delivery_status: anyDelivered ? "delivered" : "failed",
+            delivery_error: !anyDelivered ? emailError : null,
+            email_address: endorsement.contact_email,
+            phone_number: null,
+          });
+        }
 
 
         // Also update legacy check_payees for backward compatibility
@@ -1056,18 +1071,19 @@ Deno.serve(async (req) => {
           }).eq("id", endorsement.payee_id);
         }
 
-        // Audit
-        await supabase.from("endorsement_audit_log").insert({
-          endorsement_id: endorsementId,
-          check_id: endorsement.check_id,
-          event_type: anyDelivered ? "request_sent" : "request_failed",
-          event_description: anyDelivered
-            ? `Endorsement request sent to ${endorsement.payee_name} via email`
-            : `Delivery failed: ${emailError}`,
-          event_data: { method: "email", emailSent, emailError },
-
-          actor_id: ud.user.id,
-        });
+        // Audit log for the primary endorsement (only if not already covered in combinedSentIds)
+        if (!combinedSentIds.includes(endorsementId)) {
+          await supabase.from("endorsement_audit_log").insert({
+            endorsement_id: endorsementId,
+            check_id: endorsement.check_id,
+            event_type: anyDelivered ? "request_sent" : "request_failed",
+            event_description: anyDelivered
+              ? `Endorsement request sent to ${endorsement.payee_name} via email`
+              : `Delivery failed: ${emailError}`,
+            event_data: { method: "email", emailSent, emailError },
+            actor_id: ud.user.id,
+          });
+        }
 
         await supabase.from("check_audit_log").insert({
           check_id: endorsement.check_id,
