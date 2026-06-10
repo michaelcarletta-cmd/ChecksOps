@@ -52,12 +52,11 @@ type CheckRow = {
 };
 
 const ROUTE_OPTIONS: Array<{ value: string; label: string; hint: string }> = [
-  { value: "needs_review", label: "Needs Review", hint: "Send back for staff review" },
-  { value: "manual_review_required", label: "Manual Review Required", hint: "Awaiting manual decision" },
-  { value: "endorsements_in_progress", label: "Endorsements In Progress", hint: "Awaiting signatures" },
-  { value: "loss_draft_required", label: "Loss Draft Required", hint: "Mortgage on check" },
-  { value: "approved_for_deposit", label: "Approved for Deposit", hint: "Ready to deposit" },
-  { value: "voided", label: "Voided", hint: "Cancel this check" },
+  { value: "needs_review", label: "Review", hint: "Send back for staff review" },
+  { value: "endorsements_in_progress", label: "Endorsing", hint: "Awaiting signatures" },
+  { value: "loss_draft_required", label: "Loss Draft", hint: "Mortgage on check" },
+  { value: "reissue_requested", label: "Reissue", hint: "Request reissue" },
+  { value: "voided", label: "Void", hint: "Cancel this check" },
 ];
 
 type DepositLink = {
