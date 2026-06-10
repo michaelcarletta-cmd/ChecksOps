@@ -1188,8 +1188,11 @@ export function ReviewDecisionPanel({
                 </div>
               )}
 
-              <div>
-                <Label className="text-xs">Reviewer Notes</Label>
+              <div className="pt-2">
+                <Label className="text-xs font-semibold flex items-center gap-1.5 mb-1.5">
+                  <ShieldAlert className="h-3.5 w-3.5 text-amber-500" />
+                  Reviewer Notes
+                </Label>
                 <Textarea
                   value={notes}
                   onChange={(e) => {
