@@ -465,7 +465,7 @@ function EndorsementCard({
           .update({ signature_cc_email: ccEmail } as any)
           .eq("id", claimId);
       }
-      toast({ title: `Endorsement request ${isResend ? "resent" : "sent"} via ${method}` });
+      toast({ title: `Endorsement request ${isResend ? "resent" : "sent"} via email` });
       onRefresh();
 
     } catch (e: unknown) {
