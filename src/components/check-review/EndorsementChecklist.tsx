@@ -237,7 +237,46 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
   });
 
 
+  const { data: checkData } = useQuery({
+    queryKey: ["endorsement-checklist-check-images", checkId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("check_intake_items")
+        .select("front_image_path, back_image_path, check_number")
+        .eq("id", checkId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: frontImageUrl } = useQuery({
+    queryKey: ["endorsement-check-front-img", checkData?.front_image_path],
+    enabled: !!checkData?.front_image_path,
+    queryFn: async () => {
+      const { data } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(checkData!.front_image_path!, 3600);
+      return data?.signedUrl ?? null;
+    },
+  });
+
+  const { data: backImageUrl } = useQuery({
+    queryKey: ["endorsement-check-back-img", checkData?.back_image_path],
+    enabled: !!checkData?.back_image_path,
+    queryFn: async () => {
+      const { data } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(checkData!.back_image_path!, 3600);
+      return data?.signedUrl ?? null;
+    },
+  });
+
+  const [frontViewerOpen, setFrontViewerOpen] = useState(false);
+  const [backViewerOpen, setBackViewerOpen] = useState(false);
+
   const [forceCompleting, setForceCompleting] = useState(false);
+
 
   const allComplete = endorsements.length > 0 && endorsements.every(
     (e) => e.status === "signed" || e.status === "waived" ||
@@ -345,7 +384,32 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
             <Clock className="h-3 w-3 mr-1" />{pendingCount} Pending
           </Badge>
         )}
+        <div className="flex items-center gap-1">
+          {frontImageUrl && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-[10px]"
+              onClick={() => setFrontViewerOpen(true)}
+              title="View Front"
+            >
+              <FileImage className="h-3 w-3 mr-1" /> Front
+            </Button>
+          )}
+          {backImageUrl && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-[10px]"
+              onClick={() => setBackViewerOpen(true)}
+              title="View Back"
+            >
+              <FileImage className="h-3 w-3 mr-1" /> Back
+            </Button>
+          )}
+        </div>
       </div>
+
 
       {!allComplete && !readOnly && !partnerMode && (
         <div className="px-1 space-y-2">
@@ -402,8 +466,22 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
       ))}
 
     </div>
+
+    <DepositImageViewer
+      open={frontViewerOpen}
+      imageUrl={frontImageUrl ?? null}
+      title={`Front of Check #${checkData?.check_number || checkId.slice(0, 8)}`}
+      onClose={() => setFrontViewerOpen(false)}
+    />
+    <DepositImageViewer
+      open={backViewerOpen}
+      imageUrl={backImageUrl ?? null}
+      title={`Back of Check #${checkData?.check_number || checkId.slice(0, 8)}`}
+      onClose={() => setBackViewerOpen(false)}
+    />
   );
 }
+
 
 function EndorsementCard({
   endorsement,
