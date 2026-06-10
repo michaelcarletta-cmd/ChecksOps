@@ -893,17 +893,13 @@ Deno.serve(async (req) => {
         const amount = endorsement.check_intake_items?.amount ?? null;
 
         let emailSent = false;
-        let smsSent = false;
         let emailError: string | null = null;
-        let smsError: string | null = null;
+
 
         if ((method === "email" || method === "both") && !endorsement.contact_email) {
           emailError = "Missing payee email address";
         }
 
-        if ((method === "sms" || method === "both") && !endorsement.contact_phone) {
-          smsError = "Missing payee phone number";
-        }
 
         // Load branding for email customization
         const tenantId = (endorsement as any).check_intake_items?.tenant_id;
@@ -1001,31 +997,18 @@ Deno.serve(async (req) => {
           }
         }
 
-        if ((method === "sms" || method === "both") && endorsement.contact_phone) {
-          try {
-            const { error: invokeErr } = await supabase.functions.invoke("send-sms", {
-              body: {
-                to: endorsement.contact_phone,
-                message: `Endorsement needed for check #${checkNum} ($${amount ?? "N/A"}) from ${carrier}. Review & sign: ${endorsementUrl}`,
-              },
-            });
-            if (invokeErr) throw invokeErr;
-            smsSent = true;
-          } catch (e) {
-            smsError = e instanceof Error ? e.message : String(e);
-          }
-        }
 
-        const anyDelivered = emailSent || smsSent;
+        const anyDelivered = emailSent;
 
         // Update endorsement record
         await supabase.from("check_endorsements").update({
           status: anyDelivered ? "sent" : endorsement.status,
           request_sent_at: anyDelivered ? new Date().toISOString() : endorsement.request_sent_at,
-          last_reminder_at: endorsement.request_sent_at ? new Date().toISOString() : null,
-          reminder_count: endorsement.request_sent_at ? endorsement.reminder_count + 1 : 0,
+          last_reminder_at: anyDelivered ? new Date().toISOString() : endorsement.last_reminder_at,
+          reminder_count: anyDelivered ? (endorsement.reminder_count || 0) + 1 : (endorsement.reminder_count || 0),
           updated_at: new Date().toISOString(),
         }).eq("id", endorsementId);
+
 
         // Mark sibling endorsements covered by the combined email as sent too
         if (anyDelivered && combinedSentIds.length > 0) {
@@ -1053,13 +1036,14 @@ Deno.serve(async (req) => {
         await supabase.from("endorsement_requests").insert({
           endorsement_id: endorsementId,
           check_id: endorsement.check_id,
-          method,
+          method: "email",
           sent_by: ud.user.id,
           delivery_status: anyDelivered ? "delivered" : "failed",
-          delivery_error: !anyDelivered ? [emailError, smsError].filter(Boolean).join("; ") : null,
+          delivery_error: !anyDelivered ? emailError : null,
           email_address: endorsement.contact_email,
-          phone_number: endorsement.contact_phone,
+          phone_number: null,
         });
+
 
         // Also update legacy check_payees for backward compatibility
         if (endorsement.payee_id) {
@@ -1078,9 +1062,10 @@ Deno.serve(async (req) => {
           check_id: endorsement.check_id,
           event_type: anyDelivered ? "request_sent" : "request_failed",
           event_description: anyDelivered
-            ? `Endorsement request sent to ${endorsement.payee_name} via ${method}`
-            : `Delivery failed: ${[emailError, smsError].filter(Boolean).join("; ")}`,
-          event_data: { method, emailSent, smsSent, emailError, smsError },
+            ? `Endorsement request sent to ${endorsement.payee_name} via email`
+            : `Delivery failed: ${emailError}`,
+          event_data: { method: "email", emailSent, emailError },
+
           actor_id: ud.user.id,
         });
 
@@ -1088,9 +1073,10 @@ Deno.serve(async (req) => {
           check_id: endorsement.check_id,
           event_type: anyDelivered ? "endorsement_request_sent" : "endorsement_request_failed",
           event_description: anyDelivered
-            ? `Endorsement request sent to ${endorsement.payee_name} via ${method}`
+            ? `Endorsement request sent to ${endorsement.payee_name} via email`
             : `Endorsement delivery failed`,
-          event_data: { endorsement_id: endorsementId, method },
+          event_data: { endorsement_id: endorsementId, method: "email" },
+
           actor_id: ud.user.id,
         });
 
@@ -1101,10 +1087,11 @@ Deno.serve(async (req) => {
         }
 
         if (!anyDelivered) {
-          return json({ success: false, error: "All delivery methods failed", details: { emailError, smsError } }, 502);
+          return json({ success: false, error: "Email delivery failed", details: { emailError } }, 502);
         }
 
-        return json({ success: true, endorsementUrl, emailSent, smsSent });
+        return json({ success: true, endorsementUrl, emailSent });
+
       }
 
       /* ------------------------------------------------------------ */
