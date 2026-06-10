@@ -1165,8 +1165,11 @@ export function ReviewDecisionPanel({
               )}
 
               {isAdmin && (
-                <div>
-                  <Label className="text-xs">Override Status (admin)</Label>
+                <div className="rounded-md border-2 border-amber-500/60 bg-amber-500/5 p-3 space-y-2">
+                  <Label className="text-sm font-semibold flex items-center gap-1.5">
+                    <ShieldAlert className="h-4 w-4 text-amber-500" />
+                    Override Status (admin)
+                  </Label>
                   <Select
                     value={depositPath}
                     onValueChange={(v) => {
@@ -1174,17 +1177,20 @@ export function ReviewDecisionPanel({
                       markDirty();
                     }}
                   >
-                    <SelectTrigger className="h-8 text-sm">
+                    <SelectTrigger className="h-9 text-sm bg-background">
                       <SelectValue placeholder="Select override..." />
                     </SelectTrigger>
                     <SelectContent>
                       {DEPOSIT_PATHS.map((path) => (
-                        <SelectItem key={path.value} value={path.value} className="text-xs">
+                        <SelectItem key={path.value} value={path.value} className="text-sm">
                           {path.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-[10px] text-muted-foreground">
+                    Directly override the workflow status. This bypasses normal logic.
+                  </p>
                 </div>
               )}
 
