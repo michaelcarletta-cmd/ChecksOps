@@ -128,7 +128,7 @@ interface CheckPayee {
   payee_type: string;
   endorsement_status: string;
   contact_email: string | null;
-  contact_phone: string | null;
+  contact_phone: string | null; // SMS removed from endorsements
   notification_sent_via: string | null;
   notification_sent_at: string | null;
   endorsed_at: string | null;
@@ -345,7 +345,7 @@ const payeeTypeIcons: Record<string, typeof Users> = {
   mortgage_company: Building2,
   contractor: Shield,
   public_adjuster: FileCheck,
-  unknown: AlertTriangle,
+  other: AlertTriangle,
 };
 
 const endorsementColors: Record<string, string> = {
