@@ -1594,19 +1594,11 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 /* ------------------------------------------------------------------ */
 
 const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "uploaded", label: "Uploaded" },
-  { value: "processing", label: "Processing" },
-  { value: "ocr_complete", label: "OCR Complete" },
-  { value: "needs_review", label: "Needs Review" },
-  { value: "manual_review_required", label: "Manual Review Required" },
-  { value: "endorsements_in_progress", label: "Endorsements In Progress" },
-  { value: "endorsements_complete", label: "Endorsements Complete" },
-  { value: "approved_for_deposit", label: "Approved for Deposit" },
-  { value: "branch_deposit_required", label: "Branch Deposit Required" },
-  { value: "loss_draft_required", label: "Loss Draft Required" },
-  { value: "reissue_requested", label: "Reissue Requested" },
-  { value: "deposited", label: "Deposited" },
-  { value: "voided", label: "Voided" },
+  { value: "needs_review", label: "Review" },
+  { value: "endorsements_in_progress", label: "Endorsing" },
+  { value: "loss_draft_required", label: "Loss Draft" },
+  { value: "reissue_requested", label: "Reissue" },
+  { value: "voided", label: "Void" },
 ];
 
 function StatusOverride({
@@ -1701,7 +1693,7 @@ function StatusOverride({
   if (!editing) {
     return (
       <Button variant="outline" size="sm" className="w-full text-xs h-7" onClick={() => { setNewStatus(currentStatus); setEditing(true); }}>
-        <Pencil className="h-3 w-3 mr-1" /> Override Status (Admin)
+        <Pencil className="h-3 w-3 mr-1" /> Override Status (admin)
       </Button>
     );
   }
