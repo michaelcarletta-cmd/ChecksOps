@@ -12515,6 +12515,55 @@ export type Database = {
           },
         ]
       }
+      endorsement_automated_reminders: {
+        Row: {
+          endorsement_id: string
+          id: string
+          recipient_email: string
+          reminder_number: number
+          sent_at: string | null
+          tenant_id: string | null
+        }
+        Insert: {
+          endorsement_id: string
+          id?: string
+          recipient_email: string
+          reminder_number: number
+          sent_at?: string | null
+          tenant_id?: string | null
+        }
+        Update: {
+          endorsement_id?: string
+          id?: string
+          recipient_email?: string
+          reminder_number?: number
+          sent_at?: string | null
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "endorsement_automated_reminders_endorsement_id_fkey"
+            columns: ["endorsement_id"]
+            isOneToOne: false
+            referencedRelation: "check_endorsements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "endorsement_automated_reminders_endorsement_id_fkey"
+            columns: ["endorsement_id"]
+            isOneToOne: false
+            referencedRelation: "stale_endorsements"
+            referencedColumns: ["endorsement_id"]
+          },
+          {
+            foreignKeyName: "endorsement_automated_reminders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       endorsement_requests: {
         Row: {
           check_id: string
@@ -19766,6 +19815,7 @@ export type Database = {
         }
         Returns: Json
       }
+      process_endorsement_reminders: { Args: never; Returns: Json }
       read_email_batch: {
         Args: { batch_size: number; queue_name: string; vt: number }
         Returns: {
