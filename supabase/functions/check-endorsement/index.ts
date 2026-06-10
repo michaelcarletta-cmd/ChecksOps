@@ -1322,13 +1322,11 @@ Deno.serve(async (req) => {
           if (endorsement.contact_email) {
             sharedFilters.push(`contact_email.eq.${endorsement.contact_email}`);
           }
-          if (endorsement.contact_phone) {
-            sharedFilters.push(`contact_phone.eq.${endorsement.contact_phone}`);
-          }
+
           if (sharedFilters.length > 0) {
             const { data: nextEndorsements } = await supabase
               .from("check_endorsements")
-              .select("token, payee_name, status, contact_email, contact_phone")
+              .select("token, payee_name, status, contact_email")
               .eq("check_id", endorsement.check_id)
               .neq("id", endorsement.id)
               .in("status", ["pending", "sent"])
