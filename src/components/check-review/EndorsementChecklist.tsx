@@ -438,18 +438,18 @@ function EndorsementCard({
   const isResend = endorsement.request_sent_at != null;
 
 
-  const sendRequest = async (method: "email" | "sms") => {
+  const sendRequest = async () => {
     setSending(true);
     try {
       const { data: session } = await supabase.auth.getSession();
       if (!session.session?.access_token) throw new Error("Not authenticated");
 
-      const ccEmail = includeCc && method === "email" ? ccContractor.trim() : "";
+      const ccEmail = includeCc ? ccContractor.trim() : "";
       const { error } = await supabase.functions.invoke("check-endorsement", {
         body: {
           action: "send_endorsement_request",
           endorsementId: endorsement.id,
-          method,
+          method: "email",
           email: email || undefined,
           phone: phone || undefined,
           cc: ccEmail ? [ccEmail] : undefined,
@@ -465,6 +465,7 @@ function EndorsementCard({
           .update({ signature_cc_email: ccEmail } as any)
           .eq("id", claimId);
       }
+
       toast({ title: `Endorsement request ${isResend ? "resent" : "sent"} via email` });
       onRefresh();
 
@@ -698,24 +699,15 @@ function EndorsementCard({
             <Button
               size="sm"
               variant="outline"
-              className="flex-1 text-xs h-7"
+              className="w-full text-xs h-7"
               disabled={sending || !email}
-              onClick={() => sendRequest("email")}
+              onClick={() => sendRequest()}
             >
               {sending ? <RefreshCw className="h-3 w-3 mr-1 animate-spin" /> : <Send className="h-3 w-3 mr-1" />}
-              {isResend ? "Resend" : "Email"}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="flex-1 text-xs h-7"
-              disabled={sending || !phone}
-              onClick={() => sendRequest("sms")}
-            >
-              {sending ? <RefreshCw className="h-3 w-3 mr-1 animate-spin" /> : <Send className="h-3 w-3 mr-1" />}
-              SMS
+              {isResend ? "Resend Endorsement Request" : "Send Endorsement Request"}
             </Button>
           </div>
+
         </div>
       )}
 
