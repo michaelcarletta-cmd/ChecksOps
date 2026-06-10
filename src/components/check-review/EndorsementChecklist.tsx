@@ -365,7 +365,9 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
   }
 
   return (
+    <>
     <div className="space-y-3">
+
       {/* Workflow timeline + 24h stale alert */}
       <CheckStatusTimeline checkId={checkId} />
 
@@ -479,8 +481,10 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
       title={`Back of Check #${checkData?.check_number || checkId.slice(0, 8)}`}
       onClose={() => setBackViewerOpen(false)}
     />
+    </>
   );
 }
+
 
 
 function EndorsementCard({
