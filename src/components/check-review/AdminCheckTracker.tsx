@@ -52,11 +52,11 @@ type CheckRow = {
 };
 
 const ROUTE_OPTIONS: Array<{ value: string; label: string; hint: string }> = [
-  { value: "needs_review", label: "Review", hint: "Send back for staff review" },
-  { value: "endorsements_in_progress", label: "Endorsing", hint: "Awaiting signatures" },
-  { value: "loss_draft_required", label: "Loss Draft", hint: "Mortgage on check" },
-  { value: "reissue_requested", label: "Reissue", hint: "Request reissue" },
-  { value: "voided", label: "Void", hint: "Cancel this check" },
+  { value: "needs_review", label: "Review", hint: "Top box: Review" },
+  { value: "endorsements_in_progress", label: "Endorsing", hint: "Top box: Endorsing" },
+  { value: "loss_draft_required", label: "Loss Draft", hint: "Top box: Loss Draft" },
+  { value: "reissue_requested", label: "Reissue", hint: "Top box: Reissue" },
+  { value: "voided", label: "Void", hint: "Top box: Void" },
 ];
 
 type DepositLink = {
@@ -675,7 +675,7 @@ function RouteSelect({ onRoute, routing }: { onRoute: (s: string) => void; routi
     >
       <SelectTrigger className="h-8 w-[180px] text-xs">
         <ArrowRightCircle className="h-3 w-3 mr-1" />
-        <SelectValue placeholder={routing ? "Routing…" : "Route to…"} />
+        <SelectValue placeholder={routing ? "Routing…" : "Override Status (admin)"} />
       </SelectTrigger>
       <SelectContent>
         {ROUTE_OPTIONS.map((o) => (

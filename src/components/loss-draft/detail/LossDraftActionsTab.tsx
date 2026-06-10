@@ -382,7 +382,7 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
                     Change the escrow status and monitoring type. This overrides normal workflow.
                   </p>
                   <div>
-                    <Label className="text-xs">Target Status</Label>
+                    <Label className="text-xs">Override Status (admin)</Label>
                     <select
                       className="w-full h-8 rounded-md border border-input bg-background px-3 text-xs"
                       value={adminTargetStatus}

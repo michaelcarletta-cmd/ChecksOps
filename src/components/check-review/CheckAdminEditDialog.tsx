@@ -450,7 +450,7 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs">Workflow Status</Label>
+              <Label className="text-xs">Override Status (admin)</Label>
               <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
