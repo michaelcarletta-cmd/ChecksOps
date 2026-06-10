@@ -58,6 +58,7 @@ export function LossDraftDetailPanel({
   const { data: releases = [] } = useLossDraftReleases(lossDraftId);
   const { data: docs = [] } = useLossDraftDocs(lossDraftId);
   const { data: audit = [] } = useLossDraftAudit(lossDraftId);
+  const { data: related = [] } = useRelatedLossDrafts(lossDraftId);
   const invalidateAll = useInvalidateLossDraft(lossDraftId);
 
   const [editingLender, setEditingLender] = useState(false);
