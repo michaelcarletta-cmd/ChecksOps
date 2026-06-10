@@ -106,16 +106,7 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
     isVisibleInLossDraft(d) && d.escrow_status !== "final_release_complete";
   const visibleDrafts = drafts.filter(isVisibleInLossDraft);
 
-  const baseFiltered =
-    filter === "active"
-      ? visibleDrafts.filter(isActiveLossDraft)
-      : filter === "stale"
-      ? visibleDrafts.filter(d => d.is_stale)
-      : filter === "missing_docs"
-      ? visibleDrafts.filter(d => d.missing_docs_count > 0)
-      : filter === "overdue"
-      ? visibleDrafts.filter(d => d.follow_up_date && new Date(d.follow_up_date) < new Date())
-      : visibleDrafts;
+  const baseFiltered = visibleDrafts.filter(isActiveLossDraft);
 
   const q = (searchQuery ?? "").trim().toLowerCase();
   const filtered = q
@@ -142,6 +133,9 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Badge variant="outline" className="h-7 px-3 text-[10px] font-medium border-amber-400/30 text-amber-400 bg-amber-400/5">
+            Active Files
+          </Badge>
           <NewLossDraftDialog onCreated={() => qc.invalidateQueries({ queryKey: ["loss-draft-dashboard"] })} />
           <Button size="sm" variant="ghost" onClick={() => qc.invalidateQueries({ queryKey: ["loss-draft-dashboard"] })}>
             <RefreshCw className="h-4 w-4" />
@@ -150,32 +144,6 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
       </div>
 
       <LossDraftDashboardCards />
-
-      {/* Filter chips */}
-      <div className="flex gap-2 flex-wrap">
-        {[
-          { key: "active", label: "Active" },
-          { key: "all", label: "All" },
-          { key: "stale", label: "Stale" },
-          { key: "missing_docs", label: "Missing Docs" },
-          { key: "overdue", label: "Overdue Follow-up" },
-        ].map(f => (
-          <Button
-            key={f.key}
-            size="sm"
-            variant={filter === f.key ? "default" : "outline"}
-            className="text-xs h-7"
-            onClick={() => setFilter(f.key)}
-          >
-            {f.label}
-            {f.key === "stale" && visibleDrafts.filter(d => d.is_stale).length > 0 && (
-              <Badge variant="destructive" className="ml-1 text-[10px] px-1">
-                {visibleDrafts.filter(d => d.is_stale).length}
-              </Badge>
-            )}
-          </Button>
-        ))}
-      </div>
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]">
         {/* Table */}
@@ -260,6 +228,7 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
               qc.invalidateQueries({ queryKey: ["loss-draft-dashboard"] });
               qc.invalidateQueries({ queryKey: ["loss-draft-counts"] });
             }}
+            onSelectId={setSelectedId}
           />
         ) : (
           <Card className="flex items-center justify-center h-[calc(100vh-16rem)] min-h-[22rem] max-h-[42rem]">

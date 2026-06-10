@@ -17,6 +17,7 @@ import {
   useLossDraftDocs,
   useLossDraftReleases,
   useInvalidateLossDraft,
+  useRelatedLossDrafts,
 } from "@/hooks/queries/useLossDraft";
 import { LossDraftActionsTab } from "./detail/LossDraftActionsTab";
 import { LossDraftDocsTab } from "./detail/LossDraftDocsTab";
@@ -45,9 +46,11 @@ const isUnknownServicer = (value?: string | null) =>
 export function LossDraftDetailPanel({
   lossDraftId,
   onUpdate,
+  onSelectId,
 }: {
   lossDraftId: string;
   onUpdate: () => void;
+  onSelectId?: (id: string) => void;
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -55,6 +58,7 @@ export function LossDraftDetailPanel({
   const { data: releases = [] } = useLossDraftReleases(lossDraftId);
   const { data: docs = [] } = useLossDraftDocs(lossDraftId);
   const { data: audit = [] } = useLossDraftAudit(lossDraftId);
+  const { data: related = [] } = useRelatedLossDrafts(lossDraftId);
   const invalidateAll = useInvalidateLossDraft(lossDraftId);
 
   const [editingLender, setEditingLender] = useState(false);
@@ -223,6 +227,31 @@ export function LossDraftDetailPanel({
           </div>
         )}
       </CardHeader>
+      
+      {related.length > 0 && (
+        <div className="px-4 pb-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <Button
+            size="sm"
+            variant="default"
+            className="h-7 text-[10px] shrink-0"
+            disabled
+          >
+            {draft.mortgage_servicer}
+          </Button>
+          {related.map(r => (
+            <Button
+              key={r.id}
+              size="sm"
+              variant="outline"
+              className="h-7 text-[10px] shrink-0"
+              onClick={() => onSelectId?.(r.id)}
+            >
+              {r.mortgage_servicer}
+            </Button>
+          ))}
+        </div>
+      )}
+      
       <Separator />
 
       {draft.escrow_status === "final_release_complete" && (

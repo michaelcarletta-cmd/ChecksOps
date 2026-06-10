@@ -25,8 +25,6 @@ export function LossDraftDashboardCards() {
     { label: "Awaiting Docs",      value: counts?.checks_awaiting_docs ?? 0,      icon: FileWarning,   color: "text-orange-400" },
     { label: "Ready for Release",  value: counts?.checks_ready_for_release ?? 0,  icon: CheckCircle2,  color: "text-emerald-400" },
     { label: "Draw Requested",     value: counts?.draw_requested ?? 0,            icon: ArrowRightLeft, color: "text-blue-400" },
-    { label: "Stale Files",        value: counts?.stale_count ?? 0,               icon: AlertTriangle, color: "text-red-400" },
-    { label: "Overdue Follow-up",  value: counts?.overdue_followup ?? 0,          icon: Clock,         color: "text-orange-400" },
     {
       label: "Total Unreleased",
       value: `$${((counts?.total_unreleased ?? 0) as number).toLocaleString("en-US", { minimumFractionDigits: 0 })}`,
