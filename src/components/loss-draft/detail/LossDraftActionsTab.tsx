@@ -389,13 +389,11 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
                       onChange={e => setAdminTargetStatus(e.target.value)}
                     >
                       <option value="">Select status...</option>
-                      <option value="pending_send">Pending Send</option>
-                      <option value="sent_to_lender">Sent to Lender</option>
-                      <option value="received_by_lender">Received by Lender</option>
-                      <option value="escrowed">Escrowed</option>
-                      <option value="first_draw_requested">First Draw Requested</option>
-                      <option value="partial_release">Partial Release</option>
-                      <option value="final_release_complete">Final Release Complete</option>
+                      <option value="pending_send">Review</option>
+                      <option value="endorsing">Endorsing</option>
+                      <option value="escrowed">Loss Draft</option>
+                      <option value="pending_reissue">Reissue</option>
+                      <option value="void">Void</option>
                     </select>
                   </div>
                   <div>
