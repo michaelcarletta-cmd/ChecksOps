@@ -1433,8 +1433,44 @@ Deno.serve(async (req) => {
         const { data: ud, error: ae } = await anon.auth.getUser(authToken);
         if (ae || !ud?.user) return json({ error: "Unauthorized" }, 401);
 
-        const endorsementId = body.endorsementId as string;
-        if (!endorsementId) return json({ error: "endorsementId required" }, 400);
+        let endorsementId = body.endorsementId as string | undefined;
+        const payeeId = body.payeeId as string | undefined;
+
+        if (!endorsementId && payeeId) {
+          const { data: found } = await supabase
+            .from("check_endorsements")
+            .select("id")
+            .eq("payee_id", payeeId)
+            .limit(1)
+            .maybeSingle();
+          if (found) {
+            endorsementId = found.id;
+          } else {
+            const { data: payee } = await supabase
+              .from("check_payees")
+              .select("*")
+              .eq("id", payeeId)
+              .single();
+            if (payee) {
+              const { data: created, error: cErr } = await supabase
+                .from("check_endorsements")
+                .insert({
+                  check_id: payee.check_id,
+                  payee_id: payee.id,
+                  payee_name: payee.payee_name,
+                  payee_type: payee.payee_type ?? "other",
+                  status: "pending",
+                  signature_method: "internal",
+                })
+                .select("id")
+                .single();
+              if (cErr) console.error("Failed to auto-create endorsement:", cErr.message);
+              if (created) endorsementId = created.id;
+            }
+          }
+        }
+
+        if (!endorsementId) return json({ error: "endorsementId (or payeeId) required" }, 400);
 
         const { data: endorsement, error: eErr } = await supabase
           .from("check_endorsements")
@@ -1443,6 +1479,7 @@ Deno.serve(async (req) => {
           .single();
 
         if (eErr || !endorsement) return json({ error: "Endorsement not found" }, 404);
+
 
         await supabase.from("check_endorsements").update({
           status: "signed",
@@ -1497,8 +1534,43 @@ Deno.serve(async (req) => {
         const { data: ud, error: ae } = await anon.auth.getUser(authToken);
         if (ae || !ud?.user) return json({ error: "Unauthorized" }, 401);
 
-        const endorsementId = body.endorsementId as string;
-        if (!endorsementId) return json({ error: "endorsementId required" }, 400);
+        let endorsementId = body.endorsementId as string | undefined;
+        const payeeId = body.payeeId as string | undefined;
+
+        if (!endorsementId && payeeId) {
+          const { data: found } = await supabase
+            .from("check_endorsements")
+            .select("id")
+            .eq("payee_id", payeeId)
+            .limit(1)
+            .maybeSingle();
+          if (found) {
+            endorsementId = found.id;
+          } else {
+            const { data: payee } = await supabase
+              .from("check_payees")
+              .select("*")
+              .eq("id", payeeId)
+              .single();
+            if (payee) {
+              const { data: created, error: cErr } = await supabase
+                .from("check_endorsements")
+                .insert({
+                  check_id: payee.check_id,
+                  payee_id: payee.id,
+                  payee_name: payee.payee_name,
+                  payee_type: payee.payee_type ?? "other",
+                  status: "waived",
+                })
+                .select("id")
+                .single();
+              if (cErr) console.error("Failed to auto-create endorsement:", cErr.message);
+              if (created) endorsementId = created.id;
+            }
+          }
+        }
+
+        if (!endorsementId) return json({ error: "endorsementId (or payeeId) required" }, 400);
 
         const { data: endorsement, error: eErr } = await supabase
           .from("check_endorsements")
@@ -1507,6 +1579,7 @@ Deno.serve(async (req) => {
           .single();
 
         if (eErr || !endorsement) return json({ error: "Endorsement not found" }, 404);
+
 
         await supabase.from("check_endorsements").update({
           status: "waived",
