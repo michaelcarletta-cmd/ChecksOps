@@ -416,7 +416,7 @@ function EndorsementCard({
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState(endorsement.contact_email ?? "");
-  const [phone, setPhone] = useState(endorsement.contact_phone ?? "");
+  // SMS removed from endorsements
   const [ccContractor, setCcContractor] = useState(defaultContractorCc);
   const [includeCc, setIncludeCc] = useState(Boolean(defaultContractorCc));
 
@@ -459,7 +459,6 @@ function EndorsementCard({
           endorsementId: endorsement.id,
           method: "email",
           email: email || undefined,
-          phone: phone || undefined,
           cc: ccEmail ? [ccEmail] : undefined,
         },
         headers: { Authorization: `Bearer ${session.session.access_token}` },
