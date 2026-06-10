@@ -360,7 +360,7 @@ export function CheckProcessingCard({ claimId, checkId, isAdmin = false }: Props
 
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-1.5">
-                <Label className="text-xs">Workflow status</Label>
+                <Label className="text-xs">Override Status (admin)</Label>
                 <Select
                   value={adminDraft.workflowStatus}
                   onValueChange={(value) => setAdminDraft((current) => ({ ...current, workflowStatus: value }))}
