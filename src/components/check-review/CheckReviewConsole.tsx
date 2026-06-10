@@ -559,6 +559,7 @@ export function ReviewDecisionPanel({
   const { user } = useAuth();
   const qc = useQueryClient();
 
+  const { isAdmin } = usePermissions();
   const formDirtyRef = useRef(false);
 
   const { data: check } = useQuery({
