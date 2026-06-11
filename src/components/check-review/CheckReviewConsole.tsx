@@ -23,6 +23,8 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { assessCheckValidity, isAtRisk } from "@/lib/checkValidity";
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
+import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
+
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -806,11 +808,30 @@ export function ReviewDecisionPanel({
                 <FileImage className="h-3 w-3 mr-1" /> Front
               </Button>
             )}
+            <ReuploadCheckImageButton
+              checkId={checkId}
+              side="front"
+              hasImage={!!check.front_image_path}
+              onUploaded={() => {
+                qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
+                qc.invalidateQueries({ queryKey: ["review-check-front-img"] });
+              }}
+            />
             {backImageUrl && (
               <Button size="sm" variant="outline" onClick={() => setBackViewerOpen(true)}>
                 <FileImage className="h-3 w-3 mr-1" /> Back
               </Button>
             )}
+            <ReuploadCheckImageButton
+              checkId={checkId}
+              side="back"
+              hasImage={!!check.back_image_path}
+              onUploaded={() => {
+                qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
+                qc.invalidateQueries({ queryKey: ["review-check-back-img"] });
+              }}
+            />
+
             <Button
               size="sm"
               variant={editing ? "default" : "outline"}
