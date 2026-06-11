@@ -927,7 +927,7 @@ Deno.serve(async (req) => {
               .neq("id", endorsementId)
               .in("status", ["pending", "sent"]);
 
-            const refreshedSiblings = (siblings || []).map((s: any) => ({
+            refreshedSiblings = (siblings || []).map((s: any) => ({
               ...s,
               token: s.token || crypto.randomUUID(),
             }));
