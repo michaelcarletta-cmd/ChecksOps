@@ -9,6 +9,67 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const CLAIM_FILES_BUCKET = "claim-files";
+
+/**
+ * Download a remote check image (typically a cross-project signed URL from
+ * the source app) and persist the bytes into THIS project's claim-files
+ * bucket. Returns a local object path suitable for storage.from(...).createSignedUrl.
+ *
+ * Storing bytes locally is essential because:
+ *  - Source-app signed URLs expire (tokens are typically valid for ~24h).
+ *  - The URL points at a different Supabase project, so we can't re-sign it.
+ * Without copying, every shared check loses its images as soon as the source
+ * token expires.
+ *
+ * Falls back to returning the original URL string if the download fails — that
+ * way ingest never breaks, and the UI's repair path can still try later.
+ */
+async function copyRemoteImageLocally(
+  supabase: ReturnType<typeof createClient>,
+  remoteUrl: string | null | undefined,
+  checkLocalId: string,
+  side: "front" | "back",
+): Promise<string | null> {
+  if (!remoteUrl) return null;
+  const trimmed = remoteUrl.trim();
+  if (!trimmed) return null;
+  // If it's already a relative object path, keep as-is.
+  if (!/^https?:\/\//i.test(trimmed)) return trimmed;
+
+  try {
+    const resp = await fetch(trimmed);
+    if (!resp.ok) {
+      console.warn(`[ingest-shared-check] ${side} image fetch failed (${resp.status}) for ${trimmed.slice(0, 120)}…`);
+      return trimmed; // keep URL; repair logic may retry
+    }
+    const contentType = resp.headers.get("content-type") ?? "image/jpeg";
+    const extFromUrl = (() => {
+      const clean = trimmed.split("?")[0];
+      const last = clean.split("/").pop() ?? "";
+      const ext = last.includes(".") ? last.split(".").pop() : "";
+      return (ext || "jpg").toLowerCase();
+    })();
+    const bytes = new Uint8Array(await resp.arrayBuffer());
+    const objectPath = `checks/shared/${checkLocalId}/${side}-${Date.now()}.${extFromUrl}`;
+    const { error: upErr } = await supabase.storage
+      .from(CLAIM_FILES_BUCKET)
+      .upload(objectPath, bytes, {
+        upsert: true,
+        contentType,
+        cacheControl: "31536000",
+      });
+    if (upErr) {
+      console.warn(`[ingest-shared-check] ${side} image upload failed: ${upErr.message}`);
+      return trimmed;
+    }
+    return objectPath;
+  } catch (e) {
+    console.warn(`[ingest-shared-check] ${side} image copy error: ${(e as Error).message}`);
+    return trimmed;
+  }
+}
+
 interface IngestPayload {
   source_app: string;            // e.g. "freedom_crm"
   source_project_ref: string;    // e.g. "yvagrvfkeuvzjezfsbun"
@@ -287,6 +348,22 @@ Deno.serve(async (req) => {
       : [];
     const initialPartnerStatus = derivePartnerStatus(body.check) ?? derivePartnerStatusFromPayees(cleanedPayees);
 
+    // Copy remote images into LOCAL claim-files storage so they survive
+    // source-app token expiry and remain re-signable from this project.
+    // Uses source_check_id as the storage discriminator (stable + idempotent).
+    const localFrontPath = await copyRemoteImageLocally(
+      supabase,
+      body.check.front_image_url,
+      body.source_check_id,
+      "front",
+    );
+    const localBackPath = await copyRemoteImageLocally(
+      supabase,
+      body.check.back_image_url,
+      body.source_check_id,
+      "back",
+    );
+
     let checkId: string;
     if (existingCheck) {
       checkId = existingCheck.id;
@@ -310,6 +387,14 @@ Deno.serve(async (req) => {
       if (body.check.ocr_status !== undefined) updatePayload.ocr_status = body.check.ocr_status ?? null;
       if (body.freedom_claim_id !== undefined) updatePayload.freedom_claim_id = body.freedom_claim_id ?? null;
       if (body.freedom_claim_number !== undefined) updatePayload.freedom_claim_number = body.freedom_claim_number ?? null;
+      // Refresh image paths if we successfully copied bytes locally (don't
+      // overwrite with an unchanged remote URL).
+      if (localFrontPath && !/^https?:\/\//i.test(localFrontPath)) {
+        updatePayload.front_image_path = localFrontPath;
+      }
+      if (localBackPath && !/^https?:\/\//i.test(localBackPath)) {
+        updatePayload.back_image_path = localBackPath;
+      }
       if (initialPartnerStatus) Object.assign(updatePayload, initialPartnerStatus);
       const { error: updErr } = await supabase
         .from("check_intake_items")
@@ -321,8 +406,8 @@ Deno.serve(async (req) => {
         .from("check_intake_items")
         .insert({
           tenant_id: sourceTenantId,
-          front_image_path: body.check.front_image_url ?? `external://${body.source_check_id}`,
-          back_image_path: body.check.back_image_url ?? null,
+          front_image_path: localFrontPath ?? `external://${body.source_check_id}`,
+          back_image_path: localBackPath,
           carrier_name: body.check.carrier_name ?? null,
           check_number: body.check.check_number ?? null,
           amount: body.check.amount ?? null,
@@ -358,6 +443,7 @@ Deno.serve(async (req) => {
       if (insertErr) throw insertErr;
       checkId = newCheck.id;
     }
+
 
     // Mirror payee endorsement state so partners can see who has signed
     // and who still needs to. Source-of-truth is the upstream app.
