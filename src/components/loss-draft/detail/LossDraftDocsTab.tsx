@@ -114,6 +114,14 @@ export function LossDraftDocsTab({ lossDraftId, claimId, docs, onChanged }: Prop
   return (
     <ScrollArea className="h-full min-h-0">
       <div className="p-4 space-y-3">
+        {lossDraftId && (
+          <div className="flex justify-end">
+            <ViewCheckImageButton 
+              checkId={docs[0]?.id ? undefined : "loading"} // This is a bit hacky, let's find a better way or just pass the check_intake_item_id
+              className="w-full text-xs h-8"
+            />
+          </div>
+        )}
         <input
           ref={fileInputRef}
           type="file"
