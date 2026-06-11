@@ -105,12 +105,26 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
   const visibleDrafts = drafts.filter(isVisibleInLossDraft);
 
   const q = (searchQuery ?? "").trim().toLowerCase();
-  const filtered = q
+  const searched = q
     ? visibleDrafts.filter(d =>
         [d.claim_number, d.policyholder_name, d.mortgage_servicer, d.insurance_company]
           .some(v => v && v.toString().toLowerCase().includes(q))
       )
     : visibleDrafts;
+
+  const isActiveDraft = (d: LossDraftRow) => d.escrow_status !== "final_release_complete";
+  const isMonitored = (d: LossDraftRow) => (d.monitoring_type ?? "monitored") !== "not_monitored";
+
+  const activeCount = visibleDrafts.filter(isActiveDraft).length;
+  const monitoredCount = visibleDrafts.filter(d => isActiveDraft(d) && isMonitored(d)).length;
+  const nonMonitoredCount = visibleDrafts.filter(d => isActiveDraft(d) && !isMonitored(d)).length;
+
+  const filtered = searched.filter(d => {
+    if (!isActiveDraft(d)) return false;
+    if (filter === "monitored") return isMonitored(d);
+    if (filter === "non_monitored") return !isMonitored(d);
+    return true;
+  });
 
   const isActiveDraft = (d: LossDraftRow) => d.escrow_status !== "final_release_complete";
   const activeDrafts = visibleDrafts.filter(isActiveDraft);
