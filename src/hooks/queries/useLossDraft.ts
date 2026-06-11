@@ -84,7 +84,7 @@ export function useLossDraftDetail(lossDraftId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("loss_draft_tracking")
-        .select("*, check_intake_items(check_number, amount, payee_line, carrier_name, detected_claim_number, status)")
+        .select("*, check_intake_items(check_number, amount, payee_line, carrier_name, detected_claim_number, status, front_image_path, back_image_path)")
         .eq("id", lossDraftId)
         .single();
       if (error) throw error;
