@@ -1023,8 +1023,13 @@ export default function CheckCommandCenter() {
 
         {/* Review Tab — only renders when active */}
         {activeTab === "review" && (
-          <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_28rem]">
-            <Card className={isMobile && reviewCheckId ? "hidden" : ""}>
+          <div className="mt-3 flex flex-col md:flex-row gap-4">
+            <Card
+              className={`overflow-hidden transition-all duration-300 ease-in-out md:flex-shrink-0 w-full ${
+                isMobile && reviewCheckId ? "hidden" : ""
+              }`}
+              style={!isMobile ? { width: reviewCheckId ? "40%" : "80%" } : undefined}
+            >
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <ClipboardCheck className="h-4 w-4 text-orange-400" />
@@ -1040,62 +1045,69 @@ export default function CheckCommandCenter() {
               </CardContent>
             </Card>
 
-            {reviewCheckId ? (
-              <Card>
-                <CardHeader className="pb-2">
-                  {isMobile && (
-                    <div className="sticky top-0 z-10 bg-background border-b pb-2 mb-2 -mx-4 px-4">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="gap-1 -ml-2 h-8 text-xs"
-                        onClick={() => setReviewCheckId(null)}
-                      >
-                        <ArrowLeft className="h-4 w-4" /> Back
-                      </Button>
-                    </div>
-                  )}
-                  <CardTitle className="text-sm">Review & Decision</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <Tabs defaultValue="review">
-                    <TabsList className="w-full rounded-none">
-                      <TabsTrigger value="review" className="flex-1 text-xs">Review</TabsTrigger>
-                      <TabsTrigger value="settlement" className="flex-1 text-xs">Settlement</TabsTrigger>
-                      <TabsTrigger value="packet" className="flex-1 text-xs">Deposit Packet</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="review" className="mt-0">
-                      <ReviewDecisionPanel
-                        checkId={reviewCheckId}
-                        onComplete={() => {
-                          qc.invalidateQueries({ queryKey: ["check-intake-items"] });
-                          qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
-                          setReviewCheckId(null);
-                        }}
-                      />
-                    </TabsContent>
-                    <TabsContent value="settlement" className="mt-0 p-4">
-                      <ReviewSettlementTab checkId={reviewCheckId} />
-                    </TabsContent>
-                    <TabsContent value="packet" className="mt-0 p-4">
-                      <Suspense fallback={<TabLoader />}>
-                        <DepositPacketGenerator checkId={reviewCheckId} />
-                      </Suspense>
-                    </TabsContent>
-                  </Tabs>
-                </CardContent>
-              </Card>
-            ) : (
-              <Card className={`flex items-center justify-center h-[calc(100vh-400px)] ${isMobile ? "hidden" : ""}`}>
-                <div className="text-center text-muted-foreground">
-                  <ClipboardCheck className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">Select a check to review</p>
-                </div>
-              </Card>
-            )}
+            <div
+              className={`transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${
+                isMobile && !reviewCheckId ? "hidden" : ""
+              }`}
+              style={!isMobile ? { width: reviewCheckId ? "60%" : "20%" } : undefined}
+            >
+              {reviewCheckId ? (
+                <Card>
+                  <CardHeader className="pb-2">
+                    {isMobile && (
+                      <div className="sticky top-0 z-10 bg-background border-b pb-2 mb-2 -mx-4 px-4">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1 -ml-2 h-8 text-xs"
+                          onClick={() => setReviewCheckId(null)}
+                        >
+                          <ArrowLeft className="h-4 w-4" /> Back
+                        </Button>
+                      </div>
+                    )}
+                    <CardTitle className="text-sm">Review & Decision</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Tabs defaultValue="review">
+                      <TabsList className="w-full rounded-none">
+                        <TabsTrigger value="review" className="flex-1 text-xs">Review</TabsTrigger>
+                        <TabsTrigger value="settlement" className="flex-1 text-xs">Settlement</TabsTrigger>
+                        <TabsTrigger value="packet" className="flex-1 text-xs">Deposit Packet</TabsTrigger>
+                      </TabsList>
+                      <TabsContent value="review" className="mt-0">
+                        <ReviewDecisionPanel
+                          checkId={reviewCheckId}
+                          onComplete={() => {
+                            qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                            qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+                            setReviewCheckId(null);
+                          }}
+                        />
+                      </TabsContent>
+                      <TabsContent value="settlement" className="mt-0 p-4">
+                        <ReviewSettlementTab checkId={reviewCheckId} />
+                      </TabsContent>
+                      <TabsContent value="packet" className="mt-0 p-4">
+                        <Suspense fallback={<TabLoader />}>
+                          <DepositPacketGenerator checkId={reviewCheckId} />
+                        </Suspense>
+                      </TabsContent>
+                    </Tabs>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card className="flex items-center justify-center h-[calc(100vh-400px)]">
+                  <div className="text-center text-muted-foreground p-4">
+                    <ClipboardCheck className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                    <p className="text-xs">Select a check</p>
+                  </div>
+                </Card>
+              )}
+            </div>
           </div>
-
         )}
+
 
         {/* All other tabs — only render the active one */}
         {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "manager" && activeTab !== "reissue" && activeTab !== "branch" && activeTab !== "messages" && activeTab !== "partners" && (
