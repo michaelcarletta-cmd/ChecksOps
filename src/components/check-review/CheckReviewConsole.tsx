@@ -811,7 +811,7 @@ export function ReviewDecisionPanel({
             <ReuploadCheckImageButton
               checkId={checkId}
               side="front"
-              hasImage={!!check.front_image_path}
+              imagePath={check.front_image_path}
               onUploaded={() => {
                 qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
                 qc.invalidateQueries({ queryKey: ["review-check-front-img"] });
@@ -825,7 +825,7 @@ export function ReviewDecisionPanel({
             <ReuploadCheckImageButton
               checkId={checkId}
               side="back"
-              hasImage={!!check.back_image_path}
+              imagePath={check.back_image_path}
               onUploaded={() => {
                 qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
                 qc.invalidateQueries({ queryKey: ["review-check-back-img"] });

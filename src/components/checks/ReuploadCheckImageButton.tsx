@@ -21,6 +21,7 @@ export function ReuploadCheckImageButton({
   variant = "outline",
   className,
   hasImage,
+  imagePath,
 }: {
   checkId: string;
   side: "front" | "back";
@@ -28,8 +29,10 @@ export function ReuploadCheckImageButton({
   size?: "default" | "sm" | "lg" | "icon";
   variant?: "default" | "outline" | "ghost" | "destructive";
   className?: string;
-  /** When true, the check already has this image — button is hidden. */
+  /** When true, the check already has this image — button is hidden. Ignored if imagePath is provided. */
   hasImage?: boolean;
+  /** The current image path. If it's a legacy signed URL (http...), the image is considered missing. */
+  imagePath?: string | null;
 }) {
   const { user } = useAuth();
   const { isAdmin } = usePermissions();
@@ -38,8 +41,15 @@ export function ReuploadCheckImageButton({
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
+  // A path is a real storage object only if it exists AND is not a legacy signed URL.
+  const pathIsUsable =
+    imagePath !== undefined
+      ? !!imagePath && !/^https?:\/\//i.test(imagePath)
+      : !!hasImage;
+
   if (!isAdmin) return null;
-  if (hasImage) return null;
+  if (pathIsUsable) return null;
+
 
 
   const column = side === "front" ? "front_image_path" : "back_image_path";

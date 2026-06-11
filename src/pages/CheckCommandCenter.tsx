@@ -2463,7 +2463,7 @@ function CheckDetailPanel({
               <ReuploadCheckImageButton
                 checkId={checkId}
                 side="front"
-                hasImage={!!check.front_image_path}
+                imagePath={check.front_image_path}
                 onUploaded={onRefresh}
                 size="sm"
                 variant="outline"
@@ -2472,7 +2472,7 @@ function CheckDetailPanel({
               <ReuploadCheckImageButton
                 checkId={checkId}
                 side="back"
-                hasImage={!!check.back_image_path}
+                imagePath={check.back_image_path}
                 onUploaded={onRefresh}
                 size="sm"
                 variant="outline"
