@@ -80,7 +80,7 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
   const qc = useQueryClient();
   const { tenantId } = useTenantFilter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<string>("active");
+  const [filter, setFilter] = useState<LossDraftFilter>("active");
 
   const { data: drafts = [], isLoading } = useQuery({
     queryKey: ["loss-draft-dashboard", tenantId],
