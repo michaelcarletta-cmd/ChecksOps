@@ -14,11 +14,12 @@ import type { LossDraftDoc } from "@/hooks/queries/useLossDraft";
 interface Props {
   lossDraftId: string;
   claimId: string;
+  checkIntakeItemId?: string | null;
   docs: LossDraftDoc[];
   onChanged: () => void;
 }
 
-export function LossDraftDocsTab({ lossDraftId, claimId, docs, onChanged }: Props) {
+export function LossDraftDocsTab({ lossDraftId, claimId, checkIntakeItemId, docs, onChanged }: Props) {
   const { user } = useAuth();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
