@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
