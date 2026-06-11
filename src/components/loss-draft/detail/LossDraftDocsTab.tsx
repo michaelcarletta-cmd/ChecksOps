@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -13,11 +14,12 @@ import type { LossDraftDoc } from "@/hooks/queries/useLossDraft";
 interface Props {
   lossDraftId: string;
   claimId: string;
+  checkIntakeItemId?: string | null;
   docs: LossDraftDoc[];
   onChanged: () => void;
 }
 
-export function LossDraftDocsTab({ lossDraftId, claimId, docs, onChanged }: Props) {
+export function LossDraftDocsTab({ lossDraftId, claimId, checkIntakeItemId, docs, onChanged }: Props) {
   const { user } = useAuth();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -114,6 +116,14 @@ export function LossDraftDocsTab({ lossDraftId, claimId, docs, onChanged }: Prop
   return (
     <ScrollArea className="h-full min-h-0">
       <div className="p-4 space-y-3">
+        {checkIntakeItemId && (
+          <div className="flex justify-end">
+            <ViewCheckImageButton 
+              checkId={checkIntakeItemId}
+              className="w-full text-xs h-8"
+            />
+          </div>
+        )}
         <input
           ref={fileInputRef}
           type="file"

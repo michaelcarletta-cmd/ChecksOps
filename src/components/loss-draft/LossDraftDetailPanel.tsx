@@ -308,6 +308,7 @@ export function LossDraftDetailPanel({
           <LossDraftDocsTab
             lossDraftId={lossDraftId}
             claimId={draft.claim_id}
+            checkIntakeItemId={draft.check_intake_item_id}
             docs={docs}
             onChanged={handleChanged}
           />
