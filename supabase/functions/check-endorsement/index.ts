@@ -896,6 +896,7 @@ Deno.serve(async (req) => {
         let emailSent = false;
         let emailError: string | null = null;
         const combinedSentIds: string[] = [];
+        let refreshedSiblings: Array<{ id: string; payee_id: string | null; payee_name: string; token: string; status: string; contact_email: string | null }> = [];
 
 
         if (!endorsement.contact_email) {
