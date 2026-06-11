@@ -112,7 +112,8 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
       )
     : visibleDrafts;
 
-  const activeDrafts = visibleDrafts.filter(isActiveLossDraft);
+  const isActiveDraft = (d: LossDraftRow) => d.escrow_status !== "final_release_complete";
+  const activeDrafts = visibleDrafts.filter(isActiveDraft);
   const totalUnreleased = activeDrafts.reduce((s, d) => s + (d.unreleased_amount ?? 0), 0);
 
   return (
