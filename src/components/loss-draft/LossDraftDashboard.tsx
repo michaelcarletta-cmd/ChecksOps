@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { LossDraftDetailPanel } from "./LossDraftDetailPanel";
-import { LossDraftDashboardCards } from "./LossDraftDashboardCards";
+import { LossDraftDashboardCards, type LossDraftFilter } from "./LossDraftDashboardCards";
 import { NewLossDraftDialog } from "./NewLossDraftDialog";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 
