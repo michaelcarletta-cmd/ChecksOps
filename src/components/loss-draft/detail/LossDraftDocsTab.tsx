@@ -116,10 +116,10 @@ export function LossDraftDocsTab({ lossDraftId, claimId, checkIntakeItemId, docs
   return (
     <ScrollArea className="h-full min-h-0">
       <div className="p-4 space-y-3">
-        {lossDraftId && (
+        {checkIntakeItemId && (
           <div className="flex justify-end">
             <ViewCheckImageButton 
-              checkId={docs[0]?.id ? undefined : "loading"} // This is a bit hacky, let's find a better way or just pass the check_intake_item_id
+              checkId={checkIntakeItemId}
               className="w-full text-xs h-8"
             />
           </div>
