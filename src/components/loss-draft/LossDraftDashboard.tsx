@@ -101,20 +101,16 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
   // (we need to document mortgage releases). Non-monitored checks flow through the
   // normal Review → Endorsing → Deposit lane and never sit in Loss Draft.
   const isVisibleInLossDraft = (d: LossDraftRow) =>
-    !["endorsing", "final_release_complete"].includes(d.escrow_status);
-  const isActiveLossDraft = (d: LossDraftRow) =>
-    isVisibleInLossDraft(d) && d.escrow_status !== "final_release_complete";
+    !["endorsing"].includes(d.escrow_status);
   const visibleDrafts = drafts.filter(isVisibleInLossDraft);
-
-  const baseFiltered = visibleDrafts.filter(isActiveLossDraft);
 
   const q = (searchQuery ?? "").trim().toLowerCase();
   const filtered = q
-    ? baseFiltered.filter(d =>
+    ? visibleDrafts.filter(d =>
         [d.claim_number, d.policyholder_name, d.mortgage_servicer, d.insurance_company]
           .some(v => v && v.toString().toLowerCase().includes(q))
       )
-    : baseFiltered;
+    : visibleDrafts;
 
   const activeDrafts = visibleDrafts.filter(isActiveLossDraft);
   const totalUnreleased = activeDrafts.reduce((s, d) => s + (d.unreleased_amount ?? 0), 0);
