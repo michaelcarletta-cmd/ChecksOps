@@ -40,6 +40,7 @@ import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { toStorageObjectPath } from "@/lib/storagePath";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
+import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
 import { EndorsementOverride } from "@/lib/endorsementLayout";
 import { LossDraftDetailPanel } from "@/components/loss-draft/LossDraftDetailPanel";
 import { ArrowDownToLine, FileBarChart } from "lucide-react";
@@ -2449,6 +2450,26 @@ function CheckDetailPanel({
               variant="outline"
               className="h-7 text-xs"
             />
+          )}
+          {!isSharedView && (
+            <>
+              <ReuploadCheckImageButton
+                checkId={checkId}
+                side="front"
+                onUploaded={onRefresh}
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+              />
+              <ReuploadCheckImageButton
+                checkId={checkId}
+                side="back"
+                onUploaded={onRefresh}
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+              />
+            </>
           )}
         </div>
         {/* Mobile-only: surface check image at top of detail panel */}
