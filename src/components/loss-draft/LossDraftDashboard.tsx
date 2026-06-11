@@ -126,7 +126,6 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
     return true;
   });
 
-  const isActiveDraft = (d: LossDraftRow) => d.escrow_status !== "final_release_complete";
   const activeDrafts = visibleDrafts.filter(isActiveDraft);
   const totalUnreleased = activeDrafts.reduce((s, d) => s + (d.unreleased_amount ?? 0), 0);
 
