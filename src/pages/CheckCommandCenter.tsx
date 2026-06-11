@@ -2459,6 +2459,28 @@ function CheckDetailPanel({
             className="h-7 text-xs"
           />
           {!isSharedView && (
+            <>
+              <ReuploadCheckImageButton
+                checkId={checkId}
+                side="front"
+                hasImage={!!check.front_image_path}
+                onUploaded={onRefresh}
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+              />
+              <ReuploadCheckImageButton
+                checkId={checkId}
+                side="back"
+                hasImage={!!check.back_image_path}
+                onUploaded={onRefresh}
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+              />
+            </>
+          )}
+          {!isSharedView && (
             <Button
               variant="outline"
               size="sm"
@@ -2483,27 +2505,8 @@ function CheckDetailPanel({
               className="h-7 text-xs"
             />
           )}
-          {!isSharedView && (
-            <>
-              <ReuploadCheckImageButton
-                checkId={checkId}
-                side="front"
-                onUploaded={onRefresh}
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs"
-              />
-              <ReuploadCheckImageButton
-                checkId={checkId}
-                side="back"
-                onUploaded={onRefresh}
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs"
-              />
-            </>
-          )}
         </div>
+
         {/* Mobile-only: surface check image at top of detail panel */}
         {(frontImageUrl || backImageUrl) && (
           <div className="md:hidden mt-2 space-y-2">
