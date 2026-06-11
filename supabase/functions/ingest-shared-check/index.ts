@@ -348,6 +348,22 @@ Deno.serve(async (req) => {
       : [];
     const initialPartnerStatus = derivePartnerStatus(body.check) ?? derivePartnerStatusFromPayees(cleanedPayees);
 
+    // Copy remote images into LOCAL claim-files storage so they survive
+    // source-app token expiry and remain re-signable from this project.
+    // Uses source_check_id as the storage discriminator (stable + idempotent).
+    const localFrontPath = await copyRemoteImageLocally(
+      supabase,
+      body.check.front_image_url,
+      body.source_check_id,
+      "front",
+    );
+    const localBackPath = await copyRemoteImageLocally(
+      supabase,
+      body.check.back_image_url,
+      body.source_check_id,
+      "back",
+    );
+
     let checkId: string;
     if (existingCheck) {
       checkId = existingCheck.id;
@@ -371,6 +387,14 @@ Deno.serve(async (req) => {
       if (body.check.ocr_status !== undefined) updatePayload.ocr_status = body.check.ocr_status ?? null;
       if (body.freedom_claim_id !== undefined) updatePayload.freedom_claim_id = body.freedom_claim_id ?? null;
       if (body.freedom_claim_number !== undefined) updatePayload.freedom_claim_number = body.freedom_claim_number ?? null;
+      // Refresh image paths if we successfully copied bytes locally (don't
+      // overwrite with an unchanged remote URL).
+      if (localFrontPath && !/^https?:\/\//i.test(localFrontPath)) {
+        updatePayload.front_image_path = localFrontPath;
+      }
+      if (localBackPath && !/^https?:\/\//i.test(localBackPath)) {
+        updatePayload.back_image_path = localBackPath;
+      }
       if (initialPartnerStatus) Object.assign(updatePayload, initialPartnerStatus);
       const { error: updErr } = await supabase
         .from("check_intake_items")
@@ -382,8 +406,8 @@ Deno.serve(async (req) => {
         .from("check_intake_items")
         .insert({
           tenant_id: sourceTenantId,
-          front_image_path: body.check.front_image_url ?? `external://${body.source_check_id}`,
-          back_image_path: body.check.back_image_url ?? null,
+          front_image_path: localFrontPath ?? `external://${body.source_check_id}`,
+          back_image_path: localBackPath,
           carrier_name: body.check.carrier_name ?? null,
           check_number: body.check.check_number ?? null,
           amount: body.check.amount ?? null,
@@ -419,6 +443,7 @@ Deno.serve(async (req) => {
       if (insertErr) throw insertErr;
       checkId = newCheck.id;
     }
+
 
     // Mirror payee endorsement state so partners can see who has signed
     // and who still needs to. Source-of-truth is the upstream app.
