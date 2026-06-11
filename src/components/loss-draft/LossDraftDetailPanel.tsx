@@ -25,6 +25,7 @@ import { LossDraftReleasesTab } from "./detail/LossDraftReleasesTab";
 import { LossDraftAuditTab } from "./detail/LossDraftAuditTab";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
+import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { CheckMessageThread } from "@/components/check-messages/CheckMessageThread";
 import { ScrollArea } from "@/components/ui/scroll-area";
