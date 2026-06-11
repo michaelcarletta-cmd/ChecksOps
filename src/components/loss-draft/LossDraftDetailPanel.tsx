@@ -224,6 +224,22 @@ export function LossDraftDetailPanel({
               variant="outline"
               className="h-7 text-xs"
             />
+            <ReuploadCheckImageButton
+              checkId={draft.check_intake_item_id}
+              side="front"
+              onUploaded={handleChanged}
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+            />
+            <ReuploadCheckImageButton
+              checkId={draft.check_intake_item_id}
+              side="back"
+              onUploaded={handleChanged}
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+            />
           </div>
         )}
       </CardHeader>
