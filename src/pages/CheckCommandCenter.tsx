@@ -1052,25 +1052,28 @@ export default function CheckCommandCenter() {
               style={!isMobile ? { width: reviewCheckId ? "60%" : "20%" } : undefined}
             >
               {reviewCheckId ? (
-                <Card>
-                  <CardHeader className="pb-2">
-                    {isMobile && (
-                      <div className="sticky top-0 z-10 bg-background border-b pb-2 mb-2 -mx-4 px-4">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="gap-1 -ml-2 h-8 text-xs"
-                          onClick={() => setReviewCheckId(null)}
-                        >
-                          <ArrowLeft className="h-4 w-4" /> Back
-                        </Button>
-                      </div>
-                    )}
-                    <CardTitle className="text-sm">Review & Decision</CardTitle>
-                  </CardHeader>
+                <Card className="animate-fade-in">
+                  {isMobile && (
+                    <div className="sticky top-14 z-20 bg-card/95 backdrop-blur border-b px-3 py-2 flex items-center gap-2 rounded-t-lg">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1 -ml-1 h-8 text-xs"
+                        onClick={() => setReviewCheckId(null)}
+                      >
+                        <ArrowLeft className="h-4 w-4" /> Back to queue
+                      </Button>
+                      <span className="text-xs font-medium ml-auto text-muted-foreground">Review & Decision</span>
+                    </div>
+                  )}
+                  {!isMobile && (
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">Review & Decision</CardTitle>
+                    </CardHeader>
+                  )}
                   <CardContent className="p-0">
                     <Tabs defaultValue="review">
-                      <TabsList className="w-full rounded-none">
+                      <TabsList className="w-full rounded-none sticky top-[88px] md:top-0 z-10 bg-muted">
                         <TabsTrigger value="review" className="flex-1 text-xs">Review</TabsTrigger>
                         <TabsTrigger value="settlement" className="flex-1 text-xs">Settlement</TabsTrigger>
                         <TabsTrigger value="packet" className="flex-1 text-xs">Deposit Packet</TabsTrigger>
@@ -1085,10 +1088,10 @@ export default function CheckCommandCenter() {
                           }}
                         />
                       </TabsContent>
-                      <TabsContent value="settlement" className="mt-0 p-4">
+                      <TabsContent value="settlement" className="mt-0 p-3 md:p-4">
                         <ReviewSettlementTab checkId={reviewCheckId} />
                       </TabsContent>
-                      <TabsContent value="packet" className="mt-0 p-4">
+                      <TabsContent value="packet" className="mt-0 p-3 md:p-4">
                         <Suspense fallback={<TabLoader />}>
                           <DepositPacketGenerator checkId={reviewCheckId} />
                         </Suspense>
@@ -1097,7 +1100,7 @@ export default function CheckCommandCenter() {
                   </CardContent>
                 </Card>
               ) : (
-                <Card className="flex items-center justify-center h-[calc(100vh-400px)]">
+                <Card className="hidden md:flex items-center justify-center h-[calc(100vh-400px)]">
                   <div className="text-center text-muted-foreground p-4">
                     <ClipboardCheck className="h-12 w-12 mx-auto mb-3 opacity-30" />
                     <p className="text-xs">Select a check</p>
