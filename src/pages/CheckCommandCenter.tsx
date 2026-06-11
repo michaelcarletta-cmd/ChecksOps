@@ -1038,7 +1038,7 @@ export default function CheckCommandCenter() {
               </CardHeader>
               <CardContent className="p-0">
                 <CheckReviewQueue
-                  onSelectCheck={(id) => setReviewCheckId(id)}
+                  onSelectCheck={(id) => setReviewCheckId((curr) => (curr === id ? null : id))}
                   selectedCheckId={reviewCheckId}
                   searchQuery={searchQuery}
                 />
