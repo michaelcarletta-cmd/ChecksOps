@@ -635,6 +635,38 @@ export default function CheckCommandCenter() {
     const stage = (c as any).check_stage as string | undefined;
     return (s === "deposited" || stage === "deposited") && matchesSearch(c);
   });
+  const lossDraftChecks = allChecks.filter((c) => {
+    const s = getEffectiveStatus(c);
+    const stage = (c as any).check_stage as string | undefined;
+    return (stage === "loss_draft" || s === "loss_draft_required") && matchesSearch(c);
+  });
+
+  // Auto-jump to the tab that contains matches when the user searches and
+  // the current tab is empty. Prevents the "where did my check go?" issue
+  // when the check sits in a different status (e.g. Loss Draft) than the
+  // currently-viewed tab.
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) return;
+    const buckets: { tab: string; count: number }[] = [
+      { tab: "review", count: needsReview.length },
+      { tab: "endorsements", count: awaitingEndorsement.length },
+      { tab: "ready", count: readyForDeposit.length },
+      { tab: "lossdraft", count: lossDraftChecks.length },
+      { tab: "branch", count: branchDeposit.length },
+      { tab: "reissue", count: reissueRequested.length },
+      { tab: "deposited", count: depositedChecks.length },
+    ];
+    const currentCount = buckets.find((b) => b.tab === activeTab)?.count ?? 0;
+    if (currentCount > 0) return;
+    const next = buckets.find((b) => b.count > 0);
+    if (next && next.tab !== activeTab) {
+      setActiveTab(next.tab);
+      setSelectedCheck(null);
+      setReviewCheckId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, needsReview.length, awaitingEndorsement.length, readyForDeposit.length, lossDraftChecks.length, branchDeposit.length, reissueRequested.length, depositedChecks.length]);
 
   const filteredChecks =
     activeTab === "endorsements" ? awaitingEndorsement
