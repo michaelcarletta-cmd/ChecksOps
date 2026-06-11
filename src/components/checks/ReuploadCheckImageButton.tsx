@@ -20,6 +20,7 @@ export function ReuploadCheckImageButton({
   size = "sm",
   variant = "outline",
   className,
+  hasImage,
 }: {
   checkId: string;
   side: "front" | "back";
@@ -27,6 +28,8 @@ export function ReuploadCheckImageButton({
   size?: "default" | "sm" | "lg" | "icon";
   variant?: "default" | "outline" | "ghost" | "destructive";
   className?: string;
+  /** When true, the check already has this image — button is hidden. */
+  hasImage?: boolean;
 }) {
   const { user } = useAuth();
   const { isAdmin } = usePermissions();
@@ -36,6 +39,8 @@ export function ReuploadCheckImageButton({
   const [uploading, setUploading] = useState(false);
 
   if (!isAdmin) return null;
+  if (hasImage) return null;
+
 
   const column = side === "front" ? "front_image_path" : "back_image_path";
   const label = side === "front" ? "Reupload Front" : "Reupload Back";
