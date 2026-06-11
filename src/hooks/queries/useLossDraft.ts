@@ -34,8 +34,10 @@ export interface LossDraftRecord {
     carrier_name: string | null;
     detected_claim_number: string | null;
     status: string | null;
-
+    front_image_path: string | null;
+    back_image_path: string | null;
   } | null;
+
 }
 
 export interface LossDraftRelease {
