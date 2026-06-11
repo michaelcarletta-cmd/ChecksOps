@@ -9,6 +9,67 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const CLAIM_FILES_BUCKET = "claim-files";
+
+/**
+ * Download a remote check image (typically a cross-project signed URL from
+ * the source app) and persist the bytes into THIS project's claim-files
+ * bucket. Returns a local object path suitable for storage.from(...).createSignedUrl.
+ *
+ * Storing bytes locally is essential because:
+ *  - Source-app signed URLs expire (tokens are typically valid for ~24h).
+ *  - The URL points at a different Supabase project, so we can't re-sign it.
+ * Without copying, every shared check loses its images as soon as the source
+ * token expires.
+ *
+ * Falls back to returning the original URL string if the download fails — that
+ * way ingest never breaks, and the UI's repair path can still try later.
+ */
+async function copyRemoteImageLocally(
+  supabase: ReturnType<typeof createClient>,
+  remoteUrl: string | null | undefined,
+  checkLocalId: string,
+  side: "front" | "back",
+): Promise<string | null> {
+  if (!remoteUrl) return null;
+  const trimmed = remoteUrl.trim();
+  if (!trimmed) return null;
+  // If it's already a relative object path, keep as-is.
+  if (!/^https?:\/\//i.test(trimmed)) return trimmed;
+
+  try {
+    const resp = await fetch(trimmed);
+    if (!resp.ok) {
+      console.warn(`[ingest-shared-check] ${side} image fetch failed (${resp.status}) for ${trimmed.slice(0, 120)}…`);
+      return trimmed; // keep URL; repair logic may retry
+    }
+    const contentType = resp.headers.get("content-type") ?? "image/jpeg";
+    const extFromUrl = (() => {
+      const clean = trimmed.split("?")[0];
+      const last = clean.split("/").pop() ?? "";
+      const ext = last.includes(".") ? last.split(".").pop() : "";
+      return (ext || "jpg").toLowerCase();
+    })();
+    const bytes = new Uint8Array(await resp.arrayBuffer());
+    const objectPath = `checks/shared/${checkLocalId}/${side}-${Date.now()}.${extFromUrl}`;
+    const { error: upErr } = await supabase.storage
+      .from(CLAIM_FILES_BUCKET)
+      .upload(objectPath, bytes, {
+        upsert: true,
+        contentType,
+        cacheControl: "31536000",
+      });
+    if (upErr) {
+      console.warn(`[ingest-shared-check] ${side} image upload failed: ${upErr.message}`);
+      return trimmed;
+    }
+    return objectPath;
+  } catch (e) {
+    console.warn(`[ingest-shared-check] ${side} image copy error: ${(e as Error).message}`);
+    return trimmed;
+  }
+}
+
 interface IngestPayload {
   source_app: string;            // e.g. "freedom_crm"
   source_project_ref: string;    // e.g. "yvagrvfkeuvzjezfsbun"
