@@ -221,7 +221,7 @@ export function LossDraftDetailPanel({
             <ReuploadCheckImageButton
               checkId={draft.check_intake_item_id}
               side="back"
-              hasImage={!!draft.check_intake_items?.back_image_path}
+              imagePath={draft.check_intake_items?.back_image_path}
               onUploaded={handleChanged}
               size="sm"
               variant="outline"
