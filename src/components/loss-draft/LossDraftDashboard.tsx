@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { LossDraftDetailPanel } from "./LossDraftDetailPanel";
-import { LossDraftDashboardCards } from "./LossDraftDashboardCards";
+import { LossDraftDashboardCards, type LossDraftFilter } from "./LossDraftDashboardCards";
 import { NewLossDraftDialog } from "./NewLossDraftDialog";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 
@@ -80,7 +80,7 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
   const qc = useQueryClient();
   const { tenantId } = useTenantFilter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<string>("active");
+  const [filter, setFilter] = useState<LossDraftFilter>("active");
 
   const { data: drafts = [], isLoading } = useQuery({
     queryKey: ["loss-draft-dashboard", tenantId],
@@ -105,7 +105,7 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
   const visibleDrafts = drafts.filter(isVisibleInLossDraft);
 
   const q = (searchQuery ?? "").trim().toLowerCase();
-  const filtered = q
+  const searched = q
     ? visibleDrafts.filter(d =>
         [d.claim_number, d.policyholder_name, d.mortgage_servicer, d.insurance_company]
           .some(v => v && v.toString().toLowerCase().includes(q))
@@ -113,6 +113,19 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
     : visibleDrafts;
 
   const isActiveDraft = (d: LossDraftRow) => d.escrow_status !== "final_release_complete";
+  const isMonitored = (d: LossDraftRow) => (d.monitoring_type ?? "monitored") !== "not_monitored";
+
+  const activeCount = visibleDrafts.filter(isActiveDraft).length;
+  const monitoredCount = visibleDrafts.filter(d => isActiveDraft(d) && isMonitored(d)).length;
+  const nonMonitoredCount = visibleDrafts.filter(d => isActiveDraft(d) && !isMonitored(d)).length;
+
+  const filtered = searched.filter(d => {
+    if (!isActiveDraft(d)) return false;
+    if (filter === "monitored") return isMonitored(d);
+    if (filter === "non_monitored") return !isMonitored(d);
+    return true;
+  });
+
   const activeDrafts = visibleDrafts.filter(isActiveDraft);
   const totalUnreleased = activeDrafts.reduce((s, d) => s + (d.unreleased_amount ?? 0), 0);
 
@@ -140,7 +153,14 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
         </div>
       </div>
 
-      <LossDraftDashboardCards />
+      <LossDraftDashboardCards
+        activeCount={activeCount}
+        monitoredCount={monitoredCount}
+        nonMonitoredCount={nonMonitoredCount}
+        totalUnreleased={totalUnreleased}
+        activeFilter={filter}
+        onFilterChange={setFilter}
+      />
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]">
         {/* Table */}
