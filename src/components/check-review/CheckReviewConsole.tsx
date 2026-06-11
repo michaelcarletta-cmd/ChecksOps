@@ -23,6 +23,8 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { assessCheckValidity, isAtRisk } from "@/lib/checkValidity";
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
+import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
+
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
