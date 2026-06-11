@@ -153,7 +153,14 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
         </div>
       </div>
 
-      <LossDraftDashboardCards />
+      <LossDraftDashboardCards
+        activeCount={activeCount}
+        monitoredCount={monitoredCount}
+        nonMonitoredCount={nonMonitoredCount}
+        totalUnreleased={totalUnreleased}
+        activeFilter={filter}
+        onFilterChange={setFilter}
+      />
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]">
         {/* Table */}
