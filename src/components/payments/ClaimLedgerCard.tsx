@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { FileText, Link2, CheckCircle2, AlertCircle, Pencil, DollarSign } from "lucide-react";
 import { format } from "date-fns";
 import { ClaimSettlementEditor } from "./ClaimSettlementEditor";
+import { getDepositLabel } from "@/lib/depositLabel";
 
 interface Props {
   checkIntakeItemId: string;
