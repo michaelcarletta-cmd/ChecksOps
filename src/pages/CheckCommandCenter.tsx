@@ -743,7 +743,7 @@ export default function CheckCommandCenter() {
       const { data, error } = await supabase
         .from("disbursement_splits")
         .select(`
-          id, amount, settled_at,
+          id, amount, settled_at, recipient_name, method, external_check_number,
           stakeholder_accounts (nickname, custname),
           disbursement_batches (
             id, check_intake_item_id,
