@@ -59,8 +59,6 @@ import { FundsTab as IncomingFundsTab } from "@/components/payments/FundsTab";
 import { ClaimLedgerCard } from "@/components/payments/ClaimLedgerCard";
 import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
 
-import { CheckPaymentStatusBanner } from "@/components/payments/CheckPaymentStatusBanner";
-import { GlobalPaymentStatusBanner } from "@/components/payments/GlobalPaymentStatusBanner";
 
 
 
@@ -739,6 +737,31 @@ export default function CheckCommandCenter() {
     refetchInterval: 30_000,
   });
 
+  // Funds released — disbursement splits that have settled (funds delivered to recipient)
+  const { data: fundsReleased = [] } = useQuery({
+    queryKey: ["funds-released", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("disbursement_splits")
+        .select(`
+          id, amount, settled_at,
+          stakeholder_accounts (nickname, custname),
+          disbursement_batches (
+            id, check_intake_item_id,
+            check_intake_items:check_intake_item_id (check_number, carrier_name)
+          )
+        `)
+        .eq("tenant_id", tenantId!)
+        .eq("status", "settled")
+        .order("settled_at", { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!tenantId,
+    refetchInterval: 60_000,
+  });
+
   // Total unread internal messages across all check threads (for tab badge)
   const { data: totalUnreadMessages = 0 } = useQuery({
     queryKey: ["check-unread-total"],
@@ -810,10 +833,6 @@ export default function CheckCommandCenter() {
         )}
       </div>
 
-      <div className={isMobile ? "sticky top-0 z-20 bg-background pt-1" : ""}>
-        <GlobalPaymentStatusBanner />
-      </div>
-
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
         {/* Unified gradient nav cards — all primary navigation */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-9 gap-2 md:gap-3">
@@ -825,6 +844,7 @@ export default function CheckCommandCenter() {
             { key: "lossdraft",    label: "Loss Draft",        count: (lossDraftCounts as any)?.total_active ?? 0, icon: Landmark,       gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400",  ring: "ring-purple-500/30" },
             { key: "branch",       label: "Branch",            count: branchDeposit.length,       icon: Building2,      gradient: "from-teal-500/20 to-cyan-500/10",     accent: "text-teal-400",    ring: "ring-teal-500/30" },
             { key: "reissue",      label: "Reissue",           count: reissueRequested.length,    icon: RotateCcw,      gradient: "from-red-500/20 to-rose-500/10",      accent: "text-red-400",     ring: "ring-red-500/30" },
+            { key: "fundsreleased", label: "Funds Released",   count: fundsReleased.length,       icon: Banknote,       gradient: "from-emerald-500/20 to-teal-500/10",  accent: "text-emerald-400", ring: "ring-emerald-500/30" },
             { key: "partners",     label: "Partners",          count: null as number | null,      icon: Users,          gradient: "from-pink-500/20 to-fuchsia-500/10",  accent: "text-pink-400",    ring: "ring-pink-500/30" },
             ...(canAccessManager ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield, gradient: "from-indigo-500/20 to-blue-500/10", accent: "text-indigo-400", ring: "ring-indigo-500/30" }] : []),
             { key: "messages",     label: "Messages",          count: totalUnreadMessages || null, icon: MessageSquare, gradient: "from-rose-500/20 to-pink-500/10",     accent: "text-rose-400",    ring: "ring-rose-500/30" },
@@ -1028,6 +1048,63 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
+        {/* Funds Released Tab */}
+        {activeTab === "fundsreleased" && (
+          <div className="mt-3">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Banknote className="h-4 w-4 text-emerald-400" />
+                  Funds Released ({fundsReleased.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[calc(100vh-400px)]">
+                  {fundsReleased.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground">No funds released yet</div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Check #</TableHead>
+                          <TableHead>Carrier</TableHead>
+                          <TableHead>Recipient</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead>Settled</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {fundsReleased.map((split: any) => {
+                          const acct = split.stakeholder_accounts;
+                          const batch = split.disbursement_batches;
+                          const check = batch?.check_intake_items;
+                          return (
+                            <TableRow
+                              key={split.id}
+                              className={batch?.check_intake_item_id ? "cursor-pointer" : ""}
+                              onClick={() => batch?.check_intake_item_id && setSelectedCheck(batch.check_intake_item_id)}
+                            >
+                              <TableCell className="font-mono text-sm">#{check?.check_number || "—"}</TableCell>
+                              <TableCell className="text-sm">{check?.carrier_name || "—"}</TableCell>
+                              <TableCell className="text-sm">{acct?.nickname ?? acct?.custname ?? "—"}</TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                ${Number(split.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {split.settled_at ? format(new Date(split.settled_at), "MMM d, yyyy") : "—"}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* Review Tab — only renders when active */}
         {activeTab === "review" && (
           <div className="mt-3 flex flex-col md:flex-row gap-4">
@@ -1120,7 +1197,7 @@ export default function CheckCommandCenter() {
 
 
         {/* All other tabs — only render the active one */}
-        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "manager" && activeTab !== "reissue" && activeTab !== "branch" && activeTab !== "messages" && activeTab !== "partners" && (
+        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "manager" && activeTab !== "reissue" && activeTab !== "branch" && activeTab !== "messages" && activeTab !== "partners" && activeTab !== "fundsreleased" && (
           <div className="mt-3 flex flex-col md:flex-row gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
             {/* Check list — hidden on mobile when a check is selected */}
             <Card
@@ -1300,7 +1377,6 @@ export default function CheckCommandCenter() {
                       </Button>
                     </div>
                   )}
-                  <CheckPaymentStatusBanner checkIntakeItemId={selectedCheck} />
                   <CheckDetailPanel
                     checkId={selectedCheck}
                     onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
