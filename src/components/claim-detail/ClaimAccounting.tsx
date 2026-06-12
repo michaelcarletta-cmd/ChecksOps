@@ -22,6 +22,7 @@ import { CheckProcessingCard } from "@/components/claims/CheckProcessingCard";
 import { CrudDropdown } from "./CrudDropdown";
 import { PaymentMethodForm } from "./PaymentMethodForm";
 import { ClaimFundsSummary } from "./ClaimFundsSummary";
+import { getDepositLabel } from "@/lib/depositLabel";
 interface ClaimAccountingProps {
   claim: any;
   userRole: string | null;
