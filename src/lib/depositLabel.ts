@@ -22,5 +22,6 @@ export function getDepositLabel(c: DepositLabelInput | null | undefined): string
     return "Cleared";
   }
   if (c.deposit_status) return c.deposit_status.replace(/_/g, " ");
+  if (c.check_stage) return c.check_stage.replace(/_/g, " ");
   return "—";
 }
