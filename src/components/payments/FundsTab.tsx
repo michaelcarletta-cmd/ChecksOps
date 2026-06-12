@@ -18,6 +18,7 @@ interface Props {
   carrierName?: string;
   claimId?: string | null;
   detectedClaimNumber?: string | null;
+  actumEnabled?: boolean;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; icon: any; className: string }> = {
@@ -30,7 +31,7 @@ const STATUS_CONFIG: Record<string, { label: string; icon: any; className: strin
 
 type DisburseMode = null | "actum" | "external";
 
-export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId, detectedClaimNumber }: Props) {
+export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId, detectedClaimNumber, actumEnabled = true }: Props) {
   const { tenant } = useTenant();
   const qc = useQueryClient();
   const [disburseMode, setDisburseMode] = useState<DisburseMode>(null);
@@ -115,6 +116,12 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
       setPaFeeAmt(String(intakeItem.pa_fee_amount));
     }
   }, [intakeItem?.id]);
+
+  useEffect(() => {
+    if (!actumEnabled && disburseMode === "actum") {
+      setDisburseMode(null);
+    }
+  }, [actumEnabled, disburseMode]);
 
   const paFeeComputed = useMemo(() => {
     if (paFeeMode === "pct") {
@@ -292,15 +299,22 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
 
       {/* Disburse buttons */}
       {availableForDisbursement > 0 && disburseMode === null && (
-        <div className="grid grid-cols-2 gap-2">
-          <Button className="w-full" onClick={() => setDisburseMode("actum")}>
-            <DollarSign className="h-4 w-4 mr-1.5" />
-            Disburse Via Actum
-          </Button>
-          <Button variant="outline" className="w-full" onClick={() => setDisburseMode("external")}>
-            <FileCheck className="h-4 w-4 mr-1.5" />
-            Disburse Outside ChecksOps
-          </Button>
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <Button className="w-full" onClick={() => setDisburseMode("actum")} disabled={!actumEnabled}>
+              <DollarSign className="h-4 w-4 mr-1.5" />
+              Disburse Via Actum
+            </Button>
+            <Button variant="outline" className="w-full" onClick={() => setDisburseMode("external")}>
+              <FileCheck className="h-4 w-4 mr-1.5" />
+              Disburse Outside ChecksOps
+            </Button>
+          </div>
+          {!actumEnabled && (
+            <p className="text-[10px] text-muted-foreground">
+              Actum becomes available once this check is marked deposited.
+            </p>
+          )}
         </div>
       )}
 
