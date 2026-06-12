@@ -200,6 +200,11 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
 
   return (
     <div className="space-y-4 p-1">
+      {noIncoming && (
+        <div className="rounded-md border border-border bg-muted/30 p-2 text-[11px] text-muted-foreground">
+          No incoming PA payments recorded. Using check amount as the basis for disbursement.
+        </div>
+      )}
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-2">
         <Card>
