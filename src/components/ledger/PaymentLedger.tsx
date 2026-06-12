@@ -20,15 +20,32 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
-  operating: "Operating",
-  vendor: "Vendor",
   subcontractor: "Subcontractor",
-  overhead: "Overhead",
-  insured: "Insured",
   contractor: "Contractor",
+  sales_rep: "Sales Rep",
+  appraisal: "Appraisal",
   supplier: "Supplier",
+  adjuster: "Adjuster",
+  vendor: "Vendor",
+  insured: "Insured",
+  overhead: "Overhead",
+  operating: "Operating",
   other: "Other",
 };
+
+const TYPE_COLORS: Record<string, string> = {
+  subcontractor: "text-purple-600 border-purple-500/30 bg-purple-500/10",
+  contractor: "text-emerald-600 border-emerald-500/30 bg-emerald-500/10",
+  sales_rep: "text-pink-600 border-pink-500/30 bg-pink-500/10",
+  appraisal: "text-indigo-600 border-indigo-500/30 bg-indigo-500/10",
+  supplier: "text-amber-600 border-amber-500/30 bg-amber-500/10",
+  adjuster: "text-orange-600 border-orange-500/30 bg-orange-500/10",
+  vendor: "text-blue-600 border-blue-500/30 bg-blue-500/10",
+  insured: "text-cyan-600 border-cyan-500/30 bg-cyan-500/10",
+  other: "text-muted-foreground border-border bg-muted/30",
+};
+
+const EDITABLE_TYPES = ["subcontractor", "contractor", "sales_rep", "appraisal", "supplier", "adjuster", "vendor", "insured", "other"];
 
 type DateRange = "this_month" | "last_month" | "this_year" | "all";
 
