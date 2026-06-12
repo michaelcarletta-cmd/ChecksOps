@@ -51,10 +51,26 @@ type DateRange = "this_month" | "last_month" | "this_year" | "all";
 
 export function PaymentLedger() {
   const { tenant } = useTenant();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dateRange, setDateRange] = useState<DateRange>("this_year");
+
+  const updateType = async (id: string, newType: string) => {
+    const { error } = await (supabase as any)
+      .from("disbursement_splits")
+      .update({ recipient_type: newType })
+      .eq("id", id);
+    if (error) {
+      toast.error("Could not update type");
+      return;
+    }
+    toast.success("Type updated");
+    queryClient.invalidateQueries({ queryKey: ["payment-ledger"] });
+    queryClient.invalidateQueries({ queryKey: ["recipient-report"] });
+    queryClient.invalidateQueries({ queryKey: ["tax-summary"] });
+  };
 
   const dateFilters = useMemo(() => {
     const now = new Date();
