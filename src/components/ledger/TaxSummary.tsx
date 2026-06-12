@@ -5,13 +5,16 @@ import { useTenant } from "@/contexts/TenantContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, Download, FileText, CheckCircle2, Info } from "lucide-react";
+import { AlertTriangle, Download, FileText, CheckCircle2, Info, Search } from "lucide-react";
 import { startOfYear, endOfYear, getYear } from "date-fns";
 
 const THRESHOLD = 600;
 const CURRENT_YEAR = getYear(new Date());
 const YEARS = [CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2];
+
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   operating: "Operating",
@@ -21,14 +24,34 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   insured: "Insured",
   contractor: "Contractor",
   supplier: "Supplier",
+  sales_rep: "Sales Rep",
+  appraisal: "Appraisal",
+  adjuster: "Adjuster",
   other: "Other",
 };
 
-const REQUIRES_1099_TYPES = ["subcontractor", "vendor", "other"];
+// Businesses/individuals that may require a 1099-NEC at year end
+const REQUIRES_1099_TYPES = ["subcontractor", "vendor", "contractor", "supplier", "sales_rep", "appraisal", "adjuster", "other"];
+
+type RecipientRow = {
+  id: string;
+  nickname: string;
+  custname: string;
+  account_type: string;
+  chk_acct: string;
+  total: number;
+  payment_count: number;
+  requires_1099: boolean;
+  needs_1099: boolean;
+  monthly: number[]; // length 12
+};
 
 export function TaxSummary() {
   const { tenant } = useTenant();
   const [year, setYear] = useState(CURRENT_YEAR);
+  const [monthFilter, setMonthFilter] = useState<string>("all"); // "all" or "0".."11"
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
 
   const { data: payments = [], isLoading } = useQuery({
     queryKey: ["tax-summary", tenant?.id, year],
@@ -37,7 +60,8 @@ export function TaxSummary() {
       const { data, error } = await (supabase as any)
         .from("disbursement_splits")
         .select(`
-          id, amount, status, created_at,
+          id, amount, status, created_at, settled_at,
+          recipient_name, recipient_type,
           stakeholder_accounts (
             id, nickname, custname, account_type, chk_acct
           )
@@ -61,7 +85,6 @@ export function TaxSummary() {
         .select(`id, amount, payment_date, stakeholder_account_id, payee_name,
           stakeholder_accounts:stakeholder_account_id (id, nickname, custname, account_type, chk_acct)`)
         .eq("tenant_id", tenant!.id)
-        .not("stakeholder_account_id", "is", null)
         .gte("payment_date", `${year}-01-01`)
         .lte("payment_date", `${year}-12-31`);
       if (error) throw error;
@@ -85,57 +108,77 @@ export function TaxSummary() {
     },
   });
 
+  const recipients: RecipientRow[] = useMemo(() => {
+    const map: Record<string, RecipientRow> = {};
 
-  const recipients = useMemo(() => {
-    const map: Record<string, {
-      id: string; nickname: string; custname: string;
-      account_type: string; chk_acct: string;
-      total: number; payment_count: number;
-      requires_1099: boolean; needs_1099: boolean;
-    }> = {};
+    const upsert = (key: string, base: Partial<RecipientRow>, amount: number, monthIdx: number) => {
+      if (!map[key]) {
+        map[key] = {
+          id: key,
+          nickname: base.nickname ?? "—",
+          custname: base.custname ?? "",
+          account_type: base.account_type ?? "other",
+          chk_acct: base.chk_acct ?? "",
+          total: 0,
+          payment_count: 0,
+          requires_1099: REQUIRES_1099_TYPES.includes(base.account_type ?? "other"),
+          needs_1099: false,
+          monthly: Array(12).fill(0),
+        };
+      }
+      map[key].total += amount;
+      map[key].payment_count += 1;
+      map[key].monthly[monthIdx] += amount;
+    };
 
     for (const p of payments as any[]) {
       const acct = p.stakeholder_accounts;
-      if (!acct) continue;
-      if (!map[acct.id]) {
-        map[acct.id] = {
-          id: acct.id,
+      const dateStr = p.settled_at ?? p.created_at;
+      if (!dateStr) continue;
+      const d = new Date(dateStr);
+      if (d.getFullYear() !== year) continue;
+      const m = d.getMonth();
+      const amount = Number(p.amount ?? 0);
+      if (acct?.id) {
+        upsert(`acct:${acct.id}`, {
           nickname: acct.nickname,
           custname: acct.custname,
           account_type: acct.account_type,
           chk_acct: acct.chk_acct,
-          total: 0,
-          payment_count: 0,
-          requires_1099: REQUIRES_1099_TYPES.includes(acct.account_type),
-          needs_1099: false,
-        };
+        }, amount, m);
+      } else if (p.recipient_name) {
+        const t = p.recipient_type ?? "other";
+        upsert(`ext:${t}|${p.recipient_name.toLowerCase()}`, {
+          nickname: p.recipient_name,
+          custname: "External check",
+          account_type: t,
+          chk_acct: "",
+        }, amount, m);
       }
-      map[acct.id].total += Number(p.amount);
-      map[acct.id].payment_count += 1;
-    }
-
-    for (const r of Object.values(map)) {
-      r.needs_1099 = r.requires_1099 && r.total >= THRESHOLD;
     }
 
     for (const p of cashPayments as any[]) {
       const acct = p.stakeholder_accounts;
-      if (!acct) continue;
-      if (!map[acct.id]) {
-        map[acct.id] = {
-          id: acct.id,
+      if (!p.payment_date) continue;
+      const d = new Date(p.payment_date);
+      if (d.getFullYear() !== year) continue;
+      const m = d.getMonth();
+      const amount = Number(p.amount ?? 0);
+      if (acct?.id) {
+        upsert(`acct:${acct.id}`, {
           nickname: acct.nickname,
           custname: acct.custname,
           account_type: acct.account_type,
           chk_acct: acct.chk_acct,
-          total: 0,
-          payment_count: 0,
-          requires_1099: REQUIRES_1099_TYPES.includes(acct.account_type),
-          needs_1099: false,
-        };
+        }, amount, m);
+      } else if (p.payee_name) {
+        upsert(`cash:${p.payee_name.toLowerCase()}`, {
+          nickname: p.payee_name,
+          custname: "Cash job payee",
+          account_type: "other",
+          chk_acct: "",
+        }, amount, m);
       }
-      map[acct.id].total += Number(p.amount);
-      map[acct.id].payment_count += 1;
     }
 
     for (const r of Object.values(map)) {
@@ -143,7 +186,24 @@ export function TaxSummary() {
     }
 
     return Object.values(map).sort((a, b) => b.total - a.total);
-  }, [payments, cashPayments]);
+  }, [payments, cashPayments, year]);
+
+  const visibleRecipients = useMemo(() => {
+    return recipients.filter((r) => {
+      const matchSearch = !search ||
+        r.nickname.toLowerCase().includes(search.toLowerCase()) ||
+        r.custname.toLowerCase().includes(search.toLowerCase());
+      const matchType = typeFilter === "all" || r.account_type === typeFilter;
+      if (monthFilter !== "all") {
+        const m = Number(monthFilter);
+        if ((r.monthly[m] ?? 0) <= 0) return false;
+      }
+      return matchSearch && matchType;
+    });
+  }, [recipients, search, typeFilter, monthFilter]);
+
+  const displayedTotal = (r: RecipientRow) =>
+    monthFilter === "all" ? r.total : r.monthly[Number(monthFilter)] ?? 0;
 
   const flag1099Count = recipients.filter(r => r.needs_1099).length;
   const totalPaid = recipients.reduce((s, r) => s + r.total, 0);
@@ -153,20 +213,42 @@ export function TaxSummary() {
   const netRetained = totalIncome - totalPaid;
   const payoutRatio = totalIncome > 0 ? (totalPaid / totalIncome) * 100 : 0;
 
+  // Monthly totals across all recipients (for the strip)
+  const monthlyTotals = useMemo(() => {
+    const t = Array(12).fill(0);
+    for (const r of recipients) for (let i = 0; i < 12; i++) t[i] += r.monthly[i];
+    return t;
+  }, [recipients]);
 
   const exportCSV = () => {
-    const headers = ["Recipient Nickname", "Account Holder Name", "Type", "Account (last 4)", `Total Paid ${year}`, "Payment Count", "May Require 1099"];
-    const rows = recipients.map(r => [
+    const headers = [
+      "Recipient",
+      "Account Holder Name",
+      "Type",
+      "Account (last 4)",
+      ...MONTH_LABELS.map(m => `${m} ${year}`),
+      `Total ${year}`,
+      "Payment Count",
+      "May Require 1099",
+    ];
+    const rows = visibleRecipients.map(r => [
       r.nickname,
       r.custname,
       ACCOUNT_TYPE_LABELS[r.account_type] ?? r.account_type,
-      `••••${r.chk_acct?.slice(-4) ?? ""}`,
+      r.chk_acct ? `••••${r.chk_acct.slice(-4)}` : "",
+      ...r.monthly.map(v => v.toFixed(2)),
       r.total.toFixed(2),
       r.payment_count,
       r.needs_1099 ? "YES" : "No",
     ]);
 
-    const csv = [headers, ...rows].map(row => row.map(v => `"${v}"`).join(",")).join("\n");
+    const totalsRow = [
+      "TOTAL", "", "", "",
+      ...monthlyTotals.map(v => v.toFixed(2)),
+      totalPaid.toFixed(2), "", "",
+    ];
+
+    const csv = [headers, ...rows, totalsRow].map(row => row.map(v => `"${v}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -182,11 +264,11 @@ export function TaxSummary() {
         <div>
           <h3 className="text-sm font-medium">Tax & 1099 Summary</h3>
           <p className="text-xs text-muted-foreground">Recipients paid ${THRESHOLD}+ may require a 1099-NEC filing</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Includes both insurance disbursements and cash job payments</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Includes insurance disbursements, external checks, and cash job payments</p>
         </div>
         <div className="flex items-center gap-2">
           <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
-            <SelectTrigger className="h-8 text-sm w-28"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 text-sm w-24"><SelectValue /></SelectTrigger>
             <SelectContent>
               {YEARS.map(y => (<SelectItem key={y} value={String(y)} className="text-xs">{y}</SelectItem>))}
             </SelectContent>
@@ -205,7 +287,7 @@ export function TaxSummary() {
               {flag1099Count} recipient{flag1099Count !== 1 ? "s" : ""} may require a 1099-NEC for {year}
             </p>
             <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
-              Any subcontractor, vendor, or individual paid $600 or more during the tax year must receive a 1099-NEC by January 31. Share the export below with your accountant.
+              Any subcontractor, vendor, sales rep, appraiser, adjuster, or other unincorporated payee paid $600 or more during the tax year must receive a 1099-NEC by January 31. Share the export below with your accountant.
             </p>
           </div>
         </div>
@@ -241,21 +323,67 @@ export function TaxSummary() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-3 gap-3">
-        <Card><CardContent className="pt-3 pb-3 text-center">
-          <p className="text-xs text-muted-foreground mb-1">Total paid out</p>
-          <p className="text-base font-semibold">${totalPaid.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
-        </CardContent></Card>
-        <Card><CardContent className="pt-3 pb-3 text-center">
-          <p className="text-xs text-muted-foreground mb-1">To subcontractors</p>
-          <p className="text-base font-semibold">${totalSubsPaid.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
-        </CardContent></Card>
-        <Card><CardContent className="pt-3 pb-3 text-center">
-          <p className="text-xs text-muted-foreground mb-1">1099 required</p>
-          <p className={`text-base font-semibold ${flag1099Count > 0 ? "text-amber-500" : "text-emerald-500"}`}>{flag1099Count}</p>
-        </CardContent></Card>
-      </div>
+      {/* Monthly strip — click to filter */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Monthly disbursements — {year}</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-13 gap-1.5">
+            {MONTH_LABELS.map((m, i) => {
+              const active = monthFilter === String(i);
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMonthFilter(active ? "all" : String(i))}
+                  className={`text-left rounded-md border p-2 transition-colors hover:bg-muted/40 ${active ? "border-primary bg-primary/5" : ""}`}
+                >
+                  <p className="text-[10px] text-muted-foreground">{m}</p>
+                  <p className="text-xs font-semibold">${monthlyTotals[i].toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => setMonthFilter("all")}
+              className={`text-left rounded-md border p-2 transition-colors hover:bg-muted/40 ${monthFilter === "all" ? "border-primary bg-primary/5" : ""}`}
+            >
+              <p className="text-[10px] text-muted-foreground">Year</p>
+              <p className="text-xs font-semibold">${totalPaid.toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
+            </button>
+          </div>
+        </CardContent>
+      </Card>
 
+      <Card>
+        <CardContent className="pt-3 pb-3">
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="relative flex-1 min-w-48">
+              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input className="h-8 text-sm pl-8" placeholder="Search recipient..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="h-8 text-sm w-40"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs">All types</SelectItem>
+                {Object.entries(ACCOUNT_TYPE_LABELS).map(([v, l]) => (
+                  <SelectItem key={v} value={v} className="text-xs">{l}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={monthFilter} onValueChange={setMonthFilter}>
+              <SelectTrigger className="h-8 text-sm w-36"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs">Full year</SelectItem>
+                {MONTH_LABELS.map((m, i) => (
+                  <SelectItem key={m} value={String(i)} className="text-xs">{m} {year}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="rounded-md border bg-muted/30 p-2.5 flex items-start gap-2">
         <Info className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
@@ -267,55 +395,73 @@ export function TaxSummary() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
-            <FileText className="h-4 w-4" />Recipient Breakdown — {year}
+            <FileText className="h-4 w-4" />
+            Recipient Breakdown — {monthFilter === "all" ? year : `${MONTH_LABELS[Number(monthFilter)]} ${year}`}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-4 text-center text-sm text-muted-foreground">Loading...</div>
-          ) : recipients.length === 0 ? (
-            <div className="p-4 text-center text-sm text-muted-foreground">No settled payments found for {year}.</div>
+          ) : visibleRecipients.length === 0 ? (
+            <div className="p-4 text-center text-sm text-muted-foreground">No settled payments found.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-xs text-muted-foreground">
-                    <th className="text-left p-3 font-medium">Recipient</th>
-                    <th className="text-left p-3 font-medium hidden md:table-cell">Type</th>
-                    <th className="text-left p-3 font-medium hidden md:table-cell">Account</th>
-                    <th className="text-right p-3 font-medium">Total Paid</th>
-                    <th className="text-right p-3 font-medium hidden sm:table-cell">Payments</th>
-                    <th className="text-center p-3 font-medium">1099</th>
+                    <th className="text-left p-2 font-medium sticky left-0 bg-background">Recipient</th>
+                    <th className="text-left p-2 font-medium hidden lg:table-cell">Type</th>
+                    {monthFilter === "all" ? (
+                      MONTH_LABELS.map((m) => (
+                        <th key={m} className="text-right p-2 font-medium whitespace-nowrap">{m}</th>
+                      ))
+                    ) : (
+                      <th className="text-right p-2 font-medium">{MONTH_LABELS[Number(monthFilter)]}</th>
+                    )}
+                    <th className="text-right p-2 font-medium">Total</th>
+                    <th className="text-center p-2 font-medium">1099</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {recipients.map((r) => (
+                  {visibleRecipients.map((r) => (
                     <tr key={r.id} className={`border-b last:border-0 hover:bg-muted/30 transition-colors ${r.needs_1099 ? "bg-amber-500/5" : ""}`}>
-                      <td className="p-3">
+                      <td className="p-2 sticky left-0 bg-background">
                         <p className="font-medium text-xs">{r.nickname}</p>
-                        <p className="text-[10px] text-muted-foreground">{r.custname}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {r.custname}
+                          {r.chk_acct ? ` · ••••${r.chk_acct.slice(-4)}` : ""}
+                        </p>
                       </td>
-                      <td className="p-3 hidden md:table-cell">
+                      <td className="p-2 hidden lg:table-cell">
                         <Badge variant="outline" className="text-[10px]">{ACCOUNT_TYPE_LABELS[r.account_type] ?? r.account_type}</Badge>
                       </td>
-                      <td className="p-3 text-xs font-mono text-muted-foreground hidden md:table-cell">••••{r.chk_acct?.slice(-4)}</td>
-                      <td className="p-3 text-right">
+                      {monthFilter === "all" ? (
+                        r.monthly.map((v, i) => (
+                          <td key={i} className={`p-2 text-right text-xs whitespace-nowrap ${v > 0 ? "" : "text-muted-foreground/50"}`}>
+                            {v > 0 ? `$${v.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}
+                          </td>
+                        ))
+                      ) : (
+                        <td className="p-2 text-right text-xs whitespace-nowrap">
+                          ${(r.monthly[Number(monthFilter)] ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                        </td>
+                      )}
+                      <td className="p-2 text-right">
                         <p className={`font-semibold text-sm ${r.needs_1099 ? "text-amber-600" : ""}`}>
-                          ${r.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                          ${displayedTotal(r).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                         </p>
                         {r.total >= THRESHOLD * 0.8 && !r.needs_1099 && r.requires_1099 && (
                           <p className="text-[10px] text-muted-foreground">${(THRESHOLD - r.total).toFixed(2)} to threshold</p>
                         )}
                       </td>
-                      <td className="p-3 text-right text-xs text-muted-foreground hidden sm:table-cell">{r.payment_count}</td>
-                      <td className="p-3 text-center">
+                      <td className="p-2 text-center">
                         {r.needs_1099 ? (
                           <div className="flex items-center justify-center gap-1">
                             <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
                             <span className="text-xs text-amber-600 font-medium">Required</span>
                           </div>
                         ) : r.requires_1099 ? (
-                          <span className="text-xs text-muted-foreground">Under $600</span>
+                          <span className="text-[10px] text-muted-foreground">Under $600</span>
                         ) : (
                           <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
                         )}
@@ -324,10 +470,26 @@ export function TaxSummary() {
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t bg-muted/20">
-                    <td colSpan={3} className="p-3 text-xs text-muted-foreground">{recipients.length} recipient{recipients.length !== 1 ? "s" : ""}</td>
-                    <td className="p-3 text-right font-semibold text-sm">${totalPaid.toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
-                    <td colSpan={2} className="p-3" />
+                  <tr className="border-t bg-muted/20 font-medium">
+                    <td className="p-2 text-xs text-muted-foreground sticky left-0 bg-muted/20">
+                      {visibleRecipients.length} recipient{visibleRecipients.length !== 1 ? "s" : ""}
+                    </td>
+                    <td className="p-2 hidden lg:table-cell" />
+                    {monthFilter === "all" ? (
+                      monthlyTotals.map((v, i) => (
+                        <td key={i} className="p-2 text-right text-xs whitespace-nowrap">
+                          ${v.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                        </td>
+                      ))
+                    ) : (
+                      <td className="p-2 text-right text-xs whitespace-nowrap">
+                        ${monthlyTotals[Number(monthFilter)].toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      </td>
+                    )}
+                    <td className="p-2 text-right font-semibold text-sm">
+                      ${(monthFilter === "all" ? totalPaid : monthlyTotals[Number(monthFilter)]).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-2" />
                   </tr>
                 </tfoot>
               </table>
