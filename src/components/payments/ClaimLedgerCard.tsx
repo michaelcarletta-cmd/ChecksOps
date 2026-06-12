@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { FileText, Link2, CheckCircle2, AlertCircle, Pencil, DollarSign } from "lucide-react";
 import { format } from "date-fns";
 import { ClaimSettlementEditor } from "./ClaimSettlementEditor";
+import { getDepositLabel } from "@/lib/depositLabel";
 
 interface Props {
   checkIntakeItemId: string;
@@ -430,8 +431,8 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
                     </span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <Badge variant="outline" className="text-[9px]">
-                      {c.check_stage}
+                    <Badge variant="outline" className="text-[9px] capitalize">
+                      {getDepositLabel(c as any)}
                     </Badge>
                     <span className="tabular-nums font-medium">{fmt(Number(c.amount || 0))}</span>
                   </div>
