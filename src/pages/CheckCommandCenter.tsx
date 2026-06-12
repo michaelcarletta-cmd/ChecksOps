@@ -58,6 +58,8 @@ import { SendPaymentPanel } from "@/components/payments/SendPaymentPanel";
 import { FundsTab as IncomingFundsTab } from "@/components/payments/FundsTab";
 import { ClaimLedgerCard } from "@/components/payments/ClaimLedgerCard";
 import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
+import { GlobalPaymentStatusBanner } from "@/components/payments/GlobalPaymentStatusBanner";
+import { CheckPaymentStatusBanner } from "@/components/payments/CheckPaymentStatusBanner";
 
 
 
@@ -807,6 +809,11 @@ export default function CheckCommandCenter() {
         )}
       </div>
 
+      <div className={isMobile ? "sticky top-0 z-20 bg-background pt-1" : ""}>
+        <GlobalPaymentStatusBanner />
+      </div>
+
+
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
         {/* Unified gradient nav cards — all primary navigation */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-9 gap-2 md:gap-3">
@@ -1293,6 +1300,7 @@ export default function CheckCommandCenter() {
                       </Button>
                     </div>
                   )}
+                  <CheckPaymentStatusBanner checkIntakeItemId={selectedCheck} />
                   <CheckDetailPanel
                     checkId={selectedCheck}
                     onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
