@@ -74,7 +74,7 @@ export function GlobalPaymentStatusBanner() {
         const batch = (split as any).disbursement_batches;
         const check = batch?.check_intake_items;
 
-        if (split.status === "returned" && !dismissed.has(split.id)) {
+        if ((split.status === "returned" || split.status === "failed") && !dismissed.has(split.id)) {
           result.returned.push({
             id: split.id,
             amount: Number(split.amount),
