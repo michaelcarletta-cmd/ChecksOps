@@ -1085,7 +1085,7 @@ export default function CheckCommandCenter() {
                             >
                               <TableCell className="font-mono text-sm">#{check?.check_number || "—"}</TableCell>
                               <TableCell className="text-sm">{check?.carrier_name || "—"}</TableCell>
-                              <TableCell className="text-sm">{acct?.nickname ?? acct?.custname ?? "—"}</TableCell>
+                              <TableCell className="text-sm">{split.recipient_name ?? acct?.nickname ?? acct?.custname ?? "—"}{split.external_check_number ? <span className="ml-1 text-xs text-muted-foreground font-mono">· Ck #{split.external_check_number}</span> : null}</TableCell>
                               <TableCell className="text-right tabular-nums">
                                 ${Number(split.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                               </TableCell>
