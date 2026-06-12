@@ -87,9 +87,15 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
     .filter((s: any) => s.status !== "failed" && s.status !== "cancelled" && s.status !== "returned")
     .reduce((sum: number, s: any) => sum + Number(s.amount || 0), 0);
 
-  const totalReceived = incomingPayments
+  const receivedFromPayments = incomingPayments
     .filter((p: any) => p.status === "settled")
     .reduce((sum: number, p: any) => sum + Number(p.payment_amount), 0);
+
+  // Fallback: when there are no incoming PA→contractor payments, the check
+  // amount itself represents the funds available on this check.
+  const totalReceived = receivedFromPayments > 0
+    ? receivedFromPayments
+    : Number(intakeItem?.amount || 0);
 
   const totalInTransit = incomingPayments
     .filter((p: any) => p.status === "submitted")
@@ -190,18 +196,15 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
 
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading funds...</div>;
 
-  if (incomingPayments.length === 0) {
-    return (
-      <div className="p-4 text-center space-y-2">
-        <ArrowDownCircle className="h-8 w-8 text-muted-foreground mx-auto" />
-        <p className="text-sm text-muted-foreground">No incoming payments yet for this check.</p>
-        <p className="text-xs text-muted-foreground">The public adjuster will send funds here once the check clears.</p>
-      </div>
-    );
-  }
+  const noIncoming = incomingPayments.length === 0;
 
   return (
     <div className="space-y-4 p-1">
+      {noIncoming && (
+        <div className="rounded-md border border-border bg-muted/30 p-2 text-[11px] text-muted-foreground">
+          No incoming PA payments recorded. Using check amount as the basis for disbursement.
+        </div>
+      )}
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-2">
         <Card>
