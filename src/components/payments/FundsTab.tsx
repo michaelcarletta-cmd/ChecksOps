@@ -420,11 +420,6 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
         })}
       </div>
 
-      {totalInTransit > 0 && totalReceived === 0 && (
-        <div className="rounded-md border border-blue-500/30 bg-blue-500/10 p-3 text-xs text-blue-700 dark:text-blue-300">
-          ${totalInTransit.toLocaleString("en-US", { minimumFractionDigits: 2 })} is in transit and should settle within 1–2 banking days.
-        </div>
-      )}
     </div>
   );
 }
