@@ -57,7 +57,6 @@ import { assessCheckValidity } from "@/lib/checkValidity";
 import { SendPaymentPanel } from "@/components/payments/SendPaymentPanel";
 import { FundsTab as IncomingFundsTab } from "@/components/payments/FundsTab";
 import { ClaimLedgerCard } from "@/components/payments/ClaimLedgerCard";
-import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
 
 
 
