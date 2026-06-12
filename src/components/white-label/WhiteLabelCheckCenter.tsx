@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LogOut, Settings, Shield, Banknote, Receipt, Hammer } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
-import { GlobalPaymentStatusBanner } from "@/components/payments/GlobalPaymentStatusBanner";
 
 const CheckCommandCenter = lazy(() => import("@/pages/CheckCommandCenter"));
 
@@ -96,7 +95,6 @@ export function WhiteLabelCheckCenter() {
         </div>
       </header>
       <main className="p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
-        <GlobalPaymentStatusBanner />
         <Suspense fallback={<PageLoader />}>
           <CheckCommandCenter />
         </Suspense>
