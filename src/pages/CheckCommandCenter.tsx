@@ -809,6 +809,11 @@ export default function CheckCommandCenter() {
         )}
       </div>
 
+      <div className={isMobile ? "sticky top-0 z-20 bg-background pt-1" : ""}>
+        <GlobalPaymentStatusBanner />
+      </div>
+
+
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
         {/* Unified gradient nav cards — all primary navigation */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-9 gap-2 md:gap-3">
