@@ -57,7 +57,6 @@ import { assessCheckValidity } from "@/lib/checkValidity";
 import { SendPaymentPanel } from "@/components/payments/SendPaymentPanel";
 import { FundsTab as IncomingFundsTab } from "@/components/payments/FundsTab";
 import { ClaimLedgerCard } from "@/components/payments/ClaimLedgerCard";
-import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
 
 
 
@@ -3382,18 +3381,6 @@ function CheckDetailPanel({
                 }
 
 
-                if (!isDeposited) {
-                  return (
-                    <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-300">
-                      <p className="font-medium mb-1">Check must be deposited first</p>
-                      <p className="text-xs">
-                        Actum disbursement controls become available once this check is marked as
-                        Deposited (via CheckAlt RDC or branch deposit).
-                      </p>
-                    </div>
-                  );
-                }
-
                 return (
                   <>
                     {contractorPartner ? (
@@ -3407,22 +3394,14 @@ function CheckDetailPanel({
                       />
                     ) : null}
 
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                          Disburse via Actum
-                        </p>
-                      </div>
-                      <DisbursementConsole
+                    <IncomingFundsTab
                         checkIntakeItemId={checkId}
-                        checkAmount={checkAmt}
                         checkNumber={check.check_number ?? undefined}
                         carrierName={check.carrier_name ?? undefined}
-                        onComplete={() => {
-                          qc.invalidateQueries({ queryKey: ["check-funds-count", checkId, tenantId] });
-                        }}
+                        claimId={check.claim_id ?? null}
+                        detectedClaimNumber={check.detected_claim_number ?? null}
+                        actumEnabled={isDeposited}
                       />
-                    </div>
                   </>
                 );
               })()}
