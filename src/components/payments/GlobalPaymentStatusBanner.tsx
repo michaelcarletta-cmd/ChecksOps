@@ -52,7 +52,7 @@ export function GlobalPaymentStatusBanner() {
           )
         `)
         .eq("tenant_id", tenant!.id)
-        .in("status", ["submitted", "returned", "settled"])
+        .in("status", ["submitted", "returned", "settled", "failed"])
         .order("created_at", { ascending: false })
         .limit(100);
 
