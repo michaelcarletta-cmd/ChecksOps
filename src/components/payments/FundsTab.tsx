@@ -148,6 +148,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
 
   // External check form
   const [extRecipient, setExtRecipient] = useState("");
+  const [extRecipientType, setExtRecipientType] = useState<string>("vendor");
   const [extCheckNum, setExtCheckNum] = useState("");
   const [extAmount, setExtAmount] = useState("");
   const [extNotes, setExtNotes] = useState("");
@@ -191,12 +192,13 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
           method: "external_check",
           external_check_number: extCheckNum,
           recipient_name: extRecipient,
+          recipient_type: extRecipientType,
           external_notes: extNotes || null,
           settled_at: new Date().toISOString(),
         });
       if (sErr) throw sErr;
       toast({ title: "External disbursement recorded" });
-      setExtRecipient(""); setExtCheckNum(""); setExtAmount(""); setExtNotes("");
+      setExtRecipient(""); setExtRecipientType("vendor"); setExtCheckNum(""); setExtAmount(""); setExtNotes("");
       setDisburseMode(null);
       qc.invalidateQueries({ queryKey: ["funds-tab-disbursements", checkIntakeItemId, tenant?.id] });
     } catch (e: any) {
@@ -346,9 +348,26 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
               </Button>
             </div>
             <div className="space-y-2">
-              <div>
-                <Label className="text-[11px]">Recipient</Label>
-                <Input className="h-8 text-sm" placeholder="e.g. ABC Roofing" value={extRecipient} onChange={(e) => setExtRecipient(e.target.value)} />
+              <div className="grid grid-cols-[1fr_140px] gap-2">
+                <div>
+                  <Label className="text-[11px]">Recipient</Label>
+                  <Input className="h-8 text-sm" placeholder="e.g. ABC Roofing" value={extRecipient} onChange={(e) => setExtRecipient(e.target.value)} />
+                </div>
+                <div>
+                  <Label className="text-[11px]">Type</Label>
+                  <select
+                    className="h-8 w-full rounded-md border bg-background text-sm px-2"
+                    value={extRecipientType}
+                    onChange={(e) => setExtRecipientType(e.target.value)}
+                  >
+                    <option value="vendor">Vendor</option>
+                    <option value="subcontractor">Subcontractor</option>
+                    <option value="supplier">Supplier</option>
+                    <option value="contractor">Contractor</option>
+                    <option value="insured">Insured</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>

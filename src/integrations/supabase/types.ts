@@ -11721,6 +11721,7 @@ export type Database = {
           method: string
           pct_of_total: number | null
           recipient_name: string | null
+          recipient_type: string | null
           return_code: string | null
           return_desc: string | null
           returned_at: string | null
@@ -11745,6 +11746,7 @@ export type Database = {
           method?: string
           pct_of_total?: number | null
           recipient_name?: string | null
+          recipient_type?: string | null
           return_code?: string | null
           return_desc?: string | null
           returned_at?: string | null
@@ -11769,6 +11771,7 @@ export type Database = {
           method?: string
           pct_of_total?: number | null
           recipient_name?: string | null
+          recipient_type?: string | null
           return_code?: string | null
           return_desc?: string | null
           returned_at?: string | null
