@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LogOut, Settings, Shield, Banknote, Receipt, Hammer } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
+import { GlobalPaymentStatusBanner } from "@/components/payments/GlobalPaymentStatusBanner";
 
 const CheckCommandCenter = lazy(() => import("@/pages/CheckCommandCenter"));
 
