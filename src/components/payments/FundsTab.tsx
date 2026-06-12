@@ -163,12 +163,16 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
     }
     setExtSaving(true);
     try {
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData?.user?.id;
+      if (!uid) throw new Error("Not signed in");
       // Create a batch for this external payment
       const { data: batch, error: bErr } = await (supabase as any)
         .from("disbursement_batches")
         .insert({
           tenant_id: tenant!.id,
           check_intake_item_id: checkIntakeItemId,
+          created_by: uid,
           check_amount: amt,
           available_amount: amt,
           status: "completed",
@@ -176,6 +180,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
           completed_at: new Date().toISOString(),
         })
         .select("id").single();
+
       if (bErr) throw bErr;
       const { error: sErr } = await (supabase as any)
         .from("disbursement_splits").insert({
