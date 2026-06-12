@@ -87,9 +87,15 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
     .filter((s: any) => s.status !== "failed" && s.status !== "cancelled" && s.status !== "returned")
     .reduce((sum: number, s: any) => sum + Number(s.amount || 0), 0);
 
-  const totalReceived = incomingPayments
+  const receivedFromPayments = incomingPayments
     .filter((p: any) => p.status === "settled")
     .reduce((sum: number, p: any) => sum + Number(p.payment_amount), 0);
+
+  // Fallback: when there are no incoming PA→contractor payments, the check
+  // amount itself represents the funds available on this check.
+  const totalReceived = receivedFromPayments > 0
+    ? receivedFromPayments
+    : Number(intakeItem?.amount || 0);
 
   const totalInTransit = incomingPayments
     .filter((p: any) => p.status === "submitted")
