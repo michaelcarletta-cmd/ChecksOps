@@ -192,12 +192,13 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
           method: "external_check",
           external_check_number: extCheckNum,
           recipient_name: extRecipient,
+          recipient_type: extRecipientType,
           external_notes: extNotes || null,
           settled_at: new Date().toISOString(),
         });
       if (sErr) throw sErr;
       toast({ title: "External disbursement recorded" });
-      setExtRecipient(""); setExtCheckNum(""); setExtAmount(""); setExtNotes("");
+      setExtRecipient(""); setExtRecipientType("vendor"); setExtCheckNum(""); setExtAmount(""); setExtNotes("");
       setDisburseMode(null);
       qc.invalidateQueries({ queryKey: ["funds-tab-disbursements", checkIntakeItemId, tenant?.id] });
     } catch (e: any) {
