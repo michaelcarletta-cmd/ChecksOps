@@ -265,7 +265,22 @@ export function PaymentLedger() {
                           {acctLabel && <p className="text-[10px] text-muted-foreground font-mono">{acctLabel}</p>}
                         </td>
                         <td className="p-3 hidden md:table-cell">
-                          <Badge variant="outline" className="text-[10px]">{type ? (ACCOUNT_TYPE_LABELS[type] ?? type) : "—"}</Badge>
+                          {acct ? (
+                            <Badge variant="outline" className={`text-[10px] ${TYPE_COLORS[type ?? ""] ?? ""}`}>
+                              {type ? (ACCOUNT_TYPE_LABELS[type] ?? type) : "—"}
+                            </Badge>
+                          ) : (
+                            <Select value={type ?? "other"} onValueChange={(v) => updateType(p.id, v)}>
+                              <SelectTrigger className={`h-6 text-[10px] px-1.5 border ${TYPE_COLORS[type ?? "other"] ?? ""} gap-1 w-auto min-w-[90px]`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {EDITABLE_TYPES.map((t) => (
+                                  <SelectItem key={t} value={t} className="text-xs">{ACCOUNT_TYPE_LABELS[t]}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
                         </td>
                         <td className="p-3 text-xs font-mono hidden md:table-cell">{check?.check_number ?? "—"}</td>
                         <td className="p-3 text-xs hidden lg:table-cell text-muted-foreground">{check?.carrier_name ?? "—"}</td>
