@@ -148,6 +148,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
 
   // External check form
   const [extRecipient, setExtRecipient] = useState("");
+  const [extRecipientType, setExtRecipientType] = useState<string>("vendor");
   const [extCheckNum, setExtCheckNum] = useState("");
   const [extAmount, setExtAmount] = useState("");
   const [extNotes, setExtNotes] = useState("");
