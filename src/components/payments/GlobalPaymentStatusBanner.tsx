@@ -52,7 +52,7 @@ export function GlobalPaymentStatusBanner() {
           )
         `)
         .eq("tenant_id", tenant!.id)
-        .in("status", ["submitted", "returned", "settled"])
+        .in("status", ["submitted", "returned", "settled", "failed"])
         .order("created_at", { ascending: false })
         .limit(100);
 
@@ -74,7 +74,7 @@ export function GlobalPaymentStatusBanner() {
         const batch = (split as any).disbursement_batches;
         const check = batch?.check_intake_items;
 
-        if (split.status === "returned" && !dismissed.has(split.id)) {
+        if ((split.status === "returned" || split.status === "failed") && !dismissed.has(split.id)) {
           result.returned.push({
             id: split.id,
             amount: Number(split.amount),

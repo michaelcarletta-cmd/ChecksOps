@@ -94,7 +94,7 @@ export function CheckPaymentStatusBanner({ checkIntakeItemId }: Props) {
 
   if (isLoading || splits.length === 0) return null;
 
-  const returned = splits.filter((s: any) => s.status === "returned");
+  const returned = splits.filter((s: any) => s.status === "returned" || s.status === "failed");
   const inTransit = splits.filter((s: any) => s.status === "submitted");
   const settled = splits.filter((s: any) => s.status === "settled");
   const pending = splits.filter((s: any) => s.status === "pending");
