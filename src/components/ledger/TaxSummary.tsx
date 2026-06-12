@@ -544,9 +544,19 @@ export function TaxSummary() {
                       </td>
                       <td className="p-2 text-center">
                         {r.needs_1099 ? (
-                          <div className="flex items-center justify-center gap-1">
-                            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                            <span className="text-xs text-amber-600 font-medium">Required</span>
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="flex items-center justify-center gap-1">
+                              <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                              <span className="text-xs text-amber-600 font-medium">Required</span>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 text-[10px] px-2"
+                              onClick={() => generate1099([r])}
+                            >
+                              <FileText className="h-3 w-3 mr-1" />Generate
+                            </Button>
                           </div>
                         ) : r.requires_1099 ? (
                           <span className="text-[10px] text-muted-foreground">Under $600</span>
