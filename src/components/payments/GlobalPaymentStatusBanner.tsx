@@ -43,7 +43,7 @@ export function GlobalPaymentStatusBanner() {
       const { data: splits, error } = await supabase
         .from("disbursement_splits")
         .select(`
-          id, amount, status, return_code, return_desc,
+          id, amount, status, return_code, return_desc, settled_at,
           actum_consumer_unique,
           stakeholder_accounts (nickname, custname),
           disbursement_batches (
