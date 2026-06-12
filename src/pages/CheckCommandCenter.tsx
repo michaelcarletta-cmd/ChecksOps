@@ -58,6 +58,8 @@ import { SendPaymentPanel } from "@/components/payments/SendPaymentPanel";
 import { FundsTab as IncomingFundsTab } from "@/components/payments/FundsTab";
 import { ClaimLedgerCard } from "@/components/payments/ClaimLedgerCard";
 import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
+import { GlobalPaymentStatusBanner } from "@/components/payments/GlobalPaymentStatusBanner";
+import { CheckPaymentStatusBanner } from "@/components/payments/CheckPaymentStatusBanner";
 
 
 
