@@ -809,9 +809,6 @@ export default function CheckCommandCenter() {
         )}
       </div>
 
-      <div className={isMobile ? "sticky top-0 z-20 bg-background pt-1" : ""}>
-        <GlobalPaymentStatusBanner />
-      </div>
 
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
