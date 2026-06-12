@@ -356,6 +356,14 @@ export function TaxSummary() {
           <Button size="sm" variant="outline" className="h-8 text-xs" onClick={exportCSV}>
             <Download className="h-3.5 w-3.5 mr-1" />Export for accountant
           </Button>
+          <Button
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => generate1099(recipients.filter(r => r.needs_1099))}
+            disabled={flag1099Count === 0}
+          >
+            <FileText className="h-3.5 w-3.5 mr-1" />Generate {flag1099Count > 0 ? `${flag1099Count} ` : ""}1099{flag1099Count !== 1 ? "s" : ""}
+          </Button>
         </div>
       </div>
 
