@@ -2079,6 +2079,8 @@ export type Database = {
           ocr_heartbeat_at: string | null
           ocr_needs_verification: boolean
           ocr_status: string | null
+          pa_fee_amount: number | null
+          pa_fee_pct: number | null
           partner_status: string | null
           partner_status_label: string | null
           partner_status_updated_at: string | null
@@ -2136,6 +2138,8 @@ export type Database = {
           ocr_heartbeat_at?: string | null
           ocr_needs_verification?: boolean
           ocr_status?: string | null
+          pa_fee_amount?: number | null
+          pa_fee_pct?: number | null
           partner_status?: string | null
           partner_status_label?: string | null
           partner_status_updated_at?: string | null
@@ -2193,6 +2197,8 @@ export type Database = {
           ocr_heartbeat_at?: string | null
           ocr_needs_verification?: boolean
           ocr_status?: string | null
+          pa_fee_amount?: number | null
+          pa_fee_pct?: number | null
           partner_status?: string | null
           partner_status_label?: string | null
           partner_status_updated_at?: string | null
@@ -11708,14 +11714,18 @@ export type Database = {
           amount: number
           batch_id: string
           created_at: string
+          external_check_number: string | null
+          external_notes: string | null
           id: string
           idempotence_key: string | null
+          method: string
           pct_of_total: number | null
+          recipient_name: string | null
           return_code: string | null
           return_desc: string | null
           returned_at: string | null
           settled_at: string | null
-          stakeholder_account_id: string
+          stakeholder_account_id: string | null
           status: string
           submitted_at: string | null
           tenant_id: string
@@ -11728,14 +11738,18 @@ export type Database = {
           amount: number
           batch_id: string
           created_at?: string
+          external_check_number?: string | null
+          external_notes?: string | null
           id?: string
           idempotence_key?: string | null
+          method?: string
           pct_of_total?: number | null
+          recipient_name?: string | null
           return_code?: string | null
           return_desc?: string | null
           returned_at?: string | null
           settled_at?: string | null
-          stakeholder_account_id: string
+          stakeholder_account_id?: string | null
           status?: string
           submitted_at?: string | null
           tenant_id: string
@@ -11748,14 +11762,18 @@ export type Database = {
           amount?: number
           batch_id?: string
           created_at?: string
+          external_check_number?: string | null
+          external_notes?: string | null
           id?: string
           idempotence_key?: string | null
+          method?: string
           pct_of_total?: number | null
+          recipient_name?: string | null
           return_code?: string | null
           return_desc?: string | null
           returned_at?: string | null
           settled_at?: string | null
-          stakeholder_account_id?: string
+          stakeholder_account_id?: string | null
           status?: string
           submitted_at?: string | null
           tenant_id?: string
