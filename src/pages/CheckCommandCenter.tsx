@@ -1300,6 +1300,7 @@ export default function CheckCommandCenter() {
                       </Button>
                     </div>
                   )}
+                  <CheckPaymentStatusBanner checkIntakeItemId={selectedCheck} />
                   <CheckDetailPanel
                     checkId={selectedCheck}
                     onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
