@@ -57,6 +57,7 @@ export function PaymentLedger() {
         .select(`
           id, amount, status, submitted_at, settled_at, returned_at,
           return_code, return_desc, actum_order_id, created_at,
+          method, recipient_name, recipient_type, external_check_number,
           stakeholder_accounts (
             id, nickname, custname, account_type, chk_acct
           ),
