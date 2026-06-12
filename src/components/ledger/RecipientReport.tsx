@@ -11,21 +11,36 @@ import { Download, Search, Users } from "lucide-react";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths } from "date-fns";
 
 const TYPE_LABELS: Record<string, string> = {
-  vendor: "Vendor",
-  subcontractor: "Subcontractor",
-  supplier: "Supplier",
-  contractor: "Contractor",
+  subcontractor: "Subs",
+  contractor: "Contractors",
+  sales_rep: "Sales Reps",
+  appraisal: "Appraisal",
+  supplier: "Suppliers",
+  adjuster: "Adjusters",
+  vendor: "Vendors",
   insured: "Insured",
   overhead: "Overhead",
   operating: "Operating",
   other: "Other",
 };
 
+const CATEGORY_TILES: { key: string; label: string }[] = [
+  { key: "subcontractor", label: "Subs" },
+  { key: "contractor", label: "Contractors" },
+  { key: "sales_rep", label: "Sales Reps" },
+  { key: "appraisal", label: "Appraisal" },
+  { key: "supplier", label: "Suppliers" },
+  { key: "adjuster", label: "Adjusters" },
+];
+
 const TYPE_COLORS: Record<string, string> = {
   vendor: "text-blue-600 border-blue-500/30 bg-blue-500/10",
   subcontractor: "text-purple-600 border-purple-500/30 bg-purple-500/10",
   supplier: "text-amber-600 border-amber-500/30 bg-amber-500/10",
   contractor: "text-emerald-600 border-emerald-500/30 bg-emerald-500/10",
+  sales_rep: "text-pink-600 border-pink-500/30 bg-pink-500/10",
+  appraisal: "text-indigo-600 border-indigo-500/30 bg-indigo-500/10",
+  adjuster: "text-orange-600 border-orange-500/30 bg-orange-500/10",
   insured: "text-cyan-600 border-cyan-500/30 bg-cyan-500/10",
   other: "text-muted-foreground border-border bg-muted/30",
 };
