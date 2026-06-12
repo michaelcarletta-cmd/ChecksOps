@@ -1,14 +1,15 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths } from "date-fns";
-import { Download, Search, Receipt, TrendingUp, Users, DollarSign } from "lucide-react";
+import { Download, Search } from "lucide-react";
 
 const STATUS_COLORS: Record<string, string> = {
   submitted: "text-blue-600 border-blue-500/30 bg-blue-500/10",
