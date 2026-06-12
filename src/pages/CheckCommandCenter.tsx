@@ -743,7 +743,7 @@ export default function CheckCommandCenter() {
       const { data, error } = await supabase
         .from("disbursement_splits")
         .select(`
-          id, amount, settled_at,
+          id, amount, settled_at, recipient_name, method, external_check_number,
           stakeholder_accounts (nickname, custname),
           disbursement_batches (
             id, check_intake_item_id,
@@ -771,6 +771,26 @@ export default function CheckCommandCenter() {
     },
     refetchInterval: 15_000,
   });
+
+  // Realtime: when a disbursement is recorded (Actum or external check), advance
+  // the check stage and move it into the Funds Released bucket without a refresh.
+  useEffect(() => {
+    if (!tenantId) return;
+    const channel = supabase
+      .channel(`checkops-realtime-${tenantId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "disbursement_splits" }, () => {
+        qc.invalidateQueries({ queryKey: ["funds-released", tenantId] });
+        qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+        qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+        qc.invalidateQueries({ queryKey: ["funds-tab-disbursements"] });
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "check_intake_items" }, () => {
+        qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+        qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [tenantId, qc]);
 
   return (
     <div className="space-y-4 max-w-full overflow-x-hidden">
@@ -1085,7 +1105,7 @@ export default function CheckCommandCenter() {
                             >
                               <TableCell className="font-mono text-sm">#{check?.check_number || "—"}</TableCell>
                               <TableCell className="text-sm">{check?.carrier_name || "—"}</TableCell>
-                              <TableCell className="text-sm">{acct?.nickname ?? acct?.custname ?? "—"}</TableCell>
+                              <TableCell className="text-sm">{split.recipient_name ?? acct?.nickname ?? acct?.custname ?? "—"}{split.external_check_number ? <span className="ml-1 text-xs text-muted-foreground font-mono">· Ck #{split.external_check_number}</span> : null}</TableCell>
                               <TableCell className="text-right tabular-nums">
                                 ${Number(split.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                               </TableCell>

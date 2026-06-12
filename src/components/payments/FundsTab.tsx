@@ -212,11 +212,6 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
 
   return (
     <div className="space-y-4 p-1">
-      {noIncoming && (
-        <div className="rounded-md border border-border bg-muted/30 p-2 text-[11px] text-muted-foreground">
-          No incoming PA payments recorded. Using check amount as the basis for disbursement.
-        </div>
-      )}
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-2">
         <Card>
@@ -425,11 +420,6 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
         })}
       </div>
 
-      {totalInTransit > 0 && totalReceived === 0 && (
-        <div className="rounded-md border border-blue-500/30 bg-blue-500/10 p-3 text-xs text-blue-700 dark:text-blue-300">
-          ${totalInTransit.toLocaleString("en-US", { minimumFractionDigits: 2 })} is in transit and should settle within 1–2 banking days.
-        </div>
-      )}
     </div>
   );
 }
