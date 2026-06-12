@@ -11,21 +11,36 @@ import { Download, Search, Users } from "lucide-react";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths } from "date-fns";
 
 const TYPE_LABELS: Record<string, string> = {
-  vendor: "Vendor",
-  subcontractor: "Subcontractor",
-  supplier: "Supplier",
-  contractor: "Contractor",
+  subcontractor: "Subs",
+  contractor: "Contractors",
+  sales_rep: "Sales Reps",
+  appraisal: "Appraisal",
+  supplier: "Suppliers",
+  adjuster: "Adjusters",
+  vendor: "Vendors",
   insured: "Insured",
   overhead: "Overhead",
   operating: "Operating",
   other: "Other",
 };
 
+const CATEGORY_TILES: { key: string; label: string }[] = [
+  { key: "subcontractor", label: "Subs" },
+  { key: "contractor", label: "Contractors" },
+  { key: "sales_rep", label: "Sales Reps" },
+  { key: "appraisal", label: "Appraisal" },
+  { key: "supplier", label: "Suppliers" },
+  { key: "adjuster", label: "Adjusters" },
+];
+
 const TYPE_COLORS: Record<string, string> = {
   vendor: "text-blue-600 border-blue-500/30 bg-blue-500/10",
   subcontractor: "text-purple-600 border-purple-500/30 bg-purple-500/10",
   supplier: "text-amber-600 border-amber-500/30 bg-amber-500/10",
   contractor: "text-emerald-600 border-emerald-500/30 bg-emerald-500/10",
+  sales_rep: "text-pink-600 border-pink-500/30 bg-pink-500/10",
+  appraisal: "text-indigo-600 border-indigo-500/30 bg-indigo-500/10",
+  adjuster: "text-orange-600 border-orange-500/30 bg-orange-500/10",
   insured: "text-cyan-600 border-cyan-500/30 bg-cyan-500/10",
   other: "text-muted-foreground border-border bg-muted/30",
 };
@@ -145,8 +160,42 @@ export function RecipientReport() {
     URL.revokeObjectURL(url);
   };
 
+  const tileTotals = useMemo(() => {
+    const acc: Record<string, { total: number; count: number; recipients: Set<string> }> = {};
+    for (const r of normalized) {
+      if (r.status !== "settled") continue;
+      if (!acc[r.type]) acc[r.type] = { total: 0, count: 0, recipients: new Set() };
+      acc[r.type].total += r.amount;
+      acc[r.type].count += 1;
+      acc[r.type].recipients.add(r.name);
+    }
+    return acc;
+  }, [normalized]);
+
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        {CATEGORY_TILES.map((t) => {
+          const v = tileTotals[t.key] ?? { total: 0, count: 0, recipients: new Set() };
+          const active = typeFilter === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTypeFilter(active ? "all" : t.key)}
+              className={`text-left rounded-lg border p-3 transition-colors hover:bg-muted/40 ${active ? "border-primary bg-primary/5" : ""}`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <Badge variant="outline" className={`text-[10px] ${TYPE_COLORS[t.key] ?? ""}`}>{t.label}</Badge>
+                <span className="text-[10px] text-muted-foreground">{v.recipients.size}</span>
+              </div>
+              <p className="text-sm font-semibold">${v.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
+              <p className="text-[10px] text-muted-foreground">{v.count} payment{v.count !== 1 ? "s" : ""}</p>
+            </button>
+          );
+        })}
+      </div>
+
       <Card>
         <CardContent className="pt-3 pb-3">
           <div className="flex flex-wrap gap-2 items-center">

@@ -360,10 +360,13 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
                     value={extRecipientType}
                     onChange={(e) => setExtRecipientType(e.target.value)}
                   >
-                    <option value="vendor">Vendor</option>
                     <option value="subcontractor">Subcontractor</option>
-                    <option value="supplier">Supplier</option>
                     <option value="contractor">Contractor</option>
+                    <option value="sales_rep">Sales Rep</option>
+                    <option value="appraisal">Appraisal</option>
+                    <option value="supplier">Supplier</option>
+                    <option value="adjuster">Adjuster</option>
+                    <option value="vendor">Vendor</option>
                     <option value="insured">Insured</option>
                     <option value="other">Other</option>
                   </select>
