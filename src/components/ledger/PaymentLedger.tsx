@@ -149,24 +149,6 @@ export function PaymentLedger() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card><CardContent className="pt-3 pb-3">
-          <div className="flex items-center gap-1.5 mb-1"><DollarSign className="h-3.5 w-3.5 text-emerald-400" /><span className="text-xs text-muted-foreground">Total Paid Out</span></div>
-          <p className="text-lg font-semibold">${stats.totalOut.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
-        </CardContent></Card>
-        <Card><CardContent className="pt-3 pb-3">
-          <div className="flex items-center gap-1.5 mb-1"><Receipt className="h-3.5 w-3.5 text-blue-400" /><span className="text-xs text-muted-foreground">Payments</span></div>
-          <p className="text-lg font-semibold">{stats.count}</p>
-        </CardContent></Card>
-        <Card><CardContent className="pt-3 pb-3">
-          <div className="flex items-center gap-1.5 mb-1"><Users className="h-3.5 w-3.5 text-purple-400" /><span className="text-xs text-muted-foreground">Recipients</span></div>
-          <p className="text-lg font-semibold">{stats.uniqueRecipients}</p>
-        </CardContent></Card>
-        <Card><CardContent className="pt-3 pb-3">
-          <div className="flex items-center gap-1.5 mb-1"><TrendingUp className="h-3.5 w-3.5 text-amber-400" /><span className="text-xs text-muted-foreground">To Subs</span></div>
-          <p className="text-lg font-semibold">${(stats.byType.subcontractor ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
-        </CardContent></Card>
-      </div>
 
       <Card>
         <CardContent className="pt-3 pb-3">
