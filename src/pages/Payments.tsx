@@ -1,7 +1,8 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PaymentLedger } from "@/components/ledger/PaymentLedger";
+import { RecipientReport } from "@/components/ledger/RecipientReport";
 import { TaxSummary } from "@/components/ledger/TaxSummary";
-import { Receipt, FileText } from "lucide-react";
+import { Receipt, FileText, Users } from "lucide-react";
 
 export default function Payments() {
   return (
@@ -9,7 +10,7 @@ export default function Payments() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Payments</h1>
         <p className="text-sm text-muted-foreground">
-          Track all outbound payments to subcontractors, vendors, and sales reps
+          Track all outbound payments to vendors, insureds, contractors, subcontractors, and suppliers
         </p>
       </div>
 
@@ -19,6 +20,10 @@ export default function Payments() {
             <Receipt className="h-4 w-4" />
             Payment History
           </TabsTrigger>
+          <TabsTrigger value="recipients" className="gap-2">
+            <Users className="h-4 w-4" />
+            By Recipient
+          </TabsTrigger>
           <TabsTrigger value="tax" className="gap-2">
             <FileText className="h-4 w-4" />
             Tax & 1099
@@ -26,6 +31,9 @@ export default function Payments() {
         </TabsList>
         <TabsContent value="ledger">
           <PaymentLedger />
+        </TabsContent>
+        <TabsContent value="recipients">
+          <RecipientReport />
         </TabsContent>
         <TabsContent value="tax">
           <TaxSummary />
