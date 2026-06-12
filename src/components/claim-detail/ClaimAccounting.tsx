@@ -1207,14 +1207,18 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                     )}
                   </TableCell>
                   <TableCell>
-                    {check.deposit_status ? (
-                      <Badge variant="outline" className="text-[10px] px-1.5 capitalize">
-                        {check.deposit_status.replace(/_/g, " ")}
-                      </Badge>
-                    ) : "—"}
+                    {(() => {
+                      const label = getDepositLabel(check);
+                      if (label === "—") return "—";
+                      return (
+                        <Badge variant="outline" className="text-[10px] px-1.5 capitalize">
+                          {label}
+                        </Badge>
+                      );
+                    })()}
                     {check.mortgage_flag && (
                       <Badge className="ml-1 bg-blue-500/20 text-blue-400 text-[9px] px-1 whitespace-nowrap">
-                        {check.deposit_status !== 'ready' && check.deposit_status !== 'approved' && check.deposit_status !== 'deposited' ? 'LOSS DRAFT BLOCKED' : 'MTG'}
+                        {check.deposit_status !== 'ready' && check.deposit_status !== 'approved' && check.deposit_status !== 'deposited' && check.check_stage !== 'deposited' && check.check_stage !== 'funds_released' ? 'LOSS DRAFT BLOCKED' : 'MTG'}
                       </Badge>
                     )}
                   </TableCell>
