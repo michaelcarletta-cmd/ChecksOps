@@ -772,6 +772,26 @@ export default function CheckCommandCenter() {
     refetchInterval: 15_000,
   });
 
+  // Realtime: when a disbursement is recorded (Actum or external check), advance
+  // the check stage and move it into the Funds Released bucket without a refresh.
+  useEffect(() => {
+    if (!tenantId) return;
+    const channel = supabase
+      .channel(`checkops-realtime-${tenantId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "disbursement_splits" }, () => {
+        qc.invalidateQueries({ queryKey: ["funds-released", tenantId] });
+        qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+        qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+        qc.invalidateQueries({ queryKey: ["funds-tab-disbursements"] });
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "check_intake_items" }, () => {
+        qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+        qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [tenantId, qc]);
+
   return (
     <div className="space-y-4 max-w-full overflow-x-hidden">
       <div className="flex flex-wrap items-start sm:items-center justify-between gap-2">
