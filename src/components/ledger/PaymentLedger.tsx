@@ -90,14 +90,16 @@ export function PaymentLedger() {
       const acct = p.stakeholder_accounts;
       const batch = p.disbursement_batches;
       const check = batch?.check_intake_items;
+      const name = acct?.nickname ?? acct?.custname ?? p.recipient_name ?? "";
+      const type = acct?.account_type ?? p.recipient_type ?? "other";
 
       const matchSearch = !search ||
-        acct?.nickname?.toLowerCase().includes(search.toLowerCase()) ||
-        acct?.custname?.toLowerCase().includes(search.toLowerCase()) ||
+        name.toLowerCase().includes(search.toLowerCase()) ||
         check?.check_number?.toLowerCase().includes(search.toLowerCase()) ||
-        check?.carrier_name?.toLowerCase().includes(search.toLowerCase());
+        check?.carrier_name?.toLowerCase().includes(search.toLowerCase()) ||
+        p.external_check_number?.toLowerCase().includes(search.toLowerCase());
 
-      const matchType = typeFilter === "all" || acct?.account_type === typeFilter;
+      const matchType = typeFilter === "all" || type === typeFilter;
       const matchStatus = statusFilter === "all" || p.status === statusFilter;
 
       return matchSearch && matchType && matchStatus;
