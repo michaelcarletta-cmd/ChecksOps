@@ -234,15 +234,22 @@ export function PaymentLedger() {
                   {filtered.map((p: any) => {
                     const acct = p.stakeholder_accounts;
                     const check = p.disbursement_batches?.check_intake_items;
+                    const name = acct?.nickname ?? acct?.custname ?? p.recipient_name ?? "—";
+                    const type = acct?.account_type ?? p.recipient_type ?? null;
+                    const acctLabel = acct?.chk_acct
+                      ? `••••${acct.chk_acct.slice(-4)}`
+                      : p.method === "external_check"
+                        ? (p.external_check_number ? `Ck #${p.external_check_number}` : "External check")
+                        : "";
                     return (
                       <tr key={p.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                         <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">{format(new Date(p.created_at), "MMM d, yyyy")}</td>
                         <td className="p-3">
-                          <p className="font-medium text-xs">{acct?.nickname ?? "—"}</p>
-                          <p className="text-[10px] text-muted-foreground font-mono">••••{acct?.chk_acct?.slice(-4)}</p>
+                          <p className="font-medium text-xs">{name}</p>
+                          {acctLabel && <p className="text-[10px] text-muted-foreground font-mono">{acctLabel}</p>}
                         </td>
                         <td className="p-3 hidden md:table-cell">
-                          <Badge variant="outline" className="text-[10px]">{ACCOUNT_TYPE_LABELS[acct?.account_type] ?? "—"}</Badge>
+                          <Badge variant="outline" className="text-[10px]">{type ? (ACCOUNT_TYPE_LABELS[type] ?? type) : "—"}</Badge>
                         </td>
                         <td className="p-3 text-xs font-mono hidden md:table-cell">{check?.check_number ?? "—"}</td>
                         <td className="p-3 text-xs hidden lg:table-cell text-muted-foreground">{check?.carrier_name ?? "—"}</td>
