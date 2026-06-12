@@ -110,11 +110,11 @@ export function PaymentLedger() {
     const settled = filtered.filter((p: any) => p.status === "settled");
     const totalOut = settled.reduce((s: number, p: any) => s + Number(p.amount), 0);
     const byType = settled.reduce((acc: Record<string, number>, p: any) => {
-      const t = p.stakeholder_accounts?.account_type ?? "other";
+      const t = p.stakeholder_accounts?.account_type ?? p.recipient_type ?? "other";
       acc[t] = (acc[t] ?? 0) + Number(p.amount);
       return acc;
     }, {});
-    const uniqueRecipients = new Set(settled.map((p: any) => p.stakeholder_accounts?.id)).size;
+    const uniqueRecipients = new Set(settled.map((p: any) => p.stakeholder_accounts?.id ?? p.recipient_name)).size;
     return { totalOut, byType, uniqueRecipients, count: settled.length };
   }, [filtered]);
 
