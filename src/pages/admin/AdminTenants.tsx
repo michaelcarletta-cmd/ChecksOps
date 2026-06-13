@@ -15,6 +15,8 @@ import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, Ref
 import { useRef } from "react";
 import { TenantDocumentsManager } from "@/components/white-label/TenantDocumentsManager";
 import { Switch } from "@/components/ui/switch";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
 
 const ALLOWED_EMAIL = "mcarletta@freedomadj.com";
 
