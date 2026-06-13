@@ -328,6 +328,37 @@ Deno.serve(async (req) => {
       .maybeSingle();
     const branding: BrandingConfig = brandingRow || {};
 
+    // Resolve tenant-specific From / Reply-To (white-label override).
+    // Tenant comes from claim or shared check_intake_item; falls back to Freedom default.
+    let tenantFromOverride: string | null = null;
+    let tenantReplyTo: string | null = null;
+    try {
+      let tenantId: string | null = null;
+      if (request.claim_id) {
+        const { data: cl } = await sb
+          .from("claims").select("tenant_id").eq("id", request.claim_id).maybeSingle();
+        tenantId = (cl as any)?.tenant_id ?? null;
+      }
+      if (!tenantId && request.check_intake_item_id) {
+        const { data: ck } = await sb
+          .from("check_intake_items").select("tenant_id").eq("id", request.check_intake_item_id).maybeSingle();
+        tenantId = (ck as any)?.tenant_id ?? null;
+      }
+      if (tenantId) {
+        const { data: t } = await sb
+          .from("tenants")
+          .select("name, email_from_name, email_from_address, email_reply_to")
+          .eq("id", tenantId)
+          .maybeSingle();
+        const addr = (t as any)?.email_from_address;
+        if (addr) {
+          const name = (t as any)?.email_from_name || (t as any)?.name || "Notifications";
+          tenantFromOverride = `${name} <${addr}>`;
+        }
+        tenantReplyTo = (t as any)?.email_reply_to ?? null;
+      }
+    } catch (_e) { /* fall back to default sender */ }
+
     claimId = request.claim_id;
     const signersArr: any[] = request.signature_signers || [];
 
