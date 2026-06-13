@@ -17738,6 +17738,9 @@ export type Database = {
       }
       tenants: {
         Row: {
+          ach_policy_acknowledged_at: string | null
+          ach_policy_acknowledged_by: string | null
+          ach_policy_version: string | null
           actum_parent_id: string | null
           actum_password: string | null
           actum_sub_id: string | null
@@ -17746,9 +17749,15 @@ export type Database = {
           actum_syspass: string | null
           actum_username: string | null
           actum_webhook_secret: string | null
+          beneficial_owner_dob: string | null
+          beneficial_owner_id_url: string | null
+          beneficial_owner_name: string | null
+          business_address: string | null
+          business_phone: string | null
           created_at: string
           custom_domain: string | null
           data_retention_years: number
+          ein: string | null
           email_from_address: string | null
           email_from_name: string | null
           email_provider: string | null
@@ -17757,6 +17766,9 @@ export type Database = {
           id: string
           is_founding_partner: boolean
           is_system_tenant: boolean | null
+          kyc_completed_at: string | null
+          kyc_completed_by: string | null
+          legal_business_name: string | null
           logo_url: string | null
           max_checks_per_month: number | null
           monthly_rate_cents: number
@@ -17780,6 +17792,9 @@ export type Database = {
           wisp_acknowledged_by: string | null
         }
         Insert: {
+          ach_policy_acknowledged_at?: string | null
+          ach_policy_acknowledged_by?: string | null
+          ach_policy_version?: string | null
           actum_parent_id?: string | null
           actum_password?: string | null
           actum_sub_id?: string | null
@@ -17788,9 +17803,15 @@ export type Database = {
           actum_syspass?: string | null
           actum_username?: string | null
           actum_webhook_secret?: string | null
+          beneficial_owner_dob?: string | null
+          beneficial_owner_id_url?: string | null
+          beneficial_owner_name?: string | null
+          business_address?: string | null
+          business_phone?: string | null
           created_at?: string
           custom_domain?: string | null
           data_retention_years?: number
+          ein?: string | null
           email_from_address?: string | null
           email_from_name?: string | null
           email_provider?: string | null
@@ -17799,6 +17820,9 @@ export type Database = {
           id?: string
           is_founding_partner?: boolean
           is_system_tenant?: boolean | null
+          kyc_completed_at?: string | null
+          kyc_completed_by?: string | null
+          legal_business_name?: string | null
           logo_url?: string | null
           max_checks_per_month?: number | null
           monthly_rate_cents?: number
@@ -17822,6 +17846,9 @@ export type Database = {
           wisp_acknowledged_by?: string | null
         }
         Update: {
+          ach_policy_acknowledged_at?: string | null
+          ach_policy_acknowledged_by?: string | null
+          ach_policy_version?: string | null
           actum_parent_id?: string | null
           actum_password?: string | null
           actum_sub_id?: string | null
@@ -17830,9 +17857,15 @@ export type Database = {
           actum_syspass?: string | null
           actum_username?: string | null
           actum_webhook_secret?: string | null
+          beneficial_owner_dob?: string | null
+          beneficial_owner_id_url?: string | null
+          beneficial_owner_name?: string | null
+          business_address?: string | null
+          business_phone?: string | null
           created_at?: string
           custom_domain?: string | null
           data_retention_years?: number
+          ein?: string | null
           email_from_address?: string | null
           email_from_name?: string | null
           email_provider?: string | null
@@ -17841,6 +17874,9 @@ export type Database = {
           id?: string
           is_founding_partner?: boolean
           is_system_tenant?: boolean | null
+          kyc_completed_at?: string | null
+          kyc_completed_by?: string | null
+          legal_business_name?: string | null
           logo_url?: string | null
           max_checks_per_month?: number | null
           monthly_rate_cents?: number

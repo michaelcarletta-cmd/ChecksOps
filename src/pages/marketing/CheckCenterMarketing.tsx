@@ -560,6 +560,7 @@ export default function CheckCenterMarketing() {
               <a href={`mailto:${supportEmail}`} className="hover:text-foreground">Support</a>
               <Link to="/login" className="hover:text-foreground">Sign in</Link>
               <a href="#demo" className="hover:text-foreground">Book demo</a>
+              <Link to="/privacy-notice" className="hover:text-foreground">Privacy Notice</Link>
             </div>
           </div>
           <p className="mx-auto max-w-4xl text-center text-[11px] leading-relaxed text-muted-foreground">

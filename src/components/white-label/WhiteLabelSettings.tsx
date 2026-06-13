@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft,
   Loader2, Save, Trash2, Receipt, Banknote, KeyRound, HelpCircle,
-  ArrowDownToLine, FileBarChart, Gift
+  ArrowDownToLine, FileBarChart, Gift, ShieldCheck
 } from "lucide-react";
 import { ReferralSettings } from "@/components/settings/ReferralSettings";
 import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
@@ -24,6 +24,8 @@ import { TenantUserManager } from "./TenantUserManager";
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { TenantAIKeySettings } from "./TenantAIKeySettings";
 import { ActumSettings } from "@/components/settings/ActumSettings";
+import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
+import { GLBASecurityEventsLog } from "@/components/settings/GLBASecurityEventsLog";
 
 import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
 import { CheckUsageCard } from "@/components/billing/CheckUsageCard";
@@ -111,6 +113,7 @@ export function WhiteLabelSettings() {
             
             <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding</TabsTrigger>
             <TabsTrigger value="referrals" className="text-xs gap-1"><Gift className="h-3 w-3" />Referrals</TabsTrigger>
+            <TabsTrigger value="compliance" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Compliance</TabsTrigger>
             <TabsTrigger value="guide" className="text-xs gap-1"><HelpCircle className="h-3 w-3" />ChecksOps Guide</TabsTrigger>
           </TabsList>
 
@@ -163,6 +166,11 @@ export function WhiteLabelSettings() {
           <TabsContent value="referrals">
             <ReferralSettings />
             <AdminReferralDashboard />
+          </TabsContent>
+
+          <TabsContent value="compliance" className="space-y-6">
+            <ComplianceSettings />
+            {isAdmin && <GLBASecurityEventsLog />}
           </TabsContent>
 
           <TabsContent value="guide">
