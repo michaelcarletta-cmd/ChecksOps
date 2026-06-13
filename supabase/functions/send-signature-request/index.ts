@@ -76,17 +76,24 @@ function generateRawToken(): string {
 // Resend email delivery
 // ---------------------------------------------------------------------------
 
-async function sendResend(to: string, subject: string, html: string) {
+async function sendResend(
+  to: string,
+  subject: string,
+  html: string,
+  opts?: { fromOverride?: string | null; replyTo?: string | null },
+) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey) throw new Error("RESEND_API_KEY not configured");
 
   const fromEmail = Deno.env.get("FROM_EMAIL") || "claims@freedomclaims.work";
-  const body = {
-    from: `Freedom Claims <${fromEmail}>`,
+  const defaultFrom = `Freedom Claims <${fromEmail}>`;
+  const body: Record<string, unknown> = {
+    from: opts?.fromOverride || defaultFrom,
     to: [to],
     subject,
     html,
   };
+  if (opts?.replyTo) body.reply_to = opts.replyTo;
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
