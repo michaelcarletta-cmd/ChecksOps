@@ -859,3 +859,266 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
     </Card>
   );
 }
+
+/* ---------------- Tenant Management Table (master owner only) ---------------- */
+
+function TenantManagementTable({
+  tenants,
+  onOpen,
+  onChanged,
+}: {
+  tenants: Tenant[];
+  onOpen: (t: Tenant) => void;
+  onChanged: () => void;
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [notesTenant, setNotesTenant] = useState<Tenant | null>(null);
+
+  const updateTenant = async (id: string, patch: Record<string, any>, silent = false) => {
+    setBusyId(id);
+    const { error } = await supabase.from("tenants").update(patch as any).eq("id", id);
+    setBusyId(null);
+    if (error) {
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+      return false;
+    }
+    if (!silent) toast({ title: "Saved" });
+    onChanged();
+    return true;
+  };
+
+  const toggleActive = (t: Tenant, active: boolean) =>
+    updateTenant(t.id, { subscription_status: active ? "active" : "inactive" });
+
+  const toggleFoundingPartner = (t: Tenant, on: boolean) =>
+    updateTenant(t.id, on
+      ? { is_founding_partner: true, monthly_rate_cents: 7500 }
+      : { is_founding_partner: false });
+
+  const fmtMoney = (cents?: number | null) =>
+    cents == null ? "—" : `$${(cents / 100).toFixed(2)}`;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Tenant Management</CardTitle>
+        <CardDescription>
+          Master owner control panel — review, approve, and configure every tenant. Not visible to tenant or staff users.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Slug</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Active</TableHead>
+              <TableHead>Founding</TableHead>
+              <TableHead>Monthly Rate</TableHead>
+              <TableHead>Referral Code</TableHead>
+              <TableHead>Referral Disc.</TableHead>
+              <TableHead>KYC</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {tenants.map((t) => {
+              const isActive = t.subscription_status === "active";
+              return (
+                <TableRow key={t.id} className={busyId === t.id ? "opacity-60" : ""}>
+                  <TableCell className="font-medium">
+                    <button className="hover:underline text-left" onClick={() => onOpen(t)}>
+                      {t.name}
+                    </button>
+                    {t.is_system_tenant && <Badge variant="outline" className="ml-2 text-[10px]">System</Badge>}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs">/{t.slug}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {new Date(t.created_at).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={isActive ? "default" : "secondary"}>
+                      {t.subscription_status || "inactive"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Switch
+                      checked={isActive}
+                      onCheckedChange={(v) => toggleActive(t, v)}
+                      disabled={busyId === t.id}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Switch
+                      checked={!!t.is_founding_partner}
+                      onCheckedChange={(v) => toggleFoundingPartner(t, v)}
+                      disabled={busyId === t.id}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <InlineMoneyEditor
+                      valueCents={t.monthly_rate_cents ?? null}
+                      onSave={(cents) => updateTenant(t.id, { monthly_rate_cents: cents })}
+                    />
+                  </TableCell>
+                  <TableCell className="font-mono text-xs">{t.referral_code || "—"}</TableCell>
+                  <TableCell className="text-xs">{fmtMoney(t.referral_discount_cents)}</TableCell>
+                  <TableCell>
+                    <Select
+                      value={t.kyc_status || "pending"}
+                      onValueChange={(v) => updateTenant(t.id, { kyc_status: v })}
+                    >
+                      <SelectTrigger className="h-8 w-[120px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="approved">Approved</SelectItem>
+                        <SelectItem value="rejected">Rejected</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="sm" onClick={() => setNotesTenant(t)}>
+                      Notes
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => onOpen(t)}>
+                      Manage →
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </CardContent>
+
+      {notesTenant && (
+        <TenantNotesDialog
+          tenant={notesTenant}
+          onClose={() => setNotesTenant(null)}
+          onSaved={() => { setNotesTenant(null); onChanged(); }}
+        />
+      )}
+    </Card>
+  );
+}
+
+function InlineMoneyEditor({
+  valueCents,
+  onSave,
+}: {
+  valueCents: number | null;
+  onSave: (cents: number | null) => Promise<boolean> | void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(valueCents != null ? (valueCents / 100).toFixed(2) : "");
+
+  useEffect(() => {
+    setVal(valueCents != null ? (valueCents / 100).toFixed(2) : "");
+  }, [valueCents]);
+
+  if (!editing) {
+    return (
+      <button
+        className="text-sm hover:underline"
+        onClick={() => setEditing(true)}
+      >
+        {valueCents == null ? "Set rate" : `$${(valueCents / 100).toFixed(2)}`}
+      </button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-xs text-muted-foreground">$</span>
+      <Input
+        autoFocus
+        type="number"
+        step="0.01"
+        className="h-8 w-24"
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onBlur={async () => {
+          const num = val === "" ? null : Math.round(parseFloat(val) * 100);
+          if (num !== valueCents) await onSave(Number.isFinite(num as number) ? num : null);
+          setEditing(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          if (e.key === "Escape") setEditing(false);
+        }}
+      />
+    </div>
+  );
+}
+
+function TenantNotesDialog({
+  tenant,
+  onClose,
+  onSaved,
+}: {
+  tenant: Tenant;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [internal, setInternal] = useState(tenant.internal_notes || "");
+  const [kyc, setKyc] = useState(tenant.kyc_notes || "");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase
+      .from("tenants")
+      .update({ internal_notes: internal, kyc_notes: kyc } as any)
+      .eq("id", tenant.id);
+    setSaving(false);
+    if (error) {
+      toast({ title: "Save failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Notes saved" });
+    onSaved();
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{tenant.name} — Internal Notes</DialogTitle>
+          <DialogDescription>
+            These notes are private to the master owner and never shown to tenant users.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label>Internal Notes</Label>
+            <textarea
+              className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={internal}
+              onChange={(e) => setInternal(e.target.value)}
+              placeholder="Anything to remember about this tenant — billing exceptions, contacts, history…"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>KYC Notes</Label>
+            <textarea
+              className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={kyc}
+              onChange={(e) => setKyc(e.target.value)}
+              placeholder="What was verified, when, and by whom (EIN, business address, beneficial owner ID, etc.)"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={save} disabled={saving}>
+            {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Notes
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
