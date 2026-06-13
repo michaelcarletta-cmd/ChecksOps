@@ -15,7 +15,7 @@ export function GLBASecurityEventsLog() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("glba_security_events")
-        .select("id, event_type, actor_user_id, details, severity, created_at")
+        .select("id, event_type, actor_user_id, metadata, severity, created_at")
         .eq("tenant_id", tenant!.id)
         .order("created_at", { ascending: false })
         .limit(200);
@@ -46,8 +46,8 @@ export function GLBASecurityEventsLog() {
                     <code className="text-[11px] font-mono text-foreground">{e.event_type}</code>
                     {e.severity && <SeverityBadge severity={e.severity} />}
                   </div>
-                  {e.details && Object.keys(e.details).length > 0 && (
-                    <p className="text-[11px] text-muted-foreground font-mono truncate">{JSON.stringify(e.details)}</p>
+                  {e.metadata && Object.keys(e.metadata).length > 0 && (
+                    <p className="text-[11px] text-muted-foreground font-mono truncate">{JSON.stringify(e.metadata)}</p>
                   )}
                 </div>
                 <div className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">

@@ -77,7 +77,7 @@ export function ComplianceSettings() {
         tenant_id: tenant!.id,
         event_type: "kyc.completed",
         actor_user_id: user?.id,
-        details: { legal_business_name: form.legal_business_name, ein_last_4: form.ein.slice(-4) },
+        metadata: { legal_business_name: form.legal_business_name, ein_last_4: form.ein.slice(-4) },
       } as any);
     },
     onSuccess: () => {
@@ -104,7 +104,7 @@ export function ComplianceSettings() {
         tenant_id: tenant!.id,
         event_type: kind === "wisp" ? "policy.wisp_acknowledged" : "policy.ach_acknowledged",
         actor_user_id: user?.id,
-        details: kind === "ach" ? { version: ACH_POLICY_VERSION } : {},
+        metadata: kind === "ach" ? { version: ACH_POLICY_VERSION } : {},
       } as any);
       return kind;
     },
