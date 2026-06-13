@@ -36,8 +36,16 @@ type Tenant = {
   is_system_tenant: boolean | null;
   per_check_billing_enabled?: boolean | null;
   per_check_rate_cents?: number | null;
+  is_founding_partner?: boolean | null;
+  monthly_rate_cents?: number | null;
+  referral_code?: string | null;
+  referral_discount_cents?: number | null;
+  kyc_status?: string | null;
+  kyc_notes?: string | null;
+  internal_notes?: string | null;
   created_at: string;
 };
+
 
 type TenantUserRow = {
   id: string;
