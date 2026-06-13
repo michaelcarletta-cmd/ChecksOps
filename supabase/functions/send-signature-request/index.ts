@@ -480,6 +480,7 @@ Deno.serve(async (req) => {
           signer.signer_email,
           subject,
           html,
+          { fromOverride: tenantFromOverride, replyTo: tenantReplyTo },
         );
 
         const resendId = emailRes?.id || null;
