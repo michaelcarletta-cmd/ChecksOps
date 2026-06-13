@@ -159,43 +159,20 @@ export default function AdminTenants() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="max-w-[1400px] mx-auto px-6 py-8">
         {loading ? (
           <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin" /></div>
         ) : tenants.length === 0 ? (
           <Card><CardContent className="py-16 text-center text-muted-foreground">No tenants yet. Click "New Tenant" to add one.</CardContent></Card>
         ) : (
-          <div className="grid gap-3">
-            {tenants.map((t) => (
-              <Card key={t.id} className="hover:border-primary/50 transition-colors cursor-pointer" onClick={() => setSelected(t)}>
-                <CardContent className="py-4 flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div
-                      className="w-10 h-10 rounded-md flex items-center justify-center text-white font-semibold text-sm"
-                      style={{ backgroundColor: t.primary_color || "#3B82F6" }}
-                    >
-                      {t.name.slice(0, 2).toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold">{t.name}</h3>
-                        {t.is_system_tenant && <Badge variant="outline">System</Badge>}
-                        <Badge variant={t.subscription_status === "active" ? "default" : "secondary"}>
-                          {t.subscription_status || "inactive"}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        /{t.slug} • {t.plan_tier || "starter"} • {t.custom_domain || "no custom domain"}
-                      </p>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm">Manage →</Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <TenantManagementTable
+            tenants={tenants}
+            onOpen={(t) => setSelected(t)}
+            onChanged={loadTenants}
+          />
         )}
       </div>
+
     </div>
   );
 }
