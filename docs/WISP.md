@@ -113,6 +113,15 @@ The Qualified Individual delivers a written report to the CEO at least annually 
 - Annual privacy notice delivered via email each January
 - Acknowledgments tracked in `privacy_notice_acknowledgments`
 
+## 9. Payments Compliance (ACH / AML / WEB Debit)
+
+ChecksOps originates ACH transactions through Actum Processing under a documented risk-based framework:
+
+- **ACH Risk and Fraud Monitoring Policy** — `docs/ACH_RISK_FRAUD_MONITORING.md` (satisfies the NACHA rule effective 2026-06-22).
+- **AML / BSA Program** — `docs/AML_PROGRAM.md` (KYC, monitoring, SAR filing, training, independent review).
+- **WEB Debit Rule compliance** — micro-deposit account validation via the `actum-verify-account` edge function and `micro_deposit_verifications` table. Documented in ACH policy §2.
+- **Non-custodial model** — ChecksOps never holds, pools, or routes funds through a ChecksOps-owned account; this is the basis for the current money-transmitter-license position and must be preserved.
+
 ---
 
 **Acknowledgment of this WISP** is tracked per tenant in `tenants.wisp_acknowledged_at` / `wisp_acknowledged_by`.
