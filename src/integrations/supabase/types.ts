@@ -17764,10 +17764,13 @@ export type Database = {
           email_provider_config: Json | null
           email_reply_to: string | null
           id: string
+          internal_notes: string | null
           is_founding_partner: boolean
           is_system_tenant: boolean | null
           kyc_completed_at: string | null
           kyc_completed_by: string | null
+          kyc_notes: string | null
+          kyc_status: string
           legal_business_name: string | null
           logo_url: string | null
           max_checks_per_month: number | null
@@ -17818,10 +17821,13 @@ export type Database = {
           email_provider_config?: Json | null
           email_reply_to?: string | null
           id?: string
+          internal_notes?: string | null
           is_founding_partner?: boolean
           is_system_tenant?: boolean | null
           kyc_completed_at?: string | null
           kyc_completed_by?: string | null
+          kyc_notes?: string | null
+          kyc_status?: string
           legal_business_name?: string | null
           logo_url?: string | null
           max_checks_per_month?: number | null
@@ -17872,10 +17878,13 @@ export type Database = {
           email_provider_config?: Json | null
           email_reply_to?: string | null
           id?: string
+          internal_notes?: string | null
           is_founding_partner?: boolean
           is_system_tenant?: boolean | null
           kyc_completed_at?: string | null
           kyc_completed_by?: string | null
+          kyc_notes?: string | null
+          kyc_status?: string
           legal_business_name?: string | null
           logo_url?: string | null
           max_checks_per_month?: number | null
@@ -19730,6 +19739,7 @@ export type Database = {
         Args: { p_action_type: string }
         Returns: boolean
       }
+      is_master_owner: { Args: never; Returns: boolean }
       is_org_admin: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
