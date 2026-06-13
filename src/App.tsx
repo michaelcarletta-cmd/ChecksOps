@@ -28,6 +28,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
 const AdminTenants = lazy(() => import("./pages/admin/AdminTenants"));
 const VerifyAccount = lazy(() => import("./pages/VerifyAccount"));
+const PrivacyNotice = lazy(() => import("./pages/PrivacyNotice"));
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -72,6 +73,7 @@ function CheckOpsRoutes() {
       <Route path="/verify-account/:token" element={<Suspense fallback={<PageLoader />}><VerifyAccount /></Suspense>} />
       <Route path="/unsubscribe" element={<Suspense fallback={<PageLoader />}><Unsubscribe /></Suspense>} />
       <Route path="/pricing" element={<Suspense fallback={<PageLoader />}><CheckOpsPricing /></Suspense>} />
+      <Route path="/privacy-notice" element={<Suspense fallback={<PageLoader />}><PrivacyNotice /></Suspense>} />
       <Route path="/admin/tenants" element={<Suspense fallback={<PageLoader />}><AdminTenants /></Suspense>} />
       <Route path="/wl/:slug/*" element={<LegacyWlRedirect />} />
       <Route path="/:slug/*" element={<Suspense fallback={<PageLoader />}><WhiteLabelApp /></Suspense>} />
