@@ -9049,6 +9049,7 @@ export type Database = {
           policyholder_name: string | null
           policyholder_phone: string | null
           referrer_id: string | null
+          retention_purge_after: string | null
           signature_cc_email: string | null
           signed_pdf_url: string | null
           ssn_last_four: string | null
@@ -9124,6 +9125,7 @@ export type Database = {
           policyholder_name?: string | null
           policyholder_phone?: string | null
           referrer_id?: string | null
+          retention_purge_after?: string | null
           signature_cc_email?: string | null
           signed_pdf_url?: string | null
           ssn_last_four?: string | null
@@ -9199,6 +9201,7 @@ export type Database = {
           policyholder_name?: string | null
           policyholder_phone?: string | null
           referrer_id?: string | null
+          retention_purge_after?: string | null
           signature_cc_email?: string | null
           signed_pdf_url?: string | null
           ssn_last_four?: string | null
@@ -13187,6 +13190,51 @@ export type Database = {
           },
         ]
       }
+      glba_security_events: {
+        Row: {
+          actor_user_id: string | null
+          created_at: string
+          description: string | null
+          event_type: string
+          id: string
+          ip_address: unknown
+          metadata: Json
+          severity: string
+          subject_record_id: string | null
+          subject_record_type: string | null
+          subject_user_id: string | null
+          tenant_id: string | null
+        }
+        Insert: {
+          actor_user_id?: string | null
+          created_at?: string
+          description?: string | null
+          event_type: string
+          id?: string
+          ip_address?: unknown
+          metadata?: Json
+          severity?: string
+          subject_record_id?: string | null
+          subject_record_type?: string | null
+          subject_user_id?: string | null
+          tenant_id?: string | null
+        }
+        Update: {
+          actor_user_id?: string | null
+          created_at?: string
+          description?: string | null
+          event_type?: string
+          id?: string
+          ip_address?: unknown
+          metadata?: Json
+          severity?: string
+          subject_record_id?: string | null
+          subject_record_type?: string | null
+          subject_user_id?: string | null
+          tenant_id?: string | null
+        }
+        Relationships: []
+      }
       global_automation_settings: {
         Row: {
           created_at: string
@@ -15232,6 +15280,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      privacy_notice_acknowledgments: {
+        Row: {
+          acknowledged_at: string
+          claim_id: string | null
+          consumer_email: string | null
+          consumer_name: string | null
+          created_at: string
+          delivery_method: string
+          id: string
+          ip_address: unknown
+          notice_version: string
+          tenant_id: string
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          acknowledged_at?: string
+          claim_id?: string | null
+          consumer_email?: string | null
+          consumer_name?: string | null
+          created_at?: string
+          delivery_method?: string
+          id?: string
+          ip_address?: unknown
+          notice_version: string
+          tenant_id: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          acknowledged_at?: string
+          claim_id?: string | null
+          consumer_email?: string | null
+          consumer_name?: string | null
+          created_at?: string
+          delivery_method?: string
+          id?: string
+          ip_address?: unknown
+          notice_version?: string
+          tenant_id?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -17655,6 +17748,7 @@ export type Database = {
           actum_webhook_secret: string | null
           created_at: string
           custom_domain: string | null
+          data_retention_years: number
           email_from_address: string | null
           email_from_name: string | null
           email_provider: string | null
@@ -17672,6 +17766,8 @@ export type Database = {
           per_check_rate_cents: number | null
           plan_tier: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color: string | null
+          privacy_notice_version: string
+          qualified_individual_user_id: string | null
           referral_code: string | null
           referral_discount_cents: number
           referred_by_tenant_id: string | null
@@ -17680,6 +17776,8 @@ export type Database = {
           stripe_customer_id: string | null
           subscription_status: string | null
           updated_at: string
+          wisp_acknowledged_at: string | null
+          wisp_acknowledged_by: string | null
         }
         Insert: {
           actum_parent_id?: string | null
@@ -17692,6 +17790,7 @@ export type Database = {
           actum_webhook_secret?: string | null
           created_at?: string
           custom_domain?: string | null
+          data_retention_years?: number
           email_from_address?: string | null
           email_from_name?: string | null
           email_provider?: string | null
@@ -17709,6 +17808,8 @@ export type Database = {
           per_check_rate_cents?: number | null
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color?: string | null
+          privacy_notice_version?: string
+          qualified_individual_user_id?: string | null
           referral_code?: string | null
           referral_discount_cents?: number
           referred_by_tenant_id?: string | null
@@ -17717,6 +17818,8 @@ export type Database = {
           stripe_customer_id?: string | null
           subscription_status?: string | null
           updated_at?: string
+          wisp_acknowledged_at?: string | null
+          wisp_acknowledged_by?: string | null
         }
         Update: {
           actum_parent_id?: string | null
@@ -17729,6 +17832,7 @@ export type Database = {
           actum_webhook_secret?: string | null
           created_at?: string
           custom_domain?: string | null
+          data_retention_years?: number
           email_from_address?: string | null
           email_from_name?: string | null
           email_provider?: string | null
@@ -17746,6 +17850,8 @@ export type Database = {
           per_check_rate_cents?: number | null
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color?: string | null
+          privacy_notice_version?: string
+          qualified_individual_user_id?: string | null
           referral_code?: string | null
           referral_discount_cents?: number
           referred_by_tenant_id?: string | null
@@ -17754,6 +17860,8 @@ export type Database = {
           stripe_customer_id?: string | null
           subscription_status?: string | null
           updated_at?: string
+          wisp_acknowledged_at?: string | null
+          wisp_acknowledged_by?: string | null
         }
         Relationships: [
           {
@@ -19095,6 +19203,7 @@ export type Database = {
               policyholder_name: string | null
               policyholder_phone: string | null
               referrer_id: string | null
+              retention_purge_after: string | null
               signature_cc_email: string | null
               signed_pdf_url: string | null
               ssn_last_four: string | null
@@ -19195,6 +19304,7 @@ export type Database = {
               policyholder_name: string | null
               policyholder_phone: string | null
               referrer_id: string | null
+              retention_purge_after: string | null
               signature_cc_email: string | null
               signed_pdf_url: string | null
               ssn_last_four: string | null
