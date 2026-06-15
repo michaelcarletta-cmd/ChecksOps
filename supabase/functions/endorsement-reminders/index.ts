@@ -23,14 +23,27 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Load branding for email customization
+    // System-default reminder copy (used when a tenant hasn't overridden it).
     const { data: brandingRow } = await supabase
       .from("company_branding")
       .select("endorsement_reminder_subject, endorsement_reminder_body")
       .limit(1)
       .maybeSingle();
-    const reminderSubject = brandingRow?.endorsement_reminder_subject || "Reminder: Endorsement Required — Check #{check.number}";
-    const reminderBody = brandingRow?.endorsement_reminder_body || "This is a reminder that your endorsement is still needed for the check below. Please take a moment to review and endorse.";
+    const defaultReminderSubject = brandingRow?.endorsement_reminder_subject || "Reminder: Endorsement Required — Check #{check.number}";
+    const defaultReminderBody = brandingRow?.endorsement_reminder_body || "This is a reminder that your endorsement is still needed for the check below. Please take a moment to review and endorse.";
+
+    // Per-tenant brand cache so each tenant's reminders use their own company name (never Freedom's).
+    const tenantBrandCache = new Map<string, { name: string | null }>();
+    async function getTenantBrand(checkId: string): Promise<{ name: string | null } | null> {
+      const { data: ck } = await supabase.from("check_intake_items").select("tenant_id").eq("id", checkId).maybeSingle();
+      const tenantId = (ck as any)?.tenant_id;
+      if (!tenantId) return null;
+      if (tenantBrandCache.has(tenantId)) return tenantBrandCache.get(tenantId)!;
+      const { data: t } = await supabase.from("tenants").select("name, is_system_tenant").eq("id", tenantId).maybeSingle();
+      const brand = { name: (t as any)?.is_system_tenant === false ? ((t as any)?.name ?? null) : null };
+      tenantBrandCache.set(tenantId, brand);
+      return brand;
+    }
 
     // Fetch stale unsigned endorsements (> 48 hours since last contact, max 5 reminders)
     // CRITICAL: Only include endorsements that are NOT signed, waived, rejected, or expired
