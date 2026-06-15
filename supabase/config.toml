@@ -25,3 +25,5 @@ project_id = "nbcqwpysqgyxrrbgtmkw"
     verify_jwt = false
   [functions.partner-checks-by-claim]
     verify_jwt = false
+  [functions.partner-shared-checks]
+    verify_jwt = false
