@@ -91,6 +91,13 @@ Deno.serve(async (req) => {
       const endorsementUrl = `${appUrl}/endorse?token=${endorsement.token}`;
       let sent = false;
 
+      // Resolve tenant brand so the reminder is attributed to the correct company.
+      const tenantBrand = await getTenantBrand(endorsement.check_id);
+      const companyName = tenantBrand?.name ?? null;
+      const reminderSubject = defaultReminderSubject;
+      const reminderBody = defaultReminderBody;
+      const signOff = companyName ? `<p style="color:#6b7280;font-size:12px;">— ${companyName}</p>` : "";
+
       // Try email first
       if (endorsement.contact_email) {
         try {
@@ -98,7 +105,7 @@ Deno.serve(async (req) => {
             body: {
               to: endorsement.contact_email,
               subject: reminderSubject.replace(/\{check\.number\}/g, checkInfo?.check_number ?? "N/A").replace(/\{check\.amount\}/g, checkInfo?.amount ?? "N/A").replace(/\{check\.carrier\}/g, checkInfo?.carrier_name ?? "your insurance carrier").replace(/\{payee\.name\}/g, endorsement.payee_name),
-              body: `<p>Hi ${endorsement.payee_name},</p><p>${reminderBody.replace(/\{check\.number\}/g, checkInfo?.check_number ?? "N/A").replace(/\{check\.amount\}/g, `$${checkInfo?.amount ?? "N/A"}`).replace(/\{check\.carrier\}/g, checkInfo?.carrier_name ?? "your insurance carrier").replace(/\{payee\.name\}/g, endorsement.payee_name).replace(/\n/g, "</p><p>")}</p><p>This is reminder #${endorsement.reminder_count + 1}.</p><p><a href="${endorsementUrl}">Click here to review &amp; endorse</a></p>`,
+              body: `<p>Hi ${endorsement.payee_name},</p><p>${reminderBody.replace(/\{check\.number\}/g, checkInfo?.check_number ?? "N/A").replace(/\{check\.amount\}/g, `$${checkInfo?.amount ?? "N/A"}`).replace(/\{check\.carrier\}/g, checkInfo?.carrier_name ?? "your insurance carrier").replace(/\{payee\.name\}/g, endorsement.payee_name).replace(/\n/g, "</p><p>")}</p><p>This is reminder #${endorsement.reminder_count + 1}.</p><p><a href="${endorsementUrl}">Click here to review &amp; endorse</a></p>${signOff}`,
               checkId: endorsement.check_id,
             },
           });
