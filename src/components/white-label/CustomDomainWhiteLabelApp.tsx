@@ -1,12 +1,38 @@
+import { lazy, Suspense } from "react";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { TenantThemeProvider } from "@/components/white-label/TenantThemeProvider";
 import { WhiteLabelLogin } from "@/components/white-label/WhiteLabelLogin";
 import { WhiteLabelCheckCenter } from "@/components/white-label/WhiteLabelCheckCenter";
+import { WhiteLabelSettings } from "@/components/white-label/WhiteLabelSettings";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation, Link } from "react-router-dom";
+import { ArrowLeft, Home } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+const Payments = lazy(() => import("@/pages/Payments"));
+const CashJobs = lazy(() => import("@/pages/CashJobs"));
+
+function SubPageHeader() {
+  return (
+    <div className="flex items-center gap-2 mb-3">
+      <Button variant="ghost" size="sm" asChild className="gap-1.5 h-8 px-2 text-muted-foreground hover:text-foreground">
+        <Link to="/checks">
+          <ArrowLeft className="h-4 w-4" />
+          <span className="text-xs">Back</span>
+        </Link>
+      </Button>
+      <Button variant="ghost" size="sm" asChild className="gap-1.5 h-8 px-2 text-muted-foreground hover:text-foreground">
+        <Link to="/checks">
+          <Home className="h-4 w-4" />
+          <span className="text-xs">Home</span>
+        </Link>
+      </Button>
+    </div>
+  );
+}
 
 function CustomDomainRoutes() {
   const { tenant, loading, error } = useTenant();
@@ -73,6 +99,13 @@ function CustomDomainRoutes() {
     );
   }
 
+  const requireAuth = (node: React.ReactNode) =>
+    !user
+      ? <Navigate to="/login" replace />
+      : isMember
+        ? <>{node}</>
+        : <Navigate to="/login" replace />;
+
   return (
     <Routes>
       <Route
@@ -81,16 +114,30 @@ function CustomDomainRoutes() {
           user && isMember ? <Navigate to="/checks" replace /> : <WhiteLabelLogin />
         }
       />
+      <Route path="/checks" element={requireAuth(<WhiteLabelCheckCenter />)} />
       <Route
-        path="/checks"
-        element={
-          !user
-            ? <Navigate to="/login" replace />
-            : isMember
-              ? <WhiteLabelCheckCenter />
-              : <Navigate to="/login" replace />
-        }
+        path="/payments"
+        element={requireAuth(
+          <div className="min-h-screen bg-background p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
+            <SubPageHeader />
+            <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+              <Payments />
+            </Suspense>
+          </div>
+        )}
       />
+      <Route
+        path="/cash-jobs"
+        element={requireAuth(
+          <div className="min-h-screen bg-background p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
+            <SubPageHeader />
+            <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+              <CashJobs />
+            </Suspense>
+          </div>
+        )}
+      />
+      <Route path="/settings" element={requireAuth(<WhiteLabelSettings />)} />
       <Route path="*" element={<Navigate to={user && isMember ? "/checks" : "/login"} replace />} />
     </Routes>
   );

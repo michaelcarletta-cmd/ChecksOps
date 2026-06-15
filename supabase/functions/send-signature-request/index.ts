@@ -320,7 +320,7 @@ Deno.serve(async (req) => {
       request.claims = {};
     }
 
-    // Load company branding for email customization
+    // Load system-default email copy/colors (subject/body strings live on company_branding).
     const { data: brandingRow } = await sb
       .from("company_branding")
       .select("company_name, company_email, company_phone, esign_email_subject, esign_email_body, esign_email_header_color, esign_email_button_color, letterhead_url")
@@ -328,7 +328,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
     const branding: BrandingConfig = brandingRow || {};
 
-    // Resolve tenant-specific From / Reply-To (white-label override).
+    // Resolve tenant-specific From / Reply-To and visual branding (white-label override).
     // Tenant comes from claim or shared check_intake_item; falls back to Freedom default.
     let tenantFromOverride: string | null = null;
     let tenantReplyTo: string | null = null;
@@ -347,15 +347,28 @@ Deno.serve(async (req) => {
       if (tenantId) {
         const { data: t } = await sb
           .from("tenants")
-          .select("name, email_from_name, email_from_address, email_reply_to")
+          .select("name, logo_url, primary_color, is_system_tenant, email_from_name, email_from_address, email_reply_to")
           .eq("id", tenantId)
           .maybeSingle();
-        const addr = (t as any)?.email_from_address;
+        const tenantRec = t as any;
+        const addr = tenantRec?.email_from_address;
         if (addr) {
-          const name = (t as any)?.email_from_name || (t as any)?.name || "Notifications";
+          const name = tenantRec?.email_from_name || tenantRec?.name || "Notifications";
           tenantFromOverride = `${name} <${addr}>`;
         }
-        tenantReplyTo = (t as any)?.email_reply_to ?? null;
+        tenantReplyTo = tenantRec?.email_reply_to ?? null;
+
+        // For non-system (white-label) tenants, override visual branding with tenant identity
+        // so the email logo/colors/company name match the tenant — not Freedom Claims.
+        if (tenantRec && tenantRec.is_system_tenant === false) {
+          if (tenantRec.name) branding.company_name = tenantRec.name;
+          if (tenantRec.logo_url) branding.letterhead_url = tenantRec.logo_url;
+          if (tenantRec.primary_color) {
+            branding.esign_email_header_color = tenantRec.primary_color;
+            branding.esign_email_button_color = tenantRec.primary_color;
+          }
+          if (tenantRec.email_reply_to) branding.company_email = tenantRec.email_reply_to;
+        }
       }
     } catch (_e) { /* fall back to default sender */ }
 

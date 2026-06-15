@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft,
   Loader2, Save, Trash2, Receipt, Banknote, KeyRound, HelpCircle,
-  ArrowDownToLine, FileBarChart, Gift, ShieldCheck
+  ArrowDownToLine, FileBarChart, Gift, ShieldCheck, FileText
 } from "lucide-react";
 import { ReferralSettings } from "@/components/settings/ReferralSettings";
 import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
@@ -21,6 +21,7 @@ import { CheckCenterHelpPanel } from "@/components/check-review/CheckCenterHelp"
 import { StakeholderAccountSettings } from "@/components/disbursement/StakeholderAccountSettings";
 import { TenantBankAccountSettings } from "@/components/settings/TenantBankAccountSettings";
 import { TenantUserManager } from "./TenantUserManager";
+import { TenantDocumentsManager } from "./TenantDocumentsManager";
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { TenantAIKeySettings } from "./TenantAIKeySettings";
 import { ActumSettings } from "@/components/settings/ActumSettings";
@@ -114,6 +115,7 @@ export function WhiteLabelSettings() {
             <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding</TabsTrigger>
             <TabsTrigger value="referrals" className="text-xs gap-1"><Gift className="h-3 w-3" />Referrals</TabsTrigger>
             <TabsTrigger value="compliance" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Compliance</TabsTrigger>
+            <TabsTrigger value="documents" className="text-xs gap-1"><FileText className="h-3 w-3" />Documents</TabsTrigger>
             <TabsTrigger value="guide" className="text-xs gap-1"><HelpCircle className="h-3 w-3" />ChecksOps Guide</TabsTrigger>
           </TabsList>
 
@@ -175,6 +177,10 @@ export function WhiteLabelSettings() {
 
           <TabsContent value="guide">
             <CheckCenterHelpPanel />
+          </TabsContent>
+
+          <TabsContent value="documents">
+            {tenant && <TenantDocumentsManager tenantId={tenant.id} />}
           </TabsContent>
         </Tabs>
 
