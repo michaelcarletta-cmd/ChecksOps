@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS public.idx_loss_draft_claim_servicer;
