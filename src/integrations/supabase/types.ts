@@ -19777,6 +19777,30 @@ export type Database = {
           updated_at: string
         }[]
       }
+      list_partner_shared_checks: {
+        Args: {
+          _include_shared?: boolean
+          _limit?: number
+          _partner_code: string
+        }
+        Returns: {
+          amount: number
+          back_image_path: string
+          carrier: string
+          check_number: string
+          check_stage: Database["public"]["Enums"]["check_stage"]
+          claim_number: string
+          created_at: string
+          freedom_claim_id: string
+          front_image_path: string
+          id: string
+          insured_name: string
+          is_shared: boolean
+          partner_status: string
+          partner_status_label: string
+          status: string
+        }[]
+      }
       log_audit: {
         Args: {
           p_action: string
