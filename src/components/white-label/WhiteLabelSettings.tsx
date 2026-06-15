@@ -21,6 +21,7 @@ import { CheckCenterHelpPanel } from "@/components/check-review/CheckCenterHelp"
 import { StakeholderAccountSettings } from "@/components/disbursement/StakeholderAccountSettings";
 import { TenantBankAccountSettings } from "@/components/settings/TenantBankAccountSettings";
 import { TenantUserManager } from "./TenantUserManager";
+import { TenantDocumentsManager } from "./TenantDocumentsManager";
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { TenantAIKeySettings } from "./TenantAIKeySettings";
 import { ActumSettings } from "@/components/settings/ActumSettings";
