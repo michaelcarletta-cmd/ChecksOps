@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft,
   Loader2, Save, Trash2, Receipt, Banknote, KeyRound, HelpCircle,
-  ArrowDownToLine, FileBarChart, Gift, ShieldCheck
+  ArrowDownToLine, FileBarChart, Gift, ShieldCheck, FileText
 } from "lucide-react";
 import { ReferralSettings } from "@/components/settings/ReferralSettings";
 import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
