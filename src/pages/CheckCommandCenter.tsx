@@ -2206,7 +2206,7 @@ function CheckDetailPanel({
         .not("endorsement_status", "eq", "signed");
       if (payeeErr) throw payeeErr;
 
-      const { error: decisionErr } = await supabase.rpc("submit_check_review_decision", {
+      const { error: decisionErr } = await supabase.rpc("submit_check_review_decision_safe", {
         p_check_id: checkId,
         p_reviewer_id: user.id,
         p_deposit_path: "branch_deposit_required",
@@ -2240,7 +2240,7 @@ function CheckDetailPanel({
     if (!user?.id || !check) return;
     setUndoing(true);
     try {
-      const { data, error } = await supabase.rpc("submit_check_review_decision", {
+      const { data, error } = await supabase.rpc("submit_check_review_decision_safe", {
         p_check_id: checkId,
         p_reviewer_id: user.id,
         p_deposit_path: "revert_to_review",

@@ -20697,6 +20697,23 @@ export type Database = {
         }
         Returns: Json
       }
+      submit_check_review_decision_safe: {
+        Args: {
+          p_check_id: string
+          p_confirmed_amount?: number
+          p_confirmed_carrier_name?: string
+          p_confirmed_check_number?: string
+          p_confirmed_payee_line?: string
+          p_deposit_path: string
+          p_field_changes?: Json
+          p_merge_payees?: Json
+          p_reissue_reason?: string
+          p_reissue_reason_category?: string
+          p_reviewer_id: string
+          p_reviewer_notes?: string
+        }
+        Returns: Json
+      }
       submit_manager_approval: {
         Args: {
           p_actor_id: string
