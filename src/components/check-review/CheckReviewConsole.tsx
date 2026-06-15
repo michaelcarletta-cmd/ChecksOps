@@ -1456,7 +1456,7 @@ function PayeeReconciliation({
         merged_name: mergedName || null,
       }));
 
-      const { error } = await supabase.rpc("submit_check_review_decision", {
+      const { error } = await supabase.rpc("submit_check_review_decision_safe", {
         p_check_id: checkId,
         p_reviewer_id: user.id,
         p_deposit_path: "merge_only",
