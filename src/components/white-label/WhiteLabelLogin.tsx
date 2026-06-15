@@ -158,6 +158,14 @@ export function WhiteLabelLogin() {
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Sign In
             </Button>
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              disabled={resetSending}
+              className="w-full text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline disabled:opacity-60"
+            >
+              {resetSending ? "Sending reset email…" : "Forgot password?"}
+            </button>
           </form>
         </CardContent>
       </Card>
