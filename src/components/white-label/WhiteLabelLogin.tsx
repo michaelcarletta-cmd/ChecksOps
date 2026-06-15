@@ -18,6 +18,26 @@ export function WhiteLabelLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetSending, setResetSending] = useState(false);
+
+  const handleForgotPassword = async () => {
+    const target = email.trim().toLowerCase();
+    if (!target) {
+      toast({ title: "Enter your email first", description: "Type your email above, then click Forgot password.", variant: "destructive" });
+      return;
+    }
+    setResetSending(true);
+    try {
+      const redirectTo = `${window.location.origin}${location.pathname.replace(/\/login.*$/, "")}/login`;
+      const { error } = await supabase.auth.resetPasswordForEmail(target, { redirectTo });
+      if (error) throw error;
+      toast({ title: "Check your email", description: `If an account exists for ${target}, we sent reset instructions.` });
+    } catch (err: any) {
+      toast({ title: "Could not send reset email", description: err.message || "Try again in a moment.", variant: "destructive" });
+    } finally {
+      setResetSending(false);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
