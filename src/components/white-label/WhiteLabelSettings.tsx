@@ -178,6 +178,10 @@ export function WhiteLabelSettings() {
           <TabsContent value="guide">
             <CheckCenterHelpPanel />
           </TabsContent>
+
+          <TabsContent value="documents">
+            {tenant && <TenantDocumentsManager tenantId={tenant.id} />}
+          </TabsContent>
         </Tabs>
 
       </main>
