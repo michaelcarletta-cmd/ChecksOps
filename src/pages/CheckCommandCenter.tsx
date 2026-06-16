@@ -263,11 +263,54 @@ const isMirroredCheck = (c: CheckItem) =>
   !!c.external_origin && typeof c.external_origin === "object" &&
   (c.external_origin as any).source_app === "freedom_crm";
 
-const getEffectiveStatus = (c: CheckItem): string =>
-  isMirroredCheck(c) && c.partner_status ? c.partner_status : c.status;
+// Lifecycle rank — higher = further along. Used to prefer whichever of local
+// status vs mirrored partner_status is most advanced, so a stale partner value
+// can never mask completed local work (e.g. endorsements finished here but the
+// origin app never pushed an update).
+const lifecycleRank = (s: string | null | undefined): number => {
+  switch ((s || "").toLowerCase()) {
+    case "deposited":
+    case "released":
+      return 50;
+    case "approved_for_deposit":
+    case "endorsed":
+      return 40;
+    case "endorsements_in_progress":
+    case "endorsement_pending":
+      return 30;
+    case "loss_draft_required":
+      return 25;
+    case "needs_review":
+    case "in_review":
+    case "ocr_complete":
+      return 20;
+    case "held":
+      return 15;
+    case "received":
+    case "processing":
+    case "uploaded":
+      return 10;
+    case "voided":
+    case "returned":
+      return 5;
+    default:
+      return 0;
+  }
+};
+
+const getEffectiveStatus = (c: CheckItem): string => {
+  if (isMirroredCheck(c) && c.partner_status) {
+    return lifecycleRank(c.status) > lifecycleRank(c.partner_status)
+      ? c.status
+      : c.partner_status;
+  }
+  return c.status;
+};
 
 const getEffectiveStatusLabel = (c: CheckItem): string => {
   if (isMirroredCheck(c) && c.partner_status) {
+    const useLocal = lifecycleRank(c.status) > lifecycleRank(c.partner_status);
+    if (useLocal) return c.status.replace(/_/g, " ");
     return (c.partner_status_label || c.partner_status).replace(/_/g, " ");
   }
   return c.status.replace(/_/g, " ");
