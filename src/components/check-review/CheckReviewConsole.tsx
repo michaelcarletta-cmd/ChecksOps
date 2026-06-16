@@ -157,8 +157,28 @@ const isMirroredCheck = (check: ReviewCheck) =>
   !!check.external_origin && typeof check.external_origin === "object" &&
   (check.external_origin as any).source_app === "freedom_crm";
 
-const getEffectiveStatus = (check: ReviewCheck): string =>
-  isMirroredCheck(check) && check.partner_status ? check.partner_status : check.status;
+const lifecycleRank = (s: string | null | undefined): number => {
+  switch ((s || "").toLowerCase()) {
+    case "deposited": case "released": return 50;
+    case "approved_for_deposit": case "endorsed": return 40;
+    case "endorsements_in_progress": case "endorsement_pending": return 30;
+    case "loss_draft_required": return 25;
+    case "needs_review": case "in_review": case "ocr_complete": return 20;
+    case "held": return 15;
+    case "received": case "processing": case "uploaded": return 10;
+    case "voided": case "returned": return 5;
+    default: return 0;
+  }
+};
+
+const getEffectiveStatus = (check: ReviewCheck): string => {
+  if (isMirroredCheck(check) && check.partner_status) {
+    return lifecycleRank(check.status) > lifecycleRank(check.partner_status)
+      ? check.status
+      : check.partner_status;
+  }
+  return check.status;
+};
 
 const isInReviewQueue = (check: ReviewCheck): boolean => {
   const effectiveStatus = getEffectiveStatus(check);
