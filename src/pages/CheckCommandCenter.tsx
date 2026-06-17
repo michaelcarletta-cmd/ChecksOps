@@ -1309,7 +1309,14 @@ export default function CheckCommandCenter() {
                               </TableCell>
                             </TableRow>
                             {group.checks.map((check) => {
-                              const rec = check.deposit_recommendation
+                              const effStatus = getEffectiveStatus(check);
+                              // Suppress the AI "Ready for Deposit" recommendation badge once
+                              // the status badge already conveys it (avoids two badges / two
+                              // colors for the same thing).
+                              const suppressRec =
+                                check.deposit_recommendation === "ready_for_deposit" &&
+                                (effStatus === "approved_for_deposit" || effStatus === "deposited");
+                              const rec = check.deposit_recommendation && !suppressRec
                                 ? recommendationConfig[check.deposit_recommendation]
                                 : null;
                               const RecIcon = rec?.icon ?? null;
