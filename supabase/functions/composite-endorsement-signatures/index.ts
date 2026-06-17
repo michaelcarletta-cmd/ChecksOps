@@ -29,11 +29,10 @@ const ENDORSEMENT_WIDTH_PCT = 0.22;
 // toast to the user. Cap conservatively so anything bigger falls back to
 // the SVG path (which embeds the original JPEG + signatures and renders
 // fine in the browser-based deposit viewer).
-// Raised from 3M to 4.2M so common 1536x2048 (3.14 MP) and 1600x2400 (3.84 MP)
-// mobile-deposit captures render to PNG instead of falling back to SVG. SVG-as-img
-// with embedded data-URI <image> often renders only the overlay (no base check)
-// in Chrome/Safari, which surfaces as "I see endorsements but not the check".
-const MAX_RASTER_PIXELS = 4_200_000;
+// Keep rasterization below the edge CPU danger zone. Larger mobile captures use
+// SVG fallback and the UI renders those via <object>, preserving the full check
+// image while avoiding CPU kills during deposit preview generation.
+const MAX_RASTER_PIXELS = 2_000_000;
 
 type OverrideShape = {
   xPct: number;
@@ -171,24 +170,31 @@ Deno.serve(async (req) => {
 
     let backImagePath = check.back_image_path as string;
     if (backImagePath.includes("_endorsed")) {
-      const { data: firstCompositeAudit } = await supabase
+      const { data: compositeAudits } = await supabase
         .from("check_audit_log")
-        .select("event_data")
+        .select("event_data, created_at")
         .eq("check_id", checkId)
         .eq("event_type", "endorsement_signatures_composited")
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
+        .order("created_at", { ascending: false })
+        .limit(25);
 
-      const auditData = (firstCompositeAudit?.event_data ?? null) as {
+      const matchingAudit = (compositeAudits ?? []).find((audit: any) => {
+        const eventData = audit?.event_data ?? {};
+        return eventData.endorsed_back_image_path === backImagePath ||
+          eventData.composited_path === backImagePath ||
+          eventData.composited_back_path === backImagePath;
+      });
+
+      const auditData = (matchingAudit?.event_data ?? compositeAudits?.[0]?.event_data ?? null) as {
         original_back_image_path?: string;
         original_back_path?: string;
       } | null;
 
       const recoveredOriginalPath =
+        await recoverOriginalBackImagePath(supabase, backImagePath) ??
         auditData?.original_back_image_path ??
         auditData?.original_back_path ??
-        await recoverOriginalBackImagePath(supabase, backImagePath);
+        null;
 
       if (recoveredOriginalPath) {
         backImagePath = recoveredOriginalPath;
