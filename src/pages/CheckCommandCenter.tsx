@@ -307,13 +307,24 @@ const getEffectiveStatus = (c: CheckItem): string => {
   return c.status;
 };
 
+const prettifyStatus = (s: string | null | undefined): string => {
+  if (!s) return "";
+  // Unify "approved_for_deposit" and "ready_for_deposit" under one label/wording.
+  if (s === "approved_for_deposit" || s === "ready_for_deposit" || s === "ready") {
+    return "Ready for Deposit";
+  }
+  return s.replace(/_/g, " ");
+};
+
 const getEffectiveStatusLabel = (c: CheckItem): string => {
   if (isMirroredCheck(c) && c.partner_status) {
     const useLocal = lifecycleRank(c.status) > lifecycleRank(c.partner_status);
-    if (useLocal) return c.status.replace(/_/g, " ");
-    return (c.partner_status_label || c.partner_status).replace(/_/g, " ");
+    if (useLocal) return prettifyStatus(c.status);
+    return c.partner_status_label
+      ? c.partner_status_label.replace(/_/g, " ")
+      : prettifyStatus(c.partner_status);
   }
-  return c.status.replace(/_/g, " ");
+  return prettifyStatus(c.status);
 };
 
 interface AuditEntry {
@@ -1298,7 +1309,14 @@ export default function CheckCommandCenter() {
                               </TableCell>
                             </TableRow>
                             {group.checks.map((check) => {
-                              const rec = check.deposit_recommendation
+                              const effStatus = getEffectiveStatus(check);
+                              // Suppress the AI "Ready for Deposit" recommendation badge once
+                              // the status badge already conveys it (avoids two badges / two
+                              // colors for the same thing).
+                              const suppressRec =
+                                check.deposit_recommendation === "ready_for_deposit" &&
+                                (effStatus === "approved_for_deposit" || effStatus === "deposited");
+                              const rec = check.deposit_recommendation && !suppressRec
                                 ? recommendationConfig[check.deposit_recommendation]
                                 : null;
                               const RecIcon = rec?.icon ?? null;
@@ -2553,7 +2571,11 @@ function CheckDetailPanel({
 
   if (!check) return null;
 
-  const rec = check.deposit_recommendation
+  // Suppress redundant "Ready for Deposit" recommendation when status already shows it.
+  const suppressDetailRec =
+    check.deposit_recommendation === "ready_for_deposit" &&
+    (check.status === "approved_for_deposit" || check.status === "deposited");
+  const rec = check.deposit_recommendation && !suppressDetailRec
     ? recommendationConfig[check.deposit_recommendation]
     : null;
 
@@ -2606,7 +2628,7 @@ function CheckDetailPanel({
           <div className="flex items-center gap-2">
             <DTPStatusIndicator checkIntakeItemId={checkId} />
             <Badge className={statusColors[check.status] ?? ""}>
-              {check.status.replace(/_/g, " ")}
+              {prettifyStatus(check.status)}
             </Badge>
           </div>
         </div>
