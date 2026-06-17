@@ -2571,7 +2571,11 @@ function CheckDetailPanel({
 
   if (!check) return null;
 
-  const rec = check.deposit_recommendation
+  // Suppress redundant "Ready for Deposit" recommendation when status already shows it.
+  const suppressDetailRec =
+    check.deposit_recommendation === "ready_for_deposit" &&
+    (check.status === "approved_for_deposit" || check.status === "deposited");
+  const rec = check.deposit_recommendation && !suppressDetailRec
     ? recommendationConfig[check.deposit_recommendation]
     : null;
 
