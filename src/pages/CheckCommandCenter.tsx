@@ -300,7 +300,9 @@ const lifecycleRank = (s: string | null | undefined): number => {
 
 const getEffectiveStatus = (c: CheckItem): string => {
   if (isMirroredCheck(c) && c.partner_status) {
-    return lifecycleRank(c.status) > lifecycleRank(c.partner_status)
+    // Prefer local on ties so completed local work (e.g. "deposited") is never
+    // masked by an equivalent-rank partner value (e.g. "released").
+    return lifecycleRank(c.status) >= lifecycleRank(c.partner_status)
       ? c.status
       : c.partner_status;
   }
@@ -313,15 +315,20 @@ const prettifyStatus = (s: string | null | undefined): string => {
   if (s === "approved_for_deposit" || s === "ready_for_deposit" || s === "ready") {
     return "Ready for Deposit";
   }
+  // "released" from partner systems means the check itself was deposited
+  // (funds released from check to bank). Don't conflate with disbursement.
+  if (s === "released" || s === "deposited") {
+    return "Deposited";
+  }
   return s.replace(/_/g, " ");
 };
 
 const getEffectiveStatusLabel = (c: CheckItem): string => {
   if (isMirroredCheck(c) && c.partner_status) {
-    const useLocal = lifecycleRank(c.status) > lifecycleRank(c.partner_status);
+    const useLocal = lifecycleRank(c.status) >= lifecycleRank(c.partner_status);
     if (useLocal) return prettifyStatus(c.status);
     return c.partner_status_label
-      ? c.partner_status_label.replace(/_/g, " ")
+      ? prettifyStatus(c.partner_status)
       : prettifyStatus(c.partner_status);
   }
   return prettifyStatus(c.status);
