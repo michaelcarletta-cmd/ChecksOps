@@ -307,13 +307,24 @@ const getEffectiveStatus = (c: CheckItem): string => {
   return c.status;
 };
 
+const prettifyStatus = (s: string | null | undefined): string => {
+  if (!s) return "";
+  // Unify "approved_for_deposit" and "ready_for_deposit" under one label/wording.
+  if (s === "approved_for_deposit" || s === "ready_for_deposit" || s === "ready") {
+    return "Ready for Deposit";
+  }
+  return s.replace(/_/g, " ");
+};
+
 const getEffectiveStatusLabel = (c: CheckItem): string => {
   if (isMirroredCheck(c) && c.partner_status) {
     const useLocal = lifecycleRank(c.status) > lifecycleRank(c.partner_status);
-    if (useLocal) return c.status.replace(/_/g, " ");
-    return (c.partner_status_label || c.partner_status).replace(/_/g, " ");
+    if (useLocal) return prettifyStatus(c.status);
+    return c.partner_status_label
+      ? c.partner_status_label.replace(/_/g, " ")
+      : prettifyStatus(c.partner_status);
   }
-  return c.status.replace(/_/g, " ");
+  return prettifyStatus(c.status);
 };
 
 interface AuditEntry {
