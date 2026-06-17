@@ -2628,7 +2628,7 @@ function CheckDetailPanel({
           <div className="flex items-center gap-2">
             <DTPStatusIndicator checkIntakeItemId={checkId} />
             <Badge className={statusColors[check.status] ?? ""}>
-              {check.status.replace(/_/g, " ")}
+              {prettifyStatus(check.status)}
             </Badge>
           </div>
         </div>
