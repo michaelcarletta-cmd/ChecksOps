@@ -171,24 +171,31 @@ Deno.serve(async (req) => {
 
     let backImagePath = check.back_image_path as string;
     if (backImagePath.includes("_endorsed")) {
-      const { data: firstCompositeAudit } = await supabase
+      const { data: compositeAudits } = await supabase
         .from("check_audit_log")
-        .select("event_data")
+        .select("event_data, created_at")
         .eq("check_id", checkId)
         .eq("event_type", "endorsement_signatures_composited")
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
+        .order("created_at", { ascending: false })
+        .limit(25);
 
-      const auditData = (firstCompositeAudit?.event_data ?? null) as {
+      const matchingAudit = (compositeAudits ?? []).find((audit: any) => {
+        const eventData = audit?.event_data ?? {};
+        return eventData.endorsed_back_image_path === backImagePath ||
+          eventData.composited_path === backImagePath ||
+          eventData.composited_back_path === backImagePath;
+      });
+
+      const auditData = (matchingAudit?.event_data ?? compositeAudits?.[0]?.event_data ?? null) as {
         original_back_image_path?: string;
         original_back_path?: string;
       } | null;
 
       const recoveredOriginalPath =
+        await recoverOriginalBackImagePath(supabase, backImagePath) ??
         auditData?.original_back_image_path ??
         auditData?.original_back_path ??
-        await recoverOriginalBackImagePath(supabase, backImagePath);
+        null;
 
       if (recoveredOriginalPath) {
         backImagePath = recoveredOriginalPath;
