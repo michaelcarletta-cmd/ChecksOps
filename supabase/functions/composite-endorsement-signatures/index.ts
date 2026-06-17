@@ -29,11 +29,10 @@ const ENDORSEMENT_WIDTH_PCT = 0.22;
 // toast to the user. Cap conservatively so anything bigger falls back to
 // the SVG path (which embeds the original JPEG + signatures and renders
 // fine in the browser-based deposit viewer).
-// Raised from 3M to 4.2M so common 1536x2048 (3.14 MP) and 1600x2400 (3.84 MP)
-// mobile-deposit captures render to PNG instead of falling back to SVG. SVG-as-img
-// with embedded data-URI <image> often renders only the overlay (no base check)
-// in Chrome/Safari, which surfaces as "I see endorsements but not the check".
-const MAX_RASTER_PIXELS = 4_200_000;
+// Keep rasterization below the edge CPU danger zone. Larger mobile captures use
+// SVG fallback and the UI renders those via <object>, preserving the full check
+// image while avoiding CPU kills during deposit preview generation.
+const MAX_RASTER_PIXELS = 2_000_000;
 
 type OverrideShape = {
   xPct: number;

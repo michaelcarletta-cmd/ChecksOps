@@ -14,6 +14,7 @@ export function DepositImageViewer({
   onClose,
 }: DepositImageViewerProps) {
   const [zoom, setZoom] = useState(1);
+  const isSvg = Boolean(imageUrl?.toLowerCase().includes(".svg"));
 
   useEffect(() => {
     if (!open) {
@@ -70,6 +71,18 @@ export function DepositImageViewer({
       </div>
       <div className="flex-1 flex items-center justify-center overflow-auto p-6">
         {imageUrl ? (
+          isSvg ? (
+            <object
+              data={imageUrl}
+              type="image/svg+xml"
+              aria-label="Final mobile deposit image"
+              className="max-w-full max-h-full object-contain select-none"
+              style={{
+                transform: `scale(${zoom})`,
+                transformOrigin: "center center",
+              }}
+            />
+          ) : (
           <img
             src={imageUrl}
             alt="Final mobile deposit image"
@@ -79,6 +92,7 @@ export function DepositImageViewer({
               transformOrigin: "center center",
             }}
           />
+          )
         ) : (
           <div className="text-sm text-white/70">
             No deposit image available.
