@@ -916,61 +916,29 @@ Deno.serve(async (req) => {
         const emailBranding: EndorsementBranding = brandingRow || {};
 
         if (endorsement.contact_email) {
-
           try {
-            // Find sibling unsigned endorsements on the same check sharing this email
-            const { data: siblings } = await supabase
-              .from("check_endorsements")
-              .select("id, payee_id, payee_name, token, status, contact_email")
-              .eq("check_id", endorsement.check_id)
-              .eq("contact_email", endorsement.contact_email)
-              .neq("id", endorsementId)
-              .in("status", ["pending", "sent"]);
-
-            refreshedSiblings = (siblings || []).map((s: any) => ({
-              ...s,
-              token: s.token || crypto.randomUUID(),
-            }));
-
-            if (refreshedSiblings && refreshedSiblings.length > 0) {
-              for (const sibling of refreshedSiblings) {
-                await supabase.from("check_endorsements").update({
-                  token: sibling.token,
-                  token_expires_at: null,
-                }).eq("id", sibling.id);
-
-                if (sibling.payee_id) {
-                  await supabase.from("check_payees").update({
-                    endorsement_token: sibling.token,
-                    endorsement_token_expires_at: null,
-                  }).eq("id", sibling.payee_id);
-                }
-              }
-            }
-
-            const allPayees = [
-              { id: endorsementId as string, name: endorsement.payee_name as string, url: endorsementUrl },
-              ...(refreshedSiblings.map((s: any) => ({
-                id: s.id as string,
-                name: s.payee_name as string,
-                url: `${appUrl}/endorse?token=${s.token}`,
-              }))),
-            ];
-
-            const isCombined = allPayees.length > 1;
+            // Send an individual email for THIS endorsement only.
+            // Multiple payees may share an email address (e.g. spouses, co-owners),
+            // and each payee must receive their own dedicated endorsement request
+            // with their own signing link — do not combine into one email.
             const rawSubject = emailBranding.endorsement_email_subject || "Endorsement Required — Check #{check.number}";
-            const finalSubject = isCombined
-              ? `${allPayees.length} endorsements needed — Check #${checkNum}`
-              : replaceEndorsementMergeFields(rawSubject, endorsement.payee_name, checkNum, carrier, amount, endorsementUrl, emailBranding);
-            const finalBody = isCombined
-              ? buildCombinedEndorsementEmailHtml(
-                  allPayees.map((p) => ({ name: p.name, url: p.url })),
-                  checkNum,
-                  carrier,
-                  amount,
-                  emailBranding,
-                )
-              : buildEndorsementEmailHtml(endorsement.payee_name, checkNum, carrier, amount, endorsementUrl, emailBranding);
+            const finalSubject = replaceEndorsementMergeFields(
+              rawSubject,
+              endorsement.payee_name,
+              checkNum,
+              carrier,
+              amount,
+              endorsementUrl,
+              emailBranding,
+            );
+            const finalBody = buildEndorsementEmailHtml(
+              endorsement.payee_name,
+              checkNum,
+              carrier,
+              amount,
+              endorsementUrl,
+              emailBranding,
+            );
 
             const ccRaw = body.cc;
             const ccArray: string[] = Array.isArray(ccRaw)
@@ -989,10 +957,6 @@ Deno.serve(async (req) => {
             });
             if (invokeErr) throw invokeErr;
             emailSent = true;
-
-            if (isCombined) {
-              combinedSentIds.push(...(siblings || []).map((s: any) => s.id as string));
-            }
           } catch (e) {
             emailError = e instanceof Error ? e.message : String(e);
           }
