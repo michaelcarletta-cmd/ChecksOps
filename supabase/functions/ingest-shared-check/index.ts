@@ -137,6 +137,21 @@ function normalizePayeeStatus(status?: string | null, signedAt?: string | null):
   return "pending";
 }
 
+// check_payees.payee_type is constrained to: insured, mortgage_company,
+// contractor, public_adjuster, unknown. Upstream apps may send legacy values
+// like "other", "homeowner", "vendor", etc. — coerce them to a valid value
+// so the payee mirror doesn't fail outright (which would force users to
+// re-enter every payee manually).
+function normalizePayeeType(raw?: string | null): string {
+  const value = (raw ?? "").toLowerCase().trim();
+  if (!value) return "unknown";
+  if (value === "insured" || value === "homeowner" || value === "policyholder") return "insured";
+  if (value === "mortgage_company" || value === "mortgagee" || value === "mortgage" || value === "lender") return "mortgage_company";
+  if (value === "contractor" || value === "vendor" || value === "subcontractor") return "contractor";
+  if (value === "public_adjuster" || value === "pa" || value === "adjuster") return "public_adjuster";
+  return "unknown";
+}
+
 function normalizeEndorsementStatus(status?: string | null, signedAt?: string | null): string {
   if (signedAt) return "signed";
 
