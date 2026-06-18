@@ -218,12 +218,12 @@ function validateOcrOutput(raw: unknown): OcrParsedResult {
   };
 
   return {
-    carrier_name: str("carrier_name"),
+    carrier_name: toStandardCaps(str("carrier_name")),
     check_number: str("check_number"),
     amount,
     issue_date: issueDate,
     claim_number: str("claim_number"),
-    payee_line: str("payee_line"),
+    payee_line: toStandardCaps(str("payee_line")),
     routing_number: digitsOnly("routing_number"),
     account_number: digitsOnly("account_number"),
     payees,
