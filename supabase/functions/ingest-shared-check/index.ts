@@ -121,6 +121,26 @@ function humanizeStatus(key: string): string {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+// Standard Caps (Title Case) normalizer — preserves common business acronyms.
+const STANDARD_CAPS_ACRONYMS = new Set([
+  "LLC", "INC", "LP", "LLP", "PA", "PC", "CO", "CORP", "NA", "USA",
+  "II", "III", "IV", "DBA", "LTD", "PO", "JR", "SR", "US", "ATM",
+  "AC", "HVAC", "TV", "PLLC", "PLC", "FSB",
+]);
+
+function toStandardCaps<T extends string | null | undefined>(input: T): T {
+  if (input == null) return input;
+  const s = String(input);
+  if (!s.trim()) return input;
+  const out = s.replace(/[A-Za-z][A-Za-z'’]*/g, (word) => {
+    const upper = word.toUpperCase();
+    if (STANDARD_CAPS_ACRONYMS.has(upper)) return upper;
+    if (word.length === 1) return upper;
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  });
+  return out as T;
+}
+
 function resolveSignedAt(payee: { endorsed_at?: string | null; signed_at?: string | null }): string | null {
   return payee.endorsed_at ?? payee.signed_at ?? null;
 }
