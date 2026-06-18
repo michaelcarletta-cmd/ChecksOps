@@ -10,6 +10,32 @@ const corsHeaders = {
 };
 
 /* ------------------------------------------------------------------ */
+/*  Standard Caps normalizer                                           */
+/*  Converts ALL CAPS or mixed-case OCR text to Title Case while       */
+/*  preserving common business acronyms (LLC, INC, USA, etc.).         */
+/* ------------------------------------------------------------------ */
+const STANDARD_CAPS_ACRONYMS = new Set([
+  "LLC", "INC", "LP", "LLP", "PA", "PC", "CO", "CORP", "NA", "USA",
+  "II", "III", "IV", "DBA", "LTD", "PO", "JR", "SR", "US", "ATM",
+  "AC", "HVAC", "TV", "DBA", "PLLC", "PLC", "FSB",
+]);
+
+function toStandardCaps<T extends string | null | undefined>(input: T): T {
+  if (input == null) return input;
+  const s = String(input);
+  if (!s.trim()) return input;
+  const out = s.replace(/[A-Za-z][A-Za-z'’]*/g, (word) => {
+    const upper = word.toUpperCase();
+    if (STANDARD_CAPS_ACRONYMS.has(upper)) return upper;
+    // Single letters (directionals like N, S, E, W, or initials) stay uppercase
+    if (word.length === 1) return upper;
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  });
+  return out as T;
+}
+
+
+/* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
