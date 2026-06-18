@@ -173,14 +173,14 @@ function validateOcrOutput(raw: unknown): OcrParsedResult {
 
   const str = (k: string): string | null => {
     const v = obj[k];
-    return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
+    return typeof v === "string" && v.trim() !== "" ? toStandardCaps(v.trim()) : null;
   };
 
   const rawPayees = Array.isArray(obj.payees) ? obj.payees : [];
   const payees: OcrPayee[] = rawPayees
     .filter((p): p is Record<string, unknown> => typeof p === "object" && p !== null)
     .map((p) => ({
-      name: typeof p.name === "string" ? p.name.trim() : "",
+      name: typeof p.name === "string" ? toStandardCaps(p.name.trim()) : "",
       type: typeof p.type === "string" && VALID_PAYEE_TYPES.has(p.type) ? p.type : "unknown",
     }))
     .filter((p) => p.name.length > 0);
