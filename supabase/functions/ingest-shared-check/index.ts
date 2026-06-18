@@ -406,16 +406,16 @@ Deno.serve(async (req) => {
       const updatePayload: Record<string, unknown> = {
         updated_at: new Date().toISOString(),
       };
-      if (body.check.carrier_name !== undefined) updatePayload.carrier_name = body.check.carrier_name ?? null;
+      if (body.check.carrier_name !== undefined) updatePayload.carrier_name = toStandardCaps(body.check.carrier_name ?? null);
       if (body.check.check_number !== undefined) updatePayload.check_number = body.check.check_number ?? null;
       if (body.check.amount !== undefined) updatePayload.amount = body.check.amount ?? null;
       if (body.check.issue_date !== undefined) updatePayload.issue_date = body.check.issue_date ?? null;
-      if (body.check.payee_line !== undefined) updatePayload.payee_line = body.check.payee_line ?? null;
+      if (body.check.payee_line !== undefined) updatePayload.payee_line = toStandardCaps(body.check.payee_line ?? null);
       if (body.check.detected_claim_number !== undefined) updatePayload.detected_claim_number = body.check.detected_claim_number ?? null;
       if (body.check.funds_type !== undefined) updatePayload.funds_type = body.check.funds_type ?? null;
-      if (body.check.property_address !== undefined) updatePayload.property_address = body.check.property_address ?? null;
+      if (body.check.property_address !== undefined) updatePayload.property_address = toStandardCaps(body.check.property_address ?? null);
       if (body.check.payment_classification !== undefined) updatePayload.payment_classification = body.check.payment_classification ?? null;
-      if (body.check.payee_address !== undefined) updatePayload.payee_address = body.check.payee_address ?? null;
+      if (body.check.payee_address !== undefined) updatePayload.payee_address = toStandardCaps(body.check.payee_address ?? null);
       if (body.check.status !== undefined) updatePayload.status = body.check.status ?? null;
       if (body.check.check_stage !== undefined) updatePayload.check_stage = body.check.check_stage ?? "review";
       if (body.check.deposit_recommendation !== undefined) updatePayload.deposit_recommendation = body.check.deposit_recommendation ?? null;
