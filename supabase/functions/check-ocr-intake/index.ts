@@ -173,7 +173,7 @@ function validateOcrOutput(raw: unknown): OcrParsedResult {
 
   const str = (k: string): string | null => {
     const v = obj[k];
-    return typeof v === "string" && v.trim() !== "" ? toStandardCaps(v.trim()) : null;
+    return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
   };
 
   const rawPayees = Array.isArray(obj.payees) ? obj.payees : [];
