@@ -489,7 +489,7 @@ Deno.serve(async (req) => {
           check_id: checkId,
           tenant_id: sourceTenantId,
           payee_name: p.payee_name.trim(),
-          payee_type: p.payee_type ?? "other",
+          payee_type: normalizePayeeType(p.payee_type),
           status: normalizeEndorsementStatus(p.endorsement_status, signedAt),
           signed_at: signedAt,
           contact_email: p.contact_email ?? null,
