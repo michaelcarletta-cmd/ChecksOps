@@ -10,6 +10,32 @@ const corsHeaders = {
 };
 
 /* ------------------------------------------------------------------ */
+/*  Standard Caps normalizer                                           */
+/*  Converts ALL CAPS or mixed-case OCR text to Title Case while       */
+/*  preserving common business acronyms (LLC, INC, USA, etc.).         */
+/* ------------------------------------------------------------------ */
+const STANDARD_CAPS_ACRONYMS = new Set([
+  "LLC", "INC", "LP", "LLP", "PA", "PC", "CO", "CORP", "NA", "USA",
+  "II", "III", "IV", "DBA", "LTD", "PO", "JR", "SR", "US", "ATM",
+  "AC", "HVAC", "TV", "DBA", "PLLC", "PLC", "FSB",
+]);
+
+function toStandardCaps<T extends string | null | undefined>(input: T): T {
+  if (input == null) return input;
+  const s = String(input);
+  if (!s.trim()) return input;
+  const out = s.replace(/[A-Za-z][A-Za-z'’]*/g, (word) => {
+    const upper = word.toUpperCase();
+    if (STANDARD_CAPS_ACRONYMS.has(upper)) return upper;
+    // Single letters (directionals like N, S, E, W, or initials) stay uppercase
+    if (word.length === 1) return upper;
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  });
+  return out as T;
+}
+
+
+/* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -180,7 +206,7 @@ function validateOcrOutput(raw: unknown): OcrParsedResult {
   const payees: OcrPayee[] = rawPayees
     .filter((p): p is Record<string, unknown> => typeof p === "object" && p !== null)
     .map((p) => ({
-      name: typeof p.name === "string" ? p.name.trim() : "",
+      name: typeof p.name === "string" ? toStandardCaps(p.name.trim()) : "",
       type: typeof p.type === "string" && VALID_PAYEE_TYPES.has(p.type) ? p.type : "unknown",
     }))
     .filter((p) => p.name.length > 0);
@@ -218,12 +244,12 @@ function validateOcrOutput(raw: unknown): OcrParsedResult {
   };
 
   return {
-    carrier_name: str("carrier_name"),
+    carrier_name: toStandardCaps(str("carrier_name")),
     check_number: str("check_number"),
     amount,
     issue_date: issueDate,
     claim_number: str("claim_number"),
-    payee_line: str("payee_line"),
+    payee_line: toStandardCaps(str("payee_line")),
     routing_number: digitsOnly("routing_number"),
     account_number: digitsOnly("account_number"),
     payees,
