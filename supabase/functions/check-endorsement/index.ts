@@ -999,19 +999,16 @@ Deno.serve(async (req) => {
           }).eq("id", endorsement.payee_id);
         }
 
-        // Audit log for the primary endorsement (only if not already covered in combinedSentIds)
-        if (!combinedSentIds.includes(endorsementId)) {
-          await supabase.from("endorsement_audit_log").insert({
-            endorsement_id: endorsementId,
-            check_id: endorsement.check_id,
-            event_type: anyDelivered ? "request_sent" : "request_failed",
-            event_description: anyDelivered
-              ? `Endorsement request sent to ${endorsement.payee_name} via email`
-              : `Delivery failed: ${emailError}`,
-            event_data: { method: "email", emailSent, emailError },
-            actor_id: ud.user.id,
-          });
-        }
+        await supabase.from("endorsement_audit_log").insert({
+          endorsement_id: endorsementId,
+          check_id: endorsement.check_id,
+          event_type: anyDelivered ? "request_sent" : "request_failed",
+          event_description: anyDelivered
+            ? `Endorsement request sent to ${endorsement.payee_name} via email`
+            : `Delivery failed: ${emailError}`,
+          event_data: { method: "email", emailSent, emailError },
+          actor_id: ud.user.id,
+        });
 
         await supabase.from("check_audit_log").insert({
           check_id: endorsement.check_id,
