@@ -22,7 +22,6 @@ const emptyForm = {
   chk_aba: "",
   chk_acct: "",
   acct_type: "C",
-  recipient_email: "",
 };
 
 export function TenantBankAccountSettings() {
