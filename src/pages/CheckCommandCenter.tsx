@@ -1486,8 +1486,10 @@ export default function CheckCommandCenter() {
                         ))}
                       </TableBody>
                     </Table>
+                      );
+                    })()
                   )}
-                </ScrollArea>
+
                 </div>
               </CardContent>
             </Card>
