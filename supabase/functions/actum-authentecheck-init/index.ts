@@ -83,9 +83,12 @@ serve(async (req) => {
     // Parse first/last name from custname
     const fullName = (account.custname ?? "Account Holder").trim();
     const parts = fullName.split(/\s+/);
-    const firstName = parts[0] ?? "Account";
-    const lastName = parts.length > 1 ? parts.slice(1).join(" ") : "Holder";
-    const custEmail = account.verification_recipient_email || `noreply+${account.id}@checksops.com`;
+    const firstName = (parts[0] ?? "Account").slice(0, 30);
+    const lastName = (parts.length > 1 ? parts.slice(1).join(" ") : "Holder").slice(0, 30);
+    const suppliedEmail = String(account.verification_recipient_email ?? "").trim();
+    const custEmail = suppliedEmail && suppliedEmail.length <= 50
+      ? suppliedEmail
+      : `bank-${account.id.slice(0, 8)}@checksops.com`;
 
     const appBase = Deno.env.get("APP_BASE_URL") ?? "https://checksops.com";
     const acceptUrl = return_url ?? `${appBase}/verify-account/complete?ok=1&acct=${account.id}`;
