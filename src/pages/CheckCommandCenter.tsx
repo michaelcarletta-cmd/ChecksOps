@@ -808,7 +808,7 @@ export default function CheckCommandCenter() {
           stakeholder_accounts (nickname, custname),
           disbursement_batches (
             id, check_intake_item_id,
-            check_intake_items:check_intake_item_id (check_number, carrier_name)
+            check_intake_items:check_intake_item_id (check_number, carrier_name, property_address, funds_type, amount)
           )
         `)
         .eq("tenant_id", tenantId!)
