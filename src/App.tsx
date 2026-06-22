@@ -70,6 +70,7 @@ function CheckOpsRoutes() {
       <Route path="/sign" element={<Suspense fallback={<PageLoader />}><Sign /></Suspense>} />
       <Route path="/endorse" element={<Suspense fallback={<PageLoader />}><Endorse /></Suspense>} />
       <Route path="/payment-direction/:token" element={<Suspense fallback={<PageLoader />}><PaymentDirectionPage /></Suspense>} />
+      <Route path="/verify-account/complete" element={<Suspense fallback={<PageLoader />}><VerifyAccount /></Suspense>} />
       <Route path="/verify-account/:token" element={<Suspense fallback={<PageLoader />}><VerifyAccount /></Suspense>} />
       <Route path="/unsubscribe" element={<Suspense fallback={<PageLoader />}><Unsubscribe /></Suspense>} />
       <Route path="/pricing" element={<Suspense fallback={<PageLoader />}><CheckOpsPricing /></Suspense>} />
