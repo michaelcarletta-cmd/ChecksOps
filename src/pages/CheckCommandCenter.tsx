@@ -1146,11 +1146,13 @@ export default function CheckCommandCenter() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Check #</TableHead>
+                          <TableHead>Check</TableHead>
                           <TableHead>Carrier</TableHead>
-                          <TableHead>Recipient</TableHead>
+                          <TableHead>Property</TableHead>
                           <TableHead className="text-right">Amount</TableHead>
-                          <TableHead>Settled</TableHead>
+                          <TableHead>Class</TableHead>
+                          <TableHead>Recipient</TableHead>
+                          <TableHead>Date Settled</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1158,6 +1160,7 @@ export default function CheckCommandCenter() {
                           const acct = split.stakeholder_accounts;
                           const batch = split.disbursement_batches;
                           const check = batch?.check_intake_items;
+                          const fundsType = check?.funds_type;
                           return (
                             <TableRow
                               key={split.id}
@@ -1166,10 +1169,26 @@ export default function CheckCommandCenter() {
                             >
                               <TableCell className="font-mono text-sm">#{check?.check_number || "—"}</TableCell>
                               <TableCell className="text-sm">{check?.carrier_name || "—"}</TableCell>
-                              <TableCell className="text-sm">{split.recipient_name ?? acct?.nickname ?? acct?.custname ?? "—"}{split.external_check_number ? <span className="ml-1 text-xs text-muted-foreground font-mono">· Ck #{split.external_check_number}</span> : null}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate" title={check?.property_address || ""}>
+                                {check?.property_address || "—"}
+                              </TableCell>
                               <TableCell className="text-right tabular-nums">
                                 ${Number(split.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                               </TableCell>
+                              <TableCell>
+                                {fundsType ? (
+                                  <Badge variant="outline" className="text-[10px] uppercase">
+                                    {fundsType === "recoverable_depreciation"
+                                      ? "Rec. Dep."
+                                      : fundsType === "overhead_and_profit"
+                                      ? "O&P"
+                                      : fundsType}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-sm">{split.recipient_name ?? acct?.nickname ?? acct?.custname ?? "—"}{split.external_check_number ? <span className="ml-1 text-xs text-muted-foreground font-mono">· Ck #{split.external_check_number}</span> : null}</TableCell>
                               <TableCell className="text-sm text-muted-foreground">
                                 {split.settled_at ? format(new Date(split.settled_at), "MMM d, yyyy") : "—"}
                               </TableCell>
@@ -1178,6 +1197,7 @@ export default function CheckCommandCenter() {
                         })}
                       </TableBody>
                     </Table>
+
                   )}
                 </ScrollArea>
               </CardContent>
