@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { AlertTriangle, Building2, Plus, Trash2, Star, CreditCard, ShieldCheck, MailCheck, Lock, Loader2, Info, ShieldAlert } from "lucide-react";
 import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 import { AchAuthorizationForm } from "./AchAuthorizationForm";
-import { MicroDepositVerification } from "./MicroDepositVerification";
+import { AuthentecheckVerification } from "./AuthentecheckVerification";
 import { usePermissions } from "@/hooks/usePermissions";
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
