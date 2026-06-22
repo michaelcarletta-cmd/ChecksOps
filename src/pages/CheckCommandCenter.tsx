@@ -1146,10 +1146,12 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
-        {/* Funds Released Tab */}
         {activeTab === "fundsreleased" && (
-          <div className="mt-3">
-            <Card>
+          <div className="mt-3 flex flex-col md:flex-row gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
+            <Card
+              className={`overflow-hidden transition-all duration-300 ease-in-out md:flex-shrink-0 w-full ${isMobile && selectedCheck ? "hidden" : ""}`}
+              style={!isMobile ? { width: selectedCheck ? "40%" : "100%" } : undefined}
+            >
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Banknote className="h-4 w-4 text-emerald-400" />
@@ -1179,11 +1181,13 @@ export default function CheckCommandCenter() {
                           const batch = split.disbursement_batches;
                           const check = batch?.check_intake_items;
                           const fundsType = check?.funds_type;
+                          const checkId = batch?.check_intake_item_id;
+                          const isSelected = checkId && selectedCheck === checkId;
                           return (
                             <TableRow
                               key={split.id}
-                              className={batch?.check_intake_item_id ? "cursor-pointer" : ""}
-                              onClick={() => batch?.check_intake_item_id && setSelectedCheck(batch.check_intake_item_id)}
+                              className={`${checkId ? "cursor-pointer" : ""} ${isSelected ? "bg-accent" : ""}`}
+                              onClick={() => checkId && setSelectedCheck(isSelected ? null : checkId)}
                             >
                               <TableCell className="font-mono text-sm">#{check?.check_number || "—"}</TableCell>
                               <TableCell className="text-sm">{check?.carrier_name || "—"}</TableCell>
@@ -1215,13 +1219,39 @@ export default function CheckCommandCenter() {
                         })}
                       </TableBody>
                     </Table>
-
                   )}
                 </ScrollArea>
               </CardContent>
             </Card>
+
+            {selectedCheck && (
+              <div
+                className={`transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${isMobile && !selectedCheck ? "hidden" : ""}`}
+                style={!isMobile ? { width: "60%" } : undefined}
+              >
+                <div className="space-y-2">
+                  {isMobile && (
+                    <div className="sticky top-0 z-10 bg-background border-b pb-2 mb-2 -mx-4 px-4">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1 -ml-2 h-8 text-xs"
+                        onClick={() => setSelectedCheck(null)}
+                      >
+                        <ArrowLeft className="h-4 w-4" /> Back to funds released
+                      </Button>
+                    </div>
+                  )}
+                  <CheckDetailPanel
+                    checkId={selectedCheck}
+                    onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
+
 
         {/* Review Tab — only renders when active */}
         {activeTab === "review" && (
