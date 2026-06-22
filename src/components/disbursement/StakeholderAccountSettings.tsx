@@ -77,36 +77,19 @@ export function StakeholderAccountSettings() {
 
   const addAccount = useMutation({
     mutationFn: async (values: typeof emptyForm) => {
-      const { recipient_email, ...accountValues } = values;
-      const { data: inserted, error } = await supabase
+      const { error } = await supabase
         .from("stakeholder_accounts")
         .insert({
-          ...accountValues,
+          ...values,
           tenant_id: tenant!.id,
           created_by: user!.id,
         })
         .select("id")
         .single();
       if (error) throw error;
-      // Kick off micro-deposit verification
-      const { data: initData, error: initErr } = await supabase.functions.invoke(
-        "stakeholder-init-microdeposits",
-        { body: { stakeholder_account_id: inserted.id, recipient_email } },
-      );
-      if (initErr) {
-        let msg = initErr.message ?? "Failed to start verification";
-        try {
-          const body = await (initErr as any).context?.json?.();
-          if (body?.error) msg = body.error;
-        } catch {}
-        throw new Error(msg);
-      }
-      if ((initData as any)?.error) {
-        throw new Error((initData as any).error);
-      }
     },
     onSuccess: () => {
-      toast({ title: "Account added", description: "Two small deposits are on the way. Recipient will get an email to confirm." });
+      toast({ title: "Account added", description: "Click 'Verify with bank login' to verify via Authentecheck." });
       qc.invalidateQueries({ queryKey: ["stakeholder-accounts"] });
       setForm(emptyForm);
       setShowForm(false);
