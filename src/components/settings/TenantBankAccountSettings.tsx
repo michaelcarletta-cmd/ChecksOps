@@ -19,8 +19,6 @@ import { usePermissions } from "@/hooks/usePermissions";
 const emptyForm = {
   nickname: "",
   custname: "",
-  chk_aba: "",
-  chk_acct: "",
   acct_type: "C",
 };
 
