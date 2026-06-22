@@ -40,7 +40,7 @@ serve(async (req) => {
 
     const { data: account, error: acctErr } = await supabase
       .from("stakeholder_accounts")
-      .select("id, tenant_id, nickname, custname, account_type, verification_status")
+      .select("id, tenant_id, nickname, custname, account_type, verification_status, verification_recipient_email")
       .eq("id", stakeholder_account_id)
       .single();
     if (acctErr || !account) throw new Error("Account not found");
@@ -75,6 +75,7 @@ serve(async (req) => {
     const subId = account.account_type === "insured"
       ? tenantData?.actum_sub_id_ppd
       : tenantData?.actum_sub_id_ccd;
+    const parentId = tenantData?.actum_parent_id || "ACTUM";
     if (!tenantData?.actum_username || !tenantData?.actum_password || !tenantData?.actum_syspass || !subId) {
       throw new Error("Actum Authentecheck credentials not configured for this tenant.");
     }
@@ -84,24 +85,26 @@ serve(async (req) => {
     const parts = fullName.split(/\s+/);
     const firstName = parts[0] ?? "Account";
     const lastName = parts.length > 1 ? parts.slice(1).join(" ") : "Holder";
+    const custEmail = account.verification_recipient_email || `noreply+${account.id}@checksops.com`;
 
     const appBase = Deno.env.get("APP_BASE_URL") ?? "https://checksops.com";
     const acceptUrl = return_url ?? `${appBase}/verify-account/complete?ok=1&acct=${account.id}`;
     const declineUrl = return_url ?? `${appBase}/verify-account/complete?ok=0&acct=${account.id}`;
     const postbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/actum-authentecheck-postback`;
 
+    // Actum SignupInit expects pmt_type as "chk:<PARENT_ID>:<SUB_ID>", NOT a separate sub_id field.
+    // custemail is required. ps1_maxnb is only meaningful with recurring cycles, omit for one-time.
     const params = new URLSearchParams();
     params.append("meruser", tenantData.actum_username);
     params.append("merpass", tenantData.actum_password);
     params.append("syspass", tenantData.actum_syspass);
-    params.append("sub_id", subId);
-    params.append("pmt_type", "chk");
+    params.append("pmt_type", `chk:${parentId}:${subId}`);
     params.append("firstname", firstName);
     params.append("lastname", lastName);
+    params.append("custemail", custEmail);
     params.append("ps1_init", "0.01");
     params.append("ps1_desc", `Bank verification - ${account.nickname ?? "Account"}`.slice(0, 50));
     params.append("ps1_cycle", "-1");
-    params.append("ps1_maxnb", "1");
     params.append("authdata", "1");
     params.append("identity", "1");
     params.append("merchantdata", account.id);
