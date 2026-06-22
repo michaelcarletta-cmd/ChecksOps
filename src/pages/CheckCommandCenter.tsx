@@ -1585,7 +1585,7 @@ function ClaimCheckFileHeader({ group, compact = false, hideReadySignal = false 
       </div>
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">
         {hasBlocked && <Badge variant="outline" className="border-orange-500/30 text-orange-400 text-[10px]">Blocked / pending</Badge>}
-        {hasReady && <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-[10px]">Ready signal</Badge>}
+        {hasReady && !hideReadySignal && <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-[10px]">Ready signal</Badge>}
         <div className="text-sm font-semibold tabular-nums text-foreground">
           ${group.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
         </div>
