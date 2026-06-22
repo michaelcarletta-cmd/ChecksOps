@@ -40,7 +40,7 @@ serve(async (req) => {
 
     const { data: account, error: acctErr } = await supabase
       .from("stakeholder_accounts")
-      .select("id, tenant_id, nickname, custname, account_type, verification_status")
+      .select("id, tenant_id, nickname, custname, account_type, verification_status, verification_recipient_email")
       .eq("id", stakeholder_account_id)
       .single();
     if (acctErr || !account) throw new Error("Account not found");
@@ -75,6 +75,7 @@ serve(async (req) => {
     const subId = account.account_type === "insured"
       ? tenantData?.actum_sub_id_ppd
       : tenantData?.actum_sub_id_ccd;
+    const parentId = tenantData?.actum_parent_id || "ACTUM";
     if (!tenantData?.actum_username || !tenantData?.actum_password || !tenantData?.actum_syspass || !subId) {
       throw new Error("Actum Authentecheck credentials not configured for this tenant.");
     }
@@ -84,6 +85,7 @@ serve(async (req) => {
     const parts = fullName.split(/\s+/);
     const firstName = parts[0] ?? "Account";
     const lastName = parts.length > 1 ? parts.slice(1).join(" ") : "Holder";
+    const custEmail = account.verification_recipient_email || `noreply+${account.id}@checksops.com`;
 
     const appBase = Deno.env.get("APP_BASE_URL") ?? "https://checksops.com";
     const acceptUrl = return_url ?? `${appBase}/verify-account/complete?ok=1&acct=${account.id}`;
