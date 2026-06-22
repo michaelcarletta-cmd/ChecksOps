@@ -92,13 +92,11 @@ serve(async (req) => {
     const declineUrl = return_url ?? `${appBase}/verify-account/complete?ok=0&acct=${account.id}`;
     const postbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/actum-authentecheck-postback`;
 
-    // Actum SignupInit expects pmt_type as "chk:<PARENT_ID>:<SUB_ID>", NOT a separate sub_id field.
-    // custemail is required. ps1_maxnb is only meaningful with recurring cycles, omit for one-time.
+    // Actum's Authentecheck guide shows the first POST segment as the raw
+    // payment token: chk:<PARENT_ID>:<SUB_ID>&custemail=...
+    // Sending this as pmt_type=chk:... causes their CGI parser to return
+    // "Error parsing PostData".
     const params = new URLSearchParams();
-    params.append("meruser", tenantData.actum_username);
-    params.append("merpass", tenantData.actum_password);
-    params.append("syspass", tenantData.actum_syspass);
-    params.append("pmt_type", `chk:${parentId}:${subId}`);
     params.append("firstname", firstName);
     params.append("lastname", lastName);
     params.append("custemail", custEmail);
@@ -111,12 +109,17 @@ serve(async (req) => {
     params.append("redirect_accept", acceptUrl);
     params.append("redirect_decline", declineUrl);
     params.append("dynamic_saleurl", postbackUrl);
+    params.append("meruser", tenantData.actum_username);
+    params.append("merpass", tenantData.actum_password);
+    params.append("syspass", tenantData.actum_syspass);
+
+    const postBody = `chk:${encodeURIComponent(parentId)}:${encodeURIComponent(subId)}&${params.toString()}`;
 
     console.log("[authentecheck-init] initiating session for account", account.id);
     const res = await fetch(SIGNUP_INIT, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
+      body: postBody,
     });
     const text = await res.text();
     console.log("[authentecheck-init] Actum response:", text);
