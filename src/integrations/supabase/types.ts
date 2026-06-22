@@ -20726,6 +20726,7 @@ export type Database = {
         Returns: Json
       }
       system_tenant_id: { Args: never; Returns: string }
+      to_standard_caps: { Args: { input: string }; Returns: string }
       unlockrows: { Args: { "": string }; Returns: number }
       updategeometrysrid: {
         Args: {
