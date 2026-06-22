@@ -47,7 +47,6 @@ const emptyForm = {
   chk_acct: "",
   acct_type: "C",
   is_primary: false,
-  recipient_email: "",
 };
 
 export function StakeholderAccountSettings() {
