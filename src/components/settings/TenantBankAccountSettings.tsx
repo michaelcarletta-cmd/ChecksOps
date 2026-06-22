@@ -182,27 +182,18 @@ export function TenantBankAccountSettings() {
                   <Label className="text-xs">Account number</Label>
                   <Input className="h-8 text-sm font-mono" placeholder="Up to 17 digits" maxLength={17} value={form.chk_acct} onChange={(e) => setForm({ ...form, chk_acct: e.target.value.replace(/\D/g, "") })} />
                 </div>
-                <div className="space-y-1 col-span-2">
-                  <Label className="text-xs">Verification email</Label>
-                  <Input
-                    className="h-8 text-sm"
-                    type="email"
-                    placeholder="email@yourcompany.com"
-                    value={form.recipient_email}
-                    onChange={(e) => setForm({ ...form, recipient_email: e.target.value })}
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    We'll send two small deposits to this account and email this address a link to confirm the amounts.
-                  </p>
-                </div>
               </div>
 
-              {(!form.nickname || !form.custname || !form.chk_aba || !form.chk_acct || !form.recipient_email) && (
+              {(!form.nickname || !form.custname || !form.chk_aba || !form.chk_acct) && (
                 <div className="flex items-center gap-1 text-xs text-amber-600">
                   <AlertTriangle className="h-3 w-3" />
                   All fields are required
                 </div>
               )}
+
+              <p className="text-[11px] text-muted-foreground">
+                After adding, click <span className="font-medium">Verify with bank login</span> to verify ownership instantly via Authentecheck (Plaid).
+              </p>
 
               <div className="flex gap-2">
                 <Button
@@ -214,11 +205,10 @@ export function TenantBankAccountSettings() {
                     !form.custname ||
                     !form.chk_aba ||
                     !form.chk_acct ||
-                    !form.recipient_email ||
                     !isValidRoutingNumber(form.chk_aba)
                   }
                 >
-                  {addAccount.isPending ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Sending verification deposits...</> : "Add & verify account"}
+                  {addAccount.isPending ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Adding...</> : "Add account"}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => { setShowForm(false); setForm(emptyForm); }}>Cancel</Button>
               </div>
