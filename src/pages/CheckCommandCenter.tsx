@@ -1489,8 +1489,9 @@ export default function CheckCommandCenter() {
                       );
                     })()
                   )}
-
+                </ScrollArea>
                 </div>
+
               </CardContent>
             </Card>
 
