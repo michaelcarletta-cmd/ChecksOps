@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AlertTriangle, Banknote, Plus, Trash2, ShieldCheck, MailCheck, Lock, Loader2, ShieldAlert } from "lucide-react";
 import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 import { AchAuthorizationForm } from "@/components/disbursement/AchAuthorizationForm";
-import { MicroDepositVerification } from "@/components/disbursement/MicroDepositVerification";
+import { AuthentecheckVerification } from "@/components/disbursement/AuthentecheckVerification";
 import { usePermissions } from "@/hooks/usePermissions";
 
 const emptyForm = {
