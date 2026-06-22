@@ -334,6 +334,24 @@ const getEffectiveStatusLabel = (c: CheckItem): string => {
   return prettifyStatus(c.status);
 };
 
+// Per-tab status label overrides requested by ops:
+//  - Endorsing tab: always "Endorsements in Progress"
+//  - Ready for Deposit tab: always "Endorsed - Ready for Deposit"
+//  - Deposited tab: "Deposit in Progress" for first 48h after deposited_at,
+//    then "Ready for Release" (funds presumed cleared in the bank account).
+const getTabStatusLabel = (c: CheckItem, tab: string): string => {
+  if (tab === "endorsements") return "Endorsements in Progress";
+  if (tab === "ready") return "Endorsed - Ready for Deposit";
+  if (tab === "deposited") {
+    const depositedAt = (c as any).deposited_at as string | null | undefined;
+    if (!depositedAt) return "Deposit in Progress";
+    const hours = (Date.now() - new Date(depositedAt).getTime()) / 36e5;
+    return hours >= 48 ? "Ready for Release" : "Deposit in Progress";
+  }
+  return getEffectiveStatusLabel(c);
+};
+
+
 interface AuditEntry {
   id: string;
   event_type: string;
