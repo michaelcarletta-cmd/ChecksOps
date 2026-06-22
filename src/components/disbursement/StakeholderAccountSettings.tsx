@@ -333,7 +333,7 @@ export function StakeholderAccountSettings() {
                   </Button>
                 </div>
               </div>
-              <MicroDepositVerification
+              <AuthentecheckVerification
                 accountId={acct.id}
                 accountNickname={acct.nickname}
                 accountLast4={acct.chk_acct.slice(-4)}
