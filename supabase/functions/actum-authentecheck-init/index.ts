@@ -92,18 +92,19 @@ serve(async (req) => {
     const declineUrl = return_url ?? `${appBase}/verify-account/complete?ok=0&acct=${account.id}`;
     const postbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/actum-authentecheck-postback`;
 
+    // Actum SignupInit expects pmt_type as "chk:<PARENT_ID>:<SUB_ID>", NOT a separate sub_id field.
+    // custemail is required. ps1_maxnb is only meaningful with recurring cycles, omit for one-time.
     const params = new URLSearchParams();
     params.append("meruser", tenantData.actum_username);
     params.append("merpass", tenantData.actum_password);
     params.append("syspass", tenantData.actum_syspass);
-    params.append("sub_id", subId);
-    params.append("pmt_type", "chk");
+    params.append("pmt_type", `chk:${parentId}:${subId}`);
     params.append("firstname", firstName);
     params.append("lastname", lastName);
+    params.append("custemail", custEmail);
     params.append("ps1_init", "0.01");
     params.append("ps1_desc", `Bank verification - ${account.nickname ?? "Account"}`.slice(0, 50));
     params.append("ps1_cycle", "-1");
-    params.append("ps1_maxnb", "1");
     params.append("authdata", "1");
     params.append("identity", "1");
     params.append("merchantdata", account.id);
