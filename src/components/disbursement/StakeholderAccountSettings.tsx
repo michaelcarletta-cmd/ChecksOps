@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { AlertTriangle, Building2, Plus, Trash2, Star, CreditCard, ShieldCheck, MailCheck, Lock, Loader2, Info, ShieldAlert } from "lucide-react";
 import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 import { AchAuthorizationForm } from "./AchAuthorizationForm";
-import { MicroDepositVerification } from "./MicroDepositVerification";
+import { AuthentecheckVerification } from "./AuthentecheckVerification";
 import { usePermissions } from "@/hooks/usePermissions";
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
@@ -47,7 +47,6 @@ const emptyForm = {
   chk_acct: "",
   acct_type: "C",
   is_primary: false,
-  recipient_email: "",
 };
 
 export function StakeholderAccountSettings() {
@@ -78,36 +77,19 @@ export function StakeholderAccountSettings() {
 
   const addAccount = useMutation({
     mutationFn: async (values: typeof emptyForm) => {
-      const { recipient_email, ...accountValues } = values;
-      const { data: inserted, error } = await supabase
+      const { error } = await supabase
         .from("stakeholder_accounts")
         .insert({
-          ...accountValues,
+          ...values,
           tenant_id: tenant!.id,
           created_by: user!.id,
         })
         .select("id")
         .single();
       if (error) throw error;
-      // Kick off micro-deposit verification
-      const { data: initData, error: initErr } = await supabase.functions.invoke(
-        "stakeholder-init-microdeposits",
-        { body: { stakeholder_account_id: inserted.id, recipient_email } },
-      );
-      if (initErr) {
-        let msg = initErr.message ?? "Failed to start verification";
-        try {
-          const body = await (initErr as any).context?.json?.();
-          if (body?.error) msg = body.error;
-        } catch {}
-        throw new Error(msg);
-      }
-      if ((initData as any)?.error) {
-        throw new Error((initData as any).error);
-      }
     },
     onSuccess: () => {
-      toast({ title: "Account added", description: "Two small deposits are on the way. Recipient will get an email to confirm." });
+      toast({ title: "Account added", description: "Click 'Verify with bank login' to verify via Authentecheck." });
       qc.invalidateQueries({ queryKey: ["stakeholder-accounts"] });
       setForm(emptyForm);
       setShowForm(false);
@@ -234,31 +216,22 @@ export function StakeholderAccountSettings() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1 col-span-2">
-                  <Label className="text-xs">Recipient email for verification</Label>
-                  <Input
-                    className="h-8 text-sm"
-                    type="email"
-                    placeholder="who-owns-this-account@example.com"
-                    value={form.recipient_email}
-                    onChange={(e) => setForm({ ...form, recipient_email: e.target.value })}
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    We'll send two small deposits to this account, then email this address with a link to confirm the amounts.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 pt-4">
+                <div className="flex items-center gap-2 pt-4 col-span-2">
                   <Switch checked={form.is_primary} onCheckedChange={(v) => setForm({ ...form, is_primary: v })} />
                   <Label className="text-xs">Set as primary account</Label>
                 </div>
               </div>
 
-              {(!form.nickname || !form.custname || !form.chk_aba || !form.chk_acct || !form.recipient_email) && (
+              {(!form.nickname || !form.custname || !form.chk_aba || !form.chk_acct) && (
                 <div className="flex items-center gap-1 text-xs text-amber-600">
                   <AlertTriangle className="h-3 w-3" />
-                  All fields required (including recipient email)
+                  All fields required
                 </div>
               )}
+
+              <p className="text-[11px] text-muted-foreground">
+                After adding, click <span className="font-medium">Verify with bank login</span> to verify ownership instantly via Authentecheck (Plaid).
+              </p>
 
               <div className="flex gap-2">
                 <Button
@@ -270,11 +243,10 @@ export function StakeholderAccountSettings() {
                     !form.custname ||
                     !form.chk_aba ||
                     !form.chk_acct ||
-                    !form.recipient_email ||
                     !isValidRoutingNumber(form.chk_aba)
                   }
                 >
-                  {addAccount.isPending ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Sending micro-deposits...</> : "Add & verify account"}
+                  {addAccount.isPending ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Adding...</> : "Add account"}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => { setShowForm(false); setForm(emptyForm); }}>Cancel</Button>
               </div>
@@ -361,7 +333,7 @@ export function StakeholderAccountSettings() {
                   </Button>
                 </div>
               </div>
-              <MicroDepositVerification
+              <AuthentecheckVerification
                 accountId={acct.id}
                 accountNickname={acct.nickname}
                 accountLast4={acct.chk_acct.slice(-4)}

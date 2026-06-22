@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AlertTriangle, Banknote, Plus, Trash2, ShieldCheck, MailCheck, Lock, Loader2, ShieldAlert } from "lucide-react";
 import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 import { AchAuthorizationForm } from "@/components/disbursement/AchAuthorizationForm";
-import { MicroDepositVerification } from "@/components/disbursement/MicroDepositVerification";
+import { AuthentecheckVerification } from "@/components/disbursement/AuthentecheckVerification";
 import { usePermissions } from "@/hooks/usePermissions";
 
 const emptyForm = {
@@ -22,7 +22,6 @@ const emptyForm = {
   chk_aba: "",
   chk_acct: "",
   acct_type: "C",
-  recipient_email: "",
 };
 
 export function TenantBankAccountSettings() {
@@ -52,11 +51,10 @@ export function TenantBankAccountSettings() {
 
   const addAccount = useMutation({
     mutationFn: async (values: typeof emptyForm) => {
-      const { recipient_email, ...accountValues } = values;
-      const { data: inserted, error } = await supabase
+      const { error } = await supabase
         .from("stakeholder_accounts")
         .insert({
-          ...accountValues,
+          ...values,
           account_type: "operating",
           is_primary: true,
           tenant_id: tenant!.id,
@@ -65,23 +63,9 @@ export function TenantBankAccountSettings() {
         .select("id")
         .single();
       if (error) throw error;
-
-      const { data: initData, error: initErr } = await supabase.functions.invoke(
-        "stakeholder-init-microdeposits",
-        { body: { stakeholder_account_id: inserted.id, recipient_email } },
-      );
-      if (initErr) {
-        let msg = initErr.message ?? "Failed to start verification";
-        try {
-          const body = await (initErr as any).context?.json?.();
-          if (body?.error) msg = body.error;
-        } catch {}
-        throw new Error(msg);
-      }
-      if ((initData as any)?.error) throw new Error((initData as any).error);
     },
     onSuccess: () => {
-      toast({ title: "Bank account added", description: "Two small deposits are on the way. Check your email to confirm the amounts." });
+      toast({ title: "Bank account added", description: "Click 'Verify with bank login' to verify via Authentecheck." });
       qc.invalidateQueries({ queryKey: ["tenant-primary-accounts"] });
       setForm(emptyForm);
       setShowForm(false);
@@ -198,27 +182,18 @@ export function TenantBankAccountSettings() {
                   <Label className="text-xs">Account number</Label>
                   <Input className="h-8 text-sm font-mono" placeholder="Up to 17 digits" maxLength={17} value={form.chk_acct} onChange={(e) => setForm({ ...form, chk_acct: e.target.value.replace(/\D/g, "") })} />
                 </div>
-                <div className="space-y-1 col-span-2">
-                  <Label className="text-xs">Verification email</Label>
-                  <Input
-                    className="h-8 text-sm"
-                    type="email"
-                    placeholder="email@yourcompany.com"
-                    value={form.recipient_email}
-                    onChange={(e) => setForm({ ...form, recipient_email: e.target.value })}
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    We'll send two small deposits to this account and email this address a link to confirm the amounts.
-                  </p>
-                </div>
               </div>
 
-              {(!form.nickname || !form.custname || !form.chk_aba || !form.chk_acct || !form.recipient_email) && (
+              {(!form.nickname || !form.custname || !form.chk_aba || !form.chk_acct) && (
                 <div className="flex items-center gap-1 text-xs text-amber-600">
                   <AlertTriangle className="h-3 w-3" />
                   All fields are required
                 </div>
               )}
+
+              <p className="text-[11px] text-muted-foreground">
+                After adding, click <span className="font-medium">Verify with bank login</span> to verify ownership instantly via Authentecheck (Plaid).
+              </p>
 
               <div className="flex gap-2">
                 <Button
@@ -230,11 +205,10 @@ export function TenantBankAccountSettings() {
                     !form.custname ||
                     !form.chk_aba ||
                     !form.chk_acct ||
-                    !form.recipient_email ||
                     !isValidRoutingNumber(form.chk_aba)
                   }
                 >
-                  {addAccount.isPending ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Sending verification deposits...</> : "Add & verify account"}
+                  {addAccount.isPending ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Adding...</> : "Add account"}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => { setShowForm(false); setForm(emptyForm); }}>Cancel</Button>
               </div>
@@ -307,7 +281,7 @@ export function TenantBankAccountSettings() {
                     </Button>
                   </div>
                 </div>
-                <MicroDepositVerification
+                <AuthentecheckVerification
                   accountId={acct.id}
                   accountNickname={acct.nickname}
                   accountLast4={acct.chk_acct.slice(-4)}
