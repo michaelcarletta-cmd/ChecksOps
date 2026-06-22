@@ -51,11 +51,10 @@ export function TenantBankAccountSettings() {
 
   const addAccount = useMutation({
     mutationFn: async (values: typeof emptyForm) => {
-      const { recipient_email, ...accountValues } = values;
-      const { data: inserted, error } = await supabase
+      const { error } = await supabase
         .from("stakeholder_accounts")
         .insert({
-          ...accountValues,
+          ...values,
           account_type: "operating",
           is_primary: true,
           tenant_id: tenant!.id,
@@ -64,23 +63,9 @@ export function TenantBankAccountSettings() {
         .select("id")
         .single();
       if (error) throw error;
-
-      const { data: initData, error: initErr } = await supabase.functions.invoke(
-        "stakeholder-init-microdeposits",
-        { body: { stakeholder_account_id: inserted.id, recipient_email } },
-      );
-      if (initErr) {
-        let msg = initErr.message ?? "Failed to start verification";
-        try {
-          const body = await (initErr as any).context?.json?.();
-          if (body?.error) msg = body.error;
-        } catch {}
-        throw new Error(msg);
-      }
-      if ((initData as any)?.error) throw new Error((initData as any).error);
     },
     onSuccess: () => {
-      toast({ title: "Bank account added", description: "Two small deposits are on the way. Check your email to confirm the amounts." });
+      toast({ title: "Bank account added", description: "Click 'Verify with bank login' to verify via Authentecheck." });
       qc.invalidateQueries({ queryKey: ["tenant-primary-accounts"] });
       setForm(emptyForm);
       setShowForm(false);
