@@ -1549,7 +1549,7 @@ export default function CheckCommandCenter() {
 /*  Summary card (kept for Phase 1 compat)                             */
 /* ------------------------------------------------------------------ */
 
-function ClaimCheckFileHeader({ group, compact = false }: { group: CheckGroup; compact?: boolean }) {
+function ClaimCheckFileHeader({ group, compact = false, hideReadySignal = false }: { group: CheckGroup; compact?: boolean; hideReadySignal?: boolean }) {
   const signedPayees = group.checks.reduce(
     (sum, check) => sum + (check.check_payees ?? []).filter((p) => p.endorsement_status === "signed").length,
     0,
