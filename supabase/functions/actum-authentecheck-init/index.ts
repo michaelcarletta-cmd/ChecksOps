@@ -83,22 +83,23 @@ serve(async (req) => {
     // Parse first/last name from custname
     const fullName = (account.custname ?? "Account Holder").trim();
     const parts = fullName.split(/\s+/);
-    const firstName = parts[0] ?? "Account";
-    const lastName = parts.length > 1 ? parts.slice(1).join(" ") : "Holder";
-    const custEmail = account.verification_recipient_email || `noreply+${account.id}@checksops.com`;
+    const firstName = (parts[0] ?? "Account").slice(0, 30);
+    const lastName = (parts.length > 1 ? parts.slice(1).join(" ") : "Holder").slice(0, 30);
+    const suppliedEmail = String(account.verification_recipient_email ?? "").trim();
+    const custEmail = suppliedEmail && suppliedEmail.length <= 50
+      ? suppliedEmail
+      : `bank-${account.id.slice(0, 8)}@checksops.com`;
 
     const appBase = Deno.env.get("APP_BASE_URL") ?? "https://checksops.com";
     const acceptUrl = return_url ?? `${appBase}/verify-account/complete?ok=1&acct=${account.id}`;
     const declineUrl = return_url ?? `${appBase}/verify-account/complete?ok=0&acct=${account.id}`;
     const postbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/actum-authentecheck-postback`;
 
-    // Actum SignupInit expects pmt_type as "chk:<PARENT_ID>:<SUB_ID>", NOT a separate sub_id field.
-    // custemail is required. ps1_maxnb is only meaningful with recurring cycles, omit for one-time.
+    // Actum's Authentecheck guide shows the first POST segment as the raw
+    // payment token: chk:<PARENT_ID>:<SUB_ID>&custemail=...
+    // Sending this as pmt_type=chk:... causes their CGI parser to return
+    // "Error parsing PostData".
     const params = new URLSearchParams();
-    params.append("meruser", tenantData.actum_username);
-    params.append("merpass", tenantData.actum_password);
-    params.append("syspass", tenantData.actum_syspass);
-    params.append("pmt_type", `chk:${parentId}:${subId}`);
     params.append("firstname", firstName);
     params.append("lastname", lastName);
     params.append("custemail", custEmail);
@@ -111,12 +112,17 @@ serve(async (req) => {
     params.append("redirect_accept", acceptUrl);
     params.append("redirect_decline", declineUrl);
     params.append("dynamic_saleurl", postbackUrl);
+    params.append("meruser", tenantData.actum_username);
+    params.append("merpass", tenantData.actum_password);
+    params.append("syspass", tenantData.actum_syspass);
+
+    const postBody = `chk:${encodeURIComponent(parentId)}:${encodeURIComponent(subId)}&${params.toString()}`;
 
     console.log("[authentecheck-init] initiating session for account", account.id);
     const res = await fetch(SIGNUP_INIT, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
+      body: postBody,
     });
     const text = await res.text();
     console.log("[authentecheck-init] Actum response:", text);
