@@ -49,21 +49,48 @@ export function TenantBankAccountSettings() {
 
   const addAccount = useMutation({
     mutationFn: async (values: typeof emptyForm) => {
-      const { error } = await supabase
+      // Create placeholder row; Authentecheck postback fills in real routing/account.
+      const { data: inserted, error } = await supabase
         .from("stakeholder_accounts")
         .insert({
           ...values,
+          chk_aba: "000000000",
+          chk_acct: "0000000000",
           account_type: "operating",
           is_primary: true,
           tenant_id: tenant!.id,
           created_by: user!.id,
-        })
+        } as any)
         .select("id")
         .single();
       if (error) throw error;
+
+      // Immediately launch Authentecheck session
+      const { data: sess, error: initErr } = await supabase.functions.invoke(
+        "actum-authentecheck-init",
+        { body: { stakeholder_account_id: inserted!.id } },
+      );
+      if (initErr) {
+        let msg = initErr.message ?? "Failed to start verification";
+        try { const b = await (initErr as any).context?.json?.(); if (b?.error) msg = b.error; } catch {}
+        throw new Error(msg);
+      }
+      if ((sess as any)?.error) throw new Error((sess as any).error);
+      return (sess as any)?.url as string;
     },
-    onSuccess: () => {
-      toast({ title: "Bank account added", description: "Click 'Verify with bank login' to verify via Authentecheck." });
+    onSuccess: (url) => {
+      if (url) {
+        const win = window.open(url, "_blank", "noopener,noreferrer,width=520,height=720");
+        if (!win) {
+          toast({
+            title: "Popup blocked",
+            description: "Allow popups, then click 'Verify with bank login' on the new account.",
+            variant: "destructive",
+          });
+        } else {
+          toast({ title: "Bank login opened", description: "Sign in with your bank to verify the account." });
+        }
+      }
       qc.invalidateQueries({ queryKey: ["tenant-primary-accounts"] });
       setForm(emptyForm);
       setShowForm(false);
