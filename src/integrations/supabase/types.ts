@@ -16678,6 +16678,13 @@ export type Database = {
         Row: {
           account_type: string
           acct_type: string
+          authentecheck_bank_name: string | null
+          authentecheck_completed_at: string | null
+          authentecheck_consumer_code: string | null
+          authentecheck_initiated_at: string | null
+          authentecheck_order_id: string | null
+          authentecheck_postback: Json | null
+          authentecheck_session_url: string | null
           chk_aba: string
           chk_acct: string
           consumer_unique: string | null
@@ -16705,6 +16712,13 @@ export type Database = {
         Insert: {
           account_type?: string
           acct_type?: string
+          authentecheck_bank_name?: string | null
+          authentecheck_completed_at?: string | null
+          authentecheck_consumer_code?: string | null
+          authentecheck_initiated_at?: string | null
+          authentecheck_order_id?: string | null
+          authentecheck_postback?: Json | null
+          authentecheck_session_url?: string | null
           chk_aba: string
           chk_acct: string
           consumer_unique?: string | null
@@ -16732,6 +16746,13 @@ export type Database = {
         Update: {
           account_type?: string
           acct_type?: string
+          authentecheck_bank_name?: string | null
+          authentecheck_completed_at?: string | null
+          authentecheck_consumer_code?: string | null
+          authentecheck_initiated_at?: string | null
+          authentecheck_order_id?: string | null
+          authentecheck_postback?: Json | null
+          authentecheck_session_url?: string | null
           chk_aba?: string
           chk_acct?: string
           consumer_unique?: string | null
