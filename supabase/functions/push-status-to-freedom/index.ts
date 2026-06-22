@@ -16,33 +16,11 @@ const SOURCE_PARTNER_CODE = "CHECKSOPS";
 
 interface TriggerPayload {
   source_check_id: string;
-  status?: string | null;
-  check_stage?: string | null;
-  deposit_recommendation?: string | null;
+  partner_status?: string | null;
+  partner_status_label?: string | null;
   check_number?: string | null;
   carrier_name?: string | null;
   amount?: number | null;
-}
-
-// Map ChecksOps internal state to the Freedom-spec partner_status vocabulary.
-function mapToPartnerStatus(p: TriggerPayload): { key: string; label: string } {
-  const stage = (p.check_stage ?? "").toLowerCase();
-  const status = (p.status ?? "").toLowerCase();
-  const dep = (p.deposit_recommendation ?? "").toLowerCase();
-
-  // check_stage takes priority since it's the unified lifecycle model
-  if (stage.includes("deposit") && stage.includes("complete")) return { key: "released", label: "Released" };
-  if (stage.includes("deposited") || status === "deposited") return { key: "released", label: "Released" };
-  if (stage.includes("endorse") && stage.includes("complete")) return { key: "endorsed", label: "Endorsed" };
-  if (stage.includes("endorse")) return { key: "endorsement_pending", label: "Endorsement Pending" };
-  if (stage.includes("review")) return { key: "in_review", label: "In Review" };
-  if (stage.includes("hold") || status === "held") return { key: "held", label: "Held" };
-  if (stage.includes("dispute") || status === "disputed") return { key: "disputed", label: "Disputed" };
-  if (stage.includes("return") || status === "returned") return { key: "returned", label: "Returned" };
-  if (stage.includes("void") || status === "voided") return { key: "voided", label: "Voided" };
-  if (stage.includes("lost") || status === "lost") return { key: "lost", label: "Lost" };
-  if (dep) return { key: "in_review", label: `In Review (${dep})` };
-  return { key: "received", label: "Received" };
 }
 
 Deno.serve(async (req) => {
@@ -66,14 +44,17 @@ Deno.serve(async (req) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const { key, label } = mapToPartnerStatus(body);
+    if (!body?.partner_status) {
+      return new Response(JSON.stringify({ error: "partner_status required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const freedomPayload = {
       source_check_id: body.source_check_id,
       source_partner_code: SOURCE_PARTNER_CODE,
-      partner_status: key,
-      partner_status_label: label,
+      partner_status: body.partner_status,
+      partner_status_label: body.partner_status_label ?? body.partner_status,
       updated_at: new Date().toISOString(),
       check_number: body.check_number ?? undefined,
       carrier_name: body.carrier_name ?? undefined,
@@ -101,7 +82,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       ok: true,
-      pushed_partner_status: key,
+      pushed_partner_status: body.partner_status,
       freedom_response: responseText,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e: any) {
