@@ -1330,6 +1330,11 @@ export default function CheckCommandCenter() {
                   ) : filteredChecks.length === 0 ? (
                     <div className="p-8 text-center text-muted-foreground">No checks in this category</div>
                   ) : (
+                    (() => {
+                      const hideDepositCol = activeTab === "endorsements" || activeTab === "ready" || activeTab === "deposited";
+                      const hideReadySignal = activeTab === "ready" || activeTab === "deposited";
+                      const colCount = hideDepositCol ? 7 : 8;
+                      return (
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -1339,7 +1344,7 @@ export default function CheckCommandCenter() {
                           <TableHead>Class</TableHead>
                           <TableHead>Payees</TableHead>
                           <TableHead>Status</TableHead>
-                          <TableHead>Deposit</TableHead>
+                          {!hideDepositCol && <TableHead>Deposit</TableHead>}
                           <TableHead className="w-20"></TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1347,12 +1352,13 @@ export default function CheckCommandCenter() {
                         {groupedFilteredChecks.map((group) => (
                           <Fragment key={group.key}>
                             <TableRow key={`${group.key}-header`} className="bg-muted/40 hover:bg-muted/40">
-                              <TableCell colSpan={8} className="py-3">
+                              <TableCell colSpan={colCount} className="py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                  <ClaimCheckFileHeader group={group} />
+                                  <ClaimCheckFileHeader group={group} hideReadySignal={hideReadySignal} />
                                 </div>
                               </TableCell>
                             </TableRow>
+
                             {group.checks.map((check) => {
                               const effStatus = getEffectiveStatus(check);
                               // Suppress the AI "Ready for Deposit" recommendation badge once
