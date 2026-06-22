@@ -334,6 +334,24 @@ const getEffectiveStatusLabel = (c: CheckItem): string => {
   return prettifyStatus(c.status);
 };
 
+// Per-tab status label overrides requested by ops:
+//  - Endorsing tab: always "Endorsements in Progress"
+//  - Ready for Deposit tab: always "Endorsed - Ready for Deposit"
+//  - Deposited tab: "Deposit in Progress" for first 48h after deposited_at,
+//    then "Ready for Release" (funds presumed cleared in the bank account).
+const getTabStatusLabel = (c: CheckItem, tab: string): string => {
+  if (tab === "endorsements") return "Endorsements in Progress";
+  if (tab === "ready") return "Endorsed - Ready for Deposit";
+  if (tab === "deposited") {
+    const depositedAt = (c as any).deposited_at as string | null | undefined;
+    if (!depositedAt) return "Deposit in Progress";
+    const hours = (Date.now() - new Date(depositedAt).getTime()) / 36e5;
+    return hours >= 48 ? "Ready for Release" : "Deposit in Progress";
+  }
+  return getEffectiveStatusLabel(c);
+};
+
+
 interface AuditEntry {
   id: string;
   event_type: string;
@@ -808,7 +826,7 @@ export default function CheckCommandCenter() {
           stakeholder_accounts (nickname, custname),
           disbursement_batches (
             id, check_intake_item_id,
-            check_intake_items:check_intake_item_id (check_number, carrier_name)
+            check_intake_items:check_intake_item_id (check_number, carrier_name, property_address, funds_type, amount)
           )
         `)
         .eq("tenant_id", tenantId!)
@@ -1146,11 +1164,13 @@ export default function CheckCommandCenter() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Check #</TableHead>
+                          <TableHead>Check</TableHead>
                           <TableHead>Carrier</TableHead>
-                          <TableHead>Recipient</TableHead>
+                          <TableHead>Property</TableHead>
                           <TableHead className="text-right">Amount</TableHead>
-                          <TableHead>Settled</TableHead>
+                          <TableHead>Class</TableHead>
+                          <TableHead>Recipient</TableHead>
+                          <TableHead>Date Settled</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1158,6 +1178,7 @@ export default function CheckCommandCenter() {
                           const acct = split.stakeholder_accounts;
                           const batch = split.disbursement_batches;
                           const check = batch?.check_intake_items;
+                          const fundsType = check?.funds_type;
                           return (
                             <TableRow
                               key={split.id}
@@ -1166,10 +1187,26 @@ export default function CheckCommandCenter() {
                             >
                               <TableCell className="font-mono text-sm">#{check?.check_number || "—"}</TableCell>
                               <TableCell className="text-sm">{check?.carrier_name || "—"}</TableCell>
-                              <TableCell className="text-sm">{split.recipient_name ?? acct?.nickname ?? acct?.custname ?? "—"}{split.external_check_number ? <span className="ml-1 text-xs text-muted-foreground font-mono">· Ck #{split.external_check_number}</span> : null}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate" title={check?.property_address || ""}>
+                                {check?.property_address || "—"}
+                              </TableCell>
                               <TableCell className="text-right tabular-nums">
                                 ${Number(split.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                               </TableCell>
+                              <TableCell>
+                                {fundsType ? (
+                                  <Badge variant="outline" className="text-[10px] uppercase">
+                                    {fundsType === "recoverable_depreciation"
+                                      ? "Rec. Dep."
+                                      : fundsType === "overhead_and_profit"
+                                      ? "O&P"
+                                      : fundsType}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-sm">{split.recipient_name ?? acct?.nickname ?? acct?.custname ?? "—"}{split.external_check_number ? <span className="ml-1 text-xs text-muted-foreground font-mono">· Ck #{split.external_check_number}</span> : null}</TableCell>
                               <TableCell className="text-sm text-muted-foreground">
                                 {split.settled_at ? format(new Date(split.settled_at), "MMM d, yyyy") : "—"}
                               </TableCell>
@@ -1178,6 +1215,7 @@ export default function CheckCommandCenter() {
                         })}
                       </TableBody>
                     </Table>
+
                   )}
                 </ScrollArea>
               </CardContent>
@@ -1292,6 +1330,11 @@ export default function CheckCommandCenter() {
                   ) : filteredChecks.length === 0 ? (
                     <div className="p-8 text-center text-muted-foreground">No checks in this category</div>
                   ) : (
+                    (() => {
+                      const hideDepositCol = activeTab === "endorsements" || activeTab === "ready" || activeTab === "deposited";
+                      const hideReadySignal = activeTab === "ready" || activeTab === "deposited";
+                      const colCount = hideDepositCol ? 7 : 8;
+                      return (
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -1301,7 +1344,7 @@ export default function CheckCommandCenter() {
                           <TableHead>Class</TableHead>
                           <TableHead>Payees</TableHead>
                           <TableHead>Status</TableHead>
-                          <TableHead>Deposit</TableHead>
+                          {!hideDepositCol && <TableHead>Deposit</TableHead>}
                           <TableHead className="w-20"></TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1309,12 +1352,13 @@ export default function CheckCommandCenter() {
                         {groupedFilteredChecks.map((group) => (
                           <Fragment key={group.key}>
                             <TableRow key={`${group.key}-header`} className="bg-muted/40 hover:bg-muted/40">
-                              <TableCell colSpan={8} className="py-3">
+                              <TableCell colSpan={colCount} className="py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                  <ClaimCheckFileHeader group={group} />
+                                  <ClaimCheckFileHeader group={group} hideReadySignal={hideReadySignal} />
                                 </div>
                               </TableCell>
                             </TableRow>
+
                             {group.checks.map((check) => {
                               const effStatus = getEffectiveStatus(check);
                               // Suppress the AI "Ready for Deposit" recommendation badge once
@@ -1382,22 +1426,25 @@ export default function CheckCommandCenter() {
                               </TableCell>
                               <TableCell>
                                 <Badge className={`text-[10px] ${statusColors[getEffectiveStatus(check)] ?? ""}`}>
-                                  {getEffectiveStatusLabel(check)}
+                                  {getTabStatusLabel(check, activeTab)}
                                 </Badge>
                               </TableCell>
-                              <TableCell>
-                                {RecIcon && (
-                                  <span
-                                    className="inline-flex items-center gap-1"
-                                    title={rec!.label}
-                                  >
-                                    <RecIcon className={`h-4 w-4 ${rec!.color}`} />
-                                    <span className={`text-[10px] ${rec!.color} hidden md:inline`}>
-                                      {rec!.label}
+                              {!hideDepositCol && (
+                                <TableCell>
+                                  {RecIcon && (
+                                    <span
+                                      className="inline-flex items-center gap-1"
+                                      title={rec!.label}
+                                    >
+                                      <RecIcon className={`h-4 w-4 ${rec!.color}`} />
+                                      <span className={`text-[10px] ${rec!.color} hidden md:inline`}>
+                                        {rec!.label}
+                                      </span>
                                     </span>
-                                  </span>
-                                )}
-                              </TableCell>
+                                  )}
+                                </TableCell>
+                              )}
+
                               <TableCell>
                                 <div className="flex items-center gap-1">
                                   {!isShared && (
@@ -1439,9 +1486,12 @@ export default function CheckCommandCenter() {
                         ))}
                       </TableBody>
                     </Table>
+                      );
+                    })()
                   )}
                 </ScrollArea>
                 </div>
+
               </CardContent>
             </Card>
 
@@ -1499,7 +1549,7 @@ export default function CheckCommandCenter() {
 /*  Summary card (kept for Phase 1 compat)                             */
 /* ------------------------------------------------------------------ */
 
-function ClaimCheckFileHeader({ group, compact = false }: { group: CheckGroup; compact?: boolean }) {
+function ClaimCheckFileHeader({ group, compact = false, hideReadySignal = false }: { group: CheckGroup; compact?: boolean; hideReadySignal?: boolean }) {
   const signedPayees = group.checks.reduce(
     (sum, check) => sum + (check.check_payees ?? []).filter((p) => p.endorsement_status === "signed").length,
     0,
@@ -1535,7 +1585,7 @@ function ClaimCheckFileHeader({ group, compact = false }: { group: CheckGroup; c
       </div>
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">
         {hasBlocked && <Badge variant="outline" className="border-orange-500/30 text-orange-400 text-[10px]">Blocked / pending</Badge>}
-        {hasReady && <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-[10px]">Ready signal</Badge>}
+        {hasReady && !hideReadySignal && <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-[10px]">Ready signal</Badge>}
         <div className="text-sm font-semibold tabular-nums text-foreground">
           ${group.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
         </div>
