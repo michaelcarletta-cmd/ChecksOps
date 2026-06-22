@@ -1426,22 +1426,25 @@ export default function CheckCommandCenter() {
                               </TableCell>
                               <TableCell>
                                 <Badge className={`text-[10px] ${statusColors[getEffectiveStatus(check)] ?? ""}`}>
-                                  {getEffectiveStatusLabel(check)}
+                                  {getTabStatusLabel(check, activeTab)}
                                 </Badge>
                               </TableCell>
-                              <TableCell>
-                                {RecIcon && (
-                                  <span
-                                    className="inline-flex items-center gap-1"
-                                    title={rec!.label}
-                                  >
-                                    <RecIcon className={`h-4 w-4 ${rec!.color}`} />
-                                    <span className={`text-[10px] ${rec!.color} hidden md:inline`}>
-                                      {rec!.label}
+                              {!hideDepositCol && (
+                                <TableCell>
+                                  {RecIcon && (
+                                    <span
+                                      className="inline-flex items-center gap-1"
+                                      title={rec!.label}
+                                    >
+                                      <RecIcon className={`h-4 w-4 ${rec!.color}`} />
+                                      <span className={`text-[10px] ${rec!.color} hidden md:inline`}>
+                                        {rec!.label}
+                                      </span>
                                     </span>
-                                  </span>
-                                )}
-                              </TableCell>
+                                  )}
+                                </TableCell>
+                              )}
+
                               <TableCell>
                                 <div className="flex items-center gap-1">
                                   {!isShared && (
