@@ -43,8 +43,6 @@ const emptyForm = {
   nickname: "",
   account_type: "operating",
   custname: "",
-  chk_aba: "",
-  chk_acct: "",
   acct_type: "C",
   is_primary: false,
 };
