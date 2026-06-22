@@ -90,9 +90,23 @@ serve(async (req) => {
       if (fields.orderid || fields.order_id) {
         update.authentecheck_order_id = fields.orderid || fields.order_id;
       }
-      // Pull bank info from authdata if available
+      // Pull bank info from authdata if available — Authentecheck returns the
+      // routing / account / type / bank_name fields when the user signs in via Plaid.
       if (authdata && typeof authdata === "object") {
-        if (authdata.bank_name) update.authentecheck_bank_name = authdata.bank_name;
+        const a = authdata as Record<string, any>;
+        const routing = a.routing_number || a.routing || a.aba || a.chk_aba;
+        const account = a.account_number || a.account || a.chk_acct;
+        const acctType = a.account_type || a.acct_type;
+        const bankName = a.bank_name || a.bank;
+        const holder = a.account_holder || a.name_on_account || a.customer_name;
+        if (routing) update.chk_aba = String(routing).replace(/\D/g, "").slice(0, 9);
+        if (account) update.chk_acct = String(account).replace(/\D/g, "").slice(0, 17);
+        if (acctType) {
+          const t = String(acctType).toUpperCase();
+          update.acct_type = t.startsWith("S") ? "S" : "C";
+        }
+        if (bankName) update.authentecheck_bank_name = bankName;
+        if (holder) update.custname = String(holder).slice(0, 100);
       }
     } else {
       update.verification_status = "failed";
