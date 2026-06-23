@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { convertHeicToJpegIfNeeded } from "@/lib/convertHeic";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
 import { useToast } from "@/hooks/use-toast";
@@ -82,21 +83,26 @@ export function CashJobCheckUpload({
     setUploading(true);
 
     try {
+      // iPhone HEIC/HEIF photos must be converted to JPEG before upload —
+      // browsers and our compositor can't decode HEIC and would render blank.
+      const frontSafe = await convertHeicToJpegIfNeeded(frontFile);
+      const backSafe = backFile ? await convertHeicToJpegIfNeeded(backFile) : null;
+
       const ts = Date.now();
-      const frontPath = `${tenant.id}/cash-jobs/${cashJobId}/${ts}_front.${frontFile.name.split(".").pop()}`;
+      const frontPath = `${tenant.id}/cash-jobs/${cashJobId}/${ts}_front.${frontSafe.name.split(".").pop()}`;
 
       // Upload front image
       const { error: frontErr } = await supabase.storage
         .from("claim-files")
-        .upload(frontPath, frontFile, { upsert: false });
+        .upload(frontPath, frontSafe, { upsert: false, contentType: frontSafe.type || "image/jpeg" });
       if (frontErr) throw frontErr;
 
       let backPath: string | null = null;
-      if (backFile) {
-        backPath = `${tenant.id}/cash-jobs/${cashJobId}/${ts}_back.${backFile.name.split(".").pop()}`;
+      if (backSafe) {
+        backPath = `${tenant.id}/cash-jobs/${cashJobId}/${ts}_back.${backSafe.name.split(".").pop()}`;
         const { error: backErr } = await supabase.storage
           .from("claim-files")
-          .upload(backPath, backFile, { upsert: false });
+          .upload(backPath, backSafe, { upsert: false, contentType: backSafe.type || "image/jpeg" });
         if (backErr) throw backErr;
       }
 
