@@ -1,5 +1,6 @@
 import imageCompression from "browser-image-compression";
 import { supabase } from "@/integrations/supabase/client";
+import { convertHeicToJpegIfNeeded } from "@/lib/convertHeic";
 
 export type UploadedImageResult = {
   path: string;
@@ -17,12 +18,14 @@ export async function uploadCompressedImage(
   bucket: string,
   folder = "photos"
 ): Promise<UploadedImageResult> {
-  const compressed = await imageCompression(file, {
+  const safeFile = await convertHeicToJpegIfNeeded(file);
+
+  const compressed = await imageCompression(safeFile, {
     maxSizeMB: 1,
     maxWidthOrHeight: 1800,
     useWebWorker: true,
     initialQuality: 0.72,
-    fileType: file.type || "image/jpeg",
+    fileType: safeFile.type || "image/jpeg",
   });
 
   const originalName = compressed.name || file.name || "image.jpg";
