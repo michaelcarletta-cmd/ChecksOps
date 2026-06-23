@@ -307,11 +307,25 @@ Deno.serve(async (req) => {
 
     if (dlErr || !imgBlob) throw new Error(`Cannot download back image: ${dlErr?.message}`);
 
-    const originalBytes = new Uint8Array(await imgBlob.arrayBuffer());
-    const dims = detectImageDimensions(originalBytes);
-    const imgWidth = dims.width;
-    const imgHeight = dims.height;
-    console.log(`[COMPOSITE] detected image dimensions: ${imgWidth}x${imgHeight}`);
+    const rawBytes = new Uint8Array(await imgBlob.arrayBuffer());
+    const rawDims = detectImageDimensions(rawBytes);
+    console.log(`[COMPOSITE] detected source image dimensions: ${rawDims.width}x${rawDims.height}`);
+
+    // Downscale oversized captures so the compositor stays on the rasterized-PNG
+    // path. The original full-res image in storage is left untouched — only the
+    // copy fed into the SVG/PNG composite is resized.
+    const downscaled = await maybeDownscaleForRaster(
+      rawBytes,
+      rawDims.width,
+      rawDims.height,
+      MAX_RASTER_PIXELS,
+    );
+    const originalBytes = downscaled.bytes;
+    const imgWidth = downscaled.width;
+    const imgHeight = downscaled.height;
+    if (downscaled.downscaled) {
+      console.log(`[COMPOSITE] using downscaled dimensions: ${imgWidth}x${imgHeight}`);
+    }
 
     const rawOverride = (check.endorsement_override ?? null) as Partial<OverrideShape> | null;
     console.log("[COMPOSITE] raw endorsement_override from DB:", JSON.stringify(rawOverride));
