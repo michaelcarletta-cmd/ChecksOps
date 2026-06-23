@@ -8,6 +8,62 @@ try {
   console.warn("[COMPOSITE] resvg_wasm not available, will use SVG fallback:", e);
 }
 
+// Lazy-load imagescript only when needed (keeps cold-start fast).
+let imageScriptPromise: Promise<any> | null = null;
+async function loadImageScript(): Promise<any> {
+  if (!imageScriptPromise) {
+    imageScriptPromise = import("https://deno.land/x/imagescript@1.2.17/mod.ts")
+      .catch((e) => {
+        console.warn("[COMPOSITE] imagescript not available, downscale disabled:", e);
+        return null;
+      });
+  }
+  return imageScriptPromise;
+}
+
+/**
+ * If the source back image exceeds MAX_RASTER_PIXELS, decode it, resize so the
+ * pixel count fits under the cap, and re-encode as JPEG. This keeps the
+ * compositor on the rasterized-PNG path (clean, flattened endorsement) instead
+ * of the SVG fallback (which embeds the full-res JPEG and renders awkwardly
+ * when the viewer scales it down).
+ */
+async function maybeDownscaleForRaster(
+  bytes: Uint8Array,
+  width: number,
+  height: number,
+  maxPixels: number,
+): Promise<{ bytes: Uint8Array; width: number; height: number; downscaled: boolean }> {
+  const pixels = width * height;
+  if (pixels <= maxPixels) {
+    return { bytes, width, height, downscaled: false };
+  }
+
+  const lib = await loadImageScript();
+  if (!lib) {
+    return { bytes, width, height, downscaled: false };
+  }
+
+  try {
+    const ratio = Math.sqrt(maxPixels / pixels);
+    const targetW = Math.max(800, Math.floor(width * ratio));
+    const targetH = Math.max(400, Math.floor(height * ratio));
+
+    const decoded = await lib.Image.decode(bytes);
+    decoded.resize(targetW, targetH);
+    const encoded = await decoded.encodeJPEG(85);
+
+    console.log(
+      `[COMPOSITE] downscaled back image ${width}x${height} (${pixels}px) -> ${targetW}x${targetH} (${targetW * targetH}px), ${bytes.length}B -> ${encoded.length}B`,
+    );
+
+    return { bytes: encoded, width: targetW, height: targetH, downscaled: true };
+  } catch (e) {
+    console.warn("[COMPOSITE] downscale failed, falling back to original:", e);
+    return { bytes, width, height, downscaled: false };
+  }
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
