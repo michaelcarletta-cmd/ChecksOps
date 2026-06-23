@@ -121,35 +121,15 @@ export function CheckImagesViewer({
       </div>
       <div className="flex-1 flex items-center justify-center overflow-auto p-6">
         {currentUrl ? (
-          /\.svg(\?|$)/i.test(currentUrl) ? (
-            // SVG composites (endorsed back images) embed the original check as
-            // a base64 <image> data URI. Browsers refuse to load those when the
-            // SVG is rendered via <img>, so the user sees only the endorsement
-            // overlay. <object> renders SVG in its own document context and
-            // honors embedded data URIs reliably.
-            <object
-              data={currentUrl}
-              type="image/svg+xml"
-              aria-label={`${side === "front" ? "Front" : "Back"} of check`}
-              className="max-w-full max-h-full select-none"
-              style={{
-                transform: `scale(${zoom})`,
-                transformOrigin: "center center",
-                width: "100%",
-                height: "100%",
-              }}
-            />
-          ) : (
-            <img
-              src={currentUrl}
-              alt={`${side === "front" ? "Front" : "Back"} of check`}
-              className="max-w-full max-h-full object-contain select-none"
-              style={{
-                transform: `scale(${zoom})`,
-                transformOrigin: "center center",
-              }}
-            />
-          )
+          <img
+            src={currentUrl}
+            alt={`${side === "front" ? "Front" : "Back"} of check`}
+            className="max-w-full max-h-full object-contain select-none"
+            style={{
+              transform: `scale(${zoom})`,
+              transformOrigin: "center center",
+            }}
+          />
         ) : (
           <div className="text-sm text-white/70">
             No {side} image available for this check.
