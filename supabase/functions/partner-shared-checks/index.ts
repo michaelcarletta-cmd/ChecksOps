@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
       if (!path) return null;
       if (/^https?:\/\//i.test(path)) return path;
       if (path.startsWith("external://")) return null;
-      const { data: signed } = await supabase.storage.from("check-images").createSignedUrl(path, 3600);
+      const { data: signed } = await supabase.storage.from("claim-files").createSignedUrl(path, 3600);
       return signed?.signedUrl ?? null;
     };
 
