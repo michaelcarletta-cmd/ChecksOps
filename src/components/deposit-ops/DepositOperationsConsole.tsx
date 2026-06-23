@@ -646,14 +646,16 @@ function DepositItemDetail({
     queryKey: ["deposit-check-images", checkData?.id],
     enabled: !!checkData?.front_image_path,
     queryFn: async () => {
-      const [front, back] = await Promise.all([
-        checkData!.front_image_path
-          ? supabase.storage.from("check-images").createSignedUrl(checkData!.front_image_path, 3600).then(r => r.data?.signedUrl ?? null)
-          : Promise.resolve(null),
-        checkData!.back_image_path
-          ? supabase.storage.from("check-images").createSignedUrl(checkData!.back_image_path, 3600).then(r => r.data?.signedUrl ?? null)
-          : Promise.resolve(null),
-      ]);
+      // Use the edge function that knows the correct bucket (claim-files) and
+      // can repair legacy URL-style paths. The previous direct call to
+      // `check-images` bucket silently returned null for the back image when
+      // the file actually lived in `claim-files` (e.g. endorsed `.svg` composites).
+      const { data: signed, error: signedErr } = await supabase.functions.invoke("get-check-image-urls", {
+        body: { checkId: checkData!.id },
+      });
+      if (signedErr) throw signedErr;
+      const front = signed?.frontUrl ?? null;
+      const back = signed?.backUrl ?? null;
       return { front, back };
     },
   });
