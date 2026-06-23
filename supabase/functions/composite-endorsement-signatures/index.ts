@@ -486,7 +486,10 @@ Deno.serve(async (req) => {
     // ── Build SVG using fitted layout (LOCAL coordinates) ──
     const pixelCount = imgWidth * imgHeight;
     const originalBase64 = uint8ToBase64(originalBytes);
-    const mimeType = backImagePath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+    // If we downscaled, the bytes are always JPEG; otherwise honor the source extension.
+    const mimeType = downscaled.downscaled
+      ? "image/jpeg"
+      : backImagePath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
 
     const blockWidth = Math.round(imgWidth * ENDORSEMENT_WIDTH_PCT);
     const { fontSize, lineGap: fitLineGap, rowGap: fitRowGap, signatureHeight: fitSigHeight, compactText } = measured;
