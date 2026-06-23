@@ -87,7 +87,7 @@ export function CashJobCheckUpload({
 
       // Upload front image
       const { error: frontErr } = await supabase.storage
-        .from("check-images")
+        .from("claim-files")
         .upload(frontPath, frontFile, { upsert: false });
       if (frontErr) throw frontErr;
 
@@ -95,7 +95,7 @@ export function CashJobCheckUpload({
       if (backFile) {
         backPath = `${tenant.id}/cash-jobs/${cashJobId}/${ts}_back.${backFile.name.split(".").pop()}`;
         const { error: backErr } = await supabase.storage
-          .from("check-images")
+          .from("claim-files")
           .upload(backPath, backFile, { upsert: false });
         if (backErr) throw backErr;
       }
