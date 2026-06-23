@@ -10,10 +10,38 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Save, ShieldCheck, FileText, AlertTriangle, CheckCircle2, ExternalLink } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Loader2, Save, ShieldCheck, FileText, AlertTriangle, CheckCircle2, ExternalLink, Eye } from "lucide-react";
 import { format } from "date-fns";
+import { formatPhoneNumber } from "@/lib/utils";
+import wispDocText from "../../../docs/WISP.md?raw";
+import achDocText from "../../../docs/ACH_RISK_FRAUD_MONITORING.md?raw";
 
 const ACH_POLICY_VERSION = "2026-06-22";
+
+type AddressParts = { street: string; city: string; state: string; zip: string };
+
+function parseAddress(combined: string): AddressParts {
+  const empty = { street: "", city: "", state: "", zip: "" };
+  if (!combined) return empty;
+  // Expect "street, city, state zip"
+  const parts = combined.split(",").map((p) => p.trim());
+  if (parts.length >= 3) {
+    const stateZip = parts[parts.length - 1].split(/\s+/);
+    const zip = stateZip.length > 1 ? stateZip[stateZip.length - 1] : "";
+    const state = stateZip.length > 1 ? stateZip.slice(0, -1).join(" ") : stateZip[0] ?? "";
+    const city = parts[parts.length - 2] ?? "";
+    const street = parts.slice(0, parts.length - 2).join(", ");
+    return { street, city, state, zip };
+  }
+  return { ...empty, street: combined };
+}
+
+function joinAddress(a: AddressParts): string {
+  const tail = [a.state, a.zip].filter(Boolean).join(" ").trim();
+  return [a.street, a.city, tail].filter(Boolean).join(", ");
+}
 
 export function ComplianceSettings() {
   const { tenant } = useTenant();
@@ -38,20 +66,30 @@ export function ComplianceSettings() {
   const [form, setForm] = useState({
     legal_business_name: "",
     ein: "",
-    business_address: "",
+    street: "",
+    city: "",
+    state: "",
+    zip: "",
     business_phone: "",
     beneficial_owner_name: "",
     beneficial_owner_dob: "",
     beneficial_owner_id_url: "",
   });
 
+  const [viewing, setViewing] = useState<null | "wisp" | "ach">(null);
+  const [hasScrolled, setHasScrolled] = useState(false);
+
   useEffect(() => {
     if (t) {
+      const addr = parseAddress(t.business_address ?? "");
       setForm({
         legal_business_name: t.legal_business_name ?? "",
         ein: t.ein ?? "",
-        business_address: t.business_address ?? "",
-        business_phone: t.business_phone ?? "",
+        street: addr.street,
+        city: addr.city,
+        state: addr.state,
+        zip: addr.zip,
+        business_phone: t.business_phone ? formatPhoneNumber(t.business_phone) : "",
         beneficial_owner_name: t.beneficial_owner_name ?? "",
         beneficial_owner_dob: t.beneficial_owner_dob ?? "",
         beneficial_owner_id_url: t.beneficial_owner_id_url ?? "",
@@ -61,11 +99,16 @@ export function ComplianceSettings() {
 
   const saveKyc = useMutation({
     mutationFn: async () => {
-      if (!form.legal_business_name.trim() || !form.ein.trim() || !form.business_address.trim() || !form.business_phone.trim() || !form.beneficial_owner_name.trim() || !form.beneficial_owner_dob) {
+      const business_address = joinAddress({ street: form.street, city: form.city, state: form.state, zip: form.zip });
+      if (!form.legal_business_name.trim() || !form.ein.trim() || !form.street.trim() || !form.city.trim() || !form.state.trim() || !form.zip.trim() || !form.business_phone.trim() || !form.beneficial_owner_name.trim() || !form.beneficial_owner_dob) {
         throw new Error("All KYC fields are required (ID document optional)");
       }
       const payload: any = {
-        ...form,
+        legal_business_name: form.legal_business_name,
+        ein: form.ein,
+        business_address,
+        business_phone: form.business_phone,
+        beneficial_owner_name: form.beneficial_owner_name,
         beneficial_owner_dob: form.beneficial_owner_dob || null,
         beneficial_owner_id_url: form.beneficial_owner_id_url || null,
         kyc_completed_at: new Date().toISOString(),
@@ -110,6 +153,8 @@ export function ComplianceSettings() {
     },
     onSuccess: (kind) => {
       toast({ title: "Acknowledged", description: kind === "wisp" ? "WISP acknowledgment recorded." : "ACH policy acknowledgment recorded." });
+      setViewing(null);
+      setHasScrolled(false);
       qc.invalidateQueries({ queryKey: ["compliance-tenant", tenant?.id] });
     },
     onError: (e: any) => toast({ title: "Could not record", description: e.message, variant: "destructive" }),
@@ -122,6 +167,9 @@ export function ComplianceSettings() {
   const kycDone = !!t?.kyc_completed_at;
   const wispDone = !!t?.wisp_acknowledged_at;
   const achDone = !!t?.ach_policy_acknowledged_at && t?.ach_policy_version === ACH_POLICY_VERSION;
+
+  const viewingTitle = viewing === "wisp" ? "Written Information Security Program (WISP)" : `ACH Risk & Fraud Monitoring Policy (${ACH_POLICY_VERSION})`;
+  const viewingText = viewing === "wisp" ? wispDocText : achDocText;
 
   return (
     <div className="space-y-6">
@@ -152,9 +200,29 @@ export function ComplianceSettings() {
           <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Legal business name" value={form.legal_business_name} onChange={(v) => setForm({ ...form, legal_business_name: v })} />
             <Field label="EIN" value={form.ein} onChange={(v) => setForm({ ...form, ein: v })} placeholder="00-0000000" />
-            <Field label="Business address" value={form.business_address} onChange={(v) => setForm({ ...form, business_address: v })} className="sm:col-span-2" />
-            <Field label="Business phone" value={form.business_phone} onChange={(v) => setForm({ ...form, business_phone: v })} />
           </div>
+
+          <div className="space-y-3">
+            <Label className="text-[11px] uppercase text-muted-foreground tracking-wide">Business address</Label>
+            <div className="grid gap-3">
+              <Field label="Street" value={form.street} onChange={(v) => setForm({ ...form, street: v })} placeholder="123 Main St" />
+              <div className="grid sm:grid-cols-3 gap-3">
+                <Field label="City" value={form.city} onChange={(v) => setForm({ ...form, city: v })} />
+                <Field label="State" value={form.state} onChange={(v) => setForm({ ...form, state: v.toUpperCase().slice(0, 2) })} placeholder="NJ" />
+                <Field label="ZIP" value={form.zip} onChange={(v) => setForm({ ...form, zip: v.replace(/[^0-9-]/g, "").slice(0, 10) })} placeholder="07001" />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            <Field
+              label="Business phone"
+              value={form.business_phone}
+              onChange={(v) => setForm({ ...form, business_phone: formatPhoneNumber(v) })}
+              placeholder="123-456-7890"
+            />
+          </div>
+
           <Separator />
           <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Beneficial owner full name" value={form.beneficial_owner_name} onChange={(v) => setForm({ ...form, beneficial_owner_name: v })} />
@@ -172,22 +240,20 @@ export function ComplianceSettings() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Policy acknowledgments</CardTitle>
-          <CardDescription>Acknowledge that you have read and will operate under each policy.</CardDescription>
+          <CardDescription>Click "View & acknowledge" to read each policy. You must scroll to the bottom before you can acknowledge.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <PolicyRow
             title="Written Information Security Program (WISP)"
             subtitle={wispDone ? `Acknowledged ${format(new Date(t.wisp_acknowledged_at), "PPp")}` : "Not yet acknowledged"}
             done={wispDone}
-            onAck={() => ackPolicy.mutate("wisp")}
-            pending={ackPolicy.isPending}
+            onView={() => { setViewing("wisp"); setHasScrolled(false); }}
           />
           <PolicyRow
             title={`ACH Risk & Fraud Monitoring Policy (${ACH_POLICY_VERSION})`}
             subtitle={achDone ? `Acknowledged ${format(new Date(t.ach_policy_acknowledged_at), "PPp")}` : "Not yet acknowledged — required by NACHA effective 2026-06-22"}
             done={achDone}
-            onAck={() => ackPolicy.mutate("ach")}
-            pending={ackPolicy.isPending}
+            onView={() => { setViewing("ach"); setHasScrolled(false); }}
           />
         </CardContent>
       </Card>
@@ -200,10 +266,41 @@ export function ComplianceSettings() {
         <CardContent className="space-y-2 text-sm">
           <DocLink href="/privacy-notice" label="Consumer Privacy Notice (live page)" external />
           <p className="text-xs text-muted-foreground pt-2">
-            Internal policies (WISP, Data Retention, Incident Response, ACH Risk & Fraud Monitoring, AML Program) live in <code className="text-[11px]">docs/</code> in the codebase and are maintained by the Qualified Individual.
+            Internal policies (WISP, Data Retention, Incident Response, ACH Risk & Fraud Monitoring, AML Program) are maintained by the Qualified Individual and viewable above.
           </p>
         </CardContent>
       </Card>
+
+      {/* Policy viewer dialog */}
+      <Dialog open={!!viewing} onOpenChange={(o) => { if (!o) { setViewing(null); setHasScrolled(false); } }}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{viewingTitle}</DialogTitle>
+            <DialogDescription>Scroll to the bottom to enable acknowledgment.</DialogDescription>
+          </DialogHeader>
+          <ScrollArea
+            className="h-[55vh] border rounded-md p-4 bg-muted/20"
+            onScrollCapture={(e) => {
+              const el = e.currentTarget.querySelector("[data-radix-scroll-area-viewport]") as HTMLDivElement | null;
+              if (!el) return;
+              if (el.scrollTop + el.clientHeight >= el.scrollHeight - 24) setHasScrolled(true);
+            }}
+          >
+            <pre className="whitespace-pre-wrap text-xs leading-relaxed font-sans">{viewingText}</pre>
+          </ScrollArea>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => { setViewing(null); setHasScrolled(false); }}>Close</Button>
+            <Button
+              size="sm"
+              disabled={!hasScrolled || ackPolicy.isPending || (viewing === "wisp" ? wispDone : achDone)}
+              onClick={() => viewing && ackPolicy.mutate(viewing)}
+            >
+              {ackPolicy.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}
+              {hasScrolled ? "I've read this — Acknowledge" : "Scroll to bottom to acknowledge"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -226,21 +323,20 @@ function Field({ label, value, onChange, type = "text", placeholder, className =
   );
 }
 
-function PolicyRow({ title, subtitle, done, onAck, pending }: { title: string; subtitle: string; done: boolean; onAck: () => void; pending: boolean }) {
+function PolicyRow({ title, subtitle, done, onView }: { title: string; subtitle: string; done: boolean; onView: () => void }) {
   return (
     <div className="flex items-start justify-between gap-3 p-3 rounded-md border">
       <div className="space-y-0.5">
         <p className="text-sm font-medium">{title}</p>
         <p className="text-xs text-muted-foreground">{subtitle}</p>
       </div>
-      {done ? (
-        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-500/20">Acknowledged</Badge>
-      ) : (
-        <Button size="sm" variant="outline" onClick={onAck} disabled={pending}>
-          {pending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-          Acknowledge
+      <div className="flex items-center gap-2 shrink-0">
+        {done && <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-500/20">Acknowledged</Badge>}
+        <Button size="sm" variant="outline" onClick={onView}>
+          <Eye className="h-3 w-3 mr-1" />
+          {done ? "View" : "View & acknowledge"}
         </Button>
-      )}
+      </div>
     </div>
   );
 }
