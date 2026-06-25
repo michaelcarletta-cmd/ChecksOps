@@ -1,15 +1,32 @@
-// Polling fallback — reconciles any stale checkalt_deposits whose status is
-// 'submitted' or 'pending_approval' and haven't been polled in >15 minutes.
-// Safe to call from cron or manually from the admin UI.
+// Polling fallback — reconciles stale checkalt_deposits using FinCapture's
+// /fincapture/deposit/history endpoint. Maps numeric status codes to internal
+// statuses. Safe to call from cron or manually.
+//
+// FinCapture status codes:
+//   127 = Submitted, 40 = Pending/Manual review, 120 = Rejected, 11 = Unknown/Error
+//   (cleared/settled = success codes returned by API)
 
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
-import { getServiceClient, checkAltFetch } from "../_shared/checkalt.ts";
+import { getServiceClient, checkAltFetch, getCheckAltFiKey, loadConfig } from "../_shared/checkalt.ts";
+
+function mapStatus(code: number, current: string): string {
+  switch (code) {
+    case 127: return "submitted";
+    case 40:  return "pending_approval";
+    case 120: return "rejected";
+    case 11:  return "error";
+    // Treat any other terminal/success code as cleared
+    default:  return code >= 200 ? "cleared" : current;
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
     const supabase = getServiceClient();
+    const cfg = await loadConfig(supabase);
+    const fiKey = getCheckAltFiKey();
     const cutoff = new Date(Date.now() - 15 * 60_000).toISOString();
 
     const { data: stale, error } = await supabase
@@ -26,19 +43,27 @@ Deno.serve(async (req) => {
     for (const dep of stale ?? []) {
       polled++;
       try {
-        const resp = await checkAltFetch(supabase, `/fincapture/deposits/${dep.checkalt_reference}`, {
-          method: "GET",
+        const resp = await checkAltFetch(supabase, "/fincapture/deposit/history", {
+          method: "POST",
+          body: JSON.stringify({
+            fiKey,
+            ssoKey: cfg.business_unit || cfg.depositor_account_id,
+            depositAccountNumber: cfg.depositor_account_id,
+            referenceId: dep.checkalt_reference,
+          }),
         });
         const json = await resp.json().catch(() => ({}));
-        const rawStatus = String(json?.status ?? "").toLowerCase();
-        const statusMap: Record<string, string> = {
-          submitted: "submitted",
-          pending: "submitted",
-          pending_approval: "pending_approval",
-          approved: "cleared", cleared: "cleared", settled: "cleared",
-          returned: "returned", rejected: "rejected", declined: "rejected",
-        };
-        const internal = statusMap[rawStatus] ?? dep.status;
+        const items: any[] = Array.isArray(json?.items) ? json.items
+          : Array.isArray(json?.deposits) ? json.deposits
+          : Array.isArray(json) ? json : [];
+        const match = items.find((it) =>
+          it?.referenceId === dep.checkalt_reference ||
+          it?.reference === dep.checkalt_reference ||
+          it?.id === dep.checkalt_reference,
+        ) ?? items[0] ?? json;
+
+        const code = Number(match?.status ?? match?.statusCode ?? 0);
+        const internal = mapStatus(code, dep.status);
 
         const updates: Record<string, unknown> = {
           last_polled_at: new Date().toISOString(),
@@ -47,7 +72,7 @@ Deno.serve(async (req) => {
         if (internal !== dep.status) {
           updates.status = internal;
           if (internal === "cleared") updates.cleared_at = new Date().toISOString();
-          if (internal === "returned") updates.returned_at = new Date().toISOString();
+          if (internal === "rejected") updates.returned_at = new Date().toISOString();
           updated++;
         }
         await supabase.from("checkalt_deposits").update(updates).eq("id", dep.id);
