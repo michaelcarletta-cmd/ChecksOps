@@ -1,6 +1,13 @@
 // Shared CheckAlt (FinCapture) helpers — JWT acquisition + base config loader.
-// Single ChecksOps-wide account model: credentials live in env secrets,
-// per-deployment config (base URL, depositor account, business unit) lives in checkalt_config.
+//
+// Auth flow (UAT/Prod):
+//   POST {base_url}/public/jwtauth/authenticate
+//     Headers:
+//       merchant: <CHECKALT_MERCHANT>            (e.g. "lockbox5")
+//       Content-Type: application/x-www-form-urlencoded
+//       Authorization: Basic base64(userId:password)
+//
+// Every other call must include `merchant` and `Authorization: Bearer <jwt>`.
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -20,6 +27,16 @@ export function getServiceClient(): SupabaseClient {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
+export function getCheckAltMerchant(): string {
+  return Deno.env.get("CHECKALT_MERCHANT") ?? "lockbox5";
+}
+
+export function getCheckAltFiKey(): string {
+  const k = Deno.env.get("CHECKALT_FI_KEY");
+  if (!k) throw new Error("CHECKALT_FI_KEY not configured");
+  return k;
+}
+
 export async function loadConfig(supabase: SupabaseClient): Promise<CheckAltConfig> {
   const { data, error } = await supabase
     .from("checkalt_config")
@@ -31,13 +48,6 @@ export async function loadConfig(supabase: SupabaseClient): Promise<CheckAltConf
   return data as CheckAltConfig;
 }
 
-/**
- * Returns a valid JWT for FinCapture. Uses cached JWT if not expired,
- * otherwise authenticates via /fincapture/authenticate and caches the result.
- *
- * Sandbox/production credentials live in env secrets:
- *   CHECKALT_USERNAME, CHECKALT_PASSWORD
- */
 export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConfig): Promise<string> {
   // 60s safety margin before expiry
   if (cfg.cached_jwt && cfg.cached_jwt_expires_at) {
@@ -48,12 +58,17 @@ export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConf
   const username = Deno.env.get("CHECKALT_USERNAME");
   const password = Deno.env.get("CHECKALT_PASSWORD");
   if (!username || !password) throw new Error("CHECKALT_USERNAME / CHECKALT_PASSWORD not configured");
-  if (!cfg.base_url) throw new Error("checkalt_config.base_url not set");
+  const base = (cfg.base_url ?? "https://uatapi.checkalt.com").replace(/\/$/, "");
 
-  const resp = await fetch(`${cfg.base_url.replace(/\/$/, "")}/fincapture/authenticate`, {
+  const basic = btoa(`${username}:${password}`);
+  const resp = await fetch(`${base}/public/jwtauth/authenticate`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
+    headers: {
+      merchant: getCheckAltMerchant(),
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Basic ${basic}`,
+    },
+    body: "",
   });
 
   if (!resp.ok) {
@@ -61,11 +76,17 @@ export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConf
     throw new Error(`CheckAlt auth failed [${resp.status}]: ${body}`);
   }
 
-  const data = await resp.json();
-  const jwt: string | undefined = data?.token ?? data?.jwt ?? data?.accessToken;
+  // The token may be returned as a raw string OR as JSON { token | jwt | accessToken }.
+  const text = await resp.text();
+  let jwt: string | undefined;
+  try {
+    const data = JSON.parse(text);
+    jwt = data?.token ?? data?.jwt ?? data?.accessToken;
+  } catch {
+    jwt = text.trim().replace(/^Bearer\s+/i, "");
+  }
   if (!jwt) throw new Error("CheckAlt auth response missing token");
 
-  // FinCapture JWTs are typically valid ~1h; decode exp if present, else assume 50min.
   let expiresAt = new Date(Date.now() + 50 * 60_000).toISOString();
   try {
     const parts = jwt.split(".");
@@ -90,9 +111,11 @@ export async function checkAltFetch(
 ): Promise<Response> {
   const cfg = await loadConfig(supabase);
   const jwt = await getCheckAltJwt(supabase, cfg);
-  const url = `${(cfg.base_url ?? "").replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+  const base = (cfg.base_url ?? "https://uatapi.checkalt.com").replace(/\/$/, "");
+  const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${jwt}`);
+  headers.set("merchant", getCheckAltMerchant());
   if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json");
   return await fetch(url, { ...init, headers });
 }
