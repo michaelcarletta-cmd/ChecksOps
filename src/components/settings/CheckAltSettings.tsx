@@ -187,6 +187,17 @@ export function PendingApprovalDeposits() {
   );
 }
 
+/**
+ * Derive ssoKey as first initial + last name (lowercase, alphanumeric).
+ * Matches the convention CheckAlt uses for most FinCapture depositors.
+ */
+function deriveSsoKey(firstName: string, lastName: string): string {
+  const fi = (firstName || "").trim().charAt(0).toLowerCase();
+  const ln = (lastName || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (!fi || !ln) return "";
+  return `${fi}${ln}`;
+}
+
 interface TenantAccount {
   sso_user_id: string;
   deposit_account_number: string;
