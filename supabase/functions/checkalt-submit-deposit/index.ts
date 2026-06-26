@@ -41,9 +41,10 @@ async function downloadAndCompress(
   } catch (e) {
     throw new Error(`Image decode failed (${path}): ${e instanceof Error ? e.message : e}`);
   }
-  // Cap initial dimension aggressively to keep imagescript CPU bounded.
-  // Checks only need ~200 DPI for FinCapture; 1200px wide is plenty.
-  const MAX_DIM = 1200;
+  // FinCapture spec targets 1920x1080 capture; we cap at 1600px wide to
+  // stay well above the Federal Reserve 200 DPI ICL minimum on a ~6" check
+  // (~266 DPI) while keeping imagescript CPU bounded on edge runtime.
+  const MAX_DIM = 1600;
   let w = Math.min(MAX_DIM, img.width);
   if (w !== img.width) {
     img = img.resize(w, Image.RESIZE_AUTO);
