@@ -20932,6 +20932,7 @@ export type Database = {
         | "synctera"
         | "treasury_prime"
         | "increase"
+        | "checkalt"
       professional_type: "contractor" | "public_adjuster" | "attorney"
       referral_alert_type:
         | "needs_contractor"
@@ -21214,6 +21215,7 @@ export const Constants = {
         "synctera",
         "treasury_prime",
         "increase",
+        "checkalt",
       ],
       professional_type: ["contractor", "public_adjuster", "attorney"],
       referral_alert_type: [

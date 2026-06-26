@@ -4,7 +4,7 @@
 // then updates checkalt_deposits + claim_checks accordingly.
 
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
-import { getServiceClient } from "../_shared/checkalt.ts";
+import { getServiceClient, syncDepositItem } from "../_shared/checkalt.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
       // Mirror to claim_checks for downstream UI
       const { data: dep } = await supabase
         .from("checkalt_deposits")
-        .select("id, check_intake_item_id")
+        .select("id, check_intake_item_id, submitted_by")
         .eq("checkalt_reference", reference)
         .maybeSingle();
       if (dep?.check_intake_item_id) {
@@ -110,6 +110,29 @@ Deno.serve(async (req) => {
             .from("claim_checks")
             .update(ccUpdates)
             .eq("check_intake_item_id", dep.check_intake_item_id);
+        }
+
+        if (dep.submitted_by && (internalStatus === "cleared" || internalStatus === "returned" || internalStatus === "rejected")) {
+          const { data: depositItem } = await supabase
+            .from("deposit_items")
+            .select("id, provider")
+            .eq("check_id", dep.check_intake_item_id)
+            .maybeSingle();
+          if (depositItem && depositItem.provider === "checkalt") {
+            const action: "record_success" | "record_return" | "record_failure" =
+              internalStatus === "cleared" ? "record_success"
+              : internalStatus === "returned" ? "record_return"
+              : "record_failure";
+            await syncDepositItem(supabase, {
+              action,
+              deposit_item_id: depositItem.id,
+              actor_id: dep.submitted_by,
+              notes: payload?.returnReason as string | undefined ?? payload?.reason as string | undefined,
+              extra: action === "record_failure"
+                ? { error: internalStatus, response: payload }
+                : { response: payload },
+            });
+          }
         }
       }
     }

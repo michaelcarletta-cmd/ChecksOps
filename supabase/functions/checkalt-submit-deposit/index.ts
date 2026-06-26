@@ -15,6 +15,7 @@ import {
   loadConfig,
   checkAltFetch,
   getCheckAltFiKey,
+  syncDepositItem,
 } from "../_shared/checkalt.ts";
 
 const BodySchema = z.object({
@@ -190,6 +191,31 @@ Deno.serve(async (req) => {
       .from("claim_checks")
       .update({ deposit_method: "checkalt", checkalt_deposit_id: depositRow.id })
       .eq("check_intake_item_id", check.id);
+
+    // Mirror into the deposit_items pipeline if this check was routed there
+    // (assign_provider must have set provider = 'checkalt' first).
+    const { data: depositItem } = await supabase
+      .from("deposit_items")
+      .select("id, status, provider")
+      .eq("check_id", check.id)
+      .maybeSingle();
+    if (depositItem && depositItem.provider === "checkalt") {
+      await syncDepositItem(supabase, {
+        action: "record_submission",
+        deposit_item_id: depositItem.id,
+        actor_id: userId,
+        extra: { provider_reference: reference, payload: submitJson },
+      });
+      if (internalStatus === "rejected" || internalStatus === "error") {
+        await syncDepositItem(supabase, {
+          action: "record_failure",
+          deposit_item_id: depositItem.id,
+          actor_id: userId,
+          notes: submitJson?.statusDescription ?? internalStatus,
+          extra: { error: submitJson?.statusDescription ?? internalStatus, error_code: String(apiStatus), response: submitJson },
+        });
+      }
+    }
 
     return new Response(JSON.stringify({
       success: true,
