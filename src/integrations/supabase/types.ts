@@ -2834,8 +2834,6 @@ export type Database = {
       checkalt_deposits: {
         Row: {
           amount: number | null
-          approved_at: string | null
-          approved_by: string | null
           check_intake_item_id: string | null
           checkalt_reference: string | null
           claim_check_id: string | null
@@ -2844,8 +2842,6 @@ export type Database = {
           id: string
           last_polled_at: string | null
           last_status_payload: Json | null
-          reject_code: number | null
-          reject_notes: string | null
           return_reason: string | null
           returned_at: string | null
           status: string
@@ -2856,8 +2852,6 @@ export type Database = {
         }
         Insert: {
           amount?: number | null
-          approved_at?: string | null
-          approved_by?: string | null
           check_intake_item_id?: string | null
           checkalt_reference?: string | null
           claim_check_id?: string | null
@@ -2866,8 +2860,6 @@ export type Database = {
           id?: string
           last_polled_at?: string | null
           last_status_payload?: Json | null
-          reject_code?: number | null
-          reject_notes?: string | null
           return_reason?: string | null
           returned_at?: string | null
           status?: string
@@ -2878,8 +2870,6 @@ export type Database = {
         }
         Update: {
           amount?: number | null
-          approved_at?: string | null
-          approved_by?: string | null
           check_intake_item_id?: string | null
           checkalt_reference?: string | null
           claim_check_id?: string | null
@@ -2888,8 +2878,6 @@ export type Database = {
           id?: string
           last_polled_at?: string | null
           last_status_payload?: Json | null
-          reject_code?: number | null
-          reject_notes?: string | null
           return_reason?: string | null
           returned_at?: string | null
           status?: string
@@ -2904,59 +2892,6 @@ export type Database = {
             columns: ["check_intake_item_id"]
             isOneToOne: false
             referencedRelation: "check_intake_items"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      checkalt_tenant_accounts: {
-        Row: {
-          created_at: string
-          deposit_account_number: string
-          email: string
-          enabled: boolean
-          first_name: string
-          id: string
-          last_name: string
-          last_register_payload: Json | null
-          registered_at: string | null
-          sso_user_id: string
-          tenant_id: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          deposit_account_number: string
-          email: string
-          enabled?: boolean
-          first_name: string
-          id?: string
-          last_name: string
-          last_register_payload?: Json | null
-          registered_at?: string | null
-          sso_user_id: string
-          tenant_id: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          deposit_account_number?: string
-          email?: string
-          enabled?: boolean
-          first_name?: string
-          id?: string
-          last_name?: string
-          last_register_payload?: Json | null
-          registered_at?: string | null
-          sso_user_id?: string
-          tenant_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "checkalt_tenant_accounts_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: true
-            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -19826,10 +19761,6 @@ export type Database = {
         Returns: boolean
       }
       is_checkalt_enabled: { Args: never; Returns: boolean }
-      is_checkalt_enabled_for_tenant: {
-        Args: { _tenant_id: string }
-        Returns: boolean
-      }
       is_master_owner: { Args: never; Returns: boolean }
       is_org_admin: {
         Args: { _org_id: string; _user_id: string }
@@ -20990,7 +20921,6 @@ export type Database = {
         | "synctera"
         | "treasury_prime"
         | "increase"
-        | "checkalt"
       professional_type: "contractor" | "public_adjuster" | "attorney"
       referral_alert_type:
         | "needs_contractor"
@@ -21273,7 +21203,6 @@ export const Constants = {
         "synctera",
         "treasury_prime",
         "increase",
-        "checkalt",
       ],
       professional_type: ["contractor", "public_adjuster", "attorney"],
       referral_alert_type: [
