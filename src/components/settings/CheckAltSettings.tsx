@@ -26,7 +26,7 @@ interface PendingApprovalDeposit {
  * Lists CheckAlt deposits parked in manual review (status 40 / pending_approval)
  * and lets an admin approve or reject them via the deposit/approve endpoint.
  */
-function PendingApprovalDeposits() {
+export function PendingApprovalDeposits() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [rejectingId, setRejectingId] = useState<string | null>(null);
