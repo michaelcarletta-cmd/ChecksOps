@@ -195,6 +195,21 @@ Deno.serve(async (req) => {
       .update({ deposit_method: "checkalt", checkalt_deposit_id: depositRow.id })
       .eq("check_intake_item_id", check.id);
 
+    // Status sync: when CheckAlt accepts the submission (anything other than
+    // outright error/reject), advance the check_intake_items stage to
+    // 'deposited' so it surfaces under the Deposited tab. Rejections and
+    // hard errors leave the stage where it was so the operator can retry.
+    if (internalStatus !== "rejected" && internalStatus !== "error") {
+      await supabase
+        .from("check_intake_items")
+        .update({
+          check_stage: "deposited",
+          deposited_at: new Date().toISOString(),
+          deposited_by_tenant_id: check.tenant_id,
+        })
+        .eq("id", check.id);
+    }
+
     // Mirror into the deposit_items pipeline if this check was routed there
     // (assign_provider must have set provider = 'checkalt' first).
     const { data: depositItem } = await supabase

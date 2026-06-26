@@ -112,6 +112,22 @@ Deno.serve(async (req) => {
             .eq("check_intake_item_id", dep.check_intake_item_id);
         }
 
+        // Status sync to check_intake_items.check_stage so the UI tabs reflect
+        // the latest CheckAlt result. Returned/rejected items go back to the
+        // Ready for Deposit tab so the operator can address & retry.
+        const ciUpdates: Record<string, unknown> = {};
+        if (internalStatus === "cleared" || internalStatus === "submitted" || internalStatus === "pending_approval") {
+          ciUpdates.check_stage = "deposited";
+        } else if (internalStatus === "returned" || internalStatus === "rejected") {
+          ciUpdates.check_stage = "ready_for_deposit";
+        }
+        if (Object.keys(ciUpdates).length > 0) {
+          await supabase
+            .from("check_intake_items")
+            .update(ciUpdates)
+            .eq("id", dep.check_intake_item_id);
+        }
+
         if (dep.submitted_by && (internalStatus === "cleared" || internalStatus === "returned" || internalStatus === "rejected")) {
           const { data: depositItem } = await supabase
             .from("deposit_items")
