@@ -30,20 +30,44 @@ Deno.serve(async (req) => {
     req.headers.get("X-CheckAlt-Signature") ?? req.headers.get("X-Webhook-Secret") ?? "";
   signatureValid = !!expectedSecret && providedSecret === expectedSecret;
 
-  // Always log the event (even invalid ones — useful for debugging registration)
+  // Per Clearingworks dev guide, the canonical envelope is:
+  //   { type, businessId, systemId, action, source, severity,
+  //     idempotencyKey, timestamp, ...payload }
+  // We still tolerate older/test payloads using `eventType` / `status`.
   const payload = raw as Record<string, unknown>;
   const eventType =
-    (payload?.eventType as string) ?? (payload?.type as string) ?? "unknown";
+    (payload?.type as string) ?? (payload?.eventType as string) ?? "unknown";
+  const action = (payload?.action as string) ?? null;
+  const severity = (payload?.severity as string) ?? null;
+  const idempotencyKey = (payload?.idempotencyKey as string) ?? null;
   const reference =
+    (payload?.systemId as string) ??
     (payload?.reference as string) ??
     (payload?.referenceId as string) ??
     (payload?.depositReference as string) ??
     null;
 
+  // Dedupe: if we've already processed this idempotencyKey, ack 200 and stop.
+  if (idempotencyKey) {
+    const { data: existing } = await supabase
+      .from("checkalt_webhook_events")
+      .select("id, processed")
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+    if (existing?.processed) {
+      return new Response(JSON.stringify({ ok: true, duplicate: true }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
+
   const { data: eventRow } = await supabase
     .from("checkalt_webhook_events")
     .insert({
       event_type: eventType,
+      action,
+      severity,
+      idempotency_key: idempotencyKey,
       checkalt_reference: reference,
       raw_payload: payload,
       signature_valid: signatureValid,
@@ -57,8 +81,8 @@ Deno.serve(async (req) => {
     });
   }
 
-  // --- map FinCapture status -> internal status ---
-  const rawStatus = String(payload?.status ?? "").toLowerCase();
+  // Status can come from `action` (canonical envelope) or `status` (legacy).
+  const rawStatus = String(action ?? payload?.status ?? "").toLowerCase();
   const statusMap: Record<string, string> = {
     submitted: "submitted",
     pending: "submitted",
