@@ -18,6 +18,7 @@ import {
   getDepositAccountInfo,
   getDepositItemStatus,
   mapDepositStatus,
+  syncDepositItem,
 } from "../_shared/checkalt.ts";
 
 const BodySchema = z.discriminatedUnion("action", [
@@ -83,7 +84,7 @@ Deno.serve(async (req) => {
     // tenant member (read-only) or platform admin — not just admins.
     const { data: deposit, error: depErr } = await supabase
       .from("checkalt_deposits")
-      .select("id, tenant_id, checkalt_reference, status")
+      .select("id, tenant_id, checkalt_reference, status, check_intake_item_id, submitted_by")
       .eq("id", body.deposit_id)
       .maybeSingle();
     if (depErr || !deposit) throw new Error(depErr?.message || "Deposit not found");
@@ -119,6 +120,24 @@ Deno.serve(async (req) => {
         updates.status = internal;
         if (internal === "cleared") updates.cleared_at = new Date().toISOString();
         if (internal === "rejected") updates.returned_at = new Date().toISOString();
+
+        if ((internal === "cleared" || internal === "rejected" || internal === "error") && deposit.check_intake_item_id && deposit.submitted_by) {
+          const { data: depositItem } = await supabase
+            .from("deposit_items")
+            .select("id, provider")
+            .eq("check_id", deposit.check_intake_item_id)
+            .maybeSingle();
+          if (depositItem && depositItem.provider === "checkalt") {
+            await syncDepositItem(supabase, {
+              action: internal === "cleared" ? "record_success" : "record_failure",
+              deposit_item_id: depositItem.id,
+              actor_id: deposit.submitted_by,
+              extra: internal === "cleared"
+                ? { response: result.json }
+                : { error: internal, error_code: String(code), response: result.json },
+            });
+          }
+        }
       }
       await supabase.from("checkalt_deposits").update(updates).eq("id", deposit.id);
     }

@@ -189,7 +189,7 @@ function PendingApprovalDeposits() {
 
 interface TenantAccount {
   sso_user_id: string;
-  deposit_account_number: string;
+  deposit_account_last4: string;
   first_name: string;
   last_name: string;
   email: string;
@@ -219,9 +219,7 @@ function TenantDepositorAccount({ tenantId, tenantName }: { tenantId: string; te
     queryKey: ["checkalt-tenant-account", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("checkalt_tenant_accounts")
-        .select("sso_user_id, deposit_account_number, first_name, last_name, email, enabled, registered_at")
-        .eq("tenant_id", tenantId)
+        .rpc("get_checkalt_tenant_account", { _tenant_id: tenantId })
         .maybeSingle();
       if (error) throw error;
       return data as TenantAccount | null;
@@ -311,7 +309,7 @@ function TenantDepositorAccount({ tenantId, tenantName }: { tenantId: string; te
                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" /> Registered with FinCapture
               </div>
               <div className="text-muted-foreground">
-                ssoKey: <code>{account?.sso_user_id}</code> · Account ending {account?.deposit_account_number.slice(-4)}
+                ssoKey: <code>{account?.sso_user_id}</code> · Account ending {account?.deposit_account_last4}
               </div>
             </div>
             <div className="flex items-center gap-2">

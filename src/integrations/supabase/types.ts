@@ -19698,6 +19698,18 @@ export type Database = {
           unread_count: number
         }[]
       }
+      get_checkalt_tenant_account: {
+        Args: { _tenant_id: string }
+        Returns: {
+          deposit_account_last4: string
+          email: string
+          enabled: boolean
+          first_name: string
+          last_name: string
+          registered_at: string
+          sso_user_id: string
+        }[]
+      }
       get_claim_money_snapshot: { Args: { p_claim_id: string }; Returns: Json }
       get_deposit_aging_summary: { Args: never; Returns: Json }
       get_deposit_exception_kpis: { Args: never; Returns: Json }
