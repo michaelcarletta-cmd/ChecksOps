@@ -398,8 +398,8 @@ function TenantDepositorAccount({ tenantId, tenantName }: { tenantId: string; te
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        The account number is sent once to FinCapture to register this depositor and is not
-        re-displayed after registration. Re-registering replaces the stored ssoKey/account for {tenantName}.
+        Enter the FinCapture ssoKey and deposit account number CheckAlt issued for {tenantName}.
+        These are used on every deposit, approval, and status call for this organization.
       </p>
       <div className="flex justify-end">
         <Button
@@ -410,9 +410,10 @@ function TenantDepositorAccount({ tenantId, tenantName }: { tenantId: string; te
           {registerMutation.isPending
             ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
             : <UserPlus className="h-4 w-4 mr-1" />}
-          {isRegistered ? "Re-register account" : "Register with CheckAlt"}
+          Save CheckAlt account
         </Button>
       </div>
+
     </div>
   );
 }
