@@ -2834,8 +2834,6 @@ export type Database = {
       checkalt_deposits: {
         Row: {
           amount: number | null
-          approved_at: string | null
-          approved_by: string | null
           check_intake_item_id: string | null
           checkalt_reference: string | null
           claim_check_id: string | null
@@ -2844,8 +2842,6 @@ export type Database = {
           id: string
           last_polled_at: string | null
           last_status_payload: Json | null
-          reject_code: number | null
-          reject_notes: string | null
           return_reason: string | null
           returned_at: string | null
           status: string
@@ -2856,8 +2852,6 @@ export type Database = {
         }
         Insert: {
           amount?: number | null
-          approved_at?: string | null
-          approved_by?: string | null
           check_intake_item_id?: string | null
           checkalt_reference?: string | null
           claim_check_id?: string | null
@@ -2866,8 +2860,6 @@ export type Database = {
           id?: string
           last_polled_at?: string | null
           last_status_payload?: Json | null
-          reject_code?: number | null
-          reject_notes?: string | null
           return_reason?: string | null
           returned_at?: string | null
           status?: string
@@ -2878,8 +2870,6 @@ export type Database = {
         }
         Update: {
           amount?: number | null
-          approved_at?: string | null
-          approved_by?: string | null
           check_intake_item_id?: string | null
           checkalt_reference?: string | null
           claim_check_id?: string | null
@@ -2888,8 +2878,6 @@ export type Database = {
           id?: string
           last_polled_at?: string | null
           last_status_payload?: Json | null
-          reject_code?: number | null
-          reject_notes?: string | null
           return_reason?: string | null
           returned_at?: string | null
           status?: string
