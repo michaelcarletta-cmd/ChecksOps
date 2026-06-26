@@ -187,6 +187,17 @@ export function PendingApprovalDeposits() {
   );
 }
 
+/**
+ * Derive ssoKey as first initial + last name (lowercase, alphanumeric).
+ * Matches the convention CheckAlt uses for most FinCapture depositors.
+ */
+function deriveSsoKey(firstName: string, lastName: string): string {
+  const fi = (firstName || "").trim().charAt(0).toLowerCase();
+  const ln = (lastName || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (!fi || !ln) return "";
+  return `${fi}${ln}`;
+}
+
 interface TenantAccount {
   sso_user_id: string;
   deposit_account_number: string;
@@ -354,13 +365,46 @@ function TenantDepositorAccount({ tenantId, tenantName }: { tenantId: string; te
 
       <div className="grid gap-3 md:grid-cols-2">
         <div className="space-y-1.5">
+          <Label htmlFor="first_name">First name</Label>
+          <Input
+            id="first_name"
+            value={form.first_name}
+            onChange={(e) => {
+              const first_name = e.target.value;
+              setForm((f) => ({
+                ...f,
+                first_name,
+                sso_user_id: deriveSsoKey(first_name, f.last_name),
+              }));
+            }}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="last_name">Last name</Label>
+          <Input
+            id="last_name"
+            value={form.last_name}
+            onChange={(e) => {
+              const last_name = e.target.value;
+              setForm((f) => ({
+                ...f,
+                last_name,
+                sso_user_id: deriveSsoKey(f.first_name, last_name),
+              }));
+            }}
+          />
+        </div>
+        <div className="space-y-1.5">
           <Label htmlFor="sso_user_id">FinCapture User ID (ssoKey)</Label>
           <Input
             id="sso_user_id"
-            placeholder="e.g. mcarletta"
+            placeholder="auto: first initial + last name"
             value={form.sso_user_id}
             onChange={(e) => setForm({ ...form, sso_user_id: e.target.value })}
           />
+          <p className="text-[11px] text-muted-foreground">
+            Auto-generated from name (e.g. John Smith → jsmith). Edit if CheckAlt issued a different ID.
+          </p>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="deposit_account_number">Deposit account number</Label>
@@ -369,22 +413,6 @@ function TenantDepositorAccount({ tenantId, tenantName }: { tenantId: string; te
             placeholder="Full bank account number"
             value={form.deposit_account_number}
             onChange={(e) => setForm({ ...form, deposit_account_number: e.target.value })}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="first_name">First name</Label>
-          <Input
-            id="first_name"
-            value={form.first_name}
-            onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="last_name">Last name</Label>
-          <Input
-            id="last_name"
-            value={form.last_name}
-            onChange={(e) => setForm({ ...form, last_name: e.target.value })}
           />
         </div>
         <div className="space-y-1.5 md:col-span-2">
@@ -398,8 +426,8 @@ function TenantDepositorAccount({ tenantId, tenantName }: { tenantId: string; te
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        Enter the FinCapture ssoKey and deposit account number CheckAlt issued for {tenantName}.
-        These are used on every deposit, approval, and status call for this organization.
+        ssoKey defaults to first initial + last name (the convention CheckAlt uses for most depositors).
+        Override it only if CheckAlt issued a different value for {tenantName}.
       </p>
       <div className="flex justify-end">
         <Button
