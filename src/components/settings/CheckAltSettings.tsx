@@ -313,28 +313,10 @@ function TenantDepositorAccount({ tenantId, tenantName }: { tenantId: string; te
                 ssoKey: <code>{account?.sso_user_id}</code> · Account ending {account?.deposit_account_number.slice(-4)}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant={account?.enabled ? "default" : "outline"}>
-                {account?.enabled ? "Enabled" : "Disabled"}
-              </Badge>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => verifyMutation.mutate()}
-                disabled={verifyMutation.isPending}
-              >
-                {verifyMutation.isPending
-                  ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                  : <RefreshCw className="h-3 w-3 mr-1" />}
-                Verify with CheckAlt
-              </Button>
-            </div>
+            <Badge variant={account?.enabled ? "default" : "outline"}>
+              {account?.enabled ? "Enabled" : "Disabled"}
+            </Badge>
           </div>
-          {verifyResult && (
-            <p className={`text-xs ${verifyResult.ok ? "text-emerald-600" : "text-destructive"}`}>
-              {verifyResult.summary}
-            </p>
-          )}
         </div>
       )}
 
