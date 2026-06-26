@@ -240,7 +240,7 @@ export async function getDepositItemStatus(
 export async function checkAltFetch(
   supabase: SupabaseClient,
   path: string,
-  init: RequestInit = {},
+  init: RequestInit & { idempotencyKey?: string } = {},
 ): Promise<Response> {
   const cfg = await loadConfig(supabase);
   const jwt = await getCheckAltJwt(supabase, cfg);
@@ -250,5 +250,8 @@ export async function checkAltFetch(
   headers.set("Authorization", `Bearer ${jwt}`);
   headers.set("merchant", getCheckAltMerchant());
   if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json");
+  // Per Clearingworks dev guide: CW-IDEMPOTENCY guarantees a request runs
+  // exactly once even if retried. Required for deposit/process submissions.
+  if (init.idempotencyKey) headers.set("CW-IDEMPOTENCY", init.idempotencyKey);
   return await fetch(url, { ...init, headers });
 }
