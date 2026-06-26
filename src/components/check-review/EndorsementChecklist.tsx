@@ -312,7 +312,7 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
             status: "signed",
             signed_at: new Date().toISOString(),
             notes: `Manually marked as received by staff override`,
-            signature_method: "manual_override",
+            signature_method: "manual",
           })
           .in("id", incompleteIds);
 
