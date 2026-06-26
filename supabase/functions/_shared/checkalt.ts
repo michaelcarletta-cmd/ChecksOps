@@ -1,11 +1,12 @@
 // Shared CheckAlt (FinCapture) helpers — JWT acquisition + base config loader.
 //
 // Auth flow (UAT/Prod):
-//   POST {base_url}/public/jwtauth/authenticate
+//   POST {base_url}/Clearingworks/cxf/public/jwtauth/authenticate
 //     Headers:
 //       merchant: <CHECKALT_MERCHANT>            (e.g. "lockbox5")
-//       Content-Type: application/x-www-form-urlencoded
+//       Content-Type: application/json
 //       Authorization: Basic base64(userId:password)
+//     Body: { "userId": "...", "password": "..." }
 //
 // Every other call must include `merchant` and `Authorization: Bearer <jwt>`.
 
@@ -115,11 +116,11 @@ export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConf
   return jwt;
 }
 
-interface CheckAltAuthAttempt {
-  path: string;
-  body: string;
-  contentType: string;
-  label: string;
+class CheckAltAuthError extends Error {
+  constructor(message: string, public status = 502) {
+    super(message);
+    this.name = "CheckAltAuthError";
+  }
 }
 
 async function authenticateCheckAlt(
@@ -128,88 +129,42 @@ async function authenticateCheckAlt(
   username: string,
   password: string,
 ): Promise<{ jwt: string }> {
-  const attempts: CheckAltAuthAttempt[] = [
-    {
-      path: "/Clearingworks/cxf/public/jwtauth/authenticate",
-      body: JSON.stringify({ userId: username, password }),
-      contentType: "application/json",
-      label: "clearingworks-cxf-userId-json",
+  const resp = await fetch(`${base}/Clearingworks/cxf/public/jwtauth/authenticate`, {
+    method: "POST",
+    headers: {
+      merchant: getCheckAltMerchant(),
+      "Content-Type": "application/json",
+      Accept: "application/json, text/plain, */*",
+      Authorization: `Basic ${basic}`,
     },
-    {
-      path: "/Clearingworks/cxf/public/jwtauth/authenticate",
-      body: new URLSearchParams({ userId: username, password }).toString(),
-      contentType: "application/x-www-form-urlencoded",
-      label: "clearingworks-cxf-userId-form",
-    },
-    {
-      path: "/cxf/public/jwtauth/authenticate",
-      body: JSON.stringify({ userId: username, password }),
-      contentType: "application/json",
-      label: "cxf-userId-json",
-    },
-    {
-      path: "/cxf/public/jwtauth/authenticate",
-      body: new URLSearchParams({ userId: username, password }).toString(),
-      contentType: "application/x-www-form-urlencoded",
-      label: "cxf-userId-form",
-    },
-    {
-      path: "/public/jwtauth/authenticate",
-      body: JSON.stringify({ userId: username, password }),
-      contentType: "application/json",
-      label: "public-userId-json",
-    },
-    {
-      path: "/public/jwtauth/authenticate",
-      body: new URLSearchParams({ userId: username, password }).toString(),
-      contentType: "application/x-www-form-urlencoded",
-      label: "public-userId-form",
-    },
-    {
-      path: "/public/jwtauth/authenticate",
-      body: JSON.stringify({ username, password }),
-      contentType: "application/json",
-      label: "public-username-json",
-    },
-    {
-      path: "/public/jwtauth/authenticate",
-      body: new URLSearchParams({ username, password }).toString(),
-      contentType: "application/x-www-form-urlencoded",
-      label: "public-username-form",
-    },
-  ];
+    body: JSON.stringify({ userId: username, password }),
+  });
 
-  const failures: string[] = [];
-  for (const attempt of attempts) {
-    const resp = await fetch(`${base}${attempt.path}`, {
-      method: "POST",
-      headers: {
-        merchant: getCheckAltMerchant(),
-        "Content-Type": attempt.contentType,
-        Accept: "application/json, text/plain, */*",
-        Authorization: `Basic ${basic}`,
-      },
-      body: attempt.body,
-    });
+  const text = await resp.text();
+  const bodySummary = summarizeAuthBody(text);
+  const jwt = extractJwtFromResponse(resp.headers, text);
+  if (resp.ok && jwt) return { jwt };
 
-    const text = await resp.text();
-    const jwt = extractJwtFromResponse(resp.headers, text);
-    if (resp.ok && jwt) return { jwt };
-
-    failures.push(`${attempt.label}:${resp.status}:${summarizeAuthBody(text)}`);
-    if (resp.ok && !jwt) {
-      console.error(
-        "[checkalt] auth attempt returned success without JWT",
-        attempt.label,
-        "headers:",
-        JSON.stringify(safeAuthHeaders(resp.headers)),
-        "body:",
-        summarizeAuthBody(text),
-      );
-    }
+  if (bodySummary.toLowerCase().includes("account has been locked")) {
+    throw new CheckAltAuthError("CheckAlt login is locked. Contact CheckAlt support to unlock the UAT credentials, then try the deposit again.", 409);
   }
 
-  throw new Error(`CheckAlt auth response missing token (${failures.join(" | ")})`);
+  if (resp.status === 401 || resp.status === 403 || bodySummary.toLowerCase().includes("cannot be authenticated")) {
+    throw new CheckAltAuthError("CheckAlt rejected the configured login. Verify the CheckAlt username, password, and merchant value in backend secrets.", 409);
+  }
+
+  if (resp.ok && !jwt) {
+    console.error(
+      "[checkalt] auth endpoint returned success without JWT",
+      "headers:",
+      JSON.stringify(safeAuthHeaders(resp.headers)),
+      "body:",
+      bodySummary,
+    );
+    throw new CheckAltAuthError("CheckAlt auth succeeded but did not return a bearer token. Ask CheckAlt to confirm the auth response format for this account.", 502);
+  }
+
+  throw new CheckAltAuthError(`CheckAlt auth failed (${resp.status}): ${bodySummary}`, 502);
 }
 
 function extractJwtFromResponse(headers: Headers, text: string): string | undefined {
