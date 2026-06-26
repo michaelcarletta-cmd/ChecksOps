@@ -95,18 +95,19 @@ export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConf
   const base = (cfg.base_url ?? "https://uatapi.checkalt.com").replace(/\/$/, "");
 
   const basic = base64FromUtf8(`${username}:${password}`);
-  // CheckAlt's /public/jwtauth/authenticate rejects empty bodies with 400
-  // "Request body is required". Send credentials as JSON body in addition to
-  // the Basic auth header — different deployments accept either form.
+  // CheckAlt's /public/jwtauth/authenticate requires a non-empty body. Send
+  // credentials as form-urlencoded (the standard for this endpoint) in
+  // addition to the Basic auth header.
+  const form = new URLSearchParams({ username, password });
   const resp = await fetch(`${base}/public/jwtauth/authenticate`, {
     method: "POST",
     headers: {
       merchant: getCheckAltMerchant(),
-      "Content-Type": "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json",
       Authorization: `Basic ${basic}`,
     },
-    body: JSON.stringify({ username, password }),
+    body: form.toString(),
   });
 
   if (!resp.ok) {
