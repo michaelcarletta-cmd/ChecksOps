@@ -26,10 +26,60 @@ const BodySchema = z.object({
 const MIN_BYTES = 25 * 1024;
 const MAX_BYTES = 300 * 1024;
 
+function base64FromBytes(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
+
+async function downloadStorageTransform(
+  supabase: ReturnType<typeof getServiceClient>,
+  path: string,
+): Promise<Uint8Array | null> {
+  const candidates = [
+    { width: 1200, quality: 68 },
+    { width: 1100, quality: 62 },
+    { width: 1000, quality: 58 },
+    { width: 900, quality: 54 },
+    { width: 800, quality: 50 },
+    { width: 700, quality: 46 },
+  ];
+
+  let bestUnderMax: Uint8Array | null = null;
+  let largestUnderMin: Uint8Array | null = null;
+
+  for (const candidate of candidates) {
+    const { data, error } = await supabase.storage.from("claim-files").download(path, {
+      transform: {
+        width: candidate.width,
+        resize: "contain",
+        quality: candidate.quality,
+      },
+    } as any);
+    if (error || !data) continue;
+
+    const bytes = new Uint8Array(await data.arrayBuffer());
+    if (bytes.byteLength >= MIN_BYTES && bytes.byteLength <= MAX_BYTES) return bytes;
+    if (bytes.byteLength <= MAX_BYTES) bestUnderMax = bytes;
+    if (bytes.byteLength < MIN_BYTES && (!largestUnderMin || bytes.byteLength > largestUnderMin.byteLength)) {
+      largestUnderMin = bytes;
+    }
+  }
+
+  return bestUnderMax ?? largestUnderMin;
+}
+
 async function downloadAndCompress(
   supabase: ReturnType<typeof getServiceClient>,
   path: string,
 ): Promise<string> {
+  const transformed = await downloadStorageTransform(supabase, path);
+  if (transformed && transformed.byteLength >= MIN_BYTES && transformed.byteLength <= MAX_BYTES) {
+    return base64FromBytes(transformed);
+  }
+
   const { data, error } = await supabase.storage.from("claim-files").download(path);
   if (error || !data) throw new Error(`Image download failed: ${error?.message}`);
   const raw = new Uint8Array(await data.arrayBuffer());
@@ -44,21 +94,21 @@ async function downloadAndCompress(
   // FinCapture spec targets 1920x1080 capture; we cap at 1600px wide to
   // stay well above the Federal Reserve 200 DPI ICL minimum on a ~6" check
   // (~266 DPI) while keeping imagescript CPU bounded on edge runtime.
-  const MAX_DIM = 1600;
+  const MAX_DIM = 1000;
   let w = Math.min(MAX_DIM, img.width);
   if (w !== img.width) {
     img = img.resize(w, Image.RESIZE_AUTO);
   }
 
-  let quality = 70;
+  let quality = 58;
   let encoded = await img.encodeJPEG(quality);
-  // Shrink further if still too large — bounded loop (max ~6 iterations)
+  // Shrink further if still too large — bounded loop to stay inside Edge CPU limits.
   let iter = 0;
-  while (encoded.byteLength > MAX_BYTES && iter < 6 && (quality > 25 || w > 640)) {
-    if (quality > 25) {
-      quality = Math.max(25, quality - 15);
+  while (encoded.byteLength > MAX_BYTES && iter < 3 && (quality > 35 || w > 700)) {
+    if (quality > 35) {
+      quality = Math.max(35, quality - 12);
     } else {
-      w = Math.max(640, Math.round(w * 0.8));
+      w = Math.max(700, Math.round(w * 0.82));
       img = img.resize(w, Image.RESIZE_AUTO);
     }
     encoded = await img.encodeJPEG(quality);
@@ -66,13 +116,18 @@ async function downloadAndCompress(
   }
   // Bump quality back up if we're under the minimum (rare for check photos)
   while (encoded.byteLength < MIN_BYTES && quality < 95) {
-    quality = Math.min(95, quality + 10);
+    quality = Math.min(90, quality + 12);
     encoded = await img.encodeJPEG(quality);
   }
 
-  let binary = "";
-  for (let i = 0; i < encoded.length; i++) binary += String.fromCharCode(encoded[i]);
-  return btoa(binary);
+  if (encoded.byteLength > MAX_BYTES) {
+    throw new Error(`Compressed image is still too large for CheckAlt (${Math.round(encoded.byteLength / 1024)} KB). Re-upload a clearer cropped JPG check image.`);
+  }
+  if (encoded.byteLength < MIN_BYTES) {
+    throw new Error(`Compressed image is too small for CheckAlt (${Math.round(encoded.byteLength / 1024)} KB). Re-upload a higher quality check image.`);
+  }
+
+  return base64FromBytes(encoded);
 }
 
 Deno.serve(async (req) => {
@@ -127,10 +182,8 @@ Deno.serve(async (req) => {
 
     const tenantAccount = await loadTenantAccount(supabase, check.tenant_id);
 
-    const [frontImage, rearImage] = await Promise.all([
-      downloadAndCompress(supabase, check.front_image_path),
-      downloadAndCompress(supabase, check.back_image_path),
-    ]);
+    const frontImage = await downloadAndCompress(supabase, check.front_image_path);
+    const rearImage = await downloadAndCompress(supabase, check.back_image_path);
 
     // Create pending deposit row for audit anchor
     const { data: depositRow, error: depErr } = await supabase
