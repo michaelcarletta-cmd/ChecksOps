@@ -242,25 +242,38 @@ function TenantDepositorAccount({ tenantId, tenantName }: { tenantId: string; te
 
   const registerMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("checkalt-register-account", {
-        body: { tenant_id: tenantId, ...form },
-      });
+      // CheckAlt provisions the FinCapture user/deposit account on their side
+      // and hands us the ssoKey + account number. We just persist them locally
+      // so the deposit edge functions can resolve them per tenant.
+      const { error } = await supabase
+        .from("checkalt_tenant_accounts")
+        .upsert({
+          tenant_id: tenantId,
+          sso_user_id: form.sso_user_id.trim(),
+          deposit_account_number: form.deposit_account_number.trim(),
+          first_name: form.first_name.trim(),
+          last_name: form.last_name.trim(),
+          email: form.email.trim(),
+          enabled: true,
+          registered_at: new Date().toISOString(),
+        }, { onConflict: "tenant_id" });
       if (error) throw error;
-      return data as { success: boolean; sso_user_id: string };
+      return { success: true, sso_user_id: form.sso_user_id.trim() };
     },
     onSuccess: () => {
-      toast({ title: "CheckAlt account registered", description: `Depositor account active for ${tenantName}.` });
+      toast({ title: "CheckAlt account saved", description: `Depositor account active for ${tenantName}.` });
       setForm((f) => ({ ...f, deposit_account_number: "" }));
       qc.invalidateQueries({ queryKey: ["checkalt-tenant-account", tenantId] });
     },
     onError: (e: unknown) => {
       toast({
-        title: "Registration failed",
+        title: "Save failed",
         description: e instanceof Error ? e.message : "Unknown error",
         variant: "destructive",
       });
     },
   });
+
 
   const [verifyResult, setVerifyResult] = useState<{ ok: boolean; summary: string } | null>(null);
 
@@ -385,8 +398,8 @@ function TenantDepositorAccount({ tenantId, tenantName }: { tenantId: string; te
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        The account number is sent once to FinCapture to register this depositor and is not
-        re-displayed after registration. Re-registering replaces the stored ssoKey/account for {tenantName}.
+        Enter the FinCapture ssoKey and deposit account number CheckAlt issued for {tenantName}.
+        These are used on every deposit, approval, and status call for this organization.
       </p>
       <div className="flex justify-end">
         <Button
@@ -397,9 +410,10 @@ function TenantDepositorAccount({ tenantId, tenantName }: { tenantId: string; te
           {registerMutation.isPending
             ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
             : <UserPlus className="h-4 w-4 mr-1" />}
-          {isRegistered ? "Re-register account" : "Register with CheckAlt"}
+          Save CheckAlt account
         </Button>
       </div>
+
     </div>
   );
 }
