@@ -2077,8 +2077,21 @@ function CheckDetailPanel({
   const [depositViewerOpen, setDepositViewerOpen] = useState(false);
   const [depositViewerUrl, setDepositViewerUrl] = useState<string | null>(null);
   const [openingDepositView, setOpeningDepositView] = useState(false);
+  const [depositingWithCheckAlt, setDepositingWithCheckAlt] = useState(false);
   const [frontImageDimensions, setFrontImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [backImageDimensions, setBackImageDimensions] = useState<{ width: number; height: number } | null>(null);
+
+  // Whether the org has CheckAlt RDC turned on — gates the per-check
+  // "Deposit with CheckAlt" button without exposing the rest of
+  // checkalt_config (which is admin-only under RLS) to regular staff.
+  const { data: checkAltEnabled = false } = useQuery({
+    queryKey: ["checkalt-enabled"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("is_checkalt_enabled");
+      if (error) throw error;
+      return !!data;
+    },
+  });
 
   // Count of explicit payees on this check — used to decide whether to show
   // the fallback email-based endorsement composer.
@@ -2500,6 +2513,69 @@ function CheckDetailPanel({
       toast({ title: "Failed to move check", description: e.message, variant: "destructive" });
     } finally {
       setMovingToDeposited(false);
+    }
+  };
+
+  // One-click CheckAlt deposit from the check's own Overview tab — ensures a
+  // deposit_items row exists and is assigned to CheckAlt, then submits the
+  // real FinCapture API call (mirrors DepositOperationsConsole's flow).
+  const handleDepositWithCheckAlt = async () => {
+    if (!user?.id || !check) return;
+    setDepositingWithCheckAlt(true);
+    try {
+      const { data: existingItem } = await supabase
+        .from("deposit_items")
+        .select("id, status, provider")
+        .eq("check_id", checkId)
+        .maybeSingle();
+
+      let depositItemId = existingItem?.id ?? null;
+      let itemStatus = existingItem?.status ?? null;
+      const itemProvider = existingItem?.provider ?? null;
+
+      if (!depositItemId) {
+        const { data: prepData, error: prepErr } = await supabase.rpc("deposit_action", {
+          p_action: "prepare_deposit",
+          p_actor_id: user.id,
+          p_check_id: checkId,
+          p_notes: "Deposited with CheckAlt from Check Command Center",
+        });
+        if (prepErr) throw prepErr;
+        depositItemId = (prepData as any)?.deposit_item_id ?? null;
+        if (!depositItemId) throw new Error("prepare_deposit did not return a deposit_item_id");
+        itemStatus = "pending_assignment";
+      }
+
+      if (itemStatus === "pending_assignment") {
+        const { error: assignErr } = await supabase.rpc("deposit_action", {
+          p_action: "assign_provider",
+          p_actor_id: user.id,
+          p_deposit_item_id: depositItemId,
+          p_provider: "checkalt",
+          p_notes: "Assigned CheckAlt from Check Command Center",
+        });
+        if (assignErr) throw assignErr;
+      } else if (itemProvider !== "checkalt") {
+        throw new Error(`This check is already assigned to ${itemProvider ?? "another"} provider in the deposit pipeline.`);
+      }
+
+      const { data: submitData, error: submitErr } = await supabase.functions.invoke("checkalt-submit-deposit", {
+        body: { check_intake_item_id: checkId },
+      });
+      if (submitErr) throw submitErr;
+
+      sonnerToast.success("Submitted to CheckAlt", {
+        description: `Check #${check.check_number ?? checkId.slice(0, 8)} — status: ${(submitData as any)?.status ?? "submitted"}`,
+      });
+      qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+      qc.invalidateQueries({ queryKey: ["deposit-items"] });
+      qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
+      onRefresh();
+    } catch (e: any) {
+      toast({ title: "CheckAlt deposit failed", description: e.message, variant: "destructive" });
+    } finally {
+      setDepositingWithCheckAlt(false);
     }
   };
 
@@ -3244,41 +3320,55 @@ function CheckDetailPanel({
                       </label>
                     </div>
                   )}
-                  {/* Open for Mobile Deposit — only visible when all endorsements complete */}
+                  {/* Ready-for-deposit CTA — only visible once all endorsements are complete.
+                      When CheckAlt is enabled this is the one-click "Deposit with CheckAlt"
+                      button; otherwise it falls back to manual mobile deposit. */}
                   {allEndorsementsComplete && !isDepositBlocked && (
-                    <Button
-                      size="sm"
-                      className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                      disabled={openingDepositView}
-                      onClick={async () => {
-                        setOpeningDepositView(true);
-                        try {
-                          const finalUrl = await ensureDepositReadyBackImage();
-                          if (finalUrl) {
-                            setDepositViewerUrl(finalUrl);
-                            setDepositViewerOpen(true);
-                          } else {
+                    checkAltEnabled ? (
+                      <Button
+                        size="sm"
+                        className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                        disabled={depositingWithCheckAlt}
+                        onClick={handleDepositWithCheckAlt}
+                      >
+                        <Banknote className="h-4 w-4 mr-2" />
+                        {depositingWithCheckAlt ? "Depositing..." : "Deposit with CheckAlt"}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                        disabled={openingDepositView}
+                        onClick={async () => {
+                          setOpeningDepositView(true);
+                          try {
+                            const finalUrl = await ensureDepositReadyBackImage();
+                            if (finalUrl) {
+                              setDepositViewerUrl(finalUrl);
+                              setDepositViewerOpen(true);
+                            } else {
+                              toast({
+                                title: "No deposit image",
+                                description: "Could not generate or find the final endorsed back image.",
+                                variant: "destructive",
+                              });
+                            }
+                          } catch (err: any) {
+                            console.error("[OPEN-DEPOSIT-VIEW]", err);
                             toast({
-                              title: "No deposit image",
-                              description: "Could not generate or find the final endorsed back image.",
+                              title: "Deposit image failed",
+                              description: err?.message ?? "An error occurred generating the deposit image.",
                               variant: "destructive",
                             });
+                          } finally {
+                            setOpeningDepositView(false);
                           }
-                        } catch (err: any) {
-                          console.error("[OPEN-DEPOSIT-VIEW]", err);
-                          toast({
-                            title: "Deposit image failed",
-                            description: err?.message ?? "An error occurred generating the deposit image.",
-                            variant: "destructive",
-                          });
-                        } finally {
-                          setOpeningDepositView(false);
-                        }
-                      }}
-                    >
-                      <FileImage className="h-4 w-4 mr-2" />
-                      {openingDepositView ? "Preparing..." : "Open for Mobile Deposit"}
-                    </Button>
+                        }}
+                      >
+                        <FileImage className="h-4 w-4 mr-2" />
+                        {openingDepositView ? "Preparing..." : "Open for Mobile Deposit"}
+                      </Button>
+                    )
                   )}
                 </div>
               )}
