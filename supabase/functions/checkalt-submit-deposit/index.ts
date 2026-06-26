@@ -145,7 +145,6 @@ Deno.serve(async (req) => {
       frontImage,
       rearImage,
       performRiskAssessment: true,
-      externalReference: depositRow.id,
     };
 
     const submitResp = await checkAltFetch(supabase, "/fincapture/deposit/process", {
