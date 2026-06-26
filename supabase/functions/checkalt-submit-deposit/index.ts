@@ -151,9 +151,13 @@ Deno.serve(async (req) => {
       performRiskAssessment: true,
     };
 
+    // Use the (stable) pending deposit row id as the idempotency key. Any
+    // retry of this exact submission reuses the same key and CheckAlt will
+    // return 409 Conflict instead of double-posting.
     const submitResp = await checkAltFetch(supabase, "/fincapture/deposit/process", {
       method: "POST",
       body: JSON.stringify(payload),
+      idempotencyKey: `deposit-${depositRow.id}`,
     });
     const submitJson = await submitResp.json().catch(() => ({}));
 
