@@ -310,8 +310,11 @@ Deno.serve(async (req) => {
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     console.error("[checkalt-submit-deposit]", msg);
+    const status = typeof (e as { status?: unknown })?.status === "number"
+      ? (e as { status: number }).status
+      : 500;
     return new Response(JSON.stringify({ error: msg }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
