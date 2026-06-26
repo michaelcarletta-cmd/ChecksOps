@@ -95,65 +95,8 @@ export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConf
   const base = (cfg.base_url ?? "https://uatapi.checkalt.com").replace(/\/$/, "");
 
   const basic = base64FromUtf8(`${username}:${password}`);
-  // CheckAlt's /public/jwtauth/authenticate requires a non-empty body. Send
-  // credentials as form-urlencoded (the standard for this endpoint) in
-  // addition to the Basic auth header.
-  const form = new URLSearchParams({ username, password });
-  const resp = await fetch(`${base}/public/jwtauth/authenticate`, {
-    method: "POST",
-    headers: {
-      merchant: getCheckAltMerchant(),
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-      Authorization: `Basic ${basic}`,
-    },
-    body: form.toString(),
-  });
-
-  if (!resp.ok) {
-    const body = await resp.text();
-    throw new Error(`CheckAlt auth failed [${resp.status}]: ${body}`);
-  }
-
-  // Token may come back as a raw string, in an Authorization response header,
-  // or as JSON under any of several keys CheckAlt has used across versions.
-  const text = await resp.text();
-  let jwt: string | undefined;
-
-  // Try response headers first (some FinCapture deployments return the JWT here)
-  const headerToken =
-    resp.headers.get("authorization") ??
-    resp.headers.get("Authorization") ??
-    resp.headers.get("x-auth-token") ??
-    resp.headers.get("jwt");
-  if (headerToken) jwt = headerToken.replace(/^Bearer\s+/i, "").trim();
-
-  if (!jwt) {
-    try {
-      const data = JSON.parse(text);
-      jwt =
-        data?.token ??
-        data?.jwt ??
-        data?.accessToken ??
-        data?.access_token ??
-        data?.id_token ??
-        data?.idToken ??
-        data?.authToken ??
-        data?.auth_token ??
-        data?.data?.token ??
-        data?.data?.jwt ??
-        data?.data?.accessToken ??
-        data?.result?.token ??
-        data?.result?.jwt;
-    } catch {
-      jwt = text.trim().replace(/^Bearer\s+/i, "");
-    }
-  }
-
-  if (!jwt) {
-    console.error("[checkalt] auth response had no token. headers:", JSON.stringify(Object.fromEntries(resp.headers)), "body:", text.slice(0, 500));
-    throw new Error("CheckAlt auth response missing token");
-  }
+  const authResult = await authenticateCheckAlt(base, basic, username, password);
+  const jwt = authResult.jwt;
 
   let expiresAt = new Date(Date.now() + 50 * 60_000).toISOString();
   try {
@@ -170,6 +113,154 @@ export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConf
     .eq("singleton", true);
 
   return jwt;
+}
+
+interface CheckAltAuthAttempt {
+  path: string;
+  body: string;
+  contentType: string;
+  label: string;
+}
+
+async function authenticateCheckAlt(
+  base: string,
+  basic: string,
+  username: string,
+  password: string,
+): Promise<{ jwt: string }> {
+  const attempts: CheckAltAuthAttempt[] = [
+    {
+      path: "/Clearingworks/cxf/public/jwtauth/authenticate",
+      body: JSON.stringify({ userId: username, password }),
+      contentType: "application/json",
+      label: "clearingworks-cxf-userId-json",
+    },
+    {
+      path: "/Clearingworks/cxf/public/jwtauth/authenticate",
+      body: new URLSearchParams({ userId: username, password }).toString(),
+      contentType: "application/x-www-form-urlencoded",
+      label: "clearingworks-cxf-userId-form",
+    },
+    {
+      path: "/cxf/public/jwtauth/authenticate",
+      body: JSON.stringify({ userId: username, password }),
+      contentType: "application/json",
+      label: "cxf-userId-json",
+    },
+    {
+      path: "/cxf/public/jwtauth/authenticate",
+      body: new URLSearchParams({ userId: username, password }).toString(),
+      contentType: "application/x-www-form-urlencoded",
+      label: "cxf-userId-form",
+    },
+    {
+      path: "/public/jwtauth/authenticate",
+      body: JSON.stringify({ userId: username, password }),
+      contentType: "application/json",
+      label: "public-userId-json",
+    },
+    {
+      path: "/public/jwtauth/authenticate",
+      body: new URLSearchParams({ userId: username, password }).toString(),
+      contentType: "application/x-www-form-urlencoded",
+      label: "public-userId-form",
+    },
+    {
+      path: "/public/jwtauth/authenticate",
+      body: JSON.stringify({ username, password }),
+      contentType: "application/json",
+      label: "public-username-json",
+    },
+    {
+      path: "/public/jwtauth/authenticate",
+      body: new URLSearchParams({ username, password }).toString(),
+      contentType: "application/x-www-form-urlencoded",
+      label: "public-username-form",
+    },
+  ];
+
+  const failures: string[] = [];
+  for (const attempt of attempts) {
+    const resp = await fetch(`${base}${attempt.path}`, {
+      method: "POST",
+      headers: {
+        merchant: getCheckAltMerchant(),
+        "Content-Type": attempt.contentType,
+        Accept: "application/json, text/plain, */*",
+        Authorization: `Basic ${basic}`,
+      },
+      body: attempt.body,
+    });
+
+    const text = await resp.text();
+    const jwt = extractJwtFromResponse(resp.headers, text);
+    if (resp.ok && jwt) return { jwt };
+
+    failures.push(`${attempt.label}:${resp.status}:${summarizeAuthBody(text)}`);
+    if (resp.ok && !jwt) {
+      console.error(
+        "[checkalt] auth attempt returned success without JWT",
+        attempt.label,
+        "headers:",
+        JSON.stringify(safeAuthHeaders(resp.headers)),
+        "body:",
+        summarizeAuthBody(text),
+      );
+    }
+  }
+
+  throw new Error(`CheckAlt auth response missing token (${failures.join(" | ")})`);
+}
+
+function extractJwtFromResponse(headers: Headers, text: string): string | undefined {
+  const headerToken =
+    headers.get("authorization") ??
+    headers.get("x-auth-token") ??
+    headers.get("x-jwt-token") ??
+    headers.get("jwt") ??
+    headers.get("token");
+  if (headerToken) return headerToken.replace(/^Bearer\s+/i, "").trim();
+
+  try {
+    const data = JSON.parse(text);
+    const token =
+      data?.token ??
+      data?.jwt ??
+      data?.accessToken ??
+      data?.access_token ??
+      data?.id_token ??
+      data?.idToken ??
+      data?.authToken ??
+      data?.auth_token ??
+      data?.bearerToken ??
+      data?.bearer_token ??
+      data?.data?.token ??
+      data?.data?.jwt ??
+      data?.data?.accessToken ??
+      data?.response?.token ??
+      data?.response?.jwt ??
+      data?.result?.token ??
+      data?.result?.jwt;
+    if (typeof token === "string") return token.replace(/^Bearer\s+/i, "").trim();
+  } catch {
+    const raw = text.trim().replace(/^Bearer\s+/i, "");
+    if (raw && raw.split(".").length === 3) return raw;
+  }
+  return undefined;
+}
+
+function safeAuthHeaders(headers: Headers): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of headers.entries()) {
+    out[key] = key.toLowerCase() === "set-cookie" ? "[cookie omitted]" : value;
+  }
+  return out;
+}
+
+function summarizeAuthBody(text: string): string {
+  if (!text) return "empty-body";
+  const compact = text.replace(/\s+/g, " ").trim();
+  return compact.length > 240 ? `${compact.slice(0, 240)}…` : compact;
 }
 
 function base64FromUtf8(value: string): string {
