@@ -72,6 +72,37 @@ function PendingApprovalDeposits() {
     },
   });
 
+  const [refreshingId, setRefreshingId] = useState<string | null>(null);
+
+  const refreshMutation = useMutation({
+    mutationFn: async (depositId: string) => {
+      setRefreshingId(depositId);
+      const { data, error } = await supabase.functions.invoke("checkalt-account-status", {
+        body: { action: "deposit_item", deposit_id: depositId },
+      });
+      if (error) throw error;
+      return data as { ok: boolean; status: number; json: any };
+    },
+    onSuccess: (data) => {
+      toast({
+        title: data.ok ? "Status refreshed" : "Refresh returned an error",
+        description: data.ok
+          ? "Latest status pulled from FinCapture."
+          : `FinCapture responded with HTTP ${data.status}.`,
+        variant: data.ok ? "default" : "destructive",
+      });
+      qc.invalidateQueries({ queryKey: ["checkalt-pending-approval-deposits"] });
+    },
+    onError: (e: unknown) => {
+      toast({
+        title: "Refresh failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => setRefreshingId(null),
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-6">
@@ -104,6 +135,17 @@ function PendingApprovalDeposits() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => refreshMutation.mutate(dep.id)}
+                disabled={refreshingId === dep.id}
+              >
+                {refreshingId === dep.id
+                  ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  : <RefreshCw className="h-3 w-3 mr-1" />}
+                Refresh
+              </Button>
               <Button
                 size="sm"
                 onClick={() => decisionMutation.mutate({ deposit_id: dep.id, action: "approve" })}
@@ -220,6 +262,32 @@ function TenantDepositorAccount({ tenantId, tenantName }: { tenantId: string; te
     },
   });
 
+  const [verifyResult, setVerifyResult] = useState<{ ok: boolean; summary: string } | null>(null);
+
+  const verifyMutation = useMutation({
+    mutationFn: async () => {
+      const [userRes, acctRes] = await Promise.all([
+        supabase.functions.invoke("checkalt-account-status", { body: { action: "user_account", tenant_id: tenantId } }),
+        supabase.functions.invoke("checkalt-account-status", { body: { action: "deposit_account", tenant_id: tenantId } }),
+      ]);
+      if (userRes.error) throw userRes.error;
+      if (acctRes.error) throw acctRes.error;
+      return { user: userRes.data, account: acctRes.data };
+    },
+    onSuccess: (data) => {
+      const ok = !!data.user?.ok && !!data.account?.ok;
+      setVerifyResult({
+        ok,
+        summary: ok
+          ? "FinCapture confirms this user and deposit account."
+          : `FinCapture lookup returned an error (user: ${data.user?.status}, account: ${data.account?.status}).`,
+      });
+    },
+    onError: (e: unknown) => {
+      setVerifyResult({ ok: false, summary: e instanceof Error ? e.message : "Unknown error" });
+    },
+  });
+
   const isRegistered = !!account?.registered_at;
   const canSubmit =
     !!form.sso_user_id.trim() && !!form.first_name.trim() && !!form.last_name.trim() &&
@@ -236,18 +304,38 @@ function TenantDepositorAccount({ tenantId, tenantName }: { tenantId: string; te
   return (
     <div className="space-y-4">
       {isRegistered && (
-        <div className="flex items-center justify-between rounded-md border border-border/60 bg-muted/30 p-3 text-xs">
-          <div className="space-y-0.5">
-            <div className="font-medium flex items-center gap-1.5">
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" /> Registered with FinCapture
+        <div className="space-y-2">
+          <div className="flex items-center justify-between rounded-md border border-border/60 bg-muted/30 p-3 text-xs">
+            <div className="space-y-0.5">
+              <div className="font-medium flex items-center gap-1.5">
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" /> Registered with FinCapture
+              </div>
+              <div className="text-muted-foreground">
+                ssoKey: <code>{account?.sso_user_id}</code> · Account ending {account?.deposit_account_number.slice(-4)}
+              </div>
             </div>
-            <div className="text-muted-foreground">
-              ssoKey: <code>{account?.sso_user_id}</code> · Account ending {account?.deposit_account_number.slice(-4)}
+            <div className="flex items-center gap-2">
+              <Badge variant={account?.enabled ? "default" : "outline"}>
+                {account?.enabled ? "Enabled" : "Disabled"}
+              </Badge>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => verifyMutation.mutate()}
+                disabled={verifyMutation.isPending}
+              >
+                {verifyMutation.isPending
+                  ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  : <RefreshCw className="h-3 w-3 mr-1" />}
+                Verify with CheckAlt
+              </Button>
             </div>
           </div>
-          <Badge variant={account?.enabled ? "default" : "outline"}>
-            {account?.enabled ? "Enabled" : "Disabled"}
-          </Badge>
+          {verifyResult && (
+            <p className={`text-xs ${verifyResult.ok ? "text-emerald-600" : "text-destructive"}`}>
+              {verifyResult.summary}
+            </p>
+          )}
         </div>
       )}
 

@@ -7,18 +7,14 @@
 //   (cleared/settled = success codes returned by API)
 
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
-import { getServiceClient, checkAltFetch, getCheckAltFiKey, loadTenantAccount, syncDepositItem } from "../_shared/checkalt.ts";
-
-function mapStatus(code: number, current: string): string {
-  switch (code) {
-    case 127: return "submitted";
-    case 40:  return "pending_approval";
-    case 120: return "rejected";
-    case 11:  return "error";
-    // Treat any other terminal/success code as cleared
-    default:  return code >= 200 ? "cleared" : current;
-  }
-}
+import {
+  getServiceClient,
+  checkAltFetch,
+  getCheckAltFiKey,
+  loadTenantAccount,
+  syncDepositItem,
+  mapDepositStatus,
+} from "../_shared/checkalt.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -63,7 +59,7 @@ Deno.serve(async (req) => {
         ) ?? items[0] ?? json;
 
         const code = Number(match?.status ?? match?.statusCode ?? 0);
-        const internal = mapStatus(code, dep.status);
+        const internal = mapDepositStatus(code, dep.status);
 
         const updates: Record<string, unknown> = {
           last_polled_at: new Date().toISOString(),
