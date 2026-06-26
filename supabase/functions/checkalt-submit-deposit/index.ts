@@ -167,7 +167,7 @@ Deno.serve(async (req) => {
     }
 
     const reference: string | undefined =
-      submitJson?.reference ?? submitJson?.referenceId ??
+      submitJson?.referenceNumber ?? submitJson?.reference ?? submitJson?.referenceId ??
       submitJson?.depositReference ?? submitJson?.transactionId ?? submitJson?.id;
 
     // Map FinCapture status codes -> internal status

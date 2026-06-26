@@ -10,7 +10,139 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw } from "lucide-react";
+import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw, Check, X } from "lucide-react";
+
+interface PendingApprovalDeposit {
+  id: string;
+  amount: number | null;
+  checkalt_reference: string | null;
+  created_at: string;
+  check_intake_item_id: string | null;
+  check_intake_items: { check_number: string | null; carrier_name: string | null } | null;
+}
+
+/**
+ * Lists CheckAlt deposits parked in manual review (status 40 / pending_approval)
+ * and lets an admin approve or reject them via the deposit/approve endpoint.
+ */
+function PendingApprovalDeposits() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectNotes, setRejectNotes] = useState("");
+
+  const { data: deposits = [], isLoading } = useQuery({
+    queryKey: ["checkalt-pending-approval-deposits"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("checkalt_deposits")
+        .select("id, amount, checkalt_reference, created_at, check_intake_item_id, check_intake_items(check_number, carrier_name)")
+        .eq("status", "pending_approval")
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as unknown as PendingApprovalDeposit[];
+    },
+    refetchInterval: 30_000,
+  });
+
+  const decisionMutation = useMutation({
+    mutationFn: async (vars: { deposit_id: string; action: "approve" | "reject"; reject_notes?: string }) => {
+      const { data, error } = await supabase.functions.invoke("checkalt-approve-deposit", {
+        body: vars,
+      });
+      if (error) throw error;
+      return data as { status: string };
+    },
+    onSuccess: (data, vars) => {
+      toast({
+        title: vars.action === "approve" ? "Deposit approved" : "Deposit rejected",
+        description: `New status: ${data.status}`,
+      });
+      setRejectingId(null);
+      setRejectNotes("");
+      qc.invalidateQueries({ queryKey: ["checkalt-pending-approval-deposits"] });
+    },
+    onError: (e: unknown) => {
+      toast({
+        title: "Action failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-6">
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (deposits.length === 0) {
+    return (
+      <p className="py-4 text-center text-xs text-muted-foreground">
+        No deposits awaiting manual review.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {deposits.map((dep) => (
+        <div key={dep.id} className="rounded-md border border-border/60 p-3 space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs space-y-0.5">
+              <div className="font-medium">
+                Check #{dep.check_intake_items?.check_number || "—"}
+                {dep.check_intake_items?.carrier_name ? ` · ${dep.check_intake_items.carrier_name}` : ""}
+              </div>
+              <div className="text-muted-foreground font-mono">{dep.checkalt_reference}</div>
+              <div className="text-muted-foreground">
+                {dep.amount != null ? `$${Number(dep.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={() => decisionMutation.mutate({ deposit_id: dep.id, action: "approve" })}
+                disabled={decisionMutation.isPending}
+              >
+                <Check className="h-3 w-3 mr-1" />Approve
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setRejectingId(rejectingId === dep.id ? null : dep.id)}
+                disabled={decisionMutation.isPending}
+              >
+                <X className="h-3 w-3 mr-1" />Reject
+              </Button>
+            </div>
+          </div>
+          {rejectingId === dep.id && (
+            <div className="flex items-center gap-2 pt-1">
+              <Input
+                placeholder="Reason (optional)"
+                value={rejectNotes}
+                onChange={(e) => setRejectNotes(e.target.value)}
+                className="h-8 text-xs"
+              />
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => decisionMutation.mutate({ deposit_id: dep.id, action: "reject", reject_notes: rejectNotes || undefined })}
+                disabled={decisionMutation.isPending}
+              >
+                Confirm reject
+              </Button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /**
  * Admin-only configuration panel for the CheckAlt (FinCapture) RDC integration.
@@ -235,9 +367,29 @@ export function CheckAltSettings() {
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-amber-400" />
+            Pending Manual Review
+          </CardTitle>
+          <CardDescription>
+            Deposits CheckAlt parked for manual review (status 40). Approve to continue
+            processing, or reject to decline.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PendingApprovalDeposits />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="text-sm">Webhook endpoint</CardTitle>
           <CardDescription>
-            Register this URL with CheckAlt to receive real-time status updates. They will
+            CheckAlt's own RDC documentation describes a pull/poll-based status model
+            (deposit history lookups), not a confirmed push notification. This endpoint is
+            ready to receive a postback if CheckAlt confirms they support one — verify with
+            CheckAlt support before relying on it; the scheduled polling above is the
+            confirmed fallback. Register this URL if/when confirmed. They will
             include a shared-secret header that matches the <code>CHECKALT_WEBHOOK_SECRET</code>{" "}
             backend secret.
           </CardDescription>
@@ -268,6 +420,14 @@ export function CheckAltSettings() {
           <div className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
             <code>CHECKALT_WEBHOOK_SECRET</code>
             <span className="text-muted-foreground">Shared secret for webhook verification</span>
+          </div>
+          <div className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
+            <code>CHECKALT_FI_KEY</code>
+            <span className="text-muted-foreground">FinCapture FI key for RDC APIs</span>
+          </div>
+          <div className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
+            <code>CHECKALT_MERCHANT</code>
+            <span className="text-muted-foreground">Merchant header (defaults to lockbox5)</span>
           </div>
         </CardContent>
       </Card>
