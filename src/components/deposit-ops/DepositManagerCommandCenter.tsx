@@ -24,6 +24,7 @@ import {
 import {
   AutomationHealthCard, AutomationRunHistory, DigestDeliveryCenter, AutomationSettingsPanel,
 } from "./DepositAutomationHealth";
+import { PendingApprovalDeposits } from "@/components/settings/CheckAltSettings";
 
 const fmtMoney = (n: number | null | undefined) =>
   n != null ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "$0.00";
