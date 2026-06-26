@@ -13,6 +13,7 @@ import { Image } from "https://deno.land/x/imagescript@1.2.17/mod.ts";
 import {
   getServiceClient,
   loadConfig,
+  loadTenantAccount,
   checkAltFetch,
   getCheckAltFiKey,
   syncDepositItem,
@@ -101,7 +102,7 @@ Deno.serve(async (req) => {
         status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    if (!cfg.base_url || !cfg.depositor_account_id) {
+    if (!cfg.base_url) {
       return new Response(JSON.stringify({ error: "CheckAlt is not fully configured" }), {
         status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -116,6 +117,8 @@ Deno.serve(async (req) => {
     if (!check.front_image_path || !check.back_image_path) {
       throw new Error("Both front and back check images are required for CheckAlt submission");
     }
+
+    const tenantAccount = await loadTenantAccount(supabase, check.tenant_id);
 
     const [frontImage, rearImage] = await Promise.all([
       downloadAndCompress(supabase, check.front_image_path),
@@ -139,9 +142,9 @@ Deno.serve(async (req) => {
     const fiKey = getCheckAltFiKey();
     const payload = {
       fiKey,
-      ssoKey: cfg.business_unit || cfg.depositor_account_id,
+      ssoKey: tenantAccount.sso_user_id,
       captureDateTime: new Date().toISOString(),
-      depositAccountNumber: cfg.depositor_account_id,
+      depositAccountNumber: tenantAccount.deposit_account_number,
       userAmount: Number(check.amount),
       frontImage,
       rearImage,

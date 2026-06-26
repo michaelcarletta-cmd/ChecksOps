@@ -2081,16 +2081,21 @@ function CheckDetailPanel({
   const [frontImageDimensions, setFrontImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [backImageDimensions, setBackImageDimensions] = useState<{ width: number; height: number } | null>(null);
 
-  // Whether the org has CheckAlt RDC turned on — gates the per-check
-  // "Deposit with CheckAlt" button without exposing the rest of
-  // checkalt_config (which is admin-only under RLS) to regular staff.
+  // Whether this tenant has CheckAlt RDC turned on (platform switch +
+  // its own registered FinCapture account) — gates the per-check
+  // "Deposit with CheckAlt" button without exposing checkalt_tenant_accounts
+  // or checkalt_config (both admin-only under RLS) to regular staff.
+  const { tenantId: checkAltTenantId } = useTenantFilter();
   const { data: checkAltEnabled = false } = useQuery({
-    queryKey: ["checkalt-enabled"],
+    queryKey: ["checkalt-enabled", checkAltTenantId],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("is_checkalt_enabled");
+      const { data, error } = await supabase.rpc("is_checkalt_enabled_for_tenant", {
+        _tenant_id: checkAltTenantId,
+      });
       if (error) throw error;
       return !!data;
     },
+    enabled: !!checkAltTenantId,
   });
 
   // Count of explicit payees on this check — used to decide whether to show

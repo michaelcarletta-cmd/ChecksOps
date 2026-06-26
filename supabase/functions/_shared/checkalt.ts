@@ -20,6 +20,13 @@ export interface CheckAltConfig {
   cached_jwt_expires_at: string | null;
 }
 
+export interface CheckAltTenantAccount {
+  sso_user_id: string;
+  deposit_account_number: string;
+  enabled: boolean;
+  registered_at: string | null;
+}
+
 export function getServiceClient(): SupabaseClient {
   const url = Deno.env.get("SUPABASE_URL");
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -46,6 +53,33 @@ export async function loadConfig(supabase: SupabaseClient): Promise<CheckAltConf
   if (error) throw error;
   if (!data) throw new Error("checkalt_config singleton row missing");
   return data as CheckAltConfig;
+}
+
+// Each tenant registers its own depositor account with FinCapture
+// (POST /fincapture/useraccount/register). The userId chosen at registration
+// becomes the ssoKey used on every later deposit/process, deposit/approve and
+// deposit/history call for that tenant — this replaces the old global
+// cfg.business_unit / cfg.depositor_account_id fields.
+export async function loadTenantAccount(
+  supabase: SupabaseClient,
+  tenantId: string | null | undefined,
+): Promise<CheckAltTenantAccount> {
+  if (!tenantId) {
+    throw new Error("No tenant associated with this check — cannot resolve CheckAlt account");
+  }
+  const { data, error } = await supabase
+    .from("checkalt_tenant_accounts")
+    .select("sso_user_id, deposit_account_number, enabled, registered_at")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data || !data.registered_at) {
+    throw new Error("This organization has not registered a CheckAlt depositor account yet");
+  }
+  if (!data.enabled) {
+    throw new Error("CheckAlt deposits are disabled for this organization");
+  }
+  return data as CheckAltTenantAccount;
 }
 
 export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConfig): Promise<string> {

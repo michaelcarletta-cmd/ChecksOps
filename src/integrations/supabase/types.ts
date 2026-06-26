@@ -2908,6 +2908,59 @@ export type Database = {
           },
         ]
       }
+      checkalt_tenant_accounts: {
+        Row: {
+          created_at: string
+          deposit_account_number: string
+          email: string
+          enabled: boolean
+          first_name: string
+          id: string
+          last_name: string
+          last_register_payload: Json | null
+          registered_at: string | null
+          sso_user_id: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deposit_account_number: string
+          email: string
+          enabled?: boolean
+          first_name: string
+          id?: string
+          last_name: string
+          last_register_payload?: Json | null
+          registered_at?: string | null
+          sso_user_id: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deposit_account_number?: string
+          email?: string
+          enabled?: boolean
+          first_name?: string
+          id?: string
+          last_name?: string
+          last_register_payload?: Json | null
+          registered_at?: string | null
+          sso_user_id?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checkalt_tenant_accounts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       checkalt_webhook_events: {
         Row: {
           checkalt_reference: string | null
@@ -19773,6 +19826,10 @@ export type Database = {
         Returns: boolean
       }
       is_checkalt_enabled: { Args: never; Returns: boolean }
+      is_checkalt_enabled_for_tenant: {
+        Args: { _tenant_id: string }
+        Returns: boolean
+      }
       is_master_owner: { Args: never; Returns: boolean }
       is_org_admin: {
         Args: { _org_id: string; _user_id: string }
