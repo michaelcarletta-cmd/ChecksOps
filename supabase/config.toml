@@ -7,6 +7,8 @@ project_id = "nbcqwpysqgyxrrbgtmkw"
     verify_jwt = true
   [functions.checkalt-webhook]
     verify_jwt = false
+  [functions.checkalt-approve-deposit]
+    verify_jwt = true
   [functions.send-transactional-email]
     verify_jwt = true
   [functions.preview-transactional-email]
