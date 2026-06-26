@@ -131,9 +131,21 @@ async function authenticateCheckAlt(
   const attempts: CheckAltAuthAttempt[] = [
     {
       path: "/Clearingworks/cxf/public/jwtauth/authenticate",
+      body: JSON.stringify({ userId: username, password }),
+      contentType: "application/json",
+      label: "clearingworks-cxf-userId-json",
+    },
+    {
+      path: "/Clearingworks/cxf/public/jwtauth/authenticate",
       body: new URLSearchParams({ userId: username, password }).toString(),
       contentType: "application/x-www-form-urlencoded",
       label: "clearingworks-cxf-userId-form",
+    },
+    {
+      path: "/cxf/public/jwtauth/authenticate",
+      body: JSON.stringify({ userId: username, password }),
+      contentType: "application/json",
+      label: "cxf-userId-json",
     },
     {
       path: "/cxf/public/jwtauth/authenticate",
@@ -143,9 +155,21 @@ async function authenticateCheckAlt(
     },
     {
       path: "/public/jwtauth/authenticate",
+      body: JSON.stringify({ userId: username, password }),
+      contentType: "application/json",
+      label: "public-userId-json",
+    },
+    {
+      path: "/public/jwtauth/authenticate",
       body: new URLSearchParams({ userId: username, password }).toString(),
       contentType: "application/x-www-form-urlencoded",
       label: "public-userId-form",
+    },
+    {
+      path: "/public/jwtauth/authenticate",
+      body: JSON.stringify({ username, password }),
+      contentType: "application/json",
+      label: "public-username-json",
     },
     {
       path: "/public/jwtauth/authenticate",
