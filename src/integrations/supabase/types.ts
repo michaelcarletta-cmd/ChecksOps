@@ -2951,36 +2951,45 @@ export type Database = {
       }
       checkalt_webhook_events: {
         Row: {
+          action: string | null
           checkalt_reference: string | null
           event_type: string | null
           id: string
+          idempotency_key: string | null
           process_error: string | null
           processed: boolean
           processed_at: string | null
           raw_payload: Json
           received_at: string
+          severity: string | null
           signature_valid: boolean | null
         }
         Insert: {
+          action?: string | null
           checkalt_reference?: string | null
           event_type?: string | null
           id?: string
+          idempotency_key?: string | null
           process_error?: string | null
           processed?: boolean
           processed_at?: string | null
           raw_payload: Json
           received_at?: string
+          severity?: string | null
           signature_valid?: boolean | null
         }
         Update: {
+          action?: string | null
           checkalt_reference?: string | null
           event_type?: string | null
           id?: string
+          idempotency_key?: string | null
           process_error?: string | null
           processed?: boolean
           processed_at?: string | null
           raw_payload?: Json
           received_at?: string
+          severity?: string | null
           signature_valid?: boolean | null
         }
         Relationships: []
