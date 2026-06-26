@@ -329,8 +329,9 @@ export function CheckAltSettings() {
                 Enable CheckAlt deposits
               </Label>
               <p className="text-xs text-muted-foreground">
-                When off, the platform behaves exactly as today (branch deposit only).
-                When on, the Ready-for-Deposit flow exposes a "Send to CheckAlt" option.
+                When off, deposits route through Manual / Branch only. When on, staff can
+                assign "CheckAlt (FinCapture RDC)" as the route for a check in the Deposit
+                Operations console, which submits it through this API.
               </p>
             </div>
           </div>

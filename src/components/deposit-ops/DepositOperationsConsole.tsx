@@ -238,6 +238,26 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
     },
   });
 
+  // CheckAlt items are submitted via the real FinCapture API call, not the
+  // manual record_submission dialog used by other providers.
+  const checkaltSubmitMutation = useMutation({
+    mutationFn: async (checkId: string) => {
+      const { data, error } = await supabase.functions.invoke("checkalt-submit-deposit", {
+        body: { check_intake_item_id: checkId },
+      });
+      if (error) throw error;
+      return data as { status: string; checkalt_reference: string | null };
+    },
+    onSuccess: (data) => {
+      toast({ title: "Submitted to CheckAlt", description: `Status: ${data.status}` });
+      qc.invalidateQueries({ queryKey: ["deposit-items"] });
+      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+    },
+    onError: (e: Error) => {
+      toast({ title: "CheckAlt submission failed", description: e.message, variant: "destructive" });
+    },
+  });
+
   const resetDialog = () => {
     setActionDialog(null);
     setActionNotes("");
@@ -461,7 +481,14 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
                                 <Building2 className="h-3 w-3 mr-1" />Deposited
                               </Button>
                             )}
-                            {item.status === "provider_assigned" && item.provider !== "manual_branch" && item.provider !== "internal_ready" && (
+                            {item.status === "provider_assigned" && item.provider === "checkalt" && (
+                              <Button size="sm" variant="outline" className="text-xs h-7"
+                                disabled={checkaltSubmitMutation.isPending}
+                                onClick={(e) => { e.stopPropagation(); checkaltSubmitMutation.mutate(item.check_id); }}>
+                                <Send className="h-3 w-3 mr-1" />Submit to CheckAlt
+                              </Button>
+                            )}
+                            {item.status === "provider_assigned" && item.provider !== "manual_branch" && item.provider !== "internal_ready" && item.provider !== "checkalt" && (
                               <Button size="sm" variant="outline" className="text-xs h-7"
                                 onClick={(e) => { e.stopPropagation(); setActionDialog({ action: "record_submission", itemId: item.id }); }}>
                                 <Send className="h-3 w-3 mr-1" />Submit
@@ -469,10 +496,12 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
                             )}
                             {(item.status === "submitted" || item.status === "processing") && (
                               <>
-                                <Button size="sm" variant="outline" className="text-xs h-7"
-                                  onClick={(e) => { e.stopPropagation(); setActionDialog({ action: "sync_provider_status", itemId: item.id }); }}>
-                                  <RefreshCw className="h-3 w-3 mr-1" />Sync
-                                </Button>
+                                {item.provider !== "checkalt" && (
+                                  <Button size="sm" variant="outline" className="text-xs h-7"
+                                    onClick={(e) => { e.stopPropagation(); setActionDialog({ action: "sync_provider_status", itemId: item.id }); }}>
+                                    <RefreshCw className="h-3 w-3 mr-1" />Sync
+                                  </Button>
+                                )}
                                 <Button size="sm" variant="outline" className="text-xs h-7"
                                   onClick={(e) => { e.stopPropagation(); setActionDialog({ action: "record_success", itemId: item.id }); }}>
                                   <CheckCircle2 className="h-3 w-3" />
@@ -483,7 +512,14 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
                                 </Button>
                               </>
                             )}
-                            {item.status === "failed" && (
+                            {item.status === "failed" && item.provider === "checkalt" && (
+                              <Button size="sm" variant="outline" className="text-xs h-7 border-amber-500/50 text-amber-500"
+                                disabled={checkaltSubmitMutation.isPending}
+                                onClick={(e) => { e.stopPropagation(); checkaltSubmitMutation.mutate(item.check_id); }}>
+                                <RotateCcw className="h-3 w-3 mr-1" />Resubmit to CheckAlt
+                              </Button>
+                            )}
+                            {item.status === "failed" && item.provider !== "checkalt" && (
                               <Button size="sm" variant="outline" className="text-xs h-7 border-amber-500/50 text-amber-500"
                                 onClick={(e) => { e.stopPropagation(); setActionDialog({ action: "resubmit_payment", itemId: item.id }); }}>
                                 <RotateCcw className="h-3 w-3 mr-1" />Resubmit

@@ -104,6 +104,35 @@ export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConf
   return jwt;
 }
 
+// Best-effort mirror into the general deposit_items/deposit_action pipeline.
+// Never throws — a sync failure here must not block the CheckAlt-side
+// response, since checkalt_deposits is already the source of truth.
+export async function syncDepositItem(
+  supabase: SupabaseClient,
+  params: {
+    action: "record_submission" | "record_success" | "record_failure" | "record_return";
+    deposit_item_id: string;
+    actor_id: string;
+    amount?: number;
+    notes?: string;
+    extra?: Record<string, unknown>;
+  },
+): Promise<void> {
+  const { error } = await supabase.rpc("deposit_action", {
+    p_action: params.action,
+    p_actor_id: params.actor_id,
+    p_deposit_item_id: params.deposit_item_id,
+    p_check_id: null,
+    p_provider: null,
+    p_amount: params.amount ?? null,
+    p_notes: params.notes ?? null,
+    p_extra: params.extra ?? {},
+  });
+  if (error) {
+    console.error("[checkalt] deposit_items sync failed", params.action, params.deposit_item_id, error.message);
+  }
+}
+
 export async function checkAltFetch(
   supabase: SupabaseClient,
   path: string,

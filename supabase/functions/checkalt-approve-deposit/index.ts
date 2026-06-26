@@ -18,6 +18,7 @@ import {
   loadConfig,
   checkAltFetch,
   getCheckAltFiKey,
+  syncDepositItem,
 } from "../_shared/checkalt.ts";
 
 const BodySchema = z.object({
@@ -143,6 +144,23 @@ Deno.serve(async (req) => {
           deposit_status: internalStatus === "rejected" ? "returned" : "deposited",
         })
         .eq("check_intake_item_id", deposit.check_intake_item_id);
+
+      if (internalStatus === "rejected" || internalStatus === "error") {
+        const { data: depositItem } = await supabase
+          .from("deposit_items")
+          .select("id, provider")
+          .eq("check_id", deposit.check_intake_item_id)
+          .maybeSingle();
+        if (depositItem && depositItem.provider === "checkalt") {
+          await syncDepositItem(supabase, {
+            action: "record_failure",
+            deposit_item_id: depositItem.id,
+            actor_id: userId,
+            notes: respJson?.statusDescription ?? internalStatus,
+            extra: { error: respJson?.statusDescription ?? internalStatus, error_code: String(apiStatus), response: respJson },
+          });
+        }
+      }
     }
 
     return new Response(JSON.stringify({

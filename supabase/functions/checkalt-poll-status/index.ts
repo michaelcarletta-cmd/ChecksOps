@@ -7,7 +7,7 @@
 //   (cleared/settled = success codes returned by API)
 
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
-import { getServiceClient, checkAltFetch, getCheckAltFiKey, loadConfig } from "../_shared/checkalt.ts";
+import { getServiceClient, checkAltFetch, getCheckAltFiKey, loadConfig, syncDepositItem } from "../_shared/checkalt.ts";
 
 function mapStatus(code: number, current: string): string {
   switch (code) {
@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
 
     const { data: stale, error } = await supabase
       .from("checkalt_deposits")
-      .select("id, checkalt_reference, status, check_intake_item_id")
+      .select("id, checkalt_reference, status, check_intake_item_id, submitted_by")
       .in("status", ["submitted", "pending_approval"])
       .or(`last_polled_at.is.null,last_polled_at.lt.${cutoff}`)
       .not("checkalt_reference", "is", null)
@@ -74,6 +74,24 @@ Deno.serve(async (req) => {
           if (internal === "cleared") updates.cleared_at = new Date().toISOString();
           if (internal === "rejected") updates.returned_at = new Date().toISOString();
           updated++;
+
+          if ((internal === "cleared" || internal === "rejected" || internal === "error") && dep.check_intake_item_id && dep.submitted_by) {
+            const { data: depositItem } = await supabase
+              .from("deposit_items")
+              .select("id, provider")
+              .eq("check_id", dep.check_intake_item_id)
+              .maybeSingle();
+            if (depositItem && depositItem.provider === "checkalt") {
+              await syncDepositItem(supabase, {
+                action: internal === "cleared" ? "record_success" : "record_failure",
+                deposit_item_id: depositItem.id,
+                actor_id: dep.submitted_by,
+                extra: internal === "cleared"
+                  ? { response: json }
+                  : { error: internal, error_code: String(code), response: json },
+              });
+            }
+          }
         }
         await supabase.from("checkalt_deposits").update(updates).eq("id", dep.id);
       } catch (e) {
