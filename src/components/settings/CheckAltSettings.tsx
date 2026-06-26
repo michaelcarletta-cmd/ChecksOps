@@ -385,13 +385,13 @@ export function CheckAltSettings() {
         <CardHeader>
           <CardTitle className="text-sm">Webhook endpoint</CardTitle>
           <CardDescription>
-            CheckAlt's own RDC documentation describes a pull/poll-based status model
-            (deposit history lookups), not a confirmed push notification. This endpoint is
-            ready to receive a postback if CheckAlt confirms they support one — verify with
-            CheckAlt support before relying on it; the scheduled polling above is the
-            confirmed fallback. Register this URL if/when confirmed. They will
-            include a shared-secret header that matches the <code>CHECKALT_WEBHOOK_SECRET</code>{" "}
-            backend secret.
+            Nothing in CheckAlt's onboarding materials or RDC reference docs describes
+            an outbound push notification — every status check they document is a
+            pull (deposit history / status lookups). The 10-minute polling job above is
+            the actual, confirmed reconciliation path; treat it as primary, not a
+            fallback. This endpoint is left in place only in case CheckAlt turns out to
+            support a postback after all — it would need a shared-secret header matching
+            the <code>CHECKALT_WEBHOOK_SECRET</code> backend secret to be accepted.
           </CardDescription>
         </CardHeader>
         <CardContent>
