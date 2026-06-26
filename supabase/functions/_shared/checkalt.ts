@@ -115,16 +115,45 @@ export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConf
     throw new Error(`CheckAlt auth failed [${resp.status}]: ${body}`);
   }
 
-  // The token may be returned as a raw string OR as JSON { token | jwt | accessToken }.
+  // Token may come back as a raw string, in an Authorization response header,
+  // or as JSON under any of several keys CheckAlt has used across versions.
   const text = await resp.text();
   let jwt: string | undefined;
-  try {
-    const data = JSON.parse(text);
-    jwt = data?.token ?? data?.jwt ?? data?.accessToken;
-  } catch {
-    jwt = text.trim().replace(/^Bearer\s+/i, "");
+
+  // Try response headers first (some FinCapture deployments return the JWT here)
+  const headerToken =
+    resp.headers.get("authorization") ??
+    resp.headers.get("Authorization") ??
+    resp.headers.get("x-auth-token") ??
+    resp.headers.get("jwt");
+  if (headerToken) jwt = headerToken.replace(/^Bearer\s+/i, "").trim();
+
+  if (!jwt) {
+    try {
+      const data = JSON.parse(text);
+      jwt =
+        data?.token ??
+        data?.jwt ??
+        data?.accessToken ??
+        data?.access_token ??
+        data?.id_token ??
+        data?.idToken ??
+        data?.authToken ??
+        data?.auth_token ??
+        data?.data?.token ??
+        data?.data?.jwt ??
+        data?.data?.accessToken ??
+        data?.result?.token ??
+        data?.result?.jwt;
+    } catch {
+      jwt = text.trim().replace(/^Bearer\s+/i, "");
+    }
   }
-  if (!jwt) throw new Error("CheckAlt auth response missing token");
+
+  if (!jwt) {
+    console.error("[checkalt] auth response had no token. headers:", JSON.stringify(Object.fromEntries(resp.headers)), "body:", text.slice(0, 500));
+    throw new Error("CheckAlt auth response missing token");
+  }
 
   let expiresAt = new Date(Date.now() + 50 * 60_000).toISOString();
   try {
