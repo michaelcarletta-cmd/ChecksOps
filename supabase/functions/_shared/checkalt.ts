@@ -94,7 +94,7 @@ export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConf
   if (!username || !password) throw new Error("CHECKALT_USERNAME / CHECKALT_PASSWORD not configured");
   const base = (cfg.base_url ?? "https://uatapi.checkalt.com").replace(/\/$/, "");
 
-  const basic = btoa(`${username}:${password}`);
+  const basic = base64FromUtf8(`${username}:${password}`);
   const resp = await fetch(`${base}/public/jwtauth/authenticate`, {
     method: "POST",
     headers: {
@@ -136,6 +136,15 @@ export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConf
     .eq("singleton", true);
 
   return jwt;
+}
+
+function base64FromUtf8(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
 }
 
 // Best-effort mirror into the general deposit_items/deposit_action pipeline.

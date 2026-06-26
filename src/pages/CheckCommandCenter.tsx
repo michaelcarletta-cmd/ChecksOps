@@ -2567,7 +2567,7 @@ function CheckDetailPanel({
       const { data: submitData, error: submitErr } = await supabase.functions.invoke("checkalt-submit-deposit", {
         body: { check_intake_item_id: checkId },
       });
-      if (submitErr) throw submitErr;
+      if (submitErr) throw new Error(await getFunctionErrorMessage(submitErr, "CheckAlt deposit failed"));
 
       sonnerToast.success("Submitted to CheckAlt", {
         description: `Check #${check.check_number ?? checkId.slice(0, 8)} — status: ${(submitData as any)?.status ?? "submitted"}`,

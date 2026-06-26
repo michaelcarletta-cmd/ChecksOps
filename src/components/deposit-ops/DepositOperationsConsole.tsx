@@ -26,6 +26,7 @@ import { format } from "date-fns";
 import { CheckImagesViewer } from "@/components/checks/CheckImagesViewer";
 import { Eye } from "lucide-react";
 import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
+import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -245,7 +246,7 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
       const { data, error } = await supabase.functions.invoke("checkalt-submit-deposit", {
         body: { check_intake_item_id: checkId },
       });
-      if (error) throw error;
+      if (error) throw new Error(await getFunctionErrorMessage(error, "CheckAlt submission failed"));
       return data as { status: string; checkalt_reference: string | null };
     },
     onSuccess: (data) => {
