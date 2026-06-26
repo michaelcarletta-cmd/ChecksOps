@@ -41,21 +41,27 @@ async function downloadAndCompress(
   } catch (e) {
     throw new Error(`Image decode failed (${path}): ${e instanceof Error ? e.message : e}`);
   }
-  // Initial resize: 75% per FinCapture compression guidance
-  let w = Math.max(640, Math.round(img.width * 0.75));
-  img = img.resize(w, Image.RESIZE_AUTO);
+  // Cap initial dimension aggressively to keep imagescript CPU bounded.
+  // Checks only need ~200 DPI for FinCapture; 1200px wide is plenty.
+  const MAX_DIM = 1200;
+  let w = Math.min(MAX_DIM, img.width);
+  if (w !== img.width) {
+    img = img.resize(w, Image.RESIZE_AUTO);
+  }
 
-  let quality = 75;
+  let quality = 70;
   let encoded = await img.encodeJPEG(quality);
-  // Shrink further if still too large
-  while (encoded.byteLength > MAX_BYTES && (quality > 25 || w > 640)) {
+  // Shrink further if still too large — bounded loop (max ~6 iterations)
+  let iter = 0;
+  while (encoded.byteLength > MAX_BYTES && iter < 6 && (quality > 25 || w > 640)) {
     if (quality > 25) {
-      quality = Math.max(25, quality - 10);
+      quality = Math.max(25, quality - 15);
     } else {
-      w = Math.max(640, Math.round(w * 0.85));
+      w = Math.max(640, Math.round(w * 0.8));
       img = img.resize(w, Image.RESIZE_AUTO);
     }
     encoded = await img.encodeJPEG(quality);
+    iter++;
   }
   // Bump quality back up if we're under the minimum (rare for check photos)
   while (encoded.byteLength < MIN_BYTES && quality < 95) {
