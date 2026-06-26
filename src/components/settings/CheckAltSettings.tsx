@@ -286,31 +286,6 @@ function TenantDepositorAccount({ tenantId, tenantName }: { tenantId: string; te
   });
 
 
-  const [verifyResult, setVerifyResult] = useState<{ ok: boolean; summary: string } | null>(null);
-
-  const verifyMutation = useMutation({
-    mutationFn: async () => {
-      const [userRes, acctRes] = await Promise.all([
-        supabase.functions.invoke("checkalt-account-status", { body: { action: "user_account", tenant_id: tenantId } }),
-        supabase.functions.invoke("checkalt-account-status", { body: { action: "deposit_account", tenant_id: tenantId } }),
-      ]);
-      if (userRes.error) throw userRes.error;
-      if (acctRes.error) throw acctRes.error;
-      return { user: userRes.data, account: acctRes.data };
-    },
-    onSuccess: (data) => {
-      const ok = !!data.user?.ok && !!data.account?.ok;
-      setVerifyResult({
-        ok,
-        summary: ok
-          ? "FinCapture confirms this user and deposit account."
-          : `FinCapture lookup returned an error (user: ${data.user?.status}, account: ${data.account?.status}).`,
-      });
-    },
-    onError: (e: unknown) => {
-      setVerifyResult({ ok: false, summary: e instanceof Error ? e.message : "Unknown error" });
-    },
-  });
 
   const isRegistered = !!account?.registered_at;
   const canSubmit =
@@ -338,28 +313,10 @@ function TenantDepositorAccount({ tenantId, tenantName }: { tenantId: string; te
                 ssoKey: <code>{account?.sso_user_id}</code> · Account ending {account?.deposit_account_number.slice(-4)}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant={account?.enabled ? "default" : "outline"}>
-                {account?.enabled ? "Enabled" : "Disabled"}
-              </Badge>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => verifyMutation.mutate()}
-                disabled={verifyMutation.isPending}
-              >
-                {verifyMutation.isPending
-                  ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                  : <RefreshCw className="h-3 w-3 mr-1" />}
-                Verify with CheckAlt
-              </Button>
-            </div>
+            <Badge variant={account?.enabled ? "default" : "outline"}>
+              {account?.enabled ? "Enabled" : "Disabled"}
+            </Badge>
           </div>
-          {verifyResult && (
-            <p className={`text-xs ${verifyResult.ok ? "text-emerald-600" : "text-destructive"}`}>
-              {verifyResult.summary}
-            </p>
-          )}
         </div>
       )}
 
