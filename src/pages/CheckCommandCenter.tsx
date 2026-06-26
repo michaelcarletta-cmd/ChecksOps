@@ -3337,7 +3337,7 @@ function CheckDetailPanel({
                         onClick={handleDepositWithCheckAlt}
                       >
                         <Banknote className="h-4 w-4 mr-2" />
-                        {depositingWithCheckAlt ? "Depositing..." : "Deposit with CheckAlt"}
+                        {depositingWithCheckAlt ? "Depositing..." : "Deposit Check"}
                       </Button>
                     ) : (
                       <Button
