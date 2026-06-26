@@ -129,42 +129,59 @@ async function authenticateCheckAlt(
   username: string,
   password: string,
 ): Promise<{ jwt: string }> {
-  const resp = await fetch(`${base}/Clearingworks/cxf/public/jwtauth/authenticate`, {
-    method: "POST",
-    headers: {
-      merchant: getCheckAltMerchant(),
-      "Content-Type": "application/json",
-      Accept: "application/json, text/plain, */*",
-      Authorization: `Basic ${basic}`,
-    },
-    body: JSON.stringify({ userId: username, password }),
-  });
+  // Try the documented path first, then the no-/Clearingworks variant that
+  // some FinCapture tenants are provisioned on. A 404 means we're on the
+  // right host but wrong path, so falling back is safe (no lockout risk).
+  const paths = [
+    "/Clearingworks/cxf/public/jwtauth/authenticate",
+    "/cxf/public/jwtauth/authenticate",
+  ];
 
-  const text = await resp.text();
-  const bodySummary = summarizeAuthBody(text);
-  const jwt = extractJwtFromResponse(resp.headers, text);
-  if (resp.ok && jwt) return { jwt };
+  let lastStatus = 0;
+  let lastBody = "";
+  let lastUrl = "";
 
-  if (bodySummary.toLowerCase().includes("account has been locked")) {
-    throw new CheckAltAuthError("CheckAlt login is locked. Contact CheckAlt support to unlock the UAT credentials, then try the deposit again.", 409);
+  for (const path of paths) {
+    const url = `${base}${path}`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        merchant: getCheckAltMerchant(),
+        "Content-Type": "application/json",
+        Accept: "application/json, text/plain, */*",
+        Authorization: `Basic ${basic}`,
+      },
+      body: JSON.stringify({ userId: username, password }),
+    });
+
+    const text = await resp.text();
+    const bodySummary = summarizeAuthBody(text);
+    const jwt = extractJwtFromResponse(resp.headers, text);
+    if (resp.ok && jwt) return { jwt };
+
+    lastStatus = resp.status;
+    lastBody = bodySummary;
+    lastUrl = url;
+
+    // Stop immediately on lockout or auth rejection — do not try more paths
+    // (would risk further lockout).
+    if (bodySummary.toLowerCase().includes("account has been locked")) {
+      throw new CheckAltAuthError(`CheckAlt login is locked (URL: ${url}). Contact CheckAlt support to unlock the UAT credentials.`, 409);
+    }
+    if (resp.status === 401 || resp.status === 403 || bodySummary.toLowerCase().includes("cannot be authenticated")) {
+      throw new CheckAltAuthError(`CheckAlt rejected the configured login at ${url}. Verify the CheckAlt username, password, and merchant value in backend secrets.`, 409);
+    }
+    if (resp.ok && !jwt) {
+      console.error("[checkalt] auth returned 2xx without JWT", url, "body:", bodySummary);
+      throw new CheckAltAuthError(`CheckAlt auth succeeded but did not return a bearer token (URL: ${url}). Ask CheckAlt to confirm the auth response format.`, 502);
+    }
+    // Otherwise (e.g. 404) try the next path
   }
 
-  if (resp.status === 401 || resp.status === 403 || bodySummary.toLowerCase().includes("cannot be authenticated")) {
-    throw new CheckAltAuthError("CheckAlt rejected the configured login. Verify the CheckAlt username, password, and merchant value in backend secrets.", 409);
-  }
-
-  if (resp.ok && !jwt) {
-    console.error(
-      "[checkalt] auth endpoint returned success without JWT",
-      "headers:",
-      JSON.stringify(safeAuthHeaders(resp.headers)),
-      "body:",
-      bodySummary,
-    );
-    throw new CheckAltAuthError("CheckAlt auth succeeded but did not return a bearer token. Ask CheckAlt to confirm the auth response format for this account.", 502);
-  }
-
-  throw new CheckAltAuthError(`CheckAlt auth failed (${resp.status}): ${bodySummary}`, 502);
+  throw new CheckAltAuthError(
+    `CheckAlt auth failed (${lastStatus}) at ${lastUrl}. The base URL or auth path provisioned for this tenant may differ — confirm the FinCapture auth URL with CheckAlt support. Response: ${lastBody}`,
+    502,
+  );
 }
 
 function extractJwtFromResponse(headers: Headers, text: string): string | undefined {
