@@ -1,14 +1,21 @@
 // Shared CheckAlt (FinCapture) helpers — JWT acquisition + base config loader.
 //
-// Auth flow (UAT/Prod):
-//   POST {base_url}/Clearingworks/cxf/public/jwtauth/authenticate
-//     Headers:
-//       merchant: <CHECKALT_MERCHANT>            (e.g. "lockbox5")
-//       Content-Type: application/json
-//       Authorization: Basic base64(userId:password)
-//     Body: { "userId": "...", "password": "..." }
+// Base URL (UAT): https://uatapi.checkalt.com
 //
+// RDC API endpoints:
+//   Authenticate                  POST /public/jwtauth/authenticate
+//   Register                      POST /fincapture/useraccount/register
+//   Get User Account Info         POST /fincapture/useraccount/getUserAccountInformation
+//   Get Deposit Account Info      POST /fincapture/useraccount/getDepositAccountInformation
+//   Deposit Item                  POST /fincapture/deposit/item
+//   Approve Deposit               POST /fincapture/deposit/approve
+//   New Deposit Process           POST /fincapture/deposit/process
+//   Deposit History               POST /fincapture/deposit/history
+//
+// Auth: empty body, headers `merchant`, `Content-Type: application/x-www-form-urlencoded`,
+// `Authorization: Basic base64(userId:password)`.
 // Every other call must include `merchant` and `Authorization: Bearer <jwt>`.
+
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
