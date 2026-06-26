@@ -15,7 +15,7 @@ import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
 import { z } from "https://esm.sh/zod@3.23.8";
 import {
   getServiceClient,
-  loadConfig,
+  loadTenantAccount,
   checkAltFetch,
   getCheckAltFiKey,
   syncDepositItem,
@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
 
     const { data: deposit, error: depErr } = await supabase
       .from("checkalt_deposits")
-      .select("id, checkalt_reference, status, check_intake_item_id")
+      .select("id, tenant_id, checkalt_reference, status, check_intake_item_id")
       .eq("id", deposit_id)
       .maybeSingle();
     if (depErr || !deposit) throw new Error(depErr?.message || "Deposit not found");
@@ -85,13 +85,13 @@ Deno.serve(async (req) => {
       }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const cfg = await loadConfig(supabase);
+    const tenantAccount = await loadTenantAccount(supabase, deposit.tenant_id);
     const fiKey = getCheckAltFiKey();
 
     const payload: Record<string, unknown> = {
       fiKey,
-      ssoKey: cfg.business_unit || cfg.depositor_account_id,
-      depositAccountNumber: cfg.depositor_account_id,
+      ssoKey: tenantAccount.sso_user_id,
+      depositAccountNumber: tenantAccount.deposit_account_number,
       referenceId: deposit.checkalt_reference,
       action: action === "approve" ? 1 : 0,
     };

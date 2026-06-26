@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw, Check, X } from "lucide-react";
+import { useTenant } from "@/contexts/TenantContext";
+import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw, Check, X, UserPlus } from "lucide-react";
 
 interface PendingApprovalDeposit {
   id: string;
@@ -71,6 +72,37 @@ function PendingApprovalDeposits() {
     },
   });
 
+  const [refreshingId, setRefreshingId] = useState<string | null>(null);
+
+  const refreshMutation = useMutation({
+    mutationFn: async (depositId: string) => {
+      setRefreshingId(depositId);
+      const { data, error } = await supabase.functions.invoke("checkalt-account-status", {
+        body: { action: "deposit_item", deposit_id: depositId },
+      });
+      if (error) throw error;
+      return data as { ok: boolean; status: number; json: any };
+    },
+    onSuccess: (data) => {
+      toast({
+        title: data.ok ? "Status refreshed" : "Refresh returned an error",
+        description: data.ok
+          ? "Latest status pulled from FinCapture."
+          : `FinCapture responded with HTTP ${data.status}.`,
+        variant: data.ok ? "default" : "destructive",
+      });
+      qc.invalidateQueries({ queryKey: ["checkalt-pending-approval-deposits"] });
+    },
+    onError: (e: unknown) => {
+      toast({
+        title: "Refresh failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => setRefreshingId(null),
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-6">
@@ -103,6 +135,17 @@ function PendingApprovalDeposits() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => refreshMutation.mutate(dep.id)}
+                disabled={refreshingId === dep.id}
+              >
+                {refreshingId === dep.id
+                  ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  : <RefreshCw className="h-3 w-3 mr-1" />}
+                Refresh
+              </Button>
               <Button
                 size="sm"
                 onClick={() => decisionMutation.mutate({ deposit_id: dep.id, action: "approve" })}
@@ -144,14 +187,235 @@ function PendingApprovalDeposits() {
   );
 }
 
+interface TenantAccount {
+  sso_user_id: string;
+  deposit_account_number: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  enabled: boolean;
+  registered_at: string | null;
+}
+
+/**
+ * Registers (or shows the status of) this tenant's FinCapture depositor
+ * "user account". FinCapture's onboarding is per-tenant: each org needs its
+ * own POST /fincapture/useraccount/register call before deposits, approvals
+ * or polling will work for its checks. The userId submitted here becomes the
+ * ssoKey used on every later deposit call for this tenant.
+ */
+function TenantDepositorAccount({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    sso_user_id: "",
+    first_name: "",
+    last_name: "",
+    email: "",
+    deposit_account_number: "",
+  });
+
+  const { data: account, isLoading } = useQuery({
+    queryKey: ["checkalt-tenant-account", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("checkalt_tenant_accounts")
+        .select("sso_user_id, deposit_account_number, first_name, last_name, email, enabled, registered_at")
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+      if (error) throw error;
+      return data as TenantAccount | null;
+    },
+  });
+
+  useEffect(() => {
+    if (account) {
+      setForm({
+        sso_user_id: account.sso_user_id,
+        first_name: account.first_name,
+        last_name: account.last_name,
+        email: account.email,
+        deposit_account_number: "",
+      });
+    }
+  }, [account]);
+
+  const registerMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("checkalt-register-account", {
+        body: { tenant_id: tenantId, ...form },
+      });
+      if (error) throw error;
+      return data as { success: boolean; sso_user_id: string };
+    },
+    onSuccess: () => {
+      toast({ title: "CheckAlt account registered", description: `Depositor account active for ${tenantName}.` });
+      setForm((f) => ({ ...f, deposit_account_number: "" }));
+      qc.invalidateQueries({ queryKey: ["checkalt-tenant-account", tenantId] });
+    },
+    onError: (e: unknown) => {
+      toast({
+        title: "Registration failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const [verifyResult, setVerifyResult] = useState<{ ok: boolean; summary: string } | null>(null);
+
+  const verifyMutation = useMutation({
+    mutationFn: async () => {
+      const [userRes, acctRes] = await Promise.all([
+        supabase.functions.invoke("checkalt-account-status", { body: { action: "user_account", tenant_id: tenantId } }),
+        supabase.functions.invoke("checkalt-account-status", { body: { action: "deposit_account", tenant_id: tenantId } }),
+      ]);
+      if (userRes.error) throw userRes.error;
+      if (acctRes.error) throw acctRes.error;
+      return { user: userRes.data, account: acctRes.data };
+    },
+    onSuccess: (data) => {
+      const ok = !!data.user?.ok && !!data.account?.ok;
+      setVerifyResult({
+        ok,
+        summary: ok
+          ? "FinCapture confirms this user and deposit account."
+          : `FinCapture lookup returned an error (user: ${data.user?.status}, account: ${data.account?.status}).`,
+      });
+    },
+    onError: (e: unknown) => {
+      setVerifyResult({ ok: false, summary: e instanceof Error ? e.message : "Unknown error" });
+    },
+  });
+
+  const isRegistered = !!account?.registered_at;
+  const canSubmit =
+    !!form.sso_user_id.trim() && !!form.first_name.trim() && !!form.last_name.trim() &&
+    !!form.email.trim() && !!form.deposit_account_number.trim();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-6">
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {isRegistered && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between rounded-md border border-border/60 bg-muted/30 p-3 text-xs">
+            <div className="space-y-0.5">
+              <div className="font-medium flex items-center gap-1.5">
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" /> Registered with FinCapture
+              </div>
+              <div className="text-muted-foreground">
+                ssoKey: <code>{account?.sso_user_id}</code> · Account ending {account?.deposit_account_number.slice(-4)}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant={account?.enabled ? "default" : "outline"}>
+                {account?.enabled ? "Enabled" : "Disabled"}
+              </Badge>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => verifyMutation.mutate()}
+                disabled={verifyMutation.isPending}
+              >
+                {verifyMutation.isPending
+                  ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  : <RefreshCw className="h-3 w-3 mr-1" />}
+                Verify with CheckAlt
+              </Button>
+            </div>
+          </div>
+          {verifyResult && (
+            <p className={`text-xs ${verifyResult.ok ? "text-emerald-600" : "text-destructive"}`}>
+              {verifyResult.summary}
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="sso_user_id">FinCapture User ID (ssoKey)</Label>
+          <Input
+            id="sso_user_id"
+            placeholder="e.g. mcarletta"
+            value={form.sso_user_id}
+            onChange={(e) => setForm({ ...form, sso_user_id: e.target.value })}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="deposit_account_number">Deposit account number</Label>
+          <Input
+            id="deposit_account_number"
+            placeholder="Full bank account number"
+            value={form.deposit_account_number}
+            onChange={(e) => setForm({ ...form, deposit_account_number: e.target.value })}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="first_name">First name</Label>
+          <Input
+            id="first_name"
+            value={form.first_name}
+            onChange={(e) => setForm({ ...form, first_name: e.target.value })}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="last_name">Last name</Label>
+          <Input
+            id="last_name"
+            value={form.last_name}
+            onChange={(e) => setForm({ ...form, last_name: e.target.value })}
+          />
+        </div>
+        <div className="space-y-1.5 md:col-span-2">
+          <Label htmlFor="checkalt_email">Email</Label>
+          <Input
+            id="checkalt_email"
+            type="email"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+          />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        The account number is sent once to FinCapture to register this depositor and is not
+        re-displayed after registration. Re-registering replaces the stored ssoKey/account for {tenantName}.
+      </p>
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          onClick={() => registerMutation.mutate()}
+          disabled={!canSubmit || registerMutation.isPending}
+        >
+          {registerMutation.isPending
+            ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            : <UserPlus className="h-4 w-4 mr-1" />}
+          {isRegistered ? "Re-register account" : "Register with CheckAlt"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Admin-only configuration panel for the CheckAlt (FinCapture) RDC integration.
- * Single ChecksOps-wide account model:
- *   - Username/password live in backend secrets (CHECKALT_USERNAME / CHECKALT_PASSWORD)
- *   - Per-deployment values (base URL, depositor account, business unit, enable flag) live here
+ * Per-tenant account model:
+ *   - Username/password for the platform-wide auth call live in backend secrets
+ *     (CHECKALT_USERNAME / CHECKALT_PASSWORD)
+ *   - Connection settings (base URL, enable flag) live here, in checkalt_config
+ *   - Each tenant registers its own depositor account (ssoKey + bank account)
+ *     via the section below, stored in checkalt_tenant_accounts
  */
 export function CheckAltSettings() {
   const { isAdmin } = usePermissions();
+  const { tenant } = useTenant();
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -171,8 +435,6 @@ export function CheckAltSettings() {
 
   const [form, setForm] = useState({
     base_url: "",
-    business_unit: "",
-    depositor_account_id: "",
     default_enabled: false,
     notes: "",
   });
@@ -181,8 +443,6 @@ export function CheckAltSettings() {
     if (cfg) {
       setForm({
         base_url: cfg.base_url ?? "",
-        business_unit: cfg.business_unit ?? "",
-        depositor_account_id: cfg.depositor_account_id ?? "",
         default_enabled: !!cfg.default_enabled,
         notes: cfg.notes ?? "",
       });
@@ -195,8 +455,6 @@ export function CheckAltSettings() {
         .from("checkalt_config")
         .update({
           base_url: form.base_url.trim() || null,
-          business_unit: form.business_unit.trim() || null,
-          depositor_account_id: form.depositor_account_id.trim() || null,
           default_enabled: form.default_enabled,
           notes: form.notes.trim() || null,
         })
@@ -257,8 +515,7 @@ export function CheckAltSettings() {
     );
   }
 
-  const fullyConfigured =
-    !!form.base_url && !!form.depositor_account_id && form.default_enabled;
+  const fullyConfigured = !!form.base_url && form.default_enabled;
 
   return (
     <div className="space-y-6">
@@ -285,37 +542,18 @@ export function CheckAltSettings() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="base_url">Base URL</Label>
-              <Input
-                id="base_url"
-                placeholder="https://sandbox.checkalt.com"
-                value={form.base_url}
-                onChange={(e) => setForm({ ...form, base_url: e.target.value })}
-              />
-              <p className="text-xs text-muted-foreground">
-                Use the sandbox URL until live testing is approved.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="business_unit">Business Unit</Label>
-              <Input
-                id="business_unit"
-                placeholder="e.g. CHECKSOPS_PROD"
-                value={form.business_unit}
-                onChange={(e) => setForm({ ...form, business_unit: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5 md:col-span-2">
-              <Label htmlFor="depositor_account_id">Depositor Account ID</Label>
-              <Input
-                id="depositor_account_id"
-                placeholder="Provided by CheckAlt"
-                value={form.depositor_account_id}
-                onChange={(e) => setForm({ ...form, depositor_account_id: e.target.value })}
-              />
-            </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="base_url">Base URL</Label>
+            <Input
+              id="base_url"
+              placeholder="https://sandbox.checkalt.com"
+              value={form.base_url}
+              onChange={(e) => setForm({ ...form, base_url: e.target.value })}
+            />
+            <p className="text-xs text-muted-foreground">
+              Use the sandbox URL until live testing is approved. Per-tenant depositor accounts
+              (ssoKey + bank account) are configured per organization below, not here.
+            </p>
           </div>
 
           <div className="flex items-start gap-3 rounded-md border border-border/60 bg-muted/30 p-3">
@@ -365,6 +603,24 @@ export function CheckAltSettings() {
           </div>
         </CardContent>
       </Card>
+
+      {tenant && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <UserPlus className="h-4 w-4 text-primary" />
+              Depositor Account — {tenant.name}
+            </CardTitle>
+            <CardDescription>
+              FinCapture requires each organization to register its own depositor account
+              before it can submit, approve, or poll deposits.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <TenantDepositorAccount tenantId={tenant.id} tenantName={tenant.name} />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

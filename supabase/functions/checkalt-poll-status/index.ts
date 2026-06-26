@@ -7,31 +7,26 @@
 //   (cleared/settled = success codes returned by API)
 
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
-import { getServiceClient, checkAltFetch, getCheckAltFiKey, loadConfig, syncDepositItem } from "../_shared/checkalt.ts";
-
-function mapStatus(code: number, current: string): string {
-  switch (code) {
-    case 127: return "submitted";
-    case 40:  return "pending_approval";
-    case 120: return "rejected";
-    case 11:  return "error";
-    // Treat any other terminal/success code as cleared
-    default:  return code >= 200 ? "cleared" : current;
-  }
-}
+import {
+  getServiceClient,
+  checkAltFetch,
+  getCheckAltFiKey,
+  loadTenantAccount,
+  syncDepositItem,
+  mapDepositStatus,
+} from "../_shared/checkalt.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
     const supabase = getServiceClient();
-    const cfg = await loadConfig(supabase);
     const fiKey = getCheckAltFiKey();
     const cutoff = new Date(Date.now() - 15 * 60_000).toISOString();
 
     const { data: stale, error } = await supabase
       .from("checkalt_deposits")
-      .select("id, checkalt_reference, status, check_intake_item_id, submitted_by")
+      .select("id, tenant_id, checkalt_reference, status, check_intake_item_id, submitted_by")
       .in("status", ["submitted", "pending_approval"])
       .or(`last_polled_at.is.null,last_polled_at.lt.${cutoff}`)
       .not("checkalt_reference", "is", null)
@@ -43,12 +38,13 @@ Deno.serve(async (req) => {
     for (const dep of stale ?? []) {
       polled++;
       try {
+        const tenantAccount = await loadTenantAccount(supabase, dep.tenant_id);
         const resp = await checkAltFetch(supabase, "/fincapture/deposit/history", {
           method: "POST",
           body: JSON.stringify({
             fiKey,
-            ssoKey: cfg.business_unit || cfg.depositor_account_id,
-            depositAccountNumber: cfg.depositor_account_id,
+            ssoKey: tenantAccount.sso_user_id,
+            depositAccountNumber: tenantAccount.deposit_account_number,
             referenceId: dep.checkalt_reference,
           }),
         });
@@ -63,7 +59,7 @@ Deno.serve(async (req) => {
         ) ?? items[0] ?? json;
 
         const code = Number(match?.status ?? match?.statusCode ?? 0);
-        const internal = mapStatus(code, dep.status);
+        const internal = mapDepositStatus(code, dep.status);
 
         const updates: Record<string, unknown> = {
           last_polled_at: new Date().toISOString(),

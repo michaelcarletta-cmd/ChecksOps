@@ -20,6 +20,13 @@ export interface CheckAltConfig {
   cached_jwt_expires_at: string | null;
 }
 
+export interface CheckAltTenantAccount {
+  sso_user_id: string;
+  deposit_account_number: string;
+  enabled: boolean;
+  registered_at: string | null;
+}
+
 export function getServiceClient(): SupabaseClient {
   const url = Deno.env.get("SUPABASE_URL");
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -46,6 +53,33 @@ export async function loadConfig(supabase: SupabaseClient): Promise<CheckAltConf
   if (error) throw error;
   if (!data) throw new Error("checkalt_config singleton row missing");
   return data as CheckAltConfig;
+}
+
+// Each tenant registers its own depositor account with FinCapture
+// (POST /fincapture/useraccount/register). The userId chosen at registration
+// becomes the ssoKey used on every later deposit/process, deposit/approve and
+// deposit/history call for that tenant — this replaces the old global
+// cfg.business_unit / cfg.depositor_account_id fields.
+export async function loadTenantAccount(
+  supabase: SupabaseClient,
+  tenantId: string | null | undefined,
+): Promise<CheckAltTenantAccount> {
+  if (!tenantId) {
+    throw new Error("No tenant associated with this check — cannot resolve CheckAlt account");
+  }
+  const { data, error } = await supabase
+    .from("checkalt_tenant_accounts")
+    .select("sso_user_id, deposit_account_number, enabled, registered_at")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data || !data.registered_at) {
+    throw new Error("This organization has not registered a CheckAlt depositor account yet");
+  }
+  if (!data.enabled) {
+    throw new Error("CheckAlt deposits are disabled for this organization");
+  }
+  return data as CheckAltTenantAccount;
 }
 
 export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConfig): Promise<string> {
@@ -131,6 +165,76 @@ export async function syncDepositItem(
   if (error) {
     console.error("[checkalt] deposit_items sync failed", params.action, params.deposit_item_id, error.message);
   }
+}
+
+// Maps FinCapture's numeric deposit status codes to ChecksOps' internal
+// checkalt_deposits.status values. Shared by checkalt-poll-status (batch
+// reconciliation via /deposit/history) and checkalt-account-status
+// (on-demand single-item refresh via /deposit/item).
+export function mapDepositStatus(code: number, current: string): string {
+  switch (code) {
+    case 127: return "submitted";
+    case 40: return "pending_approval";
+    case 120: return "rejected";
+    case 11: return "error";
+    default: return code >= 200 ? "cleared" : current;
+  }
+}
+
+interface CheckAltApiResult {
+  ok: boolean;
+  status: number;
+  json: any;
+}
+
+// NOTE: CheckAlt has not provided sample payloads for these three endpoints
+// (unlike auth/register/process/approve/history, which were confirmed from
+// their Postman collection). The field names below follow the same
+// fiKey/userId/accountNumber/referenceId conventions used in the confirmed
+// calls — verify the request/response shape against live UAT before relying
+// on this in production.
+
+export async function getUserAccountInfo(
+  supabase: SupabaseClient,
+  ssoUserId: string,
+): Promise<CheckAltApiResult> {
+  const fiKey = getCheckAltFiKey();
+  const resp = await checkAltFetch(supabase, "/fincapture/useraccount/getUserAccountInformation", {
+    method: "POST",
+    body: JSON.stringify({ fiKey, userId: ssoUserId }),
+  });
+  return { ok: resp.ok, status: resp.status, json: await resp.json().catch(() => ({})) };
+}
+
+export async function getDepositAccountInfo(
+  supabase: SupabaseClient,
+  ssoUserId: string,
+  accountNumber: string,
+): Promise<CheckAltApiResult> {
+  const fiKey = getCheckAltFiKey();
+  const resp = await checkAltFetch(supabase, "/fincapture/useraccount/getDepositAccountInformation", {
+    method: "POST",
+    body: JSON.stringify({ fiKey, userId: ssoUserId, accountNumber }),
+  });
+  return { ok: resp.ok, status: resp.status, json: await resp.json().catch(() => ({})) };
+}
+
+export async function getDepositItemStatus(
+  supabase: SupabaseClient,
+  tenantAccount: CheckAltTenantAccount,
+  referenceId: string,
+): Promise<CheckAltApiResult> {
+  const fiKey = getCheckAltFiKey();
+  const resp = await checkAltFetch(supabase, "/fincapture/deposit/item", {
+    method: "POST",
+    body: JSON.stringify({
+      fiKey,
+      ssoKey: tenantAccount.sso_user_id,
+      depositAccountNumber: tenantAccount.deposit_account_number,
+      referenceId,
+    }),
+  });
+  return { ok: resp.ok, status: resp.status, json: await resp.json().catch(() => ({})) };
 }
 
 export async function checkAltFetch(
