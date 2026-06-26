@@ -25,6 +25,7 @@ import { TenantDocumentsManager } from "./TenantDocumentsManager";
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { TenantAIKeySettings } from "./TenantAIKeySettings";
 import { ActumSettings } from "@/components/settings/ActumSettings";
+import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { GLBASecurityEventsLog } from "@/components/settings/GLBASecurityEventsLog";
 
@@ -153,8 +154,9 @@ export function WhiteLabelSettings() {
             <TenantBankAccountSettings />
           </TabsContent>
 
-          <TabsContent value="integrations">
+          <TabsContent value="integrations" className="space-y-6">
             <ActumSettings />
+            {isAdmin && <CheckAltSettings />}
           </TabsContent>
 
           <TabsContent value="disbursement">
