@@ -148,15 +148,27 @@ function measurePreset(signerCount: number, preset: LayoutPreset): MeasuredLayou
 function fitLayout(signerCount: number, zoneHeightPx: number, requestedScale: number): MeasuredLayout {
   const userScale = requestedScale || 1;
 
-  // Pick best-fit preset ignoring user scale (layout fit only)
-  let basePreset = PRESETS[PRESETS.length - 1];
+  // Match src/lib/endorsementFit.ts: prefer a preset that leaves ~35% of the
+  // zone free so the user can actually move the endorsement around.
+  const PLACEMENT_HEADROOM = 0.65;
+  let basePreset: LayoutPreset | null = null;
   for (const preset of PRESETS) {
     const measured = measurePreset(signerCount, preset);
-    if (measured.estimatedHeight <= zoneHeightPx) {
+    if (measured.estimatedHeight <= zoneHeightPx * PLACEMENT_HEADROOM) {
       basePreset = preset;
       break;
     }
   }
+  if (!basePreset) {
+    for (const preset of PRESETS) {
+      const measured = measurePreset(signerCount, preset);
+      if (measured.estimatedHeight <= zoneHeightPx) {
+        basePreset = preset;
+        break;
+      }
+    }
+  }
+  if (!basePreset) basePreset = PRESETS[PRESETS.length - 1];
 
   // Bake user scale into all dimensions (matches src/lib/endorsementFit.ts exactly)
   const scaled: LayoutPreset = {
