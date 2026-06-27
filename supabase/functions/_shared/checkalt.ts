@@ -137,24 +137,25 @@ async function authenticateCheckAlt(
   password: string,
 ): Promise<{ jwt: string }> {
   // POST {base}/public/jwtauth/authenticate
-  // Per CheckAlt's onboarding instructions (authoritative — overrides the
-  // public OpenAPI spec, which lists a separate /public/fincapture/authenticate
-  // path that this tenant is NOT provisioned for):
+  // Per CheckAlt onboarding (authoritative):
   //   - URL: /public/jwtauth/authenticate
-  //   - merchant: lockbox5 header on ALL calls (including auth)
+  //   - merchant: lockbox5 header on ALL calls
   //   - Basic auth header with userId:password
-  //   - JSON body { userName, password } — server requires a body
-  //     ("Request body is required" when empty).
+  //   - Body: form-urlencoded. JSON bodies are blocked by their Cloudflare WAF
+  //     before reaching the app. Empty bodies are rejected by the app
+  //     ("Request body is required"). Form-urlencoded with the credentials is
+  //     the one shape that satisfies both layers.
   const url = `${base}/public/jwtauth/authenticate`;
+  const formBody = new URLSearchParams({ userName: username, password }).toString();
   const resp = await fetch(url, {
     method: "POST",
     headers: {
       merchant: getCheckAltMerchant(),
-      "Content-Type": "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json, text/plain, */*",
       Authorization: `Basic ${basic}`,
     },
-    body: JSON.stringify({ userName: username, password }),
+    body: formBody,
   });
 
   const text = await resp.text();
