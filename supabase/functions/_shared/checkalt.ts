@@ -137,19 +137,18 @@ async function authenticateCheckAlt(
   password: string,
 ): Promise<{ jwt: string }> {
   // POST {base}/public/jwtauth/authenticate
-  // CheckAlt's server requires a non-empty request body — an empty body
-  // returns {"errorMessage":"Request body is required"}. Send "{}" with
-  // JSON content-type. Credentials still flow through the Basic auth header.
+  // Match CheckAlt's RDC sample exactly: form-urlencoded content type with a
+  // truly empty body. Sending JSON (`{}`) is rejected by CheckAlt's edge/WAF.
   const url = `${base}/public/jwtauth/authenticate`;
   const resp = await fetch(url, {
     method: "POST",
     headers: {
       merchant: getCheckAltMerchant(),
-      "Content-Type": "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json, text/plain, */*",
       Authorization: `Basic ${basic}`,
     },
-    body: "{}",
+    body: "",
   });
 
   const text = await resp.text();
@@ -165,7 +164,7 @@ async function authenticateCheckAlt(
     throw new CheckAltAuthError(
       `CheckAlt edge rejected the request (HTTP ${resp.status}${cfRayId ? `, cf-ray ${cfRayId}` : ""}) at ${url}. ` +
         `This is a Cloudflare/WAF block — request never reached CheckAlt's app. ` +
-        `Forward the cf-ray ID to CheckAlt support and ask them to allowlist Supabase edge function egress.`,
+        `Forward the cf-ray ID to CheckAlt support and ask them to allowlist backend function egress.`,
       502,
     );
   }
