@@ -123,6 +123,12 @@ export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConf
   return jwt;
 }
 
+// Deno's default fetch User-Agent ("Deno/x.x.x") gets flagged by CheckAlt's
+// Cloudflare WAF as a bot before the request ever reaches their app (HTML
+// 400/403, no app-level error body). A browser-shaped User-Agent lets it through.
+const CHECKALT_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
 class CheckAltAuthError extends Error {
   constructor(message: string, public status = 502) {
     super(message);
@@ -154,6 +160,7 @@ async function authenticateCheckAlt(
       "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json, text/plain, */*",
       Authorization: `Basic ${basic}`,
+      "User-Agent": CHECKALT_USER_AGENT,
     },
     body: formBody,
   });
@@ -365,6 +372,7 @@ export async function checkAltFetch(
   headers.set("Authorization", `Bearer ${jwt}`);
   // Vendor instruction (authoritative): add merchant=lockbox5 on ALL API calls.
   headers.set("merchant", getCheckAltMerchant());
+  headers.set("User-Agent", CHECKALT_USER_AGENT);
   if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json");
   // Per Clearingworks dev guide: CW-IDEMPOTENCY guarantees a request runs
   // exactly once even if retried. Required for deposit/process submissions.
