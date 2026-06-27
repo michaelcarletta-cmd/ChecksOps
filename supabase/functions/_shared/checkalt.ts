@@ -136,21 +136,20 @@ async function authenticateCheckAlt(
   username: string,
   password: string,
 ): Promise<{ jwt: string }> {
-  // POST {base}/public/jwtauth/authenticate — matches CheckAlt's documented
-  // sample exactly: merchant header, Basic auth header, empty body with
-  // application/x-www-form-urlencoded content type. Sending a JSON body (even
-  // "{}") triggers a Cloudflare 400 at their edge; sending no Content-Type
-  // also fails. Do not change this shape without confirming with CheckAlt.
+  // POST {base}/public/jwtauth/authenticate
+  // CheckAlt's server requires a non-empty request body — an empty body
+  // returns {"errorMessage":"Request body is required"}. Send "{}" with
+  // JSON content-type. Credentials still flow through the Basic auth header.
   const url = `${base}/public/jwtauth/authenticate`;
   const resp = await fetch(url, {
     method: "POST",
     headers: {
       merchant: getCheckAltMerchant(),
-      "Content-Type": "application/x-www-form-urlencoded",
+      "Content-Type": "application/json",
       Accept: "application/json, text/plain, */*",
       Authorization: `Basic ${basic}`,
     },
-    body: "",
+    body: "{}",
   });
 
   const text = await resp.text();
