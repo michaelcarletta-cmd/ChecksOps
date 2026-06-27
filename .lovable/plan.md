@@ -1,56 +1,46 @@
-# Micro-Deposit Verification for Stakeholder Accounts
+## What's happening
 
-Verify every stakeholder bank account before it can receive ACH disbursements by sending two small random credits, then requiring the stakeholder to confirm the exact amounts.
+The toast shows a **Cloudflare 400 Bad Request** HTML page (notice the `<center>cloudflare</center>` footer). That means the request is being rejected at CheckAlt's edge/WAF — it never reaches their app. So the "Request body is required" JSON error from earlier and this Cloudflare 400 are **two different failures**, and our last fix (switching to `Content-Type: application/json` with `body: "{}"`) traded one for the other.
 
-## What you and your team see
+CheckAlt's own sample is unambiguous:
 
-- **Adding a stakeholder account** runs a free routing-number checksum first (catches typos instantly), then auto-initiates the two micro-deposits through Actum. The account immediately shows a yellow "Awaiting confirmation" badge.
-- **Stakeholder receives an email** with a secure link to a branded confirmation page. They enter the two amounts that landed in their bank account (1–2 business days later). 3 wrong tries locks the account and notifies an admin.
-- **Once confirmed**, the badge flips green to "Verified" and the account becomes eligible for real payments.
-- **Disbursement Console**: the Send Payment button is disabled for unverified accounts with a tooltip explaining why, plus a "Resend confirmation link" action. Admins get a "Send anyway (accept return risk)" override that writes to the audit log.
-- **Auto-verification for shared partners**: when a partner is added as a stakeholder via check-sharing, the same flow runs against their stored banking info.
+```
+POST https://uatapi.checkalt.com/public/jwtauth/authenticate
+merchant: lockbox5
+Content-Type: application/x-www-form-urlencoded
+Authorization: Basic ••••••
+--body ''
+```
 
-## Cost & timing
+That is: **empty body**, **form-urlencoded**, Basic auth header. The earlier "Request body is required" 400 we saw was almost certainly not from this happy-path call — it was likely from a fallback path or a different endpoint that the helper was also trying.
 
-- ~$0.50–$1.00 per account verified (two ACH credits totaling ~15¢, plus Actum per-transaction fees).
-- 1–2 business days for deposits to land, then user-paced confirmation.
-- One-time per account — re-used for all future payments to that stakeholder.
+## Plan
 
-## Technical scope
+1. **Revert `authenticateCheckAlt` in `supabase/functions/_shared/checkalt.ts`** to match CheckAlt's sample exactly:
+   - `Content-Type: application/x-www-form-urlencoded`
+   - `body: ""` (truly empty)
+   - Keep `merchant`, `Authorization: Basic <base64(user:pass)>`, `Accept`
+   - Remove the `{}` JSON body that's tripping Cloudflare
 
-**Database** (new migration)
-- `stakeholder_accounts` adds: `verification_status` (`unverified` | `pending` | `verified` | `failed` | `locked`), `verification_initiated_at`, `verification_completed_at`, `verification_amount_1_cents` and `_2_cents` (admin-only RLS, never selectable by stakeholder), `verification_attempts`, `verification_token` (uuid), `verification_token_expires_at`, `verification_failure_reason`.
-- New `stakeholder_account_verification_log` table for audit trail (init, attempt, success, failure, admin override).
-- RLS: only admins and service_role can read the secret amounts; stakeholders authenticate via token only.
+2. **Remove any leftover path/endpoint fallbacks** in that function so we only ever hit `/public/jwtauth/authenticate` — extra attempts at wrong paths are what produced the earlier confusing 404/400 chain and can re-lock the account.
 
-**Edge functions**
-- `stakeholder-init-microdeposits` — runs routing checksum, generates two random 1–25¢ amounts, submits 2 Actum credit transactions, stores hashed amounts + token, enqueues confirmation email.
-- `stakeholder-verify-microdeposits` — public endpoint; takes `{ token, amount1, amount2 }`, validates token + expiry + attempt count, marks verified or increments attempts, logs result.
-- `stakeholder-resend-verification` — admin-triggered, rotates token + resends email.
-- `actum-send-payment` — updated to reject if `verification_status !== 'verified'` unless `admin_override: true` is passed (audit-logged).
+3. **Improve the error surfaced to the UI** when Cloudflare returns HTML: detect `<html>` in the response body and show "CheckAlt edge rejected the request (Cloudflare 400) — likely IP block, header value, or malformed request. Contact CheckAlt support with the request ID." instead of dumping raw HTML into the toast.
 
-**Email template** (`stakeholder-verify-account.tsx`) — branded React Email with confirmation link `/verify-account/:token`.
+4. **Redeploy all five CheckAlt edge functions** so they pick up the shared helper:
+   - `checkalt-submit-deposit`
+   - `checkalt-approve-deposit`
+   - `checkalt-poll-status`
+   - `checkalt-account-status`
+   - `checkalt-register-account`
 
-**Frontend**
-- New route `/verify-account/:token` — public page; 2 currency inputs, validates via edge function, shows success/lock/expired states.
-- `StakeholderAccountSettings` + `CheckStakeholdersManager` — verification badge, "Resend link" button, status copy.
-- `DisbursementConsole` — disabled Send button for unverified accounts with tooltip + admin override checkbox.
-- `FundsTab` — shows verification status next to each stakeholder.
+5. **Test with `supabase--curl_edge_functions`** against `checkalt-submit-deposit` (or a dedicated auth-only test path if simpler) to confirm auth returns a JWT before you retry from the app.
 
-**Routing checksum utility** (`src/lib/banking.ts`) — ABA mod-10 checksum, reused on form input and in edge function.
+## What I will NOT change
 
-## Out of scope (for now)
+- Secrets (`CHECKALT_USERNAME=freedom_api_user_uat`, `CHECKALT_MERCHANT=lockbox5`, `CHECKALT_PASSWORD`) — those are confirmed correct.
+- Any deposit/registration logic — only the auth call shape.
+- Frontend code.
 
-- FedACH directory name-match lookup (can add later if useful).
-- Prenote layer in addition to micro-deposits (we discussed it — sticking with micro-deposits only since they're stronger).
-- Re-verification on account-info edit (treat any edit as a new account → re-verify).
+## If it still fails after this
 
-## Order of execution
-
-1. Migration: schema + RLS + audit log table.
-2. Routing checksum util.
-3. Three edge functions (init, verify, resend) + update `actum-send-payment` gate.
-4. Email template + scaffold email infra if not already set up.
-5. `/verify-account/:token` page.
-6. UI updates to stakeholder manager, disbursement console, funds tab.
-7. Manual test with a sandbox account.
+The remaining likely cause is **CheckAlt's WAF blocking Supabase edge function IPs** or expecting an allowlisted source. In that case the fix is on CheckAlt's side — we'll capture the exact request ID from the Cloudflare response headers and forward to their support.
