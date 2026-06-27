@@ -129,6 +129,14 @@ export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConf
 const CHECKALT_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
+// Optional static-IP relay: when CheckAlt's WAF blocks Supabase's rotating
+// egress IPs, point checkalt_config.base_url at a relay (e.g. a small EC2
+// box running Caddy) that forwards to the real CheckAlt host from a fixed
+// IP. CHECKALT_RELAY_SECRET authorizes us to that relay so it isn't an open
+// proxy to CheckAlt for anyone who finds the relay's hostname. Unset by
+// default — calls go straight to CheckAlt with no header added.
+const CHECKALT_RELAY_SECRET = Deno.env.get("CHECKALT_RELAY_SECRET");
+
 class CheckAltAuthError extends Error {
   constructor(message: string, public status = 502) {
     super(message);
@@ -161,6 +169,7 @@ async function authenticateCheckAlt(
       Accept: "application/json, text/plain, */*",
       Authorization: `Basic ${basic}`,
       "User-Agent": CHECKALT_USER_AGENT,
+      ...(CHECKALT_RELAY_SECRET ? { "X-Relay-Secret": CHECKALT_RELAY_SECRET } : {}),
     },
     body: formBody,
   });
@@ -373,6 +382,7 @@ export async function checkAltFetch(
   // Vendor instruction (authoritative): add merchant=lockbox5 on ALL API calls.
   headers.set("merchant", getCheckAltMerchant());
   headers.set("User-Agent", CHECKALT_USER_AGENT);
+  if (CHECKALT_RELAY_SECRET) headers.set("X-Relay-Secret", CHECKALT_RELAY_SECRET);
   if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json");
   // Per Clearingworks dev guide: CW-IDEMPOTENCY guarantees a request runs
   // exactly once even if retried. Required for deposit/process submissions.
