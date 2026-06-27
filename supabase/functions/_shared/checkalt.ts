@@ -137,20 +137,21 @@ async function authenticateCheckAlt(
   password: string,
 ): Promise<{ jwt: string }> {
   // POST {base}/public/jwtauth/authenticate
-  // CheckAlt's server requires a non-empty body (returns
-  // {"errorMessage":"Request body is required"} otherwise), even though their
-  // sample shows --body ''. Send credentials as JSON; Basic auth header stays
-  // for back-compat with their auth filter.
+  // CheckAlt's WAF rejects JSON bodies (Cloudflare HTML 400) and their app
+  // rejects empty bodies ("Request body is required"). Send credentials as
+  // form-urlencoded to match the declared Content-Type — the one shape that
+  // satisfies both layers.
   const url = `${base}/public/jwtauth/authenticate`;
+  const formBody = new URLSearchParams({ username, password }).toString();
   const resp = await fetch(url, {
     method: "POST",
     headers: {
       merchant: getCheckAltMerchant(),
-      "Content-Type": "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json, text/plain, */*",
       Authorization: `Basic ${basic}`,
     },
-    body: JSON.stringify({ username, password }),
+    body: formBody,
   });
 
   const text = await resp.text();
