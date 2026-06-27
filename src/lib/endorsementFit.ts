@@ -92,15 +92,29 @@ export function fitEndorsementLayout({
 }: EndorsementFitInput): EndorsementMeasuredLayout {
   const userScale = requestedScale || 1;
 
-  // Pick the best-fit preset ignoring user scale (layout fit only)
-  let basePreset = PRESETS[PRESETS.length - 1];
+  // Pick the largest preset that leaves vertical room to drag the endorsement.
+  // We require the block to be no more than ~65% of the zone so the user has
+  // meaningful freedom of placement; fall back to a strict fit if nothing
+  // satisfies that, and finally to the smallest preset.
+  const PLACEMENT_HEADROOM = 0.65;
+  let basePreset: EndorsementLayoutPreset | null = null;
   for (const preset of PRESETS) {
     const measured = measurePreset(signerCount, preset);
-    if (measured.estimatedHeight <= zoneHeightPx) {
+    if (measured.estimatedHeight <= zoneHeightPx * PLACEMENT_HEADROOM) {
       basePreset = preset;
       break;
     }
   }
+  if (!basePreset) {
+    for (const preset of PRESETS) {
+      const measured = measurePreset(signerCount, preset);
+      if (measured.estimatedHeight <= zoneHeightPx) {
+        basePreset = preset;
+        break;
+      }
+    }
+  }
+  if (!basePreset) basePreset = PRESETS[PRESETS.length - 1];
 
   // Apply user scale to all dimensions directly (not as CSS transform)
   const scaled: EndorsementLayoutPreset = {
