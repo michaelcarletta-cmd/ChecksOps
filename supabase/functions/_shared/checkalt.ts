@@ -146,7 +146,7 @@ async function authenticateCheckAlt(
   //     ("Request body is required"). Form-urlencoded with the credentials is
   //     the one shape that satisfies both layers.
   const url = `${base}/public/jwtauth/authenticate`;
-  const formBody = new URLSearchParams({ userName: username, password }).toString();
+  const formBody = new URLSearchParams({ userId: username, password }).toString();
   const resp = await fetch(url, {
     method: "POST",
     headers: {
