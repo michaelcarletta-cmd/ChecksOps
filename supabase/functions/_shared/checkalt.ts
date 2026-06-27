@@ -139,7 +139,9 @@ async function authenticateCheckAlt(
   // Per CheckAlt sample: POST {base}/public/jwtauth/authenticate
   // Headers: merchant, Content-Type: application/x-www-form-urlencoded,
   //          Authorization: Basic <base64(user:pass)>
-  // Body: empty
+  // Credentials travel via the Basic auth header, not the body — but UAT's
+  // body parser 400s with "Request body is required" on a truly empty body,
+  // so send a minimal non-empty placeholder instead of "".
   const url = `${base}/public/jwtauth/authenticate`;
   const resp = await fetch(url, {
     method: "POST",
@@ -149,7 +151,7 @@ async function authenticateCheckAlt(
       Accept: "application/json, text/plain, */*",
       Authorization: `Basic ${basic}`,
     },
-    body: "",
+    body: "{}",
   });
 
   const text = await resp.text();
