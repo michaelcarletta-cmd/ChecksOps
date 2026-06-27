@@ -136,22 +136,22 @@ async function authenticateCheckAlt(
   username: string,
   password: string,
 ): Promise<{ jwt: string }> {
-  // POST {base}/public/jwtauth/authenticate
-  // CheckAlt's WAF rejects JSON bodies (Cloudflare HTML 400) and their app
-  // rejects empty bodies ("Request body is required"). Send credentials as
-  // form-urlencoded to match the declared Content-Type — the one shape that
-  // satisfies both layers.
-  const url = `${base}/public/jwtauth/authenticate`;
-  const formBody = new URLSearchParams({ username, password }).toString();
+  // POST {base}/public/fincapture/authenticate
+  // Per CheckAlt's OpenAPI spec (FinCapture JWT Authentication):
+  //   - Path is /public/fincapture/authenticate (NOT /public/jwtauth/authenticate,
+  //     which is the *general* Clearingworks auth — wrong rail for RDC).
+  //   - Body: application/json with FinCaptureAPILoginUser { userName, password }.
+  //     Note camelCase "userName".
+  //   - No Basic auth header (no security block on this operation).
+  //   - merchant header is not required by this endpoint.
+  const url = `${base}/public/fincapture/authenticate`;
   const resp = await fetch(url, {
     method: "POST",
     headers: {
-      merchant: getCheckAltMerchant(),
-      "Content-Type": "application/x-www-form-urlencoded",
+      "Content-Type": "application/json",
       Accept: "application/json, text/plain, */*",
-      Authorization: `Basic ${basic}`,
     },
-    body: formBody,
+    body: JSON.stringify({ userName: username, password }),
   });
 
   const text = await resp.text();
