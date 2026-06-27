@@ -3,7 +3,7 @@
 // Base URL (UAT): https://uatapi.checkalt.com
 //
 // RDC API endpoints:
-//   Authenticate                  POST /public/fincapture/authenticate
+//   Authenticate                  POST /public/jwtauth/authenticate
 //   Register                      POST /fincapture/useraccount/register
 //   Get User Account Info         POST /fincapture/useraccount/getUserAccountInformation
 //   Get Deposit Account Info      POST /fincapture/useraccount/getDepositAccountInformation
@@ -136,20 +136,23 @@ async function authenticateCheckAlt(
   username: string,
   password: string,
 ): Promise<{ jwt: string }> {
-  // POST {base}/public/fincapture/authenticate
-  // Per CheckAlt's OpenAPI spec (FinCapture JWT Authentication):
-  //   - Path is /public/fincapture/authenticate (NOT /public/jwtauth/authenticate,
-  //     which is the *general* Clearingworks auth — wrong rail for RDC).
-  //   - Body: application/json with FinCaptureAPILoginUser { userName, password }.
-  //     Note camelCase "userName".
-  //   - No Basic auth header (no security block on this operation).
-  //   - merchant header is not required by this endpoint.
-  const url = `${base}/public/fincapture/authenticate`;
+  // POST {base}/public/jwtauth/authenticate
+  // Per CheckAlt's onboarding instructions (authoritative — overrides the
+  // public OpenAPI spec, which lists a separate /public/fincapture/authenticate
+  // path that this tenant is NOT provisioned for):
+  //   - URL: /public/jwtauth/authenticate
+  //   - merchant: lockbox5 header on ALL calls (including auth)
+  //   - Basic auth header with userId:password
+  //   - JSON body { userName, password } — server requires a body
+  //     ("Request body is required" when empty).
+  const url = `${base}/public/jwtauth/authenticate`;
   const resp = await fetch(url, {
     method: "POST",
     headers: {
+      merchant: getCheckAltMerchant(),
       "Content-Type": "application/json",
       Accept: "application/json, text/plain, */*",
+      Authorization: `Basic ${basic}`,
     },
     body: JSON.stringify({ userName: username, password }),
   });
@@ -359,9 +362,8 @@ export async function checkAltFetch(
   const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${jwt}`);
-  // FinCapture endpoints (per OpenAPI spec) do NOT accept a `merchant` header.
-  // Tenant is identified by `fiKey` in the request body. Sending a Clearingworks
-  // merchant id here returns "merchant not found".
+  // Vendor instruction (authoritative): add merchant=lockbox5 on ALL API calls.
+  headers.set("merchant", getCheckAltMerchant());
   if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json");
   // Per Clearingworks dev guide: CW-IDEMPOTENCY guarantees a request runs
   // exactly once even if retried. Required for deposit/process submissions.
