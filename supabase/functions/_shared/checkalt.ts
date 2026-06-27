@@ -136,18 +136,20 @@ async function authenticateCheckAlt(
   username: string,
   password: string,
 ): Promise<{ jwt: string }> {
-  // Per CheckAlt sample: POST {base}/public/jwtauth/authenticate
-  // Headers: merchant, Content-Type: application/x-www-form-urlencoded,
-  //          Authorization: Basic <base64(user:pass)>
-  // Credentials travel via the Basic auth header, not the body — but UAT's
-  // body parser 400s with "Request body is required" on a truly empty body,
-  // so send a minimal non-empty placeholder instead of "".
+  // POST {base}/public/jwtauth/authenticate
+  // Headers: merchant, Authorization: Basic <base64(user:pass)>
+  // Credentials travel via the Basic auth header, not the body. UAT 400s
+  // with "Request body is required" on a truly empty body — and also when
+  // the body is non-empty but Content-Type doesn't say application/json,
+  // since their gateway only parses (and thus only "sees") a JSON body.
+  // So: Content-Type must be application/json and the body must be valid
+  // (even if empty) JSON.
   const url = `${base}/public/jwtauth/authenticate`;
   const resp = await fetch(url, {
     method: "POST",
     headers: {
       merchant: getCheckAltMerchant(),
-      "Content-Type": "application/x-www-form-urlencoded",
+      "Content-Type": "application/json",
       Accept: "application/json, text/plain, */*",
       Authorization: `Basic ${basic}`,
     },
