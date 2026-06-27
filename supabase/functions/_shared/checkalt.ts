@@ -137,18 +137,20 @@ async function authenticateCheckAlt(
   password: string,
 ): Promise<{ jwt: string }> {
   // POST {base}/public/jwtauth/authenticate
-  // Match CheckAlt's RDC sample exactly: form-urlencoded content type with a
-  // truly empty body. Sending JSON (`{}`) is rejected by CheckAlt's edge/WAF.
+  // CheckAlt's server requires a non-empty body (returns
+  // {"errorMessage":"Request body is required"} otherwise), even though their
+  // sample shows --body ''. Send credentials as JSON; Basic auth header stays
+  // for back-compat with their auth filter.
   const url = `${base}/public/jwtauth/authenticate`;
   const resp = await fetch(url, {
     method: "POST",
     headers: {
       merchant: getCheckAltMerchant(),
-      "Content-Type": "application/x-www-form-urlencoded",
+      "Content-Type": "application/json",
       Accept: "application/json, text/plain, */*",
       Authorization: `Basic ${basic}`,
     },
-    body: "",
+    body: JSON.stringify({ username, password }),
   });
 
   const text = await resp.text();
@@ -168,6 +170,7 @@ async function authenticateCheckAlt(
       502,
     );
   }
+
 
   if (bodySummary.toLowerCase().includes("account has been locked")) {
     throw new CheckAltAuthError(`CheckAlt login is locked (URL: ${url}). Contact CheckAlt support to unlock the UAT credentials.`, 409);
