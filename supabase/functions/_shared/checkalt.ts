@@ -362,9 +362,8 @@ export async function checkAltFetch(
   const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${jwt}`);
-  // FinCapture endpoints (per OpenAPI spec) do NOT accept a `merchant` header.
-  // Tenant is identified by `fiKey` in the request body. Sending a Clearingworks
-  // merchant id here returns "merchant not found".
+  // Vendor instruction (authoritative): add merchant=lockbox5 on ALL API calls.
+  headers.set("merchant", getCheckAltMerchant());
   if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json");
   // Per Clearingworks dev guide: CW-IDEMPOTENCY guarantees a request runs
   // exactly once even if retried. Required for deposit/process submissions.
