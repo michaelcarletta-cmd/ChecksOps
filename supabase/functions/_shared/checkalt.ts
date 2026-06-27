@@ -3,7 +3,7 @@
 // Base URL (UAT): https://uatapi.checkalt.com
 //
 // RDC API endpoints:
-//   Authenticate                  POST /public/jwtauth/authenticate
+//   Authenticate                  POST /public/fincapture/authenticate
 //   Register                      POST /fincapture/useraccount/register
 //   Get User Account Info         POST /fincapture/useraccount/getUserAccountInformation
 //   Get Deposit Account Info      POST /fincapture/useraccount/getDepositAccountInformation
