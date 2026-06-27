@@ -136,30 +136,40 @@ async function authenticateCheckAlt(
   username: string,
   password: string,
 ): Promise<{ jwt: string }> {
-  // POST {base}/public/jwtauth/authenticate
-  // Headers: merchant, Authorization: Basic <base64(user:pass)>
-  // Credentials travel via the Basic auth header, not the body. UAT 400s
-  // with "Request body is required" on a truly empty body — and also when
-  // the body is non-empty but Content-Type doesn't say application/json,
-  // since their gateway only parses (and thus only "sees") a JSON body.
-  // So: Content-Type must be application/json and the body must be valid
-  // (even if empty) JSON.
+  // POST {base}/public/jwtauth/authenticate — matches CheckAlt's documented
+  // sample exactly: merchant header, Basic auth header, empty body with
+  // application/x-www-form-urlencoded content type. Sending a JSON body (even
+  // "{}") triggers a Cloudflare 400 at their edge; sending no Content-Type
+  // also fails. Do not change this shape without confirming with CheckAlt.
   const url = `${base}/public/jwtauth/authenticate`;
   const resp = await fetch(url, {
     method: "POST",
     headers: {
       merchant: getCheckAltMerchant(),
-      "Content-Type": "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json, text/plain, */*",
       Authorization: `Basic ${basic}`,
     },
-    body: "{}",
+    body: "",
   });
 
   const text = await resp.text();
   const bodySummary = summarizeAuthBody(text);
   const jwt = extractJwtFromResponse(resp.headers, text);
   if (resp.ok && jwt) return { jwt };
+
+  // Cloudflare/WAF rejection — response is HTML, not JSON. Surface a clean
+  // error instead of dumping the HTML into the UI toast.
+  const looksLikeHtml = /<html|<!doctype/i.test(text);
+  const cfRayId = resp.headers.get("cf-ray") ?? undefined;
+  if (looksLikeHtml) {
+    throw new CheckAltAuthError(
+      `CheckAlt edge rejected the request (HTTP ${resp.status}${cfRayId ? `, cf-ray ${cfRayId}` : ""}) at ${url}. ` +
+        `This is a Cloudflare/WAF block — request never reached CheckAlt's app. ` +
+        `Forward the cf-ray ID to CheckAlt support and ask them to allowlist Supabase edge function egress.`,
+      502,
+    );
+  }
 
   if (bodySummary.toLowerCase().includes("account has been locked")) {
     throw new CheckAltAuthError(`CheckAlt login is locked (URL: ${url}). Contact CheckAlt support to unlock the UAT credentials.`, 409);
@@ -174,6 +184,7 @@ async function authenticateCheckAlt(
     `CheckAlt auth failed (${resp.status}) at ${url}. Response: ${bodySummary}`,
     502,
   );
+
 }
 
 function extractJwtFromResponse(headers: Headers, text: string): string | undefined {
