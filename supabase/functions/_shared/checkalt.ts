@@ -136,20 +136,23 @@ async function authenticateCheckAlt(
   username: string,
   password: string,
 ): Promise<{ jwt: string }> {
-  // POST {base}/public/fincapture/authenticate
-  // Per CheckAlt's OpenAPI spec (FinCapture JWT Authentication):
-  //   - Path is /public/fincapture/authenticate (NOT /public/jwtauth/authenticate,
-  //     which is the *general* Clearingworks auth — wrong rail for RDC).
-  //   - Body: application/json with FinCaptureAPILoginUser { userName, password }.
-  //     Note camelCase "userName".
-  //   - No Basic auth header (no security block on this operation).
-  //   - merchant header is not required by this endpoint.
-  const url = `${base}/public/fincapture/authenticate`;
+  // POST {base}/public/jwtauth/authenticate
+  // Per CheckAlt's onboarding instructions (authoritative — overrides the
+  // public OpenAPI spec, which lists a separate /public/fincapture/authenticate
+  // path that this tenant is NOT provisioned for):
+  //   - URL: /public/jwtauth/authenticate
+  //   - merchant: lockbox5 header on ALL calls (including auth)
+  //   - Basic auth header with userId:password
+  //   - JSON body { userName, password } — server requires a body
+  //     ("Request body is required" when empty).
+  const url = `${base}/public/jwtauth/authenticate`;
   const resp = await fetch(url, {
     method: "POST",
     headers: {
+      merchant: getCheckAltMerchant(),
       "Content-Type": "application/json",
       Accept: "application/json, text/plain, */*",
+      Authorization: `Basic ${basic}`,
     },
     body: JSON.stringify({ userName: username, password }),
   });
