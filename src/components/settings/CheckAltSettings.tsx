@@ -251,6 +251,36 @@ function TenantDepositorAccount({ tenantId, tenantName }: { tenantId: string; te
     }
   }, [account]);
 
+  const testConnectionMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("checkalt-account-status", {
+        body: { action: "user_account", tenant_id: tenantId },
+      });
+      if (error) throw error;
+      return data as { ok: boolean; status: number; json: any };
+    },
+    onSuccess: (data) => {
+      toast({
+        title: data.ok ? "Connection OK" : `FinCapture responded with HTTP ${data.status}`,
+        description: data.ok
+          ? "Login and account lookup succeeded — no WAF block right now."
+          : "Reached FinCapture's app (no edge/WAF block), but the call itself returned an error. See console for details.",
+        variant: data.ok ? "default" : "destructive",
+      });
+      if (!data.ok) console.error("[checkalt] test connection error response", data.json);
+    },
+    onError: (e: unknown) => {
+      // A WAF/Cloudflare block surfaces here as a CheckAltAuthError thrown
+      // during login, before any account lookup happens — same diagnostic
+      // path as a real deposit attempt, without creating one.
+      toast({
+        title: "Connection test failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    },
+  });
+
   const registerMutation = useMutation({
     mutationFn: async () => {
       // CheckAlt provisions the FinCapture user/deposit account on their side
@@ -313,9 +343,23 @@ function TenantDepositorAccount({ tenantId, tenantName }: { tenantId: string; te
                 ssoKey: <code>{account?.sso_user_id}</code> · Account ending {account?.deposit_account_number.slice(-4)}
               </div>
             </div>
-            <Badge variant={account?.enabled ? "default" : "outline"}>
-              {account?.enabled ? "Enabled" : "Disabled"}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant={account?.enabled ? "default" : "outline"}>
+                {account?.enabled ? "Enabled" : "Disabled"}
+              </Badge>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={testConnectionMutation.isPending}
+                onClick={() => testConnectionMutation.mutate()}
+              >
+                {testConnectionMutation.isPending
+                  ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  : <RefreshCw className="h-3 w-3 mr-1" />}
+                Test Connection
+              </Button>
+            </div>
           </div>
         </div>
       )}
