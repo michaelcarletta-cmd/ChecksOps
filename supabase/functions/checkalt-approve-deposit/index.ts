@@ -6,10 +6,11 @@
 //   action = anything else -> hard reject (status 120), optional rejectCode/rejectNotes
 //   no rejectCode supplied -> defaults server-side to reject reason 1721 ("Rejected Through API")
 //
-// Note: CheckAlt did not provide a sample payload for this endpoint. The request
-// shape below mirrors the field names already used elsewhere in this integration
-// (fiKey/ssoKey/depositAccountNumber/referenceId) — verify against a live UAT
-// approval before relying on this in production.
+// Field names (fiKey/referenceNumber/action/approvedAmount/checkAccountNumber/
+// rejectCode/rejectNotes) are confirmed from the official ClearingWorks Postman
+// collection. The exact numeric meaning of `action` still comes from the
+// FinCapture Status & Reject Reference doc, not the Postman sample — verify
+// against a live UAT approval before relying on this in production.
 
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
 import { z } from "https://esm.sh/zod@3.23.8";
@@ -92,12 +93,12 @@ Deno.serve(async (req) => {
       fiKey,
       ssoKey: tenantAccount.sso_user_id,
       depositAccountNumber: tenantAccount.deposit_account_number,
-      referenceId: deposit.checkalt_reference,
+      referenceNumber: deposit.checkalt_reference,
       action: action === "approve" ? 1 : 0,
     };
     if (action === "approve") {
       if (approved_amount !== undefined) payload.approvedAmount = approved_amount;
-      if (micr_account_number) payload.micrAccountNumber = micr_account_number;
+      if (micr_account_number) payload.checkAccountNumber = micr_account_number;
     } else {
       payload.rejectCode = reject_code ?? 1721;
       if (reject_notes) payload.rejectNotes = reject_notes;
