@@ -6,7 +6,7 @@
 // Sample payload (from CheckAlt's own Postman collection):
 //   {
 //     fiKey, userId, firstName, lastName, emailAddress,
-//     SSORequest: true,
+//     isSSORequest: true,
 //     accountDataList: [{ accountNumber }]
 //   }
 //
@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
       firstName: first_name,
       lastName: last_name,
       emailAddress: email,
-      SSORequest: true,
+      isSSORequest: true,
       accountDataList: [{ accountNumber: deposit_account_number }],
     };
 
