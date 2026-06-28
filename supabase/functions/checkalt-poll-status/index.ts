@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
             fiKey,
             ssoKey: tenantAccount.sso_user_id,
             depositAccountNumber: tenantAccount.deposit_account_number,
-            referenceId: dep.checkalt_reference,
+            referenceNumber: dep.checkalt_reference,
           }),
         });
         const json = await resp.json().catch(() => ({}));
@@ -53,6 +53,7 @@ Deno.serve(async (req) => {
           : Array.isArray(json?.deposits) ? json.deposits
           : Array.isArray(json) ? json : [];
         const match = items.find((it) =>
+          it?.referenceNumber === dep.checkalt_reference ||
           it?.referenceId === dep.checkalt_reference ||
           it?.reference === dep.checkalt_reference ||
           it?.id === dep.checkalt_reference,

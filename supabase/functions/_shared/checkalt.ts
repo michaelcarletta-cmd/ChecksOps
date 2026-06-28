@@ -318,12 +318,12 @@ interface CheckAltApiResult {
   json: any;
 }
 
-// NOTE: CheckAlt has not provided sample payloads for these three endpoints
-// (unlike auth/register/process/approve/history, which were confirmed from
-// their Postman collection). The field names below follow the same
-// fiKey/userId/accountNumber/referenceId conventions used in the confirmed
-// calls — verify the request/response shape against live UAT before relying
-// on this in production.
+// NOTE: CheckAlt has not provided sample payloads for getUserAccountInfo /
+// getDepositAccountInfo. getDepositItemStatus's `referenceNumber` field is
+// confirmed from the official ClearingWorks Postman collection (it shares a
+// body shape with /fincapture/deposit/approve). Verify the rest of the
+// request/response shape against live UAT before relying on this in
+// production.
 
 export async function getUserAccountInfo(
   supabase: SupabaseClient,
@@ -362,7 +362,7 @@ export async function getDepositItemStatus(
       fiKey,
       ssoKey: tenantAccount.sso_user_id,
       depositAccountNumber: tenantAccount.deposit_account_number,
-      referenceId,
+      referenceNumber: referenceId,
     }),
   });
   return { ok: resp.ok, status: resp.status, json: await resp.json().catch(() => ({})) };
