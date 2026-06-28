@@ -1,0 +1,1 @@
+UPDATE public.checkalt_config SET base_url = 'https://checkalt-relay.checksops.com', updated_at = now();
