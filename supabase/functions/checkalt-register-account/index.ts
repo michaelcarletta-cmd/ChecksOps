@@ -17,7 +17,7 @@ import { z } from "https://esm.sh/zod@3.23.8";
 import {
   getServiceClient,
   checkAltFetch,
-  getCheckAltFiKey,
+  loadConfig,
 } from "../_shared/checkalt.ts";
 
 const BodySchema = z.object({
@@ -71,9 +71,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    const fiKey = getCheckAltFiKey();
+    const cfg = await loadConfig(supabase);
+    if (!cfg.fi_key) {
+      return new Response(JSON.stringify({ error: "checkalt_config.fi_key not set" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const payload = {
-      fiKey,
+      fiKey: cfg.fi_key,
       userId: sso_user_id,
       firstName: first_name,
       lastName: last_name,
@@ -86,7 +91,10 @@ Deno.serve(async (req) => {
       method: "POST",
       body: JSON.stringify(payload),
     });
-    const respJson = await resp.json().catch(() => ({}));
+    const respText = await resp.text();
+    let respJson: unknown;
+    try { respJson = JSON.parse(respText); } catch { respJson = { raw: respText }; }
+
 
     if (!resp.ok) {
       return new Response(JSON.stringify({
