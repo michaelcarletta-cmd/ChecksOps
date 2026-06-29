@@ -86,14 +86,22 @@ export async function getCheckAltJwt(
     throw new Error(`CheckAlt auth failed [${resp.status}]: ${body}`);
   }
 
-  const data = await resp.json();
-
-  // The response body IS the JWT string (or an object with a token field)
-  const jwt: string | undefined =
-    typeof data === "string"
-      ? data
-      : (data?.token ?? data?.jwt ?? data?.accessToken);
-  if (!jwt) throw new Error("CheckAlt auth response missing token");
+  // FinCapture returns the JWT as a raw string body (not JSON-wrapped),
+  // but some environments wrap it in {token|jwt|accessToken}. Read as text
+  // first, then try JSON — this avoids "Unexpected token 'e'" when the body
+  // is literally "eyJhbGciOi…".
+  const raw = (await resp.text()).trim();
+  let jwt: string | undefined;
+  if (raw.startsWith("{")) {
+    try {
+      const data = JSON.parse(raw);
+      jwt = data?.token ?? data?.jwt ?? data?.accessToken;
+    } catch { /* fall through */ }
+  } else {
+    // Strip optional surrounding quotes from a JSON-string body
+    jwt = raw.replace(/^"|"$/g, "");
+  }
+  if (!jwt || !jwt.includes(".")) throw new Error("CheckAlt auth response missing token");
 
   // FinCapture JWTs are typically valid ~1h; decode exp if present, else assume 50min.
   let expiresAt = new Date(Date.now() + 50 * 60_000).toISOString();
