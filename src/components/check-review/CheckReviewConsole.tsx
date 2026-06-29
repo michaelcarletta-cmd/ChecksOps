@@ -441,13 +441,13 @@ export function CheckReviewQueue({
       <div className="space-y-2 p-2">
         {groupedReviewChecks.map((group) => (
           <Fragment key={group.key}>
-            <div className="px-3 py-2">
+            <div className="rounded-md border-t-4 border-primary bg-primary/20 px-3 py-3 text-foreground font-semibold">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">Claim Check File</Badge>
                 <span className="font-semibold text-foreground truncate">{group.policyholderName}</span>
                 <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
               </div>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-normal text-muted-foreground">
                 <span>{group.checks.length} {group.checks.length === 1 ? "check" : "checks"}</span>
                 <span>•</span>
                 <span>Awaiting routing</span>
