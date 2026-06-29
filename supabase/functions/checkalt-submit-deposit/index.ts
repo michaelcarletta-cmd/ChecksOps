@@ -11,6 +11,7 @@ import { z } from "https://esm.sh/zod@3.23.8";
 import {
   getServiceClient,
   loadConfig,
+  loadTenantAccount,
   checkAltFetch,
 } from "../_shared/checkalt.ts";
 
@@ -152,6 +153,7 @@ Deno.serve(async (req) => {
 
     // --- submit to FinCapture /fincapture/deposit/process ---
     // Body schema: FinCaptureAPIDepositRequest from Clearingworks OpenAPI spec
+    const tenantAccount = await loadTenantAccount(supabase, check.tenant_id);
     const submitResp = await checkAltFetch(
       supabase,
       "/fincapture/deposit/process",
@@ -159,7 +161,8 @@ Deno.serve(async (req) => {
         method: "POST",
         body: JSON.stringify({
           fiKey: cfg.fi_key,
-          depositAccountNumber: cfg.depositor_account_id,
+          ssoKey: tenantAccount.sso_user_id,
+          depositAccountNumber: tenantAccount.deposit_account_number,
           firstName,
           lastName,
           emailAddress: userEmail,
@@ -171,18 +174,22 @@ Deno.serve(async (req) => {
         }),
       },
     );
-    const submitJson = await submitResp.json().catch(() => ({}));
+    const submitText = await submitResp.text();
+    let submitJson: any = {};
+    try { submitJson = submitText ? JSON.parse(submitText) : {}; } catch { submitJson = { raw: submitText }; }
+    console.log("[checkalt-submit-deposit] response", submitResp.status, submitText.slice(0, 500));
 
     if (!submitResp.ok) {
       await supabase
         .from("checkalt_deposits")
-        .update({ status: "error", last_status_payload: submitJson })
+        .update({ status: "error", last_status_payload: { http_status: submitResp.status, body: submitJson, raw: submitText.slice(0, 2000) } })
         .eq("id", depositRow.id);
       return new Response(
         JSON.stringify({
           error: "CheckAlt submission failed",
           status: submitResp.status,
           details: submitJson,
+          raw: submitText.slice(0, 1000),
         }),
         {
           status: 502,
