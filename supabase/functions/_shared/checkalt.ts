@@ -3,7 +3,7 @@
 // Base URL (UAT): https://uatapi.checkalt.com
 //
 // RDC API endpoints:
-//   Authenticate                  POST /public/jwtauth/authenticate
+//   Authenticate                  POST /public/fincapture/authenticate
 //   Register                      POST /fincapture/useraccount/register
 //   Get User Account Info         POST /fincapture/useraccount/getUserAccountInformation
 //   Get Deposit Account Info      POST /fincapture/useraccount/getDepositAccountInformation
@@ -12,8 +12,9 @@
 //   New Deposit Process           POST /fincapture/deposit/process
 //   Deposit History               POST /fincapture/deposit/history
 //
-// Auth: empty body, headers `merchant`, `Content-Type: application/x-www-form-urlencoded`,
-// `Authorization: Basic base64(userId:password)`.
+// Auth (vendor sample, Shahuraj Garade): POST /public/fincapture/authenticate
+//   Headers: merchant: lockbox5, Content-Type: application/json
+//   Body:    { "userName": "...", "password": "..." }
 // Every other call must include `merchant` and `Authorization: Bearer <jwt>`.
 
 
