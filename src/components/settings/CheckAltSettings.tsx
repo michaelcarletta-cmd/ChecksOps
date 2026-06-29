@@ -274,6 +274,17 @@ export function CheckAltSettings() {
           <div className="flex items-center justify-end gap-2 pt-2">
             <Button
               variant="outline"
+              onClick={() => testMutation.mutate()}
+              disabled={testMutation.isPending}
+            >
+              {testMutation.isPending
+                ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                : <ShieldCheck className="h-4 w-4 mr-1" />}
+              Test connection
+            </Button>
+
+            <Button
+              variant="outline"
               onClick={() => pollMutation.mutate()}
               disabled={pollMutation.isPending || !fullyConfigured}
             >
