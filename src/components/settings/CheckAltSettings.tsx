@@ -486,7 +486,38 @@ export function CheckAltSettings() {
                 </div>
               ) : null}
 
-              <div className="flex items-center justify-end">
+              {verifyResult ? (
+                <div className="rounded-md border border-border/60 bg-muted/30 p-3">
+                  <p className="text-xs font-medium mb-1">
+                    Verify {verifyResult.action === "user" ? "user" : "deposit account"} response
+                  </p>
+                  <pre className="text-[11px] overflow-x-auto whitespace-pre-wrap break-all text-muted-foreground">
+                    {JSON.stringify(verifyResult.payload, null, 2)}
+                  </pre>
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => verifyMutation.mutate("user")}
+                  disabled={verifyMutation.isPending || !regAccount?.registered_at}
+                >
+                  {verifyMutation.isPending && verifyMutation.variables === "user"
+                    ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    : <UserCheck className="h-4 w-4 mr-1" />}
+                  Verify user
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => verifyMutation.mutate("account")}
+                  disabled={verifyMutation.isPending || !regAccount?.registered_at}
+                >
+                  {verifyMutation.isPending && verifyMutation.variables === "account"
+                    ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    : <Landmark className="h-4 w-4 mr-1" />}
+                  Verify deposit account
+                </Button>
                 <Button
                   onClick={() => registerMutation.mutate()}
                   disabled={
@@ -505,6 +536,7 @@ export function CheckAltSettings() {
                   {regAccount?.registered_at ? "Re-register account" : "Register account"}
                 </Button>
               </div>
+
             </>
           )}
         </CardContent>
