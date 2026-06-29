@@ -186,7 +186,9 @@ async function fetchCheckAltWithDirectFallback(
     normalizeBaseUrl(configuredBase) !== CHECKALT_DIRECT_BASE_URL
   ) {
     const directUrl = buildCheckAltUrl(CHECKALT_DIRECT_BASE_URL, path);
-    const directResp = await fetch(directUrl, init);
+    const directHeaders = new Headers(init.headers);
+    directHeaders.delete("X-Relay-Secret");
+    const directResp = await fetch(directUrl, { ...init, headers: directHeaders });
     return {
       resp: directResp,
       url: directUrl,
