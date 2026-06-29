@@ -372,19 +372,24 @@ export function CheckReviewQueue({
       const insuredPayee = check.check_payees?.find((payee) => payee.payee_type === "insured")?.payee_name;
       const parsedInsured = extractInsuredName(check.payee_line);
       const policyholderName = linked?.policyholder_name || insuredPayee || parsedInsured || "Unknown insured";
-      
+
       if (q) {
-        const matches = 
+        const matches =
           claimNumber.toLowerCase().includes(q) ||
           policyholderName.toLowerCase().includes(q) ||
           (check.check_number || "").toLowerCase().includes(q) ||
           (check.carrier_name || "").toLowerCase().includes(q) ||
           (check.payee_line || "").toLowerCase().includes(q);
-        
+
         if (!matches) return;
       }
 
-      const key = `${claimNumber.trim().toLowerCase()}::${policyholderName.trim().toLowerCase()}`;
+      // Group strictly by claim # so every check tied to the same claim appears
+      // under one file. Unlinked checks stay separate (keyed by check id).
+      const hasClaim = !!(linked?.claim_number || check.detected_claim_number);
+      const key = hasClaim
+        ? `claim::${claimNumber.trim().toLowerCase()}`
+        : `unlinked::${check.id}`;
       const existing = groups.get(key);
 
       if (existing) {
