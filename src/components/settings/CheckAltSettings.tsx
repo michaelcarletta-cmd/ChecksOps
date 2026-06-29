@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useTenant } from "@/contexts/TenantContext";
-import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw, UserPlus } from "lucide-react";
+import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw, UserPlus, UserCheck, Landmark } from "lucide-react";
 
 /**
  * Admin-only configuration panel for the CheckAlt (FinCapture) RDC integration.
@@ -197,6 +197,37 @@ export function CheckAltSettings() {
         variant: "destructive",
       }),
   });
+
+  const [verifyResult, setVerifyResult] = useState<{ action: string; payload: unknown } | null>(null);
+
+  const verifyMutation = useMutation({
+    mutationFn: async (action: "user" | "account") => {
+      if (!tenant?.id) throw new Error("No tenant in context");
+      const { data, error } = await supabase.functions.invoke("checkalt-verify-account", {
+        body: { tenant_id: tenant.id, action },
+      });
+      if (error) throw new Error(error.message ?? "Verification failed");
+      if ((data as any)?.success === false) {
+        throw new Error((data as any).error || "Verification failed");
+      }
+      return { action, payload: (data as any)?.data };
+    },
+    onSuccess: ({ action, payload }) => {
+      setVerifyResult({ action, payload });
+      toast({
+        title: action === "user" ? "User verified" : "Deposit account verified",
+        description: "CheckAlt returned a valid response. See payload below.",
+      });
+    },
+    onError: (e: unknown) =>
+      toast({
+        title: "Verification failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      }),
+  });
+
+
 
 
   if (!isAdmin) {
