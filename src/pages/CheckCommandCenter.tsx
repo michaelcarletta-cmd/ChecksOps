@@ -763,7 +763,12 @@ export default function CheckCommandCenter() {
       const insuredPayee = check.check_payees?.find((p) => p.payee_type === "insured")?.payee_name;
       const parsedInsured = extractInsuredName(check.payee_line);
       const policyholderName = linked?.policyholder_name || insuredPayee || parsedInsured || "Unknown insured";
-      const key = `${claimNumber.trim().toLowerCase()}::${policyholderName.trim().toLowerCase()}`;
+      // Group strictly by claim number so every check tied to the same claim #
+      // appears under one file. Unlinked checks stay separate (keyed by id).
+      const hasClaim = !!(linked?.claim_number || check.detected_claim_number);
+      const key = hasClaim
+        ? `claim::${claimNumber.trim().toLowerCase()}`
+        : `unlinked::${check.id}`;
       const existing = groups.get(key);
 
       if (existing) {
@@ -1067,7 +1072,7 @@ export default function CheckCommandCenter() {
                       <TableBody>
                         {groupedReissueRequested.map((group) => (
                           <Fragment key={group.key}>
-                            <TableRow className="bg-muted/40 hover:bg-muted/40">
+                            <TableRow className="bg-secondary hover:bg-secondary border-t-2 border-primary/30">
                               <TableCell colSpan={4} className="py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                   <ClaimCheckFileHeader group={group} compact />
@@ -1120,7 +1125,7 @@ export default function CheckCommandCenter() {
                       <TableBody>
                         {groupedBranchDeposit.map((group) => (
                           <Fragment key={group.key}>
-                            <TableRow className="bg-muted/40 hover:bg-muted/40">
+                            <TableRow className="bg-secondary hover:bg-secondary border-t-2 border-primary/30">
                               <TableCell colSpan={4} className="py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                   <ClaimCheckFileHeader group={group} compact />
@@ -1381,7 +1386,7 @@ export default function CheckCommandCenter() {
                       <TableBody>
                         {groupedFilteredChecks.map((group) => (
                           <Fragment key={group.key}>
-                            <TableRow key={`${group.key}-header`} className="bg-muted/40 hover:bg-muted/40">
+                            <TableRow key={`${group.key}-header`} className="bg-secondary hover:bg-secondary border-t-2 border-primary/30">
                               <TableCell colSpan={colCount} className="py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                   <ClaimCheckFileHeader group={group} hideReadySignal={hideReadySignal} />
