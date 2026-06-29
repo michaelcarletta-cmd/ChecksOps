@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw } from "lucide-react";
+import { useTenant } from "@/contexts/TenantContext";
+import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw, UserPlus } from "lucide-react";
 
 /**
  * Admin-only configuration panel for the CheckAlt (FinCapture) RDC integration.
