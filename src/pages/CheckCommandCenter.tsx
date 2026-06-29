@@ -1072,7 +1072,7 @@ export default function CheckCommandCenter() {
                       <TableBody>
                         {groupedReissueRequested.map((group) => (
                           <Fragment key={group.key}>
-                            <TableRow className="bg-secondary hover:bg-secondary border-t-2 border-primary/30">
+                            <TableRow className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold">
                               <TableCell colSpan={4} className="py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                   <ClaimCheckFileHeader group={group} compact />
@@ -1125,7 +1125,7 @@ export default function CheckCommandCenter() {
                       <TableBody>
                         {groupedBranchDeposit.map((group) => (
                           <Fragment key={group.key}>
-                            <TableRow className="bg-secondary hover:bg-secondary border-t-2 border-primary/30">
+                            <TableRow className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold">
                               <TableCell colSpan={4} className="py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                   <ClaimCheckFileHeader group={group} compact />
@@ -1386,7 +1386,7 @@ export default function CheckCommandCenter() {
                       <TableBody>
                         {groupedFilteredChecks.map((group) => (
                           <Fragment key={group.key}>
-                            <TableRow key={`${group.key}-header`} className="bg-secondary hover:bg-secondary border-t-2 border-primary/30">
+                            <TableRow key={`${group.key}-header`} className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold">
                               <TableCell colSpan={colCount} className="py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                   <ClaimCheckFileHeader group={group} hideReadySignal={hideReadySignal} />
