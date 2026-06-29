@@ -372,19 +372,24 @@ export function CheckReviewQueue({
       const insuredPayee = check.check_payees?.find((payee) => payee.payee_type === "insured")?.payee_name;
       const parsedInsured = extractInsuredName(check.payee_line);
       const policyholderName = linked?.policyholder_name || insuredPayee || parsedInsured || "Unknown insured";
-      
+
       if (q) {
-        const matches = 
+        const matches =
           claimNumber.toLowerCase().includes(q) ||
           policyholderName.toLowerCase().includes(q) ||
           (check.check_number || "").toLowerCase().includes(q) ||
           (check.carrier_name || "").toLowerCase().includes(q) ||
           (check.payee_line || "").toLowerCase().includes(q);
-        
+
         if (!matches) return;
       }
 
-      const key = `${claimNumber.trim().toLowerCase()}::${policyholderName.trim().toLowerCase()}`;
+      // Group strictly by claim # so every check tied to the same claim appears
+      // under one file. Unlinked checks stay separate (keyed by check id).
+      const hasClaim = !!(linked?.claim_number || check.detected_claim_number);
+      const key = hasClaim
+        ? `claim::${claimNumber.trim().toLowerCase()}`
+        : `unlinked::${check.id}`;
       const existing = groups.get(key);
 
       if (existing) {
@@ -436,13 +441,13 @@ export function CheckReviewQueue({
       <div className="space-y-2 p-2">
         {groupedReviewChecks.map((group) => (
           <Fragment key={group.key}>
-            <div className="px-3 py-2">
+            <div className="rounded-md border-t-4 border-primary bg-primary/20 px-3 py-3 text-foreground font-semibold">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">Claim Check File</Badge>
                 <span className="font-semibold text-foreground truncate">{group.policyholderName}</span>
                 <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
               </div>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-normal text-muted-foreground">
                 <span>{group.checks.length} {group.checks.length === 1 ? "check" : "checks"}</span>
                 <span>•</span>
                 <span>Awaiting routing</span>
