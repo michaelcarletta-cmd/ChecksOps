@@ -132,6 +132,8 @@ export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConf
 const CHECKALT_USER_AGENT =
   "PostmanRuntime/7.43.0";
 
+const CHECKALT_DIRECT_BASE_URL = "https://uatapi.checkalt.com";
+
 // Optional static-IP relay: when CheckAlt's WAF blocks Supabase's rotating
 // egress IPs, point checkalt_config.base_url at a relay (e.g. a small EC2
 // box running Caddy) that forwards to the real CheckAlt host from a fixed
@@ -147,6 +149,54 @@ class CheckAltAuthError extends Error {
   }
 }
 
+function normalizeBaseUrl(base: string): string {
+  return base.replace(/\/$/, "");
+}
+
+function buildCheckAltUrl(base: string, path: string): string {
+  return `${normalizeBaseUrl(base)}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+function getCfRay(headers: Headers): string | undefined {
+  return headers.get("cf-ray") ?? undefined;
+}
+
+function looksLikeEdgeBlock(resp: Response, text: string): boolean {
+  const htmlBlock = /<html|<!doctype/i.test(text);
+  const hasCfRay = Boolean(getCfRay(resp.headers));
+  return htmlBlock || (hasCfRay && [400, 403, 429].includes(resp.status));
+}
+
+function edgeBlockSummary(url: string, resp: Response): string {
+  const cfRayId = getCfRay(resp.headers);
+  return `HTTP ${resp.status}${cfRayId ? `, cf-ray ${cfRayId}` : ""} at ${url}`;
+}
+
+async function fetchCheckAltWithDirectFallback(
+  configuredBase: string,
+  path: string,
+  init: RequestInit,
+): Promise<{ resp: Response; url: string; firstBlock?: string }> {
+  const primaryUrl = buildCheckAltUrl(configuredBase, path);
+  const primaryResp = await fetch(primaryUrl, init);
+  const primaryText = await primaryResp.clone().text().catch(() => "");
+
+  if (
+    looksLikeEdgeBlock(primaryResp, primaryText) &&
+    normalizeBaseUrl(configuredBase) !== CHECKALT_DIRECT_BASE_URL
+  ) {
+    const directUrl = buildCheckAltUrl(CHECKALT_DIRECT_BASE_URL, path);
+    const directResp = await fetch(directUrl, init);
+    return {
+      resp: directResp,
+      url: directUrl,
+      firstBlock: edgeBlockSummary(primaryUrl, primaryResp),
+    };
+  }
+
+  return { resp: primaryResp, url: primaryUrl };
+}
+
 async function authenticateCheckAlt(
   base: string,
   _basic: string,
@@ -158,9 +208,8 @@ async function authenticateCheckAlt(
   //   Headers: Content-Type: application/json, merchant: lockbox5
   //   Body:    { "userName": "...", "password": "..." }
   // No Basic auth header — the JSON body carries the credentials.
-  const url = `${base}/public/fincapture/authenticate`;
   const jsonBody = JSON.stringify({ userName: username, password });
-  const resp = await fetch(url, {
+  const { resp, url, firstBlock } = await fetchCheckAltWithDirectFallback(base, "/public/fincapture/authenticate", {
     method: "POST",
     headers: {
       merchant: getCheckAltMerchant(),
@@ -183,6 +232,7 @@ async function authenticateCheckAlt(
   if (looksLikeHtml) {
     throw new CheckAltAuthError(
       `CheckAlt edge rejected the request (HTTP ${resp.status}${cfRayId ? `, cf-ray ${cfRayId}` : ""}) at ${url}. ` +
+        `${firstBlock ? `Relay also failed first (${firstBlock}). ` : ""}` +
         `Cloudflare/WAF block — request never reached the app. Forward the cf-ray to CheckAlt support.`,
       502,
     );
@@ -370,7 +420,6 @@ export async function checkAltFetch(
   const cfg = await loadConfig(supabase);
   const jwt = await getCheckAltJwt(supabase, cfg);
   const base = (cfg.base_url ?? "https://uatapi.checkalt.com").replace(/\/$/, "");
-  const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${jwt}`);
   // Vendor instruction (authoritative): add merchant=lockbox5 on ALL API calls.
@@ -382,5 +431,6 @@ export async function checkAltFetch(
   // Per Clearingworks dev guide: CW-IDEMPOTENCY guarantees a request runs
   // exactly once even if retried. Required for deposit/process submissions.
   if (init.idempotencyKey) headers.set("CW-IDEMPOTENCY", init.idempotencyKey);
-  return await fetch(url, { ...init, headers });
+  const { resp } = await fetchCheckAltWithDirectFallback(base, path, { ...init, headers });
+  return resp;
 }
