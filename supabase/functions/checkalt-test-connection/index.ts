@@ -15,9 +15,9 @@ Deno.serve(async (req) => {
     }
     const supabase = getServiceClient();
     const token = authHeader.replace("Bearer ", "");
-    const { data: claims } = await supabase.auth.getClaims(token);
-    const userId = claims?.claims?.sub;
-    if (!userId) {
+    const { data: { user }, error: userErr } = await supabase.auth.getUser(token);
+    const userId = user?.id;
+    if (userErr || !userId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         message: "CheckAlt authentication succeeded",
-        token_preview: jwt.slice(0, 12) + "…",
+        token_preview: jwt.slice(0, 12) + "\u2026",
         base_url: cfg.base_url,
         merchant: cfg.merchant,
       }),
