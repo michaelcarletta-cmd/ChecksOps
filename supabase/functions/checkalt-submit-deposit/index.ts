@@ -153,6 +153,7 @@ Deno.serve(async (req) => {
 
     // --- submit to FinCapture /fincapture/deposit/process ---
     // Body schema: FinCaptureAPIDepositRequest from Clearingworks OpenAPI spec
+    const tenantAccount = await loadTenantAccount(supabase, check.tenant_id);
     const submitResp = await checkAltFetch(
       supabase,
       "/fincapture/deposit/process",
@@ -160,7 +161,8 @@ Deno.serve(async (req) => {
         method: "POST",
         body: JSON.stringify({
           fiKey: cfg.fi_key,
-          depositAccountNumber: cfg.depositor_account_id,
+          ssoKey: tenantAccount.sso_user_id,
+          depositAccountNumber: tenantAccount.deposit_account_number,
           firstName,
           lastName,
           emailAddress: userEmail,
