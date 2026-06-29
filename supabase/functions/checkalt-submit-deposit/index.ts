@@ -171,18 +171,22 @@ Deno.serve(async (req) => {
         }),
       },
     );
-    const submitJson = await submitResp.json().catch(() => ({}));
+    const submitText = await submitResp.text();
+    let submitJson: any = {};
+    try { submitJson = submitText ? JSON.parse(submitText) : {}; } catch { submitJson = { raw: submitText }; }
+    console.log("[checkalt-submit-deposit] response", submitResp.status, submitText.slice(0, 500));
 
     if (!submitResp.ok) {
       await supabase
         .from("checkalt_deposits")
-        .update({ status: "error", last_status_payload: submitJson })
+        .update({ status: "error", last_status_payload: { http_status: submitResp.status, body: submitJson, raw: submitText.slice(0, 2000) } })
         .eq("id", depositRow.id);
       return new Response(
         JSON.stringify({
           error: "CheckAlt submission failed",
           status: submitResp.status,
           details: submitJson,
+          raw: submitText.slice(0, 1000),
         }),
         {
           status: 502,
