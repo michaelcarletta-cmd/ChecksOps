@@ -1,66 +1,80 @@
-// Polling fallback — reconciles stale checkalt_deposits using FinCapture's
-// /fincapture/deposit/history endpoint. Maps numeric status codes to internal
-// statuses. Safe to call from cron or manually.
+// Polling fallback — reconciles any stale checkalt_deposits whose status is
+// 'submitted' or 'pending_approval' and haven't been polled in >15 minutes.
+// Safe to call from cron or manually from the admin UI.
 //
-// FinCapture status codes:
-//   127 = Submitted, 40 = Pending/Manual review, 120 = Rejected, 11 = Unknown/Error
-//   (cleared/settled = success codes returned by API)
+// Uses POST /fincapture/deposit/item with body { fiKey, referenceNumber }
+// per the Clearingworks FinCapture API spec (not a GET endpoint).
 
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
-import {
-  getServiceClient,
-  checkAltFetch,
-  getCheckAltFiKey,
-  loadTenantAccount,
-  syncDepositItem,
-  mapDepositStatus,
-} from "../_shared/checkalt.ts";
+import { getServiceClient, loadConfig, checkAltFetch } from "../_shared/checkalt.ts";
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS")
+    return new Response("ok", { headers: corsHeaders });
 
   try {
     const supabase = getServiceClient();
-    const fiKey = getCheckAltFiKey();
+    const cfg = await loadConfig(supabase);
+
+    if (!cfg.fi_key) {
+      return new Response(
+        JSON.stringify({ error: "checkalt_config.fi_key not set" }),
+        {
+          status: 409,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     const cutoff = new Date(Date.now() - 15 * 60_000).toISOString();
 
     const { data: stale, error } = await supabase
       .from("checkalt_deposits")
-      .select("id, tenant_id, checkalt_reference, status, check_intake_item_id, submitted_by")
+      .select("id, checkalt_reference, status, check_intake_item_id")
       .in("status", ["submitted", "pending_approval"])
       .or(`last_polled_at.is.null,last_polled_at.lt.${cutoff}`)
       .not("checkalt_reference", "is", null)
       .limit(50);
     if (error) throw error;
 
-    let polled = 0, updated = 0, errors = 0;
+    let polled = 0,
+      updated = 0,
+      errors = 0;
 
     for (const dep of stale ?? []) {
       polled++;
       try {
-        const tenantAccount = await loadTenantAccount(supabase, dep.tenant_id);
-        const resp = await checkAltFetch(supabase, "/fincapture/deposit/history", {
-          method: "POST",
-          body: JSON.stringify({
-            fiKey,
-            ssoKey: tenantAccount.sso_user_id,
-            depositAccountNumber: tenantAccount.deposit_account_number,
-            referenceNumber: dep.checkalt_reference,
-          }),
-        });
-        const json = await resp.json().catch(() => ({}));
-        const items: any[] = Array.isArray(json?.items) ? json.items
-          : Array.isArray(json?.deposits) ? json.deposits
-          : Array.isArray(json) ? json : [];
-        const match = items.find((it) =>
-          it?.referenceNumber === dep.checkalt_reference ||
-          it?.referenceId === dep.checkalt_reference ||
-          it?.reference === dep.checkalt_reference ||
-          it?.id === dep.checkalt_reference,
-        ) ?? items[0] ?? json;
+        // POST /fincapture/deposit/item with { fiKey, referenceNumber }
+        // referenceNumber is stored as string but API expects int64
+        const refNum = Number(dep.checkalt_reference);
 
-        const code = Number(match?.status ?? match?.statusCode ?? 0);
-        const internal = mapDepositStatus(code, dep.status);
+        const resp = await checkAltFetch(
+          supabase,
+          "/fincapture/deposit/item",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              fiKey: cfg.fi_key,
+              referenceNumber: isNaN(refNum) ? dep.checkalt_reference : refNum,
+            }),
+          },
+        );
+        const json = await resp.json().catch(() => ({}));
+
+        // Response schema: FinCaptureAPIDepositItemResponse
+        const rawStatus = String(json?.status ?? "").toLowerCase();
+        const statusMap: Record<string, string> = {
+          submitted: "submitted",
+          pending: "submitted",
+          pending_approval: "pending_approval",
+          approved: "cleared",
+          cleared: "cleared",
+          settled: "cleared",
+          returned: "returned",
+          rejected: "rejected",
+          declined: "rejected",
+        };
+        const internal = statusMap[rawStatus] ?? dep.status;
 
         const updates: Record<string, unknown> = {
           last_polled_at: new Date().toISOString(),
@@ -68,42 +82,35 @@ Deno.serve(async (req) => {
         };
         if (internal !== dep.status) {
           updates.status = internal;
-          if (internal === "cleared") updates.cleared_at = new Date().toISOString();
-          if (internal === "rejected") updates.returned_at = new Date().toISOString();
+          if (internal === "cleared")
+            updates.cleared_at = new Date().toISOString();
+          if (internal === "returned")
+            updates.returned_at = new Date().toISOString();
           updated++;
-
-          if ((internal === "cleared" || internal === "rejected" || internal === "error") && dep.check_intake_item_id && dep.submitted_by) {
-            const { data: depositItem } = await supabase
-              .from("deposit_items")
-              .select("id, provider")
-              .eq("check_id", dep.check_intake_item_id)
-              .maybeSingle();
-            if (depositItem && depositItem.provider === "checkalt") {
-              await syncDepositItem(supabase, {
-                action: internal === "cleared" ? "record_success" : "record_failure",
-                deposit_item_id: depositItem.id,
-                actor_id: dep.submitted_by,
-                extra: internal === "cleared"
-                  ? { response: json }
-                  : { error: internal, error_code: String(code), response: json },
-              });
-            }
-          }
         }
-        await supabase.from("checkalt_deposits").update(updates).eq("id", dep.id);
+        await supabase
+          .from("checkalt_deposits")
+          .update(updates)
+          .eq("id", dep.id);
       } catch (e) {
         errors++;
-        console.error("[checkalt-poll-status]", dep.checkalt_reference, e instanceof Error ? e.message : e);
+        console.error(
+          "[checkalt-poll-status]",
+          dep.checkalt_reference,
+          e instanceof Error ? e.message : e,
+        );
       }
     }
 
     return new Response(JSON.stringify({ polled, updated, errors }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     return new Response(JSON.stringify({ error: msg }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

@@ -1,39 +1,25 @@
-// Shared CheckAlt (FinCapture) helpers — JWT acquisition + base config loader.
+// Shared CheckAlt (Clearingworks FinCapture) helpers — JWT acquisition + base config loader.
+// Single ChecksOps-wide account model: credentials live in env secrets,
+// per-deployment config (base URL, merchant, fi_key, depositor account, business unit) lives in checkalt_config.
 //
-// Base URL (UAT): https://uatapi.checkalt.com
-//
-// RDC API endpoints:
-//   Authenticate                  POST /public/fincapture/authenticate
-//   Register                      POST /fincapture/useraccount/register
-//   Get User Account Info         POST /fincapture/useraccount/getUserAccountInformation
-//   Get Deposit Account Info      POST /fincapture/useraccount/getDepositAccountInformation
-//   Deposit Item                  POST /fincapture/deposit/item
-//   Approve Deposit               POST /fincapture/deposit/approve
-//   New Deposit Process           POST /fincapture/deposit/process
-//   Deposit History               POST /fincapture/deposit/history
-//
-// Auth (vendor sample, Shahuraj Garade): POST /public/fincapture/authenticate
-//   Headers: merchant: lockbox5, Content-Type: application/json
-//   Body:    { "userName": "...", "password": "..." }
-// Every other call must include `merchant` and `Authorization: Bearer <jwt>`.
-
+// API reference: Clearingworks IR OpenAPI 3.1 spec (ClearingworksAPI.yaml)
+// Auth:    POST {base_url}/public/fincapture/authenticate  (no JWT required)
+// Deposit: POST {base_url}/fincapture/deposit/process      (JWT required)
+// Status:  POST {base_url}/fincapture/deposit/item         (JWT required)
+// Approve: POST {base_url}/fincapture/deposit/approve      (JWT required)
+// History: POST {base_url}/fincapture/deposit/history       (JWT required)
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 export interface CheckAltConfig {
   base_url: string | null;
+  merchant: string | null;
+  fi_key: string | null;
   business_unit: string | null;
   depositor_account_id: string | null;
   default_enabled: boolean;
   cached_jwt: string | null;
   cached_jwt_expires_at: string | null;
-}
-
-export interface CheckAltTenantAccount {
-  sso_user_id: string;
-  deposit_account_number: string;
-  enabled: boolean;
-  registered_at: string | null;
 }
 
 export function getServiceClient(): SupabaseClient {
@@ -43,20 +29,12 @@ export function getServiceClient(): SupabaseClient {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-export function getCheckAltMerchant(): string {
-  return Deno.env.get("CHECKALT_MERCHANT") ?? "lockbox5";
-}
-
-export function getCheckAltFiKey(): string {
-  const k = Deno.env.get("CHECKALT_FI_KEY");
-  if (!k) throw new Error("CHECKALT_FI_KEY not configured");
-  return k;
-}
-
 export async function loadConfig(supabase: SupabaseClient): Promise<CheckAltConfig> {
   const { data, error } = await supabase
     .from("checkalt_config")
-    .select("base_url, business_unit, depositor_account_id, default_enabled, cached_jwt, cached_jwt_expires_at")
+    .select(
+      "base_url, merchant, fi_key, business_unit, depositor_account_id, default_enabled, cached_jwt, cached_jwt_expires_at",
+    )
     .eq("singleton", true)
     .maybeSingle();
   if (error) throw error;
@@ -64,34 +42,20 @@ export async function loadConfig(supabase: SupabaseClient): Promise<CheckAltConf
   return data as CheckAltConfig;
 }
 
-// Each tenant registers its own depositor account with FinCapture
-// (POST /fincapture/useraccount/register). The userId chosen at registration
-// becomes the ssoKey used on every later deposit/process, deposit/approve and
-// deposit/history call for that tenant — this replaces the old global
-// cfg.business_unit / cfg.depositor_account_id fields.
-export async function loadTenantAccount(
+/**
+ * Returns a valid JWT for FinCapture. Uses cached JWT if not expired,
+ * otherwise authenticates via /public/fincapture/authenticate and caches the result.
+ *
+ * Sandbox/production credentials live in env secrets:
+ *   CHECKALT_USERNAME, CHECKALT_PASSWORD
+ *
+ * The `merchant` header is required by Cloudflare WAF — without it requests
+ * are blocked before reaching the application.
+ */
+export async function getCheckAltJwt(
   supabase: SupabaseClient,
-  tenantId: string | null | undefined,
-): Promise<CheckAltTenantAccount> {
-  if (!tenantId) {
-    throw new Error("No tenant associated with this check — cannot resolve CheckAlt account");
-  }
-  const { data, error } = await supabase
-    .from("checkalt_tenant_accounts")
-    .select("sso_user_id, deposit_account_number, enabled, registered_at")
-    .eq("tenant_id", tenantId)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data || !data.registered_at) {
-    throw new Error("This organization has not registered a CheckAlt depositor account yet");
-  }
-  if (!data.enabled) {
-    throw new Error("CheckAlt deposits are disabled for this organization");
-  }
-  return data as CheckAltTenantAccount;
-}
-
-export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConfig): Promise<string> {
+  cfg: CheckAltConfig,
+): Promise<string> {
   // 60s safety margin before expiry
   if (cfg.cached_jwt && cfg.cached_jwt_expires_at) {
     const exp = new Date(cfg.cached_jwt_expires_at).getTime();
@@ -100,21 +64,51 @@ export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConf
 
   const username = Deno.env.get("CHECKALT_USERNAME");
   const password = Deno.env.get("CHECKALT_PASSWORD");
-  if (!username || !password) throw new Error("CHECKALT_USERNAME / CHECKALT_PASSWORD not configured");
-  const base = (cfg.base_url ?? "https://uatapi.checkalt.com").replace(/\/$/, "");
+  if (!username || !password)
+    throw new Error("CHECKALT_USERNAME / CHECKALT_PASSWORD not configured");
+  if (!cfg.base_url) throw new Error("checkalt_config.base_url not set");
+  if (!cfg.merchant) throw new Error("checkalt_config.merchant not set");
 
-  const basic = base64FromUtf8(`${username}:${password}`);
-  const authResult = await authenticateCheckAlt(base, basic, username, password);
-  const jwt = authResult.jwt;
+  const baseUrl = cfg.base_url.replace(/\/$/, "");
 
+  // Auth endpoint is under /public — no JWT needed
+  const resp = await fetch(`${baseUrl}/public/fincapture/authenticate`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      merchant: cfg.merchant,
+    },
+    body: JSON.stringify({ userName: username, password }),
+  });
+
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`CheckAlt auth failed [${resp.status}]: ${body}`);
+  }
+
+  const data = await resp.json();
+
+  // The response body IS the JWT string (or an object with a token field)
+  const jwt: string | undefined =
+    typeof data === "string"
+      ? data
+      : (data?.token ?? data?.jwt ?? data?.accessToken);
+  if (!jwt) throw new Error("CheckAlt auth response missing token");
+
+  // FinCapture JWTs are typically valid ~1h; decode exp if present, else assume 50min.
   let expiresAt = new Date(Date.now() + 50 * 60_000).toISOString();
   try {
     const parts = jwt.split(".");
     if (parts.length === 3) {
-      const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
-      if (payload?.exp) expiresAt = new Date(payload.exp * 1000).toISOString();
+      const payload = JSON.parse(
+        atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")),
+      );
+      if (payload?.exp)
+        expiresAt = new Date(payload.exp * 1000).toISOString();
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore decode errors */
+  }
 
   await supabase
     .from("checkalt_config")
@@ -124,315 +118,31 @@ export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConf
   return jwt;
 }
 
-// Deno's default fetch User-Agent ("Deno/x.x.x") gets flagged by CheckAlt's
-// Cloudflare WAF as a bot before the request ever reaches their app (HTML
-// 400/403, no app-level error body). CheckAlt support provided a Postman
-// sample, so keep our backend client identity aligned with that known-good
-// API client rather than pretending to be a browser with no browser cookies.
-const CHECKALT_USER_AGENT =
-  "PostmanRuntime/7.43.0";
-
-const CHECKALT_DIRECT_BASE_URL = "https://uatapi.checkalt.com";
-
-// Optional static-IP relay: when CheckAlt's WAF blocks Supabase's rotating
-// egress IPs, point checkalt_config.base_url at a relay (e.g. a small EC2
-// box running Caddy) that forwards to the real CheckAlt host from a fixed
-// IP. CHECKALT_RELAY_SECRET authorizes us to that relay so it isn't an open
-// proxy to CheckAlt for anyone who finds the relay's hostname. Unset by
-// default — calls go straight to CheckAlt with no header added.
-const CHECKALT_RELAY_SECRET = Deno.env.get("CHECKALT_RELAY_SECRET");
-
-class CheckAltAuthError extends Error {
-  constructor(message: string, public status = 502) {
-    super(message);
-    this.name = "CheckAltAuthError";
-  }
-}
-
-function normalizeBaseUrl(base: string): string {
-  return base.replace(/\/$/, "");
-}
-
-function buildCheckAltUrl(base: string, path: string): string {
-  return `${normalizeBaseUrl(base)}${path.startsWith("/") ? path : `/${path}`}`;
-}
-
-function getCfRay(headers: Headers): string | undefined {
-  return headers.get("cf-ray") ?? undefined;
-}
-
-function looksLikeEdgeBlock(resp: Response, text: string): boolean {
-  const htmlBlock = /<html|<!doctype/i.test(text);
-  const hasCfRay = Boolean(getCfRay(resp.headers));
-  return htmlBlock || (hasCfRay && [400, 403, 429].includes(resp.status));
-}
-
-function edgeBlockSummary(url: string, resp: Response): string {
-  const cfRayId = getCfRay(resp.headers);
-  return `HTTP ${resp.status}${cfRayId ? `, cf-ray ${cfRayId}` : ""} at ${url}`;
-}
-
-async function fetchCheckAltWithDirectFallback(
-  configuredBase: string,
-  path: string,
-  init: RequestInit,
-): Promise<{ resp: Response; url: string; firstBlock?: string }> {
-  const primaryUrl = buildCheckAltUrl(configuredBase, path);
-  const primaryResp = await fetch(primaryUrl, init);
-  const primaryText = await primaryResp.clone().text().catch(() => "");
-
-  if (
-    looksLikeEdgeBlock(primaryResp, primaryText) &&
-    normalizeBaseUrl(configuredBase) !== CHECKALT_DIRECT_BASE_URL
-  ) {
-    const directUrl = buildCheckAltUrl(CHECKALT_DIRECT_BASE_URL, path);
-    const directHeaders = new Headers(init.headers);
-    directHeaders.delete("X-Relay-Secret");
-    const directResp = await fetch(directUrl, { ...init, headers: directHeaders });
-    return {
-      resp: directResp,
-      url: directUrl,
-      firstBlock: edgeBlockSummary(primaryUrl, primaryResp),
-    };
-  }
-
-  return { resp: primaryResp, url: primaryUrl };
-}
-
-async function authenticateCheckAlt(
-  base: string,
-  _basic: string,
-  username: string,
-  password: string,
-): Promise<{ jwt: string }> {
-  // Authoritative vendor sample (CheckAlt support, Shahuraj Garade):
-  //   POST {base}/public/fincapture/authenticate
-  //   Headers: Content-Type: application/json, merchant: lockbox5
-  //   Body:    { "userName": "...", "password": "..." }
-  // No Basic auth header — the JSON body carries the credentials.
-  const jsonBody = JSON.stringify({ userName: username, password });
-  const { resp, url, firstBlock } = await fetchCheckAltWithDirectFallback(base, "/public/fincapture/authenticate", {
-    method: "POST",
-    headers: {
-      merchant: getCheckAltMerchant(),
-      "Content-Type": "application/json",
-      Accept: "application/json, text/plain, */*",
-      "User-Agent": CHECKALT_USER_AGENT,
-      "Cache-Control": "no-cache",
-      ...(CHECKALT_RELAY_SECRET ? { "X-Relay-Secret": CHECKALT_RELAY_SECRET } : {}),
-    },
-    body: jsonBody,
-  });
-
-  const text = await resp.text();
-  const bodySummary = summarizeAuthBody(text);
-  const jwt = extractJwtFromResponse(resp.headers, text);
-  if (resp.ok && jwt) return { jwt };
-
-  const looksLikeHtml = /<html|<!doctype/i.test(text);
-  const cfRayId = resp.headers.get("cf-ray") ?? undefined;
-  if (looksLikeHtml) {
-    throw new CheckAltAuthError(
-      `CheckAlt edge rejected the request (HTTP ${resp.status}${cfRayId ? `, cf-ray ${cfRayId}` : ""}) at ${url}. ` +
-        `${firstBlock ? `Relay also failed first (${firstBlock}). ` : ""}` +
-        `Cloudflare/WAF block — request never reached the app. Forward the cf-ray to CheckAlt support.`,
-      502,
-    );
-  }
-
-  if (bodySummary.toLowerCase().includes("account has been locked")) {
-    throw new CheckAltAuthError(`CheckAlt login is locked (URL: ${url}). Contact CheckAlt support to unlock the UAT credentials.`, 409);
-  }
-  if (resp.status === 401 || resp.status === 403 || bodySummary.toLowerCase().includes("cannot be authenticated")) {
-    throw new CheckAltAuthError(`CheckAlt rejected the configured login at ${url}. Verify CHECKALT_USERNAME, CHECKALT_PASSWORD, and CHECKALT_MERCHANT in backend secrets.`, 409);
-  }
-  if (resp.ok && !jwt) {
-    throw new CheckAltAuthError(`CheckAlt auth succeeded but did not return a bearer token (URL: ${url}).`, 502);
-  }
-  throw new CheckAltAuthError(
-    `CheckAlt auth failed (${resp.status}) at ${url}. Response: ${bodySummary}`,
-    502,
-  );
-}
-
-function extractJwtFromResponse(headers: Headers, text: string): string | undefined {
-  const headerToken =
-    headers.get("authorization") ??
-    headers.get("x-auth-token") ??
-    headers.get("x-jwt-token") ??
-    headers.get("jwt") ??
-    headers.get("token");
-  if (headerToken) return headerToken.replace(/^Bearer\s+/i, "").trim();
-
-  try {
-    const data = JSON.parse(text);
-    const token =
-      data?.token ??
-      data?.jwt ??
-      data?.accessToken ??
-      data?.access_token ??
-      data?.id_token ??
-      data?.idToken ??
-      data?.authToken ??
-      data?.auth_token ??
-      data?.bearerToken ??
-      data?.bearer_token ??
-      data?.data?.token ??
-      data?.data?.jwt ??
-      data?.data?.accessToken ??
-      data?.response?.token ??
-      data?.response?.jwt ??
-      data?.result?.token ??
-      data?.result?.jwt;
-    if (typeof token === "string") return token.replace(/^Bearer\s+/i, "").trim();
-  } catch {
-    const raw = text.trim().replace(/^Bearer\s+/i, "");
-    if (raw && raw.split(".").length === 3) return raw;
-  }
-  return undefined;
-}
-
-function safeAuthHeaders(headers: Headers): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [key, value] of headers.entries()) {
-    out[key] = key.toLowerCase() === "set-cookie" ? "[cookie omitted]" : value;
-  }
-  return out;
-}
-
-function summarizeAuthBody(text: string): string {
-  if (!text) return "empty-body";
-  const compact = text.replace(/\s+/g, " ").trim();
-  return compact.length > 240 ? `${compact.slice(0, 240)}…` : compact;
-}
-
-function base64FromUtf8(value: string): string {
-  const bytes = new TextEncoder().encode(value);
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  }
-  return btoa(binary);
-}
-
-// Best-effort mirror into the general deposit_items/deposit_action pipeline.
-// Never throws — a sync failure here must not block the CheckAlt-side
-// response, since checkalt_deposits is already the source of truth.
-export async function syncDepositItem(
-  supabase: SupabaseClient,
-  params: {
-    action: "record_submission" | "record_success" | "record_failure" | "record_return";
-    deposit_item_id: string;
-    actor_id: string;
-    amount?: number;
-    notes?: string;
-    extra?: Record<string, unknown>;
-  },
-): Promise<void> {
-  const { error } = await supabase.rpc("deposit_action", {
-    p_action: params.action,
-    p_actor_id: params.actor_id,
-    p_deposit_item_id: params.deposit_item_id,
-    p_check_id: null,
-    p_provider: null,
-    p_amount: params.amount ?? null,
-    p_notes: params.notes ?? null,
-    p_extra: params.extra ?? {},
-  });
-  if (error) {
-    console.error("[checkalt] deposit_items sync failed", params.action, params.deposit_item_id, error.message);
-  }
-}
-
-// Maps FinCapture's numeric deposit status codes to ChecksOps' internal
-// checkalt_deposits.status values. Shared by checkalt-poll-status (batch
-// reconciliation via /deposit/history) and checkalt-account-status
-// (on-demand single-item refresh via /deposit/item).
-export function mapDepositStatus(code: number, current: string): string {
-  switch (code) {
-    case 127: return "submitted";
-    case 40: return "pending_approval";
-    case 120: return "rejected";
-    case 11: return "error";
-    default: return code >= 200 ? "cleared" : current;
-  }
-}
-
-interface CheckAltApiResult {
-  ok: boolean;
-  status: number;
-  json: any;
-}
-
-// NOTE: CheckAlt has not provided sample payloads for getUserAccountInfo /
-// getDepositAccountInfo. getDepositItemStatus's `referenceNumber` field is
-// confirmed from the official ClearingWorks Postman collection (it shares a
-// body shape with /fincapture/deposit/approve). Verify the rest of the
-// request/response shape against live UAT before relying on this in
-// production.
-
-export async function getUserAccountInfo(
-  supabase: SupabaseClient,
-  ssoUserId: string,
-): Promise<CheckAltApiResult> {
-  const fiKey = getCheckAltFiKey();
-  const resp = await checkAltFetch(supabase, "/fincapture/useraccount/getUserAccountInformation", {
-    method: "POST",
-    body: JSON.stringify({ fiKey, userId: ssoUserId }),
-  });
-  return { ok: resp.ok, status: resp.status, json: await resp.json().catch(() => ({})) };
-}
-
-export async function getDepositAccountInfo(
-  supabase: SupabaseClient,
-  ssoUserId: string,
-  accountNumber: string,
-): Promise<CheckAltApiResult> {
-  const fiKey = getCheckAltFiKey();
-  const resp = await checkAltFetch(supabase, "/fincapture/useraccount/getDepositAccountInformation", {
-    method: "POST",
-    body: JSON.stringify({ fiKey, userId: ssoUserId, accountNumber }),
-  });
-  return { ok: resp.ok, status: resp.status, json: await resp.json().catch(() => ({})) };
-}
-
-export async function getDepositItemStatus(
-  supabase: SupabaseClient,
-  tenantAccount: CheckAltTenantAccount,
-  referenceId: string,
-): Promise<CheckAltApiResult> {
-  const fiKey = getCheckAltFiKey();
-  const resp = await checkAltFetch(supabase, "/fincapture/deposit/item", {
-    method: "POST",
-    body: JSON.stringify({
-      fiKey,
-      ssoKey: tenantAccount.sso_user_id,
-      depositAccountNumber: tenantAccount.deposit_account_number,
-      referenceNumber: referenceId,
-    }),
-  });
-  return { ok: resp.ok, status: resp.status, json: await resp.json().catch(() => ({})) };
-}
-
+/**
+ * Authenticated fetch wrapper for FinCapture endpoints.
+ * Automatically loads config, acquires/caches JWT, and injects
+ * the required `merchant` + `Authorization` headers.
+ *
+ * `path` should be the API path *without* the base URL, e.g.
+ *   "/fincapture/deposit/process"
+ */
 export async function checkAltFetch(
   supabase: SupabaseClient,
   path: string,
-  init: RequestInit & { idempotencyKey?: string } = {},
+  init: RequestInit = {},
 ): Promise<Response> {
   const cfg = await loadConfig(supabase);
+  if (!cfg.merchant) throw new Error("checkalt_config.merchant not set");
+
   const jwt = await getCheckAltJwt(supabase, cfg);
-  const base = (cfg.base_url ?? "https://uatapi.checkalt.com").replace(/\/$/, "");
+  const baseUrl = (cfg.base_url ?? "").replace(/\/$/, "");
+  const url = `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
+
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${jwt}`);
-  // Vendor instruction (authoritative): add merchant=lockbox5 on ALL API calls.
-  headers.set("merchant", getCheckAltMerchant());
-  headers.set("User-Agent", CHECKALT_USER_AGENT);
-  headers.set("Cache-Control", "no-cache");
-  if (CHECKALT_RELAY_SECRET) headers.set("X-Relay-Secret", CHECKALT_RELAY_SECRET);
-  if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json");
-  // Per Clearingworks dev guide: CW-IDEMPOTENCY guarantees a request runs
-  // exactly once even if retried. Required for deposit/process submissions.
-  if (init.idempotencyKey) headers.set("CW-IDEMPOTENCY", init.idempotencyKey);
-  const { resp } = await fetchCheckAltWithDirectFallback(base, path, { ...init, headers });
-  return resp;
+  headers.set("merchant", cfg.merchant);
+  if (!headers.has("Content-Type") && init.body)
+    headers.set("Content-Type", "application/json");
+
+  return await fetch(url, { ...init, headers });
 }
