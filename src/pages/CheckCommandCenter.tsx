@@ -763,7 +763,12 @@ export default function CheckCommandCenter() {
       const insuredPayee = check.check_payees?.find((p) => p.payee_type === "insured")?.payee_name;
       const parsedInsured = extractInsuredName(check.payee_line);
       const policyholderName = linked?.policyholder_name || insuredPayee || parsedInsured || "Unknown insured";
-      const key = `${claimNumber.trim().toLowerCase()}::${policyholderName.trim().toLowerCase()}`;
+      // Group strictly by claim number so every check tied to the same claim #
+      // appears under one file. Unlinked checks stay separate (keyed by id).
+      const hasClaim = !!(linked?.claim_number || check.detected_claim_number);
+      const key = hasClaim
+        ? `claim::${claimNumber.trim().toLowerCase()}`
+        : `unlinked::${check.id}`;
       const existing = groups.get(key);
 
       if (existing) {
