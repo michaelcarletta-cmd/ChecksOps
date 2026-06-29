@@ -135,9 +135,69 @@ export function CheckAltSettings() {
     },
   });
 
+  // ---- Tenant account registration ----
+  const { data: regAccount, isLoading: regLoading } = useQuery({
+    queryKey: ["checkalt-tenant-account", tenant?.id],
+    enabled: isAdmin && !!tenant?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("checkalt_tenant_accounts")
+        .select("sso_user_id, deposit_account_number, first_name, last_name, email, enabled, registered_at, last_register_payload")
+        .eq("tenant_id", tenant!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
 
+  const [reg, setReg] = useState({
+    sso_user_id: "",
+    first_name: "",
+    last_name: "",
+    email: "",
+    deposit_account_number: "",
+  });
 
-  
+  useEffect(() => {
+    if (regAccount) {
+      setReg({
+        sso_user_id: regAccount.sso_user_id ?? "",
+        first_name: regAccount.first_name ?? "",
+        last_name: regAccount.last_name ?? "",
+        email: regAccount.email ?? "",
+        deposit_account_number: regAccount.deposit_account_number ?? "",
+      });
+    } else if (cfg?.depositor_account_id) {
+      setReg((r) => ({ ...r, deposit_account_number: r.deposit_account_number || cfg.depositor_account_id! }));
+    }
+  }, [regAccount, cfg]);
+
+  const registerMutation = useMutation({
+    mutationFn: async () => {
+      if (!tenant?.id) throw new Error("No tenant in context");
+      const { data, error } = await supabase.functions.invoke("checkalt-register-account", {
+        body: { tenant_id: tenant.id, ...reg },
+      });
+      if (error) {
+        let msg = error.message ?? "Registration failed";
+        try { const b = await (error as any).context?.json?.(); if (b?.error) msg = typeof b.error === "string" ? b.error : JSON.stringify(b.error); } catch {}
+        throw new Error(msg);
+      }
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data;
+    },
+    onSuccess: () => {
+      toast({ title: "Account registered with CheckAlt" });
+      qc.invalidateQueries({ queryKey: ["checkalt-tenant-account"] });
+    },
+    onError: (e: unknown) =>
+      toast({
+        title: "Registration failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      }),
+  });
+
 
   if (!isAdmin) {
     return (
