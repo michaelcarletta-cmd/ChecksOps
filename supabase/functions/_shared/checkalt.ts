@@ -126,9 +126,11 @@ export async function getCheckAltJwt(supabase: SupabaseClient, cfg: CheckAltConf
 
 // Deno's default fetch User-Agent ("Deno/x.x.x") gets flagged by CheckAlt's
 // Cloudflare WAF as a bot before the request ever reaches their app (HTML
-// 400/403, no app-level error body). A browser-shaped User-Agent lets it through.
+// 400/403, no app-level error body). CheckAlt support provided a Postman
+// sample, so keep our backend client identity aligned with that known-good
+// API client rather than pretending to be a browser with no browser cookies.
 const CHECKALT_USER_AGENT =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+  "PostmanRuntime/7.43.0";
 
 // Optional static-IP relay: when CheckAlt's WAF blocks Supabase's rotating
 // egress IPs, point checkalt_config.base_url at a relay (e.g. a small EC2
@@ -165,6 +167,7 @@ async function authenticateCheckAlt(
       "Content-Type": "application/json",
       Accept: "application/json, text/plain, */*",
       "User-Agent": CHECKALT_USER_AGENT,
+      "Cache-Control": "no-cache",
       ...(CHECKALT_RELAY_SECRET ? { "X-Relay-Secret": CHECKALT_RELAY_SECRET } : {}),
     },
     body: jsonBody,
@@ -373,6 +376,7 @@ export async function checkAltFetch(
   // Vendor instruction (authoritative): add merchant=lockbox5 on ALL API calls.
   headers.set("merchant", getCheckAltMerchant());
   headers.set("User-Agent", CHECKALT_USER_AGENT);
+  headers.set("Cache-Control", "no-cache");
   if (CHECKALT_RELAY_SECRET) headers.set("X-Relay-Secret", CHECKALT_RELAY_SECRET);
   if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json");
   // Per Clearingworks dev guide: CW-IDEMPOTENCY guarantees a request runs
