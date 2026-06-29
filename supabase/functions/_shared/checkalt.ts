@@ -146,32 +146,27 @@ class CheckAltAuthError extends Error {
 
 async function authenticateCheckAlt(
   base: string,
-  basic: string,
+  _basic: string,
   username: string,
   password: string,
 ): Promise<{ jwt: string }> {
-  // POST {base}/public/jwtauth/authenticate
-  // Per CheckAlt onboarding (authoritative):
-  //   - URL: /public/jwtauth/authenticate
-  //   - merchant: lockbox5 header on ALL calls
-  //   - Basic auth header with userId:password
-  //   - Body: form-urlencoded. JSON bodies are blocked by their Cloudflare WAF
-  //     before reaching the app. Empty bodies are rejected by the app
-  //     ("Request body is required"). Form-urlencoded with the credentials is
-  //     the one shape that satisfies both layers.
-  const url = `${base}/public/jwtauth/authenticate`;
-  const formBody = new URLSearchParams({ userId: username, password }).toString();
+  // Authoritative vendor sample (CheckAlt support, Shahuraj Garade):
+  //   POST {base}/public/fincapture/authenticate
+  //   Headers: Content-Type: application/json, merchant: lockbox5
+  //   Body:    { "userName": "...", "password": "..." }
+  // No Basic auth header — the JSON body carries the credentials.
+  const url = `${base}/public/fincapture/authenticate`;
+  const jsonBody = JSON.stringify({ userName: username, password });
   const resp = await fetch(url, {
     method: "POST",
     headers: {
       merchant: getCheckAltMerchant(),
-      "Content-Type": "application/x-www-form-urlencoded",
+      "Content-Type": "application/json",
       Accept: "application/json, text/plain, */*",
-      Authorization: `Basic ${basic}`,
       "User-Agent": CHECKALT_USER_AGENT,
       ...(CHECKALT_RELAY_SECRET ? { "X-Relay-Secret": CHECKALT_RELAY_SECRET } : {}),
     },
-    body: formBody,
+    body: jsonBody,
   });
 
   const text = await resp.text();
@@ -179,19 +174,15 @@ async function authenticateCheckAlt(
   const jwt = extractJwtFromResponse(resp.headers, text);
   if (resp.ok && jwt) return { jwt };
 
-  // Cloudflare/WAF rejection — response is HTML, not JSON. Surface a clean
-  // error instead of dumping the HTML into the UI toast.
   const looksLikeHtml = /<html|<!doctype/i.test(text);
   const cfRayId = resp.headers.get("cf-ray") ?? undefined;
   if (looksLikeHtml) {
     throw new CheckAltAuthError(
       `CheckAlt edge rejected the request (HTTP ${resp.status}${cfRayId ? `, cf-ray ${cfRayId}` : ""}) at ${url}. ` +
-        `This is a Cloudflare/WAF block — request never reached CheckAlt's app. ` +
-        `Forward the cf-ray ID to CheckAlt support and ask them to allowlist backend function egress.`,
+        `Cloudflare/WAF block — request never reached the app. Forward the cf-ray to CheckAlt support.`,
       502,
     );
   }
-
 
   if (bodySummary.toLowerCase().includes("account has been locked")) {
     throw new CheckAltAuthError(`CheckAlt login is locked (URL: ${url}). Contact CheckAlt support to unlock the UAT credentials.`, 409);
@@ -206,7 +197,6 @@ async function authenticateCheckAlt(
     `CheckAlt auth failed (${resp.status}) at ${url}. Response: ${bodySummary}`,
     502,
   );
-
 }
 
 function extractJwtFromResponse(headers: Headers, text: string): string | undefined {
