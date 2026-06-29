@@ -2792,7 +2792,9 @@ export type Database = {
           created_at: string
           default_enabled: boolean
           depositor_account_id: string | null
+          fi_key: string | null
           id: string
+          merchant: string | null
           notes: string | null
           singleton: boolean
           updated_at: string
@@ -2807,7 +2809,9 @@ export type Database = {
           created_at?: string
           default_enabled?: boolean
           depositor_account_id?: string | null
+          fi_key?: string | null
           id?: string
+          merchant?: string | null
           notes?: string | null
           singleton?: boolean
           updated_at?: string
@@ -2822,7 +2826,9 @@ export type Database = {
           created_at?: string
           default_enabled?: boolean
           depositor_account_id?: string | null
+          fi_key?: string | null
           id?: string
+          merchant?: string | null
           notes?: string | null
           singleton?: boolean
           updated_at?: string
