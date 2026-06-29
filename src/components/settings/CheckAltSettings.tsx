@@ -111,7 +111,7 @@ export function CheckAltSettings() {
     },
   });
 
-  const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/checkalt-webhook`;
+  
 
   if (!isAdmin) {
     return (
@@ -268,25 +268,10 @@ export function CheckAltSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Webhook endpoint</CardTitle>
-          <CardDescription>
-            Register this URL with CheckAlt to receive real-time status updates. They will
-            include a shared-secret header that matches the <code>CHECKALT_WEBHOOK_SECRET</code>{" "}
-            backend secret.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <code className="block rounded-md bg-muted px-3 py-2 text-xs font-mono break-all">
-            {webhookUrl}
-          </code>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle className="text-sm">Required backend secrets</CardTitle>
           <CardDescription>
             These are stored securely and only available to the CheckAlt backend functions.
+            CheckAlt does not require a webhook — status is pulled via the reconcile action above.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 text-xs">
@@ -297,10 +282,6 @@ export function CheckAltSettings() {
           <div className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
             <code>CHECKALT_PASSWORD</code>
             <span className="text-muted-foreground">FinCapture API password</span>
-          </div>
-          <div className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
-            <code>CHECKALT_WEBHOOK_SECRET</code>
-            <span className="text-muted-foreground">Shared secret for webhook verification</span>
           </div>
         </CardContent>
       </Card>
