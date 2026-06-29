@@ -21,6 +21,7 @@ import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw, UserPlus } fr
  */
 export function CheckAltSettings() {
   const { isAdmin } = usePermissions();
+  const { tenant } = useTenant();
   const { toast } = useToast();
   const qc = useQueryClient();
 
