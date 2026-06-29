@@ -1,0 +1,1 @@
+ALTER TABLE public.checkalt_config ADD COLUMN IF NOT EXISTS merchant text, ADD COLUMN IF NOT EXISTS fi_key text;

@@ -288,3 +288,96 @@ export function CheckAltSettings() {
     </div>
   );
 }
+
+/**
+ * Manager-side queue showing CheckAlt deposits awaiting manual approval.
+ * Rendered inside the Deposit Manager Command Center.
+ */
+export function PendingApprovalDeposits() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery({
+    queryKey: ["checkalt-pending-approvals"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("deposit_pending_approvals")
+        .select("id, description, item_count, total_amount, requested_at, status")
+        .eq("approval_type", "checkalt_deposit")
+        .eq("status", "pending")
+        .order("requested_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const decide = useMutation({
+    mutationFn: async ({ id, approve }: { id: string; approve: boolean }) => {
+      const { error } = await supabase
+        .from("deposit_pending_approvals")
+        .update({
+          status: approve ? "approved" : "rejected",
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Decision recorded" });
+      qc.invalidateQueries({ queryKey: ["checkalt-pending-approvals"] });
+    },
+    onError: (e: unknown) => {
+      toast({
+        title: "Failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-6">
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+  if (!data || data.length === 0) {
+    return <p className="text-xs text-muted-foreground py-2">No deposits awaiting approval.</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      {data.map((row) => (
+        <div
+          key={row.id}
+          className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-3 py-2 text-sm"
+        >
+          <div className="min-w-0">
+            <div className="font-medium truncate">{row.description ?? "CheckAlt deposit"}</div>
+            <div className="text-xs text-muted-foreground">
+              {row.item_count ?? 0} item(s) · ${Number(row.total_amount ?? 0).toLocaleString()}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => decide.mutate({ id: row.id, approve: false })}
+              disabled={decide.isPending}
+            >
+              Reject
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => decide.mutate({ id: row.id, approve: true })}
+              disabled={decide.isPending}
+            >
+              Approve
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
