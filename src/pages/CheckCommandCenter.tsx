@@ -1181,47 +1181,96 @@ export default function CheckCommandCenter() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {fundsReleased.map((split: any) => {
-                          const acct = split.stakeholder_accounts;
-                          const batch = split.disbursement_batches;
-                          const check = batch?.check_intake_items;
-                          const fundsType = check?.funds_type;
-                          const checkId = batch?.check_intake_item_id;
-                          const isSelected = checkId && selectedCheck === checkId;
-                          return (
-                            <TableRow
-                              key={split.id}
-                              className={`${checkId ? "cursor-pointer" : ""} ${isSelected ? "bg-accent" : ""}`}
-                              onClick={() => checkId && setSelectedCheck(isSelected ? null : checkId)}
-                            >
-                              <TableCell className="font-mono text-sm">#{check?.check_number || "—"}</TableCell>
-                              <TableCell className="text-sm">{check?.carrier_name || "—"}</TableCell>
-                              <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate" title={check?.property_address || ""}>
-                                {check?.property_address || "—"}
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums">
-                                ${Number(split.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                              </TableCell>
-                              <TableCell>
-                                {fundsType ? (
-                                  <Badge variant="outline" className="text-[10px] uppercase">
-                                    {fundsType === "recoverable_depreciation"
-                                      ? "Rec. Dep."
-                                      : fundsType === "overhead_and_profit"
-                                      ? "O&P"
-                                      : fundsType}
-                                  </Badge>
-                                ) : (
-                                  <span className="text-[10px] text-muted-foreground">—</span>
-                                )}
-                              </TableCell>
-                              <TableCell className="text-sm">{split.recipient_name ?? acct?.nickname ?? acct?.custname ?? "—"}{split.external_check_number ? <span className="ml-1 text-xs text-muted-foreground font-mono">· Ck #{split.external_check_number}</span> : null}</TableCell>
-                              <TableCell className="text-sm text-muted-foreground">
-                                {split.settled_at ? format(new Date(split.settled_at), "MMM d, yyyy") : "—"}
-                              </TableCell>
-                            </TableRow>
+                        {(() => {
+                          // Group released splits by claim # so every disbursement
+                          // tied to the same claim sits under one darker file band.
+                          const groups = new Map<string, { key: string; claimNumber: string; policyholderName: string; rows: any[]; total: number; latest: string }>();
+                          fundsReleased.forEach((split: any) => {
+                            const batch = split.disbursement_batches;
+                            const check = batch?.check_intake_items;
+                            const linked = check?.claim_id ? claimLookup.get(check.claim_id) : null;
+                            const claimNumber = linked?.claim_number || check?.detected_claim_number || "Unlinked claim";
+                            const policyholderName = linked?.policyholder_name || check?.payee_line || "Unknown insured";
+                            const hasClaim = !!(linked?.claim_number || check?.detected_claim_number);
+                            const key = hasClaim
+                              ? `claim::${String(claimNumber).trim().toLowerCase()}`
+                              : `unlinked::${split.id}`;
+                            const existing = groups.get(key);
+                            const settledAt = split.settled_at ?? split.created_at ?? new Date().toISOString();
+                            if (existing) {
+                              existing.rows.push(split);
+                              existing.total += Number(split.amount) || 0;
+                              if (new Date(settledAt).getTime() > new Date(existing.latest).getTime()) existing.latest = settledAt;
+                            } else {
+                              groups.set(key, { key, claimNumber, policyholderName, rows: [split], total: Number(split.amount) || 0, latest: settledAt });
+                            }
+                          });
+                          const sortedGroups = Array.from(groups.values()).sort(
+                            (a, b) => new Date(b.latest).getTime() - new Date(a.latest).getTime(),
                           );
-                        })}
+                          return sortedGroups.map((group) => (
+                            <Fragment key={group.key}>
+                              <TableRow className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold">
+                                <TableCell colSpan={7} className="py-3">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">Claim Check File</Badge>
+                                      <span className="font-semibold text-foreground">{group.policyholderName}</span>
+                                      <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
+                                      <span className="text-xs font-normal text-muted-foreground">
+                                        {group.rows.length} {group.rows.length === 1 ? "disbursement" : "disbursements"}
+                                      </span>
+                                    </div>
+                                    <div className="text-sm font-semibold tabular-nums text-foreground">
+                                      ${group.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                    </div>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                              {group.rows.map((split: any) => {
+                                const acct = split.stakeholder_accounts;
+                                const batch = split.disbursement_batches;
+                                const check = batch?.check_intake_items;
+                                const fundsType = check?.funds_type;
+                                const checkId = batch?.check_intake_item_id;
+                                const isSelected = checkId && selectedCheck === checkId;
+                                return (
+                                  <TableRow
+                                    key={split.id}
+                                    className={`${checkId ? "cursor-pointer" : ""} ${isSelected ? "bg-accent" : ""}`}
+                                    onClick={() => checkId && setSelectedCheck(isSelected ? null : checkId)}
+                                  >
+                                    <TableCell className="font-mono text-sm">#{check?.check_number || "—"}</TableCell>
+                                    <TableCell className="text-sm">{check?.carrier_name || "—"}</TableCell>
+                                    <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate" title={check?.property_address || ""}>
+                                      {check?.property_address || "—"}
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums">
+                                      ${Number(split.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                    </TableCell>
+                                    <TableCell>
+                                      {fundsType ? (
+                                        <Badge variant="outline" className="text-[10px] uppercase">
+                                          {fundsType === "recoverable_depreciation"
+                                            ? "Rec. Dep."
+                                            : fundsType === "overhead_and_profit"
+                                            ? "O&P"
+                                            : fundsType}
+                                        </Badge>
+                                      ) : (
+                                        <span className="text-[10px] text-muted-foreground">—</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-sm">{split.recipient_name ?? acct?.nickname ?? acct?.custname ?? "—"}{split.external_check_number ? <span className="ml-1 text-xs text-muted-foreground font-mono">· Ck #{split.external_check_number}</span> : null}</TableCell>
+                                    <TableCell className="text-sm text-muted-foreground">
+                                      {split.settled_at ? format(new Date(split.settled_at), "MMM d, yyyy") : "—"}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </Fragment>
+                          ));
+                        })()}
                       </TableBody>
                     </Table>
                   )}
