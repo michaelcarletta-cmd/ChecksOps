@@ -115,13 +115,24 @@ Deno.serve(async (req) => {
       if (error || !data)
         throw new Error(`Image download failed: ${error?.message}`);
       const buf = new Uint8Array(await data.arrayBuffer());
+      // Chunked base64 encoding — avoids building a huge intermediate
+      // binary string (which blows the 150MB edge runtime memory cap on
+      // multi-MB check images). Process 32KB at a time.
+      const CHUNK = 0x8000;
       let binary = "";
-      for (let i = 0; i < buf.length; i++)
-        binary += String.fromCharCode(buf[i]);
-      return btoa(binary);
+      for (let i = 0; i < buf.length; i += CHUNK) {
+        binary += String.fromCharCode.apply(
+          null,
+          buf.subarray(i, i + CHUNK) as unknown as number[],
+        );
+      }
+      const b64 = btoa(binary);
+      binary = "";
+      return b64;
     };
     const frontB64 = await downloadAsB64(check.front_image_path);
     const backB64 = await downloadAsB64(check.back_image_path);
+
     if (!frontB64)
       throw new Error("Front image required for CheckAlt submission");
 
