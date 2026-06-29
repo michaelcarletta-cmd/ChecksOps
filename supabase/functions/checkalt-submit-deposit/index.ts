@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
     const downloadAsB64 = async (path: string | null) => {
       if (!path) return null;
       const { data, error } = await supabase.storage
-        .from("check-images")
+        .from("claim-files")
         .download(path);
       if (error || !data)
         throw new Error(`Image download failed: ${error?.message}`);
