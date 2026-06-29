@@ -111,6 +111,30 @@ export function CheckAltSettings() {
     },
   });
 
+  const testMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("checkalt-test-connection");
+      if (error) throw error;
+      if (data && data.success === false) throw new Error(data.error || "Test failed");
+      return data as { success: boolean; message: string; token_preview?: string };
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Connection successful",
+        description: data.message + (data.token_preview ? ` (token ${data.token_preview})` : ""),
+      });
+    },
+    onError: (e: unknown) => {
+      toast({
+        title: "Connection test failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    },
+  });
+
+
+
   
 
   if (!isAdmin) {
