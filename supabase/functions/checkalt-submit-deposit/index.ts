@@ -11,6 +11,7 @@ import { z } from "https://esm.sh/zod@3.23.8";
 import {
   getServiceClient,
   loadConfig,
+  loadTenantAccount,
   checkAltFetch,
 } from "../_shared/checkalt.ts";
 
