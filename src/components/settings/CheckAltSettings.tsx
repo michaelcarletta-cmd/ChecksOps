@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,24 @@ import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useTenant } from "@/contexts/TenantContext";
 import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw, Check, X, UserPlus } from "lucide-react";
+
+// supabase-js's functions.invoke() only sets error.message to the generic
+// "Edge Function returned a non-2xx status code" — the actual { error: ... }
+// body our edge functions return (e.g. the CheckAltAuthError message with a
+// cf-ray ID) sits unread on error.context (the raw Response). Unwrap it so
+// toasts show the real diagnostic instead of the generic supabase-js text.
+async function functionErrorToError(error: unknown): Promise<Error> {
+  if (error instanceof FunctionsHttpError) {
+    try {
+      const body = await error.context.json();
+      if (typeof body?.error === "string") return new Error(body.error);
+      if (body?.error) return new Error(JSON.stringify(body.error));
+    } catch {
+      // body wasn't JSON — fall through to the generic message below
+    }
+  }
+  return error instanceof Error ? error : new Error("Unknown error");
+}
 
 interface PendingApprovalDeposit {
   id: string;
@@ -51,7 +70,7 @@ export function PendingApprovalDeposits() {
       const { data, error } = await supabase.functions.invoke("checkalt-approve-deposit", {
         body: vars,
       });
-      if (error) throw error;
+      if (error) throw await functionErrorToError(error);
       return data as { status: string };
     },
     onSuccess: (data, vars) => {
@@ -80,7 +99,7 @@ export function PendingApprovalDeposits() {
       const { data, error } = await supabase.functions.invoke("checkalt-account-status", {
         body: { action: "deposit_item", deposit_id: depositId },
       });
-      if (error) throw error;
+      if (error) throw await functionErrorToError(error);
       return data as { ok: boolean; status: number; json: any };
     },
     onSuccess: (data) => {
@@ -256,7 +275,7 @@ function TenantDepositorAccount({ tenantId, tenantName }: { tenantId: string; te
       const { data, error } = await supabase.functions.invoke("checkalt-account-status", {
         body: { action: "user_account", tenant_id: tenantId },
       });
-      if (error) throw error;
+      if (error) throw await functionErrorToError(error);
       return data as { ok: boolean; status: number; json: any };
     },
     onSuccess: (data) => {
@@ -520,7 +539,7 @@ export function CheckAltSettings() {
   const pollMutation = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("checkalt-poll-status");
-      if (error) throw error;
+      if (error) throw await functionErrorToError(error);
       return data as { polled: number; updated: number; errors: number };
     },
     onSuccess: (data) => {
