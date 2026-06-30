@@ -5,8 +5,10 @@
 //
 // Sample payload (from CheckAlt's own Postman collection):
 //   {
-//     fiKey, userId, firstName, lastName, emailAddress,
-//     isSSORequest: true,
+//     fiKey: "<configure key>",
+//     ssorequest: true,
+//     userID: "mcarletta",
+//     firstName, lastName, emailAddress,
 //     accountDataList: [{ accountNumber }]
 //   }
 //
@@ -82,8 +84,8 @@ Deno.serve(async (req) => {
     }
     const payload = {
       fiKey: cfg.fi_key,
-      isSSORequest: true,
-      userId: sso_user_id,
+      ssorequest: true,
+      userID: sso_user_id,
       firstName: first_name,
       lastName: last_name,
       emailAddress: email,
