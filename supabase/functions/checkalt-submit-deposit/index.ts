@@ -27,11 +27,26 @@ const MIN_QUALITY = 45;
 const PER_IMAGE_BYTES_BUDGET = 750_000;   // ~750KB encoded JPEG per side
 const MAX_TOTAL_B64_CHARS = 2_400_000;    // ~1.8MB combined base64 payload
 
-const IMAGESCRIPT_URL = "https://deno.land/x/imagescript@1.2.17/mod.ts";
+// imagescript via esm.sh — deno.land/x intermittently 404s in the edge runtime
+const IMAGESCRIPT_URLS = [
+  "https://esm.sh/imagescript@1.3.0",
+  "https://esm.sh/imagescript@1.2.17",
+  "https://deno.land/x/imagescript@1.2.17/mod.ts",
+];
 let _imagescript: any = null;
 async function getImageScript() {
-  if (!_imagescript) _imagescript = await import(IMAGESCRIPT_URL);
-  return _imagescript;
+  if (_imagescript) return _imagescript;
+  let lastErr: unknown;
+  for (const url of IMAGESCRIPT_URLS) {
+    try {
+      _imagescript = await import(url);
+      return _imagescript;
+    } catch (e) {
+      lastErr = e;
+      console.warn(`[checkalt-submit-deposit] imagescript import failed at ${url}: ${(e as Error).message}`);
+    }
+  }
+  throw lastErr;
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
