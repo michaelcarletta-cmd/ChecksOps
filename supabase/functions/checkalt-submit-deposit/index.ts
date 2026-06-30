@@ -5,6 +5,11 @@
 // Returns the CheckAlt reference number and writes a checkalt_deposits row.
 // Live traffic only happens once CHECKALT_USERNAME/PASSWORD + base_url + merchant
 // + fi_key are configured.
+//
+// NOTE: Heavy image libraries (imagescript, resvg_wasm) removed to stay within
+// edge function compute limits. Image compression should happen client-side
+// before upload. If images exceed CheckAlt's ~10MB payload limit after base64
+// encoding, the function returns an error asking the user to upload smaller images.
 
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
 import { z } from "https://esm.sh/zod@3.23.8";
@@ -14,80 +19,10 @@ import {
   checkAltFetch,
 } from "../_shared/checkalt.ts";
 
-let imageScriptPromise: Promise<any> | null = null;
-async function loadImageScript(): Promise<any> {
-  if (!imageScriptPromise) {
-    imageScriptPromise = import("https://deno.land/x/imagescript@1.2.17/mod.ts");
-  }
-  return imageScriptPromise;
-}
-
-let svgRenderPromise: Promise<((svg: string) => Promise<Uint8Array>) | null> | null = null;
-async function loadSvgRenderer(): Promise<((svg: string) => Promise<Uint8Array>) | null> {
-  if (!svgRenderPromise) {
-    svgRenderPromise = import("https://deno.land/x/resvg_wasm@0.2.0/mod.ts")
-      .then((mod) => mod.render as (svg: string) => Promise<Uint8Array>)
-      .catch((e) => {
-        console.warn("[checkalt-submit-deposit] SVG renderer unavailable", e);
-        return null;
-      });
-  }
-  return svgRenderPromise;
-}
-
-const MAX_CHECKALT_IMAGE_B64_CHARS = 4_000_000;
-const MAX_CHECKALT_IMAGE_PIXELS = 2_400_000;
-
-function normalizeAccountNumber(value: unknown): string {
-  return String(value ?? "").replace(/\D/g, "");
-}
-
-function readVendorMessage(payload: unknown): string | null {
-  if (!payload || typeof payload !== "object") return null;
-  const obj = payload as Record<string, unknown>;
-  const message = obj.message ?? obj.error ?? obj.statusDescription;
-  return typeof message === "string" && message.trim() ? message.trim() : null;
-}
-
-async function resolveDepositSsoKey(
-  supabase: ReturnType<typeof getServiceClient>,
-  fiKey: string,
-  userId: string,
-  depositAccountNumber: string,
-): Promise<{ ssoKey: string; lookupPayload: unknown }> {
-  const resp = await checkAltFetch(supabase, "/fincapture/useraccount/getUserAccountInformation", {
-    method: "POST",
-    body: JSON.stringify({
-      fiKey,
-      isSSORequest: true,
-      userId,
-    }),
-  });
-  const text = await resp.text();
-  let json: unknown = {};
-  try { json = text ? JSON.parse(text) : {}; } catch { json = { raw: text }; }
-
-  if (!resp.ok) {
-    const vendorMsg = readVendorMessage(json) ?? text.slice(0, 300) ?? `HTTP ${resp.status}`;
-    throw new Error(`CheckAlt user lookup failed [${resp.status}]: ${vendorMsg}`);
-  }
-
-  const accountDataList = Array.isArray((json as any)?.accountDataList)
-    ? (json as any).accountDataList
-    : [];
-  const targetAccount = normalizeAccountNumber(depositAccountNumber);
-  const matched = accountDataList.find(
-    (acct: any) => normalizeAccountNumber(acct?.accountNumber) === targetAccount,
-  ) ?? accountDataList[0];
-  const ssoKey = matched?.ssoKey;
-  if (typeof ssoKey !== "string" || !ssoKey.trim()) {
-    throw new Error(
-      "CheckAlt user is registered, but CheckAlt did not return the deposit ssoKey for this account. Re-register the tenant account, then try the deposit again.",
-    );
-  }
-
-  return { ssoKey: ssoKey.trim(), lookupPayload: json };
-}
+// CheckAlt has a ~10MB total payload limit. Base64 adds ~33% overhead.
+// 3MB per image raw ≈ 4MB base64 ≈ 8MB for front+back with JSON wrapper.
+const MAX_IMAGE_BYTES = 3_500_000;
+const MAX_TOTAL_B64_CHARS = 8_800_000;
 
 function bytesToBase64(bytes: Uint8Array): string {
   const CHUNK = 0x8000;
@@ -99,67 +34,6 @@ function bytesToBase64(bytes: Uint8Array): string {
     );
   }
   return btoa(binary);
-}
-
-function isSvgImage(path: string, contentType: string | null, bytes: Uint8Array): boolean {
-  if (path.toLowerCase().endsWith(".svg") || contentType?.includes("svg")) return true;
-  const head = new TextDecoder().decode(bytes.subarray(0, Math.min(bytes.length, 256))).trimStart();
-  return head.startsWith("<svg") || head.startsWith("<?xml");
-}
-
-async function normalizeImageForCheckAlt(
-  bytes: Uint8Array,
-  path: string,
-  contentType: string | null,
-  label: "front" | "back",
-): Promise<string> {
-  let working = bytes;
-
-  if (isSvgImage(path, contentType, working)) {
-    const render = await loadSvgRenderer();
-    if (!render) throw new Error(`${label} image is SVG and could not be rasterized for CheckAlt`);
-    const svg = new TextDecoder().decode(working);
-    working = await render(svg);
-    console.log(`[checkalt-submit-deposit] rasterized ${label} SVG ${bytes.length}B -> ${working.length}B PNG`);
-  }
-
-  let initialB64 = bytesToBase64(working);
-  if (initialB64.length <= MAX_CHECKALT_IMAGE_B64_CHARS && !path.toLowerCase().endsWith(".png")) {
-    return initialB64;
-  }
-
-  const lib = await loadImageScript();
-  const decoded = await lib.Image.decode(working);
-  const originalWidth = decoded.width;
-  const originalHeight = decoded.height;
-  const pixelCount = originalWidth * originalHeight;
-  const ratio = pixelCount > MAX_CHECKALT_IMAGE_PIXELS
-    ? Math.sqrt(MAX_CHECKALT_IMAGE_PIXELS / pixelCount)
-    : 1;
-  const targetWidth = Math.max(900, Math.floor(originalWidth * ratio));
-  const targetHeight = Math.max(400, Math.floor(originalHeight * ratio));
-  if (ratio < 1) decoded.resize(targetWidth, targetHeight);
-
-  let bestBytes: Uint8Array | null = null;
-  let bestB64 = initialB64;
-  for (const quality of [82, 72, 62, 52, 42]) {
-    const encoded = await decoded.clone().encodeJPEG(quality);
-    const b64 = bytesToBase64(encoded);
-    bestBytes = encoded;
-    bestB64 = b64;
-    if (b64.length <= MAX_CHECKALT_IMAGE_B64_CHARS) {
-      console.log(
-        `[checkalt-submit-deposit] normalized ${label} ${originalWidth}x${originalHeight} ${bytes.length}B -> ${decoded.width}x${decoded.height} ${encoded.length}B JPEG q${quality}`,
-      );
-      return b64;
-    }
-  }
-
-  const finalLength = bestBytes?.length ?? working.length;
-  console.warn(
-    `[checkalt-submit-deposit] ${label} image still large after compression: ${bestB64.length} base64 chars (${finalLength}B raw)`,
-  );
-  return bestB64;
 }
 
 const BodySchema = z.object({
@@ -261,9 +135,15 @@ Deno.serve(async (req) => {
         .from("claim-files")
         .download(path);
       if (error || !data)
-        throw new Error(`Image download failed: ${error?.message}`);
+        throw new Error(`${label} image download failed: ${error?.message}`);
       const bytes = new Uint8Array(await data.arrayBuffer());
-      return await normalizeImageForCheckAlt(bytes, path, data.type || null, label);
+      if (bytes.length > MAX_IMAGE_BYTES) {
+        throw new Error(
+          `${label} image is too large (${(bytes.length / 1_000_000).toFixed(1)}MB). ` +
+          `Please upload a smaller image (max ~3.5MB). Compress or resize it before uploading.`
+        );
+      }
+      return bytesToBase64(bytes);
     };
     const frontB64 = await downloadAsB64(check.front_image_path, "front");
     const backB64 = await downloadAsB64(check.back_image_path, "back");
@@ -271,9 +151,26 @@ Deno.serve(async (req) => {
     if (!frontB64)
       throw new Error("Front image required for CheckAlt submission");
 
-    const estimatedPayloadSize = frontB64.length + (backB64?.length ?? 0);
-    if (estimatedPayloadSize > 8_800_000) {
-      throw new Error(`Check images are still too large for CheckAlt after compression (${estimatedPayloadSize} bytes). Re-upload smaller front/back images.`);
+    const totalB64 = frontB64.length + (backB64?.length ?? 0);
+    if (totalB64 > MAX_TOTAL_B64_CHARS) {
+      throw new Error(
+        `Combined check images are too large for CheckAlt (${(totalB64 / 1_000_000).toFixed(1)}MB encoded). ` +
+        `Please upload smaller front/back images.`
+      );
+    }
+
+    // --- look up tenant-specific CheckAlt account ---
+    const { data: tenantAccount, error: taErr } = await supabase
+      .from("checkalt_tenant_accounts")
+      .select("sso_user_id, deposit_account_number")
+      .eq("tenant_id", check.tenant_id)
+      .maybeSingle();
+    if (taErr) throw taErr;
+    if (!tenantAccount?.sso_user_id || !tenantAccount?.deposit_account_number) {
+      return new Response(
+        JSON.stringify({ error: "Tenant CheckAlt account not registered. Register in Integration Settings first." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     // --- create pending deposit row first (audit anchor) ---
@@ -292,30 +189,6 @@ Deno.serve(async (req) => {
 
     // --- submit to FinCapture /fincapture/deposit/process ---
     // Body schema: FinCaptureAPIDepositRequest from Clearingworks OpenAPI spec
-    const { data: tenantAccount, error: taErr } = await supabase
-      .from("checkalt_tenant_accounts")
-      .select("sso_user_id, deposit_account_number")
-      .eq("tenant_id", check.tenant_id)
-      .maybeSingle();
-    if (taErr) throw taErr;
-    if (!tenantAccount?.sso_user_id || !tenantAccount?.deposit_account_number) {
-      return new Response(
-        JSON.stringify({ error: "Tenant CheckAlt account not registered. Register in Integration Settings first." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
-    const { ssoKey: depositSsoKey, lookupPayload } = await resolveDepositSsoKey(
-      supabase,
-      cfg.fi_key,
-      tenantAccount.sso_user_id,
-      tenantAccount.deposit_account_number,
-    );
-
-    await supabase
-      .from("checkalt_tenant_accounts")
-      .update({ last_register_payload: lookupPayload })
-      .eq("tenant_id", check.tenant_id);
-
     const submitResp = await checkAltFetch(
       supabase,
       "/fincapture/deposit/process",
@@ -323,7 +196,7 @@ Deno.serve(async (req) => {
         method: "POST",
         body: JSON.stringify({
           fiKey: cfg.fi_key,
-          ssoKey: depositSsoKey,
+          ssoKey: tenantAccount.sso_user_id,
           depositAccountNumber: tenantAccount.deposit_account_number,
           firstName,
           lastName,
