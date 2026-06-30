@@ -99,6 +99,9 @@ const MortgageCompaniesDirectory = lazy(() =>
 const PendingApprovalDeposits = lazy(() =>
   import("@/components/settings/CheckAltSettings").then(m => ({ default: m.PendingApprovalDeposits }))
 );
+const CheckAltDepositHistory = lazy(() =>
+  import("@/components/settings/CheckAltSettings").then(m => ({ default: m.CheckAltDepositHistory }))
+);
 const LossPreventionPanel = lazy(() =>
   import("@/components/check-review/LossPreventionPanel").then(m => ({ default: m.LossPreventionPanel }))
 );
@@ -1036,6 +1039,7 @@ export default function CheckCommandCenter() {
               <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
                 <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
                 <TabsTrigger value="pending_approvals" className="text-xs gap-1"><ShieldAlert className="h-3 w-3" />Pending Approvals</TabsTrigger>
+                <TabsTrigger value="deposit_history" className="text-xs gap-1"><Banknote className="h-3 w-3" />Deposit History</TabsTrigger>
                 <TabsTrigger value="check_tracker" className="text-xs gap-1"><ShieldAlert className="h-3 w-3" />Check Tracker</TabsTrigger>
                 <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
                 <TabsTrigger value="mortgage_cos" className="text-xs gap-1"><Building2 className="h-3 w-3" />Mortgage Cos</TabsTrigger>
@@ -1048,6 +1052,11 @@ export default function CheckCommandCenter() {
               <TabsContent value="pending_approvals" className="mt-3">
                 <Suspense fallback={<TabLoader />}>
                   <PendingApprovalDeposits />
+                </Suspense>
+              </TabsContent>
+              <TabsContent value="deposit_history" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <CheckAltDepositHistory />
                 </Suspense>
               </TabsContent>
               <TabsContent value="check_tracker" className="mt-3">

@@ -749,3 +749,179 @@ export function PendingApprovalDeposits() {
   );
 }
 
+/**
+ * Manager view: CheckAlt deposit history pulled live from
+ * POST /fincapture/deposit/history (via the `checkalt-deposit-history` edge function).
+ * Defaults to the last 30 days; user can adjust date range.
+ */
+export function CheckAltDepositHistory() {
+  const { toast } = useToast();
+  const today = new Date().toISOString().slice(0, 10);
+  const thirtyAgo = new Date(Date.now() - 30 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  const [startDate, setStartDate] = useState(thirtyAgo);
+  const [endDate, setEndDate] = useState(today);
+
+  const { data, isFetching, refetch, error } = useQuery({
+    queryKey: ["checkalt-deposit-history", startDate, endDate],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke(
+        "checkalt-deposit-history",
+        { body: { start_date: startDate, end_date: endDate } },
+      );
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data as { items: any[]; count: number };
+    },
+    staleTime: 60_000,
+  });
+
+  const items = data?.items ?? [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Banknote className="h-4 w-4" /> CheckAlt Deposit History
+        </CardTitle>
+        <CardDescription>
+          Live history from FinCapture (/fincapture/deposit/history). Adjust the date
+          range and refresh to query CheckAlt directly.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Start date</Label>
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="h-8 w-[150px]"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">End date</Label>
+            <Input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="h-8 w-[150px]"
+            />
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="gap-1"
+          >
+            {isFetching ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3" />
+            )}
+            Refresh
+          </Button>
+          <div className="ml-auto text-xs text-muted-foreground">
+            {data ? `${data.count} record${data.count === 1 ? "" : "s"}` : ""}
+          </div>
+        </div>
+
+        {error && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {error instanceof Error ? error.message : "Failed to load history"}
+          </div>
+        )}
+
+        {isFetching && !data && (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          </div>
+        )}
+
+        {!isFetching && items.length === 0 && !error && (
+          <div className="rounded-md border border-dashed border-border/60 px-3 py-4 text-center text-xs text-muted-foreground">
+            No deposits found for this range.
+          </div>
+        )}
+
+        {items.length > 0 && (
+          <div className="overflow-x-auto rounded-md border border-border/40">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/40 text-muted-foreground">
+                <tr className="text-left">
+                  <th className="px-3 py-2 font-medium">Submitted</th>
+                  <th className="px-3 py-2 font-medium">Reference</th>
+                  <th className="px-3 py-2 font-medium">Check #</th>
+                  <th className="px-3 py-2 font-medium">Payer</th>
+                  <th className="px-3 py-2 font-medium text-right">Amount</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((it: any, idx: number) => {
+                  const amount = Number(
+                    it.amount ?? it.depositAmount ?? it.checkAmount ?? 0,
+                  );
+                  // CheckAlt amounts come as cents in some responses
+                  const displayAmount =
+                    amount > 100000 && Number.isInteger(amount) ? amount / 100 : amount;
+                  const submitted =
+                    it.submittedDate ??
+                    it.depositDate ??
+                    it.createdDate ??
+                    it.submitted_at ??
+                    "—";
+                  return (
+                    <tr
+                      key={
+                        it.referenceNumber ??
+                        it.reference ??
+                        it.depositItemId ??
+                        idx
+                      }
+                      className="border-t border-border/30"
+                    >
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {typeof submitted === "string"
+                          ? submitted.slice(0, 19).replace("T", " ")
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap font-mono">
+                        {it.referenceNumber ?? it.reference ?? "—"}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {it.checkNumber ?? it.serialNumber ?? "—"}
+                      </td>
+                      <td className="px-3 py-2 truncate max-w-[200px]">
+                        {it.payerName ?? it.makerName ?? it.payor ?? "—"}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-right">
+                        $
+                        {displayAmount.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <Badge variant="outline" className="text-[10px]">
+                          {it.statusDescription ??
+                            it.status ??
+                            it.statusCode ??
+                            "—"}
+                        </Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
