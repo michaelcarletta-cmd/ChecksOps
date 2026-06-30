@@ -3725,6 +3725,7 @@ function CheckDetailPanel({
               {auditLog.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">No audit events</p>
               )}
+              </div>
             </TabsContent>
 
             <TabsContent value="partners" className="p-4 mt-0 space-y-4">
