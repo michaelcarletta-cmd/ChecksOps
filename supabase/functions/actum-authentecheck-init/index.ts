@@ -114,27 +114,38 @@ serve(async (req) => {
     const declineUrl = return_url ?? `${appBase}/verify-account/complete?ok=0&acct=${account.id}`;
     const postbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/actum-authentecheck-postback`;
 
-    // Per Actum Authentecheck docs (SignupInit.cgi): standard form-encoded POST.
-    // No pmt_type / chk:<parent>:<sub> prefix — meruser/merpass/syspass identifies the merchant.
-    const params = new URLSearchParams();
-    params.append("meruser", meruser);
-    params.append("merpass", merpass);
-    params.append("syspass", syspass);
-    params.append("firstname", firstName);
-    params.append("lastname", lastName);
-    params.append("custemail", custEmail);
-    params.append("ps1_init", "0.01");
-    params.append("ps1_desc", `Bank verification ${(account.nickname ?? "Account").slice(0, 20)}`.replace(/[^A-Za-z0-9 ]/g, "").slice(0, 50));
-    params.append("merchantdata", account.id);
-    params.append("redirect_accept", acceptUrl);
-    params.append("redirect_decline", declineUrl);
-    params.append("dynamic_saleurl", postbackUrl);
+    // Per Actum Authentecheck docs (SignupInit.cgi). The FIRST field is the bare
+    // pmt_type token "chk:<parent>:<subid>" with NO key= prefix, followed by
+    // standard form-encoded fields. The subid is the merchant's Actum username.
+    const subid = meruser;
+    const psDesc = `Bank verification ${(account.nickname ?? "Account").slice(0, 20)}`
+      .replace(/[^A-Za-z0-9 ]/g, "")
+      .slice(0, 50);
+
+    const fields: Record<string, string> = {
+      custemail: custEmail,
+      firstname: firstName,
+      lastname: lastName,
+      ps1_init: "1.00",
+      ps1_desc: psDesc,
+      merchantdata: account.id,
+      redirect_accept: acceptUrl,
+      redirect_decline: declineUrl,
+      dynamic_saleurl: postbackUrl,
+      meruser,
+      merpass,
+      syspass,
+    };
+    const encoded = Object.entries(fields)
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join("&");
+    const body = `chk:actum:${subid}&${encoded}`;
 
     console.log("[authentecheck-init] initiating session for account", account.id);
     const res = await fetch(SIGNUP_INIT, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
+      body,
     });
     const text = await res.text();
     console.log("[authentecheck-init] Actum response:", text);
