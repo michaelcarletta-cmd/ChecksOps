@@ -38,6 +38,57 @@ async function loadSvgRenderer(): Promise<((svg: string) => Promise<Uint8Array>)
 const MAX_CHECKALT_IMAGE_B64_CHARS = 4_000_000;
 const MAX_CHECKALT_IMAGE_PIXELS = 2_400_000;
 
+function normalizeAccountNumber(value: unknown): string {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+function readVendorMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const obj = payload as Record<string, unknown>;
+  const message = obj.message ?? obj.error ?? obj.statusDescription;
+  return typeof message === "string" && message.trim() ? message.trim() : null;
+}
+
+async function resolveDepositSsoKey(
+  supabase: ReturnType<typeof getServiceClient>,
+  fiKey: string,
+  userId: string,
+  depositAccountNumber: string,
+): Promise<{ ssoKey: string; lookupPayload: unknown }> {
+  const resp = await checkAltFetch(supabase, "/fincapture/useraccount/getUserAccountInformation", {
+    method: "POST",
+    body: JSON.stringify({
+      fiKey,
+      isSSORequest: true,
+      userId,
+    }),
+  });
+  const text = await resp.text();
+  let json: unknown = {};
+  try { json = text ? JSON.parse(text) : {}; } catch { json = { raw: text }; }
+
+  if (!resp.ok) {
+    const vendorMsg = readVendorMessage(json) ?? text.slice(0, 300) ?? `HTTP ${resp.status}`;
+    throw new Error(`CheckAlt user lookup failed [${resp.status}]: ${vendorMsg}`);
+  }
+
+  const accountDataList = Array.isArray((json as any)?.accountDataList)
+    ? (json as any).accountDataList
+    : [];
+  const targetAccount = normalizeAccountNumber(depositAccountNumber);
+  const matched = accountDataList.find(
+    (acct: any) => normalizeAccountNumber(acct?.accountNumber) === targetAccount,
+  ) ?? accountDataList[0];
+  const ssoKey = matched?.ssoKey;
+  if (typeof ssoKey !== "string" || !ssoKey.trim()) {
+    throw new Error(
+      "CheckAlt user is registered, but CheckAlt did not return the deposit ssoKey for this account. Re-register the tenant account, then try the deposit again.",
+    );
+  }
+
+  return { ssoKey: ssoKey.trim(), lookupPayload: json };
+}
+
 function bytesToBase64(bytes: Uint8Array): string {
   const CHUNK = 0x8000;
   let binary = "";
@@ -253,6 +304,18 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
+    const { ssoKey: depositSsoKey, lookupPayload } = await resolveDepositSsoKey(
+      supabase,
+      cfg.fi_key,
+      tenantAccount.sso_user_id,
+      tenantAccount.deposit_account_number,
+    );
+
+    await supabase
+      .from("checkalt_tenant_accounts")
+      .update({ last_register_payload: lookupPayload })
+      .eq("tenant_id", check.tenant_id);
+
     const submitResp = await checkAltFetch(
       supabase,
       "/fincapture/deposit/process",
@@ -260,7 +323,7 @@ Deno.serve(async (req) => {
         method: "POST",
         body: JSON.stringify({
           fiKey: cfg.fi_key,
-          ssoKey: tenantAccount.sso_user_id,
+          ssoKey: depositSsoKey,
           depositAccountNumber: tenantAccount.deposit_account_number,
           firstName,
           lastName,
