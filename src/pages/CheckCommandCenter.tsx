@@ -3666,30 +3666,6 @@ function CheckDetailPanel({
             </TabsContent>
 
 
-            <TabsContent value="eligibility" className="p-4 space-y-3 mt-0">
-
-              {rec ? (
-                <>
-                  <div className="flex items-center gap-2">
-                    <rec.icon className={`h-5 w-5 ${rec.color}`} />
-                    <span className={`font-semibold ${rec.color}`}>{rec.label}</span>
-                  </div>
-                  <Separator />
-                  {Array.isArray(check.deposit_recommendation_reasons) &&
-                    check.deposit_recommendation_reasons.map((r, i) => (
-                      <div key={i} className="flex items-start gap-2 text-sm">
-                        <ChevronRight className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                        <span>{r}</span>
-                      </div>
-                    ))}
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Eligibility not yet evaluated
-                </p>
-              )}
-            </TabsContent>
-
             <TabsContent value="files" className="p-4 mt-0">
               <Suspense fallback={<TabLoader />}>
                 <CheckFilesSection checkIntakeItemId={checkId} />
