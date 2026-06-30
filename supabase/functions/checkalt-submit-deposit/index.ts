@@ -330,6 +330,22 @@ Deno.serve(async (req) => {
             checkalt_deposit_id: depositRow.id,
           })
           .eq("check_intake_item_id", check.id);
+
+        // Auto-advance the check to the Deposited stage on successful CheckAlt
+        // submission. deposited_at stamps the 48h "ready for release" timer used
+        // by the UI and the disbursement gate.
+        const depositedAtIso = new Date().toISOString();
+        await supabase
+          .from("check_intake_items")
+          .update({
+            check_stage: "deposited",
+            status: "deposited",
+            deposit_status: "deposited",
+            deposited_at: depositedAtIso,
+            deposited_by_tenant_id: check.tenant_id,
+            updated_at: depositedAtIso,
+          })
+          .eq("id", check.id);
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Unknown error";
         console.error("[checkalt-submit-deposit:bg]", msg);

@@ -68,6 +68,29 @@ export function DisbursementConsole({
   const { isAdmin } = usePermissions();
 
 
+  // Funds-availability gate: 48h after deposited_at the check is considered
+  // cleared and disbursement is allowed. Until then we hard-stop the submit.
+  const { data: depositMeta } = useQuery({
+    queryKey: ["check-deposit-meta", checkIntakeItemId],
+    enabled: !!checkIntakeItemId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("check_intake_items")
+        .select("deposited_at")
+        .eq("id", checkIntakeItemId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    refetchInterval: 60_000,
+  });
+  const depositedAt = depositMeta?.deposited_at as string | null | undefined;
+  const hoursSinceDeposit = depositedAt
+    ? (Date.now() - new Date(depositedAt).getTime()) / 36e5
+    : null;
+  const fundsHoldActive = hoursSinceDeposit !== null && hoursSinceDeposit < 48;
+  const hoursRemaining = fundsHoldActive ? Math.ceil(48 - (hoursSinceDeposit as number)) : 0;
+
   // Load stakeholder accounts whitelisted for THIS check
   const { data: accounts = [], isLoading } = useQuery({
     queryKey: ["disbursement-accounts", checkIntakeItemId, tenant?.id],
@@ -161,6 +184,12 @@ export function DisbursementConsole({
   const submitBatch = useMutation({
     mutationFn: async () => {
       if (!user || !tenant) throw new Error("Not authenticated");
+      if (fundsHoldActive) {
+        throw new Error(
+          `Funds are not yet available. Deposited funds clear ~48 hours after the CheckAlt deposit. ${hoursRemaining}h remaining.`
+        );
+      }
+
 
       const unverifiedWithAmount = accounts.filter((a: any) => {
         const val = parseFloat(allocations[a.id] || "0");
@@ -523,6 +552,15 @@ export function DisbursementConsole({
           </div>
         )}
 
+        {fundsHoldActive && (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300 flex items-center gap-2 mb-2">
+            <Clock className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              Deposit confirmed — funds become available for disbursement in ~{hoursRemaining}h
+              (48h hold after CheckAlt deposit).
+            </span>
+          </div>
+        )}
         <Button
           className="w-full"
           onClick={() => submitBatch.mutate()}
@@ -532,17 +570,21 @@ export function DisbursementConsole({
             totalAllocatedDollars === 0 ||
             accounts.length === 0 ||
             availableAmount <= 0 ||
+            fundsHoldActive ||
             (hasUnverifiedAllocations && !(isAdmin && adminOverride))
           }
         >
           {submitBatch.isPending ? (
             <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Submitting...</>
+          ) : fundsHoldActive ? (
+            <><Clock className="h-4 w-4 mr-2" />Funds available in ~{hoursRemaining}h</>
           ) : hasUnverifiedAllocations && !adminOverride ? (
             <><ShieldAlert className="h-4 w-4 mr-2" />Verify accounts to send</>
           ) : (
             <><Send className="h-4 w-4 mr-2" />{isBalanced ? "Send all disbursements" : `Send $${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })} (partial)`}{adminOverride && hasUnverifiedAllocations ? " (override)" : ""}</>
           )}
         </Button>
+
 
         <p className="text-xs text-center text-muted-foreground">
           Credits arrive same-day or next banking day via Actum ACH
