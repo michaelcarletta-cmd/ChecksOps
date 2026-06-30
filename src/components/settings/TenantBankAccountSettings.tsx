@@ -16,11 +16,6 @@ import { AchAuthorizationForm } from "@/components/disbursement/AchAuthorization
 import { AuthentecheckVerification } from "@/components/disbursement/AuthentecheckVerification";
 import { usePermissions } from "@/hooks/usePermissions";
 
-const emptyForm = {
-  nickname: "",
-  custname: "",
-  acct_type: "C",
-};
 
 export function TenantBankAccountSettings() {
   const { user } = useAuth();
@@ -28,8 +23,8 @@ export function TenantBankAccountSettings() {
   const { toast } = useToast();
   const { isAdmin } = usePermissions();
   const qc = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(emptyForm);
+  const [isStarting, setIsStarting] = useState(false);
+
 
   const { data: accounts = [], isLoading } = useQuery({
     queryKey: ["tenant-primary-accounts", tenant?.id],
@@ -48,12 +43,15 @@ export function TenantBankAccountSettings() {
   });
 
   const addAccount = useMutation({
-    mutationFn: async (values: typeof emptyForm) => {
-      // Create placeholder row; Authentecheck postback fills in real routing/account.
+    mutationFn: async () => {
+      // Create placeholder row; Authentecheck postback (Plaid) fills in all real fields:
+      // routing, account, account type, holder name, and bank name.
       const { data: inserted, error } = await supabase
         .from("stakeholder_accounts")
         .insert({
-          ...values,
+          nickname: "Bank Account (pending verification)",
+          custname: "Pending",
+          acct_type: "C",
           chk_aba: "000000000",
           chk_acct: "0000000000",
           account_type: "operating",
@@ -65,7 +63,6 @@ export function TenantBankAccountSettings() {
         .single();
       if (error) throw error;
 
-      // Immediately launch Authentecheck session
       const { data: sess, error: initErr } = await supabase.functions.invoke(
         "actum-authentecheck-init",
         { body: { stakeholder_account_id: inserted!.id } },
@@ -78,6 +75,8 @@ export function TenantBankAccountSettings() {
       if ((sess as any)?.error) throw new Error((sess as any).error);
       return (sess as any)?.url as string;
     },
+    onMutate: () => setIsStarting(true),
+    onSettled: () => setIsStarting(false),
     onSuccess: (url) => {
       if (url) {
         const win = window.open(url, "_blank", "noopener,noreferrer,width=520,height=720");
@@ -88,15 +87,14 @@ export function TenantBankAccountSettings() {
             variant: "destructive",
           });
         } else {
-          toast({ title: "Bank login opened", description: "Sign in with your bank to verify the account." });
+          toast({ title: "Bank login opened", description: "Sign in with your bank — we'll fill in the rest automatically." });
         }
       }
       qc.invalidateQueries({ queryKey: ["tenant-primary-accounts"] });
-      setForm(emptyForm);
-      setShowForm(false);
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
+
 
   const resendVerification = useMutation({
     mutationFn: async (id: string) => {
@@ -159,74 +157,30 @@ export function TenantBankAccountSettings() {
                 Bank Account
               </CardTitle>
               <CardDescription className="text-xs mt-1">
-                Your bank account for receiving check alternative deposits. Must be verified via micro-deposits before use.
+                Your bank account for receiving check deposits. Sign in with your bank — routing & account number, holder name, and account type are captured securely through Authentecheck (Plaid). No manual entry.
               </CardDescription>
             </div>
-            {!showForm && (
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowForm(true)}>
-                <Plus className="h-3 w-3 mr-1" />
-                Add account
-              </Button>
-            )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              onClick={() => addAccount.mutate()}
+              disabled={isStarting}
+            >
+              {isStarting
+                ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Opening bank login...</>
+                : <><Plus className="h-3 w-3 mr-1" /> Add account</>}
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
 
-          {showForm && (
-            <div className="rounded-md border bg-muted/30 p-3 space-y-3">
-              <p className="text-xs font-medium">New bank account</p>
-              <p className="text-[11px] text-muted-foreground">
-                Bank routing & account number are captured securely through Authentecheck (Plaid)
-                after you sign in to your bank. Just give the account a nickname and confirm the holder name.
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs">Account nickname</Label>
-                  <Input className="h-8 text-sm" placeholder="e.g. Main Operating Account" value={form.nickname} onChange={(e) => setForm({ ...form, nickname: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Account type</Label>
-                  <Select value={form.acct_type} onValueChange={(v) => setForm({ ...form, acct_type: v })}>
-                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="C" className="text-xs">Checking</SelectItem>
-                      <SelectItem value="S" className="text-xs">Savings</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1 col-span-2">
-                  <Label className="text-xs">Account holder name</Label>
-                  <Input className="h-8 text-sm" placeholder="Full legal name on account" value={form.custname} onChange={(e) => setForm({ ...form, custname: e.target.value })} />
-                </div>
-              </div>
-
-              {(!form.nickname || !form.custname) && (
-                <div className="flex items-center gap-1 text-xs text-amber-600">
-                  <AlertTriangle className="h-3 w-3" />
-                  Nickname and account holder name are required
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => addAccount.mutate(form)}
-                  disabled={addAccount.isPending || !form.nickname || !form.custname}
-                >
-                  {addAccount.isPending
-                    ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Opening bank login...</>
-                    : "Continue to bank login"}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => { setShowForm(false); setForm(emptyForm); }}>Cancel</Button>
-              </div>
-            </div>
-          )}
-
-          {accounts.length === 0 && !showForm && (
+          {accounts.length === 0 && (
             <p className="text-xs text-muted-foreground text-center py-4">
-              No bank account added yet. Add one to start accepting check alternative deposits.
+              No bank account added yet. Click "Add account" to sign in with your bank and verify instantly.
             </p>
           )}
+
 
           {accounts.map((acct: any) => {
             const vStatus = (acct.verification_status ?? "unverified") as VerificationStatus;
