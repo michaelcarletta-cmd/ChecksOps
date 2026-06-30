@@ -79,14 +79,20 @@ Deno.serve(async (req) => {
     // Payload shape per CheckAlt's official sample:
     //   fiKey, ssorequest (lowercase), userID (capital ID), firstName, lastName,
     //   emailAddress, SSORequest (also included for compatibility), accountDataList
+    // Include every documented key-casing variant CheckAlt has shown in samples:
+    //   ssorequest (lowercase) + SSORequest + isSSORequest
+    //   userID (capital ID) + userId
+    // CheckAlt ignores unknown keys, so sending all variants is safe.
     const payload = {
       fiKey: cfg.fi_key,
       ssorequest: true,
+      SSORequest: true,
+      isSSORequest: true,
       userID: sso_user_id,
+      userId: sso_user_id,
       firstName: first_name,
       lastName: last_name,
       emailAddress: email,
-      SSORequest: true,
       accountDataList: [{ accountNumber: deposit_account_number }],
     };
 
