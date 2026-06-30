@@ -317,47 +317,45 @@ Deno.serve(async (req) => {
         //   40  = pending manual review/approval
         //   127 = submitted for processing
         //   120 = rejected
-        // When 40 is returned, the deposit is parked at CheckAlt and an admin
-        // must call /fincapture/deposit/approve before it advances. Do NOT
-        // auto-advance the check to "deposited" in that case.
+        // Once CheckAlt accepts the image package, the check belongs in the
+        // Deposited tab. Status 40 is shown there as "Pending Approval" until
+        // the manager approves it; the 48-hour release hold starts only after
+        // that approval succeeds.
         const apiStatus = Number(submitJson?.status ?? submitJson?.statusCode);
         const isPendingApproval = apiStatus === 40;
         const internalStatus = isPendingApproval ? "pending_approval" : "submitted";
+        const statusIso = new Date().toISOString();
 
         await supabase
           .from("checkalt_deposits")
           .update({
             checkalt_reference: reference ?? null,
             status: internalStatus,
-            submitted_at: new Date().toISOString(),
+            submitted_at: statusIso,
             last_status_payload: submitJson,
           })
           .eq("id", depositRow.id);
+
+        await supabase
+          .from("check_intake_items")
+          .update({
+            check_stage: "deposited",
+            status: isPendingApproval ? "approved_for_deposit" : "deposited",
+            deposit_recommendation: null,
+            deposited_at: isPendingApproval ? null : statusIso,
+            deposited_by_tenant_id: check.tenant_id,
+            updated_at: statusIso,
+          })
+          .eq("id", check.id);
 
         await supabase
           .from("claim_checks")
           .update({
             deposit_method: "checkalt",
             checkalt_deposit_id: depositRow.id,
+            deposit_status: "deposited",
           })
           .eq("check_intake_item_id", check.id);
-
-        // Only auto-advance the check when CheckAlt has actually accepted the
-        // deposit (not when it's parked for manual review).
-        if (!isPendingApproval) {
-          const depositedAtIso = new Date().toISOString();
-          await supabase
-            .from("check_intake_items")
-            .update({
-              check_stage: "deposited",
-              status: "deposited",
-              deposit_status: "deposited",
-              deposited_at: depositedAtIso,
-              deposited_by_tenant_id: check.tenant_id,
-              updated_at: depositedAtIso,
-            })
-            .eq("id", check.id);
-        }
 
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Unknown error";

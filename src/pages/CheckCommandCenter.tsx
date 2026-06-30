@@ -138,6 +138,14 @@ interface CheckPayee {
   endorsed_at: string | null;
 }
 
+interface CheckAltDepositSummary {
+  id: string;
+  status: string | null;
+  submitted_at: string | null;
+  approved_at: string | null;
+  updated_at: string | null;
+}
+
 interface CheckItem {
   id: string;
   claim_id: string | null;
@@ -168,8 +176,10 @@ interface CheckItem {
   payee_address?: string | null;
   deposited_at?: string | null;
   deposited_by_tenant_id?: string | null;
+  check_stage?: string | null;
   updated_at?: string | null;
   check_payees?: CheckPayee[];
+  checkalt_deposits?: CheckAltDepositSummary[];
   partner_status?: string | null;
   partner_status_label?: string | null;
   partner_status_updated_at?: string | null;
@@ -337,6 +347,18 @@ const getEffectiveStatusLabel = (c: CheckItem): string => {
   return prettifyStatus(c.status);
 };
 
+const getLatestCheckAltDeposit = (c: CheckItem): CheckAltDepositSummary | null => {
+  const deposits = c.checkalt_deposits ?? [];
+  if (deposits.length === 0) return null;
+  return [...deposits].sort((a, b) => {
+    const aTime = new Date(a.updated_at ?? a.approved_at ?? a.submitted_at ?? 0).getTime();
+    const bTime = new Date(b.updated_at ?? b.approved_at ?? b.submitted_at ?? 0).getTime();
+    return bTime - aTime;
+  })[0] ?? null;
+};
+
+const getCheckAltStatus = (c: CheckItem): string | null => getLatestCheckAltDeposit(c)?.status ?? null;
+
 // Per-tab status label overrides requested by ops:
 //  - Endorsing tab: always "Endorsements in Progress"
 //  - Ready for Deposit tab: always "Endorsed - Ready for Deposit"
@@ -346,12 +368,26 @@ const getTabStatusLabel = (c: CheckItem, tab: string): string => {
   if (tab === "endorsements") return "Endorsements in Progress";
   if (tab === "ready") return "Endorsed - Ready for Deposit";
   if (tab === "deposited") {
+    if (getCheckAltStatus(c) === "pending_approval") return "Pending Approval";
     const depositedAt = (c as any).deposited_at as string | null | undefined;
     if (!depositedAt) return "Deposit in Progress";
     const hours = (Date.now() - new Date(depositedAt).getTime()) / 36e5;
     return hours >= 48 ? "Ready for Release" : "Deposit in Progress";
   }
   return getEffectiveStatusLabel(c);
+};
+
+const getTabStatusClass = (c: CheckItem, tab: string): string => {
+  if (tab === "deposited") {
+    if (getCheckAltStatus(c) === "pending_approval") return "bg-amber-500/20 text-amber-400";
+    const depositedAt = c.deposited_at;
+    if (depositedAt) {
+      const hours = (Date.now() - new Date(depositedAt).getTime()) / 36e5;
+      if (hours >= 48) return "bg-emerald-500/20 text-emerald-400";
+    }
+    return "bg-primary/20 text-primary";
+  }
+  return statusColors[getEffectiveStatus(c)] ?? "";
 };
 
 
@@ -539,7 +575,7 @@ export default function CheckCommandCenter() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("*, check_payees(*)")
+        .select("*, check_payees(*), checkalt_deposits(id, status, submitted_at, approved_at, updated_at)")
         .eq("tenant_id", tenantId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -565,7 +601,7 @@ export default function CheckCommandCenter() {
       const checkIds = sharedData.map((s: any) => s.check_id);
       const { data: checkData, error: checkErr } = await supabase
         .from("check_intake_items")
-        .select("*, check_payees(*)")
+        .select("*, check_payees(*), checkalt_deposits(id, status, submitted_at, approved_at, updated_at)")
         .in("id", checkIds)
         .order("created_at", { ascending: false });
       if (checkErr) throw checkErr;
@@ -672,6 +708,8 @@ export default function CheckCommandCenter() {
   const readyForDeposit = allChecks.filter(
     (c) => {
       const s = getEffectiveStatus(c);
+      const stage = c.check_stage;
+      if (stage === "deposited" || getCheckAltStatus(c) === "pending_approval") return false;
       return (s === "approved_for_deposit" ||
         (c.deposit_recommendation === "ready_for_deposit" && s !== "deposited")) &&
         matchesSearch(c);
@@ -714,8 +752,9 @@ export default function CheckCommandCenter() {
   const branchDeposit = allChecks.filter((c) => getEffectiveStatus(c) === "branch_deposit_required" && matchesSearch(c));
   const depositedChecks = allChecks.filter((c) => {
     const s = getEffectiveStatus(c);
-    const stage = (c as any).check_stage as string | undefined;
-    return (s === "deposited" || stage === "deposited") && matchesSearch(c);
+    const stage = c.check_stage;
+    const checkAltStatus = getCheckAltStatus(c);
+    return (s === "deposited" || stage === "deposited" || checkAltStatus === "pending_approval") && matchesSearch(c);
   });
   const lossDraftChecks = allChecks.filter((c) => {
     const s = getEffectiveStatus(c);
@@ -1518,7 +1557,7 @@ export default function CheckCommandCenter() {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <Badge className={`text-[10px] ${statusColors[getEffectiveStatus(check)] ?? ""}`}>
+                                <Badge className={`text-[10px] ${getTabStatusClass(check, activeTab)}`}>
                                   {getTabStatusLabel(check, activeTab)}
                                 </Badge>
                               </TableCell>

@@ -610,6 +610,8 @@ export function PendingApprovalDeposits() {
       setRejectingId(null);
       setRejectNotes("");
       qc.invalidateQueries({ queryKey: ["checkalt-pending-approvals"] });
+      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+      qc.invalidateQueries({ queryKey: ["deposit-items"] });
     },
     onError: (e: unknown) => {
       toast({
