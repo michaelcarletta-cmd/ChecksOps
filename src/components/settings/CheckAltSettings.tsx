@@ -560,45 +560,60 @@ export function CheckAltSettings() {
 }
 
 /**
- * Manager-side queue showing CheckAlt deposits awaiting manual approval.
- * Rendered inside the Deposit Manager Command Center.
+ * Manager-side queue showing CheckAlt deposits parked at FinCapture for manual
+ * review (status 40 / pending_approval). Approve/Reject calls the
+ * `checkalt-approve-deposit` edge function which hits
+ * `/fincapture/deposit/approve` upstream.
  */
 export function PendingApprovalDeposits() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { data, isLoading } = useQuery({
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectNotes, setRejectNotes] = useState("");
+
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ["checkalt-pending-approvals"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("deposit_pending_approvals")
-        .select("id, description, item_count, total_amount, requested_at, status")
-        .eq("approval_type", "checkalt_deposit")
-        .eq("status", "pending")
-        .order("requested_at", { ascending: false })
+        .from("checkalt_deposits")
+        .select(
+          "id, amount, checkalt_reference, submitted_at, last_status_payload, check_intake_item_id, check_intake_items(check_number, payer_name, payee_name, claim_number)",
+        )
+        .eq("status", "pending_approval")
+        .order("submitted_at", { ascending: false })
         .limit(50);
       if (error) throw error;
       return data ?? [];
     },
+    refetchInterval: 30_000,
   });
 
   const decide = useMutation({
-    mutationFn: async ({ id, approve }: { id: string; approve: boolean }) => {
-      const { error } = await supabase
-        .from("deposit_pending_approvals")
-        .update({
-          status: approve ? "approved" : "rejected",
-          reviewed_at: new Date().toISOString(),
-        })
-        .eq("id", id);
+    mutationFn: async (args: {
+      deposit_id: string;
+      action: "approve" | "reject";
+      reject_notes?: string;
+    }) => {
+      const { data, error } = await supabase.functions.invoke(
+        "checkalt-approve-deposit",
+        { body: args },
+      );
       if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data;
     },
-    onSuccess: () => {
-      toast({ title: "Decision recorded" });
+    onSuccess: (data: any) => {
+      toast({
+        title: data?.status === "rejected" ? "Deposit rejected" : "Deposit approved",
+        description: data?.status_description ?? `Status: ${data?.status}`,
+      });
+      setRejectingId(null);
+      setRejectNotes("");
       qc.invalidateQueries({ queryKey: ["checkalt-pending-approvals"] });
     },
     onError: (e: unknown) => {
       toast({
-        title: "Failed",
+        title: "Approval call failed",
         description: e instanceof Error ? e.message : "Unknown error",
         variant: "destructive",
       });
@@ -613,41 +628,120 @@ export function PendingApprovalDeposits() {
     );
   }
   if (!data || data.length === 0) {
-    return <p className="text-xs text-muted-foreground py-2">No deposits awaiting approval.</p>;
+    return (
+      <div className="flex items-center justify-between rounded-md border border-dashed border-border/60 px-3 py-3">
+        <p className="text-xs text-muted-foreground">
+          No CheckAlt deposits awaiting approval.
+        </p>
+        <Button size="sm" variant="ghost" onClick={() => refetch()}>
+          Refresh
+        </Button>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-2">
-      {data.map((row) => (
-        <div
-          key={row.id}
-          className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-3 py-2 text-sm"
-        >
-          <div className="min-w-0">
-            <div className="font-medium truncate">{row.description ?? "CheckAlt deposit"}</div>
-            <div className="text-xs text-muted-foreground">
-              {row.item_count ?? 0} item(s) · ${Number(row.total_amount ?? 0).toLocaleString()}
+      {data.map((row: any) => {
+        const intake = row.check_intake_items;
+        const statusDesc = row.last_status_payload?.statusDescription ?? row.last_status_payload?.reasonDescription;
+        const isRejecting = rejectingId === row.id;
+        return (
+          <div
+            key={row.id}
+            className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm space-y-2"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-medium truncate">
+                  {intake?.payer_name ?? "Check"} → {intake?.payee_name ?? "—"}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Check #{intake?.check_number ?? "—"} ·{" "}
+                  {intake?.claim_number ? `Claim ${intake.claim_number} · ` : ""}
+                  Ref {row.checkalt_reference ?? "pending"} · $
+                  {Number(row.amount ?? 0).toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                  })}
+                </div>
+                {statusDesc && (
+                  <div className="text-xs text-amber-300 mt-1">
+                    CheckAlt: {statusDesc}
+                  </div>
+                )}
+              </div>
+              {!isRejecting && (
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setRejectingId(row.id)}
+                    disabled={decide.isPending}
+                  >
+                    Reject
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      decide.mutate({ deposit_id: row.id, action: "approve" })
+                    }
+                    disabled={decide.isPending}
+                  >
+                    {decide.isPending ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      "Approve"
+                    )}
+                  </Button>
+                </div>
+              )}
             </div>
+            {isRejecting && (
+              <div className="space-y-2 border-t border-border/40 pt-2">
+                <Label className="text-xs">Reject reason (optional)</Label>
+                <Input
+                  value={rejectNotes}
+                  onChange={(e) => setRejectNotes(e.target.value)}
+                  placeholder="Notes shown to CheckAlt"
+                  maxLength={1000}
+                />
+                <div className="flex justify-end gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setRejectingId(null);
+                      setRejectNotes("");
+                    }}
+                    disabled={decide.isPending}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() =>
+                      decide.mutate({
+                        deposit_id: row.id,
+                        action: "reject",
+                        reject_notes: rejectNotes || undefined,
+                      })
+                    }
+                    disabled={decide.isPending}
+                  >
+                    {decide.isPending ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      "Confirm reject"
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => decide.mutate({ id: row.id, approve: false })}
-              disabled={decide.isPending}
-            >
-              Reject
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => decide.mutate({ id: row.id, approve: true })}
-              disabled={decide.isPending}
-            >
-              Approve
-            </Button>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
+
