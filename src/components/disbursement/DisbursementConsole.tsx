@@ -184,6 +184,12 @@ export function DisbursementConsole({
   const submitBatch = useMutation({
     mutationFn: async () => {
       if (!user || !tenant) throw new Error("Not authenticated");
+      if (fundsHoldActive) {
+        throw new Error(
+          `Funds are not yet available. Deposited funds clear ~48 hours after the CheckAlt deposit. ${hoursRemaining}h remaining.`
+        );
+      }
+
 
       const unverifiedWithAmount = accounts.filter((a: any) => {
         const val = parseFloat(allocations[a.id] || "0");
