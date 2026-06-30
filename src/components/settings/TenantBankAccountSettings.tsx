@@ -43,12 +43,15 @@ export function TenantBankAccountSettings() {
   });
 
   const addAccount = useMutation({
-    mutationFn: async (values: typeof emptyForm) => {
-      // Create placeholder row; Authentecheck postback fills in real routing/account.
+    mutationFn: async () => {
+      // Create placeholder row; Authentecheck postback (Plaid) fills in all real fields:
+      // routing, account, account type, holder name, and bank name.
       const { data: inserted, error } = await supabase
         .from("stakeholder_accounts")
         .insert({
-          ...values,
+          nickname: "Bank Account (pending verification)",
+          custname: "Pending",
+          acct_type: "C",
           chk_aba: "000000000",
           chk_acct: "0000000000",
           account_type: "operating",
@@ -60,7 +63,6 @@ export function TenantBankAccountSettings() {
         .single();
       if (error) throw error;
 
-      // Immediately launch Authentecheck session
       const { data: sess, error: initErr } = await supabase.functions.invoke(
         "actum-authentecheck-init",
         { body: { stakeholder_account_id: inserted!.id } },
@@ -73,6 +75,8 @@ export function TenantBankAccountSettings() {
       if ((sess as any)?.error) throw new Error((sess as any).error);
       return (sess as any)?.url as string;
     },
+    onMutate: () => setIsStarting(true),
+    onSettled: () => setIsStarting(false),
     onSuccess: (url) => {
       if (url) {
         const win = window.open(url, "_blank", "noopener,noreferrer,width=520,height=720");
@@ -83,15 +87,14 @@ export function TenantBankAccountSettings() {
             variant: "destructive",
           });
         } else {
-          toast({ title: "Bank login opened", description: "Sign in with your bank to verify the account." });
+          toast({ title: "Bank login opened", description: "Sign in with your bank — we'll fill in the rest automatically." });
         }
       }
       qc.invalidateQueries({ queryKey: ["tenant-primary-accounts"] });
-      setForm(emptyForm);
-      setShowForm(false);
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
+
 
   const resendVerification = useMutation({
     mutationFn: async (id: string) => {
