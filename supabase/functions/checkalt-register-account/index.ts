@@ -41,9 +41,12 @@ Deno.serve(async (req) => {
     }
     const supabase = getServiceClient();
     const token = authHeader.replace("Bearer ", "");
-    const { data: claims } = await supabase.auth.getClaims(token);
-    const userId = claims?.claims?.sub;
-    if (!userId) {
+    const {
+      data: { user },
+      error: userErr,
+    } = await supabase.auth.getUser(token);
+    const userId = user?.id;
+    if (userErr || !userId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -79,7 +82,7 @@ Deno.serve(async (req) => {
     }
     const payload = {
       fiKey: cfg.fi_key,
-      ssorequest: true,
+      isSSORequest: true,
       userId: sso_user_id,
       firstName: first_name,
       lastName: last_name,
@@ -94,7 +97,6 @@ Deno.serve(async (req) => {
     const respText = await resp.text();
     let respJson: unknown;
     try { respJson = JSON.parse(respText); } catch { respJson = { raw: respText }; }
-
 
     if (!resp.ok) {
       return new Response(JSON.stringify({
