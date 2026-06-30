@@ -577,10 +577,10 @@ export function PendingApprovalDeposits() {
       const { data, error } = await supabase
         .from("checkalt_deposits")
         .select(
-          "id, amount, checkalt_reference, submitted_at, last_status_payload, check_intake_item_id, check_intake_items(check_number, payer_name, payee_name, claim_number)",
+          "id, amount, checkalt_reference, submitted_at, last_status_payload, check_intake_item_id, check_intake_items(check_number, carrier_name, payee_line, freedom_claim_number, detected_claim_number)",
         )
         .eq("status", "pending_approval")
-        .order("submitted_at", { ascending: false })
+        .order("submitted_at", { ascending: false, nullsFirst: false })
         .limit(50);
       if (error) throw error;
       return data ?? [];
@@ -654,11 +654,13 @@ export function PendingApprovalDeposits() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="font-medium truncate">
-                  {intake?.payer_name ?? "Check"} → {intake?.payee_name ?? "—"}
+                  {intake?.carrier_name ?? "Check"} → {intake?.payee_line ?? "—"}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Check #{intake?.check_number ?? "—"} ·{" "}
-                  {intake?.claim_number ? `Claim ${intake.claim_number} · ` : ""}
+                  {(intake?.freedom_claim_number || intake?.detected_claim_number)
+                    ? `Claim ${intake.freedom_claim_number || intake.detected_claim_number} · `
+                    : ""}
                   Ref {row.checkalt_reference ?? "pending"} · $
                   {Number(row.amount ?? 0).toLocaleString(undefined, {
                     minimumFractionDigits: 2,
