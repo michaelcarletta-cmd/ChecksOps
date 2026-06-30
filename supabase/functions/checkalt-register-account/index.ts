@@ -5,8 +5,10 @@
 //
 // Sample payload (from CheckAlt's own Postman collection):
 //   {
-//     fiKey, userId, firstName, lastName, emailAddress,
-//     isSSORequest: true,
+//     fiKey: "<configure key>",
+//     ssorequest: true,
+//     userID: "mcarletta",
+//     firstName, lastName, emailAddress,
 //     accountDataList: [{ accountNumber }]
 //   }
 //
