@@ -62,7 +62,16 @@ Deno.serve(async (req) => {
         const json = await resp.json().catch(() => ({}));
 
         // Response schema: FinCaptureAPIDepositItemResponse
+        // CheckAlt returns numeric statusCode AND/OR string status depending
+        // on endpoint version. Map both.
         const rawStatus = String(json?.status ?? "").toLowerCase();
+        const numericStatus = Number(json?.statusCode ?? json?.status);
+        const numericMap: Record<number, string> = {
+          40: "pending_approval",
+          120: "rejected",
+          127: "submitted",
+          200: "cleared",
+        };
         const statusMap: Record<string, string> = {
           submitted: "submitted",
           pending: "submitted",
@@ -74,7 +83,9 @@ Deno.serve(async (req) => {
           rejected: "rejected",
           declined: "rejected",
         };
-        const internal = statusMap[rawStatus] ?? dep.status;
+        const internal =
+          numericMap[numericStatus] ?? statusMap[rawStatus] ?? dep.status;
+
 
         const updates: Record<string, unknown> = {
           last_polled_at: new Date().toISOString(),
