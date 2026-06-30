@@ -3086,8 +3086,7 @@ function CheckDetailPanel({
           </div>
         )}
 
-        {/* Endorsement Packet */}
-        <EndorsementPacketCard checkId={checkId} packetPath={check.endorsement_packet_path} />
+        {/* Endorsement Packet moved into Audit tab */}
       </CardHeader>
       <CardContent className="p-0">
         <Tabs value={detailTab} onValueChange={setDetailTab}>
