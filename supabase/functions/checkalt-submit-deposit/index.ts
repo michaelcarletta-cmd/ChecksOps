@@ -9,6 +9,7 @@
 
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
 import { z } from "https://esm.sh/zod@3.23.8";
+import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
 import {
   getServiceClient,
   loadConfig,
@@ -17,37 +18,14 @@ import {
   extractSsoKey,
 } from "../_shared/checkalt.ts";
 
-// CheckAlt now enforces a tighter per-image size. We aggressively downscale +
-// recompress every image before submission so phone-camera originals (often
-// 4-8MB) make it through. Target: ~700KB per side, max ~1.4MB combined b64.
-const TARGET_MAX_DIM = 1600;        // px, longest edge
-const TARGET_JPEG_QUALITY = 72;
-const MIN_DIM = 800;                // px, do not shrink below this
-const MIN_QUALITY = 45;
-const PER_IMAGE_BYTES_BUDGET = 750_000;   // ~750KB encoded JPEG per side
-const MAX_TOTAL_B64_CHARS = 2_400_000;    // ~1.8MB combined base64 payload
-
-// imagescript via esm.sh — deno.land/x intermittently 404s in the edge runtime
-const IMAGESCRIPT_URLS = [
-  "https://esm.sh/imagescript@1.3.0",
-  "https://esm.sh/imagescript@1.2.17",
-  "https://deno.land/x/imagescript@1.2.17/mod.ts",
-];
-let _imagescript: any = null;
-async function getImageScript() {
-  if (_imagescript) return _imagescript;
-  let lastErr: unknown;
-  for (const url of IMAGESCRIPT_URLS) {
-    try {
-      _imagescript = await import(url);
-      return _imagescript;
-    } catch (e) {
-      lastErr = e;
-      console.warn(`[checkalt-submit-deposit] imagescript import failed at ${url}: ${(e as Error).message}`);
-    }
-  }
-  throw lastErr;
-}
+// CheckAlt enforces a tight image payload. Compress every already-uploaded
+// image during deposit so existing oversized uploads do not need reuploading.
+const TARGET_MAX_DIM = 1200;              // px, longest edge
+const TARGET_JPEG_QUALITY = 68;
+const MIN_DIM = 600;                      // px, final hard floor
+const MIN_QUALITY = 35;
+const PER_IMAGE_BYTES_BUDGET = 450_000;   // ~450KB encoded JPEG per side
+const MAX_TOTAL_B64_CHARS = 1_600_000;    // ~1.2MB combined base64 payload
 
 function bytesToBase64(bytes: Uint8Array): string {
   const CHUNK = 0x8000;
@@ -71,7 +49,6 @@ async function normalizeImageToBudget(
   label: string,
 ): Promise<string> {
   try {
-    const { Image } = await getImageScript();
     let img = await Image.decode(bytes);
     let maxDim = TARGET_MAX_DIM;
     let quality = TARGET_JPEG_QUALITY;
@@ -102,13 +79,23 @@ async function normalizeImageToBudget(
     console.log(
       `[checkalt-submit-deposit] normalized ${label}: ${Math.round(bytes.length / 1024)}KB → ${Math.round(out.length / 1024)}KB @ ${img.width}x${img.height} q=${quality}`,
     );
+    if (out.length > PER_IMAGE_BYTES_BUDGET) {
+      throw new Error(
+        `${label} image could not be compressed below ${Math.round(PER_IMAGE_BYTES_BUDGET / 1024)}KB ` +
+        `(${Math.round(out.length / 1024)}KB after compression). Reupload a JPEG/PNG image.`,
+      );
+    }
+
     return bytesToBase64(out);
   } catch (e) {
-    console.warn(
-      `[checkalt-submit-deposit] normalize failed for ${label}, using original (${Math.round(bytes.length / 1024)}KB):`,
+    console.error(
+      `[checkalt-submit-deposit] normalize failed for ${label} (${Math.round(bytes.length / 1024)}KB):`,
       (e as Error).message,
     );
-    return bytesToBase64(bytes);
+    throw new Error(
+      `${label} check image could not be compressed for CheckAlt. ` +
+      `Reupload that side as a clear JPEG/PNG image under 2000px wide.`,
+    );
   }
 }
 
