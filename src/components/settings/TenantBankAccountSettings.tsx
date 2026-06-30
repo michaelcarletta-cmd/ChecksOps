@@ -23,8 +23,8 @@ export function TenantBankAccountSettings() {
   const { toast } = useToast();
   const { isAdmin } = usePermissions();
   const qc = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(emptyForm);
+  const [isStarting, setIsStarting] = useState(false);
+
 
   const { data: accounts = [], isLoading } = useQuery({
     queryKey: ["tenant-primary-accounts", tenant?.id],
