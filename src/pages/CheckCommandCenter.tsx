@@ -3032,34 +3032,8 @@ function CheckDetailPanel({
           </div>
         )}
 
-        {/* Single Source of Truth Blocking Banner */}
-        {isDepositBlocked && (
-          <div className="mt-2 border border-amber-500/30 bg-amber-500/10 rounded-lg p-3 space-y-2">
-            <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              Deposit Blocked
-            </div>
-            {blockingReasons.map((reason, i) => (
-              <p key={i} className="text-xs text-amber-300/80 pl-6">• {reason}</p>
-            ))}
-            {/* Bypass endorsements — physical signatures already on check */}
-            {pendingEndorsements.length > 0 && check.status !== "loss_draft_required" && !isSharedView && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full mt-1 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
-                onClick={handleBypassEndorsements}
-                disabled={bypassingEndorsements}
-              >
-                {bypassingEndorsements ? (
-                  <><Loader2Icon className="h-4 w-4 mr-2 animate-spin" />Bypassing...</>
-                ) : (
-                  <><CheckCircle2 className="h-4 w-4 mr-2" />Skip Endorsements — Already Signed</>
-                )}
-              </Button>
-            )}
-          </div>
-        )}
+        {/* Deposit Blocked banner moved into Endorsements tab */}
+
 
         {/* Loss Draft Banner & Action */}
         {check.status === "loss_draft_required" && lossDraftRecord?.id && (
