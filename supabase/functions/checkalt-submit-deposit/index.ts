@@ -226,6 +226,8 @@ Deno.serve(async (req) => {
     if (depErr) throw depErr;
 
     // --- submit to FinCapture /fincapture/deposit/process ---
+    // Payload shape per CheckAlt's official sample — only these fields:
+    //   fiKey, ssoKey, captureDateTime, userAmount, frontImage, rearImage, performRiskAssessment
     const submitResp = await checkAltFetch(
       supabase,
       "/fincapture/deposit/process",
@@ -234,15 +236,11 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           fiKey: cfg.fi_key,
           ssoKey,
-          depositAccountNumber: tenantAccount.deposit_account_number,
-          firstName,
-          lastName,
-          emailAddress: userEmail,
           captureDateTime: new Date().toISOString(),
           userAmount: check.amount,
           frontImage: frontB64,
           rearImage: backB64 ?? undefined,
-          performRiskAssessment: false,
+          performRiskAssessment: true,
         }),
       },
     );
