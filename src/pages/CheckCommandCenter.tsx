@@ -3705,7 +3705,9 @@ function CheckDetailPanel({
               </Suspense>
             </TabsContent>
 
-            <TabsContent value="audit" className="p-4 space-y-2 mt-0">
+            <TabsContent value="audit" className="p-4 space-y-3 mt-0">
+              <EndorsementPacketCard checkId={checkId} packetPath={check.endorsement_packet_path} />
+              <div className="space-y-2">
               {auditLog.map((entry) => (
                 <div key={entry.id} className="flex gap-3 text-sm">
                   <div className="w-1 rounded-full bg-primary/30 shrink-0" />
