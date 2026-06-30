@@ -577,10 +577,10 @@ export function PendingApprovalDeposits() {
       const { data, error } = await supabase
         .from("checkalt_deposits")
         .select(
-          "id, amount, checkalt_reference, submitted_at, last_status_payload, check_intake_item_id, check_intake_items(check_number, payer_name, payee_name, claim_number)",
+          "id, amount, checkalt_reference, submitted_at, last_status_payload, check_intake_item_id, check_intake_items(check_number, carrier_name, payee_line, freedom_claim_number, detected_claim_number)",
         )
         .eq("status", "pending_approval")
-        .order("submitted_at", { ascending: false })
+        .order("submitted_at", { ascending: false, nullsFirst: false })
         .limit(50);
       if (error) throw error;
       return data ?? [];
