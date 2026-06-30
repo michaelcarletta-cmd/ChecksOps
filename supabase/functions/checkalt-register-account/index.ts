@@ -79,11 +79,11 @@ Deno.serve(async (req) => {
     }
     const payload = {
       fiKey: cfg.fi_key,
+      ssorequest: true,
       userId: sso_user_id,
       firstName: first_name,
       lastName: last_name,
       emailAddress: email,
-      isSSORequest: true,
       accountDataList: [{ accountNumber: deposit_account_number }],
     };
 
