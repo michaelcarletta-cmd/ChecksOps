@@ -67,7 +67,7 @@ serve(async (req) => {
     // Load tenant Actum creds (env-aware)
     const { data: tenantData, error: tenantErr } = await supabase
       .from("tenants")
-      .select("actum_environment, actum_parent_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password, actum_test_parent_id, actum_test_sub_id_ppd, actum_test_sub_id_ccd, actum_test_syspass, actum_test_username, actum_test_password")
+      .select("actum_environment, actum_syspass, actum_username, actum_password, actum_test_syspass, actum_test_username, actum_test_password")
       .eq("id", account.tenant_id)
       .single();
     if (tenantErr) throw new Error(`Could not load tenant Actum config: ${tenantErr.message}`);
