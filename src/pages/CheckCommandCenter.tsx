@@ -99,6 +99,9 @@ const MortgageCompaniesDirectory = lazy(() =>
 const PendingApprovalDeposits = lazy(() =>
   import("@/components/settings/CheckAltSettings").then(m => ({ default: m.PendingApprovalDeposits }))
 );
+const CheckAltDepositHistory = lazy(() =>
+  import("@/components/settings/CheckAltSettings").then(m => ({ default: m.CheckAltDepositHistory }))
+);
 const LossPreventionPanel = lazy(() =>
   import("@/components/check-review/LossPreventionPanel").then(m => ({ default: m.LossPreventionPanel }))
 );
