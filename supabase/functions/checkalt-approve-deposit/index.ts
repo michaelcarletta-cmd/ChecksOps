@@ -139,30 +139,76 @@ Deno.serve(async (req) => {
       updates.reject_notes = reject_notes ?? null;
     }
 
-    await supabase.from("checkalt_deposits").update(updates).eq("id", deposit.id);
+    const { error: updateErr } = await supabase
+      .from("checkalt_deposits")
+      .update(updates)
+      .eq("id", deposit.id);
+    if (updateErr) throw updateErr;
 
     if (deposit.check_intake_item_id) {
-      await supabase
+      const approvedAtIso = String(updates.approved_at);
+      const isApproved = internalStatus === "submitted";
+
+      const { data: intake } = await supabase
+        .from("check_intake_items")
+        .select("tenant_id")
+        .eq("id", deposit.check_intake_item_id)
+        .maybeSingle();
+
+      const { error: intakeUpdateErr } = await supabase
+        .from("check_intake_items")
+        .update(isApproved
+          ? {
+            check_stage: "deposited",
+            status: "deposited",
+            deposit_recommendation: null,
+            deposited_at: approvedAtIso,
+            deposited_by_tenant_id: intake?.tenant_id ?? null,
+            updated_at: approvedAtIso,
+          }
+          : {
+            check_stage: "ready_for_deposit",
+            status: "approved_for_deposit",
+            deposit_recommendation: "ready_for_deposit",
+            deposited_at: null,
+            updated_at: approvedAtIso,
+          })
+        .eq("id", deposit.check_intake_item_id);
+      if (intakeUpdateErr) throw intakeUpdateErr;
+
+      const { error: claimUpdateErr } = await supabase
         .from("claim_checks")
         .update({
-          deposit_status: internalStatus === "rejected" ? "returned" : "deposited",
+          deposit_status: isApproved ? "deposited" : "returned",
         })
         .eq("check_intake_item_id", deposit.check_intake_item_id);
+      if (claimUpdateErr) throw claimUpdateErr;
 
-      if (internalStatus === "rejected" || internalStatus === "error") {
-        const { data: depositItem } = await supabase
-          .from("deposit_items")
-          .select("id, provider")
-          .eq("check_id", deposit.check_intake_item_id)
-          .maybeSingle();
-        if (depositItem && depositItem.provider === "checkalt") {
+      const { data: depositItem } = await supabase
+        .from("deposit_items")
+        .select("id, provider")
+        .eq("check_id", deposit.check_intake_item_id)
+        .maybeSingle();
+      if (depositItem && depositItem.provider === "checkalt") {
+        if (isApproved) {
+          await supabase
+            .from("deposit_items")
+            .update({
+              status: "succeeded",
+              cleared_at: approvedAtIso,
+              provider_reference: deposit.checkalt_reference,
+              provider_response: respJson,
+              updated_at: approvedAtIso,
+            })
+            .eq("id", depositItem.id);
+        } else if (internalStatus === "rejected" || internalStatus === "error") {
           await supabase
             .from("deposit_items")
             .update({
               status: "failed",
-              last_error: respJson?.statusDescription ?? internalStatus,
-              last_error_code: String(apiStatus),
-              last_provider_response: respJson,
+              exception_reason: respJson?.statusDescription ?? internalStatus,
+              exception_code: String(apiStatus),
+              provider_response: respJson,
               updated_at: new Date().toISOString(),
             })
             .eq("id", depositItem.id);
