@@ -3205,126 +3205,13 @@ function CheckDetailPanel({
                 </>
               )}
               <Separator />
-              {/* Check Images */}
+              {/* Inline front/back previews removed — the front of the check
+                  is shown at the top of the detail panel, and the back is
+                  available via the "View Check Images" button. The wrapper
+                  below stays in place so the back-upload prompt and the
+                  ready-for-deposit CTA continue to render. */}
               {(frontImageUrl || backImageUrl) && (
                 <div className="space-y-2">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium flex items-center gap-1">
-                    <FileImage className="h-3 w-3" /> Check Images
-                  </p>
-                  {frontImageUrl && (
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <p className="text-[10px] text-muted-foreground">Front</p>
-                        <a href={frontImageUrl} download={`check-${check.check_number ?? check.id}-front`} target="_blank" rel="noopener noreferrer">
-                          <Button variant="ghost" size="icon" className="h-5 w-5"><Download className="h-3 w-3" /></Button>
-                        </a>
-                      </div>
-                      <div className="relative overflow-hidden rounded border border-border">
-                        <img
-                          src={frontImageUrl}
-                          alt="Check front"
-                          className="w-full object-contain"
-                          onLoad={(event) => {
-                            setFrontImageDimensions({
-                              width: event.currentTarget.naturalWidth,
-                              height: event.currentTarget.naturalHeight,
-                            });
-                          }}
-                        />
-                        {showWatermark && (
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ transform: "rotate(-30deg)" }}>
-                            <div className="grid grid-cols-2 gap-x-8 gap-y-6 opacity-[0.07]">
-                              {Array.from({ length: 4 }).map((_, i) => (
-                                <span key={i} className="text-destructive font-bold text-3xl tracking-widest">VOID</span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  {backImageUrl && (
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <p className="text-[10px] text-muted-foreground">Back</p>
-                        <div className="flex items-center gap-1">
-                          {!isSharedView && (
-                          <label className="cursor-pointer">
-                            <Button variant="ghost" size="icon" className="h-5 w-5" asChild disabled={reuploadingBack}>
-                              <span><Upload className={`h-3 w-3 ${reuploadingBack ? "animate-spin" : ""}`} /></span>
-                            </Button>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={async (e) => {
-                                const file = e.target.files?.[0];
-                                if (!file || !check) return;
-                                setReuploadingBack(true);
-                                try {
-                                  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-                                  const newPath = `checks/${check.id}/back-${Date.now()}.${ext}`;
-                                  const { error: uploadErr } = await supabase.storage
-                                    .from("claim-files")
-                                    .upload(newPath, file, { cacheControl: "31536000", upsert: false, contentType: file.type || "image/jpeg" });
-                                  if (uploadErr) throw uploadErr;
-                                  const { error: updateErr } = await supabase
-                                    .from("check_intake_items")
-                                    .update({ back_image_path: newPath })
-                                    .eq("id", check.id);
-                                  if (updateErr) throw updateErr;
-                                  await supabase.from("check_audit_log").insert({
-                                    check_id: check.id,
-                                    event_type: "back_image_reuploaded",
-                                    actor_id: user?.id ?? null,
-                                    event_description: "Back of check re-uploaded (e.g. after mortgage signature)",
-                                    event_data: { old_path: check.back_image_path, new_path: newPath },
-                                  });
-                                  toast({ title: "Back image updated", description: "The back of the check has been re-uploaded successfully." });
-                                  qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
-                                  qc.invalidateQueries({ queryKey: ["check-back-img"] });
-                                  onRefresh();
-                                } catch (err: any) {
-                                  toast({ title: "Upload failed", description: err.message, variant: "destructive" });
-                                } finally {
-                                  setReuploadingBack(false);
-                                  e.target.value = "";
-                                }
-                              }}
-                            />
-                          </label>
-                          )}
-                          <a href={backImageUrl} download={`check-${check.check_number ?? check.id}-back`} target="_blank" rel="noopener noreferrer">
-                            <Button variant="ghost" size="icon" className="h-5 w-5"><Download className="h-3 w-3" /></Button>
-                          </a>
-                        </div>
-                      </div>
-                      <div className="check-back-wrap relative inline-block max-w-full rounded border border-border" style={{ overflow: "visible", containerType: "inline-size" as any }}>
-                        <img
-                          src={backImageUrl}
-                          alt="Check back"
-                          className="check-back-image block w-full"
-                          style={{ objectFit: "contain", height: "auto" }}
-                          onLoad={(event) => {
-                            setBackImageDimensions({
-                              width: event.currentTarget.naturalWidth,
-                              height: event.currentTarget.naturalHeight,
-                            });
-                          }}
-                        />
-
-                        {showWatermark && (
-                          <div className="void-watermark absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ transform: "rotate(-30deg)", zIndex: 30 }}>
-                            <div className="grid grid-cols-2 gap-x-8 gap-y-6 opacity-[0.07]">
-                              {Array.from({ length: 4 }).map((_, i) => (
-                                <span key={i} className="text-destructive font-bold text-3xl tracking-widest">VOID</span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
                   {!backImageUrl && !isSharedView && (
                     <div className="space-y-1">
                       <p className="text-[10px] text-muted-foreground">Back — No image uploaded</p>
