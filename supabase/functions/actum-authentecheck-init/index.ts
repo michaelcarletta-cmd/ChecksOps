@@ -74,26 +74,39 @@ serve(async (req) => {
 
     const env = (tenantData as any)?.actum_environment === "production" ? "production" : "test";
     const isProd = env === "production";
-    const parentId = (isProd ? tenantData?.actum_parent_id : (tenantData as any)?.actum_test_parent_id) || "ACTUM";
-    const subIdPpd = isProd ? tenantData?.actum_sub_id_ppd : (tenantData as any)?.actum_test_sub_id_ppd;
-    const subIdCcd = isProd ? tenantData?.actum_sub_id_ccd : (tenantData as any)?.actum_test_sub_id_ccd;
     const syspass = isProd ? tenantData?.actum_syspass : (tenantData as any)?.actum_test_syspass;
     const meruser = isProd ? tenantData?.actum_username : (tenantData as any)?.actum_test_username;
     const merpass = isProd ? tenantData?.actum_password : (tenantData as any)?.actum_test_password;
-    const subId = account.account_type === "insured" ? subIdPpd : subIdCcd;
-    if (!meruser || !merpass || !syspass || !subId) {
+    if (!meruser || !merpass || !syspass) {
       throw new Error(`Actum Authentecheck ${env} credentials not configured for this tenant.`);
     }
     console.log(`[authentecheck-init] using ${env} environment for tenant ${account.tenant_id}`);
 
-    // Parse first/last name from custname
-    const fullName = (account.custname ?? "Account Holder").trim();
-    const parts = fullName.split(/\s+/);
+    // Pull consumer name/email — first from account, fall back to signed-in user's profile.
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("first_name, last_name, email, full_name")
+      .eq("id", userData.user.id)
+      .maybeSingle();
+
+    const rawName =
+      (account.custname && account.custname !== "Pending" ? account.custname : "")
+      || [profile?.first_name, profile?.last_name].filter(Boolean).join(" ")
+      || profile?.full_name
+      || userData.user.email
+      || "Account Holder";
+    const parts = String(rawName).trim().split(/\s+/);
     const firstName = (parts[0] ?? "Account").slice(0, 30);
     const lastName = (parts.length > 1 ? parts.slice(1).join(" ") : "Holder").slice(0, 30);
-    const suppliedEmail = String(account.verification_recipient_email ?? "").trim();
-    const custEmail = suppliedEmail && suppliedEmail.length <= 50
-      ? suppliedEmail
+
+    const emailCandidate = String(
+      account.verification_recipient_email
+      || profile?.email
+      || userData.user.email
+      || ""
+    ).trim();
+    const custEmail = emailCandidate && emailCandidate.length <= 50
+      ? emailCandidate
       : `bank-${account.id.slice(0, 8)}@checksops.com`;
 
     const appBase = Deno.env.get("APP_BASE_URL") ?? "https://checksops.com";
@@ -101,16 +114,17 @@ serve(async (req) => {
     const declineUrl = return_url ?? `${appBase}/verify-account/complete?ok=0&acct=${account.id}`;
     const postbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/actum-authentecheck-postback`;
 
-    // Actum's Authentecheck guide shows the first POST segment as the raw
-    // payment token: chk:<PARENT_ID>:<SUB_ID>&custemail=...
-    // Sending this as pmt_type=chk:... causes their CGI parser to return
-    // "Error parsing PostData".
+    // Per Actum Authentecheck docs (SignupInit.cgi): standard form-encoded POST.
+    // No pmt_type / chk:<parent>:<sub> prefix — meruser/merpass/syspass identifies the merchant.
     const params = new URLSearchParams();
+    params.append("meruser", meruser);
+    params.append("merpass", merpass);
+    params.append("syspass", syspass);
     params.append("firstname", firstName);
     params.append("lastname", lastName);
     params.append("custemail", custEmail);
     params.append("ps1_init", "0.01");
-    params.append("ps1_desc", `Bank verification - ${account.nickname ?? "Account"}`.slice(0, 50));
+    params.append("ps1_desc", `Bank verification - ${(account.nickname ?? "Account").slice(0, 30)}`.slice(0, 50));
     params.append("ps1_cycle", "-1");
     params.append("authdata", "1");
     params.append("identity", "1");
@@ -118,19 +132,12 @@ serve(async (req) => {
     params.append("redirect_accept", acceptUrl);
     params.append("redirect_decline", declineUrl);
     params.append("dynamic_saleurl", postbackUrl);
-    // Trigger Actum-configured postback to our dynamic_saleurl with extra fields
-    params.append("postback", "1");
-    params.append("meruser", meruser);
-    params.append("merpass", merpass);
-    params.append("syspass", syspass);
-
-    const postBody = `chk:${encodeURIComponent(parentId)}:${encodeURIComponent(subId)}&${params.toString()}`;
 
     console.log("[authentecheck-init] initiating session for account", account.id);
     const res = await fetch(SIGNUP_INIT, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: postBody,
+      body: params.toString(),
     });
     const text = await res.text();
     console.log("[authentecheck-init] Actum response:", text);
@@ -150,6 +157,7 @@ serve(async (req) => {
     if (!sessionUrl) {
       throw new Error(actumErr ?? `Actum did not return a session URL: ${text.slice(0, 200)}`);
     }
+
 
     await supabase
       .from("stakeholder_accounts")
