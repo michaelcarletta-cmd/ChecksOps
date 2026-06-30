@@ -96,6 +96,9 @@ const TenantPartnerManager = lazy(() =>
 const MortgageCompaniesDirectory = lazy(() =>
   import("@/components/checks/MortgageCompaniesDirectory").then(m => ({ default: m.MortgageCompaniesDirectory }))
 );
+const PendingApprovalDeposits = lazy(() =>
+  import("@/components/settings/CheckAltSettings").then(m => ({ default: m.PendingApprovalDeposits }))
+);
 const LossPreventionPanel = lazy(() =>
   import("@/components/check-review/LossPreventionPanel").then(m => ({ default: m.LossPreventionPanel }))
 );
