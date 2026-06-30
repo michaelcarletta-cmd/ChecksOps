@@ -3124,7 +3124,7 @@ function CheckDetailPanel({
             </TabsList>
           </div>
 
-          <ScrollArea className="h-[calc(100vh-520px)]">
+          <ScrollArea className="h-[calc(100vh-340px)] min-h-[400px]">
             <TabsContent value="overview" className="p-4 space-y-3 mt-0">
               <DepositStatusPanel
                 checkId={checkId}
