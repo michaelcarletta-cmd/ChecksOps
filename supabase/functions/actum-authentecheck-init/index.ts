@@ -70,7 +70,7 @@ serve(async (req) => {
     // Load tenant Actum creds (env-aware)
     const { data: tenantData, error: tenantErr } = await supabase
       .from("tenants")
-      .select("actum_environment, actum_syspass, actum_username, actum_password, actum_test_syspass, actum_test_username, actum_test_password")
+      .select("actum_environment, actum_parent_id, actum_sub_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password, actum_test_parent_id, actum_test_sub_id_ppd, actum_test_sub_id_ccd, actum_test_syspass, actum_test_username, actum_test_password")
       .eq("id", account.tenant_id)
       .single();
     if (tenantErr) throw new Error(`Could not load tenant Actum config: ${tenantErr.message}`);
@@ -80,7 +80,11 @@ serve(async (req) => {
     const syspass = isProd ? tenantData?.actum_syspass : (tenantData as any)?.actum_test_syspass;
     const meruser = isProd ? tenantData?.actum_username : (tenantData as any)?.actum_test_username;
     const merpass = isProd ? tenantData?.actum_password : (tenantData as any)?.actum_test_password;
-    if (!meruser || !merpass || !syspass) {
+    const parentId = isProd ? (tenantData as any)?.actum_parent_id : (tenantData as any)?.actum_test_parent_id;
+    const subid = isProd
+      ? ((tenantData as any)?.actum_sub_id_ppd || (tenantData as any)?.actum_sub_id_ccd || (tenantData as any)?.actum_sub_id)
+      : ((tenantData as any)?.actum_test_sub_id_ppd || (tenantData as any)?.actum_test_sub_id_ccd);
+    if (!meruser || !merpass || !syspass || !parentId || !subid) {
       throw new Error(`Actum Authentecheck ${env} credentials not configured for this tenant.`);
     }
     console.log(`[authentecheck-init] using ${env} environment for tenant ${account.tenant_id}`);
@@ -121,7 +125,6 @@ serve(async (req) => {
     // bare first segment (`chk:actum:<subid>`), followed by normal form fields.
     // Do not URL-encode that first token or send it as pmt_type/key=value —
     // Actum's SignupInit parser rejects those variants as malformed PostData.
-    const subid = meruser;
     const psDesc = `Bank verification ${(account.nickname ?? "Account").slice(0, 20)}`
       .replace(/[^A-Za-z0-9 ]/g, "")
       .slice(0, 50);
@@ -139,7 +142,8 @@ serve(async (req) => {
     params.append("meruser", meruser);
     params.append("merpass", merpass);
     params.append("syspass", syspass);
-    const postData = `chk:actum:${subid}&${params.toString()}`;
+    const merchantToken = `chk:${String(parentId).trim()}:${String(subid).trim()}`;
+    const postData = `${merchantToken}&${params.toString()}`;
 
     console.log("[authentecheck-init] initiating session for account", account.id);
     const res = await fetch(SIGNUP_INIT, {
