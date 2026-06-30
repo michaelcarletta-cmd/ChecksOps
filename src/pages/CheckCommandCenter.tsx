@@ -2623,8 +2623,8 @@ function CheckDetailPanel({
       });
       if (submitErr) throw new Error(await getFunctionErrorMessage(submitErr, "CheckAlt deposit failed"));
 
-      sonnerToast.success("Submitted to CheckAlt", {
-        description: `Check #${check.check_number ?? checkId.slice(0, 8)} — status: ${(submitData as any)?.status ?? "submitted"}`,
+      sonnerToast.success("Deposit queued with CheckAlt", {
+        description: `Check #${check.check_number ?? checkId.slice(0, 8)} — images are being compressed and submitted in the background. Status will update shortly.`,
       });
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
