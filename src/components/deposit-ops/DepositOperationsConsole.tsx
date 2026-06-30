@@ -250,7 +250,7 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
       return data as { status: string; checkalt_reference: string | null };
     },
     onSuccess: (data) => {
-      toast({ title: "Submitted to CheckAlt", description: `Status: ${data.status}` });
+      toast({ title: "Deposit queued with CheckAlt", description: "Images are being compressed and submitted in the background. Status will update shortly." });
       qc.invalidateQueries({ queryKey: ["deposit-items"] });
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
     },
