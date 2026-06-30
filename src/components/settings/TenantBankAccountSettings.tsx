@@ -157,74 +157,30 @@ export function TenantBankAccountSettings() {
                 Bank Account
               </CardTitle>
               <CardDescription className="text-xs mt-1">
-                Your bank account for receiving check alternative deposits. Must be verified via micro-deposits before use.
+                Your bank account for receiving check deposits. Sign in with your bank — routing & account number, holder name, and account type are captured securely through Authentecheck (Plaid). No manual entry.
               </CardDescription>
             </div>
-            {!showForm && (
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowForm(true)}>
-                <Plus className="h-3 w-3 mr-1" />
-                Add account
-              </Button>
-            )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              onClick={() => addAccount.mutate()}
+              disabled={isStarting}
+            >
+              {isStarting
+                ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Opening bank login...</>
+                : <><Plus className="h-3 w-3 mr-1" /> Add account</>}
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
 
-          {showForm && (
-            <div className="rounded-md border bg-muted/30 p-3 space-y-3">
-              <p className="text-xs font-medium">New bank account</p>
-              <p className="text-[11px] text-muted-foreground">
-                Bank routing & account number are captured securely through Authentecheck (Plaid)
-                after you sign in to your bank. Just give the account a nickname and confirm the holder name.
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs">Account nickname</Label>
-                  <Input className="h-8 text-sm" placeholder="e.g. Main Operating Account" value={form.nickname} onChange={(e) => setForm({ ...form, nickname: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Account type</Label>
-                  <Select value={form.acct_type} onValueChange={(v) => setForm({ ...form, acct_type: v })}>
-                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="C" className="text-xs">Checking</SelectItem>
-                      <SelectItem value="S" className="text-xs">Savings</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1 col-span-2">
-                  <Label className="text-xs">Account holder name</Label>
-                  <Input className="h-8 text-sm" placeholder="Full legal name on account" value={form.custname} onChange={(e) => setForm({ ...form, custname: e.target.value })} />
-                </div>
-              </div>
-
-              {(!form.nickname || !form.custname) && (
-                <div className="flex items-center gap-1 text-xs text-amber-600">
-                  <AlertTriangle className="h-3 w-3" />
-                  Nickname and account holder name are required
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => addAccount.mutate(form)}
-                  disabled={addAccount.isPending || !form.nickname || !form.custname}
-                >
-                  {addAccount.isPending
-                    ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Opening bank login...</>
-                    : "Continue to bank login"}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => { setShowForm(false); setForm(emptyForm); }}>Cancel</Button>
-              </div>
-            </div>
-          )}
-
-          {accounts.length === 0 && !showForm && (
+          {accounts.length === 0 && (
             <p className="text-xs text-muted-foreground text-center py-4">
-              No bank account added yet. Add one to start accepting check alternative deposits.
+              No bank account added yet. Click "Add account" to sign in with your bank and verify instantly.
             </p>
           )}
+
 
           {accounts.map((acct: any) => {
             const vStatus = (acct.verification_status ?? "unverified") as VerificationStatus;
