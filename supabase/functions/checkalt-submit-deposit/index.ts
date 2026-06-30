@@ -313,11 +313,22 @@ Deno.serve(async (req) => {
           ? String(submitJson.referenceNumber)
           : undefined;
 
+        // CheckAlt FinCapture status codes:
+        //   40  = pending manual review/approval
+        //   127 = submitted for processing
+        //   120 = rejected
+        // When 40 is returned, the deposit is parked at CheckAlt and an admin
+        // must call /fincapture/deposit/approve before it advances. Do NOT
+        // auto-advance the check to "deposited" in that case.
+        const apiStatus = Number(submitJson?.status ?? submitJson?.statusCode);
+        const isPendingApproval = apiStatus === 40;
+        const internalStatus = isPendingApproval ? "pending_approval" : "submitted";
+
         await supabase
           .from("checkalt_deposits")
           .update({
             checkalt_reference: reference ?? null,
-            status: "submitted",
+            status: internalStatus,
             submitted_at: new Date().toISOString(),
             last_status_payload: submitJson,
           })
@@ -331,21 +342,23 @@ Deno.serve(async (req) => {
           })
           .eq("check_intake_item_id", check.id);
 
-        // Auto-advance the check to the Deposited stage on successful CheckAlt
-        // submission. deposited_at stamps the 48h "ready for release" timer used
-        // by the UI and the disbursement gate.
-        const depositedAtIso = new Date().toISOString();
-        await supabase
-          .from("check_intake_items")
-          .update({
-            check_stage: "deposited",
-            status: "deposited",
-            deposit_status: "deposited",
-            deposited_at: depositedAtIso,
-            deposited_by_tenant_id: check.tenant_id,
-            updated_at: depositedAtIso,
-          })
-          .eq("id", check.id);
+        // Only auto-advance the check when CheckAlt has actually accepted the
+        // deposit (not when it's parked for manual review).
+        if (!isPendingApproval) {
+          const depositedAtIso = new Date().toISOString();
+          await supabase
+            .from("check_intake_items")
+            .update({
+              check_stage: "deposited",
+              status: "deposited",
+              deposit_status: "deposited",
+              deposited_at: depositedAtIso,
+              deposited_by_tenant_id: check.tenant_id,
+              updated_at: depositedAtIso,
+            })
+            .eq("id", check.id);
+        }
+
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Unknown error";
         console.error("[checkalt-submit-deposit:bg]", msg);
