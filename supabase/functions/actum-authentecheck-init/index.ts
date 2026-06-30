@@ -11,6 +11,8 @@ const SIGNUP_INIT = "https://join.actumprocessing.com/Signup/SignupInit.cgi";
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
+  let failedAccount: { id: string; tenant_id: string } | null = null;
+
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
@@ -44,6 +46,7 @@ serve(async (req) => {
       .eq("id", stakeholder_account_id)
       .single();
     if (acctErr || !account) throw new Error("Account not found");
+    failedAccount = { id: account.id, tenant_id: account.tenant_id };
 
     // Tenant access check
     const { data: membership } = await supabase
@@ -114,15 +117,16 @@ serve(async (req) => {
     const declineUrl = return_url ?? `${appBase}/verify-account/complete?ok=0&acct=${account.id}`;
     const postbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/actum-authentecheck-postback`;
 
-    // Per Actum Authentecheck docs (SignupInit.cgi). pmt_type carries the
-    // chk:<parent>:<subid> merchant token; remaining fields are standard form-encoded.
+    // Per Actum Authentecheck docs (SignupInit.cgi), the merchant token is a
+    // bare first segment (`chk:actum:<subid>`), followed by normal form fields.
+    // Do not URL-encode that first token or send it as pmt_type/key=value —
+    // Actum's SignupInit parser rejects those variants as malformed PostData.
     const subid = meruser;
     const psDesc = `Bank verification ${(account.nickname ?? "Account").slice(0, 20)}`
       .replace(/[^A-Za-z0-9 ]/g, "")
       .slice(0, 50);
 
     const params = new URLSearchParams();
-    params.append("pmt_type", `chk:actum:${subid}`);
     params.append("custemail", custEmail);
     params.append("firstname", firstName);
     params.append("lastname", lastName);
@@ -135,12 +139,13 @@ serve(async (req) => {
     params.append("meruser", meruser);
     params.append("merpass", merpass);
     params.append("syspass", syspass);
+    const postData = `chk:actum:${subid}&${params.toString()}`;
 
     console.log("[authentecheck-init] initiating session for account", account.id);
     const res = await fetch(SIGNUP_INIT, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
+      body: postData,
     });
     const text = await res.text();
     console.log("[authentecheck-init] Actum response:", text);
@@ -185,6 +190,19 @@ serve(async (req) => {
     );
   } catch (err: any) {
     console.error("[authentecheck-init]", err);
+    if (failedAccount) {
+      await createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      )
+        .from("stakeholder_accounts")
+        .update({
+          is_active: false,
+          verification_status: "failed",
+          verification_failure_reason: err.message ?? "Authentecheck failed to start",
+        })
+        .eq("id", failedAccount.id);
+    }
     return new Response(JSON.stringify({ success: false, error: err.message }), {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
