@@ -14,6 +14,103 @@ import {
   checkAltFetch,
 } from "../_shared/checkalt.ts";
 
+let imageScriptPromise: Promise<any> | null = null;
+async function loadImageScript(): Promise<any> {
+  if (!imageScriptPromise) {
+    imageScriptPromise = import("https://deno.land/x/imagescript@1.2.17/mod.ts");
+  }
+  return imageScriptPromise;
+}
+
+let svgRenderPromise: Promise<((svg: string) => Promise<Uint8Array>) | null> | null = null;
+async function loadSvgRenderer(): Promise<((svg: string) => Promise<Uint8Array>) | null> {
+  if (!svgRenderPromise) {
+    svgRenderPromise = import("https://deno.land/x/resvg_wasm@0.2.0/mod.ts")
+      .then((mod) => mod.render as (svg: string) => Promise<Uint8Array>)
+      .catch((e) => {
+        console.warn("[checkalt-submit-deposit] SVG renderer unavailable", e);
+        return null;
+      });
+  }
+  return svgRenderPromise;
+}
+
+const MAX_CHECKALT_IMAGE_B64_CHARS = 4_000_000;
+const MAX_CHECKALT_IMAGE_PIXELS = 2_400_000;
+
+function bytesToBase64(bytes: Uint8Array): string {
+  const CHUNK = 0x8000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(
+      null,
+      bytes.subarray(i, i + CHUNK) as unknown as number[],
+    );
+  }
+  return btoa(binary);
+}
+
+function isSvgImage(path: string, contentType: string | null, bytes: Uint8Array): boolean {
+  if (path.toLowerCase().endsWith(".svg") || contentType?.includes("svg")) return true;
+  const head = new TextDecoder().decode(bytes.subarray(0, Math.min(bytes.length, 256))).trimStart();
+  return head.startsWith("<svg") || head.startsWith("<?xml");
+}
+
+async function normalizeImageForCheckAlt(
+  bytes: Uint8Array,
+  path: string,
+  contentType: string | null,
+  label: "front" | "back",
+): Promise<string> {
+  let working = bytes;
+
+  if (isSvgImage(path, contentType, working)) {
+    const render = await loadSvgRenderer();
+    if (!render) throw new Error(`${label} image is SVG and could not be rasterized for CheckAlt`);
+    const svg = new TextDecoder().decode(working);
+    working = await render(svg);
+    console.log(`[checkalt-submit-deposit] rasterized ${label} SVG ${bytes.length}B -> ${working.length}B PNG`);
+  }
+
+  let initialB64 = bytesToBase64(working);
+  if (initialB64.length <= MAX_CHECKALT_IMAGE_B64_CHARS && !path.toLowerCase().endsWith(".png")) {
+    return initialB64;
+  }
+
+  const lib = await loadImageScript();
+  const decoded = await lib.Image.decode(working);
+  const originalWidth = decoded.width;
+  const originalHeight = decoded.height;
+  const pixelCount = originalWidth * originalHeight;
+  const ratio = pixelCount > MAX_CHECKALT_IMAGE_PIXELS
+    ? Math.sqrt(MAX_CHECKALT_IMAGE_PIXELS / pixelCount)
+    : 1;
+  const targetWidth = Math.max(900, Math.floor(originalWidth * ratio));
+  const targetHeight = Math.max(400, Math.floor(originalHeight * ratio));
+  if (ratio < 1) decoded.resize(targetWidth, targetHeight);
+
+  let bestBytes: Uint8Array | null = null;
+  let bestB64 = initialB64;
+  for (const quality of [82, 72, 62, 52, 42]) {
+    const encoded = await decoded.clone().encodeJPEG(quality);
+    const b64 = bytesToBase64(encoded);
+    bestBytes = encoded;
+    bestB64 = b64;
+    if (b64.length <= MAX_CHECKALT_IMAGE_B64_CHARS) {
+      console.log(
+        `[checkalt-submit-deposit] normalized ${label} ${originalWidth}x${originalHeight} ${bytes.length}B -> ${decoded.width}x${decoded.height} ${encoded.length}B JPEG q${quality}`,
+      );
+      return b64;
+    }
+  }
+
+  const finalLength = bestBytes?.length ?? working.length;
+  console.warn(
+    `[checkalt-submit-deposit] ${label} image still large after compression: ${bestB64.length} base64 chars (${finalLength}B raw)`,
+  );
+  return bestB64;
+}
+
 const BodySchema = z.object({
   check_intake_item_id: z.string().uuid(),
 });
@@ -107,34 +204,26 @@ Deno.serve(async (req) => {
     const firstName = nameParts[0] || "User";
     const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
 
-    const downloadAsB64 = async (path: string | null) => {
+    const downloadAsB64 = async (path: string | null, label: "front" | "back") => {
       if (!path) return null;
       const { data, error } = await supabase.storage
         .from("claim-files")
         .download(path);
       if (error || !data)
         throw new Error(`Image download failed: ${error?.message}`);
-      const buf = new Uint8Array(await data.arrayBuffer());
-      // Chunked base64 encoding — avoids building a huge intermediate
-      // binary string (which blows the 150MB edge runtime memory cap on
-      // multi-MB check images). Process 32KB at a time.
-      const CHUNK = 0x8000;
-      let binary = "";
-      for (let i = 0; i < buf.length; i += CHUNK) {
-        binary += String.fromCharCode.apply(
-          null,
-          buf.subarray(i, i + CHUNK) as unknown as number[],
-        );
-      }
-      const b64 = btoa(binary);
-      binary = "";
-      return b64;
+      const bytes = new Uint8Array(await data.arrayBuffer());
+      return await normalizeImageForCheckAlt(bytes, path, data.type || null, label);
     };
-    const frontB64 = await downloadAsB64(check.front_image_path);
-    const backB64 = await downloadAsB64(check.back_image_path);
+    const frontB64 = await downloadAsB64(check.front_image_path, "front");
+    const backB64 = await downloadAsB64(check.back_image_path, "back");
 
     if (!frontB64)
       throw new Error("Front image required for CheckAlt submission");
+
+    const estimatedPayloadSize = frontB64.length + (backB64?.length ?? 0);
+    if (estimatedPayloadSize > 8_800_000) {
+      throw new Error(`Check images are still too large for CheckAlt after compression (${estimatedPayloadSize} bytes). Re-upload smaller front/back images.`);
+    }
 
     // --- create pending deposit row first (audit anchor) ---
     const { data: depositRow, error: depErr } = await supabase
