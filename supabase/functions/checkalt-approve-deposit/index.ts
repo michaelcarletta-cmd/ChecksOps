@@ -17,9 +17,8 @@ import { z } from "https://esm.sh/zod@3.23.8";
 import {
   getServiceClient,
   loadTenantAccount,
+  loadConfig,
   checkAltFetch,
-  getCheckAltFiKey,
-  syncDepositItem,
 } from "../_shared/checkalt.ts";
 
 const BodySchema = z.object({
