@@ -169,7 +169,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // --- load check + images ---
+    // --- load check ---
     const { data: check, error: checkErr } = await supabase
       .from("check_intake_items")
       .select(
@@ -179,44 +179,6 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (checkErr || !check)
       throw new Error(checkErr?.message || "Check not found");
-
-    // --- load submitting user's profile for FinCapture user fields ---
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("email, full_name")
-      .eq("id", userId)
-      .maybeSingle();
-    const userEmail = profile?.email ?? user?.email ?? "";
-    const fullName = profile?.full_name ?? "";
-    const nameParts = fullName.trim().split(/\s+/);
-    const firstName = nameParts[0] || "User";
-    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
-
-    const downloadAsB64 = async (path: string | null, label: "front" | "back") => {
-      if (!path) return null;
-      const { data, error } = await supabase.storage
-        .from("claim-files")
-        .download(path);
-      if (error || !data)
-        throw new Error(`${label} image download failed: ${error?.message}`);
-      const bytes = new Uint8Array(await data.arrayBuffer());
-      return await normalizeImageToBudget(bytes, label);
-    };
-    const frontB64 = await downloadAsB64(check.front_image_path, "front");
-    const backB64 = await downloadAsB64(check.back_image_path, "back");
-
-    if (!frontB64)
-      throw new Error("Front image required for CheckAlt submission");
-
-    const totalB64 = frontB64.length + (backB64?.length ?? 0);
-    if (totalB64 > MAX_TOTAL_B64_CHARS) {
-      throw new Error(
-        `Combined check images still exceed CheckAlt's limit after compression (${(totalB64 / 1_000_000).toFixed(1)}MB encoded). ` +
-        `Please reupload smaller front/back images.`
-      );
-    }
-
-
 
     // --- look up tenant-specific CheckAlt account ---
     const { data: tenantAccount, error: taErr } = await supabase
@@ -232,136 +194,164 @@ Deno.serve(async (req) => {
       );
     }
 
-    // --- resolve the real ssoKey ---
-    // Priority: cached in last_register_payload → live from getUserAccountInfo → fallback to sso_user_id
-    let ssoKey: string | null = null;
-    const cached = tenantAccount.last_register_payload as any;
-    if (cached?.sso_key) {
-      ssoKey = cached.sso_key;
-      console.log("[checkalt-submit-deposit] Using cached ssoKey from registration");
-    }
-
-    if (!ssoKey) {
-      // Fetch live from CheckAlt
-      try {
-        const info = await getUserAccountInfo(supabase, tenantAccount.sso_user_id);
-        if (info.ok) {
-          ssoKey = extractSsoKey(info.json, tenantAccount.deposit_account_number);
-          console.log("[checkalt-submit-deposit] Fetched ssoKey from getUserAccountInfo:", ssoKey ? "found" : "not found");
-
-          // Cache for next time
-          if (ssoKey) {
-            await supabase
-              .from("checkalt_tenant_accounts")
-              .update({
-                last_register_payload: {
-                  ...(typeof cached === "object" && cached ? cached : {}),
-                  user_account_info: info.json,
-                  sso_key: ssoKey,
-                },
-              })
-              .eq("tenant_id", check.tenant_id);
-          }
-        }
-      } catch (e) {
-        console.error("[checkalt-submit-deposit] getUserAccountInfo failed:", e);
-      }
-    }
-
-    // Fallback: use sso_user_id as ssoKey (works when CheckAlt userId = ssoKey)
-    if (!ssoKey) {
-      ssoKey = tenantAccount.sso_user_id;
-      console.log("[checkalt-submit-deposit] Falling back to sso_user_id as ssoKey");
-    }
-
-    // --- create pending deposit row first (audit anchor) ---
+    // --- create pending deposit row immediately (audit anchor) ---
     const { data: depositRow, error: depErr } = await supabase
       .from("checkalt_deposits")
       .insert({
         check_intake_item_id: check.id,
         tenant_id: check.tenant_id,
         amount: check.amount,
-        status: "pending",
+        status: "queued",
         submitted_by: userId,
       })
       .select()
       .single();
     if (depErr) throw depErr;
 
-    // --- submit to FinCapture /fincapture/deposit/process ---
-    // Payload shape per CheckAlt's official sample — only these fields:
-    //   fiKey, ssoKey, captureDateTime, userAmount, frontImage, rearImage, performRiskAssessment
-    const submitResp = await checkAltFetch(
-      supabase,
-      "/fincapture/deposit/process",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          fiKey: cfg.fi_key,
-          ssoKey,
-          depositAccountNumber: tenantAccount.deposit_account_number,
-          captureDateTime: new Date().toISOString(),
-          userAmount: check.amount,
-          frontImage: frontB64,
-          rearImage: backB64 ?? undefined,
-          performRiskAssessment: true,
-        }),
-      },
-    );
-    const submitText = await submitResp.text();
-    let submitJson: any = {};
-    try { submitJson = submitText ? JSON.parse(submitText) : {}; } catch { submitJson = { raw: submitText }; }
-    console.log("[checkalt-submit-deposit] response", submitResp.status, submitText.slice(0, 500));
+    // --- background worker: image normalization + CheckAlt submission ---
+    // Offloaded via EdgeRuntime.waitUntil to avoid the 2s CPU limit on the
+    // request handler. Frontend polls checkalt_deposits.status:
+    // queued → pending → submitted | error.
+    const runDeposit = async () => {
+      try {
+        await supabase
+          .from("checkalt_deposits")
+          .update({ status: "pending" })
+          .eq("id", depositRow.id);
 
-    if (!submitResp.ok) {
-      await supabase
-        .from("checkalt_deposits")
-        .update({ status: "error", last_status_payload: { http_status: submitResp.status, body: submitJson, raw: submitText.slice(0, 2000) } })
-        .eq("id", depositRow.id);
-      return new Response(
-        JSON.stringify({
-          error: "CheckAlt submission failed",
-          status: submitResp.status,
-          details: submitJson,
-          raw: submitText.slice(0, 1000),
-        }),
-        {
-          status: 502,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+        const downloadAsB64 = async (path: string | null, label: "front" | "back") => {
+          if (!path) return null;
+          const { data, error } = await supabase.storage
+            .from("claim-files")
+            .download(path);
+          if (error || !data)
+            throw new Error(`${label} image download failed: ${error?.message}`);
+          const bytes = new Uint8Array(await data.arrayBuffer());
+          return await normalizeImageToBudget(bytes, label);
+        };
+
+        const frontB64 = await downloadAsB64(check.front_image_path, "front");
+        const backB64 = await downloadAsB64(check.back_image_path, "back");
+
+        if (!frontB64) throw new Error("Front image required for CheckAlt submission");
+
+        const totalB64 = frontB64.length + (backB64?.length ?? 0);
+        if (totalB64 > MAX_TOTAL_B64_CHARS) {
+          throw new Error(
+            `Combined check images still exceed CheckAlt's limit after compression (${(totalB64 / 1_000_000).toFixed(1)}MB encoded). ` +
+            `Please reupload smaller front/back images.`,
+          );
+        }
+
+        // resolve ssoKey
+        let ssoKey: string | null = null;
+        const cached = tenantAccount.last_register_payload as any;
+        if (cached?.sso_key) ssoKey = cached.sso_key;
+        if (!ssoKey) {
+          try {
+            const info = await getUserAccountInfo(supabase, tenantAccount.sso_user_id);
+            if (info.ok) {
+              ssoKey = extractSsoKey(info.json, tenantAccount.deposit_account_number);
+              if (ssoKey) {
+                await supabase
+                  .from("checkalt_tenant_accounts")
+                  .update({
+                    last_register_payload: {
+                      ...(typeof cached === "object" && cached ? cached : {}),
+                      user_account_info: info.json,
+                      sso_key: ssoKey,
+                    },
+                  })
+                  .eq("tenant_id", check.tenant_id);
+              }
+            }
+          } catch (e) {
+            console.error("[checkalt-submit-deposit] getUserAccountInfo failed:", e);
+          }
+        }
+        if (!ssoKey) ssoKey = tenantAccount.sso_user_id;
+
+        const submitResp = await checkAltFetch(
+          supabase,
+          "/fincapture/deposit/process",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              fiKey: cfg.fi_key,
+              ssoKey,
+              depositAccountNumber: tenantAccount.deposit_account_number,
+              captureDateTime: new Date().toISOString(),
+              userAmount: check.amount,
+              frontImage: frontB64,
+              rearImage: backB64 ?? undefined,
+              performRiskAssessment: true,
+            }),
+          },
+        );
+        const submitText = await submitResp.text();
+        let submitJson: any = {};
+        try { submitJson = submitText ? JSON.parse(submitText) : {}; } catch { submitJson = { raw: submitText }; }
+        console.log("[checkalt-submit-deposit] response", submitResp.status, submitText.slice(0, 500));
+
+        if (!submitResp.ok) {
+          await supabase
+            .from("checkalt_deposits")
+            .update({
+              status: "error",
+              last_status_payload: { http_status: submitResp.status, body: submitJson, raw: submitText.slice(0, 2000) },
+            })
+            .eq("id", depositRow.id);
+          return;
+        }
+
+        const reference: string | undefined = submitJson?.referenceNumber != null
+          ? String(submitJson.referenceNumber)
+          : undefined;
+
+        await supabase
+          .from("checkalt_deposits")
+          .update({
+            checkalt_reference: reference ?? null,
+            status: "submitted",
+            submitted_at: new Date().toISOString(),
+            last_status_payload: submitJson,
+          })
+          .eq("id", depositRow.id);
+
+        await supabase
+          .from("claim_checks")
+          .update({
+            deposit_method: "checkalt",
+            checkalt_deposit_id: depositRow.id,
+          })
+          .eq("check_intake_item_id", check.id);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        console.error("[checkalt-submit-deposit:bg]", msg);
+        await supabase
+          .from("checkalt_deposits")
+          .update({ status: "error", last_status_payload: { error: msg } })
+          .eq("id", depositRow.id);
+      }
+    };
+
+    // @ts-ignore — EdgeRuntime is provided by the Deno edge runtime
+    if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
+      // @ts-ignore
+      EdgeRuntime.waitUntil(runDeposit());
+    } else {
+      runDeposit();
     }
-
-    const reference: string | undefined = submitJson?.referenceNumber != null
-      ? String(submitJson.referenceNumber)
-      : undefined;
-
-    await supabase
-      .from("checkalt_deposits")
-      .update({
-        checkalt_reference: reference ?? null,
-        status: "submitted",
-        submitted_at: new Date().toISOString(),
-        last_status_payload: submitJson,
-      })
-      .eq("id", depositRow.id);
-
-    await supabase
-      .from("claim_checks")
-      .update({
-        deposit_method: "checkalt",
-        checkalt_deposit_id: depositRow.id,
-      })
-      .eq("check_intake_item_id", check.id);
 
     return new Response(
       JSON.stringify({
         success: true,
         deposit_id: depositRow.id,
-        checkalt_reference: reference ?? null,
+        status: "queued",
+        message: "Deposit queued — images are being compressed and submitted to CheckAlt in the background.",
       }),
       {
-        status: 200,
+        status: 202,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       },
     );
