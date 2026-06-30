@@ -124,10 +124,7 @@ serve(async (req) => {
     params.append("lastname", lastName);
     params.append("custemail", custEmail);
     params.append("ps1_init", "0.01");
-    params.append("ps1_desc", `Bank verification - ${(account.nickname ?? "Account").slice(0, 30)}`.slice(0, 50));
-    params.append("ps1_cycle", "-1");
-    params.append("authdata", "1");
-    params.append("identity", "1");
+    params.append("ps1_desc", `Bank verification ${(account.nickname ?? "Account").slice(0, 20)}`.replace(/[^A-Za-z0-9 ]/g, "").slice(0, 50));
     params.append("merchantdata", account.id);
     params.append("redirect_accept", acceptUrl);
     params.append("redirect_decline", declineUrl);
