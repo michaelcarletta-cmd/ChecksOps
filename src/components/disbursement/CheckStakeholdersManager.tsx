@@ -59,7 +59,8 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
     },
   });
 
-  const selectedIds = new Set(checkStakeholders.map((s: any) => s.stakeholder_account_id));
+  const activeCheckStakeholders = checkStakeholders.filter((s: any) => s.stakeholder_accounts?.is_active !== false);
+  const selectedIds = new Set(activeCheckStakeholders.map((s: any) => s.stakeholder_account_id));
   const availableToAdd = allAccounts.filter((a: any) => !selectedIds.has(a.id));
 
   const addMut = useMutation({
@@ -130,13 +131,13 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
         </Popover>
       </div>
 
-      {checkStakeholders.length === 0 ? (
+      {activeCheckStakeholders.length === 0 ? (
         <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground text-center">
           No stakeholders yet. Add one to start disbursing.
         </div>
       ) : (
         <div className="space-y-1">
-          {checkStakeholders.map((s: any) => {
+          {activeCheckStakeholders.map((s: any) => {
             const acct = s.stakeholder_accounts;
             if (!acct) return null;
             const vStatus = (acct.verification_status ?? "unverified") as VerificationStatus;

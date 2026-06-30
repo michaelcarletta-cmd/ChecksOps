@@ -75,6 +75,7 @@ export function StakeholderAccountSettings() {
 
   const addAccount = useMutation({
     mutationFn: async (values: typeof emptyForm) => {
+      let insertedId: string | null = null;
       const { data: inserted, error } = await supabase
         .from("stakeholder_accounts")
         .insert({
@@ -87,18 +88,29 @@ export function StakeholderAccountSettings() {
         .select("id")
         .single();
       if (error) throw error;
+      insertedId = inserted!.id;
 
-      const { data: sess, error: initErr } = await supabase.functions.invoke(
-        "actum-authentecheck-init",
-        { body: { stakeholder_account_id: inserted!.id } },
-      );
-      if (initErr) {
-        let msg = initErr.message ?? "Failed to start verification";
-        try { const b = await (initErr as any).context?.json?.(); if (b?.error) msg = b.error; } catch {}
-        throw new Error(msg);
+      try {
+        const { data: sess, error: initErr } = await supabase.functions.invoke(
+          "actum-authentecheck-init",
+          { body: { stakeholder_account_id: inserted!.id } },
+        );
+        if (initErr) {
+          let msg = initErr.message ?? "Failed to start verification";
+          try { const b = await (initErr as any).context?.json?.(); if (b?.error) msg = b.error; } catch {}
+          throw new Error(msg);
+        }
+        if ((sess as any)?.error) throw new Error((sess as any).error);
+        return (sess as any)?.url as string;
+      } catch (e: any) {
+        if (insertedId) {
+          await supabase
+            .from("stakeholder_accounts")
+            .update({ is_active: false, verification_status: "failed", verification_failure_reason: e.message })
+            .eq("id", insertedId);
+        }
+        throw e;
       }
-      if ((sess as any)?.error) throw new Error((sess as any).error);
-      return (sess as any)?.url as string;
     },
     onSuccess: (url) => {
       if (url) {
@@ -141,16 +153,26 @@ export function StakeholderAccountSettings() {
 
   const deleteAccount = useMutation({
     mutationFn: async (id: string) => {
+      const { error: linkError } = await supabase
+        .from("check_stakeholders")
+        .delete()
+        .eq("stakeholder_account_id", id);
+      if (linkError) throw linkError;
+
       const { error } = await supabase
         .from("stakeholder_accounts")
-        .update({ is_active: false })
+        .update({ is_active: false, is_primary: false })
         .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
       toast({ title: "Account removed" });
       qc.invalidateQueries({ queryKey: ["stakeholder-accounts"] });
+      qc.invalidateQueries({ queryKey: ["tenant-primary-accounts"] });
+      qc.invalidateQueries({ queryKey: ["check-stakeholders"] });
+      qc.invalidateQueries({ queryKey: ["disbursement-accounts"] });
     },
+    onError: (e: any) => toast({ title: "Couldn't remove account", description: e.message, variant: "destructive" }),
   });
 
   const adminOverride = useMutation({
