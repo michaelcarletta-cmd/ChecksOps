@@ -17,8 +17,22 @@ import {
   extractSsoKey,
 } from "../_shared/checkalt.ts";
 
-const MAX_IMAGE_BYTES = 3_500_000;
-const MAX_TOTAL_B64_CHARS = 8_800_000;
+// CheckAlt now enforces a tighter per-image size. We aggressively downscale +
+// recompress every image before submission so phone-camera originals (often
+// 4-8MB) make it through. Target: ~700KB per side, max ~1.4MB combined b64.
+const TARGET_MAX_DIM = 1600;        // px, longest edge
+const TARGET_JPEG_QUALITY = 72;
+const MIN_DIM = 800;                // px, do not shrink below this
+const MIN_QUALITY = 45;
+const PER_IMAGE_BYTES_BUDGET = 750_000;   // ~750KB encoded JPEG per side
+const MAX_TOTAL_B64_CHARS = 2_400_000;    // ~1.8MB combined base64 payload
+
+const IMAGESCRIPT_URL = "https://deno.land/x/imagescript@1.2.17/mod.ts";
+let _imagescript: any = null;
+async function getImageScript() {
+  if (!_imagescript) _imagescript = await import(IMAGESCRIPT_URL);
+  return _imagescript;
+}
 
 function bytesToBase64(bytes: Uint8Array): string {
   const CHUNK = 0x8000;
@@ -30,6 +44,57 @@ function bytesToBase64(bytes: Uint8Array): string {
     );
   }
   return btoa(binary);
+}
+
+/**
+ * Decode → resize → re-encode JPEG, iterating down until the output fits the
+ * per-image byte budget. Returns base64 (no data: prefix). Falls back to the
+ * raw bytes if decoding fails so PDFs / unknown blobs aren't dropped.
+ */
+async function normalizeImageToBudget(
+  bytes: Uint8Array,
+  label: string,
+): Promise<string> {
+  try {
+    const { Image } = await getImageScript();
+    let img = await Image.decode(bytes);
+    let maxDim = TARGET_MAX_DIM;
+    let quality = TARGET_JPEG_QUALITY;
+
+    // Always resize down to TARGET_MAX_DIM first.
+    const longest = Math.max(img.width, img.height);
+    if (longest > maxDim) {
+      const scale = maxDim / longest;
+      img = img.resize(Math.round(img.width * scale), Math.round(img.height * scale));
+    }
+
+    let out: Uint8Array = await img.encodeJPEG(quality);
+
+    // Tighten until it fits the budget or we hit floors.
+    while (out.length > PER_IMAGE_BYTES_BUDGET) {
+      if (quality > MIN_QUALITY) {
+        quality = Math.max(MIN_QUALITY, quality - 10);
+      } else {
+        const newLongest = Math.max(img.width, img.height);
+        if (newLongest <= MIN_DIM) break;
+        const nextDim = Math.max(MIN_DIM, Math.round(newLongest * 0.8));
+        const scale = nextDim / newLongest;
+        img = img.resize(Math.round(img.width * scale), Math.round(img.height * scale));
+      }
+      out = await img.encodeJPEG(quality);
+    }
+
+    console.log(
+      `[checkalt-submit-deposit] normalized ${label}: ${Math.round(bytes.length / 1024)}KB → ${Math.round(out.length / 1024)}KB @ ${img.width}x${img.height} q=${quality}`,
+    );
+    return bytesToBase64(out);
+  } catch (e) {
+    console.warn(
+      `[checkalt-submit-deposit] normalize failed for ${label}, using original (${Math.round(bytes.length / 1024)}KB):`,
+      (e as Error).message,
+    );
+    return bytesToBase64(bytes);
+  }
 }
 
 const BodySchema = z.object({
@@ -133,13 +198,7 @@ Deno.serve(async (req) => {
       if (error || !data)
         throw new Error(`${label} image download failed: ${error?.message}`);
       const bytes = new Uint8Array(await data.arrayBuffer());
-      if (bytes.length > MAX_IMAGE_BYTES) {
-        throw new Error(
-          `${label} image is too large (${(bytes.length / 1_000_000).toFixed(1)}MB). ` +
-          `Please upload a smaller image (max ~3.5MB). Compress or resize it before uploading.`
-        );
-      }
-      return bytesToBase64(bytes);
+      return await normalizeImageToBudget(bytes, label);
     };
     const frontB64 = await downloadAsB64(check.front_image_path, "front");
     const backB64 = await downloadAsB64(check.back_image_path, "back");
@@ -150,10 +209,12 @@ Deno.serve(async (req) => {
     const totalB64 = frontB64.length + (backB64?.length ?? 0);
     if (totalB64 > MAX_TOTAL_B64_CHARS) {
       throw new Error(
-        `Combined check images are too large for CheckAlt (${(totalB64 / 1_000_000).toFixed(1)}MB encoded). ` +
-        `Please upload smaller front/back images.`
+        `Combined check images still exceed CheckAlt's limit after compression (${(totalB64 / 1_000_000).toFixed(1)}MB encoded). ` +
+        `Please reupload smaller front/back images.`
       );
     }
+
+
 
     // --- look up tenant-specific CheckAlt account ---
     const { data: tenantAccount, error: taErr } = await supabase
