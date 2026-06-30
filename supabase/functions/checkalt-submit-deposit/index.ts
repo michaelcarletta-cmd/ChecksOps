@@ -213,19 +213,8 @@ Deno.serve(async (req) => {
         `Please reupload smaller front/back images.`
       );
     }
-    const frontB64 = await downloadAsB64(check.front_image_path, "front");
-    const backB64 = await downloadAsB64(check.back_image_path, "back");
 
-    if (!frontB64)
-      throw new Error("Front image required for CheckAlt submission");
 
-    const totalB64 = frontB64.length + (backB64?.length ?? 0);
-    if (totalB64 > MAX_TOTAL_B64_CHARS) {
-      throw new Error(
-        `Combined check images are too large for CheckAlt (${(totalB64 / 1_000_000).toFixed(1)}MB encoded). ` +
-        `Please upload smaller front/back images.`
-      );
-    }
 
     // --- look up tenant-specific CheckAlt account ---
     const { data: tenantAccount, error: taErr } = await supabase
