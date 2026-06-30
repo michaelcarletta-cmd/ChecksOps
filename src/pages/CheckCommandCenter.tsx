@@ -1054,6 +1054,11 @@ export default function CheckCommandCenter() {
                   <PendingApprovalDeposits />
                 </Suspense>
               </TabsContent>
+              <TabsContent value="deposit_history" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <CheckAltDepositHistory />
+                </Suspense>
+              </TabsContent>
               <TabsContent value="check_tracker" className="mt-3">
                 <Suspense fallback={<TabLoader />}>
                   <AdminCheckTracker searchQuery={searchQuery} />
