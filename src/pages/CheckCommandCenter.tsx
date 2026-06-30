@@ -96,6 +96,9 @@ const TenantPartnerManager = lazy(() =>
 const MortgageCompaniesDirectory = lazy(() =>
   import("@/components/checks/MortgageCompaniesDirectory").then(m => ({ default: m.MortgageCompaniesDirectory }))
 );
+const PendingApprovalDeposits = lazy(() =>
+  import("@/components/settings/CheckAltSettings").then(m => ({ default: m.PendingApprovalDeposits }))
+);
 const LossPreventionPanel = lazy(() =>
   import("@/components/check-review/LossPreventionPanel").then(m => ({ default: m.LossPreventionPanel }))
 );
@@ -993,6 +996,7 @@ export default function CheckCommandCenter() {
             <Tabs defaultValue="deposit_ops">
               <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
                 <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
+                <TabsTrigger value="pending_approvals" className="text-xs gap-1"><ShieldAlert className="h-3 w-3" />Pending Approvals</TabsTrigger>
                 <TabsTrigger value="check_tracker" className="text-xs gap-1"><ShieldAlert className="h-3 w-3" />Check Tracker</TabsTrigger>
                 <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
                 <TabsTrigger value="mortgage_cos" className="text-xs gap-1"><Building2 className="h-3 w-3" />Mortgage Cos</TabsTrigger>
@@ -1000,6 +1004,11 @@ export default function CheckCommandCenter() {
               <TabsContent value="deposit_ops" className="mt-3">
                 <Suspense fallback={<TabLoader />}>
                   <DepositOperationsConsole searchQuery={searchQuery} />
+                </Suspense>
+              </TabsContent>
+              <TabsContent value="pending_approvals" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <PendingApprovalDeposits />
                 </Suspense>
               </TabsContent>
               <TabsContent value="check_tracker" className="mt-3">
