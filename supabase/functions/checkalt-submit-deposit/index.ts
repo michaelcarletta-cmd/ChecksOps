@@ -281,7 +281,12 @@ Deno.serve(async (req) => {
               ssoKey,
               depositAccountNumber: tenantAccount.deposit_account_number,
               captureDateTime: new Date().toISOString(),
-              userAmount: check.amount,
+              // CheckAlt support: amount must be sent as an integer with no
+              // decimal point, including cents (e.g. $123.45 -> 12345).
+              // check.amount is stored in whole dollars (e.g. 780.00), so a
+              // raw pass-through caused an "RDC Amount Mismatch" against the
+              // cents-scale amount OCR'd off the check image.
+              userAmount: Math.round(Number(check.amount) * 100),
               frontImage: frontB64,
               rearImage: backB64 ?? undefined,
               performRiskAssessment: true,
