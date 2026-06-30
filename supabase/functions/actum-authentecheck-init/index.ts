@@ -140,7 +140,7 @@ serve(async (req) => {
     const res = await fetch(SIGNUP_INIT, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
+      body: params.toString(),
     });
     const text = await res.text();
     console.log("[authentecheck-init] Actum response:", text);
