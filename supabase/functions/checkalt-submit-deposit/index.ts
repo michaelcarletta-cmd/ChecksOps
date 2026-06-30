@@ -198,14 +198,21 @@ Deno.serve(async (req) => {
       if (error || !data)
         throw new Error(`${label} image download failed: ${error?.message}`);
       const bytes = new Uint8Array(await data.arrayBuffer());
-      if (bytes.length > MAX_IMAGE_BYTES) {
-        throw new Error(
-          `${label} image is too large (${(bytes.length / 1_000_000).toFixed(1)}MB). ` +
-          `Please upload a smaller image (max ~3.5MB). Compress or resize it before uploading.`
-        );
-      }
-      return bytesToBase64(bytes);
+      return await normalizeImageToBudget(bytes, label);
     };
+    const frontB64 = await downloadAsB64(check.front_image_path, "front");
+    const backB64 = await downloadAsB64(check.back_image_path, "back");
+
+    if (!frontB64)
+      throw new Error("Front image required for CheckAlt submission");
+
+    const totalB64 = frontB64.length + (backB64?.length ?? 0);
+    if (totalB64 > MAX_TOTAL_B64_CHARS) {
+      throw new Error(
+        `Combined check images still exceed CheckAlt's limit after compression (${(totalB64 / 1_000_000).toFixed(1)}MB encoded). ` +
+        `Please reupload smaller front/back images.`
+      );
+    }
     const frontB64 = await downloadAsB64(check.front_image_path, "front");
     const backB64 = await downloadAsB64(check.back_image_path, "back");
 
