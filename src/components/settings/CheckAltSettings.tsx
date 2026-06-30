@@ -208,6 +208,8 @@ export function CheckAltSettings() {
       });
       if (error) throw new Error(error.message ?? "Verification failed");
       if ((data as any)?.success === false) {
+        // Keep the raw CheckAlt response visible so we can see what the vendor said.
+        setVerifyResult({ action, payload: (data as any).details ?? data });
         throw new Error((data as any).error || "Verification failed");
       }
       return { action, payload: (data as any)?.data };

@@ -107,12 +107,21 @@ Deno.serve(async (req) => {
     try { respJson = JSON.parse(respText); } catch { respJson = { raw: respText }; }
 
     if (!resp.ok) {
+      const detailMsg =
+        (respJson && typeof respJson === "object" && (respJson as any).message) ||
+        (respJson && typeof respJson === "object" && (respJson as any).error) ||
+        (typeof respText === "string" && respText.slice(0, 300)) ||
+        `HTTP ${resp.status}`;
+      console.error(`[checkalt-verify-account] ${action} failed [${resp.status}]:`, respText);
+      // Return 200 with success:false so the browser surfaces the CheckAlt
+      // error body (supabase.functions.invoke drops the body on non-2xx).
       return new Response(JSON.stringify({
         success: false,
+        action,
         status: resp.status,
         details: respJson,
-        error: `CheckAlt ${action} verification failed`,
-      }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        error: `CheckAlt ${action} verification failed [${resp.status}]: ${detailMsg}`,
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     return new Response(JSON.stringify({
