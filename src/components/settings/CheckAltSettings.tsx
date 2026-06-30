@@ -654,11 +654,13 @@ export function PendingApprovalDeposits() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="font-medium truncate">
-                  {intake?.payer_name ?? "Check"} → {intake?.payee_name ?? "—"}
+                  {intake?.carrier_name ?? "Check"} → {intake?.payee_line ?? "—"}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Check #{intake?.check_number ?? "—"} ·{" "}
-                  {intake?.claim_number ? `Claim ${intake.claim_number} · ` : ""}
+                  {(intake?.freedom_claim_number || intake?.detected_claim_number)
+                    ? `Claim ${intake.freedom_claim_number || intake.detected_claim_number} · `
+                    : ""}
                   Ref {row.checkalt_reference ?? "pending"} · $
                   {Number(row.amount ?? 0).toLocaleString(undefined, {
                     minimumFractionDigits: 2,
