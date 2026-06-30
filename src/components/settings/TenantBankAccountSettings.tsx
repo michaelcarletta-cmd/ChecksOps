@@ -16,11 +16,6 @@ import { AchAuthorizationForm } from "@/components/disbursement/AchAuthorization
 import { AuthentecheckVerification } from "@/components/disbursement/AuthentecheckVerification";
 import { usePermissions } from "@/hooks/usePermissions";
 
-const emptyForm = {
-  nickname: "",
-  custname: "",
-  acct_type: "C",
-};
 
 export function TenantBankAccountSettings() {
   const { user } = useAuth();
