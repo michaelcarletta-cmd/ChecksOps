@@ -64,21 +64,27 @@ serve(async (req) => {
       });
     }
 
-    // Load tenant Actum creds
+    // Load tenant Actum creds (env-aware)
     const { data: tenantData, error: tenantErr } = await supabase
       .from("tenants")
-      .select("actum_parent_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password")
+      .select("actum_environment, actum_parent_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password, actum_test_parent_id, actum_test_sub_id_ppd, actum_test_sub_id_ccd, actum_test_syspass, actum_test_username, actum_test_password")
       .eq("id", account.tenant_id)
       .single();
     if (tenantErr) throw new Error(`Could not load tenant Actum config: ${tenantErr.message}`);
 
-    const subId = account.account_type === "insured"
-      ? tenantData?.actum_sub_id_ppd
-      : tenantData?.actum_sub_id_ccd;
-    const parentId = tenantData?.actum_parent_id || "ACTUM";
-    if (!tenantData?.actum_username || !tenantData?.actum_password || !tenantData?.actum_syspass || !subId) {
-      throw new Error("Actum Authentecheck credentials not configured for this tenant.");
+    const env = (tenantData as any)?.actum_environment === "production" ? "production" : "test";
+    const isProd = env === "production";
+    const parentId = (isProd ? tenantData?.actum_parent_id : (tenantData as any)?.actum_test_parent_id) || "ACTUM";
+    const subIdPpd = isProd ? tenantData?.actum_sub_id_ppd : (tenantData as any)?.actum_test_sub_id_ppd;
+    const subIdCcd = isProd ? tenantData?.actum_sub_id_ccd : (tenantData as any)?.actum_test_sub_id_ccd;
+    const syspass = isProd ? tenantData?.actum_syspass : (tenantData as any)?.actum_test_syspass;
+    const meruser = isProd ? tenantData?.actum_username : (tenantData as any)?.actum_test_username;
+    const merpass = isProd ? tenantData?.actum_password : (tenantData as any)?.actum_test_password;
+    const subId = account.account_type === "insured" ? subIdPpd : subIdCcd;
+    if (!meruser || !merpass || !syspass || !subId) {
+      throw new Error(`Actum Authentecheck ${env} credentials not configured for this tenant.`);
     }
+    console.log(`[authentecheck-init] using ${env} environment for tenant ${account.tenant_id}`);
 
     // Parse first/last name from custname
     const fullName = (account.custname ?? "Account Holder").trim();
@@ -114,9 +120,9 @@ serve(async (req) => {
     params.append("dynamic_saleurl", postbackUrl);
     // Trigger Actum-configured postback to our dynamic_saleurl with extra fields
     params.append("postback", "1");
-    params.append("meruser", tenantData.actum_username);
-    params.append("merpass", tenantData.actum_password);
-    params.append("syspass", tenantData.actum_syspass);
+    params.append("meruser", meruser);
+    params.append("merpass", merpass);
+    params.append("syspass", syspass);
 
     const postBody = `chk:${encodeURIComponent(parentId)}:${encodeURIComponent(subId)}&${params.toString()}`;
 

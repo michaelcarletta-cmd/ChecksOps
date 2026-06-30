@@ -17842,12 +17842,19 @@ export type Database = {
           ach_policy_acknowledged_at: string | null
           ach_policy_acknowledged_by: string | null
           ach_policy_version: string | null
+          actum_environment: string
           actum_parent_id: string | null
           actum_password: string | null
           actum_sub_id: string | null
           actum_sub_id_ccd: string | null
           actum_sub_id_ppd: string | null
           actum_syspass: string | null
+          actum_test_parent_id: string | null
+          actum_test_password: string | null
+          actum_test_sub_id_ccd: string | null
+          actum_test_sub_id_ppd: string | null
+          actum_test_syspass: string | null
+          actum_test_username: string | null
           actum_username: string | null
           actum_webhook_secret: string | null
           beneficial_owner_dob: string | null
@@ -17899,12 +17906,19 @@ export type Database = {
           ach_policy_acknowledged_at?: string | null
           ach_policy_acknowledged_by?: string | null
           ach_policy_version?: string | null
+          actum_environment?: string
           actum_parent_id?: string | null
           actum_password?: string | null
           actum_sub_id?: string | null
           actum_sub_id_ccd?: string | null
           actum_sub_id_ppd?: string | null
           actum_syspass?: string | null
+          actum_test_parent_id?: string | null
+          actum_test_password?: string | null
+          actum_test_sub_id_ccd?: string | null
+          actum_test_sub_id_ppd?: string | null
+          actum_test_syspass?: string | null
+          actum_test_username?: string | null
           actum_username?: string | null
           actum_webhook_secret?: string | null
           beneficial_owner_dob?: string | null
@@ -17956,12 +17970,19 @@ export type Database = {
           ach_policy_acknowledged_at?: string | null
           ach_policy_acknowledged_by?: string | null
           ach_policy_version?: string | null
+          actum_environment?: string
           actum_parent_id?: string | null
           actum_password?: string | null
           actum_sub_id?: string | null
           actum_sub_id_ccd?: string | null
           actum_sub_id_ppd?: string | null
           actum_syspass?: string | null
+          actum_test_parent_id?: string | null
+          actum_test_password?: string | null
+          actum_test_sub_id_ccd?: string | null
+          actum_test_sub_id_ppd?: string | null
+          actum_test_syspass?: string | null
+          actum_test_username?: string | null
           actum_username?: string | null
           actum_webhook_secret?: string | null
           beneficial_owner_dob?: string | null
