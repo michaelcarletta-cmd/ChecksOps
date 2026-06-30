@@ -3032,34 +3032,8 @@ function CheckDetailPanel({
           </div>
         )}
 
-        {/* Single Source of Truth Blocking Banner */}
-        {isDepositBlocked && (
-          <div className="mt-2 border border-amber-500/30 bg-amber-500/10 rounded-lg p-3 space-y-2">
-            <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              Deposit Blocked
-            </div>
-            {blockingReasons.map((reason, i) => (
-              <p key={i} className="text-xs text-amber-300/80 pl-6">• {reason}</p>
-            ))}
-            {/* Bypass endorsements — physical signatures already on check */}
-            {pendingEndorsements.length > 0 && check.status !== "loss_draft_required" && !isSharedView && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full mt-1 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
-                onClick={handleBypassEndorsements}
-                disabled={bypassingEndorsements}
-              >
-                {bypassingEndorsements ? (
-                  <><Loader2Icon className="h-4 w-4 mr-2 animate-spin" />Bypassing...</>
-                ) : (
-                  <><CheckCircle2 className="h-4 w-4 mr-2" />Skip Endorsements — Already Signed</>
-                )}
-              </Button>
-            )}
-          </div>
-        )}
+        {/* Deposit Blocked banner moved into Endorsements tab */}
+
 
         {/* Loss Draft Banner & Action */}
         {check.status === "loss_draft_required" && lossDraftRecord?.id && (
@@ -3112,8 +3086,7 @@ function CheckDetailPanel({
           </div>
         )}
 
-        {/* Endorsement Packet */}
-        <EndorsementPacketCard checkId={checkId} packetPath={check.endorsement_packet_path} />
+        {/* Endorsement Packet moved into Audit tab */}
       </CardHeader>
       <CardContent className="p-0">
         <Tabs value={detailTab} onValueChange={setDetailTab}>
@@ -3151,7 +3124,7 @@ function CheckDetailPanel({
             </TabsList>
           </div>
 
-          <ScrollArea className="h-[calc(100vh-520px)]">
+          <ScrollArea className="h-[calc(100vh-340px)] min-h-[400px]">
             <TabsContent value="overview" className="p-4 space-y-3 mt-0">
               <DepositStatusPanel
                 checkId={checkId}
@@ -3461,6 +3434,32 @@ function CheckDetailPanel({
             </TabsContent>
 
             <TabsContent value="endorsements" className="p-4 mt-0 space-y-4">
+              {isDepositBlocked && (
+                <div className="border border-amber-500/30 bg-amber-500/10 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    Deposit Blocked
+                  </div>
+                  {blockingReasons.map((reason, i) => (
+                    <p key={i} className="text-xs text-amber-300/80 pl-6">• {reason}</p>
+                  ))}
+                  {pendingEndorsements.length > 0 && check.status !== "loss_draft_required" && !isSharedView && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full mt-1 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                      onClick={handleBypassEndorsements}
+                      disabled={bypassingEndorsements}
+                    >
+                      {bypassingEndorsements ? (
+                        <><Loader2Icon className="h-4 w-4 mr-2 animate-spin" />Bypassing...</>
+                      ) : (
+                        <><CheckCircle2 className="h-4 w-4 mr-2" />Skip Endorsements — Already Signed</>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              )}
               <Suspense fallback={<TabLoader />}>
                 <EndorsementChecklist
                   checkId={checkId}
@@ -3706,7 +3705,9 @@ function CheckDetailPanel({
               </Suspense>
             </TabsContent>
 
-            <TabsContent value="audit" className="p-4 space-y-2 mt-0">
+            <TabsContent value="audit" className="p-4 space-y-3 mt-0">
+              <EndorsementPacketCard checkId={checkId} packetPath={check.endorsement_packet_path} />
+              <div className="space-y-2">
               {auditLog.map((entry) => (
                 <div key={entry.id} className="flex gap-3 text-sm">
                   <div className="w-1 rounded-full bg-primary/30 shrink-0" />
@@ -3724,6 +3725,7 @@ function CheckDetailPanel({
               {auditLog.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">No audit events</p>
               )}
+              </div>
             </TabsContent>
 
             <TabsContent value="partners" className="p-4 mt-0 space-y-4">
