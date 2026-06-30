@@ -11,6 +11,8 @@
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// ─── Types ──────────────────────────────────────────────────
+
 export interface CheckAltConfig {
   base_url: string | null;
   merchant: string | null;
@@ -21,6 +23,14 @@ export interface CheckAltConfig {
   cached_jwt: string | null;
   cached_jwt_expires_at: string | null;
 }
+
+export interface TenantAccount {
+  tenant_id: string;
+  sso_user_id: string;
+  deposit_account_number: string;
+}
+
+// ─── Core helpers ───────────────────────────────────────────
 
 export function getServiceClient(): SupabaseClient {
   const url = Deno.env.get("SUPABASE_URL");
@@ -43,20 +53,37 @@ export async function loadConfig(supabase: SupabaseClient): Promise<CheckAltConf
 }
 
 /**
+ * Load the CheckAlt tenant account row for a given tenant_id.
+ * Throws if no registered account exists.
+ */
+export async function loadTenantAccount(
+  supabase: SupabaseClient,
+  tenantId: string,
+): Promise<TenantAccount> {
+  const { data, error } = await supabase
+    .from("checkalt_tenant_accounts")
+    .select("tenant_id, sso_user_id, deposit_account_number")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data?.sso_user_id || !data?.deposit_account_number) {
+    throw new Error(
+      "No registered CheckAlt account for this tenant. Register in Integration Settings first.",
+    );
+  }
+  return data as TenantAccount;
+}
+
+// ─── JWT ────────────────────────────────────────────────────
+
+/**
  * Returns a valid JWT for FinCapture. Uses cached JWT if not expired,
  * otherwise authenticates via /public/fincapture/authenticate and caches the result.
- *
- * Sandbox/production credentials live in env secrets:
- *   CHECKALT_USERNAME, CHECKALT_PASSWORD
- *
- * The `merchant` header is required by Cloudflare WAF — without it requests
- * are blocked before reaching the application.
  */
 export async function getCheckAltJwt(
   supabase: SupabaseClient,
   cfg: CheckAltConfig,
 ): Promise<string> {
-  // 60s safety margin before expiry
   if (cfg.cached_jwt && cfg.cached_jwt_expires_at) {
     const exp = new Date(cfg.cached_jwt_expires_at).getTime();
     if (exp - Date.now() > 60_000) return cfg.cached_jwt;
@@ -70,8 +97,6 @@ export async function getCheckAltJwt(
   if (!cfg.merchant) throw new Error("checkalt_config.merchant not set");
 
   const baseUrl = cfg.base_url.replace(/\/$/, "");
-
-  // Auth endpoint is under /public — no JWT needed
   const resp = await fetch(`${baseUrl}/public/fincapture/authenticate`, {
     method: "POST",
     headers: {
@@ -86,10 +111,6 @@ export async function getCheckAltJwt(
     throw new Error(`CheckAlt auth failed [${resp.status}]: ${body}`);
   }
 
-  // FinCapture returns the JWT as a raw string body (not JSON-wrapped),
-  // but some environments wrap it in {token|jwt|accessToken}. Read as text
-  // first, then try JSON — this avoids "Unexpected token 'e'" when the body
-  // is literally "eyJhbGciOi…".
   const raw = (await resp.text()).trim();
   let jwt: string | undefined;
   if (raw.startsWith("{")) {
@@ -98,12 +119,10 @@ export async function getCheckAltJwt(
       jwt = data?.token ?? data?.jwt ?? data?.accessToken;
     } catch { /* fall through */ }
   } else {
-    // Strip optional surrounding quotes from a JSON-string body
     jwt = raw.replace(/^"|"$/g, "");
   }
   if (!jwt || !jwt.includes(".")) throw new Error("CheckAlt auth response missing token");
 
-  // FinCapture JWTs are typically valid ~1h; decode exp if present, else assume 50min.
   let expiresAt = new Date(Date.now() + 50 * 60_000).toISOString();
   try {
     const parts = jwt.split(".");
@@ -114,9 +133,7 @@ export async function getCheckAltJwt(
       if (payload?.exp)
         expiresAt = new Date(payload.exp * 1000).toISOString();
     }
-  } catch {
-    /* ignore decode errors */
-  }
+  } catch { /* ignore */ }
 
   await supabase
     .from("checkalt_config")
@@ -126,13 +143,12 @@ export async function getCheckAltJwt(
   return jwt;
 }
 
+// ─── Authenticated fetch ────────────────────────────────────
+
 /**
  * Authenticated fetch wrapper for FinCapture endpoints.
  * Automatically loads config, acquires/caches JWT, and injects
  * the required `merchant` + `Authorization` headers.
- *
- * `path` should be the API path *without* the base URL, e.g.
- *   "/fincapture/deposit/process"
  */
 export async function checkAltFetch(
   supabase: SupabaseClient,
@@ -153,4 +169,118 @@ export async function checkAltFetch(
     headers.set("Content-Type", "application/json");
 
   return await fetch(url, { ...init, headers });
+}
+
+// ─── Account info helpers ───────────────────────────────────
+
+/**
+ * Calls POST /fincapture/useraccount/getUserAccountInformation
+ * Returns the full response JSON (FinCaptureAPIUserResponse with accountDataList).
+ */
+export async function getUserAccountInfo(
+  supabase: SupabaseClient,
+  ssoUserId: string,
+): Promise<{ ok: boolean; json: any; raw: string }> {
+  const cfg = await loadConfig(supabase);
+  if (!cfg.fi_key) throw new Error("checkalt_config.fi_key not set");
+
+  const resp = await checkAltFetch(supabase, "/fincapture/useraccount/getUserAccountInformation", {
+    method: "POST",
+    body: JSON.stringify({ fiKey: cfg.fi_key, userId: ssoUserId }),
+  });
+  const raw = await resp.text();
+  let json: any;
+  try { json = JSON.parse(raw); } catch { json = { raw }; }
+  return { ok: resp.ok, json, raw };
+}
+
+/**
+ * Calls POST /fincapture/useraccount/getDepositAccountInformation
+ */
+export async function getDepositAccountInfo(
+  supabase: SupabaseClient,
+  ssoUserId: string,
+  accountNumber: string,
+): Promise<{ ok: boolean; json: any; raw: string }> {
+  const cfg = await loadConfig(supabase);
+  if (!cfg.fi_key) throw new Error("checkalt_config.fi_key not set");
+
+  const resp = await checkAltFetch(supabase, "/fincapture/useraccount/getDepositAccountInformation", {
+    method: "POST",
+    body: JSON.stringify({ fiKey: cfg.fi_key, userId: ssoUserId, accountNumber }),
+  });
+  const raw = await resp.text();
+  let json: any;
+  try { json = JSON.parse(raw); } catch { json = { raw }; }
+  return { ok: resp.ok, json, raw };
+}
+
+/**
+ * Calls POST /fincapture/deposit/item for a single deposit status check.
+ */
+export async function getDepositItemStatus(
+  supabase: SupabaseClient,
+  tenant: TenantAccount,
+  referenceNumber: string,
+): Promise<{ ok: boolean; json: any; raw: string }> {
+  const cfg = await loadConfig(supabase);
+  if (!cfg.fi_key) throw new Error("checkalt_config.fi_key not set");
+
+  const resp = await checkAltFetch(supabase, "/fincapture/deposit/item", {
+    method: "POST",
+    body: JSON.stringify({
+      fiKey: cfg.fi_key,
+      ssoKey: tenant.sso_user_id,
+      referenceNumber: Number(referenceNumber),
+    }),
+  });
+  const raw = await resp.text();
+  let json: any;
+  try { json = JSON.parse(raw); } catch { json = { raw }; }
+  return { ok: resp.ok, json, raw };
+}
+
+/**
+ * Maps a numeric CheckAlt deposit status code to an internal status string.
+ * Codes per Clearingworks API spec FinCaptureAPIDepositItemResponse:
+ *   1 = pending, 2 = submitted, 3 = accepted/cleared, 4 = rejected/returned,
+ *   5 = suspended, 6 = duplicate
+ */
+export function mapDepositStatus(
+  code: number,
+  currentStatus: string,
+): string {
+  switch (code) {
+    case 1: return "pending";
+    case 2: return "submitted";
+    case 3: return "cleared";
+    case 4: return "rejected";
+    case 5: return "suspended";
+    case 6: return "duplicate";
+    default: return currentStatus;
+  }
+}
+
+/**
+ * Extracts the ssoKey for a given accountNumber from the CheckAlt
+ * getUserAccountInformation response.
+ *
+ * The response shape is: { accountDataList: [{ accountNumber, ssoKey, ... }] }
+ * Returns the ssoKey string, or null if not found.
+ */
+export function extractSsoKey(
+  userAccountInfo: any,
+  accountNumber: string,
+): string | null {
+  const list: any[] = userAccountInfo?.accountDataList ?? [];
+  for (const acct of list) {
+    if (acct.accountNumber === accountNumber && acct.ssoKey) {
+      return acct.ssoKey;
+    }
+  }
+  // If only one account and it has ssoKey, use it regardless of accountNumber match
+  if (list.length === 1 && list[0]?.ssoKey) {
+    return list[0].ssoKey;
+  }
+  return null;
 }

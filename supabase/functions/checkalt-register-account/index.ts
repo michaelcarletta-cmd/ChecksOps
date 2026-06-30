@@ -1,18 +1,8 @@
 // Registers a tenant's depositor "user account" with FinCapture via
-// POST /fincapture/useraccount/register. The userId submitted here becomes
-// the ssoKey used by checkalt-submit-deposit / checkalt-approve-deposit /
-// checkalt-poll-status for this tenant going forward.
+// POST /fincapture/useraccount/register, then immediately calls
+// getUserAccountInformation to retrieve the ssoKey assigned by CheckAlt.
 //
-// Sample payload (from CheckAlt's own Postman collection):
-//   {
-//     fiKey: "<configure key>",
-//     ssorequest: true,
-//     userID: "mcarletta",
-//     firstName, lastName, emailAddress,
-//     accountDataList: [{ accountNumber }]
-//   }
-//
-// Gated to tenant admins (for their own tenant) or platform admins (any tenant).
+// The ssoKey (NOT the userId) is what deposit/approve/poll endpoints require.
 
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
 import { z } from "https://esm.sh/zod@3.23.8";
@@ -20,6 +10,8 @@ import {
   getServiceClient,
   checkAltFetch,
   loadConfig,
+  getUserAccountInfo,
+  extractSsoKey,
 } from "../_shared/checkalt.ts";
 
 const BodySchema = z.object({
@@ -82,10 +74,12 @@ Deno.serve(async (req) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // ── Step 1: Register user with CheckAlt ──
     const payload = {
       fiKey: cfg.fi_key,
-      ssorequest: true,
-      userID: sso_user_id,
+      isSSORequest: true,
+      userId: sso_user_id,
       firstName: first_name,
       lastName: last_name,
       emailAddress: email,
@@ -107,7 +101,25 @@ Deno.serve(async (req) => {
         details: respJson,
       }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+    console.log("[checkalt-register-account] registration OK:", respText.slice(0, 500));
 
+    // ── Step 2: Fetch ssoKey from getUserAccountInformation ──
+    let ssoKey: string | null = null;
+    let userAccountPayload: any = null;
+    try {
+      const info = await getUserAccountInfo(supabase, sso_user_id);
+      userAccountPayload = info.json;
+      console.log("[checkalt-register-account] getUserAccountInfo:", JSON.stringify(info.json).slice(0, 500));
+
+      if (info.ok) {
+        ssoKey = extractSsoKey(info.json, deposit_account_number);
+      }
+    } catch (e) {
+      // Non-fatal — log but continue. The registration itself succeeded.
+      console.error("[checkalt-register-account] getUserAccountInfo failed:", e);
+    }
+
+    // ── Step 3: Store in DB ──
     const { error: upsertErr } = await supabase
       .from("checkalt_tenant_accounts")
       .upsert({
@@ -119,11 +131,25 @@ Deno.serve(async (req) => {
         email,
         enabled: true,
         registered_at: new Date().toISOString(),
-        last_register_payload: respJson,
+        last_register_payload: {
+          register_response: respJson,
+          user_account_info: userAccountPayload,
+          sso_key: ssoKey,
+        },
       }, { onConflict: "tenant_id" });
     if (upsertErr) throw upsertErr;
 
-    return new Response(JSON.stringify({ success: true, sso_user_id }), {
+    const warning = ssoKey
+      ? undefined
+      : "Registration succeeded but CheckAlt did not return an ssoKey in getUserAccountInformation. " +
+        "The userId will be used as ssoKey for deposits. If deposits fail, contact CheckAlt support.";
+
+    return new Response(JSON.stringify({
+      success: true,
+      sso_user_id,
+      sso_key: ssoKey,
+      warning,
+    }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

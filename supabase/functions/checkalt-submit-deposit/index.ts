@@ -2,14 +2,10 @@
 // Pulls front/back check images from storage, base64-encodes, POSTs to
 // /fincapture/deposit/process per the Clearingworks FinCapture API spec.
 //
-// Returns the CheckAlt reference number and writes a checkalt_deposits row.
-// Live traffic only happens once CHECKALT_USERNAME/PASSWORD + base_url + merchant
-// + fi_key are configured.
-//
-// NOTE: Heavy image libraries (imagescript, resvg_wasm) removed to stay within
-// edge function compute limits. Image compression should happen client-side
-// before upload. If images exceed CheckAlt's ~10MB payload limit after base64
-// encoding, the function returns an error asking the user to upload smaller images.
+// The ssoKey for the deposit is resolved in this order:
+//   1. Cached in last_register_payload.sso_key (stored during registration)
+//   2. Fetched live from getUserAccountInformation
+//   3. Falls back to sso_user_id (may work if CheckAlt uses userId as ssoKey)
 
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
 import { z } from "https://esm.sh/zod@3.23.8";
@@ -17,10 +13,10 @@ import {
   getServiceClient,
   loadConfig,
   checkAltFetch,
+  getUserAccountInfo,
+  extractSsoKey,
 } from "../_shared/checkalt.ts";
 
-// CheckAlt has a ~10MB total payload limit. Base64 adds ~33% overhead.
-// 3MB per image raw ≈ 4MB base64 ≈ 8MB for front+back with JSON wrapper.
 const MAX_IMAGE_BYTES = 3_500_000;
 const MAX_TOTAL_B64_CHARS = 8_800_000;
 
@@ -162,7 +158,7 @@ Deno.serve(async (req) => {
     // --- look up tenant-specific CheckAlt account ---
     const { data: tenantAccount, error: taErr } = await supabase
       .from("checkalt_tenant_accounts")
-      .select("sso_user_id, deposit_account_number")
+      .select("sso_user_id, deposit_account_number, last_register_payload")
       .eq("tenant_id", check.tenant_id)
       .maybeSingle();
     if (taErr) throw taErr;
@@ -171,6 +167,48 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "Tenant CheckAlt account not registered. Register in Integration Settings first." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
+    }
+
+    // --- resolve the real ssoKey ---
+    // Priority: cached in last_register_payload → live from getUserAccountInfo → fallback to sso_user_id
+    let ssoKey: string | null = null;
+    const cached = tenantAccount.last_register_payload as any;
+    if (cached?.sso_key) {
+      ssoKey = cached.sso_key;
+      console.log("[checkalt-submit-deposit] Using cached ssoKey from registration");
+    }
+
+    if (!ssoKey) {
+      // Fetch live from CheckAlt
+      try {
+        const info = await getUserAccountInfo(supabase, tenantAccount.sso_user_id);
+        if (info.ok) {
+          ssoKey = extractSsoKey(info.json, tenantAccount.deposit_account_number);
+          console.log("[checkalt-submit-deposit] Fetched ssoKey from getUserAccountInfo:", ssoKey ? "found" : "not found");
+
+          // Cache for next time
+          if (ssoKey) {
+            await supabase
+              .from("checkalt_tenant_accounts")
+              .update({
+                last_register_payload: {
+                  ...(typeof cached === "object" && cached ? cached : {}),
+                  user_account_info: info.json,
+                  sso_key: ssoKey,
+                },
+              })
+              .eq("tenant_id", check.tenant_id);
+          }
+        }
+      } catch (e) {
+        console.error("[checkalt-submit-deposit] getUserAccountInfo failed:", e);
+      }
+    }
+
+    // Fallback: use sso_user_id as ssoKey (works when CheckAlt userId = ssoKey)
+    if (!ssoKey) {
+      ssoKey = tenantAccount.sso_user_id;
+      console.log("[checkalt-submit-deposit] Falling back to sso_user_id as ssoKey");
     }
 
     // --- create pending deposit row first (audit anchor) ---
@@ -188,7 +226,6 @@ Deno.serve(async (req) => {
     if (depErr) throw depErr;
 
     // --- submit to FinCapture /fincapture/deposit/process ---
-    // Body schema: FinCaptureAPIDepositRequest from Clearingworks OpenAPI spec
     const submitResp = await checkAltFetch(
       supabase,
       "/fincapture/deposit/process",
@@ -196,7 +233,7 @@ Deno.serve(async (req) => {
         method: "POST",
         body: JSON.stringify({
           fiKey: cfg.fi_key,
-          ssoKey: tenantAccount.sso_user_id,
+          ssoKey,
           depositAccountNumber: tenantAccount.deposit_account_number,
           firstName,
           lastName,
@@ -233,8 +270,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Response schema: FinCaptureAPIDepositResponse
-    // referenceNumber is int64 — store as string for our DB
     const reference: string | undefined = submitJson?.referenceNumber != null
       ? String(submitJson.referenceNumber)
       : undefined;
@@ -249,7 +284,6 @@ Deno.serve(async (req) => {
       })
       .eq("id", depositRow.id);
 
-    // Link claim_checks if a row exists
     await supabase
       .from("claim_checks")
       .update({
