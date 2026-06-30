@@ -511,16 +511,6 @@ export function CheckAltSettings() {
                   Verify user
                 </Button>
                 <Button
-                  variant="outline"
-                  onClick={() => verifyMutation.mutate("account")}
-                  disabled={verifyMutation.isPending || !regAccount?.registered_at}
-                >
-                  {verifyMutation.isPending && verifyMutation.variables === "account"
-                    ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                    : <Landmark className="h-4 w-4 mr-1" />}
-                  Verify deposit account
-                </Button>
-                <Button
                   onClick={() => registerMutation.mutate()}
                   disabled={
                     registerMutation.isPending ||
