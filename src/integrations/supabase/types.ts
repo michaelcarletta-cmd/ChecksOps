@@ -19556,6 +19556,7 @@ export type Database = {
           }
         | { Args: { schema_name: string; table_name: string }; Returns: string }
         | { Args: { table_name: string }; Returns: string }
+      email_queue_dispatch: { Args: never; Returns: undefined }
       enablelongtransactions: { Args: never; Returns: string }
       encrypt_pii: {
         Args: { p_key_name?: string; p_plaintext: string }
