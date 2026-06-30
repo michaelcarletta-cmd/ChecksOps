@@ -17,9 +17,8 @@ import { z } from "https://esm.sh/zod@3.23.8";
 import {
   getServiceClient,
   loadTenantAccount,
+  loadConfig,
   checkAltFetch,
-  getCheckAltFiKey,
-  syncDepositItem,
 } from "../_shared/checkalt.ts";
 
 const BodySchema = z.object({
@@ -90,7 +89,8 @@ Deno.serve(async (req) => {
     }
 
     const tenantAccount = await loadTenantAccount(supabase, deposit.tenant_id);
-    const fiKey = getCheckAltFiKey();
+    const cfg = await loadConfig(supabase);
+    const fiKey = cfg.fi_key;
 
     const payload: Record<string, unknown> = {
       fiKey,
@@ -156,13 +156,16 @@ Deno.serve(async (req) => {
           .eq("check_id", deposit.check_intake_item_id)
           .maybeSingle();
         if (depositItem && depositItem.provider === "checkalt") {
-          await syncDepositItem(supabase, {
-            action: "record_failure",
-            deposit_item_id: depositItem.id,
-            actor_id: userId,
-            notes: respJson?.statusDescription ?? internalStatus,
-            extra: { error: respJson?.statusDescription ?? internalStatus, error_code: String(apiStatus), response: respJson },
-          });
+          await supabase
+            .from("deposit_items")
+            .update({
+              status: "failed",
+              last_error: respJson?.statusDescription ?? internalStatus,
+              last_error_code: String(apiStatus),
+              last_provider_response: respJson,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", depositItem.id);
         }
       }
     }
