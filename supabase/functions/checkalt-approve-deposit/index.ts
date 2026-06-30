@@ -89,7 +89,8 @@ Deno.serve(async (req) => {
     }
 
     const tenantAccount = await loadTenantAccount(supabase, deposit.tenant_id);
-    const fiKey = getCheckAltFiKey();
+    const cfg = await loadConfig(supabase);
+    const fiKey = cfg.fi_key;
 
     const payload: Record<string, unknown> = {
       fiKey,
