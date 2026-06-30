@@ -143,10 +143,6 @@ Deno.serve(async (req) => {
               .eq("check_intake_item_id", dep.check_intake_item_id);
           } else if (internal === "returned" || internal === "rejected") {
             await supabase
-              .from("claim_checks")
-              .update({ deposit_status: "returned" })
-              .eq("check_intake_item_id", dep.check_intake_item_id);
-            await supabase
               .from("check_intake_items")
               .update({
                 check_stage: "ready_for_deposit",
@@ -155,6 +151,10 @@ Deno.serve(async (req) => {
                 updated_at: new Date().toISOString(),
               })
               .eq("id", dep.check_intake_item_id);
+            await supabase
+              .from("claim_checks")
+              .update({ deposit_status: "returned" })
+              .eq("check_intake_item_id", dep.check_intake_item_id);
           }
         }
       } catch (e) {
