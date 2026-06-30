@@ -552,6 +552,15 @@ export function DisbursementConsole({
           </div>
         )}
 
+        {fundsHoldActive && (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300 flex items-center gap-2 mb-2">
+            <Clock className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              Deposit confirmed — funds become available for disbursement in ~{hoursRemaining}h
+              (48h hold after CheckAlt deposit).
+            </span>
+          </div>
+        )}
         <Button
           className="w-full"
           onClick={() => submitBatch.mutate()}
@@ -561,17 +570,21 @@ export function DisbursementConsole({
             totalAllocatedDollars === 0 ||
             accounts.length === 0 ||
             availableAmount <= 0 ||
+            fundsHoldActive ||
             (hasUnverifiedAllocations && !(isAdmin && adminOverride))
           }
         >
           {submitBatch.isPending ? (
             <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Submitting...</>
+          ) : fundsHoldActive ? (
+            <><Clock className="h-4 w-4 mr-2" />Funds available in ~{hoursRemaining}h</>
           ) : hasUnverifiedAllocations && !adminOverride ? (
             <><ShieldAlert className="h-4 w-4 mr-2" />Verify accounts to send</>
           ) : (
             <><Send className="h-4 w-4 mr-2" />{isBalanced ? "Send all disbursements" : `Send $${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })} (partial)`}{adminOverride && hasUnverifiedAllocations ? " (override)" : ""}</>
           )}
         </Button>
+
 
         <p className="text-xs text-center text-muted-foreground">
           Credits arrive same-day or next banking day via Actum ACH
