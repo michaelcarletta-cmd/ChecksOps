@@ -68,6 +68,29 @@ export function DisbursementConsole({
   const { isAdmin } = usePermissions();
 
 
+  // Funds-availability gate: 48h after deposited_at the check is considered
+  // cleared and disbursement is allowed. Until then we hard-stop the submit.
+  const { data: depositMeta } = useQuery({
+    queryKey: ["check-deposit-meta", checkIntakeItemId],
+    enabled: !!checkIntakeItemId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("check_intake_items")
+        .select("deposited_at")
+        .eq("id", checkIntakeItemId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    refetchInterval: 60_000,
+  });
+  const depositedAt = depositMeta?.deposited_at as string | null | undefined;
+  const hoursSinceDeposit = depositedAt
+    ? (Date.now() - new Date(depositedAt).getTime()) / 36e5
+    : null;
+  const fundsHoldActive = hoursSinceDeposit !== null && hoursSinceDeposit < 48;
+  const hoursRemaining = fundsHoldActive ? Math.ceil(48 - (hoursSinceDeposit as number)) : 0;
+
   // Load stakeholder accounts whitelisted for THIS check
   const { data: accounts = [], isLoading } = useQuery({
     queryKey: ["disbursement-accounts", checkIntakeItemId, tenant?.id],
