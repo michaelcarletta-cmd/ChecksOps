@@ -299,6 +299,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           fiKey: cfg.fi_key,
           ssoKey,
+          depositAccountNumber: tenantAccount.deposit_account_number,
           captureDateTime: new Date().toISOString(),
           userAmount: check.amount,
           frontImage: frontB64,
