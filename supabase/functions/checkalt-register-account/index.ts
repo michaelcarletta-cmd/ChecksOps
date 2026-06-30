@@ -76,13 +76,17 @@ Deno.serve(async (req) => {
     }
 
     // ── Step 1: Register user with CheckAlt ──
+    // Payload shape per CheckAlt's official sample:
+    //   fiKey, ssorequest (lowercase), userID (capital ID), firstName, lastName,
+    //   emailAddress, SSORequest (also included for compatibility), accountDataList
     const payload = {
       fiKey: cfg.fi_key,
-      isSSORequest: true,
-      userId: sso_user_id,
+      ssorequest: true,
+      userID: sso_user_id,
       firstName: first_name,
       lastName: last_name,
       emailAddress: email,
+      SSORequest: true,
       accountDataList: [{ accountNumber: deposit_account_number }],
     };
 
