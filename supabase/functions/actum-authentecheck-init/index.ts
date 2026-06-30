@@ -120,9 +120,9 @@ serve(async (req) => {
     params.append("dynamic_saleurl", postbackUrl);
     // Trigger Actum-configured postback to our dynamic_saleurl with extra fields
     params.append("postback", "1");
-    params.append("meruser", tenantData.actum_username);
-    params.append("merpass", tenantData.actum_password);
-    params.append("syspass", tenantData.actum_syspass);
+    params.append("meruser", meruser);
+    params.append("merpass", merpass);
+    params.append("syspass", syspass);
 
     const postBody = `chk:${encodeURIComponent(parentId)}:${encodeURIComponent(subId)}&${params.toString()}`;
 
