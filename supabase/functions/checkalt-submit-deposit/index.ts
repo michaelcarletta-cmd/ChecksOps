@@ -152,7 +152,18 @@ Deno.serve(async (req) => {
 
     // --- submit to FinCapture /fincapture/deposit/process ---
     // Body schema: FinCaptureAPIDepositRequest from Clearingworks OpenAPI spec
-    const tenantAccount = await loadTenantAccount(supabase, check.tenant_id);
+    const { data: tenantAccount, error: taErr } = await supabase
+      .from("checkalt_tenant_accounts")
+      .select("sso_user_id, deposit_account_number")
+      .eq("tenant_id", check.tenant_id)
+      .maybeSingle();
+    if (taErr) throw taErr;
+    if (!tenantAccount?.sso_user_id || !tenantAccount?.deposit_account_number) {
+      return new Response(
+        JSON.stringify({ error: "Tenant CheckAlt account not registered. Register in Integration Settings first." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
     const submitResp = await checkAltFetch(
       supabase,
       "/fincapture/deposit/process",
