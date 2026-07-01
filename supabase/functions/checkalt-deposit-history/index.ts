@@ -71,6 +71,16 @@ Deno.serve(async (req) => {
 
     const tenant = await loadTenantAccount(supabase, tenantId);
 
+    // Prefer the cached CheckAlt-issued ssoKey (from registration) over the raw sso_user_id.
+    // Submit/approve flows do the same; history must match or CheckAlt returns "no records".
+    const { data: acctRow } = await supabase
+      .from("checkalt_tenant_accounts")
+      .select("last_register_payload")
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    const cached = (acctRow?.last_register_payload ?? {}) as { sso_key?: string };
+    const ssoKey = cached.sso_key || tenant.sso_user_id;
+
     // Default to last 30 days
     const today = new Date();
     const defaultEnd = today.toISOString().slice(0, 10);
@@ -80,11 +90,19 @@ Deno.serve(async (req) => {
 
     const payload = {
       fiKey: cfg.fi_key,
-      ssoKey: tenant.sso_user_id,
+      ssoKey,
       accountNumber: body.account_number ?? tenant.deposit_account_number,
       startDate: body.start_date ?? defaultStart,
       endDate: body.end_date ?? defaultEnd,
     };
+
+    console.log("[checkalt-deposit-history] request", {
+      tenantId,
+      ssoKey,
+      accountNumber: payload.accountNumber,
+      startDate: payload.startDate,
+      endDate: payload.endDate,
+    });
 
     const resp = await checkAltFetch(supabase, "/fincapture/deposit/history", {
       method: "POST",
