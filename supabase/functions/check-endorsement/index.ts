@@ -63,6 +63,42 @@ function htmlResp(body: string, status = 200) {
   });
 }
 
+async function invokeSendEmail(
+  supabaseUrl: string,
+  bearerToken: string,
+  payload: Record<string, unknown>,
+) {
+  const response = await fetch(`${supabaseUrl}/functions/v1/send-email`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${bearerToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  let responsePayload: unknown = null;
+  try {
+    responsePayload = await response.clone().json();
+  } catch {
+    responsePayload = await response.text().catch(() => null);
+  }
+
+  if (!response.ok) {
+    const payloadObject = responsePayload && typeof responsePayload === "object"
+      ? responsePayload as Record<string, unknown>
+      : null;
+    const message =
+      (typeof payloadObject?.error === "string" && payloadObject.error) ||
+      (typeof payloadObject?.message === "string" && payloadObject.message) ||
+      (typeof responsePayload === "string" && responsePayload) ||
+      `Email function failed with HTTP ${response.status}`;
+    throw new Error(message);
+  }
+
+  return responsePayload;
+}
+
 // Tokens never expire — links are always valid until signed, waived, or rejected
 function hasLegacyExpiredToken(_endorsement: { status: string | null; token_expires_at: string | null }) {
   return false;
@@ -943,18 +979,14 @@ Deno.serve(async (req) => {
               ? ccRaw.filter((v: any) => typeof v === 'string' && v.trim()).map((v: string) => v.trim())
               : (typeof ccRaw === 'string' && ccRaw.trim() ? [ccRaw.trim()] : []);
 
-            const { error: invokeErr } = await supabase.functions.invoke("send-email", {
-              body: {
-                to: endorsement.contact_email,
-                subject: finalSubject,
-                body: finalBody,
-                checkId: endorsement.check_id,
-                tenantId: tenantId,
-                cc: ccArray.length > 0 ? ccArray : undefined,
-              },
-              headers: { Authorization: `Bearer ${authToken}` },
+            await invokeSendEmail(supabaseUrl, authToken, {
+              to: endorsement.contact_email,
+              subject: finalSubject,
+              body: finalBody,
+              checkId: endorsement.check_id,
+              tenantId: tenantId,
+              cc: ccArray.length > 0 ? ccArray : undefined,
             });
-            if (invokeErr) throw invokeErr;
             emailSent = true;
           } catch (e) {
             emailError = e instanceof Error ? e.message : String(e);
@@ -1214,13 +1246,12 @@ Deno.serve(async (req) => {
                     const insuredName = claimInfo?.insured_name || "the insured";
                     const companyName = brandingForNotif?.company_name || "Freedom Claims";
 
-                    await supabase.functions.invoke("send-email", {
-                      body: {
-                        to: notifEmail,
-                        subject: `Payment Direction Received — Claim ${claimLabel}`,
-                        claimId: linkedCheck.claim_id,
-                        checkId: linkedCheck.id,
-                        body: `
+                    await invokeSendEmail(supabaseUrl, serviceKey, {
+                      to: notifEmail,
+                      subject: `Payment Direction Received — Claim ${claimLabel}`,
+                      claimId: linkedCheck.claim_id,
+                      checkId: linkedCheck.id,
+                      body: `
                           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                             <h2 style="color: #1a1a2e; margin-bottom: 16px;">Payment Direction Received</h2>
                             <p style="color: #333; font-size: 15px; line-height: 1.6;">
@@ -1237,8 +1268,6 @@ Deno.serve(async (req) => {
                             </p>
                           </div>
                         `,
-                      },
-                      headers: { Authorization: `Bearer ${serviceKey}` },
                     });
                     console.log(`[ENDORSEMENT] Payment direction notification sent to ${notifEmail}`);
                   }
