@@ -34,7 +34,7 @@ import { format } from "date-fns";
 // Eager: default tab and inline panels
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards"; // kept for potential future use
-import { AdminCheckTracker } from "@/components/check-review/AdminCheckTracker";
+
 import { usePermissions } from "@/hooks/usePermissions";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
