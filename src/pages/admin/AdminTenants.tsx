@@ -143,8 +143,8 @@ export default function AdminTenants() {
       <div className="border-b border-border bg-card">
         <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
-              <ArrowLeft className="w-4 h-4 mr-1" /> Home
+            <Button variant="ghost" size="sm" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))}>
+              <ArrowLeft className="w-4 h-4 mr-1" /> Back
             </Button>
             <Building2 className="w-6 h-6 text-primary" />
             <div>
