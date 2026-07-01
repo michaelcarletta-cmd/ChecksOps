@@ -117,12 +117,16 @@ Deno.serve(async (req) => {
     }
 
     if (!resp.ok) {
+      console.error("[checkalt-deposit-history] upstream error", resp.status, json);
       return new Response(
-        JSON.stringify({ error: `CheckAlt history failed [${resp.status}]`, detail: json }),
-        {
+        JSON.stringify({
+          error: `CheckAlt history failed [${resp.status}]: ${
+            typeof json === "object" ? JSON.stringify(json) : String(json)
+          }`,
           status: resp.status,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
+          detail: json,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -144,12 +148,11 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : String(e) }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[checkalt-deposit-history] exception", msg);
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
