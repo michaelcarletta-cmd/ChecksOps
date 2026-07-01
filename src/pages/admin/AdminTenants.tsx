@@ -167,17 +167,28 @@ export default function AdminTenants() {
       </div>
 
       <div className="max-w-[1400px] mx-auto px-6 py-8">
-        {loading ? (
-          <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin" /></div>
-        ) : tenants.length === 0 ? (
-          <Card><CardContent className="py-16 text-center text-muted-foreground">No tenants yet. Click "New Tenant" to add one.</CardContent></Card>
-        ) : (
-          <TenantManagementTable
-            tenants={tenants}
-            onOpen={(t) => setSelected(t)}
-            onChanged={loadTenants}
-          />
-        )}
+        <Tabs defaultValue="tenants" className="w-full">
+          <TabsList className="mb-6">
+            <TabsTrigger value="tenants"><Building2 className="w-4 h-4 mr-1" /> Tenants</TabsTrigger>
+            <TabsTrigger value="referrals"><Gift className="w-4 h-4 mr-1" /> Referral Dashboard</TabsTrigger>
+          </TabsList>
+          <TabsContent value="tenants">
+            {loading ? (
+              <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin" /></div>
+            ) : tenants.length === 0 ? (
+              <Card><CardContent className="py-16 text-center text-muted-foreground">No tenants yet. Click "New Tenant" to add one.</CardContent></Card>
+            ) : (
+              <TenantManagementTable
+                tenants={tenants}
+                onOpen={(t) => setSelected(t)}
+                onChanged={loadTenants}
+              />
+            )}
+          </TabsContent>
+          <TabsContent value="referrals">
+            <AdminReferralDashboard />
+          </TabsContent>
+        </Tabs>
       </div>
 
     </div>
@@ -273,7 +284,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <TabsTrigger value="email" className="flex-1 min-w-[90px] whitespace-nowrap"><Mail className="w-4 h-4 mr-1" /> Email</TabsTrigger>
             <TabsTrigger value="compliance" className="flex-1 min-w-[170px] whitespace-nowrap"><ShieldCheck className="w-4 h-4 mr-1" /> Compliance & Docs</TabsTrigger>
             <TabsTrigger value="integrations" className="flex-1 min-w-[130px] whitespace-nowrap"><Link2 className="w-4 h-4 mr-1" /> Integrations</TabsTrigger>
-            <TabsTrigger value="referrals" className="flex-1 min-w-[110px] whitespace-nowrap"><Gift className="w-4 h-4 mr-1" /> Referrals</TabsTrigger>
+            
             <TabsTrigger value="billing" className="flex-1 min-w-[100px] whitespace-nowrap"><Receipt className="w-4 h-4 mr-1" /> Billing</TabsTrigger>
             <TabsTrigger value="usage" className="flex-1 min-w-[95px] whitespace-nowrap"><Receipt className="w-4 h-4 mr-1" /> Usage</TabsTrigger>
             <TabsTrigger value="users" className="flex-1 min-w-[95px] whitespace-nowrap"><Users className="w-4 h-4 mr-1" /> Users</TabsTrigger>
@@ -300,9 +311,6 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           <TabsContent value="integrations" className="mt-6 space-y-6">
             <ActumSettings />
             <CheckAltSettings />
-          </TabsContent>
-          <TabsContent value="referrals" className="mt-6">
-            <AdminReferralDashboard />
           </TabsContent>
           <TabsContent value="billing" className="mt-6">
             <BillingTab tenant={tenant} onUpdated={onUpdated} />
