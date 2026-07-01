@@ -16,7 +16,6 @@ import {
   ArrowDownToLine, FileBarChart, Gift, ShieldCheck, FileText
 } from "lucide-react";
 import { ReferralSettings } from "@/components/settings/ReferralSettings";
-import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
 import { CheckCenterHelpPanel } from "@/components/check-review/CheckCenterHelp";
 import { StakeholderAccountSettings } from "@/components/disbursement/StakeholderAccountSettings";
 import { TenantBankAccountSettings } from "@/components/settings/TenantBankAccountSettings";
@@ -24,8 +23,6 @@ import { TenantUserManager } from "./TenantUserManager";
 import { TenantDocumentsManager } from "./TenantDocumentsManager";
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { TenantAIKeySettings } from "./TenantAIKeySettings";
-import { ActumSettings } from "@/components/settings/ActumSettings";
-import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { GLBASecurityEventsLog } from "@/components/settings/GLBASecurityEventsLog";
 
@@ -110,13 +107,11 @@ export function WhiteLabelSettings() {
 
             <TabsTrigger value="partners" className="text-xs gap-1"><Link2 className="h-3 w-3" />Partners</TabsTrigger>
             <TabsTrigger value="banking" className="text-xs gap-1"><Banknote className="h-3 w-3" />Bank Accounts</TabsTrigger>
-            <TabsTrigger value="integrations" className="text-xs gap-1"><Link2 className="h-3 w-3" />Integrations</TabsTrigger>
             <TabsTrigger value="disbursement" className="text-xs gap-1"><CreditCard className="h-3 w-3" />Disbursement</TabsTrigger>
-            
+
             <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding</TabsTrigger>
             <TabsTrigger value="referrals" className="text-xs gap-1"><Gift className="h-3 w-3" />Referrals</TabsTrigger>
-            <TabsTrigger value="compliance" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Compliance</TabsTrigger>
-            <TabsTrigger value="documents" className="text-xs gap-1"><FileText className="h-3 w-3" />Documents</TabsTrigger>
+            <TabsTrigger value="compliance" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Compliance & Docs</TabsTrigger>
             <TabsTrigger value="guide" className="text-xs gap-1"><HelpCircle className="h-3 w-3" />ChecksOps Guide</TabsTrigger>
           </TabsList>
 
@@ -154,11 +149,6 @@ export function WhiteLabelSettings() {
             <TenantBankAccountSettings />
           </TabsContent>
 
-          <TabsContent value="integrations" className="space-y-6">
-            <ActumSettings />
-            {isAdmin && <CheckAltSettings />}
-          </TabsContent>
-
           <TabsContent value="disbursement">
             <StakeholderAccountSettings />
           </TabsContent>
@@ -169,22 +159,26 @@ export function WhiteLabelSettings() {
 
           <TabsContent value="referrals">
             <ReferralSettings />
-            <AdminReferralDashboard />
           </TabsContent>
 
-          <TabsContent value="compliance" className="space-y-6">
+          <TabsContent value="compliance" className="space-y-8">
             <ComplianceSettings />
             {isAdmin && <GLBASecurityEventsLog />}
+            {tenant && (
+              <div className="pt-6 border-t border-border/60">
+                <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+                  <FileText className="h-4 w-4" /> Tenant Documents
+                </h3>
+                <TenantDocumentsManager tenantId={tenant.id} />
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="guide">
             <CheckCenterHelpPanel />
           </TabsContent>
-
-          <TabsContent value="documents">
-            {tenant && <TenantDocumentsManager tenantId={tenant.id} />}
-          </TabsContent>
         </Tabs>
+
 
       </main>
     </div>
