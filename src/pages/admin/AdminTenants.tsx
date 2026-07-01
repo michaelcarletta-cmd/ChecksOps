@@ -312,9 +312,6 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <ActumSettings />
             <CheckAltSettings />
           </TabsContent>
-          <TabsContent value="referrals" className="mt-6">
-            <AdminReferralDashboard />
-          </TabsContent>
           <TabsContent value="billing" className="mt-6">
             <BillingTab tenant={tenant} onUpdated={onUpdated} />
           </TabsContent>
