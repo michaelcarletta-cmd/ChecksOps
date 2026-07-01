@@ -11,9 +11,14 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt } from "lucide-react";
+import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck } from "lucide-react";
 import { useRef } from "react";
 import { TenantDocumentsManager } from "@/components/white-label/TenantDocumentsManager";
+import { ActumSettings } from "@/components/settings/ActumSettings";
+import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
+import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
+import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
+import { TenantProvider } from "@/contexts/TenantContext";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
