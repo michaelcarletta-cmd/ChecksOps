@@ -37,8 +37,12 @@ export async function getFunctionErrorDetails(
 
     const payloadObject = payload && typeof payload === "object" ? payload as Record<string, unknown> : null;
     const payloadText = typeof payload === "string" ? payload : null;
+    const detailsObject = payloadObject?.details && typeof payloadObject.details === "object"
+      ? payloadObject.details as Record<string, unknown>
+      : null;
 
     const message =
+      (typeof detailsObject?.emailError === "string" && detailsObject.emailError) ||
       (typeof payloadObject?.error === "string" && payloadObject.error) ||
       (typeof payloadObject?.message === "string" && payloadObject.message) ||
       (typeof payloadObject?.details === "string" && payloadObject.details) ||
