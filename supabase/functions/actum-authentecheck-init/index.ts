@@ -122,9 +122,12 @@ serve(async (req) => {
     const postbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/actum-authentecheck-postback`;
 
     // Per Actum Authentecheck docs (SignupInit.cgi), the merchant token is a
-    // bare first segment (`chk:actum:<subid>`), followed by normal form fields.
-    // Do not URL-encode that first token or send it as pmt_type/key=value —
-    // Actum's SignupInit parser rejects those variants as malformed PostData.
+    // bare first segment, followed by normal form fields. Do not URL-encode
+    // that first token or send it as pmt_type/key=value pair — Actum's
+    // SignupInit parser rejects those variants as "Error parsing PostData"
+    // (verified directly against their endpoint). Per Actum support, use the
+    // tenant's own Test/Production ParentID and SubID here, not a generic
+    // placeholder.
     const psDesc = `Bank verification ${(account.nickname ?? "Account").slice(0, 20)}`
       .replace(/[^A-Za-z0-9 ]/g, "")
       .slice(0, 50);
@@ -133,7 +136,10 @@ serve(async (req) => {
     params.append("custemail", custEmail);
     params.append("firstname", firstName);
     params.append("lastname", lastName);
-    params.append("ps1_init", "1.00");
+    // Actum: "$0 will return ACH Verification" — Authentecheck is a bank-account
+    // verification session, not a real charge, so the initial amount is $0.
+    params.append("ps1_init", "0.00");
+    params.append("ps1_cycle", "-1");
     params.append("ps1_desc", psDesc);
     params.append("merchantdata", account.id);
     params.append("redirect_accept", acceptUrl);
