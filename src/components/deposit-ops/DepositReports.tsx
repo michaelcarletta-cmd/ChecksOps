@@ -15,11 +15,23 @@ const fmtMoney = (n: number | null | undefined) =>
   n != null ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "$0.00";
 
 const providerLabels: Record<string, string> = {
-  manual_branch: "Branch",
-  internal_ready: "Internal",
-  synctera: "Synctera",
-  treasury_prime: "Treasury Prime",
+  checkalt: "ChecksOps",
+  checksops: "ChecksOps",
+  fincapture: "ChecksOps",
+  manual_branch: "Bank",
+  branch: "Bank",
+  mobile: "Bank",
+  mobile_deposit: "Bank",
+  internal_ready: "Bank",
+  synctera: "Bank",
+  treasury_prime: "Bank",
 };
+
+const providerLabel = (p: string | null | undefined) => {
+  if (!p) return "—";
+  return providerLabels[p] ?? "Bank";
+};
+
 
 interface TenantDepositItem {
   id: string;
