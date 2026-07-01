@@ -952,6 +952,7 @@ Deno.serve(async (req) => {
                 tenantId: tenantId,
                 cc: ccArray.length > 0 ? ccArray : undefined,
               },
+              headers: { Authorization: `Bearer ${authToken}` },
             });
             if (invokeErr) throw invokeErr;
             emailSent = true;
@@ -1237,6 +1238,7 @@ Deno.serve(async (req) => {
                           </div>
                         `,
                       },
+                      headers: { Authorization: `Bearer ${serviceKey}` },
                     });
                     console.log(`[ENDORSEMENT] Payment direction notification sent to ${notifEmail}`);
                   }
