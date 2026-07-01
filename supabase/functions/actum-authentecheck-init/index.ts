@@ -80,10 +80,11 @@ serve(async (req) => {
     const syspass = isProd ? tenantData?.actum_syspass : (tenantData as any)?.actum_test_syspass;
     const meruser = isProd ? tenantData?.actum_username : (tenantData as any)?.actum_test_username;
     const merpass = isProd ? tenantData?.actum_password : (tenantData as any)?.actum_test_password;
+    const parentId = isProd ? (tenantData as any)?.actum_parent_id : (tenantData as any)?.actum_test_parent_id;
     const subid = isProd
       ? ((tenantData as any)?.actum_sub_id_ppd || (tenantData as any)?.actum_sub_id_ccd || (tenantData as any)?.actum_sub_id)
       : ((tenantData as any)?.actum_test_sub_id_ppd || (tenantData as any)?.actum_test_sub_id_ccd);
-    if (!meruser || !merpass || !syspass || !subid) {
+    if (!meruser || !merpass || !syspass || !parentId || !subid) {
       throw new Error(`Actum Authentecheck ${env} credentials not configured for this tenant.`);
     }
     console.log(`[authentecheck-init] using ${env} environment for tenant ${account.tenant_id}`);
@@ -124,10 +125,9 @@ serve(async (req) => {
     // bare first segment, followed by normal form fields. Do not URL-encode
     // that first token or send it as pmt_type/key=value pair — Actum's
     // SignupInit parser rejects those variants as "Error parsing PostData"
-    // (verified directly against their endpoint). The middle segment is the
-    // fixed literal "actum" — Table 1 (SignupInit) has no per-merchant
-    // parent_id field; merchant identity comes entirely from meruser/merpass/
-    // syspass. The trailing segment is the tenant's assigned SubID.
+    // (verified directly against their endpoint). Per Actum support, use the
+    // tenant's own Test/Production ParentID and SubID here, not a generic
+    // placeholder.
     const psDesc = `Bank verification ${(account.nickname ?? "Account").slice(0, 20)}`
       .replace(/[^A-Za-z0-9 ]/g, "")
       .slice(0, 50);
@@ -148,7 +148,7 @@ serve(async (req) => {
     params.append("meruser", meruser);
     params.append("merpass", merpass);
     params.append("syspass", syspass);
-    const merchantToken = `chk:actum:${String(subid).trim()}`;
+    const merchantToken = `chk:${String(parentId).trim()}:${String(subid).trim()}`;
     const postData = `${merchantToken}&${params.toString()}`;
 
     console.log("[authentecheck-init] initiating session for account", account.id);
