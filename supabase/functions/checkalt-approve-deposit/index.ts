@@ -1,22 +1,19 @@
 // Resolves a deposit parked in manual review (status 40 / pending_approval) by
 // calling FinCapture's `/fincapture/deposit/approve` endpoint.
 //
-// Per the FinCapture API Status & Reject Reference:
-//   action = 1            -> approve, deposit proceeds to submission (status 127)
-//   action = anything else -> hard reject (status 120), optional rejectCode/rejectNotes
+// Per the official ClearingWorks OpenAPI spec (FinCaptureAPIDepositApprovalRequest):
+//   action = 2 -> approval
+//   action = 1 -> rejection (optional rejectCode/rejectNotes)
 //   no rejectCode supplied -> defaults server-side to reject reason 1721 ("Rejected Through API")
 //
-// Field names (fiKey/referenceNumber/action/approvedAmount/checkAccountNumber/
-// rejectCode/rejectNotes) are confirmed from the official ClearingWorks Postman
-// collection. The exact numeric meaning of `action` still comes from the
-// FinCapture Status & Reject Reference doc, not the Postman sample — verify
-// against a live UAT approval before relying on this in production.
+// Valid payload fields: fiKey, referenceNumber (int64), action, approvedAmount,
+// checkAccountNumber, rejectCode, rejectNotes. ssoKey and depositAccountNumber
+// are NOT part of this schema.
 
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
 import { z } from "https://esm.sh/zod@3.23.8";
 import {
   getServiceClient,
-  loadTenantAccount,
   loadConfig,
   checkAltFetch,
 } from "../_shared/checkalt.ts";
@@ -88,16 +85,13 @@ Deno.serve(async (req) => {
       }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const tenantAccount = await loadTenantAccount(supabase, deposit.tenant_id);
     const cfg = await loadConfig(supabase);
     const fiKey = cfg.fi_key;
 
     const payload: Record<string, unknown> = {
       fiKey,
-      ssoKey: tenantAccount.sso_user_id,
-      depositAccountNumber: tenantAccount.deposit_account_number,
-      referenceNumber: deposit.checkalt_reference,
-      action: action === "approve" ? 1 : 0,
+      referenceNumber: Number(deposit.checkalt_reference),
+      action: action === "approve" ? 2 : 1,
     };
     if (action === "approve") {
       if (approved_amount !== undefined) payload.approvedAmount = approved_amount;
