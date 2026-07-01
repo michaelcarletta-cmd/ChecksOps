@@ -244,6 +244,7 @@ function CreateTenantDialog({ onCreated }: { onCreated: (t: Tenant) => void }) {
 
 function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: () => void; onUpdated: (t: Tenant) => void }) {
   return (
+    <TenantProvider slug={tenant.slug}>
     <div className="min-h-screen bg-background">
       <div className="border-b border-border bg-card">
         <div className="max-w-5xl mx-auto px-6 py-5 flex items-center gap-4">
@@ -266,11 +267,13 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
 
       <div className="max-w-5xl mx-auto px-6 py-8">
         <Tabs defaultValue="company" className="w-full">
-          <TabsList className="grid w-full grid-cols-7">
+          <TabsList className="grid w-full grid-cols-9">
             <TabsTrigger value="company"><Building2 className="w-4 h-4 mr-1" /> Company</TabsTrigger>
             <TabsTrigger value="branding"><Settings className="w-4 h-4 mr-1" /> Branding</TabsTrigger>
             <TabsTrigger value="email"><Mail className="w-4 h-4 mr-1" /> Email</TabsTrigger>
-            <TabsTrigger value="documents"><FileText className="w-4 h-4 mr-1" /> Documents</TabsTrigger>
+            <TabsTrigger value="compliance"><ShieldCheck className="w-4 h-4 mr-1" /> Compliance & Docs</TabsTrigger>
+            <TabsTrigger value="integrations"><Link2 className="w-4 h-4 mr-1" /> Integrations</TabsTrigger>
+            <TabsTrigger value="referrals"><Gift className="w-4 h-4 mr-1" /> Referrals</TabsTrigger>
             <TabsTrigger value="billing"><Receipt className="w-4 h-4 mr-1" /> Billing</TabsTrigger>
             <TabsTrigger value="usage"><Receipt className="w-4 h-4 mr-1" /> Usage</TabsTrigger>
             <TabsTrigger value="users"><Users className="w-4 h-4 mr-1" /> Users</TabsTrigger>
@@ -285,8 +288,21 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           <TabsContent value="email" className="mt-6">
             <EmailTab tenant={tenant} onUpdated={onUpdated} />
           </TabsContent>
-          <TabsContent value="documents" className="mt-6">
-            <TenantDocumentsManager tenantId={tenant.id} />
+          <TabsContent value="compliance" className="mt-6 space-y-8">
+            <ComplianceSettings />
+            <div className="pt-6 border-t border-border/60">
+              <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+                <FileText className="w-4 h-4" /> Tenant Documents
+              </h3>
+              <TenantDocumentsManager tenantId={tenant.id} />
+            </div>
+          </TabsContent>
+          <TabsContent value="integrations" className="mt-6 space-y-6">
+            <ActumSettings />
+            <CheckAltSettings />
+          </TabsContent>
+          <TabsContent value="referrals" className="mt-6">
+            <AdminReferralDashboard />
           </TabsContent>
           <TabsContent value="billing" className="mt-6">
             <BillingTab tenant={tenant} onUpdated={onUpdated} />
@@ -300,8 +316,11 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
         </Tabs>
       </div>
     </div>
+    </TenantProvider>
   );
 }
+
+
 
 /* ---------------- Tabs ---------------- */
 
