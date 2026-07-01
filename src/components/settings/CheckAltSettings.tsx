@@ -622,6 +622,35 @@ export function PendingApprovalDeposits() {
     },
   });
 
+  // Bulk "Poll Now" — reconciles every checkalt_deposits row sitting in
+  // submitted/pending_approval against CheckAlt's real status right here in
+  // the operational queue, instead of only via the admin Settings panel or
+  // waiting up to 10 minutes for the cron.
+  const poll = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("checkalt-poll-status");
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data as { polled: number; updated: number; errors: number };
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Reconciled with CheckAlt",
+        description: `Checked ${data.polled}, updated ${data.updated}${data.errors ? `, ${data.errors} error(s)` : ""}`,
+      });
+      qc.invalidateQueries({ queryKey: ["checkalt-pending-approvals"] });
+      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+      qc.invalidateQueries({ queryKey: ["deposit-items"] });
+    },
+    onError: (e: unknown) => {
+      toast({
+        title: "Poll failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-6">
@@ -635,15 +664,31 @@ export function PendingApprovalDeposits() {
         <p className="text-xs text-muted-foreground">
           No CheckAlt deposits awaiting approval.
         </p>
-        <Button size="sm" variant="ghost" onClick={() => refetch()}>
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="ghost" onClick={() => poll.mutate()} disabled={poll.isPending}>
+            {poll.isPending
+              ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              : <RefreshCw className="h-3 w-3 mr-1" />}
+            Poll Now
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => refetch()}>
+            Refresh
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-2">
+      <div className="flex items-center justify-end">
+        <Button size="sm" variant="outline" onClick={() => poll.mutate()} disabled={poll.isPending}>
+          {poll.isPending
+            ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            : <RefreshCw className="h-3 w-3 mr-1" />}
+          Poll Now
+        </Button>
+      </div>
       {data.map((row: any) => {
         const intake = row.check_intake_items;
         const statusDesc = row.last_status_payload?.statusDescription ?? row.last_status_payload?.reasonDescription;
