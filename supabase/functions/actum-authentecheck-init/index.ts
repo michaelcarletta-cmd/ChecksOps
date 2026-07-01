@@ -136,7 +136,9 @@ serve(async (req) => {
     params.append("custemail", custEmail);
     params.append("firstname", firstName);
     params.append("lastname", lastName);
-    params.append("ps1_init", "1.00");
+    // Actum: "$0 will return ACH Verification" — Authentecheck is a bank-account
+    // verification session, not a real charge, so the initial amount is $0.
+    params.append("ps1_init", "0.00");
     params.append("ps1_cycle", "-1");
     params.append("ps1_desc", psDesc);
     params.append("merchantdata", account.id);
