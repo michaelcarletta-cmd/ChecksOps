@@ -167,17 +167,28 @@ export default function AdminTenants() {
       </div>
 
       <div className="max-w-[1400px] mx-auto px-6 py-8">
-        {loading ? (
-          <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin" /></div>
-        ) : tenants.length === 0 ? (
-          <Card><CardContent className="py-16 text-center text-muted-foreground">No tenants yet. Click "New Tenant" to add one.</CardContent></Card>
-        ) : (
-          <TenantManagementTable
-            tenants={tenants}
-            onOpen={(t) => setSelected(t)}
-            onChanged={loadTenants}
-          />
-        )}
+        <Tabs defaultValue="tenants" className="w-full">
+          <TabsList className="mb-6">
+            <TabsTrigger value="tenants"><Building2 className="w-4 h-4 mr-1" /> Tenants</TabsTrigger>
+            <TabsTrigger value="referrals"><Gift className="w-4 h-4 mr-1" /> Referral Dashboard</TabsTrigger>
+          </TabsList>
+          <TabsContent value="tenants">
+            {loading ? (
+              <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin" /></div>
+            ) : tenants.length === 0 ? (
+              <Card><CardContent className="py-16 text-center text-muted-foreground">No tenants yet. Click "New Tenant" to add one.</CardContent></Card>
+            ) : (
+              <TenantManagementTable
+                tenants={tenants}
+                onOpen={(t) => setSelected(t)}
+                onChanged={loadTenants}
+              />
+            )}
+          </TabsContent>
+          <TabsContent value="referrals">
+            <AdminReferralDashboard />
+          </TabsContent>
+        </Tabs>
       </div>
 
     </div>
