@@ -2148,7 +2148,7 @@ function RerunOcrButton({ checkId, onSuccess }: { checkId: string; onSuccess: ()
         body: { checkId },
         headers: { Authorization: `Bearer ${session.session?.access_token}` },
       });
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(await getFunctionErrorMessage(error, "Failed to send endorsement request"));
       if (data && typeof data === "object" && (("success" in data && !data.success) || ("ocr_success" in data && !data.ocr_success))) {
         throw new Error(typeof data.error === "string" ? data.error : "OCR failed");
       }
@@ -3785,7 +3785,7 @@ function EndorsementPacketCard({ checkId, packetPath }: { checkId: string; packe
         body: { checkId, force: true },
         headers: { Authorization: `Bearer ${session.session.access_token}` },
       });
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(await getFunctionErrorMessage(error, "Failed to send endorsement request"));
       toast({ title: "Endorsement packet regenerated" });
     } catch (e: unknown) {
       toast({
