@@ -16,7 +16,6 @@ import {
   ArrowDownToLine, FileBarChart, Gift, ShieldCheck, FileText
 } from "lucide-react";
 import { ReferralSettings } from "@/components/settings/ReferralSettings";
-import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
 import { CheckCenterHelpPanel } from "@/components/check-review/CheckCenterHelp";
 import { StakeholderAccountSettings } from "@/components/disbursement/StakeholderAccountSettings";
 import { TenantBankAccountSettings } from "@/components/settings/TenantBankAccountSettings";
@@ -24,8 +23,6 @@ import { TenantUserManager } from "./TenantUserManager";
 import { TenantDocumentsManager } from "./TenantDocumentsManager";
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { TenantAIKeySettings } from "./TenantAIKeySettings";
-import { ActumSettings } from "@/components/settings/ActumSettings";
-import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { GLBASecurityEventsLog } from "@/components/settings/GLBASecurityEventsLog";
 
