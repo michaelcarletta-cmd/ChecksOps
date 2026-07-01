@@ -21,7 +21,7 @@ export function ActumSettings() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const [showSecrets, setShowSecrets] = useState(false);
+  const [showSecrets, setShowSecrets] = useState(true);
   const [form, setForm] = useState({
     actum_environment: "test" as Env,
     // production
