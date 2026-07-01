@@ -90,6 +90,7 @@ Deno.serve(async (req) => {
 
     const payload = {
       fiKey: cfg.fi_key,
+      userId: tenant.sso_user_id,
       ssoKey,
       accountNumber: body.account_number ?? tenant.deposit_account_number,
       startDate: body.start_date ?? defaultStart,
