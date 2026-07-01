@@ -267,16 +267,16 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
 
       <div className="max-w-5xl mx-auto px-6 py-8">
         <Tabs defaultValue="company" className="w-full">
-          <TabsList className="grid w-full grid-cols-9">
-            <TabsTrigger value="company"><Building2 className="w-4 h-4 mr-1" /> Company</TabsTrigger>
-            <TabsTrigger value="branding"><Settings className="w-4 h-4 mr-1" /> Branding</TabsTrigger>
-            <TabsTrigger value="email"><Mail className="w-4 h-4 mr-1" /> Email</TabsTrigger>
-            <TabsTrigger value="compliance"><ShieldCheck className="w-4 h-4 mr-1" /> Compliance & Docs</TabsTrigger>
-            <TabsTrigger value="integrations"><Link2 className="w-4 h-4 mr-1" /> Integrations</TabsTrigger>
-            <TabsTrigger value="referrals"><Gift className="w-4 h-4 mr-1" /> Referrals</TabsTrigger>
-            <TabsTrigger value="billing"><Receipt className="w-4 h-4 mr-1" /> Billing</TabsTrigger>
-            <TabsTrigger value="usage"><Receipt className="w-4 h-4 mr-1" /> Usage</TabsTrigger>
-            <TabsTrigger value="users"><Users className="w-4 h-4 mr-1" /> Users</TabsTrigger>
+          <TabsList className="flex w-full flex-wrap h-auto justify-start gap-1 p-1">
+            <TabsTrigger value="company" className="flex-1 min-w-[110px] whitespace-nowrap"><Building2 className="w-4 h-4 mr-1" /> Company</TabsTrigger>
+            <TabsTrigger value="branding" className="flex-1 min-w-[110px] whitespace-nowrap"><Settings className="w-4 h-4 mr-1" /> Branding</TabsTrigger>
+            <TabsTrigger value="email" className="flex-1 min-w-[90px] whitespace-nowrap"><Mail className="w-4 h-4 mr-1" /> Email</TabsTrigger>
+            <TabsTrigger value="compliance" className="flex-1 min-w-[170px] whitespace-nowrap"><ShieldCheck className="w-4 h-4 mr-1" /> Compliance & Docs</TabsTrigger>
+            <TabsTrigger value="integrations" className="flex-1 min-w-[130px] whitespace-nowrap"><Link2 className="w-4 h-4 mr-1" /> Integrations</TabsTrigger>
+            <TabsTrigger value="referrals" className="flex-1 min-w-[110px] whitespace-nowrap"><Gift className="w-4 h-4 mr-1" /> Referrals</TabsTrigger>
+            <TabsTrigger value="billing" className="flex-1 min-w-[100px] whitespace-nowrap"><Receipt className="w-4 h-4 mr-1" /> Billing</TabsTrigger>
+            <TabsTrigger value="usage" className="flex-1 min-w-[95px] whitespace-nowrap"><Receipt className="w-4 h-4 mr-1" /> Usage</TabsTrigger>
+            <TabsTrigger value="users" className="flex-1 min-w-[95px] whitespace-nowrap"><Users className="w-4 h-4 mr-1" /> Users</TabsTrigger>
           </TabsList>
 
           <TabsContent value="company" className="mt-6">
