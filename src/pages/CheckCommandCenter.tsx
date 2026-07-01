@@ -34,7 +34,7 @@ import { format } from "date-fns";
 // Eager: default tab and inline panels
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards"; // kept for potential future use
-import { AdminCheckTracker } from "@/components/check-review/AdminCheckTracker";
+
 import { usePermissions } from "@/hooks/usePermissions";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
@@ -1040,7 +1040,6 @@ export default function CheckCommandCenter() {
                 <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
                 <TabsTrigger value="pending_approvals" className="text-xs gap-1"><ShieldAlert className="h-3 w-3" />Pending Approvals</TabsTrigger>
                 <TabsTrigger value="deposit_history" className="text-xs gap-1"><Banknote className="h-3 w-3" />Deposit History</TabsTrigger>
-                <TabsTrigger value="check_tracker" className="text-xs gap-1"><ShieldAlert className="h-3 w-3" />Check Tracker</TabsTrigger>
                 <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
                 <TabsTrigger value="mortgage_cos" className="text-xs gap-1"><Building2 className="h-3 w-3" />Mortgage Cos</TabsTrigger>
               </TabsList>
@@ -1057,11 +1056,6 @@ export default function CheckCommandCenter() {
               <TabsContent value="deposit_history" className="mt-3">
                 <Suspense fallback={<TabLoader />}>
                   <CheckAltDepositHistory />
-                </Suspense>
-              </TabsContent>
-              <TabsContent value="check_tracker" className="mt-3">
-                <Suspense fallback={<TabLoader />}>
-                  <AdminCheckTracker searchQuery={searchQuery} />
                 </Suspense>
               </TabsContent>
               <TabsContent value="reports" className="mt-3">
