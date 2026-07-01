@@ -9,6 +9,16 @@
 // Valid payload fields: fiKey, referenceNumber (int64), action, approvedAmount,
 // checkAccountNumber, rejectCode, rejectNotes. ssoKey and depositAccountNumber
 // are NOT part of this schema.
+//
+// Response shape (FinCaptureAPIDepositApprovalResponse) is
+// { success: boolean, status: string, statusDescription: string } — e.g.
+// { "success": true, "status": "Approved", "statusDescription": "..." }.
+// `status` is a human-readable word here, NOT a numeric code like the
+// deposit/item and deposit/process endpoints use — it must not be run
+// through Number(). A 200 HTTP response only means CheckAlt accepted the
+// request; `success` reflects whether the approval/rejection actually took
+// effect on their side, so it must be checked before we mark the deposit
+// resolved.
 
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
 import { z } from "https://esm.sh/zod@3.23.8";
@@ -115,11 +125,21 @@ Deno.serve(async (req) => {
       }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const apiStatus = Number(respJson?.status ?? respJson?.statusCode);
+    // CheckAlt can return HTTP 200 while still declining the request (e.g. a
+    // business-rule failure) — `success` is the real signal, not resp.ok.
+    if (respJson?.success !== true) {
+      return new Response(JSON.stringify({
+        error: "CheckAlt did not confirm the approval",
+        status: respJson?.status ?? null,
+        status_description: respJson?.statusDescription ?? null,
+        details: respJson,
+      }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    const apiStatusText = String(respJson?.status ?? "").toLowerCase();
     let internalStatus = action === "approve" ? "submitted" : "rejected";
-    if (apiStatus === 127) internalStatus = "submitted";
-    else if (apiStatus === 120) internalStatus = "rejected";
-    else if (apiStatus === 11) internalStatus = "error";
+    if (apiStatusText.includes("reject")) internalStatus = "rejected";
+    else if (apiStatusText.includes("approv") || apiStatusText.includes("submit")) internalStatus = "submitted";
 
     const updates: Record<string, unknown> = {
       status: internalStatus,
@@ -195,13 +215,13 @@ Deno.serve(async (req) => {
               updated_at: approvedAtIso,
             })
             .eq("id", depositItem.id);
-        } else if (internalStatus === "rejected" || internalStatus === "error") {
+        } else if (internalStatus === "rejected") {
           await supabase
             .from("deposit_items")
             .update({
               status: "failed",
               exception_reason: respJson?.statusDescription ?? internalStatus,
-              exception_code: String(apiStatus),
+              exception_code: String(respJson?.status ?? internalStatus),
               provider_response: respJson,
               updated_at: new Date().toISOString(),
             })
@@ -214,7 +234,7 @@ Deno.serve(async (req) => {
       success: true,
       deposit_id: deposit.id,
       status: internalStatus,
-      api_status: apiStatus,
+      api_status: respJson?.status ?? null,
       status_description: respJson?.statusDescription ?? null,
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
