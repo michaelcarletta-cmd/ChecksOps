@@ -94,29 +94,20 @@ function DailyDepositLog({ logs }: { logs: Record<string, unknown>[] }) {
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Provider</TableHead>
-                  <TableHead className="text-right">Items</TableHead>
                   <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="text-right">Confirmed</TableHead>
-                  <TableHead className="text-right">Reconciled</TableHead>
-                  <TableHead className="text-right">NSF</TableHead>
-                  <TableHead className="text-right">Variance</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {logs.map((row, i) => (
                   <TableRow key={i}>
                     <TableCell className="text-sm">{row.deposit_date ? format(new Date(row.deposit_date as string), "MMM d, yyyy") : "—"}</TableCell>
-                    <TableCell className="text-xs">{providerLabels[row.provider as string] ?? (row.provider as string)}</TableCell>
-                    <TableCell className="text-right text-sm">{row.item_count as number}</TableCell>
+                    <TableCell className="text-xs">{providerLabel(row.provider as string)}</TableCell>
                     <TableCell className="text-right tabular-nums">{fmtMoney(row.total_amount as number)}</TableCell>
-                    <TableCell className="text-right tabular-nums text-emerald-400">{fmtMoney(row.confirmed_amount as number)}</TableCell>
-                    <TableCell className="text-right tabular-nums text-primary">{fmtMoney(row.reconciled_amount as number)}</TableCell>
-                    <TableCell className="text-right text-sm">{(row.nsf_count as number) > 0 ? <Badge variant="destructive" className="text-[9px]">{row.nsf_count as number}</Badge> : "0"}</TableCell>
-                    <TableCell className={`text-right tabular-nums ${(row.total_variance as number) !== 0 ? "text-amber-400" : ""}`}>{fmtMoney(row.total_variance as number)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+
           )}
         </ScrollArea>
       </CardContent>
