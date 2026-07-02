@@ -222,6 +222,29 @@ export function TenantManagement() {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  const getPreviewUrl = (t: any) => {
+    if (t.custom_domain) {
+      return `https://${t.custom_domain.replace(/\/$/, "")}/checks`;
+    }
+    if (typeof window !== "undefined") {
+      const host = window.location.hostname;
+      if (isCheckOpsHost(host)) {
+        return `${window.location.origin}/${t.slug}/checks`;
+      }
+    }
+    return `/wl/${t.slug}`;
+  };
+
+  const previewAsTenant = (t: any) => {
+    const url = getPreviewUrl(t);
+    window.open(url, "_blank", "noopener,noreferrer");
+    toast({
+      title: `Previewing as ${t.name}`,
+      description: "Opened tenant portal in a new tab. You are viewing what their users see.",
+    });
+  };
+
+
   const updateConfigField = (field: string, value: string) => {
     setForm((prev) => ({ ...prev, email_provider_config: { ...prev.email_provider_config, [field]: value } }));
   };
