@@ -610,6 +610,15 @@ export function TenantManagement() {
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8"
+                    title="Preview as this tenant (opens their portal in a new tab)"
+                    onClick={() => previewAsTenant(t)}
+                  >
+                    <Eye className="h-4 w-4 text-blue-400" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
                     title="Manage Users"
                     onClick={() => setUsersTarget({ id: t.id, name: t.name })}
                   >
