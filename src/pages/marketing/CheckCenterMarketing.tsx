@@ -30,8 +30,99 @@ import {
   Lock,
   Zap,
   LineChart,
+  Smartphone,
+  Banknote,
+  Wallet,
+  Timer,
+  Camera,
 } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
+
+const DepositMockup = () => (
+  <div className="rounded-xl border border-border/60 bg-card/80 shadow-xl overflow-hidden">
+    <div className="p-4 border-b border-border/40 bg-muted/20 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Smartphone className="h-4 w-4 text-emerald-400" />
+        <span className="text-sm font-semibold">Mobile Deposit</span>
+      </div>
+      <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+        Electronic clearing
+      </Badge>
+    </div>
+    <div className="p-4 space-y-3">
+      <div className="rounded-md border border-dashed border-border/60 bg-muted/10 p-3 flex items-center gap-3">
+        <Camera className="h-5 w-5 text-muted-foreground" />
+        <div className="flex-1">
+          <p className="text-xs font-medium">Front & back captured</p>
+          <p className="text-[10px] text-muted-foreground">MICR line verified · endorsements attached</p>
+        </div>
+        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+      </div>
+      <div className="space-y-1.5">
+        {[
+          { l: "Payee", v: "John & Jane Smith" },
+          { l: "Amount", v: "$24,850.00" },
+          { l: "Deposit account", v: "Operating ••4210" },
+          { l: "Rail", v: "Remote deposit capture" },
+        ].map((r) => (
+          <div key={r.l} className="flex justify-between text-xs">
+            <span className="text-muted-foreground">{r.l}</span>
+            <span className="font-mono">{r.v}</span>
+          </div>
+        ))}
+      </div>
+      <div className="rounded-md bg-emerald-500/10 border border-emerald-500/30 p-3 text-xs text-emerald-300 flex items-center gap-2">
+        <Timer className="h-3.5 w-3.5" />
+        Submitted 10:42 AM · Funds expected next business day
+      </div>
+    </div>
+  </div>
+);
+
+const PayoutMockup = () => (
+  <div className="rounded-xl border border-border/60 bg-card/80 shadow-xl overflow-hidden">
+    <div className="p-4 border-b border-border/40 bg-muted/20 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Wallet className="h-4 w-4 text-blue-400" />
+        <span className="text-sm font-semibold">Send Payment</span>
+      </div>
+      <Badge variant="outline" className="text-[10px] border-blue-500/30 text-blue-400 bg-blue-500/10">
+        ACH · Verified account
+      </Badge>
+    </div>
+    <div className="p-4 space-y-3">
+      <div className="rounded-md border border-border/50 bg-muted/10 p-3 space-y-1.5">
+        <div className="flex justify-between text-xs">
+          <span className="text-muted-foreground">Recipient</span>
+          <span className="font-medium">Ridgeline Roofing LLC</span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span className="text-muted-foreground">Bank</span>
+          <span className="font-mono">Chase ••7831</span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span className="text-muted-foreground">Verification</span>
+          <span className="inline-flex items-center gap-1 text-emerald-400">
+            <ShieldCheck className="h-3 w-3" /> Bank-login verified
+          </span>
+        </div>
+      </div>
+      <div className="rounded-md border border-border/50 bg-muted/10 p-3">
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">Amount</span>
+          <span className="text-lg font-mono font-bold">$8,420.00</span>
+        </div>
+        <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+          <span>Claim CLM-2044 · Draw #2</span>
+          <span>Tokenized · no bank details re-entered</span>
+        </div>
+      </div>
+      <Button size="sm" className="w-full gap-1.5 bg-blue-500 hover:bg-blue-500/90 text-white">
+        <Send className="h-3.5 w-3.5" /> Send $8,420.00
+      </Button>
+    </div>
+  </div>
+);
 
 const HeroMockup = () => (
   <div className="relative w-full max-w-full min-w-0 rounded-xl border border-border/60 bg-card/80 backdrop-blur shadow-2xl overflow-hidden">
