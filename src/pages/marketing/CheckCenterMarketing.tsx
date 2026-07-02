@@ -540,8 +540,88 @@ export default function CheckCenterMarketing() {
         </div>
       </section>
 
+      {/* Money movement */}
+      <section id="money-movement" className="border-t border-border/40 bg-gradient-to-b from-transparent via-card/30 to-transparent">
+        <div className="mx-auto max-w-7xl px-4 md:px-6 py-20 md:py-28">
+          <div className="max-w-2xl">
+            <Badge variant="outline" className="mb-4">Money movement</Badge>
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight">
+              From cleared check to funded subcontractor.
+            </h2>
+            <p className="mt-4 text-muted-foreground text-lg">
+              ChecksOps connects directly into bank-grade rails so approved checks clear electronically
+              and approved disbursements move by ACH — all inside the same claim file, with the same audit trail.
+            </p>
+          </div>
+
+          <div className="mt-12 grid lg:grid-cols-2 gap-8">
+            {/* Clearing side */}
+            <div className="space-y-5">
+              <div className="flex items-center gap-2">
+                <div className="h-9 w-9 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                  <Banknote className="h-4 w-4" />
+                </div>
+                <h3 className="text-lg font-semibold">Clear the check</h3>
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Once every payee has endorsed and the packet is approved, the check clears through an
+                integrated remote deposit capture rail — no branch trip, no manual re-keying. Status flows
+                back into the claim file automatically.
+              </p>
+              <DepositMockup />
+              <ul className="space-y-2 text-xs text-muted-foreground">
+                {[
+                  "Front, back, and endorsement page bundled and submitted electronically",
+                  "Deposit confirmation, hold status, and cleared date sync back to the check",
+                  "Branch deposit path stays available as a fallback for any exception",
+                ].map((t) => (
+                  <li key={t} className="flex gap-2 items-start">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5 flex-shrink-0" />
+                    <span>{t}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Payout side */}
+            <div className="space-y-5">
+              <div className="flex items-center gap-2">
+                <div className="h-9 w-9 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center">
+                  <Send className="h-4 w-4" />
+                </div>
+                <h3 className="text-lg font-semibold">Pay the subs, vendors, and reps</h3>
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Recipients verify their bank account once — through a secure bank-login flow, not a
+                paper form. After that, every future ACH is a single click. No routing numbers to
+                collect, no voided checks, no wires to chase.
+              </p>
+              <PayoutMockup />
+              <ul className="space-y-2 text-xs text-muted-foreground">
+                {[
+                  "Bank ownership verified at signup — no more bad account numbers",
+                  "Account details tokenized after the first payment; never re-entered",
+                  "Every disbursement tied to a claim, draw, and approver in the audit log",
+                ].map((t) => (
+                  <li key={t} className="flex gap-2 items-start">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-blue-400 mt-0.5 flex-shrink-0" />
+                    <span>{t}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          <p className="mt-10 text-center text-[11px] text-muted-foreground max-w-3xl mx-auto">
+            Deposit and ACH rails are provided by regulated banking partners. ChecksOps orchestrates
+            the workflow, evidence, and approvals — your company remains the merchant of record.
+          </p>
+        </div>
+      </section>
+
       {/* Security */}
       <section id="security" className="border-t border-border/40 bg-card/20">
+
         <div className="mx-auto max-w-7xl px-4 md:px-6 py-20 md:py-28">
           <div className="max-w-2xl">
             <Badge variant="outline" className="mb-4">Security & audit</Badge>
