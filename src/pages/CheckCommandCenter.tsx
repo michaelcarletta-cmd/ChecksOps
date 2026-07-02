@@ -2186,6 +2186,8 @@ function CheckDetailPanel({
   const [frontImageDimensions, setFrontImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [backImageDimensions, setBackImageDimensions] = useState<{ width: number; height: number } | null>(null);
 
+
+
   // Whether this tenant has CheckAlt RDC turned on (platform switch +
   // its own registered FinCapture account) — gates the per-check
   // "Deposit with CheckAlt" button without exposing checkalt_tenant_accounts
@@ -2305,6 +2307,32 @@ function CheckDetailPanel({
       return data?.signedUrl ?? null;
     },
   });
+
+  useEffect(() => {
+    setBackImageDimensions(null);
+    if (!backImageUrl) return;
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (!cancelled) setBackImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.src = backImageUrl;
+    return () => { cancelled = true; };
+  }, [backImageUrl]);
+
+  useEffect(() => {
+    setFrontImageDimensions(null);
+    if (!frontImageUrl) return;
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (!cancelled) setFrontImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.src = frontImageUrl;
+    return () => { cancelled = true; };
+  }, [frontImageUrl]);
+
+
 
    // Fetch reviewer profile for name display
   const { data: reviewerProfile } = useQuery({
@@ -3550,7 +3578,7 @@ function CheckDetailPanel({
                     </Button>
                   </div>
 
-                  {showEndorsementAdjuster && backImageUrl && (
+                  {showEndorsementAdjuster && backImageUrl && backImageDimensions && (
                     <Suspense fallback={<TabLoader />}>
                       <EndorsementAdjuster
                         checkId={checkId}
