@@ -964,10 +964,29 @@ function TenantManagementTable({
               return (
                 <TableRow key={t.id} className={busyId === t.id ? "opacity-60" : ""}>
                   <TableCell className="font-medium">
-                    <button className="hover:underline text-left" onClick={() => onOpen(t)}>
-                      {t.name}
-                    </button>
-                    {t.is_system_tenant && <Badge variant="outline" className="ml-2 text-[10px]">System</Badge>}
+                    <div className="flex items-center gap-1">
+                      <button className="hover:underline text-left" onClick={() => onOpen(t)}>
+                        {t.name}
+                      </button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0"
+                        title="Preview as this tenant (opens their portal in a new tab)"
+                        onClick={() => {
+                          const url = t.custom_domain
+                            ? `https://${t.custom_domain.replace(/\/$/, "")}/checks`
+                            : (typeof window !== "undefined" && isCheckOpsHost(window.location.hostname))
+                              ? `${window.location.origin}/${t.slug}/checks`
+                              : `/wl/${t.slug}`;
+                          window.open(url, "_blank", "noopener,noreferrer");
+                          toast({ title: `Previewing as ${t.name}`, description: "Opened tenant portal in a new tab." });
+                        }}
+                      >
+                        <Eye className="w-4 h-4 text-blue-400" />
+                      </Button>
+                      {t.is_system_tenant && <Badge variant="outline" className="text-[10px]">System</Badge>}
+                    </div>
                   </TableCell>
                   <TableCell className="font-mono text-xs">/{t.slug}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">
