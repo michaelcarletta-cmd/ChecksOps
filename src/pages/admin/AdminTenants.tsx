@@ -1016,6 +1016,22 @@ function TenantManagementTable({
                     </Select>
                   </TableCell>
                   <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Preview as this tenant (opens their portal in a new tab)"
+                      onClick={() => {
+                        const url = t.custom_domain
+                          ? `https://${t.custom_domain.replace(/\/$/, "")}/checks`
+                          : (typeof window !== "undefined" && isCheckOpsHost(window.location.hostname))
+                            ? `${window.location.origin}/${t.slug}/checks`
+                            : `/wl/${t.slug}`;
+                        window.open(url, "_blank", "noopener,noreferrer");
+                        toast({ title: `Previewing as ${t.name}`, description: "Opened tenant portal in a new tab." });
+                      }}
+                    >
+                      <Eye className="w-4 h-4 mr-1 text-blue-400" /> Preview
+                    </Button>
                     <Button variant="ghost" size="sm" onClick={() => setNotesTenant(t)}>
                       Notes
                     </Button>
