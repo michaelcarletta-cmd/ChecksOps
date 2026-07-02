@@ -2308,6 +2308,32 @@ function CheckDetailPanel({
     },
   });
 
+  useEffect(() => {
+    setBackImageDimensions(null);
+    if (!backImageUrl) return;
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (!cancelled) setBackImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.src = backImageUrl;
+    return () => { cancelled = true; };
+  }, [backImageUrl]);
+
+  useEffect(() => {
+    setFrontImageDimensions(null);
+    if (!frontImageUrl) return;
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (!cancelled) setFrontImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.src = frontImageUrl;
+    return () => { cancelled = true; };
+  }, [frontImageUrl]);
+
+
+
    // Fetch reviewer profile for name display
   const { data: reviewerProfile } = useQuery({
     queryKey: ["reviewer-profile", check?.reviewed_by],
