@@ -156,8 +156,9 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
     enabled: !!tenantId,
   });
 
-  // Fetch approved checks not yet in pipeline
-  const existingCheckIds = new Set(items.map((i) => i.check_id));
+  // Fetch approved checks not yet in pipeline (ignore terminal items so reverted checks reappear)
+  const TERMINAL_ITEM_STATUSES = ["failed", "returned", "cancelled"];
+  const existingCheckIds = new Set(items.filter((i) => !TERMINAL_ITEM_STATUSES.includes(i.status)).map((i) => i.check_id));
   const { data: approvedChecks = [] } = useQuery({
     queryKey: ["approved-checks-for-deposit", tenantId, existingCheckIds.size],
     queryFn: async () => {
