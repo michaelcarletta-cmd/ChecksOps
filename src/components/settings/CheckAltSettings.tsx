@@ -574,16 +574,38 @@ export function PendingApprovalDeposits() {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["checkalt-pending-approvals"],
     queryFn: async () => {
+      // Two queries instead of an embedded check_intake_items(...) select —
+      // an embed that can't resolve (RLS, a deleted/inaccessible row) risks
+      // silently dropping the parent checkalt_deposits row depending on how
+      // PostgREST infers the join, which would hide a genuinely pending
+      // deposit with no error and no indication why. Fetching separately
+      // guarantees every pending_approval row always renders.
       const { data, error } = await supabase
         .from("checkalt_deposits")
         .select(
-          "id, amount, checkalt_reference, submitted_at, last_status_payload, status_unresolved, check_intake_item_id, check_intake_items(check_number, carrier_name, payee_line, freedom_claim_number, detected_claim_number)",
+          "id, amount, checkalt_reference, submitted_at, last_status_payload, status_unresolved, check_intake_item_id",
         )
         .eq("status", "pending_approval")
         .order("submitted_at", { ascending: false, nullsFirst: false })
         .limit(50);
       if (error) throw error;
-      return data ?? [];
+      const rows = data ?? [];
+
+      const intakeIds = [...new Set(rows.map((r) => r.check_intake_item_id).filter(Boolean))];
+      let intakeById = new Map<string, any>();
+      if (intakeIds.length > 0) {
+        const { data: intakeRows, error: intakeErr } = await supabase
+          .from("check_intake_items")
+          .select("id, check_number, carrier_name, payee_line, freedom_claim_number, detected_claim_number")
+          .in("id", intakeIds as string[]);
+        if (intakeErr) throw intakeErr;
+        intakeById = new Map((intakeRows ?? []).map((r) => [r.id, r]));
+      }
+
+      return rows.map((r) => ({
+        ...r,
+        check_intake_items: r.check_intake_item_id ? intakeById.get(r.check_intake_item_id) ?? null : null,
+      }));
     },
     refetchInterval: 30_000,
   });
