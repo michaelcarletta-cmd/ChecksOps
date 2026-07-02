@@ -313,7 +313,7 @@ export default function CheckCenterMarketing() {
         </div>
         {menuOpen && (
           <div className="md:hidden border-t border-border/40 bg-background/95 backdrop-blur px-4 py-3 space-y-2 text-sm">
-            {["capabilities", "workflow", "partners", "security", "demo"].map((s) => (
+            {["capabilities", "workflow", "money-movement", "partners", "security", "demo"].map((s) => (
               <a key={s} href={`#${s}`} onClick={() => setMenuOpen(false)} className="block py-1.5 capitalize text-muted-foreground">
                 {s}
               </a>
