@@ -3550,7 +3550,7 @@ function CheckDetailPanel({
                     </Button>
                   </div>
 
-                  {showEndorsementAdjuster && backImageUrl && (
+                  {showEndorsementAdjuster && backImageUrl && backImageDimensions && (
                     <Suspense fallback={<TabLoader />}>
                       <EndorsementAdjuster
                         checkId={checkId}
