@@ -956,6 +956,10 @@ export default function Settings() {
               </CollapsibleContent>
             </Card>
           </Collapsible>
+
+          <div className="mt-4">
+            <EmailSenderSettings />
+          </div>
         </TabsContent>
 
         <TabsContent value="import" className="w-full">
