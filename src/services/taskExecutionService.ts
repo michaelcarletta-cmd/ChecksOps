@@ -1083,6 +1083,7 @@ async function sendEmailTaskNotification(task: ExecutionTask, escalationLevel: n
       body: {
         templateName: 'urgent-task-notification',
         recipientEmail: email,
+        tenantId: task.tenant_id ?? null,
         idempotencyKey: `urgent-task-${task.id}-${escalationLevel}-${Date.now()}`,
         templateData: {
           title: task.title,
