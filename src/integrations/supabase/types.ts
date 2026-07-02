@@ -17689,6 +17689,7 @@ export type Database = {
           last_verification_error: string | null
           provider: string
           reply_to: string | null
+          resend_domain_id: string | null
           sending_domain: string | null
           sending_mode: string
           tenant_id: string
@@ -17705,6 +17706,7 @@ export type Database = {
           last_verification_error?: string | null
           provider?: string
           reply_to?: string | null
+          resend_domain_id?: string | null
           sending_domain?: string | null
           sending_mode?: string
           tenant_id: string
@@ -17721,6 +17723,7 @@ export type Database = {
           last_verification_error?: string | null
           provider?: string
           reply_to?: string | null
+          resend_domain_id?: string | null
           sending_domain?: string | null
           sending_mode?: string
           tenant_id?: string
