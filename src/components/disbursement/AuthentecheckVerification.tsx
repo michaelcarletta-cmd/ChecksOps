@@ -47,7 +47,10 @@ export function AuthentecheckVerification({
       return url;
     },
     onSuccess: (url) => {
-      const win = window.open(url, "_blank", "noopener,noreferrer,width=520,height=720");
+      // Open as a normal full-size tab, not a constrained popup — OAuth-based
+      // bank redirects (Wells Fargo, Chase, etc. via Plaid) can lose session
+      // state inside small fixed-size popup windows, especially on mobile.
+      const win = window.open(url, "_blank", "noopener,noreferrer");
       if (!win) {
         toast({
           title: "Popup blocked",
