@@ -28,6 +28,7 @@ export type TaskEventType =
 
 export interface ExecutionTask {
   id: string;
+  tenant_id?: string | null;
   title: string;
   description: string | null;
   claim_id: string | null;
