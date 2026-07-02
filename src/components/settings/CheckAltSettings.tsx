@@ -916,9 +916,14 @@ export function CheckAltDepositHistory() {
                   const amount = Number(
                     it.amount ?? it.depositAmount ?? it.checkAmount ?? 0,
                   );
-                  // CheckAlt amounts come as cents in some responses
-                  const displayAmount =
-                    amount > 100000 && Number.isInteger(amount) ? amount / 100 : amount;
+                  // CheckAlt's FinCapture API sends/returns amounts as whole
+                  // cents, not decimal dollars (confirmed directly by
+                  // CheckAlt support, and confirmed here — a $780.00 check's
+                  // history entry came back as depositAmount: 78000). The
+                  // previous "only convert if > $100,000" heuristic missed
+                  // this because 78000 cents doesn't clear that threshold,
+                  // displaying it as $78,000.00 instead of $780.00.
+                  const displayAmount = amount / 100;
                   const submitted =
                     it.submittedDate ??
                     it.depositDate ??
