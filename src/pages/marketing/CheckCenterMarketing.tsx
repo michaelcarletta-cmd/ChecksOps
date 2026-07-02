@@ -294,6 +294,7 @@ export default function CheckCenterMarketing() {
           <nav className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
             <a href="#capabilities" className="hover:text-foreground transition-colors">Capabilities</a>
             <a href="#workflow" className="hover:text-foreground transition-colors">Workflow</a>
+            <a href="#money-movement" className="hover:text-foreground transition-colors">Money Movement</a>
             <a href="#partners" className="hover:text-foreground transition-colors">Partners</a>
             <a href="#security" className="hover:text-foreground transition-colors">Security</a>
             <a href="#demo" className="hover:text-foreground transition-colors">Demo</a>
