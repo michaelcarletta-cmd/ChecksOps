@@ -2855,6 +2855,7 @@ export type Database = {
           return_reason: string | null
           returned_at: string | null
           status: string
+          status_unresolved: boolean
           submitted_at: string | null
           submitted_by: string | null
           tenant_id: string | null
@@ -2877,6 +2878,7 @@ export type Database = {
           return_reason?: string | null
           returned_at?: string | null
           status?: string
+          status_unresolved?: boolean
           submitted_at?: string | null
           submitted_by?: string | null
           tenant_id?: string | null
@@ -2899,6 +2901,7 @@ export type Database = {
           return_reason?: string | null
           returned_at?: string | null
           status?: string
+          status_unresolved?: boolean
           submitted_at?: string | null
           submitted_by?: string | null
           tenant_id?: string | null
