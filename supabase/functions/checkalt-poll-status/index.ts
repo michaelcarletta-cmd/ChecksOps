@@ -154,27 +154,32 @@ Deno.serve(async (req) => {
           );
         }
 
+        const statusChanged = internal !== dep.status;
         const updates: Record<string, unknown> = {
           last_polled_at: new Date().toISOString(),
           last_status_payload: statusPayload,
           status_unresolved: statusUnresolved,
         };
-        if (internal !== dep.status) {
+        if (statusChanged) {
           updates.status = internal;
           if (internal === "cleared")
             updates.cleared_at = new Date().toISOString();
           if (internal === "returned")
             updates.returned_at = new Date().toISOString();
-          updated++;
         }
-        await supabase
+        const { error: depUpdateErr } = await supabase
           .from("checkalt_deposits")
           .update(updates)
           .eq("id", dep.id);
+        if (depUpdateErr) throw new Error(`checkalt_deposits update failed: ${depUpdateErr.message}`);
+        // Only count as "updated" once the write has actually succeeded —
+        // this is the exact distinction that was impossible to make before
+        // (updated could be incremented even when the write silently failed).
+        if (statusChanged) updated++;
 
         if (dep.check_intake_item_id) {
           if (internal === "pending_approval") {
-            await supabase
+            const { error: e1 } = await supabase
               .from("check_intake_items")
               .update({
                 check_stage: "deposited",
@@ -183,10 +188,12 @@ Deno.serve(async (req) => {
                 updated_at: new Date().toISOString(),
               })
               .eq("id", dep.check_intake_item_id);
-            await supabase
+            if (e1) throw new Error(`check_intake_items update failed: ${e1.message}`);
+            const { error: e2 } = await supabase
               .from("claim_checks")
               .update({ deposit_status: "deposited" })
               .eq("check_intake_item_id", dep.check_intake_item_id);
+            if (e2) throw new Error(`claim_checks update failed: ${e2.message}`);
           } else if (internal === "submitted" || internal === "cleared") {
             const depositedAt = new Date().toISOString();
             const { data: intake } = await supabase
@@ -194,7 +201,7 @@ Deno.serve(async (req) => {
               .select("tenant_id, deposited_at")
               .eq("id", dep.check_intake_item_id)
               .maybeSingle();
-            await supabase
+            const { error: e1 } = await supabase
               .from("check_intake_items")
               .update({
                 check_stage: "deposited",
@@ -205,12 +212,14 @@ Deno.serve(async (req) => {
                 updated_at: depositedAt,
               })
               .eq("id", dep.check_intake_item_id);
-            await supabase
+            if (e1) throw new Error(`check_intake_items update failed: ${e1.message}`);
+            const { error: e2 } = await supabase
               .from("claim_checks")
               .update({ deposit_status: "deposited" })
               .eq("check_intake_item_id", dep.check_intake_item_id);
+            if (e2) throw new Error(`claim_checks update failed: ${e2.message}`);
           } else if (internal === "returned" || internal === "rejected") {
-            await supabase
+            const { error: e1 } = await supabase
               .from("check_intake_items")
               .update({
                 check_stage: "ready_for_deposit",
@@ -219,10 +228,12 @@ Deno.serve(async (req) => {
                 updated_at: new Date().toISOString(),
               })
               .eq("id", dep.check_intake_item_id);
-            await supabase
+            if (e1) throw new Error(`check_intake_items update failed: ${e1.message}`);
+            const { error: e2 } = await supabase
               .from("claim_checks")
               .update({ deposit_status: "returned" })
               .eq("check_intake_item_id", dep.check_intake_item_id);
+            if (e2) throw new Error(`claim_checks update failed: ${e2.message}`);
           }
         }
       } catch (e) {
