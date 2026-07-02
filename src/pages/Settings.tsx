@@ -45,6 +45,7 @@ import { BackupStatusSettings } from "@/components/settings/BackupStatusSettings
 import { ZapierIntegrationSettings } from "@/components/settings/ZapierIntegrationSettings";
 import { OrganizationSettings } from "@/components/settings/OrganizationSettings";
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
+import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
 import { AuditLogSettings } from "@/components/settings/AuditLogSettings";
 import { NotificationDeliveryLogView } from "@/components/settings/NotificationDeliveryLogView";
 import StatusUrgencyNotificationsSettings from "@/components/settings/StatusUrgencyNotificationsSettings";
@@ -955,6 +956,10 @@ export default function Settings() {
               </CollapsibleContent>
             </Card>
           </Collapsible>
+
+          <div className="mt-4">
+            <EmailSenderSettings />
+          </div>
         </TabsContent>
 
         <TabsContent value="import" className="w-full">

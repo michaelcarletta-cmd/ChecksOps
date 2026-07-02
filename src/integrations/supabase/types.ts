@@ -17678,6 +17678,65 @@ export type Database = {
           },
         ]
       }
+      tenant_email_settings: {
+        Row: {
+          created_at: string
+          dns_records: Json | null
+          domain_status: string
+          from_address: string | null
+          from_name: string | null
+          id: string
+          last_verification_error: string | null
+          provider: string
+          reply_to: string | null
+          sending_domain: string | null
+          sending_mode: string
+          tenant_id: string
+          updated_at: string
+          verified_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          dns_records?: Json | null
+          domain_status?: string
+          from_address?: string | null
+          from_name?: string | null
+          id?: string
+          last_verification_error?: string | null
+          provider?: string
+          reply_to?: string | null
+          sending_domain?: string | null
+          sending_mode?: string
+          tenant_id: string
+          updated_at?: string
+          verified_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          dns_records?: Json | null
+          domain_status?: string
+          from_address?: string | null
+          from_name?: string | null
+          id?: string
+          last_verification_error?: string | null
+          provider?: string
+          reply_to?: string | null
+          sending_domain?: string | null
+          sending_mode?: string
+          tenant_id?: string
+          updated_at?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_email_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_openai_credentials: {
         Row: {
           created_at: string

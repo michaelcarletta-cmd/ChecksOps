@@ -1,46 +1,66 @@
-## What's happening
+# Per-Tenant Email Architecture
 
-The toast shows a **Cloudflare 400 Bad Request** HTML page (notice the `<center>cloudflare</center>` footer). That means the request is being rejected at CheckAlt's edge/WAF — it never reaches their app. So the "Request body is required" JSON error from earlier and this Cloudflare 400 are **two different failures**, and our last fix (switching to `Content-Type: application/json` with `body: "{}"`) traded one for the other.
+## Sender strategy
+- **Platform fallback (ships now):** All tenant emails send from `notify.checksops.com` (already verified via Lovable Emails). From-line shows the tenant's brand name; Reply-To routes to the tenant's inbox.
+- **Per-tenant custom domain (Phase 2, opt-in):** Tenants can later verify their own sending domain (e.g. `mail.acmerestoration.com`) via a third-party connector (Resend or Mailgun). When verified, sends switch to their domain automatically.
 
-CheckAlt's own sample is unambiguous:
+Note: I'll use the existing `notify.checksops.com` sender rather than provisioning a second `notify.claims.checksops.com` — same effect, no extra DNS. Say the word if you want the `claims.` subdomain instead.
 
-```
-POST https://uatapi.checkalt.com/public/jwtauth/authenticate
-merchant: lockbox5
-Content-Type: application/x-www-form-urlencoded
-Authorization: Basic ••••••
---body ''
-```
+---
 
-That is: **empty body**, **form-urlencoded**, Basic auth header. The earlier "Request body is required" 400 we saw was almost certainly not from this happy-path call — it was likely from a fallback path or a different endpoint that the helper was also trying.
+## Phase 1 — Ship now
 
-## Plan
+### Schema (migration on `company_branding`)
+Add per-tenant email columns:
+- `email_from_name` (text) — display name in From
+- `email_reply_to` (text) — Reply-To address
+- `email_sending_mode` (`platform` | `custom`, default `platform`)
+- `email_sending_domain` (text, nullable) — Phase 2 use
+- `email_from_address` (text, nullable) — Phase 2 use
+- `email_domain_status` (`unverified` | `pending` | `verified` | `failed`, default `unverified`)
+- `email_dns_records` (jsonb, nullable) — SPF/DKIM/DMARC records shown to tenant
+- `email_provider` (`lovable` | `resend` | `mailgun`, default `lovable`)
+- `email_verified_at` (timestamptz, nullable)
 
-1. **Revert `authenticateCheckAlt` in `supabase/functions/_shared/checkalt.ts`** to match CheckAlt's sample exactly:
-   - `Content-Type: application/x-www-form-urlencoded`
-   - `body: ""` (truly empty)
-   - Keep `merchant`, `Authorization: Basic <base64(user:pass)>`, `Accept`
-   - Remove the `{}` JSON body that's tripping Cloudflare
+### Backend: tenant-aware resolver
+New shared helper `supabase/functions/_shared/tenantEmailSender.ts`:
+- `resolveTenantSender(tenantId)` → returns `{ fromName, fromAddress, replyTo, provider }`
+- If `email_sending_mode='custom'` AND `email_domain_status='verified'` → use tenant domain via chosen provider
+- Otherwise → `"<TenantName> <notify@checksops.com>"` with tenant's Reply-To
 
-2. **Remove any leftover path/endpoint fallbacks** in that function so we only ever hit `/public/jwtauth/authenticate` — extra attempts at wrong paths are what produced the earlier confusing 404/400 chain and can re-lock the account.
+### Update send paths
+- `send-transactional-email`: accept `tenantId` in payload, call resolver, pass result to Mailgun/queue
+- `auth-email-hook`: look up tenant from user's `tenant_users`, resolve sender the same way
+- Any direct `resend`/`mailgun` calls in existing functions: route through resolver
 
-3. **Improve the error surfaced to the UI** when Cloudflare returns HTML: detect `<html>` in the response body and show "CheckAlt edge rejected the request (Cloudflare 400) — likely IP block, header value, or malformed request. Contact CheckAlt support with the request ID." instead of dumping raw HTML into the toast.
+### Settings UI
+`src/components/settings/EmailSenderSettings.tsx` (admin-only, scoped to current tenant):
+- Toggle: "Use ChecksOps default sender" / "Use my own domain (Phase 2)"
+- Fields: From Name, Reply-To email
+- Preview card showing example From line
+- Custom-domain section stubbed with "Coming soon" until Phase 2 lands
 
-4. **Redeploy all five CheckAlt edge functions** so they pick up the shared helper:
-   - `checkalt-submit-deposit`
-   - `checkalt-approve-deposit`
-   - `checkalt-poll-status`
-   - `checkalt-account-status`
-   - `checkalt-register-account`
+---
 
-5. **Test with `supabase--curl_edge_functions`** against `checkalt-submit-deposit` (or a dedicated auth-only test path if simpler) to confirm auth returns a JWT before you retry from the app.
+## Phase 2 — Custom domains (when a tenant asks)
 
-## What I will NOT change
+1. Connect Resend or Mailgun via `standard_connectors--connect`
+2. In settings UI: input sending domain → call edge function `verify-tenant-domain` which creates the domain on the provider and returns DNS records (DKIM CNAMEs, SPF, DMARC)
+3. UI displays records with copy buttons
+4. "Check verification" button polls provider; on success sets `email_domain_status='verified'`
+5. Resolver automatically switches that tenant to their own domain
+6. Nightly cron re-checks verified domains; flips to `failed` if DNS drift is detected
 
-- Secrets (`CHECKALT_USERNAME=freedom_api_user_uat`, `CHECKALT_MERCHANT=lockbox5`, `CHECKALT_PASSWORD`) — those are confirmed correct.
-- Any deposit/registration logic — only the auth call shape.
-- Frontend code.
+---
 
-## If it still fails after this
+## Files to touch (Phase 1)
+- `supabase/migrations/…_tenant_email_settings.sql` — new columns
+- `supabase/functions/_shared/tenantEmailSender.ts` — new
+- `supabase/functions/send-transactional-email/index.ts` — use resolver
+- `supabase/functions/auth-email-hook/index.ts` — use resolver
+- `src/components/settings/EmailSenderSettings.tsx` — new
+- `src/pages/…settings route` — mount new panel
 
-The remaining likely cause is **CheckAlt's WAF blocking Supabase edge function IPs** or expecting an allowlisted source. In that case the fix is on CheckAlt's side — we'll capture the exact request ID from the Cloudflare response headers and forward to their support.
+## Out of scope right now
+- Any provider connector work (Resend/Mailgun) — deferred to Phase 2
+- Rewriting locked functions (`send-email`, `check-endorsement`) unless you unlock them
