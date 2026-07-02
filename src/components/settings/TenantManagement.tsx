@@ -223,16 +223,11 @@ export function TenantManagement() {
   };
 
   const getPreviewUrl = (t: any) => {
-    if (t.custom_domain) {
-      return `https://${t.custom_domain.replace(/\/$/, "")}/checks`;
+    // Always preview via the slug route — custom domains may not have DNS configured yet.
+    if (typeof window !== "undefined" && isCheckOpsHost(window.location.hostname)) {
+      return `${window.location.origin}/${t.slug}/checks`;
     }
-    if (typeof window !== "undefined") {
-      const host = window.location.hostname;
-      if (isCheckOpsHost(host)) {
-        return `${window.location.origin}/${t.slug}/checks`;
-      }
-    }
-    return `/wl/${t.slug}`;
+    return `/wl/${t.slug}/checks`;
   };
 
   const previewAsTenant = (t: any) => {
