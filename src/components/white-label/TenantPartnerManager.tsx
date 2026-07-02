@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Copy, Link2, Loader2, Check, X, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { isMasterMerchant } from "@/lib/masterMerchant";
 
 export function TenantPartnerManager() {
   const { user } = useAuth();
