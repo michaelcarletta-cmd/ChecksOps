@@ -577,7 +577,7 @@ export function PendingApprovalDeposits() {
       const { data, error } = await supabase
         .from("checkalt_deposits")
         .select(
-          "id, amount, checkalt_reference, submitted_at, last_status_payload, check_intake_item_id, check_intake_items(check_number, carrier_name, payee_line, freedom_claim_number, detected_claim_number)",
+          "id, amount, checkalt_reference, submitted_at, last_status_payload, status_unresolved, check_intake_item_id, check_intake_items(check_number, carrier_name, payee_line, freedom_claim_number, detected_claim_number)",
         )
         .eq("status", "pending_approval")
         .order("submitted_at", { ascending: false, nullsFirst: false })
@@ -716,6 +716,12 @@ export function PendingApprovalDeposits() {
                 {statusDesc && (
                   <div className="text-xs text-amber-300 mt-1">
                     CheckAlt: {statusDesc}
+                  </div>
+                )}
+                {row.status_unresolved && (
+                  <div className="text-xs text-destructive mt-1 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    Last poll couldn't read a status from CheckAlt — this row may be stale
                   </div>
                 )}
               </div>

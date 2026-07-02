@@ -83,13 +83,27 @@ Deno.serve(async (req) => {
           rejected: "rejected",
           declined: "rejected",
         };
-        const internal =
-          numericMap[numericStatus] ?? statusMap[rawStatus] ?? dep.status;
+        const resolved = numericMap[numericStatus] ?? statusMap[rawStatus];
+        const internal = resolved ?? dep.status;
 
+        // CheckAlt's /fincapture/deposit/item response doesn't always carry
+        // a status/statusCode field we recognize (e.g. it can return only
+        // ruleDetails). When that happens `resolved` is undefined and we're
+        // silently keeping whatever status we already had — record that so
+        // it's visible instead of looking like a confirmed no-change poll.
+        const statusUnresolved = resolved === undefined;
+        if (statusUnresolved) {
+          console.warn(
+            "[checkalt-poll-status] could not resolve status for",
+            dep.checkalt_reference,
+            "- response had status:", json?.status, "statusCode:", json?.statusCode,
+          );
+        }
 
         const updates: Record<string, unknown> = {
           last_polled_at: new Date().toISOString(),
           last_status_payload: json,
+          status_unresolved: statusUnresolved,
         };
         if (internal !== dep.status) {
           updates.status = internal;
