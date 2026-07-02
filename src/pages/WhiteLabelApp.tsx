@@ -54,7 +54,7 @@ function WhiteLabelRoutes() {
   const basePath = useTenantBasePath(tenant?.slug);
 
   // Check tenant membership
-  const { data: isMember, isLoading: memberLoading } = useQuery({
+  const { data: isTenantMember, isLoading: memberLoading } = useQuery({
     queryKey: ["tenant-membership", tenant?.id, user?.id],
     queryFn: async () => {
       if (!tenant?.id || !user?.id) return false;
@@ -68,6 +68,10 @@ function WhiteLabelRoutes() {
     },
     enabled: !!tenant?.id && !!user?.id,
   });
+
+  // Master merchant can preview any tenant's Check Center
+  const isMember = !!isTenantMember || isMasterMerchant(user?.email);
+
 
   if (loading || authLoading || (user && memberLoading)) {
     return (
