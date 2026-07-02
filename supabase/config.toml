@@ -15,6 +15,10 @@ project_id = "nbcqwpysqgyxrrbgtmkw"
     verify_jwt = true
   [functions.send-transactional-email]
     verify_jwt = true
+  [functions.tenant-domain-verify]
+    verify_jwt = true
+  [functions.tenant-domain-check]
+    verify_jwt = true
   [functions.preview-transactional-email]
     verify_jwt = false
   [functions.handle-email-unsubscribe]
