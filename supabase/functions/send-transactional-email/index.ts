@@ -283,7 +283,10 @@ Deno.serve(async (req) => {
       ? template.subject(templateData)
       : template.subject
 
-  // 5. Enqueue the pre-rendered email for async processing by the dispatcher.
+  // 5. Resolve the tenant's effective sender identity (from + reply-to).
+  const sender = await resolveTenantSender(supabase, tenantId)
+
+  // 6. Enqueue the pre-rendered email for async processing by the dispatcher.
   // The dispatcher (process-email-queue) handles sending, retries, and rate-limit backoff.
 
   // Log pending BEFORE enqueue so we have a record even if enqueue crashes
@@ -299,8 +302,10 @@ Deno.serve(async (req) => {
     payload: {
       message_id: messageId,
       to: effectiveRecipient,
-      from: `${SITE_NAME} <noreply@${FROM_DOMAIN}>`,
-      sender_domain: SENDER_DOMAIN,
+      from: sender.from,
+      sender_domain: sender.senderDomain,
+      reply_to: sender.replyTo,
+      tenant_id: tenantId,
       subject: resolvedSubject,
       html,
       text: plainText,
