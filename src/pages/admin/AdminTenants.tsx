@@ -974,11 +974,9 @@ function TenantManagementTable({
                         className="h-7 w-7 shrink-0"
                         title="Preview as this tenant (opens their portal in a new tab)"
                         onClick={() => {
-                          const url = t.custom_domain
-                            ? `https://${t.custom_domain.replace(/\/$/, "")}/checks`
-                            : (typeof window !== "undefined" && isCheckOpsHost(window.location.hostname))
-                              ? `${window.location.origin}/${t.slug}/checks`
-                              : `/wl/${t.slug}`;
+                          const url = (typeof window !== "undefined" && isCheckOpsHost(window.location.hostname))
+                            ? `${window.location.origin}/${t.slug}/checks`
+                            : `/wl/${t.slug}/checks`;
                           window.open(url, "_blank", "noopener,noreferrer");
                           toast({ title: `Previewing as ${t.name}`, description: "Opened tenant portal in a new tab." });
                         }}
@@ -1040,11 +1038,9 @@ function TenantManagementTable({
                       size="sm"
                       title="Preview as this tenant (opens their portal in a new tab)"
                       onClick={() => {
-                        const url = t.custom_domain
-                          ? `https://${t.custom_domain.replace(/\/$/, "")}/checks`
-                          : (typeof window !== "undefined" && isCheckOpsHost(window.location.hostname))
-                            ? `${window.location.origin}/${t.slug}/checks`
-                            : `/wl/${t.slug}`;
+                        const url = (typeof window !== "undefined" && isCheckOpsHost(window.location.hostname))
+                          ? `${window.location.origin}/${t.slug}/checks`
+                          : `/wl/${t.slug}/checks`;
                         window.open(url, "_blank", "noopener,noreferrer");
                         toast({ title: `Previewing as ${t.name}`, description: "Opened tenant portal in a new tab." });
                       }}
