@@ -9,6 +9,7 @@ const corsHeaders = {
 
 interface ImmediateTask {
   id: string;
+  tenant_id: string | null;
   assigned_to: string;
   immediate_enabled: boolean;
   status: string;
