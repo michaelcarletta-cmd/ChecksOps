@@ -82,6 +82,7 @@ serve(async (req) => {
         body: {
           templateName: "stakeholder-verify-account",
           recipientEmail: to,
+          tenantId: account.tenant_id,
           idempotencyKey: `verify-${stakeholder_account_id}-${token}`,
           templateData: {
             nickname: account.nickname,

@@ -28,6 +28,7 @@ export type TaskEventType =
 
 export interface ExecutionTask {
   id: string;
+  tenant_id?: string | null;
   title: string;
   description: string | null;
   claim_id: string | null;
@@ -1082,6 +1083,7 @@ async function sendEmailTaskNotification(task: ExecutionTask, escalationLevel: n
       body: {
         templateName: 'urgent-task-notification',
         recipientEmail: email,
+        tenantId: task.tenant_id ?? null,
         idempotencyKey: `urgent-task-${task.id}-${escalationLevel}-${Date.now()}`,
         templateData: {
           title: task.title,
