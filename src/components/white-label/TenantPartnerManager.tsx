@@ -63,19 +63,22 @@ export function TenantPartnerManager() {
       }
 
       // Preflight: confirm current user is actually a member of their tenant.
-      // Without this, the partnership INSERT fails with a raw RLS violation
-      // because user_belongs_to_tenant(auth.uid(), inviter_tenant_id) returns false.
-      const { data: membership, error: memErr } = await supabase
-        .from("tenant_users")
-        .select("id")
-        .eq("tenant_id", tenantId!)
-        .eq("user_id", user!.id)
-        .maybeSingle();
-      if (memErr) throw memErr;
-      if (!membership) {
-        throw new Error(
-          "Your account isn't enrolled in this company yet. Ask an admin to add you under Settings → Team before connecting partners."
-        );
+      // Master merchant / super admins bypass this check so they can help tenants
+      // during preview without being added to tenant_users.
+      const superAdmin = isMasterMerchant(user!.email);
+      if (!superAdmin) {
+        const { data: membership, error: memErr } = await supabase
+          .from("tenant_users")
+          .select("id")
+          .eq("tenant_id", tenantId!)
+          .eq("user_id", user!.id)
+          .maybeSingle();
+        if (memErr) throw memErr;
+        if (!membership) {
+          throw new Error(
+            "Your account isn't enrolled in this company yet. Ask an admin to add you under Settings → Team before connecting partners."
+          );
+        }
       }
 
       // Look up the tenant by their permanent partner_code via SECURITY DEFINER RPC
