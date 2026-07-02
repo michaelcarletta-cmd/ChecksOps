@@ -4,9 +4,39 @@
 //
 // Uses POST /fincapture/deposit/item with body { fiKey, referenceNumber }
 // per the Clearingworks FinCapture API spec (not a GET endpoint).
+//
+// /fincapture/deposit/item does not reliably return a status/statusCode for
+// every reference (confirmed in production — a deposit CheckAlt had already
+// approved came back with ruleDetails only, no status field at all). When
+// that happens we fall back to POST /fincapture/deposit/history, which has
+// been confirmed to carry a resolvable status for the same reference.
 
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
-import { getServiceClient, loadConfig, checkAltFetch } from "../_shared/checkalt.ts";
+import { getServiceClient, loadConfig, checkAltFetch, loadTenantAccount } from "../_shared/checkalt.ts";
+
+const NUMERIC_STATUS_MAP: Record<number, string> = {
+  40: "pending_approval",
+  120: "rejected",
+  127: "submitted",
+  200: "cleared",
+};
+const STRING_STATUS_MAP: Record<string, string> = {
+  submitted: "submitted",
+  pending: "submitted",
+  pending_approval: "pending_approval",
+  approved: "cleared",
+  cleared: "cleared",
+  settled: "cleared",
+  returned: "returned",
+  rejected: "rejected",
+  declined: "rejected",
+};
+
+function resolveStatus(json: any): string | undefined {
+  const rawStatus = String(json?.status ?? "").toLowerCase();
+  const numericStatus = Number(json?.statusCode ?? json?.status);
+  return NUMERIC_STATUS_MAP[numericStatus] ?? STRING_STATUS_MAP[rawStatus];
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS")
@@ -30,7 +60,7 @@ Deno.serve(async (req) => {
 
     const { data: stale, error } = await supabase
       .from("checkalt_deposits")
-      .select("id, checkalt_reference, status, check_intake_item_id")
+      .select("id, tenant_id, checkalt_reference, status, check_intake_item_id")
       .in("status", ["submitted", "pending_approval"])
       .or(`last_polled_at.is.null,last_polled_at.lt.${cutoff}`)
       .not("checkalt_reference", "is", null)
@@ -61,36 +91,60 @@ Deno.serve(async (req) => {
         );
         const json = await resp.json().catch(() => ({}));
 
-        // Response schema: FinCaptureAPIDepositItemResponse
-        // CheckAlt returns numeric statusCode AND/OR string status depending
-        // on endpoint version. Map both.
-        const rawStatus = String(json?.status ?? "").toLowerCase();
-        const numericStatus = Number(json?.statusCode ?? json?.status);
-        const numericMap: Record<number, string> = {
-          40: "pending_approval",
-          120: "rejected",
-          127: "submitted",
-          200: "cleared",
-        };
-        const statusMap: Record<string, string> = {
-          submitted: "submitted",
-          pending: "submitted",
-          pending_approval: "pending_approval",
-          approved: "cleared",
-          cleared: "cleared",
-          settled: "cleared",
-          returned: "returned",
-          rejected: "rejected",
-          declined: "rejected",
-        };
-        const resolved = numericMap[numericStatus] ?? statusMap[rawStatus];
+        // Response schema: FinCaptureAPIDepositItemResponse. CheckAlt
+        // returns numeric statusCode AND/OR string status depending on
+        // endpoint version — but not always either (see file header).
+        let resolved = resolveStatus(json);
+        let statusPayload = json;
+
+        // Fall back to /fincapture/deposit/history, which has been confirmed
+        // to carry a resolvable status even when /deposit/item doesn't.
+        if (resolved === undefined) {
+          try {
+            const tenant = await loadTenantAccount(supabase, dep.tenant_id);
+            const today = new Date();
+            const startDate = new Date(today.getTime() - 30 * 86_400_000)
+              .toISOString().slice(0, 10);
+            const endDate = today.toISOString().slice(0, 10);
+            const histResp = await checkAltFetch(supabase, "/fincapture/deposit/history", {
+              method: "POST",
+              body: JSON.stringify({
+                fiKey: cfg.fi_key,
+                ssoKey: tenant.sso_user_id,
+                accountNumber: tenant.deposit_account_number,
+                startDate,
+                endDate,
+              }),
+            });
+            const histJson = await histResp.json().catch(() => ({}));
+            const items: any[] =
+              histJson?.depositHistoryList ??
+              histJson?.depositList ??
+              histJson?.history ??
+              (Array.isArray(histJson) ? histJson : []);
+            const match = items.find(
+              (it) => String(it?.referenceNumber) === String(dep.checkalt_reference),
+            );
+            if (match) {
+              const histResolved = resolveStatus(match);
+              if (histResolved !== undefined) {
+                resolved = histResolved;
+                statusPayload = { ...json, historyFallback: match };
+              }
+            }
+          } catch (e) {
+            console.error(
+              "[checkalt-poll-status] history fallback failed for",
+              dep.checkalt_reference,
+              e instanceof Error ? e.message : e,
+            );
+          }
+        }
+
         const internal = resolved ?? dep.status;
 
-        // CheckAlt's /fincapture/deposit/item response doesn't always carry
-        // a status/statusCode field we recognize (e.g. it can return only
-        // ruleDetails). When that happens `resolved` is undefined and we're
-        // silently keeping whatever status we already had — record that so
-        // it's visible instead of looking like a confirmed no-change poll.
+        // Still nothing usable from either endpoint — record that so it's
+        // visible instead of looking like a confirmed no-change poll.
         const statusUnresolved = resolved === undefined;
         if (statusUnresolved) {
           console.warn(
@@ -102,7 +156,7 @@ Deno.serve(async (req) => {
 
         const updates: Record<string, unknown> = {
           last_polled_at: new Date().toISOString(),
-          last_status_payload: json,
+          last_status_payload: statusPayload,
           status_unresolved: statusUnresolved,
         };
         if (internal !== dep.status) {
