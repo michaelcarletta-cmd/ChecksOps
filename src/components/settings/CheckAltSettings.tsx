@@ -625,9 +625,14 @@ export function PendingApprovalDeposits() {
       return data;
     },
     onSuccess: (data: any) => {
+      const wasRejected = data?.status === "rejected";
       toast({
-        title: data?.status === "rejected" ? "Deposit rejected" : "Deposit approved",
-        description: data?.status_description ?? `Status: ${data?.status}`,
+        title: wasRejected ? "Deposit rejected by CheckAlt" : "Deposit approved",
+        description:
+          data?.status_description
+            ? `${data.status_description}${data?.api_status ? ` (code ${data.api_status})` : ""}`
+            : `Status: ${data?.status}`,
+        variant: wasRejected ? "destructive" : "default",
       });
       setRejectingId(null);
       setRejectNotes("");

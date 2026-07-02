@@ -136,7 +136,12 @@ Deno.serve(async (req) => {
       }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const apiStatusText = String(respJson?.status ?? "").toLowerCase();
+    // CheckAlt sometimes returns a numeric `status` (e.g. 120) with the real
+    // human-readable outcome in `statusDescription` (e.g. "Rejected"). Inspect
+    // both so a duplicate/blocked deposit doesn't get mislabeled as submitted.
+    const apiStatusText = (
+      String(respJson?.status ?? "") + " " + String(respJson?.statusDescription ?? "")
+    ).toLowerCase();
     let internalStatus = action === "approve" ? "submitted" : "rejected";
     if (apiStatusText.includes("reject")) internalStatus = "rejected";
     else if (apiStatusText.includes("approv") || apiStatusText.includes("submit")) internalStatus = "submitted";
