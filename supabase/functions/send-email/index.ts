@@ -51,11 +51,16 @@ const payload: any = {
     payload.attachments = attachments;
   }
 
-  const response = await fetch("https://api.resend.com/emails", {
+  const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+  if (!lovableApiKey) {
+    throw new Error("LOVABLE_API_KEY is not configured");
+  }
+  const response = await fetch("https://connector-gateway.lovable.dev/resend/emails", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
+      "Authorization": `Bearer ${lovableApiKey}`,
+      "X-Connection-Api-Key": apiKey,
     },
     body: JSON.stringify(payload),
   });
