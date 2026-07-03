@@ -130,10 +130,12 @@ Deno.serve(async (req) => {
     if (claim.policyholder_email && RESEND_API_KEY) {
       try {
         const fromDomain = branding?.email_from_domain || "notifications@freedomclaims.com";
-        const resendResponse = await fetch("https://api.resend.com/emails", {
+        const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+        const resendResponse = await fetch("https://connector-gateway.lovable.dev/resend/emails", {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${RESEND_API_KEY}`,
+            "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+            "X-Connection-Api-Key": RESEND_API_KEY,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
