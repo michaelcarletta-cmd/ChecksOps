@@ -2250,7 +2250,7 @@ function CheckDetailPanel({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("*, check_payees(*)")
+        .select("*, check_payees(*), checkalt_deposits(id, status, submitted_at, approved_at, updated_at, last_status_payload)")
         .eq("id", checkId)
         .single();
       if (error) throw error;
