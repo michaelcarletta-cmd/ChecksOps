@@ -1005,7 +1005,7 @@ export default function CheckCommandCenter() {
 
             { key: "reissue",      label: "Reissue",           count: reissueRequested.length,    icon: RotateCcw,      gradient: "from-red-500/20 to-rose-500/10",      accent: "text-red-400",     ring: "ring-red-500/30" },
             { key: "fundsreleased", label: "Funds Released",   count: fundsReleased.length,       icon: Banknote,       gradient: "from-emerald-500/20 to-teal-500/10",  accent: "text-emerald-400", ring: "ring-emerald-500/30" },
-            { key: "partners",     label: "Partners",          count: null as number | null,      icon: Users,          gradient: "from-pink-500/20 to-fuchsia-500/10",  accent: "text-pink-400",    ring: "ring-pink-500/30" },
+            // Partners moved into Manager → Partners sub-tab (2026-07-07).
             ...(canAccessManager ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield, gradient: "from-indigo-500/20 to-blue-500/10", accent: "text-indigo-400", ring: "ring-indigo-500/30" }] : []),
             { key: "messages",     label: "Messages",          count: totalUnreadMessages || null, icon: MessageSquare, gradient: "from-rose-500/20 to-pink-500/10",     accent: "text-rose-400",    ring: "ring-rose-500/30" },
           ].map((tab) => {
@@ -1054,6 +1054,8 @@ export default function CheckCommandCenter() {
                 <TabsTrigger value="deposit_history" className="text-xs gap-1"><Banknote className="h-3 w-3" />Deposit History</TabsTrigger>
                 <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
                 <TabsTrigger value="mortgage_cos" className="text-xs gap-1"><Building2 className="h-3 w-3" />Mortgage Cos</TabsTrigger>
+                <TabsTrigger value="partners" className="text-xs gap-1"><Users className="h-3 w-3" />Partners</TabsTrigger>
+
               </TabsList>
               <TabsContent value="deposit_ops" className="mt-3">
                 <Suspense fallback={<TabLoader />}>
@@ -1080,6 +1082,12 @@ export default function CheckCommandCenter() {
                   <MortgageCompaniesDirectory searchQuery={searchQuery} />
                 </Suspense>
               </TabsContent>
+              <TabsContent value="partners" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <TenantPartnerManager />
+                </Suspense>
+              </TabsContent>
+
             </Tabs>
           </div>
         )}
@@ -1099,14 +1107,8 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
-        {/* Partners Tab — Manage Partners only (shared checks now appear in their status tabs) */}
-        {activeTab === "partners" && (
-          <div className="mt-3">
-            <Suspense fallback={<TabLoader />}>
-              <TenantPartnerManager />
-            </Suspense>
-          </div>
-        )}
+        {/* Partners moved into Manager → Partners sub-tab (2026-07-07). */}
+
 
         {/* Reissue Tab */}
         {activeTab === "reissue" && (
