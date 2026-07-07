@@ -96,15 +96,31 @@ serve(async (req) => {
       .eq("id", userData.user.id)
       .maybeSingle();
 
-    const rawName =
-      (account.custname && account.custname !== "Pending" ? account.custname : "")
-      || [profile?.first_name, profile?.last_name].filter(Boolean).join(" ")
-      || profile?.full_name
-      || userData.user.email
-      || "Account Holder";
-    const parts = String(rawName).trim().split(/\s+/);
-    const firstName = (parts[0] ?? "Account").slice(0, 30);
+    // Actum rejects names containing "@" or other non-name chars ("First name
+    // foo@bar.com is invalid"). Sanitize each candidate: drop empties, drop
+    // anything that looks like an email, strip disallowed characters. Only
+    // fall through to the signed-in user's email as a *last resort*, and even
+    // then use the local-part with punctuation stripped.
+    const cleanNamePart = (s: string) =>
+      s.replace(/[^A-Za-z' -]/g, "").trim();
+    const isEmailish = (s: string) => /@/.test(s);
+    const nameCandidates: string[] = [];
+    if (account.custname && account.custname !== "Pending" && !isEmailish(account.custname)) {
+      nameCandidates.push(account.custname);
+    }
+    const joinedProfile = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ");
+    if (joinedProfile && !isEmailish(joinedProfile)) nameCandidates.push(joinedProfile);
+    if (profile?.full_name && !isEmailish(profile.full_name)) nameCandidates.push(profile.full_name);
+    // Last resort: derive from email local-part (e.g. "mcarletta@..." -> "Mcarletta Holder")
+    const emailLocal = (userData.user.email ?? "").split("@")[0]?.replace(/[._-]+/g, " ").trim();
+    if (emailLocal) nameCandidates.push(emailLocal.charAt(0).toUpperCase() + emailLocal.slice(1));
+    nameCandidates.push("Account Holder");
+
+    const rawName = nameCandidates.find((n) => cleanNamePart(n).length > 0) ?? "Account Holder";
+    const parts = cleanNamePart(rawName).split(/\s+/).filter(Boolean);
+    const firstName = (parts[0] || "Account").slice(0, 30);
     const lastName = (parts.length > 1 ? parts.slice(1).join(" ") : "Holder").slice(0, 30);
+
 
     const emailCandidate = String(
       account.verification_recipient_email
