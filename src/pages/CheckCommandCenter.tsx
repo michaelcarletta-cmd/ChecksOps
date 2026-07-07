@@ -876,9 +876,14 @@ export default function CheckCommandCenter() {
           stakeholder_accounts (nickname, custname),
           disbursement_batches (
             id, check_intake_item_id,
-            check_intake_items:check_intake_item_id (check_number, carrier_name, property_address, funds_type, amount)
+            check_intake_items:check_intake_item_id (
+              check_number, carrier_name, property_address, funds_type, amount,
+              claim_id, detected_claim_number, payee_line,
+              claims:claim_id ( claim_number, policyholder_name )
+            )
           )
         `)
+
         .eq("tenant_id", tenantId!)
         .eq("status", "settled")
         .order("settled_at", { ascending: false })
@@ -990,7 +995,10 @@ export default function CheckCommandCenter() {
             { key: "ready",        label: "Ready for Deposit", count: readyForDeposit.length,     icon: CheckCircle2,   gradient: "from-emerald-500/20 to-green-500/10", accent: "text-emerald-400", ring: "ring-emerald-500/30" },
             { key: "deposited",    label: "Deposited",         count: depositedChecks.length,     icon: Banknote,       gradient: "from-primary/20 to-blue-500/10",      accent: "text-primary",     ring: "ring-primary/30" },
             { key: "lossdraft",    label: "Loss Draft",        count: (lossDraftCounts as any)?.total_active ?? 0, icon: Landmark,       gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400",  ring: "ring-purple-500/30" },
-            { key: "branch",       label: "Bank Deposit",      count: branchDeposit.length,       icon: Building2,      gradient: "from-teal-500/20 to-cyan-500/10",     accent: "text-teal-400",    ring: "ring-teal-500/30" },
+            // Bank Deposit card intentionally removed — users are pushed to CheckAlt for RDC.
+            // The branch_deposit_required status still exists in the pipeline as a fallback,
+            // but is no longer surfaced as a top-level tab in the command center.
+
             { key: "reissue",      label: "Reissue",           count: reissueRequested.length,    icon: RotateCcw,      gradient: "from-red-500/20 to-rose-500/10",      accent: "text-red-400",     ring: "ring-red-500/30" },
             { key: "fundsreleased", label: "Funds Released",   count: fundsReleased.length,       icon: Banknote,       gradient: "from-emerald-500/20 to-teal-500/10",  accent: "text-emerald-400", ring: "ring-emerald-500/30" },
             { key: "partners",     label: "Partners",          count: null as number | null,      icon: Users,          gradient: "from-pink-500/20 to-fuchsia-500/10",  accent: "text-pink-400",    ring: "ring-pink-500/30" },
@@ -1240,9 +1248,11 @@ export default function CheckCommandCenter() {
                             const batch = split.disbursement_batches;
                             const check = batch?.check_intake_items;
                             const linked = check?.claim_id ? claimLookup.get(check.claim_id) : null;
-                            const claimNumber = linked?.claim_number || check?.detected_claim_number || "Unlinked claim";
-                            const policyholderName = linked?.policyholder_name || check?.payee_line || "Unknown insured";
-                            const hasClaim = !!(linked?.claim_number || check?.detected_claim_number);
+                            const embeddedClaim = check?.claims ?? null;
+                            const claimNumber = linked?.claim_number || embeddedClaim?.claim_number || check?.detected_claim_number || "Unlinked claim";
+                            const policyholderName = linked?.policyholder_name || embeddedClaim?.policyholder_name || check?.payee_line || "Unknown insured";
+                            const hasClaim = !!(linked?.claim_number || embeddedClaim?.claim_number || check?.detected_claim_number);
+
                             const key = hasClaim
                               ? `claim::${String(claimNumber).trim().toLowerCase()}`
                               : `unlinked::${split.id}`;
