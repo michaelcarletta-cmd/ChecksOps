@@ -147,6 +147,7 @@ interface CheckAltDepositSummary {
   submitted_at: string | null;
   approved_at: string | null;
   updated_at: string | null;
+  last_status_payload?: Record<string, unknown> | null;
 }
 
 interface CheckItem {
