@@ -301,12 +301,16 @@ Deno.serve(async (req) => {
       resolvedTenantId = (ck as any)?.tenant_id ?? null;
     }
     if (!resolvedTenantId && claimId) {
-      const { data: cl } = await supabaseAdmin
-        .from('claims')
+      // claims has no direct tenant_id — resolve via any check_intake_item
+      // linked to the claim (checks carry tenant_id).
+      const { data: ckForClaim } = await supabaseAdmin
+        .from('check_intake_items')
         .select('tenant_id')
-        .eq('id', claimId)
+        .eq('claim_id', claimId)
+        .not('tenant_id', 'is', null)
+        .limit(1)
         .maybeSingle();
-      resolvedTenantId = (cl as any)?.tenant_id ?? null;
+      resolvedTenantId = (ckForClaim as any)?.tenant_id ?? null;
     }
 
     let tenantFromName: string | null = null;
