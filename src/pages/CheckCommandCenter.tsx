@@ -757,8 +757,12 @@ export default function CheckCommandCenter() {
     const s = getEffectiveStatus(c);
     const stage = c.check_stage;
     const checkAltStatus = getCheckAltStatus(c);
+    // Once funds have been disbursed, the check belongs in the Funds Released
+    // tab — do NOT show it in Deposited anymore.
+    if (stage === "funds_released") return false;
     return (s === "deposited" || stage === "deposited" || checkAltStatus === "pending_approval") && matchesSearch(c);
   });
+
   const lossDraftChecks = allChecks.filter((c) => {
     const s = getEffectiveStatus(c);
     const stage = (c as any).check_stage as string | undefined;
