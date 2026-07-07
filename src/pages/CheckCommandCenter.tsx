@@ -147,6 +147,7 @@ interface CheckAltDepositSummary {
   submitted_at: string | null;
   approved_at: string | null;
   updated_at: string | null;
+  last_status_payload?: Record<string, unknown> | null;
 }
 
 interface CheckItem {
@@ -2249,7 +2250,7 @@ function CheckDetailPanel({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("*, check_payees(*)")
+        .select("*, check_payees(*), checkalt_deposits(id, status, submitted_at, approved_at, updated_at, last_status_payload)")
         .eq("id", checkId)
         .single();
       if (error) throw error;
@@ -3331,18 +3332,35 @@ function CheckDetailPanel({
                   {/* Ready-for-deposit CTA — only visible once all endorsements are complete.
                       When CheckAlt is enabled this is the one-click "Deposit with CheckAlt"
                       button; otherwise it falls back to manual mobile deposit. */}
-                  {allEndorsementsComplete && !isDepositBlocked && (
-                    checkAltEnabled ? (
-                      <Button
-                        size="sm"
-                        className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                        disabled={depositingWithCheckAlt}
-                        onClick={handleDepositWithCheckAlt}
-                      >
-                        <Banknote className="h-4 w-4 mr-2" />
-                        {depositingWithCheckAlt ? "Depositing..." : "Deposit Check"}
-                      </Button>
-                    ) : (
+                  {(() => {
+                    const latestCA = (check.checkalt_deposits ?? [])
+                      .slice()
+                      .sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""))[0];
+                    const caRejected = latestCA && ["rejected", "returned", "error"].includes(String(latestCA.status));
+                    const rejPayload = (latestCA?.last_status_payload as any) ?? null;
+                    const rejCode = rejPayload?.status ?? rejPayload?.statusCode ?? null;
+                    const rejDesc = rejPayload?.statusDescription ?? rejPayload?.description ?? null;
+                    return (
+                      <>
+                        {caRejected && (
+                          <div className="rounded-md border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300 mt-1">
+                            <div className="font-medium">CheckAlt {latestCA?.status} {rejCode ? `(code ${rejCode})` : ""}</div>
+                            {rejDesc && <div className="text-red-200/80 mt-0.5">{String(rejDesc)}</div>}
+                            <div className="text-red-200/60 mt-1">Click below to resubmit to CheckAlt.</div>
+                          </div>
+                        )}
+                        {allEndorsementsComplete && !isDepositBlocked && (
+                          checkAltEnabled ? (
+                            <Button
+                              size="sm"
+                              className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                              disabled={depositingWithCheckAlt}
+                              onClick={handleDepositWithCheckAlt}
+                            >
+                              <Banknote className="h-4 w-4 mr-2" />
+                              {depositingWithCheckAlt ? "Depositing..." : caRejected ? "Resubmit to CheckAlt" : "Deposit Check"}
+                            </Button>
+                          ) : (
                       <Button
                         size="sm"
                         className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -3375,9 +3393,12 @@ function CheckDetailPanel({
                       >
                         <FileImage className="h-4 w-4 mr-2" />
                         {openingDepositView ? "Preparing..." : "Open for Mobile Deposit"}
-                      </Button>
-                    )
-                  )}
+                        </Button>
+                      )
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
               <Separator />
