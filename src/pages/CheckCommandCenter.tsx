@@ -3393,9 +3393,12 @@ function CheckDetailPanel({
                       >
                         <FileImage className="h-4 w-4 mr-2" />
                         {openingDepositView ? "Preparing..." : "Open for Mobile Deposit"}
-                      </Button>
-                    )
-                  )}
+                        </Button>
+                      )
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
               <Separator />
