@@ -329,21 +329,16 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
       )}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         {[
           { label: "In Flight", value: reconSummary?.in_flight_amount, color: "text-amber-400" },
           { label: "Cleared", value: reconSummary?.cleared_amount, color: "text-emerald-400" },
-          { label: "Reconciled", value: reconSummary?.reconciled_amount, color: "text-primary" },
           { label: "Failed", value: reconSummary?.failed_amount, color: "text-destructive" },
-          { label: "Unconfirmed", value: reconSummary?.unconfirmed_amount, color: "text-orange-400" },
-          { label: "Variance", value: reconSummary?.total_variance, color: "text-amber-400" },
-          { label: "NSF", value: reconSummary?.nsf_count, color: "text-destructive", isCount: true },
-          { label: "Unsynced", value: reconSummary?.unsynced_count, color: "text-muted-foreground", isCount: true },
         ].map((card) => (
           <Card key={card.label}>
             <CardContent className="p-3 text-center">
               <p className={`text-lg font-bold tabular-nums ${card.color}`}>
-                {card.isCount ? (card.value ?? 0) : fmtMoney(card.value ?? 0)}
+                {fmtMoney(card.value ?? 0)}
               </p>
               <p className="text-[10px] text-muted-foreground">{card.label}</p>
             </CardContent>
