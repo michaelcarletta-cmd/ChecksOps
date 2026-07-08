@@ -124,8 +124,23 @@ serve(async (req) => {
         results.push({ tenant_id: t.id, name: t.name, skipped: "no_ach_authorization" });
         continue;
       }
-      if (!["verified", "admin_override"].includes(account.verification_status)) {
-        results.push({ tenant_id: t.id, name: t.name, skipped: `account_${account.verification_status}` });
+      // Bank details come from the Plaid-verified stakeholder account.
+      // No plaintext or encrypted bank numbers are stored on tenant_billing_accounts.
+      if (!account.stakeholder_account_id) {
+        results.push({ tenant_id: t.id, name: t.name, skipped: "no_linked_bank_account" });
+        continue;
+      }
+      const { data: bank } = await supabase
+        .from("stakeholder_accounts")
+        .select("id, chk_aba, chk_acct, acct_type, custname, verification_status, is_active")
+        .eq("id", account.stakeholder_account_id)
+        .maybeSingle();
+      if (!bank || !bank.is_active) {
+        results.push({ tenant_id: t.id, name: t.name, skipped: "bank_account_inactive" });
+        continue;
+      }
+      if (!["verified", "admin_override"].includes(bank.verification_status)) {
+        results.push({ tenant_id: t.id, name: t.name, skipped: `bank_${bank.verification_status}` });
         continue;
       }
 
@@ -175,11 +190,10 @@ serve(async (req) => {
       if (account.actum_consumer_unique) {
         params.append("consumer_code", account.actum_consumer_unique);
       } else {
-        const accountNumber = await decrypt(account.account_number_encrypted, keyB64);
-        params.append("custname", account.account_holder_name);
-        params.append("chk_acct", accountNumber);
-        params.append("chk_aba", account.routing_number);
-        params.append("acct_type", account.account_type === "savings" ? "S" : "C");
+        params.append("custname", bank.custname);
+        params.append("chk_acct", bank.chk_acct);
+        params.append("chk_aba", bank.chk_aba);
+        params.append("acct_type", bank.acct_type === "S" ? "S" : "C");
       }
 
       const actumRes = await fetch("https://join.actumprocessing.com/cgi-bin/dbs/man_trans.cgi", {
