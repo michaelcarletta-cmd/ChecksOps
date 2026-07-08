@@ -394,6 +394,36 @@ export function EmailSenderSettings() {
                 Add these at your DNS provider (Cloudflare, GoDaddy, etc.). Then click
                 &quot;Check verification&quot;. Propagation can take a few minutes to 48 hours.
               </p>
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle className="text-sm">Using Cloudflare? Two things break verification</AlertTitle>
+                <AlertDescription className="text-xs space-y-2 mt-2">
+                  <div>
+                    <strong>1. Turn OFF the proxy (grey cloud, not orange) on every record.</strong>{" "}
+                    Resend's DKIM records are CNAMEs — if Cloudflare's orange cloud is on,
+                    it flattens them and verification fails. Click each record → set to
+                    <em> DNS only</em>.
+                  </div>
+                  <div>
+                    <strong>2. In the Name field, enter ONLY the prefix</strong> (e.g. <code>send</code>,{" "}
+                    <code>resend._domainkey</code>) — not the full domain. Cloudflare
+                    auto-appends your root domain, so pasting <code>send.yourdomain.com</code>{" "}
+                    becomes <code>send.yourdomain.com.yourdomain.com</code>.
+                  </div>
+                  <div className="pt-1">
+                    Verify with{" "}
+                    <a
+                      href="https://mxtoolbox.com/SuperTool.aspx"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline"
+                    >
+                      MXToolbox
+                    </a>{" "}
+                    — the returned value should match the Value column exactly.
+                  </div>
+                </AlertDescription>
+              </Alert>
               <div className="rounded-md border overflow-x-auto">
                 <Table>
                   <TableHeader>
