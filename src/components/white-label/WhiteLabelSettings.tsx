@@ -127,6 +127,7 @@ export function WhiteLabelSettings() {
 
           <TabsContent value="usage" className="space-y-4">
             <TenantUsageTracker />
+            <TenantBillingAccountPanel />
           </TabsContent>
 
 
