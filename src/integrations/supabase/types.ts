@@ -17765,6 +17765,59 @@ export type Database = {
           },
         ]
       }
+      tenant_maintenance_payments: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          id: string
+          method: string
+          notes: string | null
+          period_end: string
+          period_start: string
+          received_at: string
+          recorded_by: string | null
+          reference: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          id?: string
+          method?: string
+          notes?: string | null
+          period_end: string
+          period_start: string
+          received_at?: string
+          recorded_by?: string | null
+          reference?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          id?: string
+          method?: string
+          notes?: string | null
+          period_end?: string
+          period_start?: string
+          received_at?: string
+          recorded_by?: string | null
+          reference?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_maintenance_payments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_openai_credentials: {
         Row: {
           created_at: string
