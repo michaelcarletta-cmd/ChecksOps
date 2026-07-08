@@ -244,27 +244,6 @@ export function MaintenancePaymentsTracker() {
                 </TableRow>
               ))}
             </TableBody>
-            <TableBody>
-              {isLoading ? (
-                <TableRow><TableCell colSpan={7} className="text-center text-xs py-8 text-muted-foreground">Loading…</TableCell></TableRow>
-              ) : payments.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center text-xs py-8 text-muted-foreground">No payments logged yet.</TableCell></TableRow>
-              ) : payments.map((p: any) => (
-                <TableRow key={p.id}>
-                  <TableCell className="text-xs">{format(new Date(p.received_at), "MMM d, yyyy")}</TableCell>
-                  <TableCell className="text-xs font-medium">{p.tenants?.name ?? "—"}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{format(new Date(p.period_start), "MMM d")} – {format(new Date(p.period_end), "MMM d")}</TableCell>
-                  <TableCell><Badge variant="outline" className="text-[10px]">{p.method}</Badge></TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{p.reference || "—"}</TableCell>
-                  <TableCell className="text-right text-xs font-bold tabular-nums">${(p.amount_cents / 100).toFixed(2)}</TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(p.id)} className="h-7 w-7">
-                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
           </Table>
         </div>
       </CardContent>
