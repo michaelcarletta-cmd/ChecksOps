@@ -61,6 +61,21 @@ serve(async (req) => {
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
     const targetTenantIds: string[] | null = body?.tenant_ids ?? null;
     const dryRun: boolean = !!body?.dry_run;
+    // Optional consolidated-billing overrides (per-tenant, so single tenant only)
+    const overrideAmountCents: number | null =
+      typeof body?.override_amount_cents === "number" ? body.override_amount_cents : null;
+    const overrideLineItems: Array<{ label: string; detail?: string; amount_cents: number }> | null =
+      Array.isArray(body?.line_items) ? body.line_items : null;
+    const overrideKind: string | null = body?.override_kind ?? null; // e.g. "consolidated"
+    const sendInvoice: boolean = body?.send_invoice !== false; // default true
+    const invoiceRecipient: string | null = body?.invoice_recipient ?? null;
+    const overridePeriodLabel: string | null = body?.period_label ?? null;
+    if (overrideAmountCents !== null && (!targetTenantIds || targetTenantIds.length !== 1)) {
+      return new Response(
+        JSON.stringify({ error: "override_amount_cents requires exactly one tenant_id" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     // Actum config (reuses the same merchant credentials used for disbursements)
     const parentId = Deno.env.get("ACTUM_PARENT_ID");
