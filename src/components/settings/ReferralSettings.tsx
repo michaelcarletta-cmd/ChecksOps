@@ -45,9 +45,12 @@ export function ReferralSettings() {
   });
 
   // Load referral events (who I referred)
-  const { data: referralEvents = [] } = useQuery({
+  const { data: referralEvents = [], refetch: refetchEvents } = useQuery({
     queryKey: ["referral-events", tenant?.id],
     enabled: !!tenant?.id,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchInterval: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("referral_events")
