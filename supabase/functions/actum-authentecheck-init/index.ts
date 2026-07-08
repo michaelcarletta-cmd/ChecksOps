@@ -173,6 +173,10 @@ serve(async (req) => {
     // testing with the same test bank account) is declined as "Uncleared
     // Transaction" during Transaction Processing.
     params.append("verifiedcons", "1");
+    // Per Actum support: their stored/default postback URL is only actually
+    // triggered when postback=1 is included in the request, in addition to
+    // (or alongside) dynamic_saleurl.
+    params.append("postback", "1");
     params.append("meruser", meruser);
     params.append("merpass", merpass);
     params.append("syspass", syspass);
