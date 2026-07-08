@@ -247,7 +247,7 @@ serve(async (req) => {
         actum_order_id: parsed.order_id,
         actum_history_id: parsed.history_id,
         consumer_unique: parsed.consumer_unique,
-        mer_order_number: `maint_${payment.id}`,
+        mer_order_number: merTag,
         transaction_type: "debit",
         amount: amount_cents / 100,
         status: accepted ? "accepted" : "declined",
