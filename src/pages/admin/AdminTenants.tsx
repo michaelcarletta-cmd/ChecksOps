@@ -909,7 +909,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
     const endISO = new Date(range.end.getTime() - 1).toISOString();
 
     try {
-      const [usageRes, checkaltRes, actumRes, maintRes] = await Promise.all([
+      const [usageRes, checkaltRes, actumRes, maintRes, tenantRes] = await Promise.all([
         supabase.rpc("get_tenant_check_usage", {
           _tenant_id: tenantId,
           _month_start: startISO,
@@ -934,6 +934,11 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
           .gte("received_at", range.start.toISOString())
           .lt("received_at", range.end.toISOString())
           .order("received_at", { ascending: false }),
+        supabase
+          .from("tenants")
+          .select("monthly_rate_cents, referral_discount_cents, is_founding_partner")
+          .eq("id", tenantId)
+          .maybeSingle(),
       ]);
       if (usageRes.error) throw usageRes.error;
       setData(usageRes.data);
@@ -948,6 +953,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
           .reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0),
       });
       setMaintenance(maintRes.data ?? []);
+      setTenantMeta(tenantRes.data as any ?? null);
     } catch (e: any) {
       setError(e.message);
     }
