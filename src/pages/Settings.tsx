@@ -662,6 +662,7 @@ export default function Settings() {
           <TabsTrigger value="ai-knowledge" className="w-full md:w-auto justify-start text-base font-medium px-4">AI Knowledge Base</TabsTrigger>
           
           <TabsTrigger value="organization" className="w-full md:w-auto justify-start text-base font-medium px-4">Organization</TabsTrigger>
+          <TabsTrigger value="email" className="w-full md:w-auto justify-start text-base font-medium px-4">Email</TabsTrigger>
           <TabsTrigger value="import" className="w-full md:w-auto justify-start text-base font-medium px-4">Import Data</TabsTrigger>
           {isAdmin && (
             <TabsTrigger value="audit-logs" className="w-full md:w-auto justify-start text-base font-medium px-4">Audit Logs</TabsTrigger>
@@ -958,11 +959,13 @@ export default function Settings() {
             </Card>
           </Collapsible>
 
-          <div className="mt-4 space-y-4">
-            <EmailSenderSettings />
-            <TenantEmailHealthPanel />
-          </div>
         </TabsContent>
+
+        <TabsContent value="email" className="w-full space-y-4">
+          <EmailSenderSettings />
+          <TenantEmailHealthPanel />
+        </TabsContent>
+
 
         <TabsContent value="import" className="w-full">
           <ImportSettings />
