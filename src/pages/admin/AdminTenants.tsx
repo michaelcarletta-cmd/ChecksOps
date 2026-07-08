@@ -886,8 +886,10 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const [checkalt, setCheckalt] = useState<{ count: number; amount: number } | null>(null);
   const [actum, setActum] = useState<{ count: number; amountOut: number } | null>(null);
   const [maintenance, setMaintenance] = useState<any[]>([]);
+  const [tenantMeta, setTenantMeta] = useState<{ monthly_rate_cents: number; referral_discount_cents: number; is_founding_partner: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pulling, setPulling] = useState(false);
 
   const range = (() => {
     if (scope === "month") {
