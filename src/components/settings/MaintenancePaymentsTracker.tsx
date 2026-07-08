@@ -127,9 +127,21 @@ export function MaintenancePaymentsTracker() {
               Track monthly maintenance fees received from tenants (after referral discounts). Total: <strong>${total.toFixed(2)}</strong> · This month: <strong>${thisMonthTotal.toFixed(2)}</strong>
             </CardDescription>
           </div>
-          <Button size="sm" onClick={() => setOpen(!open)}>
-            <Plus className="h-3.5 w-3.5 mr-1.5" /> Log payment
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => chargeMutation.mutate(true)} disabled={chargeMutation.isPending}>
+              {chargeMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Zap className="h-3.5 w-3.5 mr-1.5" />}
+              Dry run
+            </Button>
+            <Button size="sm" variant="default" onClick={() => {
+              if (!confirm("Run auto-debit for all eligible tenants now? This will pull the monthly fee via Actum ACH.")) return;
+              chargeMutation.mutate(false);
+            }} disabled={chargeMutation.isPending}>
+              <Zap className="h-3.5 w-3.5 mr-1.5" /> Run charges
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setOpen(!open)}>
+              <Plus className="h-3.5 w-3.5 mr-1.5" /> Log manual
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
