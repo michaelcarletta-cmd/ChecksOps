@@ -145,6 +145,14 @@ serve(async (req) => {
     params.append("redirect_accept", acceptUrl);
     params.append("redirect_decline", declineUrl);
     params.append("dynamic_saleurl", postbackUrl);
+    // Both are "dependent on merchant setup" per the integration guide — Actum
+    // has enabled them for this account (confirmed via their own successful
+    // test call). authdata=1 is required for the authdata JSON block (routing
+    // number, account number, balances) to appear in the postback at all; our
+    // postback handler already parses fields.authdata, so without this flag
+    // that data was never being sent.
+    params.append("authdata", "1");
+    params.append("identity", "1");
     params.append("meruser", meruser);
     params.append("merpass", merpass);
     params.append("syspass", syspass);
