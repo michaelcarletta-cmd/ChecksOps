@@ -98,17 +98,42 @@ serve(async (req) => {
       if (authdata && typeof authdata === "object") {
         const a = authdata as Record<string, any>;
         const routing = a.routing_number || a.routing || a.aba || a.chk_aba;
-        const account = a.account_number || a.account || a.chk_acct;
-        const acctType = a.account_type || a.acct_type;
+        // Actum returns the account as `acct_number` (masked, e.g. "*************9235").
+        // `display_acct` is a Plaid short display token, not the real last-4.
+        // Fall back through every field name we've seen.
+        const rawAcct = a.acct_number || a.account_number || a.account || a.chk_acct || a.display_acct;
+        const acctType = a.acct_type || a.account_type;
         const bankName = a.bank_name || a.bank;
-        const holder = a.account_holder || a.name_on_account || a.customer_name;
+        // Prefer full holder name from nested `holder[0].name.fullName` (Plaid), fall back to flat fields.
+        const holder =
+          a?.holder?.[0]?.name?.fullName ||
+          a.account_holder ||
+          a.name_on_account ||
+          a.customer_name;
         if (routing) update.chk_aba = String(routing).replace(/\D/g, "").slice(0, 9);
-        if (account) update.chk_acct = String(account).replace(/\D/g, "").slice(0, 17);
+        if (rawAcct) {
+          // Strip mask characters; keep digits only. May yield just last-4 when Plaid masks the rest.
+          const digits = String(rawAcct).replace(/\D/g, "");
+          if (digits && digits !== "0000000000") update.chk_acct = digits.slice(-17);
+        }
         if (acctType) {
           const t = String(acctType).toUpperCase();
           update.acct_type = t.startsWith("S") ? "S" : "C";
         }
-        if (bankName) update.authentecheck_bank_name = bankName;
+        if (bankName) {
+          update.authentecheck_bank_name = bankName;
+          // Auto-set a friendlier nickname if the user never customized it.
+          if (
+            !account.nickname ||
+            account.nickname === "Bank Account (pending verification)" ||
+            account.nickname === "Operating"
+          ) {
+            const last4 = update.chk_acct
+              ? String(update.chk_acct).slice(-4)
+              : null;
+            update.nickname = last4 ? `${bankName} ••${last4}` : String(bankName);
+          }
+        }
         if (holder) update.custname = String(holder).slice(0, 100);
       }
     } else {
