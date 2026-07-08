@@ -172,6 +172,9 @@ serve(async (req) => {
       }
 
       // Insert pending payment first
+      const notesText = isConsolidated
+        ? `Consolidated pull (${overrideKind || "consolidated"}) for ${overridePeriodLabel || period_start.slice(0, 7)}${overrideLineItems ? ": " + overrideLineItems.map((li) => `${li.label} ${(li.amount_cents / 100).toFixed(2)}`).join(" · ") : ""}`
+        : `Auto-debit for ${period_start.slice(0, 7)}`;
       const { data: payment, error: payErr } = await supabase
         .from("tenant_maintenance_payments")
         .insert({
@@ -179,11 +182,11 @@ serve(async (req) => {
           amount_cents,
           period_start,
           period_end,
-          method: "actum_ach",
+          method: isConsolidated ? "actum_ach_consolidated" : "actum_ach",
           status: "pending",
           idempotence_key,
           recorded_by: actorUserId,
-          notes: `Auto-debit for ${period_start.slice(0, 7)}`,
+          notes: notesText,
         })
         .select()
         .single();
