@@ -1,6 +1,10 @@
 project_id = "nbcqwpysqgyxrrbgtmkw"
 
 [functions]
+  [functions.resend-webhook]
+    verify_jwt = false
+  [functions.tenant-domain-recheck-cron]
+    verify_jwt = true
   [functions.auth-email-hook]
     verify_jwt = false
   [functions.process-email-queue]
