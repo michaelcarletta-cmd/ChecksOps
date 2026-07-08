@@ -45,6 +45,8 @@ const emptyForm = {
   custname: "",
   acct_type: "C",
   is_primary: false,
+  send_method: "self" as "self" | "email",
+  verification_recipient_email: "",
 };
 
 export function StakeholderAccountSettings() {
@@ -62,7 +64,7 @@ export function StakeholderAccountSettings() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("stakeholder_accounts")
-        .select("id, nickname, account_type, chk_acct, acct_type, is_primary, is_active, custname, verification_status, verified_at")
+        .select("id, nickname, account_type, chk_acct, acct_type, is_primary, is_active, custname, verification_status, verified_at, verification_recipient_email")
         .eq("tenant_id", tenant!.id)
         .eq("is_active", true)
         .order("is_primary", { ascending: false })
@@ -75,11 +77,13 @@ export function StakeholderAccountSettings() {
 
   const addAccount = useMutation({
     mutationFn: async (values: typeof emptyForm) => {
+      const { send_method, verification_recipient_email, ...accountFields } = values;
       let insertedId: string | null = null;
       const { data: inserted, error } = await supabase
         .from("stakeholder_accounts")
         .insert({
-          ...values,
+          ...accountFields,
+          verification_recipient_email: send_method === "email" ? verification_recipient_email.trim() : null,
           chk_aba: "000000000",
           chk_acct: "0000000000",
           tenant_id: tenant!.id,
@@ -91,6 +95,20 @@ export function StakeholderAccountSettings() {
       insertedId = inserted!.id;
 
       try {
+        if (send_method === "email") {
+          const { data: sent, error: sendErr } = await supabase.functions.invoke(
+            "stakeholder-resend-verification",
+            { body: { stakeholder_account_id: inserted!.id, recipient_email: verification_recipient_email.trim() } },
+          );
+          if (sendErr) {
+            let msg = sendErr.message ?? "Failed to send verification link";
+            try { const b = await (sendErr as any).context?.json?.(); if (b?.error) msg = b.error; } catch {}
+            throw new Error(msg);
+          }
+          if ((sent as any)?.error) throw new Error((sent as any).error);
+          return { url: null, emailed: true };
+        }
+
         const { data: sess, error: initErr } = await supabase.functions.invoke(
           "actum-authentecheck-init",
           { body: { stakeholder_account_id: inserted!.id } },
@@ -101,7 +119,7 @@ export function StakeholderAccountSettings() {
           throw new Error(msg);
         }
         if ((sess as any)?.error) throw new Error((sess as any).error);
-        return (sess as any)?.url as string;
+        return { url: (sess as any)?.url as string, emailed: false };
       } catch (e: any) {
         if (insertedId) {
           await supabase
@@ -112,8 +130,10 @@ export function StakeholderAccountSettings() {
         throw e;
       }
     },
-    onSuccess: (url) => {
-      if (url) {
+    onSuccess: ({ url, emailed }) => {
+      if (emailed) {
+        toast({ title: "Verification link sent", description: "The account holder will receive an email to link their bank account." });
+      } else if (url) {
         // Open as a normal full-size tab, not a constrained popup — OAuth-based
         // bank redirects (Wells Fargo, Chase, etc. via Plaid) can lose session
         // state inside small fixed-size popup windows, especially on mobile.
@@ -264,20 +284,55 @@ export function StakeholderAccountSettings() {
                 </div>
               )}
 
-              <p className="text-[11px] text-muted-foreground">
-                Routing & account numbers are captured securely after you sign in to your bank
-                through Authentecheck (Plaid). Continue to launch the bank login.
-              </p>
+              <div className="flex items-center gap-2 pt-1">
+                <Switch
+                  checked={form.send_method === "email"}
+                  onCheckedChange={(v) => setForm({ ...form, send_method: v ? "email" : "self" })}
+                />
+                <Label className="text-xs">Send a link for the account holder to add their own bank account</Label>
+              </div>
+
+              {form.send_method === "email" ? (
+                <div className="space-y-1">
+                  <Label className="text-xs">Account holder's email</Label>
+                  <Input
+                    className="h-8 text-sm"
+                    type="email"
+                    placeholder="name@example.com"
+                    value={form.verification_recipient_email}
+                    onChange={(e) => setForm({ ...form, verification_recipient_email: e.target.value })}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    They'll get an emailed link to securely sign in to their bank through
+                    Authentecheck (Plaid) and link their own account — no bank details are
+                    entered here.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  Routing & account numbers are captured securely after you sign in to your bank
+                  through Authentecheck (Plaid). Continue to launch the bank login.
+                </p>
+              )}
 
               <div className="flex gap-2">
                 <Button
                   size="sm"
                   onClick={() => addAccount.mutate(form)}
-                  disabled={addAccount.isPending || !form.nickname || !form.custname}
+                  disabled={
+                    addAccount.isPending ||
+                    !form.nickname ||
+                    !form.custname ||
+                    (form.send_method === "email" && !form.verification_recipient_email.trim())
+                  }
                 >
-                  {addAccount.isPending
-                    ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Opening bank login...</>
-                    : "Continue to bank login"}
+                  {addAccount.isPending ? (
+                    <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> {form.send_method === "email" ? "Sending link..." : "Opening bank login..."}</>
+                  ) : form.send_method === "email" ? (
+                    "Send link"
+                  ) : (
+                    "Continue to bank login"
+                  )}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => { setShowForm(false); setForm(emptyForm); }}>Cancel</Button>
               </div>
@@ -331,7 +386,7 @@ export function StakeholderAccountSettings() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  {vStatus === "pending" && (
+                  {acct.verification_recipient_email && ["unverified", "pending", "failed"].includes(vStatus) && (
                     <Button
                       size="sm"
                       variant="ghost"
@@ -349,7 +404,7 @@ export function StakeholderAccountSettings() {
                       className="h-7 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-50"
                       onClick={() => adminOverride.mutate(acct.id)}
                       disabled={adminOverride.isPending}
-                      title="Admin override: mark as verified without micro-deposits"
+                      title="Admin override: mark as verified without Authentecheck"
                     >
                       <ShieldAlert className="h-3 w-3 mr-1" /> Override
                     </Button>

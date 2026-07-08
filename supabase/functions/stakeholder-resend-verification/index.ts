@@ -34,7 +34,7 @@ serve(async (req) => {
 
     const { data: account } = await supabase
       .from("stakeholder_accounts")
-      .select("id, tenant_id, nickname, custname, chk_acct, verification_status, verification_recipient_email")
+      .select("id, tenant_id, nickname, custname, verification_status, verification_recipient_email")
       .eq("id", stakeholder_account_id)
       .single();
     if (!account) throw new Error("Account not found");
@@ -49,8 +49,8 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    if (account.verification_status !== "pending") {
-      return new Response(JSON.stringify({ error: `Cannot resend — account status is ${account.verification_status}` }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (["verified", "admin_override", "locked"].includes(account.verification_status)) {
+      return new Response(JSON.stringify({ error: `Cannot send verification link — account status is ${account.verification_status}` }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const to = recipient_email ?? account.verification_recipient_email;
@@ -87,7 +87,6 @@ serve(async (req) => {
           templateData: {
             nickname: account.nickname,
             custname: account.custname,
-            lastFour: String(account.chk_acct).slice(-4),
             verifyUrl: `${Deno.env.get("APP_BASE_URL") ?? "https://checksops.com"}/verify-account/${token}`,
           },
         },
