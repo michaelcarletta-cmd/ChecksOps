@@ -44,7 +44,9 @@ export function ReferralSettings() {
     },
   });
 
-  // Load referral events (who I referred)
+  // Load referral history from the tenants table (source of truth = referred_by_tenant_id).
+  // referral_events is a separate audit log and may be missing rows if an insert failed
+  // while the tenant record was still updated — mirroring the admin dashboard fix.
   const { data: referralEvents = [], refetch: refetchEvents } = useQuery({
     queryKey: ["referral-events", tenant?.id],
     enabled: !!tenant?.id,
@@ -53,15 +55,18 @@ export function ReferralSettings() {
     refetchInterval: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("referral_events")
-        .select(`
-          id, discount_applied_cents, status, created_at,
-          referred_tenants:referred_tenant_id (name)
-        `)
-        .eq("referrer_tenant_id", tenant!.id)
+        .from("tenants")
+        .select("id, name, created_at, referral_discount_cents")
+        .eq("referred_by_tenant_id", tenant!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []).map((t: any) => ({
+        id: t.id,
+        status: "active",
+        created_at: t.created_at,
+        discount_applied_cents: t.referral_discount_cents || 500,
+        referred_tenants: { name: t.name },
+      }));
     },
   });
 
