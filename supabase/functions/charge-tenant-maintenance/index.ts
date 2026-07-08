@@ -102,22 +102,30 @@ serve(async (req) => {
 
     const results: any[] = [];
     for (const t of tenants ?? []) {
-      const amount_cents = Math.max(0, (t.monthly_rate_cents ?? 0) - (t.referral_discount_cents ?? 0));
+      const isConsolidated = overrideAmountCents !== null;
+      const amount_cents = isConsolidated
+        ? Math.max(0, overrideAmountCents!)
+        : Math.max(0, (t.monthly_rate_cents ?? 0) - (t.referral_discount_cents ?? 0));
       if (amount_cents <= 0) {
         results.push({ tenant_id: t.id, name: t.name, skipped: "zero_amount" });
         continue;
       }
 
-      // Idempotency: one charge per tenant per period
-      const idempotence_key = `maint_${t.id}_${period_start}`;
-      const { data: existing } = await supabase
-        .from("tenant_maintenance_payments")
-        .select("id, status")
-        .eq("idempotence_key", idempotence_key)
-        .maybeSingle();
-      if (existing) {
-        results.push({ tenant_id: t.id, name: t.name, skipped: "already_charged", status: existing.status });
-        continue;
+      // Idempotency: monthly-maintenance auto-debit is 1 per tenant per period.
+      // Consolidated pulls are ad-hoc, so key them by timestamp to allow multiple per period.
+      const idempotence_key = isConsolidated
+        ? `consolidated_${t.id}_${Date.now()}`
+        : `maint_${t.id}_${period_start}`;
+      if (!isConsolidated) {
+        const { data: existing } = await supabase
+          .from("tenant_maintenance_payments")
+          .select("id, status")
+          .eq("idempotence_key", idempotence_key)
+          .maybeSingle();
+        if (existing) {
+          results.push({ tenant_id: t.id, name: t.name, skipped: "already_charged", status: existing.status });
+          continue;
+        }
       }
 
       const { data: account } = await supabase
