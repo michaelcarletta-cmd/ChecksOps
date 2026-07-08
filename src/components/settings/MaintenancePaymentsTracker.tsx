@@ -211,6 +211,7 @@ export function MaintenancePaymentsTracker() {
                 <TableHead>Tenant</TableHead>
                 <TableHead>Period</TableHead>
                 <TableHead>Method</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Reference</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead />
