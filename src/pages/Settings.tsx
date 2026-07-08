@@ -959,11 +959,13 @@ export default function Settings() {
             </Card>
           </Collapsible>
 
-          <div className="mt-4 space-y-4">
-            <EmailSenderSettings />
-            <TenantEmailHealthPanel />
-          </div>
         </TabsContent>
+
+        <TabsContent value="email" className="w-full space-y-4">
+          <EmailSenderSettings />
+          <TenantEmailHealthPanel />
+        </TabsContent>
+
 
         <TabsContent value="import" className="w-full">
           <ImportSettings />
