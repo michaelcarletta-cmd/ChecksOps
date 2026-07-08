@@ -102,14 +102,21 @@ Deno.serve(async (req) => {
   // Defense in depth: verify_jwt=true already requires a valid JWT at the
   // gateway layer. This adds an explicit role check so only service-role
   // callers can trigger queue processing.
+  //
+  // Supports both legacy JWT service-role keys (role claim = 'service_role')
+  // and the newer non-JWT `sb_secret_...` service keys (matched literally
+  // against the SUPABASE_SERVICE_ROLE_KEY env var).
   const token = authHeader.slice('Bearer '.length).trim()
   const claims = parseJwtClaims(token)
-  if (claims?.role !== 'service_role') {
+  const isServiceRole =
+    claims?.role === 'service_role' || token === supabaseServiceKey
+  if (!isServiceRole) {
     return new Response(
       JSON.stringify({ error: 'Forbidden' }),
       { status: 403, headers: { 'Content-Type': 'application/json' } }
     )
   }
+
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
