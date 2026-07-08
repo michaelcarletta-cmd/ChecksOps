@@ -11,7 +11,11 @@ import { CheckCircle2, AlertTriangle, ShieldCheck, Loader2 } from "lucide-react"
  */
 export default function VerifyAccount() {
   const [params] = useSearchParams();
-  const acct = params.get("acct");
+  // Actum's redirect only reliably preserves "order_id" and "merordernumber"
+  // (echoing back our submitted merchantdata) — it does not carry through
+  // arbitrary custom query params like our own "acct", so fall back to
+  // merordernumber, which is the stakeholder_account id we originally sent.
+  const acct = params.get("acct") || params.get("merordernumber");
   const ok = params.get("ok");
   const [status, setStatus] = useState<string>("pending");
   const [nickname, setNickname] = useState<string | null>(null);
