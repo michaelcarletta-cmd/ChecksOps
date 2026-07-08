@@ -61,7 +61,11 @@ export async function resolveTenantSender(
 
   // Load tenant display name + email settings in parallel
   const [{ data: tenant }, { data: settings }] = await Promise.all([
-    client.from('tenants').select('name').eq('id', tenantId).maybeSingle(),
+    client
+      .from('tenants')
+      .select('name, email_from_name, email_from_address, email_reply_to')
+      .eq('id', tenantId)
+      .maybeSingle(),
     client
       .from('tenant_email_settings')
       .select(
@@ -73,12 +77,15 @@ export async function resolveTenantSender(
 
   const displayName =
     (settings?.from_name && settings.from_name.trim()) ||
+    (tenant?.email_from_name && tenant.email_from_name.trim()) ||
     (tenant?.name && tenant.name.trim()) ||
     PLATFORM_DEFAULT_NAME
 
-  const replyTo = settings?.reply_to?.trim() || undefined
+  const replyTo =
+    settings?.reply_to?.trim() || tenant?.email_reply_to?.trim() || undefined
 
-  // Phase 2: verified custom domain
+  // Phase 2: verified custom domain (DNS/DKIM verified through the in-app
+  // domain-verification flow, sent via Resend directly)
   if (
     settings?.sending_mode === 'custom' &&
     settings?.domain_status === 'verified' &&
@@ -90,6 +97,23 @@ export async function resolveTenantSender(
       senderDomain: settings.sending_domain,
       replyTo,
       provider: (settings.provider as ResolvedSender['provider']) || 'lovable',
+      usingCustomDomain: true,
+    }
+  }
+
+  // Phase 1.5: simple tenant-configured From address (Admin Tenants > Email
+  // tab). Domain authorization is handled by Lovable's own Cloud > Emails
+  // feature, not the in-app DNS-verification flow above — if the domain
+  // shows there as an available sender, the platform's own send API (not
+  // Resend) already knows how to send from it.
+  const tenantFromAddress = tenant?.email_from_address?.trim()
+  if (tenantFromAddress && tenantFromAddress.includes('@')) {
+    const domain = tenantFromAddress.split('@')[1]
+    return {
+      from: buildFrom(displayName, tenantFromAddress),
+      senderDomain: domain,
+      replyTo,
+      provider: 'lovable',
       usingCustomDomain: true,
     }
   }

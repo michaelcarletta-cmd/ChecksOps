@@ -17,6 +17,7 @@ import { useRef } from "react";
 import { TenantDocumentsManager } from "@/components/white-label/TenantDocumentsManager";
 import { ActumSettings } from "@/components/settings/ActumSettings";
 import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
+import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
 import { TenantProvider } from "@/contexts/TenantContext";
@@ -298,7 +299,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <BrandingTab tenant={tenant} onUpdated={onUpdated} />
           </TabsContent>
           <TabsContent value="email" className="mt-6">
-            <EmailTab tenant={tenant} onUpdated={onUpdated} />
+            <EmailSenderSettings />
           </TabsContent>
           <TabsContent value="compliance" className="mt-6 space-y-8">
             <ComplianceSettings />
@@ -528,39 +529,6 @@ function BrandingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Ten
   );
 }
 
-function EmailTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tenant) => void }) {
-  const [fromName, setFromName] = useState(tenant.email_from_name || "");
-  const [fromAddress, setFromAddress] = useState(tenant.email_from_address || "");
-  const [replyTo, setReplyTo] = useState(tenant.email_reply_to || "");
-  const { saving, save } = useTenantSave(tenant, onUpdated);
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Email & Contact</CardTitle>
-        <CardDescription>Contact info and "From" identity for outbound emails to this tenant's users.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label>From Name</Label>
-          <Input value={fromName} onChange={(e) => setFromName(e.target.value)} placeholder="Acme Inspections" />
-        </div>
-        <div className="space-y-2">
-          <Label>From Address</Label>
-          <Input value={fromAddress} onChange={(e) => setFromAddress(e.target.value)} placeholder="noreply@acme.com" />
-          <p className="text-xs text-muted-foreground">Domain must be verified in Cloud → Emails. Falls back to ChecksOps default if blank.</p>
-        </div>
-        <div className="space-y-2">
-          <Label>Reply-To</Label>
-          <Input value={replyTo} onChange={(e) => setReplyTo(e.target.value)} placeholder="support@acme.com" />
-        </div>
-        <Button onClick={() => save({ email_from_name: fromName || null, email_from_address: fromAddress || null, email_reply_to: replyTo || null })} disabled={saving}>
-          {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Email Settings
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
 
 /* ---------------- Users Tab ---------------- */
 
