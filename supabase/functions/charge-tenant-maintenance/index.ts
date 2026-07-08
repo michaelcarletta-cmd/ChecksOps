@@ -6,9 +6,13 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-async function decrypt(b64: string, keyB64: string): Promise<string> {
-  const rawKey = Uint8Array.from(atob(keyB64), (c) => c.charCodeAt(0));
-  const key = await crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["decrypt"]);
+async function deriveKey(secret: string): Promise<CryptoKey> {
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+  return crypto.subtle.importKey("raw", hash, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+
+async function decrypt(b64: string, secret: string): Promise<string> {
+  const key = await deriveKey(secret);
   const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
   const iv = bytes.slice(0, 12);
   const ct = bytes.slice(12);
