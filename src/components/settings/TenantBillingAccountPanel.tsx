@@ -204,7 +204,7 @@ export function TenantBillingAccountPanel() {
                   className="mt-0.5"
                 />
                 <Label htmlFor="ach-auth" className="text-xs leading-snug cursor-pointer">
-                  I authorize ChecksOps to initiate monthly ACH debits from the selected account for maintenance fees, until I revoke this authorization in writing. Amounts may vary by referral discounts applied.
+                  I authorize ChecksOps to initiate monthly ACH debits from the selected account for <strong>maintenance fees, check processing fees (CheckAlt), and payment processing fees (Actum)</strong>, until I revoke this authorization in writing. Amounts may vary based on monthly usage and any referral discounts applied.
                 </Label>
               </div>
 
