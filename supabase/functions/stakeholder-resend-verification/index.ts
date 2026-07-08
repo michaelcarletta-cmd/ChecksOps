@@ -77,8 +77,14 @@ serve(async (req) => {
       details: { recipient_email: to },
     });
 
+    // supabase.functions.invoke() does NOT throw when the invoked function
+    // returns an HTTP error — it resolves with an `error` property instead.
+    // Check it explicitly so a failed send is reported back to the caller
+    // rather than silently swallowed while the UI reports "success".
+    let emailData: any = null;
+    let emailErr: any = null;
     try {
-      await supabase.functions.invoke("send-transactional-email", {
+      const res = await supabase.functions.invoke("send-transactional-email", {
         body: {
           templateName: "stakeholder-verify-account",
           recipientEmail: to,
@@ -91,8 +97,21 @@ serve(async (req) => {
           },
         },
       });
+      emailData = res.data;
+      emailErr = res.error;
     } catch (e) {
-      console.error("[stakeholder-resend-verification] email enqueue failed", e);
+      emailErr = e;
+    }
+
+    if (emailErr) {
+      let msg = emailErr.message ?? "Failed to send verification email";
+      try { const b = await emailErr.context?.json?.(); if (b?.error) msg = b.error; } catch { /* ignore */ }
+      console.error("[stakeholder-resend-verification] email send failed", msg);
+      return new Response(JSON.stringify({ success: false, error: msg }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (emailData?.error) {
+      console.error("[stakeholder-resend-verification] email send failed", emailData.error);
+      return new Response(JSON.stringify({ success: false, error: emailData.error }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });

@@ -268,23 +268,35 @@ Deno.serve(async (req) => {
     )
   }
 
-  // 4. Render React Email template to HTML and plain text
-  const html = await renderAsync(
-    React.createElement(template.component, templateData)
-  )
-  const plainText = await renderAsync(
-    React.createElement(template.component, templateData),
-    { plainText: true }
-  )
-
-  // Resolve subject — supports static string or dynamic function
-  const resolvedSubject =
-    typeof template.subject === 'function'
-      ? template.subject(templateData)
-      : template.subject
-
-  // 5. Resolve the tenant's effective sender identity (from + reply-to).
-  const sender = await resolveTenantSender(supabase, tenantId)
+  // 4. Render React Email template to HTML and plain text, and resolve the
+  // tenant's sender identity. Wrapped so a crash here (bad templateData,
+  // missing tenant email settings, etc.) still gets logged — otherwise it's
+  // a silent failure with no trace in email_send_log.
+  let html: string
+  let plainText: string
+  let resolvedSubject: string
+  let sender: Awaited<ReturnType<typeof resolveTenantSender>>
+  try {
+    html = await renderAsync(React.createElement(template.component, templateData))
+    plainText = await renderAsync(React.createElement(template.component, templateData), { plainText: true })
+    resolvedSubject =
+      typeof template.subject === 'function' ? template.subject(templateData) : template.subject
+    sender = await resolveTenantSender(supabase, tenantId)
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err)
+    console.error('Failed to render email or resolve sender', { templateName, error: errorMsg })
+    await supabase.from('email_send_log').insert({
+      message_id: messageId,
+      template_name: templateName,
+      recipient_email: effectiveRecipient,
+      status: 'failed',
+      error_message: `Render/sender resolution failed: ${errorMsg}`.slice(0, 1000),
+    })
+    return new Response(
+      JSON.stringify({ error: 'Failed to prepare email' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    )
+  }
 
   // 6a. Custom-domain tenants: send DIRECTLY through Resend (bypass Lovable queue,
   // which is bound to the platform's verified domain).
