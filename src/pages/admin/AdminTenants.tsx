@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
+import { toast as sonnerToast } from "sonner";
 import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck, Eye } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { useRef } from "react";
@@ -294,8 +295,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <TabsTrigger value="compliance" className="flex-1 min-w-[170px] whitespace-nowrap"><ShieldCheck className="w-4 h-4 mr-1" /> Compliance & Docs</TabsTrigger>
             <TabsTrigger value="integrations" className="flex-1 min-w-[130px] whitespace-nowrap"><Link2 className="w-4 h-4 mr-1" /> Integrations</TabsTrigger>
             
-            <TabsTrigger value="billing" className="flex-1 min-w-[100px] whitespace-nowrap"><Receipt className="w-4 h-4 mr-1" /> Billing</TabsTrigger>
-            <TabsTrigger value="usage" className="flex-1 min-w-[95px] whitespace-nowrap"><Receipt className="w-4 h-4 mr-1" /> Usage</TabsTrigger>
+            <TabsTrigger value="billing" className="flex-1 min-w-[100px] whitespace-nowrap"><Receipt className="w-4 h-4 mr-1" /> Billing & Usage</TabsTrigger>
             <TabsTrigger value="users" className="flex-1 min-w-[95px] whitespace-nowrap"><Users className="w-4 h-4 mr-1" /> Users</TabsTrigger>
           </TabsList>
 
@@ -321,10 +321,9 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <ActumSettings />
             <CheckAltSettings />
           </TabsContent>
-          <TabsContent value="billing" className="mt-6">
+          <TabsContent value="billing" className="mt-6 space-y-6">
             <BillingTab tenant={tenant} onUpdated={onUpdated} />
-          </TabsContent>
-          <TabsContent value="usage" className="mt-6">
+            <TenantBillingBankPanel tenantId={tenant.id} tenantName={tenant.name} />
             <TenantUsageInlinePanel tenantId={tenant.id} tenantName={tenant.name} />
           </TabsContent>
           <TabsContent value="users" className="mt-6">
@@ -752,30 +751,190 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
   );
 }
 
-/* ---------------- Usage Tab ---------------- */
+/* ---------------- Bank Account (for pulling maintenance fees) ---------------- */
 
-function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
-  const [data, setData] = useState<any>(null);
+function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
+  const [bank, setBank] = useState<any>(null);
+  const [billing, setBilling] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [charging, setCharging] = useState(false);
 
   const load = async () => {
     setLoading(true);
-    setError(null);
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
-    const { data: res, error: e } = await supabase.rpc("get_tenant_check_usage", {
-      _tenant_id: tenantId,
-      _month_start: monthStart,
-      _month_end: monthEnd,
-    } as any);
-    if (e) setError(e.message);
-    else setData(res);
+    const { data: b } = await supabase
+      .from("tenant_billing_accounts")
+      .select("id, stakeholder_account_id, auto_debit_enabled, ach_authorized_at")
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    setBilling(b);
+
+    if (b?.stakeholder_account_id) {
+      const { data: sa } = await supabase
+        .from("stakeholder_accounts")
+        .select("id, nickname, chk_acct, acct_type, custname, verification_status, verified_at")
+        .eq("id", b.stakeholder_account_id)
+        .maybeSingle();
+      setBank(sa);
+    } else {
+      // Fall back: show any active verified account so admin sees it exists
+      const { data: any1 } = await supabase
+        .from("stakeholder_accounts")
+        .select("id, nickname, chk_acct, acct_type, custname, verification_status, verified_at")
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true)
+        .in("verification_status", ["verified", "admin_override"])
+        .order("verified_at", { ascending: false, nullsFirst: false })
+        .limit(1);
+      setBank(any1?.[0] ?? null);
+    }
     setLoading(false);
   };
 
   useEffect(() => { load(); }, [tenantId]);
+
+  const pullNow = async () => {
+    setCharging(true);
+    const { data, error } = await supabase.functions.invoke("charge-tenant-maintenance", {
+      body: { tenant_ids: [tenantId], dry_run: false },
+    });
+    setCharging(false);
+    if (error) return sonnerToast.error(error.message);
+    const r = (data as any)?.results?.[0];
+    if (r?.skipped) sonnerToast.warning(`Skipped: ${r.skipped}`);
+    else if (r?.error) sonnerToast.error(r.error);
+    else if (r?.status === "submitted") sonnerToast.success(`ACH debit submitted for $${(r.amount_cents / 100).toFixed(2)}`);
+    else sonnerToast.info(JSON.stringify(r ?? data));
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Billing Bank Account</CardTitle>
+            <CardDescription>
+              Plaid/Authentecheck-verified account we pull maintenance fees from for {tenantName}.
+            </CardDescription>
+          </div>
+          <Button size="sm" onClick={pullNow} disabled={charging || !bank || !billing?.auto_debit_enabled}>
+            {charging ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+            Pull maintenance fee now
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+        ) : !bank ? (
+          <div className="text-sm text-muted-foreground italic">
+            No verified bank account on file. Tenant must add one via Plaid in the Bank Account panel.
+          </div>
+        ) : (
+          <div className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
+            <div>
+              <div className="text-sm font-medium">{bank.nickname}</div>
+              <div className="text-xs text-muted-foreground">
+                {bank.custname} · {bank.acct_type === "C" ? "Checking" : "Savings"} · ••••{bank.chk_acct.slice(-4)}
+              </div>
+            </div>
+            <div className="flex flex-col items-end gap-1">
+              <Badge variant="default" className="text-[10px]">
+                <ShieldCheck className="w-3 h-3 mr-1" />
+                {bank.verification_status === "admin_override" ? "Verified (override)" : "Verified via Plaid"}
+              </Badge>
+              <span className="text-[10px] text-muted-foreground">
+                {billing?.stakeholder_account_id
+                  ? billing?.auto_debit_enabled
+                    ? "Auto-debit ON"
+                    : "Auto-debit OFF"
+                  : "Not linked for billing"}
+              </span>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ---------------- Usage Tab ---------------- */
+
+function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
+  const now = new Date();
+  const [scope, setScope] = useState<"month" | "year">("month");
+  const [month, setMonth] = useState(now.getMonth()); // 0-11
+  const [year, setYear] = useState(now.getFullYear());
+  const [data, setData] = useState<any>(null);
+  const [checkalt, setCheckalt] = useState<{ count: number; amount: number } | null>(null);
+  const [actum, setActum] = useState<{ count: number; amountOut: number } | null>(null);
+  const [maintenance, setMaintenance] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const range = (() => {
+    if (scope === "month") {
+      const start = new Date(year, month, 1);
+      const end = new Date(year, month + 1, 1);
+      return { start, end, label: start.toLocaleDateString("en-US", { month: "long", year: "numeric" }) };
+    }
+    const start = new Date(year, 0, 1);
+    const end = new Date(year + 1, 0, 1);
+    return { start, end, label: String(year) };
+  })();
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    const startISO = range.start.toISOString();
+    const endISO = new Date(range.end.getTime() - 1).toISOString();
+
+    try {
+      const [usageRes, checkaltRes, actumRes, maintRes] = await Promise.all([
+        supabase.rpc("get_tenant_check_usage", {
+          _tenant_id: tenantId,
+          _month_start: startISO,
+          _month_end: endISO,
+        } as any),
+        supabase
+          .from("checkalt_deposits")
+          .select("id, amount, status, created_at")
+          .eq("tenant_id", tenantId)
+          .gte("created_at", range.start.toISOString())
+          .lt("created_at", range.end.toISOString()),
+        supabase
+          .from("actum_transactions")
+          .select("id, amount, transaction_type, status, created_at")
+          .eq("tenant_id", tenantId)
+          .gte("created_at", range.start.toISOString())
+          .lt("created_at", range.end.toISOString()),
+        supabase
+          .from("tenant_maintenance_payments")
+          .select("id, amount_cents, status, received_at, period_start, method, reference, failure_reason")
+          .eq("tenant_id", tenantId)
+          .gte("received_at", range.start.toISOString())
+          .lt("received_at", range.end.toISOString())
+          .order("received_at", { ascending: false }),
+      ]);
+      if (usageRes.error) throw usageRes.error;
+      setData(usageRes.data);
+      setCheckalt({
+        count: checkaltRes.data?.length ?? 0,
+        amount: (checkaltRes.data ?? []).reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0),
+      });
+      setActum({
+        count: actumRes.data?.length ?? 0,
+        amountOut: (actumRes.data ?? [])
+          .filter((r: any) => r.transaction_type === "credit")
+          .reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0),
+      });
+      setMaintenance(maintRes.data ?? []);
+    } catch (e: any) {
+      setError(e.message);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [tenantId, scope, month, year]);
 
   const events: any[] = data?.events || [];
   const checkCount = events.filter((e) => e.event_type === "check_processing").length;
@@ -783,21 +942,48 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const instant = events.filter((e) => e.event_type === "actum_instant").length;
   const fmt = (cents: number) =>
     new Intl.NumberFormat("en-US", { style: "currency", currency: (data?.currency || "usd").toUpperCase() }).format((cents || 0) / 100);
-  const monthLabel = new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const maintenancePaidCents = maintenance
+    .filter((r) => ["cleared", "recorded", "submitted"].includes(r.status))
+    .reduce((s, r) => s + (r.amount_cents ?? 0), 0);
+  const months = Array.from({ length: 12 }, (_, i) => ({ v: i, l: new Date(2020, i, 1).toLocaleString("en-US", { month: "long" }) }));
+  const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
 
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <CardTitle>Usage Tracking — {monthLabel}</CardTitle>
+            <CardTitle>Usage & Payments — {range.label}</CardTitle>
             <CardDescription>
-              Live check processing & Actum disbursement activity for {tenantName}.
+              Checks processed, CheckAlt deposits, Actum disbursements & maintenance fees paid to ChecksOps.
             </CardDescription>
           </div>
-          <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
-            <RefreshCw className={`w-4 h-4 mr-1 ${loading ? "animate-spin" : ""}`} /> Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Select value={scope} onValueChange={(v) => setScope(v as any)}>
+              <SelectTrigger className="w-[110px] h-8"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="month">Month</SelectItem>
+                <SelectItem value="year">Year</SelectItem>
+              </SelectContent>
+            </Select>
+            {scope === "month" && (
+              <Select value={String(month)} onValueChange={(v) => setMonth(parseInt(v))}>
+                <SelectTrigger className="w-[130px] h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {months.map((m) => <SelectItem key={m.v} value={String(m.v)}>{m.l}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+            <Select value={String(year)} onValueChange={(v) => setYear(parseInt(v))}>
+              <SelectTrigger className="w-[90px] h-8"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -807,37 +993,65 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
           <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="rounded-xl border bg-card p-4">
-                <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Checks Processed</div>
-                <div className="text-3xl font-bold">{checkCount}</div>
-                <div className="text-[10px] text-muted-foreground mt-2">Standard endorsement workflow</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-lg border bg-card p-3">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Checks Processed</div>
+                <div className="text-2xl font-bold mt-1">{checkCount}</div>
+                <div className="text-[10px] text-muted-foreground mt-1">Fees: {fmt(data?.amount_cents ?? 0)}</div>
               </div>
-              <div className="rounded-xl border bg-card p-4">
-                <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Actum Same Day</div>
-                <div className="text-3xl font-bold">{sameDay}</div>
-                <div className="text-[10px] text-muted-foreground mt-2">$1.00 pass-through fee</div>
+              <div className="rounded-lg border bg-card p-3">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">CheckAlt Deposits</div>
+                <div className="text-2xl font-bold mt-1">{checkalt?.count ?? 0}</div>
+                <div className="text-[10px] text-muted-foreground mt-1">${(checkalt?.amount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
               </div>
-              <div className="rounded-xl border bg-card p-4">
-                <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Actum Instant</div>
-                <div className="text-3xl font-bold">{instant}</div>
-                <div className="text-[10px] text-muted-foreground mt-2">$1.50 pass-through fee</div>
+              <div className="rounded-lg border bg-card p-3">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Actum Out</div>
+                <div className="text-2xl font-bold mt-1">{actum?.count ?? 0}</div>
+                <div className="text-[10px] text-muted-foreground mt-1">${(actum?.amountOut ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              </div>
+              <div className="rounded-lg border bg-card p-3">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Paid to ChecksOps</div>
+                <div className="text-2xl font-bold mt-1">{fmt(maintenancePaidCents)}</div>
+                <div className="text-[10px] text-muted-foreground mt-1">Same Day {sameDay} · Instant {instant}</div>
               </div>
             </div>
 
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 flex items-center justify-between">
+            {maintenance.length > 0 && (
               <div>
-                <div className="text-xs text-primary uppercase tracking-wider mb-1">Total Estimated Fees</div>
-                <div className="text-3xl font-bold text-primary">{fmt(data?.amount_cents ?? 0)}</div>
+                <h4 className="text-sm font-semibold mb-2">Maintenance Fee Payments ({maintenance.length})</h4>
+                <div className="border rounded-lg max-h-56 overflow-y-auto divide-y">
+                  {maintenance.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between px-3 py-2 text-xs">
+                      <div>
+                        <div className="font-medium">
+                          {new Date(p.received_at).toLocaleDateString()}
+                          {p.period_start && <span className="text-muted-foreground ml-2">· {new Date(p.period_start).toLocaleDateString(undefined, { month: "short", year: "numeric" })}</span>}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {p.method?.toUpperCase()} {p.reference && `· ${p.reference}`} {p.failure_reason && `· ${p.failure_reason}`}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold">{fmt(p.amount_cents)}</span>
+                        <Badge variant="outline" className={`text-[9px] h-4 ${
+                          p.status === "cleared" ? "border-emerald-500/40 text-emerald-500" :
+                          p.status === "returned" || p.status === "failed" ? "border-destructive/40 text-destructive" :
+                          "border-muted-foreground/30"
+                        }`}>
+                          {p.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <Badge variant="outline">{monthLabel}</Badge>
-            </div>
+            )}
 
             <div>
-              <h4 className="text-sm font-semibold mb-2">Detailed Log ({events.length})</h4>
+              <h4 className="text-sm font-semibold mb-2">Detailed Check Log ({events.length})</h4>
               <div className="border rounded-lg max-h-72 overflow-y-auto divide-y">
                 {events.length === 0 ? (
-                  <div className="p-6 text-center text-sm text-muted-foreground italic">No usage events recorded this month.</div>
+                  <div className="p-6 text-center text-sm text-muted-foreground italic">No usage events for this range.</div>
                 ) : (
                   events.map((e) => (
                     <div key={e.id} className="flex items-center justify-between px-3 py-2 text-xs">
@@ -869,6 +1083,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
     </Card>
   );
 }
+
 
 /* ---------------- Tenant Management Table (master owner only) ---------------- */
 
