@@ -71,8 +71,7 @@ serve(async (req) => {
     if (!dryRun && (!parentId || !subId)) {
       throw new Error("Actum credentials not configured (ACTUM_PARENT_ID / ACTUM_SUB_ID)");
     }
-    const keyB64 = Deno.env.get("TENANT_BILLING_ENCRYPTION_KEY");
-    if (!keyB64) throw new Error("TENANT_BILLING_ENCRYPTION_KEY not configured");
+    // Bank details come from Plaid-verified stakeholder_accounts (no encryption key needed).
 
     const period_start = firstOfCurrentMonth();
     const period_end = firstOfNextMonth();
