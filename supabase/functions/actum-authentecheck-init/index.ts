@@ -118,8 +118,14 @@ serve(async (req) => {
 
     const rawName = nameCandidates.find((n) => cleanNamePart(n).length > 0) ?? "Account Holder";
     const parts = cleanNamePart(rawName).split(/\s+/).filter(Boolean);
-    const firstName = (parts[0] || "Account").slice(0, 30);
-    const lastName = (parts.length > 1 ? parts.slice(1).join(" ") : "Holder").slice(0, 30);
+    // In test/sandbox mode, Plaid's test institutions (Houndstooth Bank, First
+    // Platypus Bank) always return a fixed identity ("Robert A Yakuza"). Actum
+    // appears to cross-check the merchant-submitted name against the identity
+    // Plaid returns, so submitting a real user's name here causes a mismatch
+    // that a real production bank login wouldn't hit. Match Actum's own
+    // documented test identity instead of the signed-in user's real name.
+    const firstName = isProd ? (parts[0] || "Account").slice(0, 30) : "Bob";
+    const lastName = isProd ? (parts.length > 1 ? parts.slice(1).join(" ") : "Holder").slice(0, 30) : "Yakuza";
 
 
     const emailCandidate = String(
