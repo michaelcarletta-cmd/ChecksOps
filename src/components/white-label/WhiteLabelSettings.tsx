@@ -33,6 +33,7 @@ import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
 import { CheckUsageCard } from "@/components/billing/CheckUsageCard";
 import { TenantUsageTracker } from "@/components/billing/TenantUsageTracker";
 import { BillingConfigPanel } from "@/components/billing/BillingConfigPanel";
+import { TenantBillingAccountPanel } from "@/components/settings/TenantBillingAccountPanel";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
