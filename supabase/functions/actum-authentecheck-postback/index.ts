@@ -50,9 +50,12 @@ serve(async (req) => {
 
     console.log("[authentecheck-postback] payload:", JSON.stringify(fields).slice(0, 2000));
 
-    const stakeholderId = fields.merchantdata || fields.merchant_data;
+    // Per Table 2 of the integration guide, the account identifier we submit
+    // as "merchantdata" comes back in the postback under "orderinfo" (initial
+    // flow) or "order_info" (repeat flow) — not "merchantdata" itself.
+    const stakeholderId = fields.orderinfo || fields.order_info || fields.merchantdata || fields.merchant_data;
     if (!stakeholderId) {
-      console.warn("[authentecheck-postback] missing merchantdata, ignoring");
+      console.warn("[authentecheck-postback] missing orderinfo/order_info, ignoring");
       return new Response("ok", { headers: corsHeaders });
     }
 
