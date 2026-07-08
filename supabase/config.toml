@@ -47,3 +47,5 @@ project_id = "nbcqwpysqgyxrrbgtmkw"
     verify_jwt = false
   [functions.partner-shared-checks]
     verify_jwt = false
+  [functions.actum-return-webhook]
+    verify_jwt = false
