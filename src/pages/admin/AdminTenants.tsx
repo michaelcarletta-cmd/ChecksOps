@@ -815,8 +815,8 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
       ach_authorized_at: new Date().toISOString(),
     };
     const { error } = billing?.id
-      ? await supabase.from("tenant_billing_accounts").update(payload).eq("id", billing.id)
-      : await supabase.from("tenant_billing_accounts").insert(payload);
+      ? await supabase.from("tenant_billing_accounts").update(payload as any).eq("id", billing.id)
+      : await supabase.from("tenant_billing_accounts").insert(payload as any);
     if (error) return sonnerToast.error(error.message);
     sonnerToast.success("Bank account linked for maintenance-fee billing");
     load();
