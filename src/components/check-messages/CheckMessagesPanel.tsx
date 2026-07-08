@@ -20,8 +20,10 @@ interface CheckSummary {
   carrier_name: string | null;
   amount: number | null;
   status: string | null;
+  payee_line: string | null;
   claims: { claim_number: string | null; policyholder_name: string | null } | null;
 }
+
 
 interface CheckMessagesPanelProps {
   onOpenCheck?: (checkId: string) => void;
@@ -94,7 +96,7 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
       if (checkIds.length === 0) return [] as CheckSummary[];
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("id, check_number, carrier_name, amount, status, claims(claim_number, policyholder_name)")
+        .select("id, check_number, carrier_name, amount, status, payee_line, claims(claim_number, policyholder_name)")
         .in("id", checkIds);
       if (error) throw error;
       return (data ?? []) as unknown as CheckSummary[];
@@ -114,9 +116,11 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
         return (
           (c.check_number ?? "").toLowerCase().includes(q) ||
           (c.carrier_name ?? "").toLowerCase().includes(q) ||
+          (c.payee_line ?? "").toLowerCase().includes(q) ||
           (c.claims?.policyholder_name ?? "").toLowerCase().includes(q) ||
           (c.claims?.claim_number ?? "").toLowerCase().includes(q)
         );
+
       })
       .sort((a, b) => {
         // Unread first, then most recent
@@ -144,7 +148,7 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
           <div className="relative mt-2">
             <Search className="h-3.5 w-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search check #, carrier, claim…"
+              placeholder="Search check #, payee, carrier, claim…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="h-8 pl-7 text-xs"
@@ -189,9 +193,15 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
                           </Badge>
                         )}
                       </div>
-                      <div className="text-[11px] text-muted-foreground truncate">
+                      {c.payee_line && (
+                        <div className="text-[11px] font-medium text-foreground truncate" title={c.payee_line}>
+                          {c.payee_line}
+                        </div>
+                      )}
+                      <div className="text-[10px] text-muted-foreground truncate">
                         {c.claims?.policyholder_name || c.carrier_name || "Unknown"}
                       </div>
+
                       {r.last_message_at && (
                         <div className="text-[10px] text-muted-foreground mt-0.5">
                           {formatDistanceToNow(new Date(r.last_message_at), { addSuffix: true })}
@@ -219,11 +229,15 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
               <CardTitle className="text-sm">
                 {selected?.check
                   ? `Check #${selected.check.check_number || "—"} • ${
-                      selected.check.claims?.policyholder_name || selected.check.carrier_name || "Unknown"
+                      selected.check.payee_line ||
+                      selected.check.claims?.policyholder_name ||
+                      selected.check.carrier_name ||
+                      "Unknown"
                     }`
                   : "Select a conversation"}
               </CardTitle>
               {selected?.check && (
+
                 <div className="text-[11px] text-muted-foreground">
                   {selected.check.claims?.claim_number && `Claim ${selected.check.claims.claim_number} • `}
                   {selected.check.amount != null &&

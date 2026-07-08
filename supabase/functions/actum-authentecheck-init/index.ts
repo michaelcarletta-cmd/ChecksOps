@@ -96,15 +96,31 @@ serve(async (req) => {
       .eq("id", userData.user.id)
       .maybeSingle();
 
-    const rawName =
-      (account.custname && account.custname !== "Pending" ? account.custname : "")
-      || [profile?.first_name, profile?.last_name].filter(Boolean).join(" ")
-      || profile?.full_name
-      || userData.user.email
-      || "Account Holder";
-    const parts = String(rawName).trim().split(/\s+/);
-    const firstName = (parts[0] ?? "Account").slice(0, 30);
+    // Actum rejects names containing "@" or other non-name chars ("First name
+    // foo@bar.com is invalid"). Sanitize each candidate: drop empties, drop
+    // anything that looks like an email, strip disallowed characters. Only
+    // fall through to the signed-in user's email as a *last resort*, and even
+    // then use the local-part with punctuation stripped.
+    const cleanNamePart = (s: string) =>
+      s.replace(/[^A-Za-z' -]/g, "").trim();
+    const isEmailish = (s: string) => /@/.test(s);
+    const nameCandidates: string[] = [];
+    if (account.custname && account.custname !== "Pending" && !isEmailish(account.custname)) {
+      nameCandidates.push(account.custname);
+    }
+    const joinedProfile = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ");
+    if (joinedProfile && !isEmailish(joinedProfile)) nameCandidates.push(joinedProfile);
+    if (profile?.full_name && !isEmailish(profile.full_name)) nameCandidates.push(profile.full_name);
+    // Last resort: derive from email local-part (e.g. "mcarletta@..." -> "Mcarletta Holder")
+    const emailLocal = (userData.user.email ?? "").split("@")[0]?.replace(/[._-]+/g, " ").trim();
+    if (emailLocal) nameCandidates.push(emailLocal.charAt(0).toUpperCase() + emailLocal.slice(1));
+    nameCandidates.push("Account Holder");
+
+    const rawName = nameCandidates.find((n) => cleanNamePart(n).length > 0) ?? "Account Holder";
+    const parts = cleanNamePart(rawName).split(/\s+/).filter(Boolean);
+    const firstName = (parts[0] || "Account").slice(0, 30);
     const lastName = (parts.length > 1 ? parts.slice(1).join(" ") : "Holder").slice(0, 30);
+
 
     const emailCandidate = String(
       account.verification_recipient_email
@@ -121,13 +137,11 @@ serve(async (req) => {
     const declineUrl = return_url ?? `${appBase}/verify-account/complete?ok=0&acct=${account.id}`;
     const postbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/actum-authentecheck-postback`;
 
-    // Per Actum Authentecheck docs (SignupInit.cgi), the merchant token is a
-    // bare first segment, followed by normal form fields. Do not URL-encode
-    // that first token or send it as pmt_type/key=value pair — Actum's
-    // SignupInit parser rejects those variants as "Error parsing PostData"
-    // (verified directly against their endpoint). Per Actum support, use the
-    // tenant's own Test/Production ParentID and SubID here, not a generic
-    // placeholder.
+    // Per Actum's working curl example: the merchant token goes in the URL
+    // query string as `?chk:PARENT:SUB=null` (URL-encoded colons), NOT in the
+    // POST body. All other fields are standard form-urlencoded body params.
+    // Also required: `authdata=1` and `identity=1` to trigger the Plaid-backed
+    // Authentecheck flow (bank verification), not a regular signup charge.
     const psDesc = `Bank verification ${(account.nickname ?? "Account").slice(0, 20)}`
       .replace(/[^A-Za-z0-9 ]/g, "")
       .slice(0, 50);
@@ -145,25 +159,23 @@ serve(async (req) => {
     params.append("redirect_accept", acceptUrl);
     params.append("redirect_decline", declineUrl);
     params.append("dynamic_saleurl", postbackUrl);
-    // Both are "dependent on merchant setup" per the integration guide — Actum
-    // has enabled them for this account (confirmed via their own successful
-    // test call). authdata=1 is required for the authdata JSON block (routing
-    // number, account number, balances) to appear in the postback at all; our
-    // postback handler already parses fields.authdata, so without this flag
-    // that data was never being sent.
     params.append("authdata", "1");
     params.append("identity", "1");
     params.append("meruser", meruser);
     params.append("merpass", merpass);
     params.append("syspass", syspass);
-    const merchantToken = `chk:${String(parentId).trim()}:${String(subid).trim()}`;
-    const postData = `${merchantToken}&${params.toString()}`;
 
-    console.log("[authentecheck-init] initiating session for account", account.id);
-    const res = await fetch(SIGNUP_INIT, {
+    const parentClean = String(parentId).trim();
+    const subClean = String(subid).trim();
+    // Encode the colons in the merchant token key (Actum's example uses %3A).
+    const merchantTokenParam = `chk%3A${encodeURIComponent(parentClean)}%3A${encodeURIComponent(subClean)}=null`;
+    const url = `${SIGNUP_INIT}?${merchantTokenParam}`;
+
+    console.log("[authentecheck-init] initiating session for account", account.id, "url:", url);
+    const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: postData,
+      body: params.toString(),
     });
     const text = await res.text();
     console.log("[authentecheck-init] Actum response:", text);

@@ -2855,6 +2855,7 @@ export type Database = {
           return_reason: string | null
           returned_at: string | null
           status: string
+          status_unresolved: boolean
           submitted_at: string | null
           submitted_by: string | null
           tenant_id: string | null
@@ -2877,6 +2878,7 @@ export type Database = {
           return_reason?: string | null
           returned_at?: string | null
           status?: string
+          status_unresolved?: boolean
           submitted_at?: string | null
           submitted_by?: string | null
           tenant_id?: string | null
@@ -2899,6 +2901,7 @@ export type Database = {
           return_reason?: string | null
           returned_at?: string | null
           status?: string
+          status_unresolved?: boolean
           submitted_at?: string | null
           submitted_by?: string | null
           tenant_id?: string | null
@@ -17673,6 +17676,68 @@ export type Database = {
             foreignKeyName: "tenant_documents_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_email_settings: {
+        Row: {
+          created_at: string
+          dns_records: Json | null
+          domain_status: string
+          from_address: string | null
+          from_name: string | null
+          id: string
+          last_verification_error: string | null
+          provider: string
+          reply_to: string | null
+          resend_domain_id: string | null
+          sending_domain: string | null
+          sending_mode: string
+          tenant_id: string
+          updated_at: string
+          verified_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          dns_records?: Json | null
+          domain_status?: string
+          from_address?: string | null
+          from_name?: string | null
+          id?: string
+          last_verification_error?: string | null
+          provider?: string
+          reply_to?: string | null
+          resend_domain_id?: string | null
+          sending_domain?: string | null
+          sending_mode?: string
+          tenant_id: string
+          updated_at?: string
+          verified_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          dns_records?: Json | null
+          domain_status?: string
+          from_address?: string | null
+          from_name?: string | null
+          id?: string
+          last_verification_error?: string | null
+          provider?: string
+          reply_to?: string | null
+          resend_domain_id?: string | null
+          sending_domain?: string | null
+          sending_mode?: string
+          tenant_id?: string
+          updated_at?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_email_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },

@@ -34,7 +34,7 @@ import { format } from "date-fns";
 // Eager: default tab and inline panels
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards"; // kept for potential future use
-import { AdminCheckTracker } from "@/components/check-review/AdminCheckTracker";
+
 import { usePermissions } from "@/hooks/usePermissions";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
@@ -147,6 +147,7 @@ interface CheckAltDepositSummary {
   submitted_at: string | null;
   approved_at: string | null;
   updated_at: string | null;
+  last_status_payload?: Record<string, unknown> | null;
 }
 
 interface CheckItem {
@@ -757,8 +758,12 @@ export default function CheckCommandCenter() {
     const s = getEffectiveStatus(c);
     const stage = c.check_stage;
     const checkAltStatus = getCheckAltStatus(c);
+    // Once funds have been disbursed, the check belongs in the Funds Released
+    // tab — do NOT show it in Deposited anymore.
+    if (stage === "funds_released") return false;
     return (s === "deposited" || stage === "deposited" || checkAltStatus === "pending_approval") && matchesSearch(c);
   });
+
   const lossDraftChecks = allChecks.filter((c) => {
     const s = getEffectiveStatus(c);
     const stage = (c as any).check_stage as string | undefined;
@@ -876,9 +881,14 @@ export default function CheckCommandCenter() {
           stakeholder_accounts (nickname, custname),
           disbursement_batches (
             id, check_intake_item_id,
-            check_intake_items:check_intake_item_id (check_number, carrier_name, property_address, funds_type, amount)
+            check_intake_items:check_intake_item_id (
+              check_number, carrier_name, property_address, funds_type, amount,
+              claim_id, detected_claim_number, payee_line,
+              claims:claim_id ( claim_number, policyholder_name )
+            )
           )
         `)
+
         .eq("tenant_id", tenantId!)
         .eq("status", "settled")
         .order("settled_at", { ascending: false })
@@ -990,10 +1000,13 @@ export default function CheckCommandCenter() {
             { key: "ready",        label: "Ready for Deposit", count: readyForDeposit.length,     icon: CheckCircle2,   gradient: "from-emerald-500/20 to-green-500/10", accent: "text-emerald-400", ring: "ring-emerald-500/30" },
             { key: "deposited",    label: "Deposited",         count: depositedChecks.length,     icon: Banknote,       gradient: "from-primary/20 to-blue-500/10",      accent: "text-primary",     ring: "ring-primary/30" },
             { key: "lossdraft",    label: "Loss Draft",        count: (lossDraftCounts as any)?.total_active ?? 0, icon: Landmark,       gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400",  ring: "ring-purple-500/30" },
-            { key: "branch",       label: "Branch",            count: branchDeposit.length,       icon: Building2,      gradient: "from-teal-500/20 to-cyan-500/10",     accent: "text-teal-400",    ring: "ring-teal-500/30" },
+            // Bank Deposit card intentionally removed — users are pushed to CheckAlt for RDC.
+            // The branch_deposit_required status still exists in the pipeline as a fallback,
+            // but is no longer surfaced as a top-level tab in the command center.
+
             { key: "reissue",      label: "Reissue",           count: reissueRequested.length,    icon: RotateCcw,      gradient: "from-red-500/20 to-rose-500/10",      accent: "text-red-400",     ring: "ring-red-500/30" },
             { key: "fundsreleased", label: "Funds Released",   count: fundsReleased.length,       icon: Banknote,       gradient: "from-emerald-500/20 to-teal-500/10",  accent: "text-emerald-400", ring: "ring-emerald-500/30" },
-            { key: "partners",     label: "Partners",          count: null as number | null,      icon: Users,          gradient: "from-pink-500/20 to-fuchsia-500/10",  accent: "text-pink-400",    ring: "ring-pink-500/30" },
+            // Partners moved into Manager → Partners sub-tab (2026-07-07).
             ...(canAccessManager ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield, gradient: "from-indigo-500/20 to-blue-500/10", accent: "text-indigo-400", ring: "ring-indigo-500/30" }] : []),
             { key: "messages",     label: "Messages",          count: totalUnreadMessages || null, icon: MessageSquare, gradient: "from-rose-500/20 to-pink-500/10",     accent: "text-rose-400",    ring: "ring-rose-500/30" },
           ].map((tab) => {
@@ -1040,9 +1053,10 @@ export default function CheckCommandCenter() {
                 <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
                 <TabsTrigger value="pending_approvals" className="text-xs gap-1"><ShieldAlert className="h-3 w-3" />Pending Approvals</TabsTrigger>
                 <TabsTrigger value="deposit_history" className="text-xs gap-1"><Banknote className="h-3 w-3" />Deposit History</TabsTrigger>
-                <TabsTrigger value="check_tracker" className="text-xs gap-1"><ShieldAlert className="h-3 w-3" />Check Tracker</TabsTrigger>
                 <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
                 <TabsTrigger value="mortgage_cos" className="text-xs gap-1"><Building2 className="h-3 w-3" />Mortgage Cos</TabsTrigger>
+                <TabsTrigger value="partners" className="text-xs gap-1"><Users className="h-3 w-3" />Partners</TabsTrigger>
+
               </TabsList>
               <TabsContent value="deposit_ops" className="mt-3">
                 <Suspense fallback={<TabLoader />}>
@@ -1059,11 +1073,6 @@ export default function CheckCommandCenter() {
                   <CheckAltDepositHistory />
                 </Suspense>
               </TabsContent>
-              <TabsContent value="check_tracker" className="mt-3">
-                <Suspense fallback={<TabLoader />}>
-                  <AdminCheckTracker searchQuery={searchQuery} />
-                </Suspense>
-              </TabsContent>
               <TabsContent value="reports" className="mt-3">
                 <Suspense fallback={<TabLoader />}>
                   <DepositReports />
@@ -1074,6 +1083,12 @@ export default function CheckCommandCenter() {
                   <MortgageCompaniesDirectory searchQuery={searchQuery} />
                 </Suspense>
               </TabsContent>
+              <TabsContent value="partners" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <TenantPartnerManager />
+                </Suspense>
+              </TabsContent>
+
             </Tabs>
           </div>
         )}
@@ -1093,14 +1108,8 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
-        {/* Partners Tab — Manage Partners only (shared checks now appear in their status tabs) */}
-        {activeTab === "partners" && (
-          <div className="mt-3">
-            <Suspense fallback={<TabLoader />}>
-              <TenantPartnerManager />
-            </Suspense>
-          </div>
-        )}
+        {/* Partners moved into Manager → Partners sub-tab (2026-07-07). */}
+
 
         {/* Reissue Tab */}
         {activeTab === "reissue" && (
@@ -1246,9 +1255,11 @@ export default function CheckCommandCenter() {
                             const batch = split.disbursement_batches;
                             const check = batch?.check_intake_items;
                             const linked = check?.claim_id ? claimLookup.get(check.claim_id) : null;
-                            const claimNumber = linked?.claim_number || check?.detected_claim_number || "Unlinked claim";
-                            const policyholderName = linked?.policyholder_name || check?.payee_line || "Unknown insured";
-                            const hasClaim = !!(linked?.claim_number || check?.detected_claim_number);
+                            const embeddedClaim = check?.claims ?? null;
+                            const claimNumber = linked?.claim_number || embeddedClaim?.claim_number || check?.detected_claim_number || "Unlinked claim";
+                            const policyholderName = linked?.policyholder_name || embeddedClaim?.policyholder_name || check?.payee_line || "Unknown insured";
+                            const hasClaim = !!(linked?.claim_number || embeddedClaim?.claim_number || check?.detected_claim_number);
+
                             const key = hasClaim
                               ? `claim::${String(claimNumber).trim().toLowerCase()}`
                               : `unlinked::${split.id}`;
@@ -2148,7 +2159,7 @@ function RerunOcrButton({ checkId, onSuccess }: { checkId: string; onSuccess: ()
         body: { checkId },
         headers: { Authorization: `Bearer ${session.session?.access_token}` },
       });
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(await getFunctionErrorMessage(error, "OCR failed"));
       if (data && typeof data === "object" && (("success" in data && !data.success) || ("ocr_success" in data && !data.ocr_success))) {
         throw new Error(typeof data.error === "string" ? data.error : "OCR failed");
       }
@@ -2191,6 +2202,8 @@ function CheckDetailPanel({
   const [depositingWithCheckAlt, setDepositingWithCheckAlt] = useState(false);
   const [frontImageDimensions, setFrontImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [backImageDimensions, setBackImageDimensions] = useState<{ width: number; height: number } | null>(null);
+
+
 
   // Whether this tenant has CheckAlt RDC turned on (platform switch +
   // its own registered FinCapture account) — gates the per-check
@@ -2237,7 +2250,7 @@ function CheckDetailPanel({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("*, check_payees(*)")
+        .select("*, check_payees(*), checkalt_deposits(id, status, submitted_at, approved_at, updated_at, last_status_payload)")
         .eq("id", checkId)
         .single();
       if (error) throw error;
@@ -2311,6 +2324,32 @@ function CheckDetailPanel({
       return data?.signedUrl ?? null;
     },
   });
+
+  useEffect(() => {
+    setBackImageDimensions(null);
+    if (!backImageUrl) return;
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (!cancelled) setBackImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.src = backImageUrl;
+    return () => { cancelled = true; };
+  }, [backImageUrl]);
+
+  useEffect(() => {
+    setFrontImageDimensions(null);
+    if (!frontImageUrl) return;
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (!cancelled) setFrontImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.src = frontImageUrl;
+    return () => { cancelled = true; };
+  }, [frontImageUrl]);
+
+
 
    // Fetch reviewer profile for name display
   const { data: reviewerProfile } = useQuery({
@@ -3293,18 +3332,35 @@ function CheckDetailPanel({
                   {/* Ready-for-deposit CTA — only visible once all endorsements are complete.
                       When CheckAlt is enabled this is the one-click "Deposit with CheckAlt"
                       button; otherwise it falls back to manual mobile deposit. */}
-                  {allEndorsementsComplete && !isDepositBlocked && (
-                    checkAltEnabled ? (
-                      <Button
-                        size="sm"
-                        className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                        disabled={depositingWithCheckAlt}
-                        onClick={handleDepositWithCheckAlt}
-                      >
-                        <Banknote className="h-4 w-4 mr-2" />
-                        {depositingWithCheckAlt ? "Depositing..." : "Deposit Check"}
-                      </Button>
-                    ) : (
+                  {(() => {
+                    const latestCA = (check.checkalt_deposits ?? [])
+                      .slice()
+                      .sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""))[0];
+                    const caRejected = latestCA && ["rejected", "returned", "error"].includes(String(latestCA.status));
+                    const rejPayload = (latestCA?.last_status_payload as any) ?? null;
+                    const rejCode = rejPayload?.status ?? rejPayload?.statusCode ?? null;
+                    const rejDesc = rejPayload?.statusDescription ?? rejPayload?.description ?? null;
+                    return (
+                      <>
+                        {caRejected && (
+                          <div className="rounded-md border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300 mt-1">
+                            <div className="font-medium">CheckAlt {latestCA?.status} {rejCode ? `(code ${rejCode})` : ""}</div>
+                            {rejDesc && <div className="text-red-200/80 mt-0.5">{String(rejDesc)}</div>}
+                            <div className="text-red-200/60 mt-1">Click below to resubmit to CheckAlt.</div>
+                          </div>
+                        )}
+                        {allEndorsementsComplete && !isDepositBlocked && (
+                          checkAltEnabled ? (
+                            <Button
+                              size="sm"
+                              className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                              disabled={depositingWithCheckAlt}
+                              onClick={handleDepositWithCheckAlt}
+                            >
+                              <Banknote className="h-4 w-4 mr-2" />
+                              {depositingWithCheckAlt ? "Depositing..." : caRejected ? "Resubmit to CheckAlt" : "Deposit Check"}
+                            </Button>
+                          ) : (
                       <Button
                         size="sm"
                         className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -3337,9 +3393,12 @@ function CheckDetailPanel({
                       >
                         <FileImage className="h-4 w-4 mr-2" />
                         {openingDepositView ? "Preparing..." : "Open for Mobile Deposit"}
-                      </Button>
-                    )
-                  )}
+                        </Button>
+                      )
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
               <Separator />
@@ -3556,7 +3615,7 @@ function CheckDetailPanel({
                     </Button>
                   </div>
 
-                  {showEndorsementAdjuster && backImageUrl && (
+                  {showEndorsementAdjuster && backImageUrl && backImageDimensions && (
                     <Suspense fallback={<TabLoader />}>
                       <EndorsementAdjuster
                         checkId={checkId}
@@ -3785,7 +3844,7 @@ function EndorsementPacketCard({ checkId, packetPath }: { checkId: string; packe
         body: { checkId, force: true },
         headers: { Authorization: `Bearer ${session.session.access_token}` },
       });
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(await getFunctionErrorMessage(error, "Failed to generate endorsement packet"));
       toast({ title: "Endorsement packet regenerated" });
     } catch (e: unknown) {
       toast({
@@ -4292,7 +4351,7 @@ function EditablePayeeCard({
         body: { action: "send_endorsement_request", payeeId: payee.id, method, email: normalizedEmail || undefined, phone: normalizedPhone || undefined },
         headers: { Authorization: `Bearer ${session.session.access_token}` },
       });
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(await getFunctionErrorMessage(error, "Failed to send endorsement request"));
       toast({ title: `Endorsement request sent via ${method}` });
       onRefresh();
     } catch (e: unknown) {
@@ -4433,7 +4492,7 @@ function PayeeCard({
         headers: { Authorization: `Bearer ${session.session.access_token}` },
       });
 
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(await getFunctionErrorMessage(error, "Failed to send endorsement request"));
       toast({ title: `Endorsement request sent via ${method}` });
       onRefresh();
     } catch (e: unknown) {

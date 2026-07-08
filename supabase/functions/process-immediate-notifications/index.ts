@@ -9,6 +9,7 @@ const corsHeaders = {
 
 interface ImmediateTask {
   id: string;
+  tenant_id: string | null;
   assigned_to: string;
   immediate_enabled: boolean;
   status: string;
@@ -150,6 +151,7 @@ Deno.serve(async (req: Request) => {
               body: {
                 templateName: "urgent-task-notification",
                 recipientEmail: profile.email,
+                tenantId: task.tenant_id,
                 idempotencyKey: `urgent-task-${task.id}-esc${newEscalation}`,
                 templateData: {
                   title: task.title,

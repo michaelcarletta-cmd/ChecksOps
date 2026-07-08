@@ -11,7 +11,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Building2, ExternalLink, Loader2, Pencil, Power, Upload, X, Trash2, Users, Receipt } from "lucide-react";
+import { Plus, Building2, ExternalLink, Loader2, Pencil, Power, Upload, X, Trash2, Users, Receipt, Eye } from "lucide-react";
+import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { TenantUserManagement } from "./TenantUserManagement";
 import { TenantUsageDashboard } from "./TenantUsageDashboard";
 
@@ -220,6 +221,24 @@ export function TenantManagement() {
   const updateField = (field: keyof TenantForm, value: any) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
+
+  const getPreviewUrl = (t: any) => {
+    // Always preview via the slug route — custom domains may not have DNS configured yet.
+    if (typeof window !== "undefined" && isCheckOpsHost(window.location.hostname)) {
+      return `${window.location.origin}/${t.slug}/checks`;
+    }
+    return `/wl/${t.slug}/checks`;
+  };
+
+  const previewAsTenant = (t: any) => {
+    const url = getPreviewUrl(t);
+    window.open(url, "_blank", "noopener,noreferrer");
+    toast({
+      title: `Previewing as ${t.name}`,
+      description: "Opened tenant portal in a new tab. You are viewing what their users see.",
+    });
+  };
+
 
   const updateConfigField = (field: string, value: string) => {
     setForm((prev) => ({ ...prev, email_provider_config: { ...prev.email_provider_config, [field]: value } }));
@@ -582,6 +601,15 @@ export function TenantManagement() {
                       </Button>
                     </>
                   )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    title="Preview as this tenant (opens their portal in a new tab)"
+                    onClick={() => previewAsTenant(t)}
+                  >
+                    <Eye className="h-4 w-4 text-blue-400" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"

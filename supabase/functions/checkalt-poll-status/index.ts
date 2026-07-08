@@ -4,9 +4,39 @@
 //
 // Uses POST /fincapture/deposit/item with body { fiKey, referenceNumber }
 // per the Clearingworks FinCapture API spec (not a GET endpoint).
+//
+// /fincapture/deposit/item does not reliably return a status/statusCode for
+// every reference (confirmed in production — a deposit CheckAlt had already
+// approved came back with ruleDetails only, no status field at all). When
+// that happens we fall back to POST /fincapture/deposit/history, which has
+// been confirmed to carry a resolvable status for the same reference.
 
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
-import { getServiceClient, loadConfig, checkAltFetch } from "../_shared/checkalt.ts";
+import { getServiceClient, loadConfig, checkAltFetch, loadTenantAccount } from "../_shared/checkalt.ts";
+
+const NUMERIC_STATUS_MAP: Record<number, string> = {
+  40: "pending_approval",
+  120: "rejected",
+  127: "submitted",
+  200: "cleared",
+};
+const STRING_STATUS_MAP: Record<string, string> = {
+  submitted: "submitted",
+  pending: "submitted",
+  pending_approval: "pending_approval",
+  approved: "cleared",
+  cleared: "cleared",
+  settled: "cleared",
+  returned: "returned",
+  rejected: "rejected",
+  declined: "rejected",
+};
+
+function resolveStatus(json: any): string | undefined {
+  const rawStatus = String(json?.status ?? "").toLowerCase();
+  const numericStatus = Number(json?.statusCode ?? json?.status);
+  return NUMERIC_STATUS_MAP[numericStatus] ?? STRING_STATUS_MAP[rawStatus];
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS")
@@ -30,7 +60,7 @@ Deno.serve(async (req) => {
 
     const { data: stale, error } = await supabase
       .from("checkalt_deposits")
-      .select("id, checkalt_reference, status, check_intake_item_id")
+      .select("id, tenant_id, checkalt_reference, status, check_intake_item_id")
       .in("status", ["submitted", "pending_approval"])
       .or(`last_polled_at.is.null,last_polled_at.lt.${cutoff}`)
       .not("checkalt_reference", "is", null)
@@ -61,52 +91,95 @@ Deno.serve(async (req) => {
         );
         const json = await resp.json().catch(() => ({}));
 
-        // Response schema: FinCaptureAPIDepositItemResponse
-        // CheckAlt returns numeric statusCode AND/OR string status depending
-        // on endpoint version. Map both.
-        const rawStatus = String(json?.status ?? "").toLowerCase();
-        const numericStatus = Number(json?.statusCode ?? json?.status);
-        const numericMap: Record<number, string> = {
-          40: "pending_approval",
-          120: "rejected",
-          127: "submitted",
-          200: "cleared",
-        };
-        const statusMap: Record<string, string> = {
-          submitted: "submitted",
-          pending: "submitted",
-          pending_approval: "pending_approval",
-          approved: "cleared",
-          cleared: "cleared",
-          settled: "cleared",
-          returned: "returned",
-          rejected: "rejected",
-          declined: "rejected",
-        };
-        const internal =
-          numericMap[numericStatus] ?? statusMap[rawStatus] ?? dep.status;
+        // Response schema: FinCaptureAPIDepositItemResponse. CheckAlt
+        // returns numeric statusCode AND/OR string status depending on
+        // endpoint version — but not always either (see file header).
+        let resolved = resolveStatus(json);
+        let statusPayload = json;
 
+        // Fall back to /fincapture/deposit/history, which has been confirmed
+        // to carry a resolvable status even when /deposit/item doesn't.
+        if (resolved === undefined) {
+          try {
+            const tenant = await loadTenantAccount(supabase, dep.tenant_id);
+            const today = new Date();
+            const startDate = new Date(today.getTime() - 30 * 86_400_000)
+              .toISOString().slice(0, 10);
+            const endDate = today.toISOString().slice(0, 10);
+            const histResp = await checkAltFetch(supabase, "/fincapture/deposit/history", {
+              method: "POST",
+              body: JSON.stringify({
+                fiKey: cfg.fi_key,
+                ssoKey: tenant.sso_user_id,
+                accountNumber: tenant.deposit_account_number,
+                startDate,
+                endDate,
+              }),
+            });
+            const histJson = await histResp.json().catch(() => ({}));
+            const items: any[] =
+              histJson?.depositHistoryList ??
+              histJson?.depositList ??
+              histJson?.history ??
+              (Array.isArray(histJson) ? histJson : []);
+            const match = items.find(
+              (it) => String(it?.referenceNumber) === String(dep.checkalt_reference),
+            );
+            if (match) {
+              const histResolved = resolveStatus(match);
+              if (histResolved !== undefined) {
+                resolved = histResolved;
+                statusPayload = { ...json, historyFallback: match };
+              }
+            }
+          } catch (e) {
+            console.error(
+              "[checkalt-poll-status] history fallback failed for",
+              dep.checkalt_reference,
+              e instanceof Error ? e.message : e,
+            );
+          }
+        }
 
+        const internal = resolved ?? dep.status;
+
+        // Still nothing usable from either endpoint — record that so it's
+        // visible instead of looking like a confirmed no-change poll.
+        const statusUnresolved = resolved === undefined;
+        if (statusUnresolved) {
+          console.warn(
+            "[checkalt-poll-status] could not resolve status for",
+            dep.checkalt_reference,
+            "- response had status:", json?.status, "statusCode:", json?.statusCode,
+          );
+        }
+
+        const statusChanged = internal !== dep.status;
         const updates: Record<string, unknown> = {
           last_polled_at: new Date().toISOString(),
-          last_status_payload: json,
+          last_status_payload: statusPayload,
+          status_unresolved: statusUnresolved,
         };
-        if (internal !== dep.status) {
+        if (statusChanged) {
           updates.status = internal;
           if (internal === "cleared")
             updates.cleared_at = new Date().toISOString();
           if (internal === "returned")
             updates.returned_at = new Date().toISOString();
-          updated++;
         }
-        await supabase
+        const { error: depUpdateErr } = await supabase
           .from("checkalt_deposits")
           .update(updates)
           .eq("id", dep.id);
+        if (depUpdateErr) throw new Error(`checkalt_deposits update failed: ${depUpdateErr.message}`);
+        // Only count as "updated" once the write has actually succeeded —
+        // this is the exact distinction that was impossible to make before
+        // (updated could be incremented even when the write silently failed).
+        if (statusChanged) updated++;
 
         if (dep.check_intake_item_id) {
           if (internal === "pending_approval") {
-            await supabase
+            const { error: e1 } = await supabase
               .from("check_intake_items")
               .update({
                 check_stage: "deposited",
@@ -115,10 +188,12 @@ Deno.serve(async (req) => {
                 updated_at: new Date().toISOString(),
               })
               .eq("id", dep.check_intake_item_id);
-            await supabase
+            if (e1) throw new Error(`check_intake_items update failed: ${e1.message}`);
+            const { error: e2 } = await supabase
               .from("claim_checks")
               .update({ deposit_status: "deposited" })
               .eq("check_intake_item_id", dep.check_intake_item_id);
+            if (e2) throw new Error(`claim_checks update failed: ${e2.message}`);
           } else if (internal === "submitted" || internal === "cleared") {
             const depositedAt = new Date().toISOString();
             const { data: intake } = await supabase
@@ -126,7 +201,7 @@ Deno.serve(async (req) => {
               .select("tenant_id, deposited_at")
               .eq("id", dep.check_intake_item_id)
               .maybeSingle();
-            await supabase
+            const { error: e1 } = await supabase
               .from("check_intake_items")
               .update({
                 check_stage: "deposited",
@@ -137,12 +212,14 @@ Deno.serve(async (req) => {
                 updated_at: depositedAt,
               })
               .eq("id", dep.check_intake_item_id);
-            await supabase
+            if (e1) throw new Error(`check_intake_items update failed: ${e1.message}`);
+            const { error: e2 } = await supabase
               .from("claim_checks")
               .update({ deposit_status: "deposited" })
               .eq("check_intake_item_id", dep.check_intake_item_id);
+            if (e2) throw new Error(`claim_checks update failed: ${e2.message}`);
           } else if (internal === "returned" || internal === "rejected") {
-            await supabase
+            const { error: e1 } = await supabase
               .from("check_intake_items")
               .update({
                 check_stage: "ready_for_deposit",
@@ -151,10 +228,12 @@ Deno.serve(async (req) => {
                 updated_at: new Date().toISOString(),
               })
               .eq("id", dep.check_intake_item_id);
-            await supabase
+            if (e1) throw new Error(`check_intake_items update failed: ${e1.message}`);
+            const { error: e2 } = await supabase
               .from("claim_checks")
               .update({ deposit_status: "returned" })
               .eq("check_intake_item_id", dep.check_intake_item_id);
+            if (e2) throw new Error(`claim_checks update failed: ${e2.message}`);
           }
         }
       } catch (e) {

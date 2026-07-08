@@ -397,10 +397,13 @@ async function sendEmail(supabase: any, config: any, execution: any) {
     emailPayload.attachments = attachments;
   }
 
-  const response = await fetch('https://api.resend.com/emails', {
+  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+  if (!lovableApiKey) throw new Error('LOVABLE_API_KEY not configured');
+  const response = await fetch('https://connector-gateway.lovable.dev/resend/emails', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${resendApiKey}`,
+      'Authorization': `Bearer ${lovableApiKey}`,
+      'X-Connection-Api-Key': resendApiKey,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(emailPayload),

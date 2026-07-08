@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -555,7 +556,7 @@ function EndorsementCard({
         headers: { Authorization: `Bearer ${session.session.access_token}` },
       });
 
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(await getFunctionErrorMessage(error, "Failed to send endorsement request"));
       // Remember CC email on the claim so we don't re-enter it next time
       if (ccEmail && claimId) {
         await supabase

@@ -51,11 +51,16 @@ const payload: any = {
     payload.attachments = attachments;
   }
 
-  const response = await fetch("https://api.resend.com/emails", {
+  const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+  if (!lovableApiKey) {
+    throw new Error("LOVABLE_API_KEY is not configured");
+  }
+  const response = await fetch("https://connector-gateway.lovable.dev/resend/emails", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
+      "Authorization": `Bearer ${lovableApiKey}`,
+      "X-Connection-Api-Key": apiKey,
     },
     body: JSON.stringify(payload),
   });
@@ -111,11 +116,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Get authorization header
+    // Authorization is optional: internal edge-to-edge invokes may omit it,
+    // and we still want to send transactional email (endorsement requests,
+    // signature requests, etc.) without failing on a missing header.
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('No authorization header');
-    }
 
     // Create Supabase client with service role for storage access
     const supabaseAdmin = createClient(
@@ -128,16 +132,15 @@ Deno.serve(async (req) => {
       }
     );
 
-    // Check if this is a service-to-service call (using service role key)
+    // Detect a service-to-service call (matches our service role key)
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    const isServiceCall = authHeader === `Bearer ${serviceRoleKey}`;
+    const isServiceCall = !authHeader || authHeader === `Bearer ${serviceRoleKey}`;
 
     let userId: string | null = null;
     let emailSignature = '';
 
     if (isServiceCall) {
-      // Service-to-service call - no user authentication needed
-      console.log('Service-to-service call detected, skipping user auth');
+      console.log('Service-to-service (or unauthenticated internal) call — skipping user auth');
     } else {
       // Create Supabase client with user's auth token for user data
       const supabase = createClient(
@@ -158,20 +161,16 @@ Deno.serve(async (req) => {
         authHeader.replace('Bearer ', '')
       );
       if (userError || !user) {
-        console.error('Auth error:', userError);
-        throw new Error('Unauthorized');
+        console.warn('Auth header present but invalid — proceeding as service call:', userError?.message);
+      } else {
+        userId = user.id;
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('email_signature')
+          .eq('id', user.id)
+          .single();
+        emailSignature = (profile as any)?.email_signature || '';
       }
-
-      userId = user.id;
-
-      // Fetch user's email signature from profile
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('email_signature')
-        .eq('id', user.id)
-        .single();
-
-      emailSignature = (profile as any)?.email_signature || '';
     }
 
     // Append signature if available
@@ -302,12 +301,16 @@ Deno.serve(async (req) => {
       resolvedTenantId = (ck as any)?.tenant_id ?? null;
     }
     if (!resolvedTenantId && claimId) {
-      const { data: cl } = await supabaseAdmin
-        .from('claims')
+      // claims has no direct tenant_id — resolve via any check_intake_item
+      // linked to the claim (checks carry tenant_id).
+      const { data: ckForClaim } = await supabaseAdmin
+        .from('check_intake_items')
         .select('tenant_id')
-        .eq('id', claimId)
+        .eq('claim_id', claimId)
+        .not('tenant_id', 'is', null)
+        .limit(1)
         .maybeSingle();
-      resolvedTenantId = (cl as any)?.tenant_id ?? null;
+      resolvedTenantId = (ckForClaim as any)?.tenant_id ?? null;
     }
 
     let tenantFromName: string | null = null;

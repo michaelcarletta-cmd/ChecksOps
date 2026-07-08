@@ -11,9 +11,15 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt } from "lucide-react";
+import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck, Eye } from "lucide-react";
+import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { useRef } from "react";
 import { TenantDocumentsManager } from "@/components/white-label/TenantDocumentsManager";
+import { ActumSettings } from "@/components/settings/ActumSettings";
+import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
+import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
+import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
+import { TenantProvider } from "@/contexts/TenantContext";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -138,8 +144,8 @@ export default function AdminTenants() {
       <div className="border-b border-border bg-card">
         <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
-              <ArrowLeft className="w-4 h-4 mr-1" /> Home
+            <Button variant="ghost" size="sm" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))}>
+              <ArrowLeft className="w-4 h-4 mr-1" /> Back
             </Button>
             <Building2 className="w-6 h-6 text-primary" />
             <div>
@@ -162,17 +168,28 @@ export default function AdminTenants() {
       </div>
 
       <div className="max-w-[1400px] mx-auto px-6 py-8">
-        {loading ? (
-          <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin" /></div>
-        ) : tenants.length === 0 ? (
-          <Card><CardContent className="py-16 text-center text-muted-foreground">No tenants yet. Click "New Tenant" to add one.</CardContent></Card>
-        ) : (
-          <TenantManagementTable
-            tenants={tenants}
-            onOpen={(t) => setSelected(t)}
-            onChanged={loadTenants}
-          />
-        )}
+        <Tabs defaultValue="tenants" className="w-full">
+          <TabsList className="mb-6">
+            <TabsTrigger value="tenants"><Building2 className="w-4 h-4 mr-1" /> Tenants</TabsTrigger>
+            <TabsTrigger value="referrals"><Gift className="w-4 h-4 mr-1" /> Referral Dashboard</TabsTrigger>
+          </TabsList>
+          <TabsContent value="tenants">
+            {loading ? (
+              <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin" /></div>
+            ) : tenants.length === 0 ? (
+              <Card><CardContent className="py-16 text-center text-muted-foreground">No tenants yet. Click "New Tenant" to add one.</CardContent></Card>
+            ) : (
+              <TenantManagementTable
+                tenants={tenants}
+                onOpen={(t) => setSelected(t)}
+                onChanged={loadTenants}
+              />
+            )}
+          </TabsContent>
+          <TabsContent value="referrals">
+            <AdminReferralDashboard />
+          </TabsContent>
+        </Tabs>
       </div>
 
     </div>
@@ -239,6 +256,7 @@ function CreateTenantDialog({ onCreated }: { onCreated: (t: Tenant) => void }) {
 
 function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: () => void; onUpdated: (t: Tenant) => void }) {
   return (
+    <TenantProvider slug={tenant.slug}>
     <div className="min-h-screen bg-background">
       <div className="border-b border-border bg-card">
         <div className="max-w-5xl mx-auto px-6 py-5 flex items-center gap-4">
@@ -261,14 +279,16 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
 
       <div className="max-w-5xl mx-auto px-6 py-8">
         <Tabs defaultValue="company" className="w-full">
-          <TabsList className="grid w-full grid-cols-7">
-            <TabsTrigger value="company"><Building2 className="w-4 h-4 mr-1" /> Company</TabsTrigger>
-            <TabsTrigger value="branding"><Settings className="w-4 h-4 mr-1" /> Branding</TabsTrigger>
-            <TabsTrigger value="email"><Mail className="w-4 h-4 mr-1" /> Email</TabsTrigger>
-            <TabsTrigger value="documents"><FileText className="w-4 h-4 mr-1" /> Documents</TabsTrigger>
-            <TabsTrigger value="billing"><Receipt className="w-4 h-4 mr-1" /> Billing</TabsTrigger>
-            <TabsTrigger value="usage"><Receipt className="w-4 h-4 mr-1" /> Usage</TabsTrigger>
-            <TabsTrigger value="users"><Users className="w-4 h-4 mr-1" /> Users</TabsTrigger>
+          <TabsList className="flex w-full flex-wrap h-auto justify-start gap-1 p-1">
+            <TabsTrigger value="company" className="flex-1 min-w-[110px] whitespace-nowrap"><Building2 className="w-4 h-4 mr-1" /> Company</TabsTrigger>
+            <TabsTrigger value="branding" className="flex-1 min-w-[110px] whitespace-nowrap"><Settings className="w-4 h-4 mr-1" /> Branding</TabsTrigger>
+            <TabsTrigger value="email" className="flex-1 min-w-[90px] whitespace-nowrap"><Mail className="w-4 h-4 mr-1" /> Email</TabsTrigger>
+            <TabsTrigger value="compliance" className="flex-1 min-w-[170px] whitespace-nowrap"><ShieldCheck className="w-4 h-4 mr-1" /> Compliance & Docs</TabsTrigger>
+            <TabsTrigger value="integrations" className="flex-1 min-w-[130px] whitespace-nowrap"><Link2 className="w-4 h-4 mr-1" /> Integrations</TabsTrigger>
+            
+            <TabsTrigger value="billing" className="flex-1 min-w-[100px] whitespace-nowrap"><Receipt className="w-4 h-4 mr-1" /> Billing</TabsTrigger>
+            <TabsTrigger value="usage" className="flex-1 min-w-[95px] whitespace-nowrap"><Receipt className="w-4 h-4 mr-1" /> Usage</TabsTrigger>
+            <TabsTrigger value="users" className="flex-1 min-w-[95px] whitespace-nowrap"><Users className="w-4 h-4 mr-1" /> Users</TabsTrigger>
           </TabsList>
 
           <TabsContent value="company" className="mt-6">
@@ -280,8 +300,18 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           <TabsContent value="email" className="mt-6">
             <EmailTab tenant={tenant} onUpdated={onUpdated} />
           </TabsContent>
-          <TabsContent value="documents" className="mt-6">
-            <TenantDocumentsManager tenantId={tenant.id} />
+          <TabsContent value="compliance" className="mt-6 space-y-8">
+            <ComplianceSettings />
+            <div className="pt-6 border-t border-border/60">
+              <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+                <FileText className="w-4 h-4" /> Tenant Documents
+              </h3>
+              <TenantDocumentsManager tenantId={tenant.id} />
+            </div>
+          </TabsContent>
+          <TabsContent value="integrations" className="mt-6 space-y-6">
+            <ActumSettings />
+            <CheckAltSettings />
           </TabsContent>
           <TabsContent value="billing" className="mt-6">
             <BillingTab tenant={tenant} onUpdated={onUpdated} />
@@ -295,8 +325,11 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
         </Tabs>
       </div>
     </div>
+    </TenantProvider>
   );
 }
+
+
 
 /* ---------------- Tabs ---------------- */
 
@@ -931,10 +964,27 @@ function TenantManagementTable({
               return (
                 <TableRow key={t.id} className={busyId === t.id ? "opacity-60" : ""}>
                   <TableCell className="font-medium">
-                    <button className="hover:underline text-left" onClick={() => onOpen(t)}>
-                      {t.name}
-                    </button>
-                    {t.is_system_tenant && <Badge variant="outline" className="ml-2 text-[10px]">System</Badge>}
+                    <div className="flex items-center gap-1">
+                      <button className="hover:underline text-left" onClick={() => onOpen(t)}>
+                        {t.name}
+                      </button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0"
+                        title="Preview as this tenant (opens their portal in a new tab)"
+                        onClick={() => {
+                          const url = (typeof window !== "undefined" && isCheckOpsHost(window.location.hostname))
+                            ? `${window.location.origin}/${t.slug}/checks`
+                            : `/wl/${t.slug}/checks`;
+                          window.open(url, "_blank", "noopener,noreferrer");
+                          toast({ title: `Previewing as ${t.name}`, description: "Opened tenant portal in a new tab." });
+                        }}
+                      >
+                        <Eye className="w-4 h-4 text-blue-400" />
+                      </Button>
+                      {t.is_system_tenant && <Badge variant="outline" className="text-[10px]">System</Badge>}
+                    </div>
                   </TableCell>
                   <TableCell className="font-mono text-xs">/{t.slug}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">
@@ -983,6 +1033,20 @@ function TenantManagementTable({
                     </Select>
                   </TableCell>
                   <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Preview as this tenant (opens their portal in a new tab)"
+                      onClick={() => {
+                        const url = (typeof window !== "undefined" && isCheckOpsHost(window.location.hostname))
+                          ? `${window.location.origin}/${t.slug}/checks`
+                          : `/wl/${t.slug}/checks`;
+                        window.open(url, "_blank", "noopener,noreferrer");
+                        toast({ title: `Previewing as ${t.name}`, description: "Opened tenant portal in a new tab." });
+                      }}
+                    >
+                      <Eye className="w-4 h-4 mr-1 text-blue-400" /> Preview
+                    </Button>
                     <Button variant="ghost" size="sm" onClick={() => setNotesTenant(t)}>
                       Notes
                     </Button>

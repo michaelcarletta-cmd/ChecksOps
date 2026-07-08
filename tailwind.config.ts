@@ -14,7 +14,7 @@ export default {
     },
     extend: {
       fontFamily: {
-        display: ['"Clash Display"', 'sans-serif'],
+        display: ['Manrope', 'sans-serif'],
         sans: ['Manrope', 'sans-serif'],
       },
       colors: {

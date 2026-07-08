@@ -574,16 +574,38 @@ export function PendingApprovalDeposits() {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["checkalt-pending-approvals"],
     queryFn: async () => {
+      // Two queries instead of an embedded check_intake_items(...) select —
+      // an embed that can't resolve (RLS, a deleted/inaccessible row) risks
+      // silently dropping the parent checkalt_deposits row depending on how
+      // PostgREST infers the join, which would hide a genuinely pending
+      // deposit with no error and no indication why. Fetching separately
+      // guarantees every pending_approval row always renders.
       const { data, error } = await supabase
         .from("checkalt_deposits")
         .select(
-          "id, amount, checkalt_reference, submitted_at, last_status_payload, check_intake_item_id, check_intake_items(check_number, carrier_name, payee_line, freedom_claim_number, detected_claim_number)",
+          "id, amount, checkalt_reference, submitted_at, last_status_payload, status_unresolved, check_intake_item_id",
         )
         .eq("status", "pending_approval")
         .order("submitted_at", { ascending: false, nullsFirst: false })
         .limit(50);
       if (error) throw error;
-      return data ?? [];
+      const rows = data ?? [];
+
+      const intakeIds = [...new Set(rows.map((r) => r.check_intake_item_id).filter(Boolean))];
+      let intakeById = new Map<string, any>();
+      if (intakeIds.length > 0) {
+        const { data: intakeRows, error: intakeErr } = await supabase
+          .from("check_intake_items")
+          .select("id, check_number, carrier_name, payee_line, freedom_claim_number, detected_claim_number")
+          .in("id", intakeIds as string[]);
+        if (intakeErr) throw intakeErr;
+        intakeById = new Map((intakeRows ?? []).map((r) => [r.id, r]));
+      }
+
+      return rows.map((r) => ({
+        ...r,
+        check_intake_items: r.check_intake_item_id ? intakeById.get(r.check_intake_item_id) ?? null : null,
+      }));
     },
     refetchInterval: 30_000,
   });
@@ -603,9 +625,14 @@ export function PendingApprovalDeposits() {
       return data;
     },
     onSuccess: (data: any) => {
+      const wasRejected = data?.status === "rejected";
       toast({
-        title: data?.status === "rejected" ? "Deposit rejected" : "Deposit approved",
-        description: data?.status_description ?? `Status: ${data?.status}`,
+        title: wasRejected ? "Deposit rejected by CheckAlt" : "Deposit approved",
+        description:
+          data?.status_description
+            ? `${data.status_description}${data?.api_status ? ` (code ${data.api_status})` : ""}`
+            : `Status: ${data?.status}`,
+        variant: wasRejected ? "destructive" : "default",
       });
       setRejectingId(null);
       setRejectNotes("");
@@ -616,6 +643,35 @@ export function PendingApprovalDeposits() {
     onError: (e: unknown) => {
       toast({
         title: "Approval call failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Bulk "Poll Now" — reconciles every checkalt_deposits row sitting in
+  // submitted/pending_approval against CheckAlt's real status right here in
+  // the operational queue, instead of only via the admin Settings panel or
+  // waiting up to 10 minutes for the cron.
+  const poll = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("checkalt-poll-status");
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data as { polled: number; updated: number; errors: number };
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Reconciled with CheckAlt",
+        description: `Checked ${data.polled}, updated ${data.updated}${data.errors ? `, ${data.errors} error(s)` : ""}`,
+      });
+      qc.invalidateQueries({ queryKey: ["checkalt-pending-approvals"] });
+      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+      qc.invalidateQueries({ queryKey: ["deposit-items"] });
+    },
+    onError: (e: unknown) => {
+      toast({
+        title: "Poll failed",
         description: e instanceof Error ? e.message : "Unknown error",
         variant: "destructive",
       });
@@ -635,15 +691,31 @@ export function PendingApprovalDeposits() {
         <p className="text-xs text-muted-foreground">
           No CheckAlt deposits awaiting approval.
         </p>
-        <Button size="sm" variant="ghost" onClick={() => refetch()}>
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="ghost" onClick={() => poll.mutate()} disabled={poll.isPending}>
+            {poll.isPending
+              ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              : <RefreshCw className="h-3 w-3 mr-1" />}
+            Poll Now
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => refetch()}>
+            Refresh
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-2">
+      <div className="flex items-center justify-end">
+        <Button size="sm" variant="outline" onClick={() => poll.mutate()} disabled={poll.isPending}>
+          {poll.isPending
+            ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            : <RefreshCw className="h-3 w-3 mr-1" />}
+          Poll Now
+        </Button>
+      </div>
       {data.map((row: any) => {
         const intake = row.check_intake_items;
         const statusDesc = row.last_status_payload?.statusDescription ?? row.last_status_payload?.reasonDescription;
@@ -671,6 +743,12 @@ export function PendingApprovalDeposits() {
                 {statusDesc && (
                   <div className="text-xs text-amber-300 mt-1">
                     CheckAlt: {statusDesc}
+                  </div>
+                )}
+                {row.status_unresolved && (
+                  <div className="text-xs text-destructive mt-1 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    Last poll couldn't read a status from CheckAlt — this row may be stale
                   </div>
                 )}
               </div>
@@ -865,9 +943,14 @@ export function CheckAltDepositHistory() {
                   const amount = Number(
                     it.amount ?? it.depositAmount ?? it.checkAmount ?? 0,
                   );
-                  // CheckAlt amounts come as cents in some responses
-                  const displayAmount =
-                    amount > 100000 && Number.isInteger(amount) ? amount / 100 : amount;
+                  // CheckAlt's FinCapture API sends/returns amounts as whole
+                  // cents, not decimal dollars (confirmed directly by
+                  // CheckAlt support, and confirmed here — a $780.00 check's
+                  // history entry came back as depositAmount: 78000). The
+                  // previous "only convert if > $100,000" heuristic missed
+                  // this because 78000 cents doesn't clear that threshold,
+                  // displaying it as $78,000.00 instead of $780.00.
+                  const displayAmount = amount / 100;
                   const submitted =
                     it.submittedDate ??
                     it.depositDate ??

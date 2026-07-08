@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Routes, Route, Navigate, useLocation, Link } from "react-router-dom";
 import { ArrowLeft, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { isMasterMerchant } from "@/lib/masterMerchant";
 
 const Payments = lazy(() => import("@/pages/Payments"));
 const CashJobs = lazy(() => import("@/pages/CashJobs"));
@@ -39,7 +40,7 @@ function CustomDomainRoutes() {
   const { user, loading: authLoading } = useAuth();
   const location = useLocation();
 
-  const { data: isMember, isLoading: memberLoading } = useQuery({
+  const { data: isTenantMember, isLoading: memberLoading } = useQuery({
     queryKey: ["tenant-membership", tenant?.id, user?.id],
     queryFn: async () => {
       if (!tenant?.id || !user?.id) return false;
@@ -53,6 +54,9 @@ function CustomDomainRoutes() {
     },
     enabled: !!tenant?.id && !!user?.id,
   });
+
+  // Master merchant can preview any tenant's Check Center
+  const isMember = !!isTenantMember || isMasterMerchant(user?.email);
 
   if (loading || authLoading || (user && memberLoading)) {
     return (
