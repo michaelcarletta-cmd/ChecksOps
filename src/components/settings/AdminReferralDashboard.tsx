@@ -54,11 +54,14 @@ export function AdminReferralDashboard() {
     },
   });
 
-  const totalDiscountsGiven = referralEvents
-    .filter((e: any) => e.status === "active")
-    .reduce((s: number, e: any) => s + e.discount_applied_cents, 0) / 100;
-
-  const totalReferrals = referralEvents.filter((e: any) => e.status === "active").length;
+  // Source of truth = tenants table (same field powering the "Active Discount"
+  // column below), so top-card metrics can never drift from the per-row values.
+  // referral_events is a separate log and may be missing rows if an insert
+  // failed while the tenant record was still updated.
+  const totalReferrals = tenants.filter((t: any) => t.referred_by).length;
+  const totalDiscountsGiven =
+    tenants.reduce((s: number, t: any) => s + (t.referral_discount_cents || 0), 0) / 100;
+  const eventCount = referralEvents.filter((e: any) => e.status === "active").length;
   const foundingPartners = tenants.filter((t: any) => t.is_founding_partner).length;
 
   const filteredTenants = tenants.filter((t: any) =>
