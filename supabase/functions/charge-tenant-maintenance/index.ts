@@ -269,6 +269,59 @@ serve(async (req) => {
         })
         .eq("id", payment.id);
 
+      // Fire invoice email (best-effort; never blocks the ACH result)
+      let invoice_sent = false;
+      let invoice_error: string | null = null;
+      if (sendInvoice) {
+        try {
+          let recipient = invoiceRecipient;
+          if (!recipient) {
+            // Fall back to the first tenant_user's email via auth admin
+            const { data: tu } = await supabase
+              .from("tenant_users")
+              .select("user_id, created_at")
+              .eq("tenant_id", t.id)
+              .order("created_at", { ascending: true })
+              .limit(1)
+              .maybeSingle();
+            if (tu?.user_id) {
+              const { data: u } = await supabase.auth.admin.getUserById(tu.user_id);
+              recipient = u?.user?.email ?? null;
+            }
+          }
+          if (recipient) {
+            const invoice_number = `INV-${period_start.slice(0, 7)}-${payment.id.slice(0, 6).toUpperCase()}`;
+            const lineItemsPayload = overrideLineItems ?? [
+              { label: "Monthly maintenance", detail: overridePeriodLabel || period_start.slice(0, 7), amount_cents: t.monthly_rate_cents ?? 0 },
+            ];
+            const { error: emailErr } = await supabase.functions.invoke("send-transactional-email", {
+              body: {
+                templateName: "tenant-invoice",
+                recipientEmail: recipient,
+                idempotencyKey: `invoice-${payment.id}`,
+                templateData: {
+                  tenant_name: t.name,
+                  period_label: overridePeriodLabel || period_start.slice(0, 7),
+                  invoice_number,
+                  line_items: lineItemsPayload,
+                  discount_cents: isConsolidated ? 0 : (t.referral_discount_cents ?? 0),
+                  total_cents: amount_cents,
+                  bank_last4: bank.chk_acct?.slice(-4),
+                  status: accepted ? "submitted" : "failed",
+                  charged_at: new Date().toISOString(),
+                },
+              },
+            });
+            if (emailErr) invoice_error = emailErr.message;
+            else invoice_sent = true;
+          } else {
+            invoice_error = "no_recipient";
+          }
+        } catch (e: any) {
+          invoice_error = e?.message ?? String(e);
+        }
+      }
+
       results.push({
         tenant_id: t.id,
         name: t.name,
@@ -276,6 +329,8 @@ serve(async (req) => {
         status: accepted ? "submitted" : "failed",
         actum_order_id: parsed.order_id,
         reason: parsed.reason,
+        invoice_sent,
+        invoice_error,
       });
     }
 
