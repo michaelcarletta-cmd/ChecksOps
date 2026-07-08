@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { DollarSign, Plus, Trash2 } from "lucide-react";
+import { DollarSign, Plus, Trash2, Zap, Loader2 } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 
 export function MaintenancePaymentsTracker() {
@@ -40,14 +40,37 @@ export function MaintenancePaymentsTracker() {
 
   const { data: payments = [], isLoading } = useQuery({
     queryKey: ["maintenance-payments"],
+    refetchOnMount: "always",
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tenant_maintenance_payments")
-        .select("id, tenant_id, amount_cents, period_start, period_end, method, reference, notes, received_at, tenants:tenant_id(name)")
+        .select("id, tenant_id, amount_cents, period_start, period_end, method, reference, notes, received_at, status, failure_reason, actum_order_id, tenants:tenant_id(name)")
         .order("received_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
+  });
+
+  const chargeMutation = useMutation({
+    mutationFn: async (dryRun: boolean) => {
+      const { data, error } = await supabase.functions.invoke("charge-tenant-maintenance", {
+        body: { dry_run: dryRun },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data: any, dryRun) => {
+      const skipped = (data?.results ?? []).filter((r: any) => r.skipped).length;
+      const charged = (data?.results ?? []).filter((r: any) => r.status === "submitted").length;
+      const failed = (data?.results ?? []).filter((r: any) => r.status === "failed").length;
+      toast.success(
+        dryRun
+          ? `Dry run: would charge ${(data?.results ?? []).filter((r: any) => r.would_charge_cents).length} tenant(s)`
+          : `Charged ${charged}, failed ${failed}, skipped ${skipped}`,
+      );
+      qc.invalidateQueries({ queryKey: ["maintenance-payments"] });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Charge run failed"),
   });
 
   const addMutation = useMutation({
@@ -104,9 +127,21 @@ export function MaintenancePaymentsTracker() {
               Track monthly maintenance fees received from tenants (after referral discounts). Total: <strong>${total.toFixed(2)}</strong> · This month: <strong>${thisMonthTotal.toFixed(2)}</strong>
             </CardDescription>
           </div>
-          <Button size="sm" onClick={() => setOpen(!open)}>
-            <Plus className="h-3.5 w-3.5 mr-1.5" /> Log payment
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => chargeMutation.mutate(true)} disabled={chargeMutation.isPending}>
+              {chargeMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Zap className="h-3.5 w-3.5 mr-1.5" />}
+              Dry run
+            </Button>
+            <Button size="sm" variant="default" onClick={() => {
+              if (!confirm("Run auto-debit for all eligible tenants now? This will pull the monthly fee via Actum ACH.")) return;
+              chargeMutation.mutate(false);
+            }} disabled={chargeMutation.isPending}>
+              <Zap className="h-3.5 w-3.5 mr-1.5" /> Run charges
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setOpen(!open)}>
+              <Plus className="h-3.5 w-3.5 mr-1.5" /> Log manual
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -176,6 +211,7 @@ export function MaintenancePaymentsTracker() {
                 <TableHead>Tenant</TableHead>
                 <TableHead>Period</TableHead>
                 <TableHead>Method</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Reference</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead />
@@ -183,16 +219,22 @@ export function MaintenancePaymentsTracker() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={7} className="text-center text-xs py-8 text-muted-foreground">Loading…</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center text-xs py-8 text-muted-foreground">Loading…</TableCell></TableRow>
               ) : payments.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center text-xs py-8 text-muted-foreground">No payments logged yet.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center text-xs py-8 text-muted-foreground">No payments logged yet.</TableCell></TableRow>
               ) : payments.map((p: any) => (
                 <TableRow key={p.id}>
                   <TableCell className="text-xs">{format(new Date(p.received_at), "MMM d, yyyy")}</TableCell>
                   <TableCell className="text-xs font-medium">{p.tenants?.name ?? "—"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{format(new Date(p.period_start), "MMM d")} – {format(new Date(p.period_end), "MMM d")}</TableCell>
                   <TableCell><Badge variant="outline" className="text-[10px]">{p.method}</Badge></TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{p.reference || "—"}</TableCell>
+                  <TableCell>
+                    <Badge variant={p.status === "submitted" || p.status === "cleared" ? "default" : p.status === "failed" || p.status === "returned" ? "destructive" : "outline"} className="text-[10px]">
+                      {p.status ?? "recorded"}
+                    </Badge>
+                    {p.failure_reason && <div className="text-[10px] text-destructive mt-0.5">{p.failure_reason}</div>}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{p.reference || p.actum_order_id || "—"}</TableCell>
                   <TableCell className="text-right text-xs font-bold tabular-nums">${(p.amount_cents / 100).toFixed(2)}</TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(p.id)} className="h-7 w-7">
