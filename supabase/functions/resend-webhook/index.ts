@@ -135,6 +135,22 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Also append status rows to email_send_log for the health dashboard
+  const templateTag = tags.find((t) => t.name === 'template')?.value || 'unknown'
+  const logStatus = reason === 'bounce' ? 'bounced' : reason === 'complaint' ? 'complained' : 'suppressed'
+  const messageId = data?.email_id || data?.id || crypto.randomUUID()
+  await admin.from('email_send_log').insert(
+    to.map((email) => ({
+      tenant_id: tenantId,
+      message_id: `webhook-${messageId}-${email}`,
+      template_name: templateTag,
+      recipient_email: email.toLowerCase(),
+      status: logStatus,
+      error_message: data?.bounce?.message || null,
+      metadata: { provider: 'resend', event_type: type },
+    })),
+  )
+
   return new Response(JSON.stringify({ suppressed: to.length, tenant_id: tenantId, reason }), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })

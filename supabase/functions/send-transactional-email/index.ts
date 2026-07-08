@@ -138,7 +138,7 @@ Deno.serve(async (req) => {
 
   if (suppressed) {
     // Log the suppressed attempt
-    await supabase.from('email_send_log').insert({
+    await supabase.from('email_send_log').insert({ tenant_id: tenantId ?? null,
       message_id: messageId,
       template_name: templateName,
       recipient_email: effectiveRecipient,
@@ -171,7 +171,7 @@ Deno.serve(async (req) => {
       error: tokenLookupError,
       email: normalizedEmail,
     })
-    await supabase.from('email_send_log').insert({
+    await supabase.from('email_send_log').insert({ tenant_id: tenantId ?? null,
       message_id: messageId,
       template_name: templateName,
       recipient_email: effectiveRecipient,
@@ -204,7 +204,7 @@ Deno.serve(async (req) => {
       console.error('Failed to create unsubscribe token', {
         error: tokenError,
       })
-      await supabase.from('email_send_log').insert({
+      await supabase.from('email_send_log').insert({ tenant_id: tenantId ?? null,
         message_id: messageId,
         template_name: templateName,
         recipient_email: effectiveRecipient,
@@ -233,7 +233,7 @@ Deno.serve(async (req) => {
         error: reReadError,
         email: normalizedEmail,
       })
-      await supabase.from('email_send_log').insert({
+      await supabase.from('email_send_log').insert({ tenant_id: tenantId ?? null,
         message_id: messageId,
         template_name: templateName,
         recipient_email: effectiveRecipient,
@@ -255,7 +255,7 @@ Deno.serve(async (req) => {
     console.warn('Unsubscribe token already used but email not suppressed', {
       email: normalizedEmail,
     })
-    await supabase.from('email_send_log').insert({
+    await supabase.from('email_send_log').insert({ tenant_id: tenantId ?? null,
       message_id: messageId,
       template_name: templateName,
       recipient_email: effectiveRecipient,
@@ -289,7 +289,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err)
     console.error('Failed to render email or resolve sender', { templateName, error: errorMsg })
-    await supabase.from('email_send_log').insert({
+    await supabase.from('email_send_log').insert({ tenant_id: tenantId ?? null,
       message_id: messageId,
       template_name: templateName,
       recipient_email: effectiveRecipient,
@@ -310,7 +310,7 @@ Deno.serve(async (req) => {
 
     if (!lovableKey || !resendKey) {
       console.error('Resend credentials missing for custom-domain tenant', { tenantId })
-      await supabase.from('email_send_log').insert({
+      await supabase.from('email_send_log').insert({ tenant_id: tenantId ?? null,
         message_id: messageId,
         template_name: templateName,
         recipient_email: effectiveRecipient,
@@ -323,7 +323,7 @@ Deno.serve(async (req) => {
       })
     }
 
-    await supabase.from('email_send_log').insert({
+    await supabase.from('email_send_log').insert({ tenant_id: tenantId ?? null,
       message_id: messageId,
       template_name: templateName,
       recipient_email: effectiveRecipient,
@@ -356,7 +356,7 @@ Deno.serve(async (req) => {
 
     if (!resendRes.ok) {
       console.error('Resend send failed', resendRes.status, resendBody)
-      await supabase.from('email_send_log').insert({
+      await supabase.from('email_send_log').insert({ tenant_id: tenantId ?? null,
         message_id: messageId,
         template_name: templateName,
         recipient_email: effectiveRecipient,
@@ -369,7 +369,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    await supabase.from('email_send_log').insert({
+    await supabase.from('email_send_log').insert({ tenant_id: tenantId ?? null,
       message_id: messageId,
       template_name: templateName,
       recipient_email: effectiveRecipient,
@@ -388,7 +388,7 @@ Deno.serve(async (req) => {
   }
 
   // 6b. Platform sender: enqueue for the Lovable queue dispatcher.
-  await supabase.from('email_send_log').insert({
+  await supabase.from('email_send_log').insert({ tenant_id: tenantId ?? null,
     message_id: messageId,
     template_name: templateName,
     recipient_email: effectiveRecipient,
@@ -422,7 +422,7 @@ Deno.serve(async (req) => {
       effectiveRecipient,
     })
 
-    await supabase.from('email_send_log').insert({
+    await supabase.from('email_send_log').insert({ tenant_id: tenantId ?? null,
       message_id: messageId,
       template_name: templateName,
       recipient_email: effectiveRecipient,
