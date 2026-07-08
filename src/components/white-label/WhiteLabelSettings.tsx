@@ -169,7 +169,6 @@ export function WhiteLabelSettings() {
             <EmailSenderSettings />
             <TenantEmailHealthPanel />
           </TabsContent>
-          </TabsContent>
 
           <TabsContent value="compliance" className="space-y-8">
             <ComplianceSettings />
