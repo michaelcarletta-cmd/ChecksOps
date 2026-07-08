@@ -208,7 +208,8 @@ serve(async (req) => {
       params.append("action_code", "D"); // Debit
       params.append("creditflag", "0");
       params.append("currency", "US");
-      params.append("merordernumber", `maint_${payment.id}`);
+      const merTag = isConsolidated ? `cons_${payment.id}` : `maint_${payment.id}`;
+      params.append("merordernumber", merTag);
       params.append("postback", "1");
       params.append("idempotence", idempotence_key);
 
