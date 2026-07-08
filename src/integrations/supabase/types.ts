@@ -20292,6 +20292,10 @@ export type Database = {
         Args: { _check_id: string }
         Returns: number
       }
+      set_vault_secret: {
+        Args: { secret_name: string; secret_value: string }
+        Returns: undefined
+      }
       st_3dclosestpoint: {
         Args: { geom1: unknown; geom2: unknown }
         Returns: unknown
