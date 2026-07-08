@@ -123,10 +123,10 @@ export function TenantBillingAccountPanel() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Landmark className="h-4 w-4" />
-          Maintenance fee auto-billing
+          Monthly fee auto-billing
         </CardTitle>
         <CardDescription>
-          Choose which of your verified bank accounts ChecksOps should debit each month for maintenance fees. All bank accounts are added through Plaid / Authentecheck in the Bank Account section — no manual entry.
+          Choose which of your verified bank accounts ChecksOps should debit each month for <strong>maintenance fees, check processing fees (CheckAlt), and payment processing fees (Actum)</strong>. All bank accounts are added through Plaid / Authentecheck in the Bank Account section — no manual entry.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
