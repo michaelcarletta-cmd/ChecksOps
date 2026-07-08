@@ -90,6 +90,7 @@ export function ReferralSettings() {
       });
       setReferralCodeInput("");
       qc.invalidateQueries({ queryKey: ["tenant-referral"] });
+      qc.invalidateQueries({ queryKey: ["referral-events"] });
     },
     onError: (error: any) => {
       toast({
