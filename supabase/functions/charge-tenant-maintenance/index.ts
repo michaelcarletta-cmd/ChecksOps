@@ -62,14 +62,14 @@ serve(async (req) => {
     const targetTenantIds: string[] | null = body?.tenant_ids ?? null;
     const dryRun: boolean = !!body?.dry_run;
 
-    // Platform Actum config
-    const parentId = Deno.env.get("PLATFORM_ACTUM_PARENT_ID");
-    const subId = Deno.env.get("PLATFORM_ACTUM_SUB_ID");
-    const syspass = Deno.env.get("PLATFORM_ACTUM_SYSPASS");
-    const apiUser = Deno.env.get("PLATFORM_ACTUM_USERNAME");
-    const apiPass = Deno.env.get("PLATFORM_ACTUM_PASSWORD");
+    // Actum config (reuses the same merchant credentials used for disbursements)
+    const parentId = Deno.env.get("ACTUM_PARENT_ID");
+    const subId = Deno.env.get("ACTUM_SUB_ID");
+    const syspass = Deno.env.get("ACTUM_SYSPASS");
+    const apiUser = Deno.env.get("ACTUM_USERNAME");
+    const apiPass = Deno.env.get("ACTUM_PASSWORD");
     if (!dryRun && (!parentId || !subId)) {
-      throw new Error("Platform Actum credentials not configured (PLATFORM_ACTUM_PARENT_ID / PLATFORM_ACTUM_SUB_ID)");
+      throw new Error("Actum credentials not configured (ACTUM_PARENT_ID / ACTUM_SUB_ID)");
     }
     const keyB64 = Deno.env.get("TENANT_BILLING_ENCRYPTION_KEY");
     if (!keyB64) throw new Error("TENANT_BILLING_ENCRYPTION_KEY not configured");
