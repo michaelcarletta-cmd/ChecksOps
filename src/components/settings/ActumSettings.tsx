@@ -11,7 +11,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useTenant } from "@/contexts/TenantContext";
-import { Loader2, CreditCard, ShieldCheck, AlertTriangle, Eye, EyeOff, FlaskConical, Rocket } from "lucide-react";
+import { Loader2, CreditCard, ShieldCheck, AlertTriangle, Eye, EyeOff, FlaskConical, Rocket, Database } from "lucide-react";
 
 type Env = "test" | "production";
 
@@ -112,6 +112,21 @@ export function ActumSettings() {
     onError: (e: any) => {
       toast({ title: "Save failed", description: e.message, variant: "destructive" });
     },
+  });
+
+  const fixEmailQueueAuth = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("setup-email-queue-secrets");
+      if (error) {
+        let msg = error.message ?? "Failed to configure email queue secrets";
+        try { const b = await (error as any).context?.json?.(); if (b?.error) msg = b.error; } catch { /* ignore */ }
+        throw new Error(msg);
+      }
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return (data as any)?.message as string;
+    },
+    onSuccess: (message) => toast({ title: "Email queue authentication fixed", description: message }),
+    onError: (e: any) => toast({ title: "Fix failed", description: e.message, variant: "destructive" }),
   });
 
   if (!isAdmin) {
@@ -341,6 +356,32 @@ export function ActumSettings() {
             <p className="font-medium mb-1">Actum Order IDs</p>
             <p>Our system uses <code>payment_[ID]</code> for individual payments and <code>split_[ID]</code> for disbursement splits. Make sure your Actum account is configured to send these back in the <code>orderinfo</code> field.</p>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Database className="h-4 w-4 text-primary" />
+            Email queue authentication (one-time fix)
+          </CardTitle>
+          <CardDescription>
+            Scheduled jobs (transactional email dispatch, CheckAlt status polling) authenticate
+            via vault-stored secrets that were never actually created for this project. This
+            populates them using this function's own credentials — nothing needs to be typed
+            or pasted anywhere. Safe to run more than once.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => fixEmailQueueAuth.mutate()}
+            disabled={fixEmailQueueAuth.isPending}
+          >
+            {fixEmailQueueAuth.isPending && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
+            Fix email queue authentication
+          </Button>
         </CardContent>
       </Card>
     </div>
