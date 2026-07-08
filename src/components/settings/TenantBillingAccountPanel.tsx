@@ -123,10 +123,10 @@ export function TenantBillingAccountPanel() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Landmark className="h-4 w-4" />
-          Maintenance fee auto-billing
+          Monthly fee auto-billing
         </CardTitle>
         <CardDescription>
-          Choose which of your verified bank accounts ChecksOps should debit each month for maintenance fees. All bank accounts are added through Plaid / Authentecheck in the Bank Account section — no manual entry.
+          Choose which of your verified bank accounts ChecksOps should debit each month for <strong>maintenance fees, check processing fees (CheckAlt), and payment processing fees (Actum)</strong>. All bank accounts are added through Plaid / Authentecheck in the Bank Account section — no manual entry.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -171,7 +171,7 @@ export function TenantBillingAccountPanel() {
                   onCheckedChange={(c) => toggleAutoDebit.mutate(!!c)}
                 />
                 <Label htmlFor="auto-debit" className="text-xs cursor-pointer">
-                  Enable monthly auto-debit
+                  Enable monthly auto-debit (maintenance + check processing + payment processing)
                 </Label>
               </div>
             )}
@@ -204,7 +204,7 @@ export function TenantBillingAccountPanel() {
                   className="mt-0.5"
                 />
                 <Label htmlFor="ach-auth" className="text-xs leading-snug cursor-pointer">
-                  I authorize ChecksOps to initiate monthly ACH debits from the selected account for maintenance fees, until I revoke this authorization in writing. Amounts may vary by referral discounts applied.
+                  I authorize ChecksOps to initiate monthly ACH debits from the selected account for <strong>maintenance fees, check processing fees (CheckAlt), and payment processing fees (Actum)</strong>, until I revoke this authorization in writing. Amounts may vary based on monthly usage and any referral discounts applied.
                 </Label>
               </div>
 
