@@ -886,8 +886,10 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const [checkalt, setCheckalt] = useState<{ count: number; amount: number } | null>(null);
   const [actum, setActum] = useState<{ count: number; amountOut: number } | null>(null);
   const [maintenance, setMaintenance] = useState<any[]>([]);
+  const [tenantMeta, setTenantMeta] = useState<{ monthly_rate_cents: number; referral_discount_cents: number; is_founding_partner: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pulling, setPulling] = useState(false);
 
   const range = (() => {
     if (scope === "month") {
@@ -907,7 +909,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
     const endISO = new Date(range.end.getTime() - 1).toISOString();
 
     try {
-      const [usageRes, checkaltRes, actumRes, maintRes] = await Promise.all([
+      const [usageRes, checkaltRes, actumRes, maintRes, tenantRes] = await Promise.all([
         supabase.rpc("get_tenant_check_usage", {
           _tenant_id: tenantId,
           _month_start: startISO,
@@ -932,6 +934,11 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
           .gte("received_at", range.start.toISOString())
           .lt("received_at", range.end.toISOString())
           .order("received_at", { ascending: false }),
+        supabase
+          .from("tenants")
+          .select("monthly_rate_cents, referral_discount_cents, is_founding_partner")
+          .eq("id", tenantId)
+          .maybeSingle(),
       ]);
       if (usageRes.error) throw usageRes.error;
       setData(usageRes.data);
@@ -946,6 +953,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
           .reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0),
       });
       setMaintenance(maintRes.data ?? []);
+      setTenantMeta(tenantRes.data as any ?? null);
     } catch (e: any) {
       setError(e.message);
     }
@@ -965,6 +973,61 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
     .reduce((s, r) => s + (r.amount_cents ?? 0), 0);
   const months = Array.from({ length: 12 }, (_, i) => ({ v: i, l: new Date(2020, i, 1).toLocaleString("en-US", { month: "long" }) }));
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
+
+  // Consolidated billing: check processing fees ($4/check), Actum disbursement fees ($1 credit),
+  // maintenance for the month (monthly_rate - referral discount). Applies only when scope=month.
+  const CHECK_FEE_CENTS = 400;
+  const ACTUM_FEE_CENTS = 100;
+  const checkaltFeeCents = (checkalt?.count ?? 0) * CHECK_FEE_CENTS;
+  const actumFeeCents = (actum?.count ?? 0) * ACTUM_FEE_CENTS;
+  const grossMaintenance = tenantMeta?.monthly_rate_cents ?? 0;
+  const discount = tenantMeta?.referral_discount_cents ?? 0;
+  const netMaintenance = Math.max(0, grossMaintenance - discount);
+  const consolidatedTotalCents = checkaltFeeCents + actumFeeCents + netMaintenance;
+
+  const pullConsolidated = async () => {
+    if (scope !== "month") {
+      sonnerToast.error("Switch to a specific month to pull consolidated billing.");
+      return;
+    }
+    if (consolidatedTotalCents <= 0) {
+      sonnerToast.warning("Nothing to charge for this period.");
+      return;
+    }
+    const confirmed = window.confirm(
+      `Pull $${(consolidatedTotalCents / 100).toFixed(2)} from ${tenantName}'s verified bank account and email them an invoice?`
+    );
+    if (!confirmed) return;
+    setPulling(true);
+    const line_items = [
+      checkaltFeeCents > 0 && { label: "Check processing", detail: `${checkalt?.count ?? 0} checks × $4.00`, amount_cents: checkaltFeeCents },
+      actumFeeCents > 0 && { label: "Actum disbursements", detail: `${actum?.count ?? 0} × $1.00`, amount_cents: actumFeeCents },
+      grossMaintenance > 0 && { label: "Monthly maintenance", detail: range.label, amount_cents: grossMaintenance },
+      discount > 0 && { label: "Referral discount", detail: "applied to maintenance", amount_cents: -discount },
+    ].filter(Boolean);
+
+    const { data: resp, error } = await supabase.functions.invoke("charge-tenant-maintenance", {
+      body: {
+        tenant_ids: [tenantId],
+        override_amount_cents: consolidatedTotalCents,
+        override_kind: "consolidated",
+        line_items,
+        period_label: range.label,
+        send_invoice: true,
+      },
+    });
+    setPulling(false);
+    if (error) return sonnerToast.error(error.message);
+    const r = (resp as any)?.results?.[0];
+    if (r?.skipped) sonnerToast.warning(`Skipped: ${r.skipped}`);
+    else if (r?.error) sonnerToast.error(r.error);
+    else if (r?.status === "submitted") {
+      sonnerToast.success(
+        `ACH debit for $${(r.amount_cents / 100).toFixed(2)} submitted${r.invoice_sent ? " · invoice emailed" : r.invoice_error ? ` · invoice: ${r.invoice_error}` : ""}`
+      );
+      load();
+    } else sonnerToast.info(JSON.stringify(r ?? resp));
+  };
 
   return (
     <Card>
@@ -1033,6 +1096,71 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                 <div className="text-[10px] text-muted-foreground mt-1">Same Day {sameDay} · Instant {instant}</div>
               </div>
             </div>
+
+            {/* Consolidated billing table — one ACH pull for CheckAlt + Actum + maintenance */}
+            {scope === "month" && (
+              <div className="rounded-lg border">
+                <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+                  <div>
+                    <h4 className="text-sm font-semibold">Consolidated Billing — {range.label}</h4>
+                    <p className="text-[11px] text-muted-foreground">
+                      One ACH pull covers all ChecksOps fees for the month. Invoice is emailed automatically.
+                    </p>
+                  </div>
+                  <Button size="sm" onClick={pullConsolidated} disabled={pulling || consolidatedTotalCents <= 0}>
+                    {pulling ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+                    Pull {fmt(consolidatedTotalCents)} & email invoice
+                  </Button>
+                </div>
+                <table className="w-full text-sm">
+                  <thead className="text-[10px] uppercase text-muted-foreground bg-muted/20">
+                    <tr>
+                      <th className="text-left px-4 py-2 font-medium">Line item</th>
+                      <th className="text-right px-4 py-2 font-medium">Usage</th>
+                      <th className="text-right px-4 py-2 font-medium">Rate</th>
+                      <th className="text-right px-4 py-2 font-medium">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    <tr>
+                      <td className="px-4 py-2">CheckAlt check processing</td>
+                      <td className="text-right px-4 py-2 tabular-nums">{checkalt?.count ?? 0} checks</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$4.00</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(checkaltFeeCents)}</td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-2">Actum disbursements</td>
+                      <td className="text-right px-4 py-2 tabular-nums">{actum?.count ?? 0} txns</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$1.00</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(actumFeeCents)}</td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-2">
+                        Monthly maintenance
+                        {tenantMeta?.is_founding_partner && (
+                          <Badge variant="outline" className="ml-2 text-[9px] h-4 border-yellow-500/40 text-yellow-600">Founding partner</Badge>
+                        )}
+                      </td>
+                      <td className="text-right px-4 py-2 tabular-nums">1 mo</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">{fmt(grossMaintenance)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(grossMaintenance)}</td>
+                    </tr>
+                    {discount > 0 && (
+                      <tr>
+                        <td className="px-4 py-2 text-emerald-600">Referral discount</td>
+                        <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">—</td>
+                        <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">—</td>
+                        <td className="text-right px-4 py-2 tabular-nums font-medium text-emerald-600">−{fmt(discount)}</td>
+                      </tr>
+                    )}
+                    <tr className="bg-muted/30">
+                      <td className="px-4 py-2 font-semibold" colSpan={3}>Total to pull</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-bold text-base">{fmt(consolidatedTotalCents)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             {maintenance.length > 0 && (
               <div>

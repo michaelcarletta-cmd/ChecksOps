@@ -61,6 +61,21 @@ serve(async (req) => {
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
     const targetTenantIds: string[] | null = body?.tenant_ids ?? null;
     const dryRun: boolean = !!body?.dry_run;
+    // Optional consolidated-billing overrides (per-tenant, so single tenant only)
+    const overrideAmountCents: number | null =
+      typeof body?.override_amount_cents === "number" ? body.override_amount_cents : null;
+    const overrideLineItems: Array<{ label: string; detail?: string; amount_cents: number }> | null =
+      Array.isArray(body?.line_items) ? body.line_items : null;
+    const overrideKind: string | null = body?.override_kind ?? null; // e.g. "consolidated"
+    const sendInvoice: boolean = body?.send_invoice !== false; // default true
+    const invoiceRecipient: string | null = body?.invoice_recipient ?? null;
+    const overridePeriodLabel: string | null = body?.period_label ?? null;
+    if (overrideAmountCents !== null && (!targetTenantIds || targetTenantIds.length !== 1)) {
+      return new Response(
+        JSON.stringify({ error: "override_amount_cents requires exactly one tenant_id" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     // Actum config (reuses the same merchant credentials used for disbursements)
     const parentId = Deno.env.get("ACTUM_PARENT_ID");
@@ -87,22 +102,30 @@ serve(async (req) => {
 
     const results: any[] = [];
     for (const t of tenants ?? []) {
-      const amount_cents = Math.max(0, (t.monthly_rate_cents ?? 0) - (t.referral_discount_cents ?? 0));
+      const isConsolidated = overrideAmountCents !== null;
+      const amount_cents = isConsolidated
+        ? Math.max(0, overrideAmountCents!)
+        : Math.max(0, (t.monthly_rate_cents ?? 0) - (t.referral_discount_cents ?? 0));
       if (amount_cents <= 0) {
         results.push({ tenant_id: t.id, name: t.name, skipped: "zero_amount" });
         continue;
       }
 
-      // Idempotency: one charge per tenant per period
-      const idempotence_key = `maint_${t.id}_${period_start}`;
-      const { data: existing } = await supabase
-        .from("tenant_maintenance_payments")
-        .select("id, status")
-        .eq("idempotence_key", idempotence_key)
-        .maybeSingle();
-      if (existing) {
-        results.push({ tenant_id: t.id, name: t.name, skipped: "already_charged", status: existing.status });
-        continue;
+      // Idempotency: monthly-maintenance auto-debit is 1 per tenant per period.
+      // Consolidated pulls are ad-hoc, so key them by timestamp to allow multiple per period.
+      const idempotence_key = isConsolidated
+        ? `consolidated_${t.id}_${Date.now()}`
+        : `maint_${t.id}_${period_start}`;
+      if (!isConsolidated) {
+        const { data: existing } = await supabase
+          .from("tenant_maintenance_payments")
+          .select("id, status")
+          .eq("idempotence_key", idempotence_key)
+          .maybeSingle();
+        if (existing) {
+          results.push({ tenant_id: t.id, name: t.name, skipped: "already_charged", status: existing.status });
+          continue;
+        }
       }
 
       const { data: account } = await supabase
@@ -149,6 +172,9 @@ serve(async (req) => {
       }
 
       // Insert pending payment first
+      const notesText = isConsolidated
+        ? `Consolidated pull (${overrideKind || "consolidated"}) for ${overridePeriodLabel || period_start.slice(0, 7)}${overrideLineItems ? ": " + overrideLineItems.map((li) => `${li.label} ${(li.amount_cents / 100).toFixed(2)}`).join(" · ") : ""}`
+        : `Auto-debit for ${period_start.slice(0, 7)}`;
       const { data: payment, error: payErr } = await supabase
         .from("tenant_maintenance_payments")
         .insert({
@@ -156,11 +182,11 @@ serve(async (req) => {
           amount_cents,
           period_start,
           period_end,
-          method: "actum_ach",
+          method: isConsolidated ? "actum_ach_consolidated" : "actum_ach",
           status: "pending",
           idempotence_key,
           recorded_by: actorUserId,
-          notes: `Auto-debit for ${period_start.slice(0, 7)}`,
+          notes: notesText,
         })
         .select()
         .single();
@@ -182,7 +208,8 @@ serve(async (req) => {
       params.append("action_code", "D"); // Debit
       params.append("creditflag", "0");
       params.append("currency", "US");
-      params.append("merordernumber", `maint_${payment.id}`);
+      const merTag = isConsolidated ? `cons_${payment.id}` : `maint_${payment.id}`;
+      params.append("merordernumber", merTag);
       params.append("postback", "1");
       params.append("idempotence", idempotence_key);
 
@@ -220,7 +247,7 @@ serve(async (req) => {
         actum_order_id: parsed.order_id,
         actum_history_id: parsed.history_id,
         consumer_unique: parsed.consumer_unique,
-        mer_order_number: `maint_${payment.id}`,
+        mer_order_number: merTag,
         transaction_type: "debit",
         amount: amount_cents / 100,
         status: accepted ? "accepted" : "declined",
@@ -242,6 +269,59 @@ serve(async (req) => {
         })
         .eq("id", payment.id);
 
+      // Fire invoice email (best-effort; never blocks the ACH result)
+      let invoice_sent = false;
+      let invoice_error: string | null = null;
+      if (sendInvoice) {
+        try {
+          let recipient = invoiceRecipient;
+          if (!recipient) {
+            // Fall back to the first tenant_user's email via auth admin
+            const { data: tu } = await supabase
+              .from("tenant_users")
+              .select("user_id, created_at")
+              .eq("tenant_id", t.id)
+              .order("created_at", { ascending: true })
+              .limit(1)
+              .maybeSingle();
+            if (tu?.user_id) {
+              const { data: u } = await supabase.auth.admin.getUserById(tu.user_id);
+              recipient = u?.user?.email ?? null;
+            }
+          }
+          if (recipient) {
+            const invoice_number = `INV-${period_start.slice(0, 7)}-${payment.id.slice(0, 6).toUpperCase()}`;
+            const lineItemsPayload = overrideLineItems ?? [
+              { label: "Monthly maintenance", detail: overridePeriodLabel || period_start.slice(0, 7), amount_cents: t.monthly_rate_cents ?? 0 },
+            ];
+            const { error: emailErr } = await supabase.functions.invoke("send-transactional-email", {
+              body: {
+                templateName: "tenant-invoice",
+                recipientEmail: recipient,
+                idempotencyKey: `invoice-${payment.id}`,
+                templateData: {
+                  tenant_name: t.name,
+                  period_label: overridePeriodLabel || period_start.slice(0, 7),
+                  invoice_number,
+                  line_items: lineItemsPayload,
+                  discount_cents: isConsolidated ? 0 : (t.referral_discount_cents ?? 0),
+                  total_cents: amount_cents,
+                  bank_last4: bank.chk_acct?.slice(-4),
+                  status: accepted ? "submitted" : "failed",
+                  charged_at: new Date().toISOString(),
+                },
+              },
+            });
+            if (emailErr) invoice_error = emailErr.message;
+            else invoice_sent = true;
+          } else {
+            invoice_error = "no_recipient";
+          }
+        } catch (e: any) {
+          invoice_error = e?.message ?? String(e);
+        }
+      }
+
       results.push({
         tenant_id: t.id,
         name: t.name,
@@ -249,6 +329,8 @@ serve(async (req) => {
         status: accepted ? "submitted" : "failed",
         actum_order_id: parsed.order_id,
         reason: parsed.reason,
+        invoice_sent,
+        invoice_error,
       });
     }
 
