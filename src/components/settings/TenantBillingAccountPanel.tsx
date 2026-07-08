@@ -171,7 +171,7 @@ export function TenantBillingAccountPanel() {
                   onCheckedChange={(c) => toggleAutoDebit.mutate(!!c)}
                 />
                 <Label htmlFor="auto-debit" className="text-xs cursor-pointer">
-                  Enable monthly auto-debit
+                  Enable monthly auto-debit (maintenance + check processing + payment processing)
                 </Label>
               </div>
             )}
