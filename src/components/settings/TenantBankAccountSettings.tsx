@@ -30,13 +30,16 @@ export function TenantBankAccountSettings() {
     queryKey: ["tenant-primary-accounts", tenant?.id],
     enabled: !!tenant?.id,
     queryFn: async () => {
+      // Show every active bank account this tenant owns (matches what the
+      // Disbursements panel sees). Verified accounts saved via Authentecheck
+      // may not carry is_primary=true, so we don't filter on it.
       const { data, error } = await supabase
         .from("stakeholder_accounts")
-        .select("id, nickname, chk_acct, acct_type, is_active, custname, verification_status, verified_at")
+        .select("id, nickname, chk_acct, acct_type, is_active, custname, verification_status, verified_at, is_primary")
         .eq("tenant_id", tenant!.id)
-        .eq("is_primary", true)
         .eq("is_active", true)
-        .order("created_at", { ascending: true });
+        .order("verified_at", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
