@@ -167,6 +167,12 @@ serve(async (req) => {
     params.append("dynamic_saleurl", postbackUrl);
     params.append("authdata", "1");
     params.append("identity", "1");
+    // Actum enabled the "verifiedcons" bypass for this account — without it, a
+    // consumer's first transaction is held for two business days and any
+    // repeat attempt with the same routing/account (e.g. repeated sandbox
+    // testing with the same test bank account) is declined as "Uncleared
+    // Transaction" during Transaction Processing.
+    params.append("verifiedcons", "1");
     params.append("meruser", meruser);
     params.append("merpass", merpass);
     params.append("syspass", syspass);
