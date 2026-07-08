@@ -165,6 +165,12 @@ export function WhiteLabelSettings() {
             <ReferralSettings />
           </TabsContent>
 
+          <TabsContent value="email" className="space-y-4">
+            <EmailSenderSettings />
+            <TenantEmailHealthPanel />
+          </TabsContent>
+          </TabsContent>
+
           <TabsContent value="compliance" className="space-y-8">
             <ComplianceSettings />
             {isAdmin && <GLBASecurityEventsLog />}
