@@ -1097,6 +1097,71 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
               </div>
             </div>
 
+            {/* Consolidated billing table — one ACH pull for CheckAlt + Actum + maintenance */}
+            {scope === "month" && (
+              <div className="rounded-lg border">
+                <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+                  <div>
+                    <h4 className="text-sm font-semibold">Consolidated Billing — {range.label}</h4>
+                    <p className="text-[11px] text-muted-foreground">
+                      One ACH pull covers all ChecksOps fees for the month. Invoice is emailed automatically.
+                    </p>
+                  </div>
+                  <Button size="sm" onClick={pullConsolidated} disabled={pulling || consolidatedTotalCents <= 0}>
+                    {pulling ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+                    Pull {fmt(consolidatedTotalCents)} & email invoice
+                  </Button>
+                </div>
+                <table className="w-full text-sm">
+                  <thead className="text-[10px] uppercase text-muted-foreground bg-muted/20">
+                    <tr>
+                      <th className="text-left px-4 py-2 font-medium">Line item</th>
+                      <th className="text-right px-4 py-2 font-medium">Usage</th>
+                      <th className="text-right px-4 py-2 font-medium">Rate</th>
+                      <th className="text-right px-4 py-2 font-medium">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    <tr>
+                      <td className="px-4 py-2">CheckAlt check processing</td>
+                      <td className="text-right px-4 py-2 tabular-nums">{checkalt?.count ?? 0} checks</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$4.00</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(checkaltFeeCents)}</td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-2">Actum disbursements</td>
+                      <td className="text-right px-4 py-2 tabular-nums">{actum?.count ?? 0} txns</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$1.00</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(actumFeeCents)}</td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-2">
+                        Monthly maintenance
+                        {tenantMeta?.is_founding_partner && (
+                          <Badge variant="outline" className="ml-2 text-[9px] h-4 border-yellow-500/40 text-yellow-600">Founding partner</Badge>
+                        )}
+                      </td>
+                      <td className="text-right px-4 py-2 tabular-nums">1 mo</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">{fmt(grossMaintenance)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(grossMaintenance)}</td>
+                    </tr>
+                    {discount > 0 && (
+                      <tr>
+                        <td className="px-4 py-2 text-emerald-600">Referral discount</td>
+                        <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">—</td>
+                        <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">—</td>
+                        <td className="text-right px-4 py-2 tabular-nums font-medium text-emerald-600">−{fmt(discount)}</td>
+                      </tr>
+                    )}
+                    <tr className="bg-muted/30">
+                      <td className="px-4 py-2 font-semibold" colSpan={3}>Total to pull</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-bold text-base">{fmt(consolidatedTotalCents)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+
             {maintenance.length > 0 && (
               <div>
                 <h4 className="text-sm font-semibold mb-2">Maintenance Fee Payments ({maintenance.length})</h4>
