@@ -17553,6 +17553,7 @@ export type Database = {
           id: string
           nickname: string | null
           routing_number: string
+          stakeholder_account_id: string | null
           tenant_id: string
           updated_at: string
           verification_status: string
@@ -17571,6 +17572,7 @@ export type Database = {
           id?: string
           nickname?: string | null
           routing_number: string
+          stakeholder_account_id?: string | null
           tenant_id: string
           updated_at?: string
           verification_status?: string
@@ -17589,11 +17591,19 @@ export type Database = {
           id?: string
           nickname?: string | null
           routing_number?: string
+          stakeholder_account_id?: string | null
           tenant_id?: string
           updated_at?: string
           verification_status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tenant_billing_accounts_stakeholder_account_id_fkey"
+            columns: ["stakeholder_account_id"]
+            isOneToOne: false
+            referencedRelation: "stakeholder_accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tenant_billing_accounts_tenant_id_fkey"
             columns: ["tenant_id"]
