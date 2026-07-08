@@ -120,6 +120,9 @@ export function AdminReferralDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{totalReferrals}</div>
+            <div className="text-[10px] text-muted-foreground mt-1">
+              {eventCount} logged in events
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -131,6 +134,7 @@ export function AdminReferralDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">${totalDiscountsGiven.toFixed(2)}</div>
+            <div className="text-[10px] text-muted-foreground mt-1">Sum of active tenant credits</div>
           </CardContent>
         </Card>
         <Card>
