@@ -17171,6 +17171,7 @@ export type Database = {
           id: string
           metadata: Json | null
           reason: string
+          tenant_id: string | null
         }
         Insert: {
           created_at?: string
@@ -17178,6 +17179,7 @@ export type Database = {
           id?: string
           metadata?: Json | null
           reason: string
+          tenant_id?: string | null
         }
         Update: {
           created_at?: string
@@ -17185,8 +17187,17 @@ export type Database = {
           id?: string
           metadata?: Json | null
           reason?: string
+          tenant_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "suppressed_emails_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       task_activity_events: {
         Row: {
