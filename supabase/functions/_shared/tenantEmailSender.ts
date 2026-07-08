@@ -121,10 +121,11 @@ export async function resolveTenantSender(
   return {
     from: buildFrom(displayName, `${PLATFORM_FROM_LOCAL}@${PLATFORM_FROM_DOMAIN}`),
     senderDomain: PLATFORM_SENDER_DOMAIN,
-    replyTo,
+    replyTo: effectiveReplyTo,
     provider: 'lovable',
     usingCustomDomain: false,
   }
+
 }
 
 /**
