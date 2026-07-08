@@ -294,8 +294,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <TabsTrigger value="compliance" className="flex-1 min-w-[170px] whitespace-nowrap"><ShieldCheck className="w-4 h-4 mr-1" /> Compliance & Docs</TabsTrigger>
             <TabsTrigger value="integrations" className="flex-1 min-w-[130px] whitespace-nowrap"><Link2 className="w-4 h-4 mr-1" /> Integrations</TabsTrigger>
             
-            <TabsTrigger value="billing" className="flex-1 min-w-[100px] whitespace-nowrap"><Receipt className="w-4 h-4 mr-1" /> Billing</TabsTrigger>
-            <TabsTrigger value="usage" className="flex-1 min-w-[95px] whitespace-nowrap"><Receipt className="w-4 h-4 mr-1" /> Usage</TabsTrigger>
+            <TabsTrigger value="billing" className="flex-1 min-w-[100px] whitespace-nowrap"><Receipt className="w-4 h-4 mr-1" /> Billing & Usage</TabsTrigger>
             <TabsTrigger value="users" className="flex-1 min-w-[95px] whitespace-nowrap"><Users className="w-4 h-4 mr-1" /> Users</TabsTrigger>
           </TabsList>
 
