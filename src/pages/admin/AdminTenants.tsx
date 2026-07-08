@@ -806,6 +806,22 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
     else sonnerToast.info(JSON.stringify(r ?? data));
   };
 
+  const linkForBilling = async () => {
+    if (!bank?.id) return;
+    const payload = {
+      tenant_id: tenantId,
+      stakeholder_account_id: bank.id,
+      auto_debit_enabled: true,
+      ach_authorized_at: new Date().toISOString(),
+    };
+    const { error } = billing?.id
+      ? await supabase.from("tenant_billing_accounts").update(payload as any).eq("id", billing.id)
+      : await supabase.from("tenant_billing_accounts").insert(payload as any);
+    if (error) return sonnerToast.error(error.message);
+    sonnerToast.success("Bank account linked for maintenance-fee billing");
+    load();
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -842,13 +858,15 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
                 <ShieldCheck className="w-3 h-3 mr-1" />
                 {bank.verification_status === "admin_override" ? "Verified (override)" : "Verified via Plaid"}
               </Badge>
-              <span className="text-[10px] text-muted-foreground">
-                {billing?.stakeholder_account_id
-                  ? billing?.auto_debit_enabled
-                    ? "Auto-debit ON"
-                    : "Auto-debit OFF"
-                  : "Not linked for billing"}
-              </span>
+              {billing?.stakeholder_account_id ? (
+                <span className="text-[10px] text-muted-foreground">
+                  {billing?.auto_debit_enabled ? "Auto-debit ON" : "Auto-debit OFF"}
+                </span>
+              ) : (
+                <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={linkForBilling}>
+                  Link for billing
+                </Button>
+              )}
             </div>
           </div>
         )}
