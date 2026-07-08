@@ -16,6 +16,9 @@ import {
   ArrowDownToLine, FileBarChart, Gift, ShieldCheck, FileText
 } from "lucide-react";
 import { ReferralSettings } from "@/components/settings/ReferralSettings";
+import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
+import { TenantEmailHealthPanel } from "@/components/settings/TenantEmailHealthPanel";
+import { Mail } from "lucide-react";
 import { CheckCenterHelpPanel } from "@/components/check-review/CheckCenterHelp";
 import { StakeholderAccountSettings } from "@/components/disbursement/StakeholderAccountSettings";
 import { TenantBankAccountSettings } from "@/components/settings/TenantBankAccountSettings";
