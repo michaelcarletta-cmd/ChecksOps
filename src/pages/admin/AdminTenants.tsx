@@ -798,12 +798,12 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
       body: { tenant_ids: [tenantId], dry_run: false },
     });
     setCharging(false);
-    if (error) return toast.error(error.message);
+    if (error) return sonnerToast.error(error.message);
     const r = (data as any)?.results?.[0];
-    if (r?.skipped) toast.warning(`Skipped: ${r.skipped}`);
-    else if (r?.error) toast.error(r.error);
-    else if (r?.status === "submitted") toast.success(`ACH debit submitted for $${(r.amount_cents / 100).toFixed(2)}`);
-    else toast.info(JSON.stringify(r ?? data));
+    if (r?.skipped) sonnerToast.warning(`Skipped: ${r.skipped}`);
+    else if (r?.error) sonnerToast.error(r.error);
+    else if (r?.status === "submitted") sonnerToast.success(`ACH debit submitted for $${(r.amount_cents / 100).toFixed(2)}`);
+    else sonnerToast.info(JSON.stringify(r ?? data));
   };
 
   return (
