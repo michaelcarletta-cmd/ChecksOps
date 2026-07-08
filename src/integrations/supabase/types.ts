@@ -17538,6 +17538,71 @@ export type Database = {
           },
         ]
       }
+      tenant_billing_accounts: {
+        Row: {
+          account_holder_name: string
+          account_number_encrypted: string
+          account_number_last4: string
+          account_type: string
+          ach_authorized_at: string | null
+          ach_authorized_by: string | null
+          actum_consumer_unique: string | null
+          auto_debit_enabled: boolean
+          created_at: string
+          entity_type: string
+          id: string
+          nickname: string | null
+          routing_number: string
+          tenant_id: string
+          updated_at: string
+          verification_status: string
+        }
+        Insert: {
+          account_holder_name: string
+          account_number_encrypted: string
+          account_number_last4: string
+          account_type?: string
+          ach_authorized_at?: string | null
+          ach_authorized_by?: string | null
+          actum_consumer_unique?: string | null
+          auto_debit_enabled?: boolean
+          created_at?: string
+          entity_type?: string
+          id?: string
+          nickname?: string | null
+          routing_number: string
+          tenant_id: string
+          updated_at?: string
+          verification_status?: string
+        }
+        Update: {
+          account_holder_name?: string
+          account_number_encrypted?: string
+          account_number_last4?: string
+          account_type?: string
+          ach_authorized_at?: string | null
+          ach_authorized_by?: string | null
+          actum_consumer_unique?: string | null
+          auto_debit_enabled?: boolean
+          created_at?: string
+          entity_type?: string
+          id?: string
+          nickname?: string | null
+          routing_number?: string
+          tenant_id?: string
+          updated_at?: string
+          verification_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_billing_accounts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_credit_balances: {
         Row: {
           balance: number
@@ -17767,9 +17832,14 @@ export type Database = {
       }
       tenant_maintenance_payments: {
         Row: {
+          actum_consumer_unique: string | null
+          actum_history_id: string | null
+          actum_order_id: string | null
           amount_cents: number
           created_at: string
+          failure_reason: string | null
           id: string
+          idempotence_key: string | null
           method: string
           notes: string | null
           period_end: string
@@ -17777,13 +17847,20 @@ export type Database = {
           received_at: string
           recorded_by: string | null
           reference: string | null
+          status: string
+          submitted_at: string | null
           tenant_id: string
           updated_at: string
         }
         Insert: {
+          actum_consumer_unique?: string | null
+          actum_history_id?: string | null
+          actum_order_id?: string | null
           amount_cents: number
           created_at?: string
+          failure_reason?: string | null
           id?: string
+          idempotence_key?: string | null
           method?: string
           notes?: string | null
           period_end: string
@@ -17791,13 +17868,20 @@ export type Database = {
           received_at?: string
           recorded_by?: string | null
           reference?: string | null
+          status?: string
+          submitted_at?: string | null
           tenant_id: string
           updated_at?: string
         }
         Update: {
+          actum_consumer_unique?: string | null
+          actum_history_id?: string | null
+          actum_order_id?: string | null
           amount_cents?: number
           created_at?: string
+          failure_reason?: string | null
           id?: string
+          idempotence_key?: string | null
           method?: string
           notes?: string | null
           period_end?: string
@@ -17805,6 +17889,8 @@ export type Database = {
           received_at?: string
           recorded_by?: string | null
           reference?: string | null
+          status?: string
+          submitted_at?: string | null
           tenant_id?: string
           updated_at?: string
         }
