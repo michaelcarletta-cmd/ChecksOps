@@ -46,6 +46,7 @@ import { ZapierIntegrationSettings } from "@/components/settings/ZapierIntegrati
 import { OrganizationSettings } from "@/components/settings/OrganizationSettings";
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
 import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
+import { TenantEmailHealthPanel } from "@/components/settings/TenantEmailHealthPanel";
 import { AuditLogSettings } from "@/components/settings/AuditLogSettings";
 import { NotificationDeliveryLogView } from "@/components/settings/NotificationDeliveryLogView";
 import StatusUrgencyNotificationsSettings from "@/components/settings/StatusUrgencyNotificationsSettings";
