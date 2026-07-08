@@ -806,6 +806,22 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
     else sonnerToast.info(JSON.stringify(r ?? data));
   };
 
+  const linkForBilling = async () => {
+    if (!bank?.id) return;
+    const payload = {
+      tenant_id: tenantId,
+      stakeholder_account_id: bank.id,
+      auto_debit_enabled: true,
+      ach_authorized_at: new Date().toISOString(),
+    };
+    const { error } = billing?.id
+      ? await supabase.from("tenant_billing_accounts").update(payload).eq("id", billing.id)
+      : await supabase.from("tenant_billing_accounts").insert(payload);
+    if (error) return sonnerToast.error(error.message);
+    sonnerToast.success("Bank account linked for maintenance-fee billing");
+    load();
+  };
+
   return (
     <Card>
       <CardHeader>
