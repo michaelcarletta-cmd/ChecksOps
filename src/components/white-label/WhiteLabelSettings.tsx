@@ -127,12 +127,6 @@ export function WhiteLabelSettings() {
 
           <TabsContent value="usage" className="space-y-4">
             <TenantUsageTracker />
-            {isAdmin && user?.email === FREEDOM_ADJUSTMENT_EMAIL && (
-              <div className="pt-8 border-t border-dashed">
-                <h3 className="text-sm font-semibold mb-4 text-muted-foreground uppercase tracking-widest">Admin Billing Control</h3>
-                <BillingConfigPanel />
-              </div>
-            )}
           </TabsContent>
 
 

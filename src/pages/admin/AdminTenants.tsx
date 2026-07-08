@@ -20,6 +20,8 @@ import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
 import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
+import { BillingConfigPanel } from "@/components/billing/BillingConfigPanel";
+import { MaintenancePaymentsTracker } from "@/components/settings/MaintenancePaymentsTracker";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -173,6 +175,7 @@ export default function AdminTenants() {
           <TabsList className="mb-6">
             <TabsTrigger value="tenants"><Building2 className="w-4 h-4 mr-1" /> Tenants</TabsTrigger>
             <TabsTrigger value="referrals"><Gift className="w-4 h-4 mr-1" /> Referral Dashboard</TabsTrigger>
+            <TabsTrigger value="platform-billing"><Receipt className="w-4 h-4 mr-1" /> Platform Billing</TabsTrigger>
           </TabsList>
           <TabsContent value="tenants">
             {loading ? (
@@ -189,6 +192,10 @@ export default function AdminTenants() {
           </TabsContent>
           <TabsContent value="referrals">
             <AdminReferralDashboard />
+          </TabsContent>
+          <TabsContent value="platform-billing" className="space-y-6">
+            <BillingConfigPanel />
+            <MaintenancePaymentsTracker />
           </TabsContent>
         </Tabs>
       </div>
