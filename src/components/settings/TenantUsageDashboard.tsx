@@ -47,6 +47,8 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
   const now = new Date();
   const monthStart = startOfMonth(now).toISOString();
   const monthEnd = endOfMonth(now).toISOString();
+  const yearStart = new Date(now.getFullYear(), 0, 1).toISOString();
+  const yearEnd = new Date(now.getFullYear() + 1, 0, 1).toISOString();
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["tenant-usage-full", tenantId],
@@ -60,6 +62,82 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
       return data as unknown as UsagePayload;
     },
     enabled: isOpen && !!tenantId,
+  });
+
+  // Year-to-date + payments-out rollups
+  const { data: rollups } = useQuery({
+    queryKey: ["tenant-usage-rollups", tenantId, now.getFullYear()],
+    enabled: isOpen && !!tenantId,
+    queryFn: async () => {
+      const [ytdChecksRes, checkaltRes, actumRes, maintRes, monthlyBreakdownRes] = await Promise.all([
+        supabase
+          .from("check_billing_events")
+          .select("id, unit_price_cents, event_type", { count: "exact" })
+          .eq("tenant_id", tenantId)
+          .eq("event_type", "check_processing")
+          .gte("billed_at", yearStart)
+          .lt("billed_at", yearEnd),
+        supabase
+          .from("checkalt_deposits")
+          .select("id, amount, status, created_at")
+          .eq("tenant_id", tenantId)
+          .gte("created_at", yearStart)
+          .lt("created_at", yearEnd),
+        supabase
+          .from("actum_transactions")
+          .select("id, amount, transaction_type, status, created_at")
+          .eq("tenant_id", tenantId)
+          .gte("created_at", yearStart)
+          .lt("created_at", yearEnd),
+        supabase
+          .from("tenant_maintenance_payments")
+          .select("id, amount_cents, status, received_at, period_start, method, reference")
+          .eq("tenant_id", tenantId)
+          .order("received_at", { ascending: false })
+          .limit(24),
+        supabase
+          .from("check_billing_events")
+          .select("billed_at")
+          .eq("tenant_id", tenantId)
+          .eq("event_type", "check_processing")
+          .gte("billed_at", yearStart)
+          .lt("billed_at", yearEnd),
+      ]);
+
+      const monthlyCounts: Record<string, number> = {};
+      (monthlyBreakdownRes.data ?? []).forEach((r: any) => {
+        const d = new Date(r.billed_at);
+        const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        monthlyCounts[k] = (monthlyCounts[k] ?? 0) + 1;
+      });
+
+      const checkaltCount = checkaltRes.data?.length ?? 0;
+      const checkaltAmount = (checkaltRes.data ?? []).reduce(
+        (s: number, r: any) => s + Number(r.amount ?? 0),
+        0,
+      );
+      const actumCount = actumRes.data?.length ?? 0;
+      const actumOutAmount = (actumRes.data ?? [])
+        .filter((r: any) => r.transaction_type === "credit")
+        .reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0);
+      const maintenance = maintRes.data ?? [];
+      const maintenancePaidCents = maintenance
+        .filter((r: any) => ["cleared", "recorded", "submitted"].includes(r.status))
+        .reduce((s: number, r: any) => s + (r.amount_cents ?? 0), 0);
+
+      return {
+        ytdChecks: ytdChecksRes.count ?? ytdChecksRes.data?.length ?? 0,
+        ytdCheckFeesCents: (ytdChecksRes.data ?? []).reduce(
+          (s: number, r: any) => s + (r.unit_price_cents ?? 0),
+          0,
+        ),
+        monthlyCounts,
+        checkalt: { count: checkaltCount, amount: checkaltAmount },
+        actum: { count: actumCount, amountOut: actumOutAmount },
+        maintenance,
+        maintenancePaidCents,
+      };
+    },
   });
 
   return (
