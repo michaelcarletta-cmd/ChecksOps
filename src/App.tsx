@@ -28,6 +28,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
 const AdminTenants = lazy(() => import("./pages/admin/AdminTenants"));
 const VerifyAccount = lazy(() => import("./pages/VerifyAccount"));
+const VerifyAccountStart = lazy(() => import("./pages/VerifyAccountStart"));
 const PrivacyNotice = lazy(() => import("./pages/PrivacyNotice"));
 
 export const queryClient = new QueryClient({
@@ -71,7 +72,7 @@ function CheckOpsRoutes() {
       <Route path="/endorse" element={<Suspense fallback={<PageLoader />}><Endorse /></Suspense>} />
       <Route path="/payment-direction/:token" element={<Suspense fallback={<PageLoader />}><PaymentDirectionPage /></Suspense>} />
       <Route path="/verify-account/complete" element={<Suspense fallback={<PageLoader />}><VerifyAccount /></Suspense>} />
-      <Route path="/verify-account/:token" element={<Suspense fallback={<PageLoader />}><VerifyAccount /></Suspense>} />
+      <Route path="/verify-account/:token" element={<Suspense fallback={<PageLoader />}><VerifyAccountStart /></Suspense>} />
       <Route path="/unsubscribe" element={<Suspense fallback={<PageLoader />}><Unsubscribe /></Suspense>} />
       <Route path="/pricing" element={<Suspense fallback={<PageLoader />}><CheckOpsPricing /></Suspense>} />
       <Route path="/privacy-notice" element={<Suspense fallback={<PageLoader />}><PrivacyNotice /></Suspense>} />

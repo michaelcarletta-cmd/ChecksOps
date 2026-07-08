@@ -10,38 +10,37 @@ const LOGO_URL = 'https://checksops.com/checksops-logo.png'
 interface Props {
   nickname?: string
   custname?: string
-  lastFour?: string
   verifyUrl?: string
 }
 
-const Email = ({ nickname, custname, lastFour, verifyUrl }: Props) => (
+const Email = ({ nickname, custname, verifyUrl }: Props) => (
   <Html lang="en" dir="ltr">
     <Head />
-    <Preview>Confirm two small deposits to verify your bank account</Preview>
+    <Preview>Securely link your bank account to receive payments</Preview>
     <Body style={main}>
       <Container style={container}>
         <Section style={logoSection}>
           <Img src={LOGO_URL} alt={SITE_NAME} width="180" style={logo} />
         </Section>
-        <Heading style={h1}>Verify your bank account</Heading>
+        <Heading style={h1}>Link your bank account</Heading>
         <Text style={text}>
           {custname ? `Hi ${custname},` : 'Hi,'}
         </Text>
         <Text style={text}>
-          To start receiving ACH payments from {SITE_NAME}, we need to confirm
-          that you own the account ending in <strong>••••{lastFour ?? '----'}</strong>
-          {nickname ? <> ({nickname})</> : null}.
+          To start receiving ACH payments from {SITE_NAME}
+          {nickname ? <> for {nickname}</> : null}, we need you to securely
+          link your bank account.
         </Text>
         <Text style={text}>
-          In the next 1–2 business days you'll see <strong>two small deposits</strong>
-          {' '}from us in your bank account (each less than $0.25). Once they
-          arrive, click the button below and enter the exact amounts to verify
-          your account.
+          Click the button below, then sign in to your bank through our
+          verification partner. This confirms your account instantly — no
+          waiting on deposits, and we never see or store your bank login
+          credentials.
         </Text>
 
         <Section style={{ textAlign: 'center', margin: '24px 0' }}>
           <Button href={verifyUrl} style={button}>
-            Confirm deposits
+            Link bank account
           </Button>
         </Section>
 
@@ -68,7 +67,6 @@ export const template = {
   previewData: {
     nickname: 'Operating account',
     custname: 'Acme Roofing LLC',
-    lastFour: '4321',
     verifyUrl: 'https://checksops.com/verify-account/example-token',
   },
 } satisfies TemplateEntry

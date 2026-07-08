@@ -24,7 +24,8 @@ Every consumer or business bank account is validated **before the first debit or
 
 | Method | Implementation | Code reference |
 |---|---|---|
-| Micro-deposit verification | Two random sub-dollar credits, user confirms exact amounts within 7 days, max 3 attempts before lockout. | `supabase/functions/actum-verify-account/index.ts`, `MicroDepositVerification.tsx`, `micro_deposit_verifications` table |
+| Authentecheck (Plaid) instant verification | User logs into their bank via Plaid through Actum's Authentecheck session; routing/account number and account-holder identity are pulled directly from the financial institution rather than self-reported. This is the primary/active validation method. | `supabase/functions/actum-authentecheck-init/index.ts`, `supabase/functions/actum-authentecheck-postback/index.ts`, `AuthentecheckVerification.tsx` |
+| Micro-deposit verification | Two random sub-dollar credits, user confirms exact amounts within 7 days, max 3 attempts before lockout. **Dormant** — the `micro_deposit_verifications` table remains in the schema, but the verification UI and initiating edge function referenced here have been superseded by Authentecheck and are no longer present in the codebase. | `micro_deposit_verifications` table (schema only) |
 | Admin override | Documented business reason logged to `glba_security_events`; admin role only. | `stakeholder_accounts.verification_status = 'admin_override'` |
 
 Accounts in `unverified`, `pending`, `failed`, or `locked` state are **blocked from disbursement** at the database layer.
