@@ -974,6 +974,61 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const months = Array.from({ length: 12 }, (_, i) => ({ v: i, l: new Date(2020, i, 1).toLocaleString("en-US", { month: "long" }) }));
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
 
+  // Consolidated billing: check processing fees ($4/check), Actum disbursement fees ($1 credit),
+  // maintenance for the month (monthly_rate - referral discount). Applies only when scope=month.
+  const CHECK_FEE_CENTS = 400;
+  const ACTUM_FEE_CENTS = 100;
+  const checkaltFeeCents = (checkalt?.count ?? 0) * CHECK_FEE_CENTS;
+  const actumFeeCents = (actum?.count ?? 0) * ACTUM_FEE_CENTS;
+  const grossMaintenance = tenantMeta?.monthly_rate_cents ?? 0;
+  const discount = tenantMeta?.referral_discount_cents ?? 0;
+  const netMaintenance = Math.max(0, grossMaintenance - discount);
+  const consolidatedTotalCents = checkaltFeeCents + actumFeeCents + netMaintenance;
+
+  const pullConsolidated = async () => {
+    if (scope !== "month") {
+      sonnerToast.error("Switch to a specific month to pull consolidated billing.");
+      return;
+    }
+    if (consolidatedTotalCents <= 0) {
+      sonnerToast.warning("Nothing to charge for this period.");
+      return;
+    }
+    const confirmed = window.confirm(
+      `Pull $${(consolidatedTotalCents / 100).toFixed(2)} from ${tenantName}'s verified bank account and email them an invoice?`
+    );
+    if (!confirmed) return;
+    setPulling(true);
+    const line_items = [
+      checkaltFeeCents > 0 && { label: "Check processing", detail: `${checkalt?.count ?? 0} checks × $4.00`, amount_cents: checkaltFeeCents },
+      actumFeeCents > 0 && { label: "Actum disbursements", detail: `${actum?.count ?? 0} × $1.00`, amount_cents: actumFeeCents },
+      grossMaintenance > 0 && { label: "Monthly maintenance", detail: range.label, amount_cents: grossMaintenance },
+      discount > 0 && { label: "Referral discount", detail: "applied to maintenance", amount_cents: -discount },
+    ].filter(Boolean);
+
+    const { data: resp, error } = await supabase.functions.invoke("charge-tenant-maintenance", {
+      body: {
+        tenant_ids: [tenantId],
+        override_amount_cents: consolidatedTotalCents,
+        override_kind: "consolidated",
+        line_items,
+        period_label: range.label,
+        send_invoice: true,
+      },
+    });
+    setPulling(false);
+    if (error) return sonnerToast.error(error.message);
+    const r = (resp as any)?.results?.[0];
+    if (r?.skipped) sonnerToast.warning(`Skipped: ${r.skipped}`);
+    else if (r?.error) sonnerToast.error(r.error);
+    else if (r?.status === "submitted") {
+      sonnerToast.success(
+        `ACH debit for $${(r.amount_cents / 100).toFixed(2)} submitted${r.invoice_sent ? " · invoice emailed" : r.invoice_error ? ` · invoice: ${r.invoice_error}` : ""}`
+      );
+      load();
+    } else sonnerToast.info(JSON.stringify(r ?? resp));
+  };
+
   return (
     <Card>
       <CardHeader>
