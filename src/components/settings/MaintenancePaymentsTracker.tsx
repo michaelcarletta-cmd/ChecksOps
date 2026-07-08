@@ -40,14 +40,37 @@ export function MaintenancePaymentsTracker() {
 
   const { data: payments = [], isLoading } = useQuery({
     queryKey: ["maintenance-payments"],
+    refetchOnMount: "always",
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tenant_maintenance_payments")
-        .select("id, tenant_id, amount_cents, period_start, period_end, method, reference, notes, received_at, tenants:tenant_id(name)")
+        .select("id, tenant_id, amount_cents, period_start, period_end, method, reference, notes, received_at, status, failure_reason, actum_order_id, tenants:tenant_id(name)")
         .order("received_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
+  });
+
+  const chargeMutation = useMutation({
+    mutationFn: async (dryRun: boolean) => {
+      const { data, error } = await supabase.functions.invoke("charge-tenant-maintenance", {
+        body: { dry_run: dryRun },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data: any, dryRun) => {
+      const skipped = (data?.results ?? []).filter((r: any) => r.skipped).length;
+      const charged = (data?.results ?? []).filter((r: any) => r.status === "submitted").length;
+      const failed = (data?.results ?? []).filter((r: any) => r.status === "failed").length;
+      toast.success(
+        dryRun
+          ? `Dry run: would charge ${(data?.results ?? []).filter((r: any) => r.would_charge_cents).length} tenant(s)`
+          : `Charged ${charged}, failed ${failed}, skipped ${skipped}`,
+      );
+      qc.invalidateQueries({ queryKey: ["maintenance-payments"] });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Charge run failed"),
   });
 
   const addMutation = useMutation({
