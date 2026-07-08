@@ -47,6 +47,8 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
   const now = new Date();
   const monthStart = startOfMonth(now).toISOString();
   const monthEnd = endOfMonth(now).toISOString();
+  const yearStart = new Date(now.getFullYear(), 0, 1).toISOString();
+  const yearEnd = new Date(now.getFullYear() + 1, 0, 1).toISOString();
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["tenant-usage-full", tenantId],
@@ -60,6 +62,82 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
       return data as unknown as UsagePayload;
     },
     enabled: isOpen && !!tenantId,
+  });
+
+  // Year-to-date + payments-out rollups
+  const { data: rollups } = useQuery({
+    queryKey: ["tenant-usage-rollups", tenantId, now.getFullYear()],
+    enabled: isOpen && !!tenantId,
+    queryFn: async () => {
+      const [ytdChecksRes, checkaltRes, actumRes, maintRes, monthlyBreakdownRes] = await Promise.all([
+        supabase
+          .from("check_billing_events")
+          .select("id, unit_price_cents, event_type", { count: "exact" })
+          .eq("tenant_id", tenantId)
+          .eq("event_type", "check_processing")
+          .gte("billed_at", yearStart)
+          .lt("billed_at", yearEnd),
+        supabase
+          .from("checkalt_deposits")
+          .select("id, amount, status, created_at")
+          .eq("tenant_id", tenantId)
+          .gte("created_at", yearStart)
+          .lt("created_at", yearEnd),
+        supabase
+          .from("actum_transactions")
+          .select("id, amount, transaction_type, status, created_at")
+          .eq("tenant_id", tenantId)
+          .gte("created_at", yearStart)
+          .lt("created_at", yearEnd),
+        supabase
+          .from("tenant_maintenance_payments")
+          .select("id, amount_cents, status, received_at, period_start, method, reference")
+          .eq("tenant_id", tenantId)
+          .order("received_at", { ascending: false })
+          .limit(24),
+        supabase
+          .from("check_billing_events")
+          .select("billed_at")
+          .eq("tenant_id", tenantId)
+          .eq("event_type", "check_processing")
+          .gte("billed_at", yearStart)
+          .lt("billed_at", yearEnd),
+      ]);
+
+      const monthlyCounts: Record<string, number> = {};
+      (monthlyBreakdownRes.data ?? []).forEach((r: any) => {
+        const d = new Date(r.billed_at);
+        const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        monthlyCounts[k] = (monthlyCounts[k] ?? 0) + 1;
+      });
+
+      const checkaltCount = checkaltRes.data?.length ?? 0;
+      const checkaltAmount = (checkaltRes.data ?? []).reduce(
+        (s: number, r: any) => s + Number(r.amount ?? 0),
+        0,
+      );
+      const actumCount = actumRes.data?.length ?? 0;
+      const actumOutAmount = (actumRes.data ?? [])
+        .filter((r: any) => r.transaction_type === "credit")
+        .reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0);
+      const maintenance = maintRes.data ?? [];
+      const maintenancePaidCents = maintenance
+        .filter((r: any) => ["cleared", "recorded", "submitted"].includes(r.status))
+        .reduce((s: number, r: any) => s + (r.amount_cents ?? 0), 0);
+
+      return {
+        ytdChecks: ytdChecksRes.count ?? ytdChecksRes.data?.length ?? 0,
+        ytdCheckFeesCents: (ytdChecksRes.data ?? []).reduce(
+          (s: number, r: any) => s + (r.unit_price_cents ?? 0),
+          0,
+        ),
+        monthlyCounts,
+        checkalt: { count: checkaltCount, amount: checkaltAmount },
+        actum: { count: actumCount, amountOut: actumOutAmount },
+        maintenance,
+        maintenancePaidCents,
+      };
+    },
   });
 
   return (
@@ -128,6 +206,109 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
                 * Note: Actum fees are paid directly to Actum. Billing amounts reflect the internal per-check rate configured for this tenant.
               </p>
             </div>
+
+            {/* Year-to-date + Payments Out */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-lg border bg-card p-3">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Checks YTD</div>
+                <div className="text-2xl font-bold mt-1">{rollups?.ytdChecks ?? 0}</div>
+                <div className="text-[10px] text-muted-foreground mt-1">
+                  Fees: {formatCents(rollups?.ytdCheckFeesCents ?? 0)}
+                </div>
+              </div>
+              <div className="rounded-lg border bg-card p-3">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">CheckAlt Deposits YTD</div>
+                <div className="text-2xl font-bold mt-1">{rollups?.checkalt.count ?? 0}</div>
+                <div className="text-[10px] text-muted-foreground mt-1">
+                  Volume: ${(rollups?.checkalt.amount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div className="rounded-lg border bg-card p-3">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Actum Disbursements YTD</div>
+                <div className="text-2xl font-bold mt-1">{rollups?.actum.count ?? 0}</div>
+                <div className="text-[10px] text-muted-foreground mt-1">
+                  Sent: ${(rollups?.actum.amountOut ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div className="rounded-lg border bg-card p-3">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Paid to ChecksOps</div>
+                <div className="text-2xl font-bold mt-1">{formatCents(rollups?.maintenancePaidCents ?? 0)}</div>
+                <div className="text-[10px] text-muted-foreground mt-1">Maintenance fees</div>
+              </div>
+            </div>
+
+            {/* Monthly breakdown of checks processed */}
+            <div className="rounded-lg border bg-card p-4">
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                Checks by Month · {now.getFullYear()}
+              </div>
+              <div className="grid grid-cols-6 md:grid-cols-12 gap-1">
+                {Array.from({ length: 12 }, (_, i) => {
+                  const key = `${now.getFullYear()}-${String(i + 1).padStart(2, "0")}`;
+                  const count = rollups?.monthlyCounts?.[key] ?? 0;
+                  const max = Math.max(1, ...Object.values(rollups?.monthlyCounts ?? {}));
+                  const pct = Math.round((count / max) * 100);
+                  return (
+                    <div key={key} className="flex flex-col items-center gap-1" title={`${format(new Date(now.getFullYear(), i, 1), "MMMM")}: ${count} checks`}>
+                      <div className="w-full h-16 bg-muted/40 rounded relative flex items-end">
+                        <div
+                          className="w-full bg-primary/70 rounded-b transition-all"
+                          style={{ height: `${pct}%` }}
+                        />
+                      </div>
+                      <div className="text-[9px] text-muted-foreground uppercase">
+                        {format(new Date(now.getFullYear(), i, 1), "MMM")}
+                      </div>
+                      <div className="text-[10px] font-semibold">{count}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Maintenance fee history */}
+            {rollups?.maintenance && rollups.maintenance.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold">ChecksOps Maintenance Fee History</h4>
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="max-h-48 overflow-y-auto divide-y bg-muted/10">
+                    {rollups.maintenance.map((p: any) => (
+                      <div key={p.id} className="flex items-center justify-between px-4 py-2 text-xs">
+                        <div>
+                          <div className="font-medium">
+                            {format(new Date(p.received_at), "MMM d, yyyy")}
+                            {p.period_start && (
+                              <span className="text-muted-foreground ml-2">
+                                · Period {format(new Date(p.period_start), "MMM yyyy")}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground">
+                            {p.method?.toUpperCase()} {p.reference && `· ${p.reference}`}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold">{formatCents(p.amount_cents)}</span>
+                          <Badge
+                            variant="outline"
+                            className={`text-[9px] h-4 ${
+                              p.status === "cleared"
+                                ? "border-emerald-500/40 text-emerald-500"
+                                : p.status === "returned" || p.status === "failed"
+                                ? "border-destructive/40 text-destructive"
+                                : "border-muted-foreground/30"
+                            }`}
+                          >
+                            {p.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
 
             <div className="space-y-3">
               <h4 className="text-sm font-semibold flex items-center gap-2">
