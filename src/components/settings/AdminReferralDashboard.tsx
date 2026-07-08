@@ -38,6 +38,8 @@ export function AdminReferralDashboard() {
 
   const { data: referralEvents = [] } = useQuery({
     queryKey: ["admin-referral-events"],
+    refetchOnMount: "always",
+    refetchInterval: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("referral_events")
