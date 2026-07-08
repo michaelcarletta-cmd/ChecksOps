@@ -101,22 +101,21 @@ export async function resolveTenantSender(
     }
   }
 
-  // Phase 1.5: simple tenant-configured From address (Admin Tenants > Email
-  // tab). Domain authorization is handled by Lovable's own Cloud > Emails
-  // feature, not the in-app DNS-verification flow above — if the domain
-  // shows there as an available sender, the platform's own send API (not
-  // Resend) already knows how to send from it.
+  // Phase 1.5: a tenant may set a custom From address (e.g.
+  // noreply@theirbrand.com) in Admin Tenants > Email. We can only actually
+  // send from that domain if it's registered as a verified sender in the
+  // Lovable email platform — otherwise the send API returns 403
+  // "no_matching_sender" and every email dead-letters.
+  //
+  // Since Phase 1.5 has no in-app DNS verification (that's Phase 2), we
+  // treat the tenant-configured From address as a *Reply-To hint only* and
+  // keep the outgoing envelope on the verified platform domain. If the
+  // tenant later verifies their domain through the Phase 2 flow, the block
+  // above takes over and their real From address is used.
   const tenantFromAddress = tenant?.email_from_address?.trim()
-  if (tenantFromAddress && tenantFromAddress.includes('@')) {
-    const domain = tenantFromAddress.split('@')[1]
-    return {
-      from: buildFrom(displayName, tenantFromAddress),
-      senderDomain: domain,
-      replyTo,
-      provider: 'lovable',
-      usingCustomDomain: true,
-    }
-  }
+  const effectiveReplyTo =
+    replyTo || (tenantFromAddress && tenantFromAddress.includes('@') ? tenantFromAddress : undefined)
+
 
   // Phase 1: platform sender with tenant display name + reply-to
   return {
