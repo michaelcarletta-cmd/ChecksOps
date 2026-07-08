@@ -112,11 +112,15 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
   // 2. Check suppression list (fail-closed: if we can't verify, don't send)
-  const { data: suppressed, error: suppressionError } = await supabase
+  // Scope: match either global suppressions (tenant_id IS NULL) OR this tenant's own suppressions.
+  const suppressionQuery = supabase
     .from('suppressed_emails')
-    .select('id')
+    .select('id, tenant_id')
     .eq('email', effectiveRecipient.toLowerCase())
-    .maybeSingle()
+  const { data: suppressedRows, error: suppressionError } = tenantId
+    ? await suppressionQuery.or(`tenant_id.is.null,tenant_id.eq.${tenantId}`)
+    : await suppressionQuery.is('tenant_id', null)
+  const suppressed = suppressedRows && suppressedRows.length > 0 ? suppressedRows[0] : null
 
   if (suppressionError) {
     console.error('Suppression check failed — refusing to send', {
