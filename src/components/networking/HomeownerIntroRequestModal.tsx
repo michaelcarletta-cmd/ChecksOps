@@ -181,8 +181,8 @@ export function HomeownerIntroRequestModal({ open, onOpenChange, contractor }: P
                 Open my claim portal →
               </Button>
               <p className="text-[10px] text-muted-foreground">
-                Bookmark that page — the private link is your key back in. We also emailed it to{" "}
-                <strong>{submittedEmail}</strong>.
+                Bookmark this page — the private link is your key back in. Anyone with the link
+                can act on this claim, so don't share it.
               </p>
             </div>
             <Button variant="outline" className="w-full" onClick={() => handleClose(false)}>
