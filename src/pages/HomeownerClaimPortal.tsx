@@ -53,6 +53,14 @@ type CheckRow = {
 };
 
 const MAX_MB = 15;
+const ENDORSED_STAGES = new Set([
+  "endorsements_complete",
+  "approved_for_deposit",
+  "branch_deposit_required",
+  "deposited",
+  "cleared",
+]);
+const DEPOSITED_STAGES = new Set(["deposited", "cleared"]);
 
 export default function HomeownerClaimPortal() {
   const { token = "" } = useParams();
