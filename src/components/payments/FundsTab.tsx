@@ -229,9 +229,16 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
           settled_at: new Date().toISOString(),
         });
       if (sErr) throw sErr;
-      toast({ title: "External disbursement recorded" });
+      const remaining = Math.max(0, availableForDisbursement - amt);
+      toast({
+        title: "External disbursement recorded",
+        description: remaining > 0
+          ? `$${remaining.toLocaleString("en-US", { minimumFractionDigits: 2 })} remaining — record another to zero out.`
+          : "This check is fully disbursed.",
+      });
       setExtRecipient(""); setExtRecipientType("vendor"); setExtCheckNum(""); setExtAmount(""); setExtNotes("");
-      setDisburseMode(null);
+      // Keep the form open when funds remain so the tenant can immediately record the next payment.
+      if (remaining <= 0.005) setDisburseMode(null);
       qc.invalidateQueries({ queryKey: ["funds-tab-disbursements", checkIntakeItemId, tenant?.id] });
       qc.invalidateQueries({ queryKey: ["recurring-recipients", tenant?.id] });
     } catch (e: any) {
@@ -361,12 +368,23 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
               <X className="h-3 w-3 mr-1" />Cancel
             </Button>
           </div>
+          <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-700 dark:text-emerald-300">
+            Remaining to zero out: <span className="font-semibold">${availableForDisbursement.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+          </div>
           <DisbursementConsole
             checkIntakeItemId={checkIntakeItemId}
             checkAmount={availableForDisbursement}
             checkNumber={checkNumber}
             carrierName={carrierName}
-            onComplete={() => setDisburseMode(null)}
+            onComplete={() => {
+              // Refresh disbursement totals then decide whether to keep the console open for the remainder.
+              qc.invalidateQueries({ queryKey: ["funds-tab-disbursements", checkIntakeItemId, tenant?.id] }).then(() => {
+                // Give the query a tick to settle before deciding — if funds remain the console re-renders with the new remainder.
+                setTimeout(() => {
+                  if (availableForDisbursement <= 0.005) setDisburseMode(null);
+                }, 300);
+              });
+            }}
           />
         </div>
       )}
@@ -380,6 +398,10 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
                 <X className="h-3 w-3 mr-1" />Cancel
               </Button>
             </div>
+            <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-700 dark:text-emerald-300">
+              Remaining to zero out: <span className="font-semibold">${availableForDisbursement.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+            </div>
+
             <div className="space-y-2">
               {recurringRecipients.length > 0 && (
                 <div>
