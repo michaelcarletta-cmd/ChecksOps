@@ -83,6 +83,36 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
     },
   });
 
+  // Recurring recipients — distinct external recipients this tenant has paid before
+  const { data: recurringRecipients = [] } = useQuery({
+    queryKey: ["recurring-recipients", tenant?.id],
+    enabled: !!tenant?.id,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("disbursement_splits")
+        .select("recipient_name, recipient_type, created_at")
+        .eq("tenant_id", tenant!.id)
+        .eq("method", "external_check")
+        .not("recipient_name", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      const seen = new Map<string, { name: string; type: string; count: number }>();
+      for (const r of (data ?? []) as any[]) {
+        const name = String(r.recipient_name ?? "").trim();
+        if (!name) continue;
+        const type = r.recipient_type ?? "other";
+        const key = `${type}|${name.toLowerCase()}`;
+        const existing = seen.get(key);
+        if (existing) existing.count += 1;
+        else seen.set(key, { name, type, count: 1 });
+      }
+      return Array.from(seen.values()).sort((a, b) => b.count - a.count);
+    },
+  });
+
+
+
   const outgoingSplits = outgoingBatches.flatMap((b: any) =>
     (b.disbursement_splits ?? []).map((s: any) => ({ ...s, batch_id: b.id }))
   );
