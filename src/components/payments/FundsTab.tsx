@@ -229,9 +229,16 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
           settled_at: new Date().toISOString(),
         });
       if (sErr) throw sErr;
-      toast({ title: "External disbursement recorded" });
+      const remaining = Math.max(0, availableForDisbursement - amt);
+      toast({
+        title: "External disbursement recorded",
+        description: remaining > 0
+          ? `$${remaining.toLocaleString("en-US", { minimumFractionDigits: 2 })} remaining — record another to zero out.`
+          : "This check is fully disbursed.",
+      });
       setExtRecipient(""); setExtRecipientType("vendor"); setExtCheckNum(""); setExtAmount(""); setExtNotes("");
-      setDisburseMode(null);
+      // Keep the form open when funds remain so the tenant can immediately record the next payment.
+      if (remaining <= 0.005) setDisburseMode(null);
       qc.invalidateQueries({ queryKey: ["funds-tab-disbursements", checkIntakeItemId, tenant?.id] });
       qc.invalidateQueries({ queryKey: ["recurring-recipients", tenant?.id] });
     } catch (e: any) {
