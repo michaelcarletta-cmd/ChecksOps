@@ -99,44 +99,33 @@ export function HomeownerIntroRequestModal({ open, onOpenChange, contractor }: P
 
     setSubmitting(true);
     try {
-      // Look up user_id if not passed in
-      let contractorUserId = contractor.user_id ?? null;
-      if (!contractorUserId) {
-        const { data: prof } = await supabase
-          .from("contractor_profiles")
-          .select("user_id")
-          .eq("id", contractor.id)
-          .maybeSingle();
-        contractorUserId = prof?.user_id ?? null;
-      }
-      if (!contractorUserId) throw new Error("Contractor unavailable");
-
-      const { data: inserted, error } = await supabase
-        .from("homeowner_intro_requests")
-        .insert({
-          contractor_profile_id: contractor.id,
-          contractor_user_id: contractorUserId,
-          homeowner_name: parsed.data.homeowner_name,
-          homeowner_email: parsed.data.homeowner_email,
-          homeowner_phone: parsed.data.homeowner_phone || null,
-          property_zip: parsed.data.property_zip || null,
-          loss_type: parsed.data.loss_type || null,
-          message: parsed.data.message || null,
-        })
-        .select("id, access_token")
-        .single();
+      const { data: inserted, error } = await supabase.rpc(
+        "submit_homeowner_intro_request",
+        {
+          _contractor_profile_id: contractor.id,
+          _homeowner_name: parsed.data.homeowner_name,
+          _homeowner_email: parsed.data.homeowner_email,
+          _homeowner_phone: parsed.data.homeowner_phone || null,
+          _property_zip: parsed.data.property_zip || null,
+          _loss_type: parsed.data.loss_type || null,
+          _message: parsed.data.message || null,
+        },
+      );
       if (error) throw error;
+      const row = Array.isArray(inserted) ? inserted[0] : inserted;
+      const newId = (row as any)?.id ?? null;
+      const newToken = (row as any)?.access_token ?? null;
 
-      // Fire-and-forget email notification to the contractor
-      if (inserted?.id) {
+      // Fire-and-forget email notification to the contractor + homeowner portal link
+      if (newId) {
         supabase.functions
-          .invoke("notify-homeowner-lead", { body: { lead_id: inserted.id } })
+          .invoke("notify-homeowner-lead", { body: { lead_id: newId } })
           .catch(() => {
             /* non-blocking; the lead is already saved */
           });
       }
-      setLeadId(inserted?.id ?? null);
-      setAccessToken((inserted as any)?.access_token ?? null);
+      setLeadId(newId);
+      setAccessToken(newToken);
       setSubmittedEmail(parsed.data.homeowner_email);
       setSubmitted(true);
     } catch (e: any) {
