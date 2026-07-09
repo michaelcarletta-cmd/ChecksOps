@@ -215,7 +215,7 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
               <SelectTrigger><SelectValue placeholder="Trade" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All trades</SelectItem>
-                {TRADE_OPTIONS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                {TRADE_OPTIONS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={state} onValueChange={setState}>
