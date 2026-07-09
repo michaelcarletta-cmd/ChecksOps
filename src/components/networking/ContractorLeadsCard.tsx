@@ -232,7 +232,48 @@ export function ContractorLeadsCard() {
             ))}
           </div>
         )}
+
+        {uploads && uploads.length > 0 && (
+          <div className="mt-6 border-t border-border pt-4">
+            <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5">
+              <FileImage className="h-3.5 w-3.5" /> Homeowner check uploads
+            </div>
+            <div className="space-y-2">
+              {uploads.map((u: any) => {
+                const relatedLead = (leads ?? []).find((l) => l.id === u.lead_id);
+                return (
+                  <div
+                    key={u.id}
+                    className="flex items-center justify-between text-sm border border-border rounded-md p-2 gap-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">
+                        {relatedLead?.homeowner_name ?? "Homeowner"}
+                        <span className="text-muted-foreground text-xs ml-2">
+                          {formatDistanceToNow(new Date(u.created_at), { addSuffix: true })}
+                        </span>
+                      </div>
+                      {u.note && <div className="text-xs text-muted-foreground truncate">{u.note}</div>}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="outline" className="text-[10px]">{u.status}</Badge>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => openUpload(u.file_path)}
+                      >
+                        View
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 }
+
