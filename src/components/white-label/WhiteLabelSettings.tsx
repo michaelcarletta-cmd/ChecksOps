@@ -232,6 +232,7 @@ export function WhiteLabelSettings() {
             </Card>
             <MyVerificationStatus />
             <ContractorServiceAreaCard />
+            <ContractorLeadsCard />
           </TabsContent>
         </Tabs>
 
