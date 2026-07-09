@@ -31,6 +31,8 @@ project_id = "nbcqwpysqgyxrrbgtmkw"
     verify_jwt = false
   [functions.lookup-partner-code-public]
     verify_jwt = false
+  [functions.public-contractor-directory]
+    verify_jwt = false
   [functions.ingest-shared-check]
     verify_jwt = false
   [functions.actum-webhook]
