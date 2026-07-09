@@ -1,16 +1,30 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, Download, FileText, CheckCircle2, Info, Search } from "lucide-react";
+import { AlertTriangle, Download, FileText, CheckCircle2, Info, Search, Pencil } from "lucide-react";
 import { startOfYear, endOfYear, getYear } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import f1099necAsset from "@/assets/f1099nec.pdf.asset.json";
+
+type TaxProfile = {
+  recipient_key: string;
+  recipient_name: string | null;
+  tin: string | null;
+  address_street: string | null;
+  address_city: string | null;
+  address_state: string | null;
+  address_zip: string | null;
+  account_number: string | null;
+  notes: string | null;
+};
 
 
 const THRESHOLD = 600;
@@ -55,6 +69,63 @@ export function TaxSummary() {
   const [monthFilter, setMonthFilter] = useState<string>("all"); // "all" or "0".."11"
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [editing, setEditing] = useState<{ key: string; name: string } | null>(null);
+  const [form, setForm] = useState<TaxProfile>({
+    recipient_key: "", recipient_name: "", tin: "", address_street: "", address_city: "",
+    address_state: "", address_zip: "", account_number: "", notes: "",
+  });
+  const queryClient = useQueryClient();
+
+  const { data: taxProfiles = [] } = useQuery({
+    queryKey: ["recipient-tax-profiles", tenant?.id],
+    enabled: !!tenant?.id,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("recipient_tax_profiles")
+        .select("recipient_key, recipient_name, tin, address_street, address_city, address_state, address_zip, account_number, notes")
+        .eq("tenant_id", tenant!.id);
+      if (error) throw error;
+      return (data ?? []) as TaxProfile[];
+    },
+  });
+
+  const profileByKey = useMemo(() => {
+    const m: Record<string, TaxProfile> = {};
+    for (const p of taxProfiles) m[p.recipient_key] = p;
+    return m;
+  }, [taxProfiles]);
+
+  const saveProfile = useMutation({
+    mutationFn: async (p: TaxProfile) => {
+      const payload = { ...p, tenant_id: tenant!.id };
+      const { error } = await (supabase as any)
+        .from("recipient_tax_profiles")
+        .upsert(payload, { onConflict: "tenant_id,recipient_key" });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recipient-tax-profiles", tenant?.id] });
+      toast({ title: "Recipient tax info saved" });
+      setEditing(null);
+    },
+    onError: (e: any) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
+  });
+
+  const openEdit = (key: string, defaultName: string) => {
+    const existing = profileByKey[key];
+    setEditing({ key, name: defaultName });
+    setForm({
+      recipient_key: key,
+      recipient_name: existing?.recipient_name ?? defaultName,
+      tin: existing?.tin ?? "",
+      address_street: existing?.address_street ?? "",
+      address_city: existing?.address_city ?? "",
+      address_state: existing?.address_state ?? "",
+      address_zip: existing?.address_zip ?? "",
+      account_number: existing?.account_number ?? "",
+      notes: existing?.notes ?? "",
+    });
+  };
 
   const { data: tenantDetails } = useQuery({
     queryKey: ["tax-summary-tenant-details", tenant?.id],
@@ -326,10 +397,15 @@ export function TaxSummary() {
       for (const r of rows) {
         const src = await PDFDocument.load(srcBytes);
         const pageCount = src.getPageCount();
-        const recipientName = r.custname && r.custname !== "External check" && r.custname !== "Cash job payee"
-          ? r.custname
-          : r.nickname;
+        const profile = profileByKey[r.id];
+        const recipientName = profile?.recipient_name
+          || (r.custname && r.custname !== "External check" && r.custname !== "Cash job payee" ? r.custname : r.nickname);
         const amount = r.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const recipientStreet = profile?.address_street ?? "";
+        const recipientCityStateZip = [profile?.address_city, profile?.address_state].filter(Boolean).join(", ")
+          + (profile?.address_zip ? ` ${profile.address_zip}` : "");
+        const recipientTin = profile?.tin ?? "";
+        const accountNumber = profile?.account_number || r.nickname.slice(0, 20);
 
         for (let pi = 0; pi < pageCount; pi++) {
           const page = src.getPage(pi);
@@ -347,22 +423,24 @@ export function TaxSummary() {
 
           // ---- TINs ----
           draw(page, payerEin, 58, 624, { maxWidth: 115 });
-          // Recipient TIN — not captured yet, leave blank
+          draw(page, recipientTin, 215, 624, { maxWidth: 115 });
 
           // ---- RECIPIENT block ----
           draw(page, recipientName, 58, 586, { bold: true, maxWidth: 235 });
-          // recipient street / city / state / zip left blank (not captured)
+          draw(page, recipientStreet, 58, 562, { maxWidth: 235 });
+          draw(page, recipientCityStateZip, 58, 538, { maxWidth: 235 });
 
           // ---- Box 1a: Nonemployee compensation ----
           draw(page, amount, 315, 650, { bold: true, size: 10 });
 
-          // ---- Account number (recipient nickname as reference) ----
-          draw(page, r.nickname.slice(0, 20), 58, 444, { size: 8, maxWidth: 190 });
+          // ---- Account number ----
+          draw(page, accountNumber.slice(0, 24), 58, 444, { size: 8, maxWidth: 190 });
         }
 
         const copied = await out.copyPages(src, src.getPageIndices());
         copied.forEach((p) => out.addPage(p));
       }
+
 
       const pdfBytes = await out.save();
       const blob = new Blob([pdfBytes as BlobPart], { type: "application/pdf" });
@@ -598,23 +676,46 @@ export function TaxSummary() {
                           <div className="flex flex-col items-center gap-1">
                             <div className="flex items-center justify-center gap-1">
                               <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                              <span className="text-xs text-amber-600 font-medium">Required</span>
+                              <span className="text-xs text-amber-600 font-medium">
+                                {profileByKey[r.id]?.tin ? "Ready" : "Missing TIN"}
+                              </span>
                             </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-6 text-[10px] px-2"
-                              onClick={() => generate1099([r])}
-                            >
-                              <FileText className="h-3 w-3 mr-1" />Generate
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-[10px] px-2"
+                                onClick={() => openEdit(r.id, r.custname && r.custname !== "External check" && r.custname !== "Cash job payee" ? r.custname : r.nickname)}
+                              >
+                                <Pencil className="h-3 w-3 mr-1" />Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-[10px] px-2"
+                                onClick={() => generate1099([r])}
+                              >
+                                <FileText className="h-3 w-3 mr-1" />Generate
+                              </Button>
+                            </div>
                           </div>
                         ) : r.requires_1099 ? (
-                          <span className="text-[10px] text-muted-foreground">Under $600</span>
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-[10px] text-muted-foreground">Under $600</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 text-[10px] px-2"
+                              onClick={() => openEdit(r.id, r.custname && r.custname !== "External check" && r.custname !== "Cash job payee" ? r.custname : r.nickname)}
+                            >
+                              <Pencil className="h-3 w-3 mr-1" />Tax info
+                            </Button>
+                          </div>
                         ) : (
                           <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
                         )}
                       </td>
+
                     </tr>
                   ))}
                 </tbody>
@@ -646,6 +747,56 @@ export function TaxSummary() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>1099 recipient info</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label className="text-xs">Recipient name (as shown on 1099)</Label>
+              <Input value={form.recipient_name ?? ""} onChange={(e) => setForm({ ...form, recipient_name: e.target.value })} />
+            </div>
+            <div>
+              <Label className="text-xs">Recipient TIN / SSN / EIN</Label>
+              <Input value={form.tin ?? ""} placeholder="XX-XXXXXXX or XXX-XX-XXXX" onChange={(e) => setForm({ ...form, tin: e.target.value })} />
+            </div>
+            <div>
+              <Label className="text-xs">Street address</Label>
+              <Input value={form.address_street ?? ""} onChange={(e) => setForm({ ...form, address_street: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-1">
+                <Label className="text-xs">City</Label>
+                <Input value={form.address_city ?? ""} onChange={(e) => setForm({ ...form, address_city: e.target.value })} />
+              </div>
+              <div>
+                <Label className="text-xs">State</Label>
+                <Input value={form.address_state ?? ""} maxLength={2} onChange={(e) => setForm({ ...form, address_state: e.target.value.toUpperCase() })} />
+              </div>
+              <div>
+                <Label className="text-xs">ZIP</Label>
+                <Input value={form.address_zip ?? ""} onChange={(e) => setForm({ ...form, address_zip: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Account number (optional)</Label>
+              <Input value={form.account_number ?? ""} onChange={(e) => setForm({ ...form, account_number: e.target.value })} />
+            </div>
+            <div>
+              <Label className="text-xs">Notes (optional)</Label>
+              <Input value={form.notes ?? ""} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button onClick={() => saveProfile.mutate(form)} disabled={saveProfile.isPending}>
+              {saveProfile.isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

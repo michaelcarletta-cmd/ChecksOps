@@ -16039,6 +16039,62 @@ export type Database = {
         }
         Relationships: []
       }
+      recipient_tax_profiles: {
+        Row: {
+          account_number: string | null
+          address_city: string | null
+          address_state: string | null
+          address_street: string | null
+          address_zip: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          recipient_key: string
+          recipient_name: string | null
+          tenant_id: string
+          tin: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_number?: string | null
+          address_city?: string | null
+          address_state?: string | null
+          address_street?: string | null
+          address_zip?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          recipient_key: string
+          recipient_name?: string | null
+          tenant_id: string
+          tin?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_number?: string | null
+          address_city?: string | null
+          address_state?: string | null
+          address_street?: string | null
+          address_zip?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          recipient_key?: string
+          recipient_name?: string | null
+          tenant_id?: string
+          tin?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipient_tax_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       referral_alerts: {
         Row: {
           actioned_at: string | null
