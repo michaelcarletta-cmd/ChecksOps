@@ -21709,6 +21709,7 @@ export type Database = {
         }
         Returns: Json
       }
+      whoami: { Args: never; Returns: string }
     }
     Enums: {
       app_role:
