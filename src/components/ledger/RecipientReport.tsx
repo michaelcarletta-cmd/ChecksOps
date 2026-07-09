@@ -53,9 +53,48 @@ type DateRange = "this_month" | "last_month" | "this_year" | "all";
 
 export function RecipientReport() {
   const { tenant } = useTenant();
+  const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [dateRange, setDateRange] = useState<DateRange>("this_year");
+  const [editTarget, setEditTarget] = useState<{ name: string; type: string; count: number } | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editType, setEditType] = useState("other");
+  const [editSaving, setEditSaving] = useState(false);
+
+  const openEdit = (name: string, type: string, count: number) => {
+    setEditTarget({ name, type, count });
+    setEditName(name);
+    setEditType(type);
+  };
+
+  const saveEdit = async () => {
+    if (!editTarget || !tenant?.id) return;
+    const newName = editName.trim();
+    if (!newName) {
+      toast({ title: "Recipient name required", variant: "destructive" });
+      return;
+    }
+    setEditSaving(true);
+    try {
+      const { error } = await (supabase as any)
+        .from("disbursement_splits")
+        .update({ recipient_name: newName, recipient_type: editType })
+        .eq("tenant_id", tenant.id)
+        .eq("recipient_name", editTarget.name)
+        .eq("recipient_type", editTarget.type);
+      if (error) throw error;
+      toast({ title: "Recipient updated", description: `${editTarget.count} payment${editTarget.count !== 1 ? "s" : ""} updated` });
+      setEditTarget(null);
+      qc.invalidateQueries({ queryKey: ["recipient-report", tenant.id] });
+      qc.invalidateQueries({ queryKey: ["recurring-recipients", tenant.id] });
+    } catch (e: any) {
+      toast({ title: "Couldn't update recipient", description: e.message, variant: "destructive" });
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
 
   const dateFilters = useMemo(() => {
     const now = new Date();
