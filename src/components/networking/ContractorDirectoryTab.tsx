@@ -81,6 +81,7 @@ export function ContractorDirectoryTab() {
 
   return (
     <div className="space-y-4">
+      <ContractorServiceAreaCard />
       <Card>
         <CardContent className="p-3 md:p-4">
           <div className="flex flex-col md:flex-row gap-2 md:items-center">
