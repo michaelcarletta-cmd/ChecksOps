@@ -233,6 +233,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
       setExtRecipient(""); setExtRecipientType("vendor"); setExtCheckNum(""); setExtAmount(""); setExtNotes("");
       setDisburseMode(null);
       qc.invalidateQueries({ queryKey: ["funds-tab-disbursements", checkIntakeItemId, tenant?.id] });
+      qc.invalidateQueries({ queryKey: ["recurring-recipients", tenant?.id] });
     } catch (e: any) {
       toast({ title: "Couldn't record external disbursement", description: e.message, variant: "destructive" });
     } finally {
