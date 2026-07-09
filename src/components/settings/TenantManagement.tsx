@@ -630,6 +630,15 @@ export function TenantManagement() {
                   >
                     <Receipt className="h-4 w-4 text-primary" />
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    title="Manage Pro Badge"
+                    onClick={() => setProTarget({ id: t.id, name: t.name })}
+                  >
+                    <Crown className="h-4 w-4 text-amber-400" />
+                  </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={() => openEdit(t)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
