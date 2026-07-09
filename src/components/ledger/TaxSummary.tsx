@@ -747,6 +747,56 @@ export function TaxSummary() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>1099 recipient info</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label className="text-xs">Recipient name (as shown on 1099)</Label>
+              <Input value={form.recipient_name ?? ""} onChange={(e) => setForm({ ...form, recipient_name: e.target.value })} />
+            </div>
+            <div>
+              <Label className="text-xs">Recipient TIN / SSN / EIN</Label>
+              <Input value={form.tin ?? ""} placeholder="XX-XXXXXXX or XXX-XX-XXXX" onChange={(e) => setForm({ ...form, tin: e.target.value })} />
+            </div>
+            <div>
+              <Label className="text-xs">Street address</Label>
+              <Input value={form.address_street ?? ""} onChange={(e) => setForm({ ...form, address_street: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-1">
+                <Label className="text-xs">City</Label>
+                <Input value={form.address_city ?? ""} onChange={(e) => setForm({ ...form, address_city: e.target.value })} />
+              </div>
+              <div>
+                <Label className="text-xs">State</Label>
+                <Input value={form.address_state ?? ""} maxLength={2} onChange={(e) => setForm({ ...form, address_state: e.target.value.toUpperCase() })} />
+              </div>
+              <div>
+                <Label className="text-xs">ZIP</Label>
+                <Input value={form.address_zip ?? ""} onChange={(e) => setForm({ ...form, address_zip: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Account number (optional)</Label>
+              <Input value={form.account_number ?? ""} onChange={(e) => setForm({ ...form, account_number: e.target.value })} />
+            </div>
+            <div>
+              <Label className="text-xs">Notes (optional)</Label>
+              <Input value={form.notes ?? ""} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button onClick={() => saveProfile.mutate(form)} disabled={saveProfile.isPending}>
+              {saveProfile.isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
