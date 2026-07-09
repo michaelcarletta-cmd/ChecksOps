@@ -26,10 +26,9 @@ const schema = z.object({
   homeowner_phone: z
     .string()
     .trim()
+    .min(7, "Enter a phone number so the contractor can reach you")
     .max(30)
-    .regex(/^[\d\s()+\-.]*$/, "Phone can only contain digits and () + - .")
-    .optional()
-    .or(z.literal("")),
+    .regex(/^[\d\s()+\-.]+$/, "Phone can only contain digits and () + - ."),
   property_zip: z
     .string()
     .trim()
@@ -194,7 +193,7 @@ export function HomeownerIntroRequestModal({ open, onOpenChange, contractor }: P
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="hir-phone">Phone</Label>
+                  <Label htmlFor="hir-phone">Phone *</Label>
                   <Input
                     id="hir-phone"
                     type="tel"
