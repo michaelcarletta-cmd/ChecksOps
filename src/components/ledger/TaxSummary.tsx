@@ -56,6 +56,20 @@ export function TaxSummary() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
 
+  const { data: tenantDetails } = useQuery({
+    queryKey: ["tax-summary-tenant-details", tenant?.id],
+    enabled: !!tenant?.id,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("tenants")
+        .select("legal_business_name, ein, business_address, business_phone")
+        .eq("id", tenant!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { legal_business_name: string | null; ein: string | null; business_address: string | null; business_phone: string | null } | null;
+    },
+  });
+
   const { data: payments = [], isLoading } = useQuery({
     queryKey: ["tax-summary", tenant?.id, year],
     enabled: !!tenant?.id,
@@ -275,40 +289,75 @@ export function TaxSummary() {
       const fontBold = await out.embedFont(StandardFonts.HelveticaBold);
       const black = rgb(0, 0, 0);
 
-      const payer = tenant?.name ?? "Payer";
-      // Each 1099-NEC page holds TWO forms stacked. These offsets are the y-shift (in PDF points,
-      // origin bottom-left) for the top form vs the bottom form on the same page.
-      // The IRS form uses ~264pt tall form blocks on an 8.5x11 (612x792) page.
-      const FORM_OFFSETS = [528, 264]; // top form baseline, bottom form baseline (approx)
+      // Tenant / payer info
+      const payerName = tenantDetails?.legal_business_name || tenant?.name || "";
+      const payerAddress = tenantDetails?.business_address || "";
+      const payerPhone = tenantDetails?.business_phone || "";
+      const payerEin = tenantDetails?.ein || "";
 
-      const draw = (page: any, text: string, x: number, yFromFormTop: number, formBaselineY: number, opts: { bold?: boolean; size?: number } = {}) => {
+      // Split "123 Main St, City, ST 12345" into street / city / state / zip best-effort.
+      const parseAddr = (full: string) => {
+        const parts = full.split(",").map((s) => s.trim()).filter(Boolean);
+        const street = parts[0] || "";
+        const city = parts[1] || "";
+        let state = "";
+        let zip = "";
+        if (parts[2]) {
+          const m = parts[2].match(/^([A-Za-z .]+)\s+([\d-]+)$/);
+          if (m) { state = m[1].trim(); zip = m[2].trim(); }
+          else { state = parts[2]; }
+        }
+        return { street, city, state, zip };
+      };
+      const payer = parseAddr(payerAddress);
+
+      // Coordinates (PDF points, origin bottom-left, page 612x792). One form per page (Copy A/B/C).
+      const draw = (page: any, text: string, x: number, y: number, opts: { bold?: boolean; size?: number; maxWidth?: number } = {}) => {
         if (!text) return;
-        page.drawText(text, {
-          x,
-          y: formBaselineY + (264 - yFromFormTop),
-          size: opts.size ?? 9,
-          font: opts.bold ? fontBold : font,
-          color: black,
-        });
+        const size = opts.size ?? 9;
+        const f = opts.bold ? fontBold : font;
+        let t = String(text);
+        if (opts.maxWidth) {
+          while (t.length > 3 && f.widthOfTextAtSize(t, size) > opts.maxWidth) t = t.slice(0, -1);
+        }
+        page.drawText(t, { x, y, size, font: f, color: black });
       };
 
       for (const r of rows) {
         const src = await PDFDocument.load(srcBytes);
         const pageCount = src.getPageCount();
+        const recipientName = r.custname && r.custname !== "External check" && r.custname !== "Cash job payee"
+          ? r.custname
+          : r.nickname;
+        const amount = r.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-        // Stamp payer + recipient data onto EVERY form (top & bottom) on EVERY copy page.
         for (let pi = 0; pi < pageCount; pi++) {
           const page = src.getPage(pi);
-          for (const baseY of FORM_OFFSETS) {
-            // Payer name (block starts near top of form)
-            draw(page, payer, 57, 40, baseY, { bold: true });
-            // Recipient name
-            draw(page, r.custname || r.nickname || "", 57, 192, baseY, { bold: true });
-            // (Recipient street / city are left blank — user hasn't captured recipient address.)
-            // Box 1a Nonemployee compensation
-            const amount = `$${r.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
-            draw(page, amount, 315, 128, baseY, { bold: true, size: 10 });
-          }
+
+          // ---- PAYER block (left column, top) ----
+          draw(page, payerName, 58, 732, { bold: true, maxWidth: 235 });
+          draw(page, payer.street, 58, 700, { maxWidth: 150 });
+          draw(page, payer.city, 58, 676, { maxWidth: 150 });
+          draw(page, payerPhone, 215, 676, { maxWidth: 80 });
+          draw(page, payer.state, 58, 652, { maxWidth: 115 });
+          draw(page, payer.zip, 258, 652, { maxWidth: 35 });
+
+          // ---- Calendar year ----
+          draw(page, String(year), 422, 690, { bold: true, size: 10 });
+
+          // ---- TINs ----
+          draw(page, payerEin, 58, 624, { maxWidth: 115 });
+          // Recipient TIN — not captured yet, leave blank
+
+          // ---- RECIPIENT block ----
+          draw(page, recipientName, 58, 586, { bold: true, maxWidth: 235 });
+          // recipient street / city / state / zip left blank (not captured)
+
+          // ---- Box 1a: Nonemployee compensation ----
+          draw(page, amount, 315, 650, { bold: true, size: 10 });
+
+          // ---- Account number (recipient nickname as reference) ----
+          draw(page, r.nickname.slice(0, 20), 58, 444, { size: 8, maxWidth: 190 });
         }
 
         const copied = await out.copyPages(src, src.getPageIndices());
@@ -329,12 +378,13 @@ export function TaxSummary() {
       URL.revokeObjectURL(url);
       toast({
         title: `1099-NEC PDF ready`,
-        description: `Filled ${rows.length} recipient${rows.length !== 1 ? "s" : ""}. Verify TIN, address, and amounts before filing.`,
+        description: `Filled ${rows.length} recipient${rows.length !== 1 ? "s" : ""}. Verify recipient TIN & address before filing.`,
       });
     } catch (e: any) {
       toast({ title: "Couldn't generate 1099-NEC", description: e.message, variant: "destructive" });
     }
   };
+
 
 
 
