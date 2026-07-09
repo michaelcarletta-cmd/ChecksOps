@@ -69,6 +69,63 @@ export function TaxSummary() {
   const [monthFilter, setMonthFilter] = useState<string>("all"); // "all" or "0".."11"
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [editing, setEditing] = useState<{ key: string; name: string } | null>(null);
+  const [form, setForm] = useState<TaxProfile>({
+    recipient_key: "", recipient_name: "", tin: "", address_street: "", address_city: "",
+    address_state: "", address_zip: "", account_number: "", notes: "",
+  });
+  const queryClient = useQueryClient();
+
+  const { data: taxProfiles = [] } = useQuery({
+    queryKey: ["recipient-tax-profiles", tenant?.id],
+    enabled: !!tenant?.id,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("recipient_tax_profiles")
+        .select("recipient_key, recipient_name, tin, address_street, address_city, address_state, address_zip, account_number, notes")
+        .eq("tenant_id", tenant!.id);
+      if (error) throw error;
+      return (data ?? []) as TaxProfile[];
+    },
+  });
+
+  const profileByKey = useMemo(() => {
+    const m: Record<string, TaxProfile> = {};
+    for (const p of taxProfiles) m[p.recipient_key] = p;
+    return m;
+  }, [taxProfiles]);
+
+  const saveProfile = useMutation({
+    mutationFn: async (p: TaxProfile) => {
+      const payload = { ...p, tenant_id: tenant!.id };
+      const { error } = await (supabase as any)
+        .from("recipient_tax_profiles")
+        .upsert(payload, { onConflict: "tenant_id,recipient_key" });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recipient-tax-profiles", tenant?.id] });
+      toast({ title: "Recipient tax info saved" });
+      setEditing(null);
+    },
+    onError: (e: any) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
+  });
+
+  const openEdit = (key: string, defaultName: string) => {
+    const existing = profileByKey[key];
+    setEditing({ key, name: defaultName });
+    setForm({
+      recipient_key: key,
+      recipient_name: existing?.recipient_name ?? defaultName,
+      tin: existing?.tin ?? "",
+      address_street: existing?.address_street ?? "",
+      address_city: existing?.address_city ?? "",
+      address_state: existing?.address_state ?? "",
+      address_zip: existing?.address_zip ?? "",
+      account_number: existing?.account_number ?? "",
+      notes: existing?.notes ?? "",
+    });
+  };
 
   const { data: tenantDetails } = useQuery({
     queryKey: ["tax-summary-tenant-details", tenant?.id],
