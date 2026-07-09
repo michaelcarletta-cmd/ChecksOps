@@ -6,11 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DollarSign, ArrowDownCircle, Send, CheckCircle2, AlertCircle, Clock, FileCheck, X } from "lucide-react";
 import { format } from "date-fns";
 import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
+
 
 interface Props {
   checkIntakeItemId: string;
@@ -80,6 +82,36 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
       return data ?? [];
     },
   });
+
+  // Recurring recipients — distinct external recipients this tenant has paid before
+  const { data: recurringRecipients = [] } = useQuery({
+    queryKey: ["recurring-recipients", tenant?.id],
+    enabled: !!tenant?.id,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("disbursement_splits")
+        .select("recipient_name, recipient_type, created_at")
+        .eq("tenant_id", tenant!.id)
+        .eq("method", "external_check")
+        .not("recipient_name", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      const seen = new Map<string, { name: string; type: string; count: number }>();
+      for (const r of (data ?? []) as any[]) {
+        const name = String(r.recipient_name ?? "").trim();
+        if (!name) continue;
+        const type = r.recipient_type ?? "other";
+        const key = `${type}|${name.toLowerCase()}`;
+        const existing = seen.get(key);
+        if (existing) existing.count += 1;
+        else seen.set(key, { name, type, count: 1 });
+      }
+      return Array.from(seen.values()).sort((a, b) => b.count - a.count);
+    },
+  });
+
+
 
   const outgoingSplits = outgoingBatches.flatMap((b: any) =>
     (b.disbursement_splits ?? []).map((s: any) => ({ ...s, batch_id: b.id }))
@@ -201,6 +233,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
       setExtRecipient(""); setExtRecipientType("vendor"); setExtCheckNum(""); setExtAmount(""); setExtNotes("");
       setDisburseMode(null);
       qc.invalidateQueries({ queryKey: ["funds-tab-disbursements", checkIntakeItemId, tenant?.id] });
+      qc.invalidateQueries({ queryKey: ["recurring-recipients", tenant?.id] });
     } catch (e: any) {
       toast({ title: "Couldn't record external disbursement", description: e.message, variant: "destructive" });
     } finally {
@@ -348,6 +381,33 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
               </Button>
             </div>
             <div className="space-y-2">
+              {recurringRecipients.length > 0 && (
+                <div>
+                  <Label className="text-[11px]">Recurring recipient (optional)</Label>
+                  <Select
+                    value=""
+                    onValueChange={(v) => {
+                      const pick = recurringRecipients.find((r: any) => `${r.type}|${r.name}` === v);
+                      if (pick) {
+                        setExtRecipient(pick.name);
+                        setExtRecipientType(pick.type);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue placeholder="Pick a past recipient..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {recurringRecipients.map((r: any) => (
+                        <SelectItem key={`${r.type}|${r.name}`} value={`${r.type}|${r.name}`} className="text-xs">
+                          {r.name} <span className="text-muted-foreground">· {r.type} · {r.count}×</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               <div className="grid grid-cols-[1fr_140px] gap-2">
                 <div>
                   <Label className="text-[11px]">Recipient</Label>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,8 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download, Search, Users } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Download, Search, Users, Pencil } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths } from "date-fns";
+
 
 const TYPE_LABELS: Record<string, string> = {
   subcontractor: "Subs",
@@ -49,9 +53,48 @@ type DateRange = "this_month" | "last_month" | "this_year" | "all";
 
 export function RecipientReport() {
   const { tenant } = useTenant();
+  const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [dateRange, setDateRange] = useState<DateRange>("this_year");
+  const [editTarget, setEditTarget] = useState<{ name: string; type: string; count: number } | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editType, setEditType] = useState("other");
+  const [editSaving, setEditSaving] = useState(false);
+
+  const openEdit = (name: string, type: string, count: number) => {
+    setEditTarget({ name, type, count });
+    setEditName(name);
+    setEditType(type);
+  };
+
+  const saveEdit = async () => {
+    if (!editTarget || !tenant?.id) return;
+    const newName = editName.trim();
+    if (!newName) {
+      toast({ title: "Recipient name required", variant: "destructive" });
+      return;
+    }
+    setEditSaving(true);
+    try {
+      const { error } = await (supabase as any)
+        .from("disbursement_splits")
+        .update({ recipient_name: newName, recipient_type: editType })
+        .eq("tenant_id", tenant.id)
+        .eq("recipient_name", editTarget.name)
+        .eq("recipient_type", editTarget.type);
+      if (error) throw error;
+      toast({ title: "Recipient updated", description: `${editTarget.count} payment${editTarget.count !== 1 ? "s" : ""} updated` });
+      setEditTarget(null);
+      qc.invalidateQueries({ queryKey: ["recipient-report", tenant.id] });
+      qc.invalidateQueries({ queryKey: ["recurring-recipients", tenant.id] });
+    } catch (e: any) {
+      toast({ title: "Couldn't update recipient", description: e.message, variant: "destructive" });
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
 
   const dateFilters = useMemo(() => {
     const now = new Date();
@@ -302,6 +345,7 @@ export function RecipientReport() {
                     <th className="text-right p-3 font-medium hidden sm:table-cell">Payments</th>
                     <th className="text-right p-3 font-medium">Total Paid</th>
                     <th className="text-left p-3 font-medium hidden md:table-cell">Last Paid</th>
+                    <th className="p-3 w-10"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -320,6 +364,17 @@ export function RecipientReport() {
                       <td className="p-3 text-xs text-muted-foreground hidden md:table-cell">
                         {format(new Date(r.last), "MMM d, yyyy")}
                       </td>
+                      <td className="p-3 text-right">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0"
+                          title="Edit recipient"
+                          onClick={() => openEdit(r.name, r.type, r.count)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -328,6 +383,44 @@ export function RecipientReport() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit recipient</DialogTitle>
+          </DialogHeader>
+          {editTarget && (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Updates <span className="font-medium text-foreground">{editTarget.count}</span> payment
+                {editTarget.count !== 1 ? "s" : ""} tied to <span className="font-medium text-foreground">{editTarget.name}</span>.
+                To merge with an existing recipient, enter that recipient's exact name and matching type.
+              </p>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Recipient name</Label>
+                <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="h-9 text-sm" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Type</Label>
+                <Select value={editType} onValueChange={setEditType}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(TYPE_LABELS).map(([v, l]) => (
+                      <SelectItem key={v} value={v} className="text-xs">{l}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
+            <Button onClick={saveEdit} disabled={editSaving}>
+              {editSaving ? "Saving..." : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
