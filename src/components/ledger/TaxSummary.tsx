@@ -397,10 +397,15 @@ export function TaxSummary() {
       for (const r of rows) {
         const src = await PDFDocument.load(srcBytes);
         const pageCount = src.getPageCount();
-        const recipientName = r.custname && r.custname !== "External check" && r.custname !== "Cash job payee"
-          ? r.custname
-          : r.nickname;
+        const profile = profileByKey[r.id];
+        const recipientName = profile?.recipient_name
+          || (r.custname && r.custname !== "External check" && r.custname !== "Cash job payee" ? r.custname : r.nickname);
         const amount = r.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const recipientStreet = profile?.address_street ?? "";
+        const recipientCityStateZip = [profile?.address_city, profile?.address_state].filter(Boolean).join(", ")
+          + (profile?.address_zip ? ` ${profile.address_zip}` : "");
+        const recipientTin = profile?.tin ?? "";
+        const accountNumber = profile?.account_number || r.nickname.slice(0, 20);
 
         for (let pi = 0; pi < pageCount; pi++) {
           const page = src.getPage(pi);
@@ -418,22 +423,24 @@ export function TaxSummary() {
 
           // ---- TINs ----
           draw(page, payerEin, 58, 624, { maxWidth: 115 });
-          // Recipient TIN — not captured yet, leave blank
+          draw(page, recipientTin, 215, 624, { maxWidth: 115 });
 
           // ---- RECIPIENT block ----
           draw(page, recipientName, 58, 586, { bold: true, maxWidth: 235 });
-          // recipient street / city / state / zip left blank (not captured)
+          draw(page, recipientStreet, 58, 562, { maxWidth: 235 });
+          draw(page, recipientCityStateZip, 58, 538, { maxWidth: 235 });
 
           // ---- Box 1a: Nonemployee compensation ----
           draw(page, amount, 315, 650, { bold: true, size: 10 });
 
-          // ---- Account number (recipient nickname as reference) ----
-          draw(page, r.nickname.slice(0, 20), 58, 444, { size: 8, maxWidth: 190 });
+          // ---- Account number ----
+          draw(page, accountNumber.slice(0, 24), 58, 444, { size: 8, maxWidth: 190 });
         }
 
         const copied = await out.copyPages(src, src.getPageIndices());
         copied.forEach((p) => out.addPage(p));
       }
+
 
       const pdfBytes = await out.save();
       const blob = new Blob([pdfBytes as BlobPart], { type: "application/pdf" });
