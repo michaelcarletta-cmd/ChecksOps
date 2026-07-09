@@ -252,6 +252,7 @@ export function ContractorServiceAreaCard() {
         user_id: user.id,
         display_name: displayName,
         service_zip_prefixes: [],
+        service_states: [],
         trades: [],
       });
       if (error) throw error;
