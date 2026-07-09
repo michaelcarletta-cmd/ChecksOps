@@ -21655,6 +21655,21 @@ export type Database = {
         }
         Returns: Json
       }
+      submit_homeowner_intro_request: {
+        Args: {
+          _contractor_profile_id: string
+          _homeowner_email: string
+          _homeowner_name: string
+          _homeowner_phone?: string
+          _loss_type?: string
+          _message?: string
+          _property_zip?: string
+        }
+        Returns: {
+          access_token: string
+          id: string
+        }[]
+      }
       submit_manager_approval: {
         Args: {
           p_actor_id: string
