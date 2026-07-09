@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Loader2, MapPin, Save, Plus, X, Crosshair, Wrench, Globe } from "lucide-react";
-import { ContractorVerificationStatusCard } from "./ContractorVerificationStatusCard";
 
 type MyProfile = {
   id: string;
