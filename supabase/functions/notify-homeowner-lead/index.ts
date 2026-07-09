@@ -27,10 +27,12 @@ Deno.serve(async (req) => {
     const { data: lead, error } = await admin
       .from('homeowner_intro_requests')
       .select(
-        'id, contractor_profile_id, contractor_user_id, homeowner_name, homeowner_email, homeowner_phone, property_zip, loss_type, message, created_at',
+        'id, contractor_profile_id, contractor_user_id, homeowner_name, homeowner_email, homeowner_phone, property_zip, loss_type, message, created_at, access_token',
       )
       .eq('id', parsed.data.lead_id)
       .maybeSingle()
+
+
 
     if (error || !lead) {
       return new Response(JSON.stringify({ error: 'lead not found' }), {
@@ -89,6 +91,28 @@ Deno.serve(async (req) => {
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
+
+    // Also send the homeowner their private claim-portal link (best-effort)
+    if (lead.access_token && lead.homeowner_email) {
+      const portalUrl = `${siteUrl}/h/claim/${lead.access_token}`
+      await admin.functions
+        .invoke('send-transactional-email', {
+          body: {
+            templateName: 'homeowner-claim-portal-link',
+            recipientEmail: lead.homeowner_email,
+            idempotencyKey: `homeowner-portal-${lead.id}`,
+            templateData: {
+              homeowner_name: lead.homeowner_name?.split(' ')[0] ?? '',
+              contractor_name: profile?.display_name ?? 'your contractor',
+              portal_url: portalUrl,
+            },
+          },
+        })
+        .catch(() => {
+          /* non-blocking: contractor notification already succeeded */
+        })
+    }
+
 
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,

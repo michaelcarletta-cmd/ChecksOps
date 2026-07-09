@@ -76,9 +76,31 @@ Deno.serve(async (req) => {
         .eq('lead_id', lead.id)
         .order('created_at', { ascending: false })
 
-      // Timeline stub: show upload + status events. Real check pipeline
-      // hooks in later (check_intake_items keyed to contractor_user_id +
-      // homeowner_email match). For now surface the homeowner's own uploads.
+      // Live check pipeline: match by contractor's tenant + claim number the
+      // homeowner entered on their DTP. Falls back to empty when unknown.
+      let checks: any[] = []
+      if (lead.dtp_claim_number && profile?.user_id) {
+        const { data: tenants } = await admin
+          .from('tenant_users')
+          .select('tenant_id')
+          .eq('user_id', profile.user_id)
+        const tenantIds = (tenants ?? []).map((t: any) => t.tenant_id).filter(Boolean)
+        if (tenantIds.length) {
+          const { data: rows } = await admin
+            .from('check_intake_items')
+            .select(
+              'id, amount, check_number, carrier_name, payee_line, check_stage, status, deposited_at, created_at, updated_at',
+            )
+            .in('tenant_id', tenantIds)
+            .or(
+              `detected_claim_number.eq.${lead.dtp_claim_number},freedom_claim_number.eq.${lead.dtp_claim_number}`,
+            )
+            .order('created_at', { ascending: false })
+            .limit(20)
+          checks = rows ?? []
+        }
+      }
+
       return json({
         ok: true,
         lead: {
@@ -105,8 +127,10 @@ Deno.serve(async (req) => {
             }
           : null,
         uploads: uploads ?? [],
+        checks,
       })
     }
+
 
     if (!profile || !profile.is_directory_listed || !profile.directory_opt_in) {
       return json({ error: 'contractor not accepting activity' }, 403)
