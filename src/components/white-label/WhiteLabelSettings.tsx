@@ -176,18 +176,16 @@ export function WhiteLabelSettings() {
             <StakeholderAccountSettings />
           </TabsContent>
 
-          <TabsContent value="branding">
+          <TabsContent value="branding" className="space-y-6">
             {tenant && <BrandingSettings tenant={tenant} />}
+            <EmailSenderSettings />
+            <TenantEmailHealthPanel />
           </TabsContent>
 
           <TabsContent value="referrals">
             <ReferralSettings />
           </TabsContent>
 
-          <TabsContent value="email" className="space-y-4">
-            <EmailSenderSettings />
-            <TenantEmailHealthPanel />
-          </TabsContent>
 
           <TabsContent value="compliance" className="space-y-8">
             <ComplianceSettings />
