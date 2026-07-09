@@ -9,10 +9,21 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { ShieldCheck, Star, MapPin, Search, Lock, CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-const TRADE_OPTIONS = [
-  "General Contractor", "Roofing", "Water Mitigation", "Fire Restoration",
-  "Mold Remediation", "Plumbing", "Electrical", "HVAC", "Flooring", "Framing",
+const TRADE_OPTIONS: { value: string; label: string }[] = [
+  { value: "general_contractor", label: "General Contractor" },
+  { value: "roofing", label: "Roofing" },
+  { value: "water_mitigation", label: "Water Mitigation" },
+  { value: "fire_restoration", label: "Fire / Smoke Restoration" },
+  { value: "mold_remediation", label: "Mold Remediation" },
+  { value: "plumbing", label: "Plumbing" },
+  { value: "electrical", label: "Electrical" },
+  { value: "hvac", label: "HVAC" },
+  { value: "flooring", label: "Flooring" },
+  { value: "windows_siding", label: "Windows & Siding" },
+  { value: "public_adjuster", label: "Public Adjuster" },
+  { value: "attorney", label: "Attorney (Insurance)" },
 ];
+const TRADE_LABEL = new Map(TRADE_OPTIONS.map((t) => [t.value, t.label]));
 const STATE_OPTIONS = ["FL","TX","CA","NY","GA","AZ","NC","SC","TN","VA","PA","OH","IL","CO","WA","OR","LA","AL","MS","NJ"];
 
 type PublicContractor = {
