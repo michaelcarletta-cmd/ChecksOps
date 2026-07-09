@@ -13853,6 +13853,76 @@ export type Database = {
         }
         Relationships: []
       }
+      homeowner_check_uploads: {
+        Row: {
+          contractor_profile_id: string
+          contractor_user_id: string
+          converted_check_id: string | null
+          created_at: string
+          file_mime: string | null
+          file_path: string
+          homeowner_email: string
+          homeowner_user_id: string | null
+          id: string
+          lead_id: string | null
+          note: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          contractor_profile_id: string
+          contractor_user_id: string
+          converted_check_id?: string | null
+          created_at?: string
+          file_mime?: string | null
+          file_path: string
+          homeowner_email: string
+          homeowner_user_id?: string | null
+          id?: string
+          lead_id?: string | null
+          note?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          contractor_profile_id?: string
+          contractor_user_id?: string
+          converted_check_id?: string | null
+          created_at?: string
+          file_mime?: string | null
+          file_path?: string
+          homeowner_email?: string
+          homeowner_user_id?: string | null
+          id?: string
+          lead_id?: string | null
+          note?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "homeowner_check_uploads_contractor_profile_id_fkey"
+            columns: ["contractor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "contractor_directory_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "homeowner_check_uploads_contractor_profile_id_fkey"
+            columns: ["contractor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "contractor_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "homeowner_check_uploads_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "homeowner_intro_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       homeowner_directory_leads: {
         Row: {
           action: string
