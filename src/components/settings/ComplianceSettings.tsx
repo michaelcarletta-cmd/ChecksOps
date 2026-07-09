@@ -8,22 +8,17 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Save, ShieldCheck, FileText, AlertTriangle, CheckCircle2, ExternalLink, Eye } from "lucide-react";
+import { Loader2, Save, ShieldCheck, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { formatPhoneNumber } from "@/lib/utils";
-
-const ACH_POLICY_VERSION = "2026-06-22";
+import { TenantDocumentsManager } from "@/components/white-label/TenantDocumentsManager";
 
 type AddressParts = { street: string; city: string; state: string; zip: string };
 
 function parseAddress(combined: string): AddressParts {
   const empty = { street: "", city: "", state: "", zip: "" };
   if (!combined) return empty;
-  // Expect "street, city, state zip"
   const parts = combined.split(",").map((p) => p.trim());
   if (parts.length >= 3) {
     const stateZip = parts[parts.length - 1].split(/\s+/);
@@ -53,7 +48,7 @@ export function ComplianceSettings() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tenants")
-        .select("id, name, legal_business_name, ein, business_address, business_phone, beneficial_owner_name, beneficial_owner_dob, beneficial_owner_id_url, kyc_completed_at, kyc_completed_by, wisp_acknowledged_at, wisp_acknowledged_by, ach_policy_acknowledged_at, ach_policy_acknowledged_by, ach_policy_version")
+        .select("id, name, legal_business_name, ein, business_address, business_phone, beneficial_owner_name, beneficial_owner_dob, beneficial_owner_id_url, kyc_completed_at, kyc_completed_by")
         .eq("id", tenant!.id)
         .single();
       if (error) throw error;
@@ -73,9 +68,6 @@ export function ComplianceSettings() {
     beneficial_owner_dob: "",
     beneficial_owner_id_url: "",
   });
-
-  const [viewing, setViewing] = useState<null | "wisp" | "ach">(null);
-  const [hasScrolled, setHasScrolled] = useState(false);
 
   useEffect(() => {
     if (t) {
@@ -128,46 +120,11 @@ export function ComplianceSettings() {
     onError: (e: any) => toast({ title: "Could not save", description: e.message, variant: "destructive" }),
   });
 
-  const ackPolicy = useMutation({
-    mutationFn: async (kind: "wisp" | "ach") => {
-      const patch: any = {};
-      if (kind === "wisp") {
-        patch.wisp_acknowledged_at = new Date().toISOString();
-        patch.wisp_acknowledged_by = user?.id;
-      } else {
-        patch.ach_policy_acknowledged_at = new Date().toISOString();
-        patch.ach_policy_acknowledged_by = user?.id;
-        patch.ach_policy_version = ACH_POLICY_VERSION;
-      }
-      const { error } = await supabase.from("tenants").update(patch).eq("id", tenant!.id);
-      if (error) throw error;
-      await supabase.from("glba_security_events").insert({
-        tenant_id: tenant!.id,
-        event_type: kind === "wisp" ? "policy.wisp_acknowledged" : "policy.ach_acknowledged",
-        actor_user_id: user?.id,
-        metadata: kind === "ach" ? { version: ACH_POLICY_VERSION } : {},
-      } as any);
-      return kind;
-    },
-    onSuccess: (kind) => {
-      toast({ title: "Acknowledged", description: kind === "wisp" ? "WISP acknowledgment recorded." : "ACH policy acknowledgment recorded." });
-      setViewing(null);
-      setHasScrolled(false);
-      qc.invalidateQueries({ queryKey: ["compliance-tenant", tenant?.id] });
-    },
-    onError: (e: any) => toast({ title: "Could not record", description: e.message, variant: "destructive" }),
-  });
-
   if (isLoading) {
     return <div className="flex items-center justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
   }
 
   const kycDone = !!t?.kyc_completed_at;
-  const wispDone = !!t?.wisp_acknowledged_at;
-  const achDone = !!t?.ach_policy_acknowledged_at && t?.ach_policy_version === ACH_POLICY_VERSION;
-
-  const viewingTitle = viewing === "wisp" ? "Written Information Security Program (WISP)" : `ACH Risk & Fraud Monitoring Policy (${ACH_POLICY_VERSION})`;
-  const viewingText = viewing === "wisp" ? wispDocText : achDocText;
 
   return (
     <div className="space-y-6">
@@ -177,12 +134,10 @@ export function ComplianceSettings() {
           <CardTitle className="flex items-center gap-2 text-base">
             <ShieldCheck className="h-4 w-4 text-primary" /> Compliance status
           </CardTitle>
-          <CardDescription>GLBA, AML, and NACHA compliance posture for this tenant.</CardDescription>
+          <CardDescription>KYC and vetting document posture for this tenant.</CardDescription>
         </CardHeader>
-        <CardContent className="grid sm:grid-cols-3 gap-3">
+        <CardContent>
           <StatusPill label="KYC" done={kycDone} />
-          <StatusPill label="WISP acknowledged" done={wispDone} />
-          <StatusPill label={`ACH policy (${ACH_POLICY_VERSION})`} done={achDone} />
         </CardContent>
       </Card>
 
@@ -234,71 +189,8 @@ export function ComplianceSettings() {
         </CardContent>
       </Card>
 
-      {/* Policy acknowledgments */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Policy acknowledgments</CardTitle>
-          <CardDescription>Click "View & acknowledge" to read each policy. You must scroll to the bottom before you can acknowledge.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <PolicyRow
-            title="Written Information Security Program (WISP)"
-            subtitle={wispDone ? `Acknowledged ${format(new Date(t.wisp_acknowledged_at), "PPp")}` : "Not yet acknowledged"}
-            done={wispDone}
-            onView={() => { setViewing("wisp"); setHasScrolled(false); }}
-          />
-          <PolicyRow
-            title={`ACH Risk & Fraud Monitoring Policy (${ACH_POLICY_VERSION})`}
-            subtitle={achDone ? `Acknowledged ${format(new Date(t.ach_policy_acknowledged_at), "PPp")}` : "Not yet acknowledged — required by NACHA effective 2026-06-22"}
-            done={achDone}
-            onView={() => { setViewing("ach"); setHasScrolled(false); }}
-          />
-        </CardContent>
-      </Card>
-
-      {/* Reference links */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2"><FileText className="h-4 w-4" /> Reference documents</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <DocLink href="/privacy-notice" label="Consumer Privacy Notice (live page)" external />
-          <p className="text-xs text-muted-foreground pt-2">
-            Internal policies (WISP, Data Retention, Incident Response, ACH Risk & Fraud Monitoring, AML Program) are maintained by the Qualified Individual and viewable above.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Policy viewer dialog */}
-      <Dialog open={!!viewing} onOpenChange={(o) => { if (!o) { setViewing(null); setHasScrolled(false); } }}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{viewingTitle}</DialogTitle>
-            <DialogDescription>Scroll to the bottom to enable acknowledgment.</DialogDescription>
-          </DialogHeader>
-          <ScrollArea
-            className="h-[55vh] border rounded-md p-4 bg-muted/20"
-            onScrollCapture={(e) => {
-              const el = e.currentTarget.querySelector("[data-radix-scroll-area-viewport]") as HTMLDivElement | null;
-              if (!el) return;
-              if (el.scrollTop + el.clientHeight >= el.scrollHeight - 24) setHasScrolled(true);
-            }}
-          >
-            <pre className="whitespace-pre-wrap text-xs leading-relaxed font-sans">{viewingText}</pre>
-          </ScrollArea>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" size="sm" onClick={() => { setViewing(null); setHasScrolled(false); }}>Close</Button>
-            <Button
-              size="sm"
-              disabled={!hasScrolled || ackPolicy.isPending || (viewing === "wisp" ? wispDone : achDone)}
-              onClick={() => viewing && ackPolicy.mutate(viewing)}
-            >
-              {ackPolicy.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}
-              {hasScrolled ? "I've read this — Acknowledge" : "Scroll to bottom to acknowledge"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Vetting documents (W-9, License, Insurance, SaaS, ToS, Privacy Policy) */}
+      {tenant?.id && <TenantDocumentsManager tenantId={tenant.id} />}
     </div>
   );
 }
@@ -318,31 +210,5 @@ function Field({ label, value, onChange, type = "text", placeholder, className =
       <Label className="text-[11px] uppercase text-muted-foreground tracking-wide">{label}</Label>
       <Input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} className="h-9" />
     </div>
-  );
-}
-
-function PolicyRow({ title, subtitle, done, onView }: { title: string; subtitle: string; done: boolean; onView: () => void }) {
-  return (
-    <div className="flex items-start justify-between gap-3 p-3 rounded-md border">
-      <div className="space-y-0.5">
-        <p className="text-sm font-medium">{title}</p>
-        <p className="text-xs text-muted-foreground">{subtitle}</p>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        {done && <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-500/20">Acknowledged</Badge>}
-        <Button size="sm" variant="outline" onClick={onView}>
-          <Eye className="h-3 w-3 mr-1" />
-          {done ? "View" : "View & acknowledge"}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function DocLink({ href, label, external }: { href: string; label: string; external?: boolean }) {
-  return (
-    <a href={href} target={external ? "_blank" : undefined} rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
-      {label} {external && <ExternalLink className="h-3 w-3" />}
-    </a>
   );
 }
