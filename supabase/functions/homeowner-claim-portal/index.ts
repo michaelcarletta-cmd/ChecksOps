@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
     const { data: lead, error: leadErr } = await admin
       .from('homeowner_intro_requests')
       .select(
-        'id, contractor_profile_id, contractor_user_id, homeowner_name, homeowner_email, homeowner_phone, property_zip, loss_type, message, status, created_at, dtp_signed_at, dtp_signature_name, dtp_insurance_carrier, dtp_claim_number, dtp_policy_number, dtp_property_address',
+        'id, contractor_profile_id, contractor_user_id, homeowner_name, homeowner_email, homeowner_phone, property_zip, loss_type, message, status, accepted_at, created_at, dtp_signed_at, dtp_signature_name, dtp_insurance_carrier, dtp_claim_number, dtp_policy_number, dtp_property_address',
       )
       .eq('access_token', p.token)
       .maybeSingle()
@@ -68,6 +68,28 @@ Deno.serve(async (req) => {
       .select('id, display_name, bio, tier, is_directory_listed, directory_opt_in, user_id')
       .eq('id', lead.contractor_profile_id)
       .maybeSingle()
+
+    // The portal is inert until the contractor accepts the lead.
+    const isAccepted = lead.status === 'accepted' && !!lead.accepted_at
+    if (!isAccepted) {
+      if (p.action === 'get') {
+        return json({
+          ok: true,
+          pending: true,
+          lead: {
+            id: lead.id,
+            homeowner_name: lead.homeowner_name,
+            status: lead.status,
+            accepted_at: lead.accepted_at,
+            created_at: lead.created_at,
+          },
+          contractor: profile
+            ? { id: profile.id, display_name: profile.display_name, tier: profile.tier }
+            : null,
+        })
+      }
+      return json({ error: 'contractor has not accepted this request yet' }, 403)
+    }
 
     if (p.action === 'get') {
       const { data: uploads } = await admin
