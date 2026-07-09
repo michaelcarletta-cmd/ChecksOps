@@ -151,9 +151,14 @@ export function ContractorServiceAreaCard() {
       if (radN != null && (radN < 1 || radN > 500)) {
         throw new Error("Radius must be 1-500 miles");
       }
+      const cleanName = businessName.trim();
+      if (published && cleanName.length < 2) {
+        throw new Error("Enter your business name before publishing");
+      }
       const { error } = await supabase
         .from("contractor_profiles")
         .update({
+          display_name: cleanName || profile.display_name,
           service_zip_prefixes: prefixes,
           home_base_lat: latN,
           home_base_lng: lngN,
