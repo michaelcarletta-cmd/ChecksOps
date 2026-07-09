@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ShieldCheck, Star, MapPin, Search, Lock, CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { HomeownerIntroRequestModal } from "@/components/networking/HomeownerIntroRequestModal";
 
 const TRADE_OPTIONS: { value: string; label: string }[] = [
   { value: "general_contractor", label: "General Contractor" },
@@ -158,6 +159,7 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
   const [selected, setSelected] = useState<PublicContractor | null>(null);
   const [selectedReviews, setSelectedReviews] = useState<Review[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -307,17 +309,15 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
                     </div>
                   )}
                 </div>
-                <div className="border-t border-border pt-4 bg-muted/30 -mx-6 px-6 py-4">
-                  <div className="flex gap-3 items-start">
-                    <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                    <div>
-                      <div className="font-semibold text-sm mb-1">To contact this pro</div>
-                      <p className="text-xs text-muted-foreground">
-                        Ask your restoration contractor or public adjuster to invite them to your claim through ChecksOps.
-                        Direct contact isn't available from this public page — we keep the review chain honest.
-                      </p>
-                    </div>
-                  </div>
+                <div className="border-t border-border pt-4 -mx-6 px-6 bg-muted/30 py-4 space-y-3">
+                  <Button className="w-full" size="lg" onClick={() => setContactOpen(true)}>
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    Contact this Pro
+                  </Button>
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    Your info goes straight to {selected.display_name}. ChecksOps doesn't sell your details or
+                    share them with anyone else in the directory.
+                  </p>
                 </div>
               </div>
             </>
@@ -325,10 +325,17 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
         </SheetContent>
       </Sheet>
 
+      <HomeownerIntroRequestModal
+        open={contactOpen}
+        onOpenChange={setContactOpen}
+        contractor={selected ? { id: selected.id, display_name: selected.display_name } : null}
+      />
+
       <PublicFooter />
     </div>
   );
 }
+
 
 function ContractorCard({ c, onClick }: { c: PublicContractor; onClick: () => void }) {
   const local = c.zip_prefix_match || (c.distance_miles != null && c.service_radius_miles != null && c.distance_miles <= c.service_radius_miles);
