@@ -74,6 +74,7 @@ export function ContractorServiceAreaCard() {
   const [trades, setTrades] = useState<string[]>([]);
   const [newTrade, setNewTrade] = useState("");
   const [bio, setBio] = useState("");
+  const [businessName, setBusinessName] = useState("");
   const [published, setPublished] = useState(false);
 
   useEffect(() => {
@@ -84,6 +85,7 @@ export function ContractorServiceAreaCard() {
       setRadius(profile.service_radius_miles != null ? String(profile.service_radius_miles) : "");
       setTrades(profile.trades ?? []);
       setBio(profile.bio ?? "");
+      setBusinessName(profile.display_name ?? "");
       setPublished(!!(profile.is_directory_listed && profile.directory_opt_in));
     }
   }, [profile]);
