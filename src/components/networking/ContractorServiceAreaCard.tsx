@@ -346,6 +346,12 @@ export function ContractorServiceAreaCard() {
               : <span className="text-muted-foreground italic">none</span>}
           </div>
           <div>
+            <span className="text-muted-foreground">States: </span>
+            {(profile.service_states?.length ?? 0) > 0
+              ? profile.service_states!.join(", ")
+              : <span className="text-muted-foreground italic">none</span>}
+          </div>
+          <div>
             <span className="text-muted-foreground">Home base: </span>
             {profile.home_base_lat != null && profile.home_base_lng != null
               ? `${Number(profile.home_base_lat).toFixed(4)}, ${Number(profile.home_base_lng).toFixed(4)}`
