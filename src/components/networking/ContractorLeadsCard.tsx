@@ -100,6 +100,26 @@ export function ContractorLeadsCard() {
     onError: (e: any) => toast.error(e.message ?? "Update failed"),
   });
 
+  const acceptLead = useMutation({
+    mutationFn: async (leadId: string) => {
+      const { error } = await supabase
+        .from("homeowner_intro_requests")
+        .update({ status: "accepted" })
+        .eq("id", leadId);
+      if (error) throw error;
+      const { error: fnErr } = await supabase.functions.invoke(
+        "notify-homeowner-lead-accepted",
+        { body: { lead_id: leadId } },
+      );
+      if (fnErr) throw fnErr;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["homeowner-intro-requests"] });
+      toast.success("Accepted — homeowner emailed their private claim portal link");
+    },
+    onError: (e: any) => toast.error(e.message ?? "Could not accept lead"),
+  });
+
   const filtered = (leads ?? []).filter((l) => filter === "all" || l.status === filter);
   const newCount = (leads ?? []).filter((l) => l.status === "new").length;
 
