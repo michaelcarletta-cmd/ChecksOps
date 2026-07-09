@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ShieldCheck, Star, MapPin, Search, Lock, CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { HomeownerIntroRequestModal } from "@/components/networking/HomeownerIntroRequestModal";
 
 const TRADE_OPTIONS: { value: string; label: string }[] = [
   { value: "general_contractor", label: "General Contractor" },
