@@ -229,6 +229,7 @@ export function ContractorLeadsCard() {
                       <Phone className="h-3 w-3 mr-1" /> Call
                     </Button>
                   )}
+                  <LinkCheckToLeadButton leadId={l.id} leadClaimNumber={l.dtp_claim_number} />
                 </div>
               </div>
             ))}
