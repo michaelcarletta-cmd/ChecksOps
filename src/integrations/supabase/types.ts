@@ -13823,6 +13823,54 @@ export type Database = {
         }
         Relationships: []
       }
+      homeowner_directory_leads: {
+        Row: {
+          action: string
+          contractor_id: string | null
+          created_at: string
+          email: string
+          id: string
+          referrer: string | null
+          user_agent: string | null
+          zip: string
+        }
+        Insert: {
+          action?: string
+          contractor_id?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          referrer?: string | null
+          user_agent?: string | null
+          zip: string
+        }
+        Update: {
+          action?: string
+          contractor_id?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          referrer?: string | null
+          user_agent?: string | null
+          zip?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "homeowner_directory_leads_contractor_id_fkey"
+            columns: ["contractor_id"]
+            isOneToOne: false
+            referencedRelation: "contractor_directory_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "homeowner_directory_leads_contractor_id_fkey"
+            columns: ["contractor_id"]
+            isOneToOne: false
+            referencedRelation: "contractor_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       increase_settings: {
         Row: {
           id: string
