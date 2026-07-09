@@ -13983,6 +13983,7 @@ export type Database = {
       }
       homeowner_intro_requests: {
         Row: {
+          accepted_at: string | null
           access_token: string
           contacted_at: string | null
           contractor_profile_id: string
@@ -14009,6 +14010,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          accepted_at?: string | null
           access_token?: string
           contacted_at?: string | null
           contractor_profile_id: string
@@ -14035,6 +14037,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          accepted_at?: string | null
           access_token?: string
           contacted_at?: string | null
           contractor_profile_id?: string
