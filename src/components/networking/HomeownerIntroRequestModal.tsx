@@ -59,6 +59,8 @@ export function HomeownerIntroRequestModal({ open, onOpenChange, contractor }: P
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [leadId, setLeadId] = useState<string | null>(null);
+  const [submittedEmail, setSubmittedEmail] = useState("");
 
   const reset = () => {
     setName("");
@@ -68,6 +70,8 @@ export function HomeownerIntroRequestModal({ open, onOpenChange, contractor }: P
     setLossType("");
     setMessage("");
     setSubmitted(false);
+    setLeadId(null);
+    setSubmittedEmail("");
   };
 
   const handleClose = (o: boolean) => {
