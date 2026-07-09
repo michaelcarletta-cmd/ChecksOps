@@ -21,6 +21,7 @@ type Lead = {
   status: string;
   created_at: string;
   contacted_at: string | null;
+  dtp_claim_number: string | null;
 };
 
 const STATUS_OPTIONS = [
@@ -51,7 +52,7 @@ export function ContractorLeadsCard() {
       const { data, error } = await supabase
         .from("homeowner_intro_requests")
         .select(
-          "id, homeowner_name, homeowner_email, homeowner_phone, property_zip, loss_type, message, status, created_at, contacted_at",
+          "id, homeowner_name, homeowner_email, homeowner_phone, property_zip, loss_type, message, status, created_at, contacted_at, dtp_claim_number",
         )
         .order("created_at", { ascending: false })
         .limit(200);
