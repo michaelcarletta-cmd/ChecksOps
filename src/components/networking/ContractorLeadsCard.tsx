@@ -252,6 +252,20 @@ export function ContractorLeadsCard() {
                       <Phone className="h-3 w-3 mr-1" /> Call
                     </Button>
                   )}
+                  {l.accepted_at ? (
+                    <Badge className="h-7 px-2 text-[10px] bg-emerald-500/20 text-emerald-300 flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> Accepted
+                    </Badge>
+                  ) : (
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => acceptLead.mutate(l.id)}
+                      disabled={acceptLead.isPending}
+                    >
+                      <CheckCircle2 className="h-3 w-3 mr-1" /> Accept & unlock portal
+                    </Button>
+                  )}
                   <LinkCheckToLeadButton leadId={l.id} leadClaimNumber={l.dtp_claim_number} />
                 </div>
               </div>
