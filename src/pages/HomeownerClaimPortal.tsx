@@ -70,6 +70,7 @@ export default function HomeownerClaimPortal() {
   const [contractor, setContractor] = useState<Contractor | null>(null);
   const [uploads, setUploads] = useState<UploadRow[]>([]);
   const [checks, setChecks] = useState<CheckRow[]>([]);
+  const [pending, setPending] = useState(false);
 
   // Upload state
   const [file, setFile] = useState<File | null>(null);
