@@ -100,6 +100,7 @@ export default function HomeownerClaimPortal() {
       });
       if (err) throw new Error(err.message);
       if ((data as any)?.error) throw new Error((data as any).error);
+      setPending(Boolean((data as any)?.pending));
       setLead((data as any).lead);
       setContractor((data as any).contractor);
       setUploads(((data as any).uploads ?? []) as UploadRow[]);
