@@ -133,6 +133,8 @@ export function HomeownerIntroRequestModal({ open, onOpenChange, contractor }: P
             /* non-blocking; the lead is already saved */
           });
       }
+      setLeadId(inserted?.id ?? null);
+      setSubmittedEmail(parsed.data.homeowner_email);
       setSubmitted(true);
     } catch (e: any) {
       toast.error(e.message ?? "Could not send your request");
