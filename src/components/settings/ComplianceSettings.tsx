@@ -15,8 +15,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Save, ShieldCheck, FileText, AlertTriangle, CheckCircle2, ExternalLink, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { formatPhoneNumber } from "@/lib/utils";
-import wispDocText from "../../../docs/WISP.md?raw";
-import achDocText from "../../../docs/ACH_RISK_FRAUD_MONITORING.md?raw";
 
 const ACH_POLICY_VERSION = "2026-06-22";
 
