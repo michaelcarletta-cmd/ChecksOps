@@ -59,6 +59,28 @@ export function ContractorLeadsCard() {
     },
   });
 
+  const { data: uploads } = useQuery({
+    queryKey: ["homeowner-check-uploads"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("homeowner_check_uploads")
+        .select("id, lead_id, file_path, file_mime, note, status, created_at")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const openUpload = async (path: string) => {
+    const { data, error } = await supabase.storage.from("claim-files").createSignedUrl(path, 300);
+    if (error || !data?.signedUrl) {
+      toast.error("Could not open file");
+      return;
+    }
+    window.open(data.signedUrl, "_blank", "noopener");
+  };
+
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       const patch: Record<string, unknown> = { status };
