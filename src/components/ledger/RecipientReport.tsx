@@ -345,6 +345,7 @@ export function RecipientReport() {
                     <th className="text-right p-3 font-medium hidden sm:table-cell">Payments</th>
                     <th className="text-right p-3 font-medium">Total Paid</th>
                     <th className="text-left p-3 font-medium hidden md:table-cell">Last Paid</th>
+                    <th className="p-3 w-10"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -363,6 +364,17 @@ export function RecipientReport() {
                       <td className="p-3 text-xs text-muted-foreground hidden md:table-cell">
                         {format(new Date(r.last), "MMM d, yyyy")}
                       </td>
+                      <td className="p-3 text-right">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0"
+                          title="Edit recipient"
+                          onClick={() => openEdit(r.name, r.type, r.count)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -371,6 +383,44 @@ export function RecipientReport() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit recipient</DialogTitle>
+          </DialogHeader>
+          {editTarget && (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Updates <span className="font-medium text-foreground">{editTarget.count}</span> payment
+                {editTarget.count !== 1 ? "s" : ""} tied to <span className="font-medium text-foreground">{editTarget.name}</span>.
+                To merge with an existing recipient, enter that recipient's exact name and matching type.
+              </p>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Recipient name</Label>
+                <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="h-9 text-sm" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Type</Label>
+                <Select value={editType} onValueChange={setEditType}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(TYPE_LABELS).map(([v, l]) => (
+                      <SelectItem key={v} value={v} className="text-xs">{l}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
+            <Button onClick={saveEdit} disabled={editSaving}>
+              {editSaving ? "Saving..." : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
