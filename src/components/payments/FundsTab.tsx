@@ -380,6 +380,33 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
               </Button>
             </div>
             <div className="space-y-2">
+              {recurringRecipients.length > 0 && (
+                <div>
+                  <Label className="text-[11px]">Recurring recipient (optional)</Label>
+                  <Select
+                    value=""
+                    onValueChange={(v) => {
+                      const pick = recurringRecipients.find((r: any) => `${r.type}|${r.name}` === v);
+                      if (pick) {
+                        setExtRecipient(pick.name);
+                        setExtRecipientType(pick.type);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue placeholder="Pick a past recipient..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {recurringRecipients.map((r: any) => (
+                        <SelectItem key={`${r.type}|${r.name}`} value={`${r.type}|${r.name}`} className="text-xs">
+                          {r.name} <span className="text-muted-foreground">· {r.type} · {r.count}×</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               <div className="grid grid-cols-[1fr_140px] gap-2">
                 <div>
                   <Label className="text-[11px]">Recipient</Label>
