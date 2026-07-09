@@ -56,6 +56,20 @@ export function TaxSummary() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
 
+  const { data: tenantDetails } = useQuery({
+    queryKey: ["tax-summary-tenant-details", tenant?.id],
+    enabled: !!tenant?.id,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("tenants")
+        .select("legal_business_name, ein, business_address, business_phone")
+        .eq("id", tenant!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { legal_business_name: string | null; ein: string | null; business_address: string | null; business_phone: string | null } | null;
+    },
+  });
+
   const { data: payments = [], isLoading } = useQuery({
     queryKey: ["tax-summary", tenant?.id, year],
     enabled: !!tenant?.id,
