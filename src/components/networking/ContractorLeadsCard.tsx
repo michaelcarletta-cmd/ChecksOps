@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Mail, Phone, MapPin, MessageSquare, Loader2, Inbox, FileImage } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
+import { LinkCheckToLeadButton } from "./LinkCheckToLeadButton";
 
 type Lead = {
   id: string;
@@ -20,6 +21,7 @@ type Lead = {
   status: string;
   created_at: string;
   contacted_at: string | null;
+  dtp_claim_number: string | null;
 };
 
 const STATUS_OPTIONS = [
@@ -50,7 +52,7 @@ export function ContractorLeadsCard() {
       const { data, error } = await supabase
         .from("homeowner_intro_requests")
         .select(
-          "id, homeowner_name, homeowner_email, homeowner_phone, property_zip, loss_type, message, status, created_at, contacted_at",
+          "id, homeowner_name, homeowner_email, homeowner_phone, property_zip, loss_type, message, status, created_at, contacted_at, dtp_claim_number",
         )
         .order("created_at", { ascending: false })
         .limit(200);
@@ -227,6 +229,7 @@ export function ContractorLeadsCard() {
                       <Phone className="h-3 w-3 mr-1" /> Call
                     </Button>
                   )}
+                  <LinkCheckToLeadButton leadId={l.id} leadClaimNumber={l.dtp_claim_number} />
                 </div>
               </div>
             ))}
