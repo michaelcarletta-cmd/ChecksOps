@@ -9632,6 +9632,91 @@ export type Database = {
         }
         Relationships: []
       }
+      contractor_claim_invites: {
+        Row: {
+          claim_id: string
+          contractor_id: string
+          created_at: string
+          id: string
+          invited_by: string | null
+          message: string | null
+          org_id: string
+          responded_at: string | null
+          status: string
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          claim_id: string
+          contractor_id: string
+          created_at?: string
+          id?: string
+          invited_by?: string | null
+          message?: string | null
+          org_id: string
+          responded_at?: string | null
+          status?: string
+          token?: string
+          updated_at?: string
+        }
+        Update: {
+          claim_id?: string
+          contractor_id?: string
+          created_at?: string
+          id?: string
+          invited_by?: string | null
+          message?: string | null
+          org_id?: string
+          responded_at?: string | null
+          status?: string
+          token?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contractor_claim_invites_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "contractor_claim_invites_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "contractor_claim_invites_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contractor_claim_invites_contractor_id_fkey"
+            columns: ["contractor_id"]
+            isOneToOne: false
+            referencedRelation: "contractor_directory_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contractor_claim_invites_contractor_id_fkey"
+            columns: ["contractor_id"]
+            isOneToOne: false
+            referencedRelation: "contractor_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contractor_claim_invites_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contractor_documents: {
         Row: {
           contractor_id: string
@@ -9679,6 +9764,139 @@ export type Database = {
           uploaded_by?: string | null
         }
         Relationships: []
+      }
+      contractor_profiles: {
+        Row: {
+          avatar_url: string | null
+          bio: string | null
+          coi_expires_at: string | null
+          created_at: string
+          directory_opt_in: boolean
+          display_name: string
+          id: string
+          is_directory_listed: boolean
+          license_number: string | null
+          service_metros: string[]
+          service_states: string[]
+          tier: string
+          trades: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          bio?: string | null
+          coi_expires_at?: string | null
+          created_at?: string
+          directory_opt_in?: boolean
+          display_name: string
+          id?: string
+          is_directory_listed?: boolean
+          license_number?: string | null
+          service_metros?: string[]
+          service_states?: string[]
+          tier?: string
+          trades?: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          bio?: string | null
+          coi_expires_at?: string | null
+          created_at?: string
+          directory_opt_in?: boolean
+          display_name?: string
+          id?: string
+          is_directory_listed?: boolean
+          license_number?: string | null
+          service_metros?: string[]
+          service_states?: string[]
+          tier?: string
+          trades?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      contractor_reviews: {
+        Row: {
+          author_user_id: string | null
+          claim_id: string | null
+          comment: string | null
+          contractor_id: string
+          created_at: string
+          id: string
+          org_id: string
+          rating: number
+          updated_at: string
+        }
+        Insert: {
+          author_user_id?: string | null
+          claim_id?: string | null
+          comment?: string | null
+          contractor_id: string
+          created_at?: string
+          id?: string
+          org_id: string
+          rating: number
+          updated_at?: string
+        }
+        Update: {
+          author_user_id?: string | null
+          claim_id?: string | null
+          comment?: string | null
+          contractor_id?: string
+          created_at?: string
+          id?: string
+          org_id?: string
+          rating?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contractor_reviews_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "contractor_reviews_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "contractor_reviews_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contractor_reviews_contractor_id_fkey"
+            columns: ["contractor_id"]
+            isOneToOne: false
+            referencedRelation: "contractor_directory_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contractor_reviews_contractor_id_fkey"
+            columns: ["contractor_id"]
+            isOneToOne: false
+            referencedRelation: "contractor_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contractor_reviews_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       counter_arguments: {
         Row: {
@@ -18801,6 +19019,29 @@ export type Database = {
           rcv_claimed: number | null
           rd_available: number | null
           unclassified_payment_total: number | null
+        }
+        Relationships: []
+      }
+      contractor_directory_view: {
+        Row: {
+          avatar_url: string | null
+          avg_rating: number | null
+          bio: string | null
+          coi_expires_at: string | null
+          created_at: string | null
+          directory_opt_in: boolean | null
+          display_name: string | null
+          id: string | null
+          is_directory_listed: boolean | null
+          jobs_count: number | null
+          license_number: string | null
+          review_count: number | null
+          service_metros: string[] | null
+          service_states: string[] | null
+          tier: string | null
+          trades: string[] | null
+          updated_at: string | null
+          user_id: string | null
         }
         Relationships: []
       }
