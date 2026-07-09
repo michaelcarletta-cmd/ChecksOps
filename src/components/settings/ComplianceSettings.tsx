@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { Loader2, Save, ShieldCheck, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { formatPhoneNumber } from "@/lib/utils";
-import { TenantDocumentsManager } from "@/components/white-label/TenantDocumentsManager";
+
 
 type AddressParts = { street: string; city: string; state: string; zip: string };
 
@@ -189,8 +189,6 @@ export function ComplianceSettings() {
         </CardContent>
       </Card>
 
-      {/* Vetting documents (W-9, License, Insurance, SaaS, ToS, Privacy Policy) */}
-      {tenant?.id && <TenantDocumentsManager tenantId={tenant.id} />}
     </div>
   );
 }
