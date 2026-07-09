@@ -72,6 +72,25 @@ const PageLoader = () => (
   </div>
 );
 
+function MyVerificationStatus() {
+  const { user } = useAuth();
+  const { data: profileId } = useQuery({
+    queryKey: ["my-contractor-profile-id", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("contractor_profiles")
+        .select("id")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      return data?.id ?? null;
+    },
+  });
+  if (!profileId) return null;
+  return <ContractorVerificationStatusCard contractorId={profileId} />;
+}
+
+
 export function WhiteLabelSettings() {
   const { tenant } = useTenant();
   const { user, loading } = useAuth();
