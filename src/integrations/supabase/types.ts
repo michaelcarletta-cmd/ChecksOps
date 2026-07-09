@@ -9767,17 +9767,21 @@ export type Database = {
       }
       contractor_profiles: {
         Row: {
+          admin_disbursed_verified: boolean
           avatar_url: string | null
           bio: string | null
           coi_expires_at: string | null
           created_at: string
           directory_opt_in: boolean
           display_name: string
+          has_open_disputes: boolean
           home_base_lat: number | null
           home_base_lng: number | null
           id: string
           is_directory_listed: boolean
           license_number: string | null
+          pro_approved_at: string | null
+          pro_approved_by: string | null
           service_metros: string[]
           service_radius_miles: number | null
           service_states: string[]
@@ -9786,19 +9790,25 @@ export type Database = {
           trades: string[]
           updated_at: string
           user_id: string
+          verification_notes: string | null
+          verified_at: string | null
         }
         Insert: {
+          admin_disbursed_verified?: boolean
           avatar_url?: string | null
           bio?: string | null
           coi_expires_at?: string | null
           created_at?: string
           directory_opt_in?: boolean
           display_name: string
+          has_open_disputes?: boolean
           home_base_lat?: number | null
           home_base_lng?: number | null
           id?: string
           is_directory_listed?: boolean
           license_number?: string | null
+          pro_approved_at?: string | null
+          pro_approved_by?: string | null
           service_metros?: string[]
           service_radius_miles?: number | null
           service_states?: string[]
@@ -9807,19 +9817,25 @@ export type Database = {
           trades?: string[]
           updated_at?: string
           user_id: string
+          verification_notes?: string | null
+          verified_at?: string | null
         }
         Update: {
+          admin_disbursed_verified?: boolean
           avatar_url?: string | null
           bio?: string | null
           coi_expires_at?: string | null
           created_at?: string
           directory_opt_in?: boolean
           display_name?: string
+          has_open_disputes?: boolean
           home_base_lat?: number | null
           home_base_lng?: number | null
           id?: string
           is_directory_listed?: boolean
           license_number?: string | null
+          pro_approved_at?: string | null
+          pro_approved_by?: string | null
           service_metros?: string[]
           service_radius_miles?: number | null
           service_states?: string[]
@@ -9828,6 +9844,8 @@ export type Database = {
           trades?: string[]
           updated_at?: string
           user_id?: string
+          verification_notes?: string | null
+          verified_at?: string | null
         }
         Relationships: []
       }
@@ -19809,6 +19827,10 @@ export type Database = {
         Args: { p_actor_id: string; p_check_id: string; p_reason: string }
         Returns: Json
       }
+      admin_set_contractor_pro: {
+        Args: { p_approve: boolean; p_contractor_id: string }
+        Returns: Json
+      }
       apply_referral_code: {
         Args: {
           p_new_tenant_id: string
@@ -19853,6 +19875,10 @@ export type Database = {
       compute_claim_last_activity: {
         Args: { p_claim_id: string }
         Returns: string
+      }
+      contractor_verification_status: {
+        Args: { p_contractor_id: string }
+        Returns: Json
       }
       create_claim_for_staff:
         | {
@@ -20724,6 +20750,10 @@ export type Database = {
       rebalance_deposit_workload: {
         Args: { p_actor_id: string; p_max_per_owner?: number }
         Returns: Json
+      }
+      recompute_contractor_tier: {
+        Args: { p_contractor_id: string }
+        Returns: undefined
       }
       refresh_all_deposit_next_actions: {
         Args: { p_actor_id?: string }
