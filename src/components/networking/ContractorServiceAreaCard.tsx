@@ -131,6 +131,39 @@ export function ContractorServiceAreaCard() {
   };
   const removePrefix = (p: string) => setPrefixes(prefixes.filter((x) => x !== p));
 
+  const toggleState = (code: string) =>
+    setStates((prev) => (prev.includes(code) ? prev.filter((s) => s !== code) : [...prev, code].sort()));
+
+  const deriveStatesFromZips = async () => {
+    if (prefixes.length === 0) {
+      toast({ title: "Add at least one ZIP prefix first", variant: "destructive" });
+      return;
+    }
+    setDeriving(true);
+    try {
+      const found = new Set<string>(states);
+      for (const p of prefixes) {
+        // Try a handful of trailing digits until we find a valid ZIP for the prefix
+        for (const suffix of ["01", "10", "00", "50", "20", "05"]) {
+          try {
+            const r = await fetch(`https://api.zippopotam.us/us/${p}${suffix}`);
+            if (!r.ok) continue;
+            const j = await r.json();
+            const abbr = j?.places?.[0]?.["state abbreviation"];
+            if (abbr) { found.add(String(abbr).toUpperCase()); break; }
+          } catch { /* try next */ }
+        }
+      }
+      const next = Array.from(found).sort();
+      setStates(next);
+      toast({ title: `Detected ${next.length} state${next.length !== 1 ? "s" : ""} from ZIP prefixes` });
+    } catch (e: any) {
+      toast({ title: "Couldn't derive states", description: e.message, variant: "destructive" });
+    } finally {
+      setDeriving(false);
+    }
+  };
+
   const toggleTrade = (v: string) =>
     setTrades((prev) => (prev.includes(v) ? prev.filter((t) => t !== v) : [...prev, v]));
 
