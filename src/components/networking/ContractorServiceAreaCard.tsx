@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, MapPin, Save, Plus, X, Crosshair, Wrench, Globe } from "lucide-react";
+import { Loader2, MapPin, Save, Plus, X, Crosshair, Wrench, Globe, Sparkles } from "lucide-react";
 
 type MyProfile = {
   id: string;
@@ -18,6 +18,7 @@ type MyProfile = {
   bio: string | null;
   trades: string[] | null;
   service_zip_prefixes: string[] | null;
+  service_states: string[] | null;
   home_base_lat: number | null;
   home_base_lng: number | null;
   service_radius_miles: number | null;
@@ -25,6 +26,27 @@ type MyProfile = {
   directory_opt_in: boolean | null;
   tier: string | null;
 };
+
+const US_STATES: { code: string; name: string }[] = [
+  { code: "AL", name: "Alabama" }, { code: "AK", name: "Alaska" }, { code: "AZ", name: "Arizona" },
+  { code: "AR", name: "Arkansas" }, { code: "CA", name: "California" }, { code: "CO", name: "Colorado" },
+  { code: "CT", name: "Connecticut" }, { code: "DE", name: "Delaware" }, { code: "DC", name: "District of Columbia" },
+  { code: "FL", name: "Florida" }, { code: "GA", name: "Georgia" }, { code: "HI", name: "Hawaii" },
+  { code: "ID", name: "Idaho" }, { code: "IL", name: "Illinois" }, { code: "IN", name: "Indiana" },
+  { code: "IA", name: "Iowa" }, { code: "KS", name: "Kansas" }, { code: "KY", name: "Kentucky" },
+  { code: "LA", name: "Louisiana" }, { code: "ME", name: "Maine" }, { code: "MD", name: "Maryland" },
+  { code: "MA", name: "Massachusetts" }, { code: "MI", name: "Michigan" }, { code: "MN", name: "Minnesota" },
+  { code: "MS", name: "Mississippi" }, { code: "MO", name: "Missouri" }, { code: "MT", name: "Montana" },
+  { code: "NE", name: "Nebraska" }, { code: "NV", name: "Nevada" }, { code: "NH", name: "New Hampshire" },
+  { code: "NJ", name: "New Jersey" }, { code: "NM", name: "New Mexico" }, { code: "NY", name: "New York" },
+  { code: "NC", name: "North Carolina" }, { code: "ND", name: "North Dakota" }, { code: "OH", name: "Ohio" },
+  { code: "OK", name: "Oklahoma" }, { code: "OR", name: "Oregon" }, { code: "PA", name: "Pennsylvania" },
+  { code: "RI", name: "Rhode Island" }, { code: "SC", name: "South Carolina" }, { code: "SD", name: "South Dakota" },
+  { code: "TN", name: "Tennessee" }, { code: "TX", name: "Texas" }, { code: "UT", name: "Utah" },
+  { code: "VT", name: "Vermont" }, { code: "VA", name: "Virginia" }, { code: "WA", name: "Washington" },
+  { code: "WV", name: "West Virginia" }, { code: "WI", name: "Wisconsin" }, { code: "WY", name: "Wyoming" },
+];
+
 
 // Preset trades / specialties homeowners can filter on.
 // Values are stored lowercase-snake in `trades[]`; labels are the display strings.
@@ -55,7 +77,7 @@ export function ContractorServiceAreaCard() {
       const { data, error } = await supabase
         .from("contractor_profiles")
         .select(
-          "id, display_name, bio, trades, service_zip_prefixes, home_base_lat, home_base_lng, service_radius_miles, is_directory_listed, directory_opt_in, tier",
+          "id, display_name, bio, trades, service_zip_prefixes, service_states, home_base_lat, home_base_lng, service_radius_miles, is_directory_listed, directory_opt_in, tier",
         )
         .eq("user_id", user!.id)
         .maybeSingle();
@@ -66,6 +88,8 @@ export function ContractorServiceAreaCard() {
 
   const [prefixes, setPrefixes] = useState<string[]>([]);
   const [newPrefix, setNewPrefix] = useState("");
+  const [states, setStates] = useState<string[]>([]);
+  const [deriving, setDeriving] = useState(false);
   const [homeZip, setHomeZip] = useState("");
   const [lat, setLat] = useState<string>("");
   const [lng, setLng] = useState<string>("");
@@ -80,6 +104,7 @@ export function ContractorServiceAreaCard() {
   useEffect(() => {
     if (profile) {
       setPrefixes(profile.service_zip_prefixes ?? []);
+      setStates(profile.service_states ?? []);
       setLat(profile.home_base_lat != null ? String(profile.home_base_lat) : "");
       setLng(profile.home_base_lng != null ? String(profile.home_base_lng) : "");
       setRadius(profile.service_radius_miles != null ? String(profile.service_radius_miles) : "");
@@ -105,6 +130,39 @@ export function ContractorServiceAreaCard() {
     setNewPrefix("");
   };
   const removePrefix = (p: string) => setPrefixes(prefixes.filter((x) => x !== p));
+
+  const toggleState = (code: string) =>
+    setStates((prev) => (prev.includes(code) ? prev.filter((s) => s !== code) : [...prev, code].sort()));
+
+  const deriveStatesFromZips = async () => {
+    if (prefixes.length === 0) {
+      toast({ title: "Add at least one ZIP prefix first", variant: "destructive" });
+      return;
+    }
+    setDeriving(true);
+    try {
+      const found = new Set<string>(states);
+      for (const p of prefixes) {
+        // Try a handful of trailing digits until we find a valid ZIP for the prefix
+        for (const suffix of ["01", "10", "00", "50", "20", "05"]) {
+          try {
+            const r = await fetch(`https://api.zippopotam.us/us/${p}${suffix}`);
+            if (!r.ok) continue;
+            const j = await r.json();
+            const abbr = j?.places?.[0]?.["state abbreviation"];
+            if (abbr) { found.add(String(abbr).toUpperCase()); break; }
+          } catch { /* try next */ }
+        }
+      }
+      const next = Array.from(found).sort();
+      setStates(next);
+      toast({ title: `Detected ${next.length} state${next.length !== 1 ? "s" : ""} from ZIP prefixes` });
+    } catch (e: any) {
+      toast({ title: "Couldn't derive states", description: e.message, variant: "destructive" });
+    } finally {
+      setDeriving(false);
+    }
+  };
 
   const toggleTrade = (v: string) =>
     setTrades((prev) => (prev.includes(v) ? prev.filter((t) => t !== v) : [...prev, v]));
@@ -160,6 +218,7 @@ export function ContractorServiceAreaCard() {
         .update({
           display_name: cleanName || profile.display_name,
           service_zip_prefixes: prefixes,
+          service_states: states,
           home_base_lat: latN,
           home_base_lng: lngN,
           service_radius_miles: radN,
@@ -193,6 +252,7 @@ export function ContractorServiceAreaCard() {
         user_id: user.id,
         display_name: displayName,
         service_zip_prefixes: [],
+        service_states: [],
         trades: [],
       });
       if (error) throw error;
@@ -283,6 +343,12 @@ export function ContractorServiceAreaCard() {
             <span className="text-muted-foreground">ZIP prefixes: </span>
             {(profile.service_zip_prefixes?.length ?? 0) > 0
               ? profile.service_zip_prefixes!.map((p) => `${p}*`).join(", ")
+              : <span className="text-muted-foreground italic">none</span>}
+          </div>
+          <div>
+            <span className="text-muted-foreground">States: </span>
+            {(profile.service_states?.length ?? 0) > 0
+              ? profile.service_states!.join(", ")
               : <span className="text-muted-foreground italic">none</span>}
           </div>
           <div>
@@ -425,6 +491,67 @@ export function ContractorServiceAreaCard() {
             </Button>
           </div>
         </div>
+
+        {/* States served */}
+        <div className="space-y-2 border-t border-border pt-4">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+              States served
+            </Label>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={deriveStatesFromZips}
+              disabled={deriving || prefixes.length === 0}
+              className="h-7 text-xs"
+            >
+              {deriving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Sparkles className="h-3 w-3 mr-1" />}
+              Auto-detect from ZIPs
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Pick states you serve, or auto-detect them from your ZIP prefixes above. Homeowners can filter the directory
+            by state, and your card shows the states you cover.
+          </p>
+          {states.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {states.map((s) => (
+                <Badge key={s} variant="secondary" className="gap-1 pr-1">
+                  {s}
+                  <button
+                    onClick={() => toggleState(s)}
+                    className="hover:text-destructive"
+                    aria-label={`Remove ${s}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-1 pt-1 max-h-40 overflow-y-auto rounded-md border border-border bg-muted/20 p-2">
+            {US_STATES.map((st) => {
+              const active = states.includes(st.code);
+              return (
+                <button
+                  key={st.code}
+                  type="button"
+                  onClick={() => toggleState(st.code)}
+                  title={st.name}
+                  className={`rounded-md border px-2 py-1 text-[11px] transition-colors ${
+                    active
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background hover:bg-muted"
+                  }`}
+                >
+                  {st.code}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+
 
         {/* Home base + radius */}
         <div className="space-y-2 border-t border-border pt-4">
