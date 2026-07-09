@@ -8,12 +8,15 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { FileText, Upload, Loader2, Trash2, Download, CheckCircle2, AlertCircle } from "lucide-react";
 
-type DocType = "w9" | "license" | "insurance";
+type DocType = "w9" | "license" | "insurance" | "saas_agreement" | "terms_of_service" | "privacy_policy";
 
 const DOC_DEFS: { type: DocType; label: string; description: string }[] = [
   { type: "w9", label: "W-9", description: "IRS Form W-9 (Request for Taxpayer Identification Number)" },
   { type: "license", label: "License", description: "Business or professional license" },
   { type: "insurance", label: "Insurance", description: "Certificate of Insurance (COI)" },
+  { type: "saas_agreement", label: "SaaS Agreement", description: "Signed ChecksOps SaaS agreement" },
+  { type: "terms_of_service", label: "Terms of Service", description: "Signed Terms of Service" },
+  { type: "privacy_policy", label: "Privacy Policy", description: "Signed Privacy Policy acknowledgment" },
 ];
 
 interface TenantDocumentRow {

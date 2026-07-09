@@ -1,0 +1,2 @@
+ALTER TABLE public.tenant_documents DROP CONSTRAINT IF EXISTS tenant_documents_doc_type_check;
+ALTER TABLE public.tenant_documents ADD CONSTRAINT tenant_documents_doc_type_check CHECK (doc_type IN ('w9','license','insurance','saas_agreement','terms_of_service','privacy_policy'));
