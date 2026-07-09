@@ -126,8 +126,55 @@ export function ContractorServiceAreaCard() {
       toast({ title: "Couldn't save", description: e.message, variant: "destructive" }),
   });
 
+  const createProfile = useMutation({
+    mutationFn: async () => {
+      if (!user?.id) throw new Error("Not signed in");
+      const displayName =
+        (user.user_metadata as any)?.full_name ||
+        (user.user_metadata as any)?.name ||
+        user.email?.split("@")[0] ||
+        "New contractor";
+      const { error } = await supabase.from("contractor_profiles").insert({
+        user_id: user.id,
+        display_name: displayName,
+        service_zip_prefixes: [],
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Directory listing created" });
+      qc.invalidateQueries({ queryKey: ["my-contractor-profile"] });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't create listing", description: e.message, variant: "destructive" }),
+  });
+
   if (isLoading) return null;
-  if (!profile) return null; // only render for users with a contractor profile
+  if (!profile) {
+    return (
+      <Card className="border-dashed">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-primary" /> Create your Find-a-Pro listing
+          </CardTitle>
+          <CardDescription className="text-xs">
+            You don't have a public directory listing yet. Create one to start setting your service area and appear on{" "}
+            <code>checksops.com/find-a-pro</code>.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button size="sm" onClick={() => createProfile.mutate()} disabled={createProfile.isPending}>
+            {createProfile.isPending ? (
+              <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+            ) : (
+              <Plus className="h-3 w-3 mr-2" />
+            )}
+            Create my listing
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="border-primary/30">
