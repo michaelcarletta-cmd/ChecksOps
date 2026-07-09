@@ -187,6 +187,31 @@ export function ContractorServiceAreaCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
+        {/* Currently saved summary */}
+        <div className="rounded-md border border-border bg-muted/30 p-3 text-xs space-y-1">
+          <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">
+            Currently saved
+          </div>
+          <div>
+            <span className="text-muted-foreground">ZIP prefixes: </span>
+            {(profile.service_zip_prefixes?.length ?? 0) > 0
+              ? profile.service_zip_prefixes!.map((p) => `${p}*`).join(", ")
+              : <span className="text-muted-foreground italic">none</span>}
+          </div>
+          <div>
+            <span className="text-muted-foreground">Home base: </span>
+            {profile.home_base_lat != null && profile.home_base_lng != null
+              ? `${Number(profile.home_base_lat).toFixed(4)}, ${Number(profile.home_base_lng).toFixed(4)}`
+              : <span className="text-muted-foreground italic">not set</span>}
+          </div>
+          <div>
+            <span className="text-muted-foreground">Service radius: </span>
+            {profile.service_radius_miles != null
+              ? `${profile.service_radius_miles} mi`
+              : <span className="text-muted-foreground italic">not set</span>}
+          </div>
+        </div>
+
         {/* ZIP prefixes */}
         <div className="space-y-2">
           <Label className="text-xs uppercase tracking-wide text-muted-foreground">
