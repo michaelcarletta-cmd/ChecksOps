@@ -74,6 +74,7 @@ export function ContractorServiceAreaCard() {
   const [trades, setTrades] = useState<string[]>([]);
   const [newTrade, setNewTrade] = useState("");
   const [bio, setBio] = useState("");
+  const [businessName, setBusinessName] = useState("");
   const [published, setPublished] = useState(false);
 
   useEffect(() => {
@@ -84,6 +85,7 @@ export function ContractorServiceAreaCard() {
       setRadius(profile.service_radius_miles != null ? String(profile.service_radius_miles) : "");
       setTrades(profile.trades ?? []);
       setBio(profile.bio ?? "");
+      setBusinessName(profile.display_name ?? "");
       setPublished(!!(profile.is_directory_listed && profile.directory_opt_in));
     }
   }, [profile]);
@@ -149,9 +151,14 @@ export function ContractorServiceAreaCard() {
       if (radN != null && (radN < 1 || radN > 500)) {
         throw new Error("Radius must be 1-500 miles");
       }
+      const cleanName = businessName.trim();
+      if (published && cleanName.length < 2) {
+        throw new Error("Enter your business name before publishing");
+      }
       const { error } = await supabase
         .from("contractor_profiles")
         .update({
+          display_name: cleanName || profile.display_name,
           service_zip_prefixes: prefixes,
           home_base_lat: latN,
           home_base_lng: lngN,
@@ -349,19 +356,38 @@ export function ContractorServiceAreaCard() {
           </div>
         </div>
 
-        {/* Short bio */}
-        <div className="space-y-2 border-t border-border pt-4">
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-            Short bio (shown on your card)
-          </Label>
-          <Textarea
-            value={bio}
-            onChange={(e) => setBio(e.target.value.slice(0, 400))}
-            placeholder="A sentence or two homeowners will see on your directory card…"
-            className="min-h-[70px] text-sm"
-          />
-          <p className="text-[10px] text-muted-foreground text-right">{bio.length}/400</p>
+        {/* Business name + short bio */}
+        <div className="space-y-3 border-t border-border pt-4">
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+              Business name (shown on your directory card)
+            </Label>
+            <Input
+              value={businessName}
+              onChange={(e) => setBusinessName(e.target.value.slice(0, 120))}
+              placeholder="e.g. Sunrise Restoration LLC"
+              className="h-9"
+              maxLength={120}
+            />
+            <p className="text-[10px] text-muted-foreground">
+              This replaces your user name on <code>checksops.com/find-a-pro</code>. Homeowners never see the sign-in
+              email.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+              Short bio (shown on your card)
+            </Label>
+            <Textarea
+              value={bio}
+              onChange={(e) => setBio(e.target.value.slice(0, 400))}
+              placeholder="A sentence or two homeowners will see — years in business, service area, specialties, licenses/certs…"
+              className="min-h-[70px] text-sm"
+            />
+            <p className="text-[10px] text-muted-foreground text-right">{bio.length}/400</p>
+          </div>
         </div>
+
 
         {/* ZIP prefixes */}
         <div className="space-y-2 border-t border-border pt-4">
