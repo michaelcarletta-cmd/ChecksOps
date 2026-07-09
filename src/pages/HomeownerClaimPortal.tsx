@@ -39,6 +39,18 @@ type Lead = {
 };
 type Contractor = { id: string; display_name: string; bio: string | null; tier: string | null };
 type UploadRow = { id: string; file_path: string; status: string; note: string | null; created_at: string };
+type CheckRow = {
+  id: string;
+  amount: number | null;
+  check_number: string | null;
+  carrier_name: string | null;
+  payee_line: string | null;
+  check_stage: string | null;
+  status: string | null;
+  deposited_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
 
 const MAX_MB = 15;
 
@@ -49,6 +61,7 @@ export default function HomeownerClaimPortal() {
   const [lead, setLead] = useState<Lead | null>(null);
   const [contractor, setContractor] = useState<Contractor | null>(null);
   const [uploads, setUploads] = useState<UploadRow[]>([]);
+  const [checks, setChecks] = useState<CheckRow[]>([]);
 
   // Upload state
   const [file, setFile] = useState<File | null>(null);
