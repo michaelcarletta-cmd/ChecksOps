@@ -676,23 +676,46 @@ export function TaxSummary() {
                           <div className="flex flex-col items-center gap-1">
                             <div className="flex items-center justify-center gap-1">
                               <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                              <span className="text-xs text-amber-600 font-medium">Required</span>
+                              <span className="text-xs text-amber-600 font-medium">
+                                {profileByKey[r.id]?.tin ? "Ready" : "Missing TIN"}
+                              </span>
                             </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-6 text-[10px] px-2"
-                              onClick={() => generate1099([r])}
-                            >
-                              <FileText className="h-3 w-3 mr-1" />Generate
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-[10px] px-2"
+                                onClick={() => openEdit(r.id, r.custname && r.custname !== "External check" && r.custname !== "Cash job payee" ? r.custname : r.nickname)}
+                              >
+                                <Pencil className="h-3 w-3 mr-1" />Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-[10px] px-2"
+                                onClick={() => generate1099([r])}
+                              >
+                                <FileText className="h-3 w-3 mr-1" />Generate
+                              </Button>
+                            </div>
                           </div>
                         ) : r.requires_1099 ? (
-                          <span className="text-[10px] text-muted-foreground">Under $600</span>
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-[10px] text-muted-foreground">Under $600</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 text-[10px] px-2"
+                              onClick={() => openEdit(r.id, r.custname && r.custname !== "External check" && r.custname !== "Cash job payee" ? r.custname : r.nickname)}
+                            >
+                              <Pencil className="h-3 w-3 mr-1" />Tax info
+                            </Button>
+                          </div>
                         ) : (
                           <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
                         )}
                       </td>
+
                     </tr>
                   ))}
                 </tbody>
