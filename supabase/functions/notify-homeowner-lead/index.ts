@@ -92,26 +92,10 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Also send the homeowner their private claim-portal link (best-effort)
-    if (lead.access_token && lead.homeowner_email) {
-      const portalUrl = `${siteUrl}/h/claim/${lead.access_token}`
-      await admin.functions
-        .invoke('send-transactional-email', {
-          body: {
-            templateName: 'homeowner-claim-portal-link',
-            recipientEmail: lead.homeowner_email,
-            idempotencyKey: `homeowner-portal-${lead.id}`,
-            templateData: {
-              homeowner_name: lead.homeowner_name?.split(' ')[0] ?? '',
-              contractor_name: profile?.display_name ?? 'your contractor',
-              portal_url: portalUrl,
-            },
-          },
-        })
-        .catch(() => {
-          /* non-blocking: contractor notification already succeeded */
-        })
-    }
+    // NOTE: We do NOT email the homeowner a portal link here. The portal is
+    // only shared after the contractor/PA has spoken with the homeowner and
+    // accepted the work (see notify-homeowner-lead-accepted).
+
 
 
     return new Response(JSON.stringify({ ok: true }), {
