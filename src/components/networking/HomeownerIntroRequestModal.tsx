@@ -151,28 +151,15 @@ export function HomeownerIntroRequestModal({ open, onOpenChange, contractor }: P
               <div className="flex items-start gap-2">
                 <ShieldCheck className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
                 <div className="text-sm">
-                  <div className="font-semibold">Open your private claim portal</div>
+                  <div className="font-semibold">What happens next</div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    No login needed. Sign your Direction to Pay, upload your insurance check, and
-                    watch every endorsement and deposit happen live.
+                    {contractor?.display_name} will reach out to discuss your claim. Once they
+                    accept your project, we'll email you a private link to sign your Direction
+                    to Pay, upload your insurance check, and follow every step live —
+                    no login required.
                   </p>
                 </div>
               </div>
-              <Button
-                className="w-full"
-                onClick={() => {
-                  if (accessToken) {
-                    window.open(`/h/claim/${accessToken}`, "_blank", "noopener");
-                  }
-                }}
-                disabled={!accessToken}
-              >
-                Open my claim portal →
-              </Button>
-              <p className="text-[10px] text-muted-foreground">
-                Bookmark this page — the private link is your key back in. Anyone with the link
-                can act on this claim, so don't share it.
-              </p>
             </div>
             <Button variant="outline" className="w-full" onClick={() => handleClose(false)}>
               Done

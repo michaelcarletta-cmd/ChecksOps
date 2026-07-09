@@ -1,4 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
+// Sends the homeowner their private claim-portal link ONLY after the
+// contractor/PA has accepted the lead (status = 'accepted', accepted_at set).
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { z } from 'npm:zod@3.23.8'
@@ -6,9 +8,7 @@ import { z } from 'npm:zod@3.23.8'
 const BodySchema = z.object({ lead_id: z.string().uuid() })
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
     const parsed = BodySchema.safeParse(await req.json())
@@ -27,12 +27,10 @@ Deno.serve(async (req) => {
     const { data: lead, error } = await admin
       .from('homeowner_intro_requests')
       .select(
-        'id, contractor_profile_id, contractor_user_id, homeowner_name, homeowner_email, homeowner_phone, property_zip, loss_type, message, created_at, access_token',
+        'id, contractor_profile_id, contractor_user_id, homeowner_name, homeowner_email, status, accepted_at, access_token',
       )
       .eq('id', parsed.data.lead_id)
       .maybeSingle()
-
-
 
     if (error || !lead) {
       return new Response(JSON.stringify({ error: 'lead not found' }), {
@@ -41,46 +39,43 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Anti-abuse: only fire for leads created in the last 5 minutes
-    const ageMs = Date.now() - new Date(lead.created_at).getTime()
-    if (ageMs > 5 * 60 * 1000) {
-      return new Response(JSON.stringify({ ok: true, skipped: 'stale' }), {
-        status: 200,
+    // Require the contractor to have accepted before we share the portal link.
+    if (lead.status !== 'accepted' || !lead.accepted_at) {
+      return new Response(
+        JSON.stringify({ error: 'lead not yet accepted' }),
+        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+
+    // Verify the caller is the contractor who owns this lead
+    const authHeader = req.headers.get('Authorization') ?? ''
+    const jwt = authHeader.replace(/^Bearer\s+/i, '')
+    const { data: userLookup } = await admin.auth.getUser(jwt)
+    if (!userLookup?.user || userLookup.user.id !== lead.contractor_user_id) {
+      return new Response(JSON.stringify({ error: 'forbidden' }), {
+        status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    // Look up contractor's email + display name
     const { data: profile } = await admin
       .from('contractor_profiles')
       .select('display_name')
       .eq('id', lead.contractor_profile_id)
       .maybeSingle()
 
-    const { data: userLookup } = await admin.auth.admin.getUserById(lead.contractor_user_id)
-    const contractorEmail = userLookup?.user?.email
-    if (!contractorEmail) {
-      return new Response(JSON.stringify({ error: 'contractor email missing' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
     const siteUrl = Deno.env.get('SITE_URL') || 'https://checksops.com'
+    const portalUrl = `${siteUrl}/h/claim/${lead.access_token}`
+
     const invokeRes = await admin.functions.invoke('send-transactional-email', {
       body: {
-        templateName: 'new-homeowner-lead',
-        recipientEmail: contractorEmail,
-        idempotencyKey: `homeowner-lead-${lead.id}`,
+        templateName: 'homeowner-claim-portal-link',
+        recipientEmail: lead.homeowner_email,
+        idempotencyKey: `homeowner-portal-${lead.id}`,
         templateData: {
-          contractor_name: profile?.display_name ?? 'there',
-          homeowner_name: lead.homeowner_name,
-          homeowner_email: lead.homeowner_email,
-          homeowner_phone: lead.homeowner_phone ?? '',
-          property_zip: lead.property_zip ?? '',
-          loss_type: lead.loss_type ?? '',
-          message: lead.message ?? '',
-          leads_url: `${siteUrl}/settings`,
+          homeowner_name: lead.homeowner_name?.split(' ')[0] ?? '',
+          contractor_name: profile?.display_name ?? 'your contractor',
+          portal_url: portalUrl,
         },
       },
     })
@@ -91,12 +86,6 @@ Deno.serve(async (req) => {
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
-
-    // NOTE: We do NOT email the homeowner a portal link here. The portal is
-    // only shared after the contractor/PA has spoken with the homeowner and
-    // accepted the work (see notify-homeowner-lead-accepted).
-
-
 
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,

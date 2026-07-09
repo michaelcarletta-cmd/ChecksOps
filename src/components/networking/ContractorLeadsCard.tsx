@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Mail, Phone, MapPin, MessageSquare, Loader2, Inbox, FileImage } from "lucide-react";
+import { Mail, Phone, MapPin, MessageSquare, Loader2, Inbox, FileImage, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { LinkCheckToLeadButton } from "./LinkCheckToLeadButton";
@@ -21,12 +21,14 @@ type Lead = {
   status: string;
   created_at: string;
   contacted_at: string | null;
+  accepted_at: string | null;
   dtp_claim_number: string | null;
 };
 
 const STATUS_OPTIONS = [
   { value: "new", label: "New" },
   { value: "contacted", label: "Contacted" },
+  { value: "accepted", label: "Accepted" },
   { value: "quoted", label: "Quoted" },
   { value: "won", label: "Won" },
   { value: "lost", label: "Lost" },
@@ -36,6 +38,7 @@ const STATUS_OPTIONS = [
 const statusColor: Record<string, string> = {
   new: "bg-primary text-primary-foreground",
   contacted: "bg-blue-500/20 text-blue-300",
+  accepted: "bg-emerald-500/20 text-emerald-300",
   quoted: "bg-purple-500/20 text-purple-300",
   won: "bg-green-500/20 text-green-300",
   lost: "bg-muted text-muted-foreground",
@@ -52,7 +55,7 @@ export function ContractorLeadsCard() {
       const { data, error } = await supabase
         .from("homeowner_intro_requests")
         .select(
-          "id, homeowner_name, homeowner_email, homeowner_phone, property_zip, loss_type, message, status, created_at, contacted_at, dtp_claim_number",
+          "id, homeowner_name, homeowner_email, homeowner_phone, property_zip, loss_type, message, status, created_at, contacted_at, accepted_at, dtp_claim_number",
         )
         .order("created_at", { ascending: false })
         .limit(200);
@@ -95,6 +98,26 @@ export function ContractorLeadsCard() {
       toast.success("Updated");
     },
     onError: (e: any) => toast.error(e.message ?? "Update failed"),
+  });
+
+  const acceptLead = useMutation({
+    mutationFn: async (leadId: string) => {
+      const { error } = await supabase
+        .from("homeowner_intro_requests")
+        .update({ status: "accepted" })
+        .eq("id", leadId);
+      if (error) throw error;
+      const { error: fnErr } = await supabase.functions.invoke(
+        "notify-homeowner-lead-accepted",
+        { body: { lead_id: leadId } },
+      );
+      if (fnErr) throw fnErr;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["homeowner-intro-requests"] });
+      toast.success("Accepted — homeowner emailed their private claim portal link");
+    },
+    onError: (e: any) => toast.error(e.message ?? "Could not accept lead"),
   });
 
   const filtered = (leads ?? []).filter((l) => filter === "all" || l.status === filter);
@@ -227,6 +250,20 @@ export function ContractorLeadsCard() {
                       }}
                     >
                       <Phone className="h-3 w-3 mr-1" /> Call
+                    </Button>
+                  )}
+                  {l.accepted_at ? (
+                    <Badge className="h-7 px-2 text-[10px] bg-emerald-500/20 text-emerald-300 flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> Accepted
+                    </Badge>
+                  ) : (
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => acceptLead.mutate(l.id)}
+                      disabled={acceptLead.isPending}
+                    >
+                      <CheckCircle2 className="h-3 w-3 mr-1" /> Accept & unlock portal
                     </Button>
                   )}
                   <LinkCheckToLeadButton leadId={l.id} leadClaimNumber={l.dtp_claim_number} />

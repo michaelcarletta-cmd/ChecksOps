@@ -70,6 +70,7 @@ export default function HomeownerClaimPortal() {
   const [contractor, setContractor] = useState<Contractor | null>(null);
   const [uploads, setUploads] = useState<UploadRow[]>([]);
   const [checks, setChecks] = useState<CheckRow[]>([]);
+  const [pending, setPending] = useState(false);
 
   // Upload state
   const [file, setFile] = useState<File | null>(null);
@@ -99,6 +100,7 @@ export default function HomeownerClaimPortal() {
       });
       if (err) throw new Error(err.message);
       if ((data as any)?.error) throw new Error((data as any).error);
+      setPending(Boolean((data as any)?.pending));
       setLead((data as any).lead);
       setContractor((data as any).contractor);
       setUploads(((data as any).uploads ?? []) as UploadRow[]);
@@ -216,6 +218,29 @@ export default function HomeownerClaimPortal() {
             <Link to="/find-a-pro" className="text-sm text-primary underline inline-block mt-2">
               <ArrowLeft className="h-3 w-3 inline mr-1" /> Back to Find a Pro
             </Link>
+          </CardContent>
+        </Card>
+      </Shell>
+    );
+  }
+
+  if (pending) {
+    return (
+      <Shell>
+        <Card className="max-w-md mx-auto">
+          <CardContent className="py-10 text-center space-y-3">
+            <Lock className="h-8 w-8 text-primary mx-auto" />
+            <div className="font-semibold text-lg">Waiting for {contractor?.display_name ?? "your contractor"}</div>
+            <p className="text-sm text-muted-foreground">
+              Your request has been sent. Your claim portal opens after
+              {" "}{contractor?.display_name ?? "the contractor"} speaks with you and
+              accepts the work. You'll receive an email with your private link the
+              moment they do.
+            </p>
+            <p className="text-xs text-muted-foreground pt-2">
+              Nothing to sign or upload yet — this keeps your Direction to Pay
+              and check safe until the pro is officially on your project.
+            </p>
           </CardContent>
         </Card>
       </Shell>
