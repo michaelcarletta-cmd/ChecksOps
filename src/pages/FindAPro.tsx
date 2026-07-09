@@ -159,6 +159,7 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
   const [selected, setSelected] = useState<PublicContractor | null>(null);
   const [selectedReviews, setSelectedReviews] = useState<Review[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
