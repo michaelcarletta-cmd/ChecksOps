@@ -345,7 +345,7 @@ function ContractorCard({ c, onClick }: { c: PublicContractor; onClick: () => vo
         </div>
         {c.bio && <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{c.bio}</p>}
         <div className="flex flex-wrap gap-1 mt-3">
-          {(c.trades ?? []).slice(0, 3).map(t => <Badge key={t} variant="outline" className="text-xs">{t}</Badge>)}
+          {(c.trades ?? []).slice(0, 3).map(t => <Badge key={t} variant="outline" className="text-xs">{TRADE_LABEL.get(t) ?? t}</Badge>)}
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground mt-3">
           {c.distance_miles != null && (
