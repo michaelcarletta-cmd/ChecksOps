@@ -20052,6 +20052,10 @@ export type Database = {
         Args: { p_claim_id: string }
         Returns: string
       }
+      contractor_accepts_leads: {
+        Args: { _profile_id: string; _user_id: string }
+        Returns: boolean
+      }
       contractor_verification_status: {
         Args: { p_contractor_id: string }
         Returns: Json
