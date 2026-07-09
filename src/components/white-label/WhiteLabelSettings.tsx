@@ -28,6 +28,8 @@ import { TenantPartnerManager } from "./TenantPartnerManager";
 import { TenantAIKeySettings } from "./TenantAIKeySettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { GLBASecurityEventsLog } from "@/components/settings/GLBASecurityEventsLog";
+import { ContractorServiceAreaCard } from "@/components/networking/ContractorServiceAreaCard";
+import { Search as SearchIcon } from "lucide-react";
 
 import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
 import { CheckUsageCard } from "@/components/billing/CheckUsageCard";
