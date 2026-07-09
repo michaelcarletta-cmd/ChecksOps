@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
-import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crown } from "lucide-react";
+import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crown, Palette } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { useRef } from "react";
 import { TenantDocumentsManager } from "@/components/white-label/TenantDocumentsManager";
@@ -293,8 +293,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
         <Tabs defaultValue="company" className="w-full">
           <TabsList className="flex w-full flex-wrap h-auto justify-start gap-1 p-1">
             <TabsTrigger value="company" className="flex-1 min-w-[110px] whitespace-nowrap"><Building2 className="w-4 h-4 mr-1" /> Company</TabsTrigger>
-            <TabsTrigger value="branding" className="flex-1 min-w-[110px] whitespace-nowrap"><Settings className="w-4 h-4 mr-1" /> Branding</TabsTrigger>
-            <TabsTrigger value="email" className="flex-1 min-w-[90px] whitespace-nowrap"><Mail className="w-4 h-4 mr-1" /> Email</TabsTrigger>
+            <TabsTrigger value="branding" className="flex-1 min-w-[150px] whitespace-nowrap"><Palette className="w-4 h-4 mr-1" /> Branding & Email</TabsTrigger>
             <TabsTrigger value="compliance" className="flex-1 min-w-[170px] whitespace-nowrap"><ShieldCheck className="w-4 h-4 mr-1" /> Compliance & Docs</TabsTrigger>
             <TabsTrigger value="integrations" className="flex-1 min-w-[130px] whitespace-nowrap"><Link2 className="w-4 h-4 mr-1" /> Integrations</TabsTrigger>
             
@@ -306,10 +305,8 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           <TabsContent value="company" className="mt-6">
             <CompanyTab tenant={tenant} onUpdated={onUpdated} />
           </TabsContent>
-          <TabsContent value="branding" className="mt-6">
+          <TabsContent value="branding" className="mt-6 space-y-6">
             <BrandingTab tenant={tenant} onUpdated={onUpdated} />
-          </TabsContent>
-          <TabsContent value="email" className="mt-6">
             <EmailSenderSettings />
           </TabsContent>
           <TabsContent value="compliance" className="mt-6 space-y-8">

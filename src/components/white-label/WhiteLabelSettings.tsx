@@ -136,9 +136,8 @@ export function WhiteLabelSettings() {
             <TabsTrigger value="banking" className="text-xs gap-1"><Banknote className="h-3 w-3" />Bank Accounts</TabsTrigger>
             <TabsTrigger value="disbursement" className="text-xs gap-1"><CreditCard className="h-3 w-3" />Disbursement</TabsTrigger>
 
-            <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding</TabsTrigger>
+            <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding & Email</TabsTrigger>
             <TabsTrigger value="referrals" className="text-xs gap-1"><Gift className="h-3 w-3" />Referrals</TabsTrigger>
-            <TabsTrigger value="email" className="text-xs gap-1"><Mail className="h-3 w-3" />Email</TabsTrigger>
             <TabsTrigger value="compliance" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Compliance & Docs</TabsTrigger>
             <TabsTrigger value="guide" className="text-xs gap-1"><HelpCircle className="h-3 w-3" />ChecksOps Guide</TabsTrigger>
             <TabsTrigger value="directory" className="text-xs gap-1"><SearchIcon className="h-3 w-3" />Find-a-Pro Directory</TabsTrigger>
@@ -177,18 +176,16 @@ export function WhiteLabelSettings() {
             <StakeholderAccountSettings />
           </TabsContent>
 
-          <TabsContent value="branding">
+          <TabsContent value="branding" className="space-y-6">
             {tenant && <BrandingSettings tenant={tenant} />}
+            <EmailSenderSettings />
+            <TenantEmailHealthPanel />
           </TabsContent>
 
           <TabsContent value="referrals">
             <ReferralSettings />
           </TabsContent>
 
-          <TabsContent value="email" className="space-y-4">
-            <EmailSenderSettings />
-            <TenantEmailHealthPanel />
-          </TabsContent>
 
           <TabsContent value="compliance" className="space-y-8">
             <ComplianceSettings />
