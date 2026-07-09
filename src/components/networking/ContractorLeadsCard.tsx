@@ -27,6 +27,7 @@ type Lead = {
 const STATUS_OPTIONS = [
   { value: "new", label: "New" },
   { value: "contacted", label: "Contacted" },
+  { value: "accepted", label: "Accepted" },
   { value: "quoted", label: "Quoted" },
   { value: "won", label: "Won" },
   { value: "lost", label: "Lost" },
@@ -36,6 +37,7 @@ const STATUS_OPTIONS = [
 const statusColor: Record<string, string> = {
   new: "bg-primary text-primary-foreground",
   contacted: "bg-blue-500/20 text-blue-300",
+  accepted: "bg-emerald-500/20 text-emerald-300",
   quoted: "bg-purple-500/20 text-purple-300",
   won: "bg-green-500/20 text-green-300",
   lost: "bg-muted text-muted-foreground",
