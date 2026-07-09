@@ -477,14 +477,13 @@ export function TenantManagement() {
     <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="space-y-4">
       <Tabs defaultValue="branding" className="w-full">
         <TabsList className="w-full">
-          <TabsTrigger value="branding" className="flex-1">Branding</TabsTrigger>
-          <TabsTrigger value="email" className="flex-1">Email</TabsTrigger>
+          <TabsTrigger value="branding" className="flex-1">Branding & Email</TabsTrigger>
         </TabsList>
-        <TabsContent value="branding" className="mt-4">
+        <TabsContent value="branding" className="mt-4 space-y-6">
           {renderBrandingFields(isEdit)}
-        </TabsContent>
-        <TabsContent value="email" className="mt-4">
-          {renderEmailConfig()}
+          <div className="pt-4 border-t border-border/60">
+            {renderEmailConfig()}
+          </div>
         </TabsContent>
       </Tabs>
       <Button type="submit" className="w-full" disabled={isPending}>
