@@ -6,11 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DollarSign, ArrowDownCircle, Send, CheckCircle2, AlertCircle, Clock, FileCheck, X } from "lucide-react";
 import { format } from "date-fns";
 import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
+
 
 interface Props {
   checkIntakeItemId: string;
