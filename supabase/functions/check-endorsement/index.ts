@@ -1240,13 +1240,20 @@ Deno.serve(async (req) => {
 
                 // Send email notification to team about payment direction
                 try {
+                  const { data: tenantForNotif } = linkedCheck.tenant_id
+                    ? await supabase
+                        .from("tenants")
+                        .select("name, email_from_name, email_reply_to")
+                        .eq("id", linkedCheck.tenant_id)
+                        .maybeSingle()
+                    : { data: null } as any;
                   const { data: brandingForNotif } = await supabase
                     .from("company_branding")
                     .select("company_name, company_email")
                     .limit(1)
                     .maybeSingle();
 
-                  const notifEmail = brandingForNotif?.company_email;
+                  const notifEmail = tenantForNotif?.email_reply_to || brandingForNotif?.company_email;
                   if (notifEmail) {
                     const decisionLabel = paymentDirection === "pay_contractor"
                       ? "Pay Contractor" + (contractorName ? ` (${contractorName})` : "")
@@ -1261,7 +1268,7 @@ Deno.serve(async (req) => {
 
                     const claimLabel = claimInfo?.claim_number || linkedCheck.claim_id;
                     const insuredName = claimInfo?.insured_name || "the insured";
-                    const companyName = brandingForNotif?.company_name || "Freedom Claims";
+                    const companyName = tenantForNotif?.email_from_name || tenantForNotif?.name || brandingForNotif?.company_name || "Freedom Claims";
 
                     await invokeSendEmail(supabaseUrl, serviceKey, {
                       to: notifEmail,
