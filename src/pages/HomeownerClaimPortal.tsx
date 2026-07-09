@@ -264,34 +264,73 @@ export default function HomeownerClaimPortal() {
               }
             />
             <TimelineRow
-              done={uploads.length > 0}
+              done={uploads.length > 0 || checks.length > 0}
               label="Check received by ChecksOps"
               detail={
-                uploads[0]
-                  ? new Date(uploads[0].created_at).toLocaleString()
-                  : "Upload below to start"
+                checks[0]?.created_at
+                  ? new Date(checks[0].created_at).toLocaleString()
+                  : uploads[0]
+                    ? new Date(uploads[0].created_at).toLocaleString()
+                    : "Upload below to start"
               }
             />
             <TimelineRow
-              done={uploads.some((u) => ["endorsed", "deposited", "cleared"].includes(u.status))}
+              done={checks.some((c) => ENDORSED_STAGES.has(c.check_stage ?? ""))}
               label="Endorsed by all parties"
               detail={
-                uploads.some((u) => u.status === "endorsed")
+                checks.some((c) => ENDORSED_STAGES.has(c.check_stage ?? ""))
                   ? "Complete"
                   : "Contractor collects endorsements"
               }
             />
             <TimelineRow
-              done={uploads.some((u) => ["deposited", "cleared"].includes(u.status))}
+              done={checks.some((c) => DEPOSITED_STAGES.has(c.check_stage ?? "") || c.deposited_at)}
               label="Deposited"
               detail={
-                uploads.some((u) => u.status === "deposited")
-                  ? "Funds on the way to contractor"
-                  : "Pending endorsements"
+                checks.find((c) => c.deposited_at)
+                  ? `Deposited ${new Date(checks.find((c) => c.deposited_at)!.deposited_at!).toLocaleString()}`
+                  : checks.some((c) => DEPOSITED_STAGES.has(c.check_stage ?? ""))
+                    ? "Funds on the way to contractor"
+                    : "Pending endorsements"
               }
             />
           </CardContent>
         </Card>
+
+        {checks.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Live check status</CardTitle>
+              <CardDescription>
+                Updated automatically as your contractor works your check through ChecksOps.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {checks.map((c) => (
+                <div
+                  key={c.id}
+                  className="flex items-center justify-between text-sm border border-border rounded-md p-3"
+                >
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">
+                      {c.carrier_name ?? "Insurance check"}
+                      {c.check_number ? ` • #${c.check_number}` : ""}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {c.amount != null
+                        ? `$${Number(c.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                        : ""}
+                      {c.updated_at ? ` • updated ${new Date(c.updated_at).toLocaleDateString()}` : ""}
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] capitalize whitespace-nowrap ml-2">
+                    {(c.check_stage ?? c.status ?? "processing").replace(/_/g, " ")}
+                  </Badge>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
 
         {/* DTP */}
         <Card className={dtpSigned ? "border-primary/40" : ""}>
