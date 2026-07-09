@@ -486,6 +486,67 @@ export function ContractorServiceAreaCard() {
           </div>
         </div>
 
+        {/* States served */}
+        <div className="space-y-2 border-t border-border pt-4">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+              States served
+            </Label>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={deriveStatesFromZips}
+              disabled={deriving || prefixes.length === 0}
+              className="h-7 text-xs"
+            >
+              {deriving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Sparkles className="h-3 w-3 mr-1" />}
+              Auto-detect from ZIPs
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Pick states you serve, or auto-detect them from your ZIP prefixes above. Homeowners can filter the directory
+            by state, and your card shows the states you cover.
+          </p>
+          {states.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {states.map((s) => (
+                <Badge key={s} variant="secondary" className="gap-1 pr-1">
+                  {s}
+                  <button
+                    onClick={() => toggleState(s)}
+                    className="hover:text-destructive"
+                    aria-label={`Remove ${s}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-1 pt-1 max-h-40 overflow-y-auto rounded-md border border-border bg-muted/20 p-2">
+            {US_STATES.map((st) => {
+              const active = states.includes(st.code);
+              return (
+                <button
+                  key={st.code}
+                  type="button"
+                  onClick={() => toggleState(st.code)}
+                  title={st.name}
+                  className={`rounded-md border px-2 py-1 text-[11px] transition-colors ${
+                    active
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background hover:bg-muted"
+                  }`}
+                >
+                  {st.code}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+
+
         {/* Home base + radius */}
         <div className="space-y-2 border-t border-border pt-4">
           <Label className="text-xs uppercase tracking-wide text-muted-foreground">
