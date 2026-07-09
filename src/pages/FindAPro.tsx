@@ -21,11 +21,15 @@ type PublicContractor = {
   bio: string | null;
   trades: string[] | null;
   service_states: string[] | null;
+  service_zip_prefixes: string[] | null;
+  service_radius_miles: number | null;
   tier: string | null;
   avg_rating: number | null;
   review_count: number | null;
   jobs_count: number | null;
   verified: boolean;
+  distance_miles?: number | null;
+  zip_prefix_match?: boolean;
 };
 
 type Review = { rating: number; comment: string | null; created_at: string };
