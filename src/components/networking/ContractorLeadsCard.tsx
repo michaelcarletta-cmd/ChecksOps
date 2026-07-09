@@ -21,6 +21,7 @@ type Lead = {
   status: string;
   created_at: string;
   contacted_at: string | null;
+  accepted_at: string | null;
   dtp_claim_number: string | null;
 };
 
