@@ -27,10 +27,12 @@ Deno.serve(async (req) => {
     const { data: lead, error } = await admin
       .from('homeowner_intro_requests')
       .select(
-        'id, contractor_profile_id, contractor_user_id, homeowner_name, homeowner_email, homeowner_phone, property_zip, loss_type, message, created_at',
+        'id, contractor_profile_id, contractor_user_id, homeowner_name, homeowner_email, homeowner_phone, property_zip, loss_type, message, created_at, access_token',
       )
       .eq('id', parsed.data.lead_id)
       .maybeSingle()
+
+
 
     if (error || !lead) {
       return new Response(JSON.stringify({ error: 'lead not found' }), {
