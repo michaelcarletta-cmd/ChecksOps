@@ -27,7 +27,7 @@ import { TenantDocumentsManager } from "./TenantDocumentsManager";
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { TenantAIKeySettings } from "./TenantAIKeySettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
-import { GLBASecurityEventsLog } from "@/components/settings/GLBASecurityEventsLog";
+
 import { ContractorServiceAreaCard } from "@/components/networking/ContractorServiceAreaCard";
 import { ContractorLeadsCard } from "@/components/networking/ContractorLeadsCard";
 import { ContractorVerificationStatusCard } from "@/components/networking/ContractorVerificationStatusCard";
@@ -192,7 +192,6 @@ export function WhiteLabelSettings() {
 
           <TabsContent value="compliance" className="space-y-8">
             <ComplianceSettings />
-            {isAdmin && <GLBASecurityEventsLog />}
             {tenant && (
               <div className="pt-6 border-t border-border/60">
                 <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
