@@ -21,6 +21,7 @@ import {
   Lock,
 } from "lucide-react";
 import { toast } from "sonner";
+import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 
 type Lead = {
   id: string;
@@ -584,8 +585,8 @@ function Shell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/find-a-pro" className="font-bold text-lg">
-            ChecksOps
+          <Link to="/find-a-pro" className="flex items-center" aria-label="ChecksOps home">
+            <CheckOpsLogo className="text-foreground text-xl" />
           </Link>
           <Badge variant="secondary" className="gap-1.5 text-[10px]">
             <ShieldCheck className="h-3 w-3" /> Homeowner portal

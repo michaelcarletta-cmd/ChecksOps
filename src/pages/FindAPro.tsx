@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { ShieldCheck, Star, MapPin, Search, Lock, CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { HomeownerIntroRequestModal } from "@/components/networking/HomeownerIntroRequestModal";
+import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 
 const TRADE_OPTIONS: { value: string; label: string }[] = [
   { value: "general_contractor", label: "General Contractor" },
@@ -400,12 +401,15 @@ function PublicHeader() {
   return (
     <header className="border-b border-border">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
-        <a href="/" className="font-bold tracking-tight">ChecksOps</a>
+        <a href="/" className="flex items-center" aria-label="ChecksOps home">
+          <CheckOpsLogo className="text-foreground text-xl" />
+        </a>
         <div className="text-xs text-muted-foreground">For homeowners</div>
       </div>
     </header>
   );
 }
+
 
 function PublicFooter() {
   return (
