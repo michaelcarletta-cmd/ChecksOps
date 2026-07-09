@@ -13901,6 +13901,75 @@ export type Database = {
           },
         ]
       }
+      homeowner_intro_requests: {
+        Row: {
+          contacted_at: string | null
+          contractor_profile_id: string
+          contractor_user_id: string
+          created_at: string
+          homeowner_email: string
+          homeowner_name: string
+          homeowner_phone: string | null
+          id: string
+          ip_hash: string | null
+          loss_type: string | null
+          message: string | null
+          property_zip: string | null
+          source: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          contacted_at?: string | null
+          contractor_profile_id: string
+          contractor_user_id: string
+          created_at?: string
+          homeowner_email: string
+          homeowner_name: string
+          homeowner_phone?: string | null
+          id?: string
+          ip_hash?: string | null
+          loss_type?: string | null
+          message?: string | null
+          property_zip?: string | null
+          source?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          contacted_at?: string | null
+          contractor_profile_id?: string
+          contractor_user_id?: string
+          created_at?: string
+          homeowner_email?: string
+          homeowner_name?: string
+          homeowner_phone?: string | null
+          id?: string
+          ip_hash?: string | null
+          loss_type?: string | null
+          message?: string | null
+          property_zip?: string | null
+          source?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "homeowner_intro_requests_contractor_profile_id_fkey"
+            columns: ["contractor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "contractor_directory_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "homeowner_intro_requests_contractor_profile_id_fkey"
+            columns: ["contractor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "contractor_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       increase_settings: {
         Row: {
           id: string
