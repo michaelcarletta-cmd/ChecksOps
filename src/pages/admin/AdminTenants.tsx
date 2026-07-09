@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
-import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck, Eye } from "lucide-react";
+import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crown } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { useRef } from "react";
 import { TenantDocumentsManager } from "@/components/white-label/TenantDocumentsManager";
@@ -23,6 +23,7 @@ import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
 import { BillingConfigPanel } from "@/components/billing/BillingConfigPanel";
 import { MaintenancePaymentsTracker } from "@/components/settings/MaintenancePaymentsTracker";
+import { TenantProBadgeManagement } from "@/components/settings/TenantProBadgeManagement";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -264,6 +265,8 @@ function CreateTenantDialog({ onCreated }: { onCreated: (t: Tenant) => void }) {
 /* ---------------- Tenant Detail (with tabs) ---------------- */
 
 function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: () => void; onUpdated: (t: Tenant) => void }) {
+  const [proOpen, setProOpen] = useState(false);
+
   return (
     <TenantProvider slug={tenant.slug}>
     <div className="min-h-screen bg-background">
@@ -296,6 +299,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <TabsTrigger value="integrations" className="flex-1 min-w-[130px] whitespace-nowrap"><Link2 className="w-4 h-4 mr-1" /> Integrations</TabsTrigger>
             
             <TabsTrigger value="billing" className="flex-1 min-w-[100px] whitespace-nowrap"><Receipt className="w-4 h-4 mr-1" /> Billing & Usage</TabsTrigger>
+            <TabsTrigger value="pro-badge" className="flex-1 min-w-[115px] whitespace-nowrap"><Crown className="w-4 h-4 mr-1" /> Pro Badge</TabsTrigger>
             <TabsTrigger value="users" className="flex-1 min-w-[95px] whitespace-nowrap"><Users className="w-4 h-4 mr-1" /> Users</TabsTrigger>
           </TabsList>
 
@@ -326,10 +330,33 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <TenantBillingBankPanel tenantId={tenant.id} tenantName={tenant.name} />
             <TenantUsageInlinePanel tenantId={tenant.id} tenantName={tenant.name} />
           </TabsContent>
+          <TabsContent value="pro-badge" className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Crown className="w-5 h-5 text-amber-400" /> Contractor Pro Badge
+                </CardTitle>
+                <CardDescription>
+                  Approve or revoke the Find-a-Pro badge for contractor profiles in this tenant.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button onClick={() => setProOpen(true)}>
+                  <Crown className="w-4 h-4 mr-2" /> Manage Pro Badge
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
           <TabsContent value="users" className="mt-6">
             <UsersTab tenant={tenant} />
           </TabsContent>
         </Tabs>
+        <TenantProBadgeManagement
+          tenantId={tenant.id}
+          tenantName={tenant.name}
+          isOpen={proOpen}
+          onClose={() => setProOpen(false)}
+        />
       </div>
     </div>
     </TenantProvider>
@@ -1244,6 +1271,7 @@ function TenantManagementTable({
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notesTenant, setNotesTenant] = useState<Tenant | null>(null);
+  const [proTenant, setProTenant] = useState<Tenant | null>(null);
 
   const updateTenant = async (id: string, patch: Record<string, any>, silent = false) => {
     setBusyId(id);
@@ -1386,6 +1414,9 @@ function TenantManagementTable({
                     <Button variant="ghost" size="sm" onClick={() => setNotesTenant(t)}>
                       Notes
                     </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setProTenant(t)}>
+                      <Crown className="w-4 h-4 mr-1 text-amber-400" /> Pro Badge
+                    </Button>
                     <Button variant="ghost" size="sm" onClick={() => onOpen(t)}>
                       Manage →
                     </Button>
@@ -1402,6 +1433,14 @@ function TenantManagementTable({
           tenant={notesTenant}
           onClose={() => setNotesTenant(null)}
           onSaved={() => { setNotesTenant(null); onChanged(); }}
+        />
+      )}
+      {proTenant && (
+        <TenantProBadgeManagement
+          tenantId={proTenant.id}
+          tenantName={proTenant.name}
+          isOpen={true}
+          onClose={() => setProTenant(null)}
         />
       )}
     </Card>
