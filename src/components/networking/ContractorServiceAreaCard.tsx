@@ -218,6 +218,7 @@ export function ContractorServiceAreaCard() {
         .update({
           display_name: cleanName || profile.display_name,
           service_zip_prefixes: prefixes,
+          service_states: states,
           home_base_lat: latN,
           home_base_lng: lngN,
           service_radius_miles: radN,
