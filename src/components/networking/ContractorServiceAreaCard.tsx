@@ -88,6 +88,8 @@ export function ContractorServiceAreaCard() {
 
   const [prefixes, setPrefixes] = useState<string[]>([]);
   const [newPrefix, setNewPrefix] = useState("");
+  const [states, setStates] = useState<string[]>([]);
+  const [deriving, setDeriving] = useState(false);
   const [homeZip, setHomeZip] = useState("");
   const [lat, setLat] = useState<string>("");
   const [lng, setLng] = useState<string>("");
