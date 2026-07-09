@@ -1,66 +1,81 @@
-# Per-Tenant Email Architecture
 
-## Sender strategy
-- **Platform fallback (ships now):** All tenant emails send from `notify.checksops.com` (already verified via Lovable Emails). From-line shows the tenant's brand name; Reply-To routes to the tenant's inbox.
-- **Per-tenant custom domain (Phase 2, opt-in):** Tenants can later verify their own sending domain (e.g. `mail.acmerestoration.com`) via a third-party connector (Resend or Mailgun). When verified, sends switch to their domain automatically.
+# Contractor Directory
 
-Note: I'll use the existing `notify.checksops.com` sender rather than provisioning a second `notify.claims.checksops.com` — same effect, no extra DNS. Say the word if you want the `claims.` subdomain instead.
+A network-wide, browsable list of verified "Pro" contractors that any tenant can search and invite to a claim in one click. Exclusivity stays intact because only sponsored + verified contractors appear.
 
----
+## What tenants see
 
-## Phase 1 — Ship now
+New route: `/networking/contractors` (or a new "Directory" tab inside the existing Networking page).
 
-### Schema (migration on `company_branding`)
-Add per-tenant email columns:
-- `email_from_name` (text) — display name in From
-- `email_reply_to` (text) — Reply-To address
-- `email_sending_mode` (`platform` | `custom`, default `platform`)
-- `email_sending_domain` (text, nullable) — Phase 2 use
-- `email_from_address` (text, nullable) — Phase 2 use
-- `email_domain_status` (`unverified` | `pending` | `verified` | `failed`, default `unverified`)
-- `email_dns_records` (jsonb, nullable) — SPF/DKIM/DMARC records shown to tenant
-- `email_provider` (`lovable` | `resend` | `mailgun`, default `lovable`)
-- `email_verified_at` (timestamptz, nullable)
+```text
+┌────────────────────────────────────────────────────────┐
+│ Contractor Directory                                   │
+│ [Trade ▾] [Region ▾] [Min rating ▾]  [Search…]         │
+├────────────────────────────────────────────────────────┤
+│  ▣ Acme Roofing            ★ 4.9 (23)   Roofing        │
+│    Dallas, TX · Verified · 47 jobs paid                │
+│    [View]  [Invite to claim ▾]                         │
+├────────────────────────────────────────────────────────┤
+│  ▣ BrightWorks Restoration  ★ 4.8 (11)  Water/Fire     │
+│    Houston, TX · Verified · 22 jobs paid               │
+│    [View]  [Invite to claim ▾]                         │
+└────────────────────────────────────────────────────────┘
+```
 
-### Backend: tenant-aware resolver
-New shared helper `supabase/functions/_shared/tenantEmailSender.ts`:
-- `resolveTenantSender(tenantId)` → returns `{ fromName, fromAddress, replyTo, provider }`
-- If `email_sending_mode='custom'` AND `email_domain_status='verified'` → use tenant domain via chosen provider
-- Otherwise → `"<TenantName> <notify@checksops.com>"` with tenant's Reply-To
+Filters: trade (multi), state/metro, minimum rating, "paid by me before" toggle.
 
-### Update send paths
-- `send-transactional-email`: accept `tenantId` in payload, call resolver, pass result to Mailgun/queue
-- `auth-email-hook`: look up tenant from user's `tenant_users`, resolve sender the same way
-- Any direct `resend`/`mailgun` calls in existing functions: route through resolver
+Contractor detail drawer: bio, trades, service area, license #, COI on file, total jobs completed on ChecksOps, per-tenant reviews, tier badge.
 
-### Settings UI
-`src/components/settings/EmailSenderSettings.tsx` (admin-only, scoped to current tenant):
-- Toggle: "Use ChecksOps default sender" / "Use my own domain (Phase 2)"
-- Fields: From Name, Reply-To email
-- Preview card showing example From line
-- Custom-domain section stubbed with "Coming soon" until Phase 2 lands
+"Invite to claim" opens a small popover: pick one of the tenant's active claims → sends invite. On accept, the contractor is added to that claim's contractor list and can receive payments immediately (already Verified, no Plaid re-verification).
 
----
+## Who can appear in the directory
 
-## Phase 2 — Custom domains (when a tenant asks)
+Only contractors flagged `is_directory_listed = true` AND `tier = 'pro'`. Contractor sets a `directory_opt_in` flag in their portal; admin flips `is_directory_listed` when they hit the Pro bar (sponsored + KYC + W-9 + COI + N paid jobs).
 
-1. Connect Resend or Mailgun via `standard_connectors--connect`
-2. In settings UI: input sending domain → call edge function `verify-tenant-domain` which creates the domain on the provider and returns DNS records (DKIM CNAMEs, SPF, DMARC)
-3. UI displays records with copy buttons
-4. "Check verification" button polls provider; on success sets `email_domain_status='verified'`
-5. Resolver automatically switches that tenant to their own domain
-6. Nightly cron re-checks verified domains; flips to `failed` if DNS drift is detected
+For this first build we ship the directory UI and the schema. The Pro tier gate and the contractor-side opt-in toggle land in the same phase so the directory is not empty at launch (we can also mark specific existing contractors as directory-listed manually via admin).
 
----
+## Database
 
-## Files to touch (Phase 1)
-- `supabase/migrations/…_tenant_email_settings.sql` — new columns
-- `supabase/functions/_shared/tenantEmailSender.ts` — new
-- `supabase/functions/send-transactional-email/index.ts` — use resolver
-- `supabase/functions/auth-email-hook/index.ts` — use resolver
-- `src/components/settings/EmailSenderSettings.tsx` — new
-- `src/pages/…settings route` — mount new panel
+New tables (all RLS scoped, GRANTs included):
 
-## Out of scope right now
-- Any provider connector work (Resend/Mailgun) — deferred to Phase 2
-- Rewriting locked functions (`send-email`, `check-endorsement`) unless you unlock them
+- `contractor_profiles`
+  - user_id, display_name, bio, trades (text[]), service_states (text[]), service_metros (text[]), license_number, coi_expires_at, avatar_url, is_directory_listed (bool, admin-controlled), directory_opt_in (bool, contractor-controlled), tier ('guest'|'verified'|'pro'), created_at, updated_at.
+- `contractor_reviews`
+  - contractor_id, tenant_id, rating (1–5), comment, claim_id (nullable), created_at.
+- `contractor_claim_invites`
+  - contractor_id, tenant_id, claim_id, invited_by, status ('pending'|'accepted'|'declined'|'expired'), token, created_at, responded_at.
+
+Derived stats (jobs_paid_count, avg_rating) served via a SQL view `contractor_directory_view` that joins `claim_check_payments` counts + reviews aggregate. Directory query hits this view only when `is_directory_listed = true`.
+
+RLS:
+- `contractor_profiles` SELECT allowed to any authenticated tenant user when `is_directory_listed = true AND directory_opt_in = true`; full row access to the owning contractor and service_role.
+- `contractor_reviews` SELECT allowed to any authenticated tenant user for directory-listed contractors; INSERT restricted to tenant users whose tenant has a settled `claim_check_payments` row with that contractor (prevents fake reviews).
+- `contractor_claim_invites` SELECT/INSERT restricted to the inviting tenant's users; SELECT also to the invited contractor.
+
+## Edge functions
+
+- `contractor-directory-search` — parameterized search (trade, state, min rating, text) hitting `contractor_directory_view`, returns paginated results. Server-side so filters/sorts stay consistent and RLS is enforced.
+- `contractor-invite-to-claim` — creates a `contractor_claim_invites` row, sends the invite email/notification to the contractor, no-ops if a pending invite already exists for the same claim.
+- `contractor-invite-respond` — accept/decline handler used from the contractor portal / email link. On accept, adds the contractor to `claim_contractors` for that claim.
+
+Fee logic and Pro-tier auto-promotion are out of scope for this ticket — the directory reads whatever tier is already set. Admin can manually set `tier = 'pro'` + `is_directory_listed = true` on seed contractors.
+
+## Frontend files
+
+- `src/pages/ContractorDirectory.tsx` — new page, wired into the Networking route.
+- `src/components/networking/ContractorDirectoryFilters.tsx` — filter bar (shadcn Select + Input, lucide icons).
+- `src/components/networking/ContractorDirectoryCard.tsx` — one result row with tier/rating badges.
+- `src/components/networking/ContractorDetailDrawer.tsx` — shadcn Sheet with full profile, reviews, invite CTA.
+- `src/components/networking/InviteToClaimPopover.tsx` — claim picker + submit, uses TanStack Query mutation → `contractor-invite-to-claim`.
+- Sidebar entry added under Networking, gated to tenant users (not contractor portal).
+
+Dark theme, existing tokens, shadcn Card/Badge/Sheet/Select/Popover, lucide icons only, no new libraries.
+
+## Rollout order
+
+1. Schema + view + RLS + GRANTs (migration).
+2. `contractor-directory-search` + `contractor-invite-to-claim` + `contractor-invite-respond` edge functions.
+3. Directory page, filter bar, cards, detail drawer, invite popover.
+4. Manual admin seed of initial Pro contractors so the directory has content on day one.
+
+Confirm and I'll start with the migration.
