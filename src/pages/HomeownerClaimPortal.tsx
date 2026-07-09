@@ -224,6 +224,29 @@ export default function HomeownerClaimPortal() {
     );
   }
 
+  if (pending) {
+    return (
+      <Shell>
+        <Card className="max-w-md mx-auto">
+          <CardContent className="py-10 text-center space-y-3">
+            <Lock className="h-8 w-8 text-primary mx-auto" />
+            <div className="font-semibold text-lg">Waiting for {contractor?.display_name ?? "your contractor"}</div>
+            <p className="text-sm text-muted-foreground">
+              Your request has been sent. Your claim portal opens after
+              {" "}{contractor?.display_name ?? "the contractor"} speaks with you and
+              accepts the work. You'll receive an email with your private link the
+              moment they do.
+            </p>
+            <p className="text-xs text-muted-foreground pt-2">
+              Nothing to sign or upload yet — this keeps your Direction to Pay
+              and check safe until the pro is officially on your project.
+            </p>
+          </CardContent>
+        </Card>
+      </Shell>
+    );
+  }
+
   return (
     <Shell>
       <div className="max-w-2xl mx-auto space-y-4">
