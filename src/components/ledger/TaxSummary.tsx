@@ -261,83 +261,81 @@ export function TaxSummary() {
     URL.revokeObjectURL(url);
   };
 
-  const generate1099 = (rows: RecipientRow[]) => {
+  const generate1099 = async (rows: RecipientRow[]) => {
     if (rows.length === 0) return;
-    const payer = tenant?.name ?? "Payer";
-    const forms = rows.map((r) => `
-      <section class="form">
-        <header>
-          <h2>Form 1099-NEC — Nonemployee Compensation</h2>
-          <p class="year">Tax Year ${year}</p>
-        </header>
-        <div class="grid">
-          <div class="box">
-            <label>PAYER'S name &amp; address</label>
-            <p><strong>${payer}</strong></p>
-          </div>
-          <div class="box">
-            <label>RECIPIENT'S name</label>
-            <p><strong>${r.custname || r.nickname}</strong></p>
-            <p class="muted">${r.nickname && r.custname && r.nickname !== r.custname ? r.nickname : ""}</p>
-            <p class="muted">Type: ${ACCOUNT_TYPE_LABELS[r.account_type] ?? r.account_type}${r.chk_acct ? ` · Acct ••••${r.chk_acct.slice(-4)}` : ""}</p>
-          </div>
-          <div class="box small">
-            <label>TIN / SSN / EIN</label>
-            <p class="blank">_________________</p>
-          </div>
-          <div class="box small">
-            <label>Address on file</label>
-            <p class="blank">_________________</p>
-          </div>
-          <div class="box highlight">
-            <label>Box 1 — Nonemployee compensation</label>
-            <p class="amount">$${r.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
-          </div>
-          <div class="box small"><label>Box 4 — Federal income tax withheld</label><p>$0.00</p></div>
-        </div>
-        <h3>Monthly breakdown — ${year}</h3>
-        <table>
-          <thead><tr>${MONTH_LABELS.map(m => `<th>${m}</th>`).join("")}<th>Total</th></tr></thead>
-          <tbody><tr>${r.monthly.map(v => `<td>${v > 0 ? `$${v.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}</td>`).join("")}<td><strong>$${r.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong></td></tr></tbody>
-        </table>
-        <p class="footnote">${r.payment_count} payment${r.payment_count !== 1 ? "s" : ""} totaling $${r.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}. This worksheet summarizes amounts paid in ${year} and is not an official IRS form. File the official 1099-NEC through your accountant or tax software.</p>
-      </section>
-    `).join("");
+    try {
+      const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+      const srcBytes = await fetch(f1099necAsset.url).then((r) => {
+        if (!r.ok) throw new Error(`Couldn't load 1099-NEC form (${r.status})`);
+        return r.arrayBuffer();
+      });
 
-    const html = `<!doctype html><html><head><meta charset="utf-8"/><title>1099-NEC ${year}</title>
-      <style>
-        body { font-family: -apple-system, Segoe UI, Inter, sans-serif; padding: 24px; color: #111; }
-        .form { page-break-after: always; border: 1px solid #999; padding: 18px; margin-bottom: 18px; }
-        .form:last-child { page-break-after: auto; }
-        header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #111; padding-bottom: 6px; margin-bottom: 12px; }
-        h2 { margin: 0; font-size: 16px; }
-        .year { margin: 0; font-weight: 600; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .box { border: 1px solid #bbb; padding: 8px 10px; border-radius: 4px; }
-        .box.small { font-size: 11px; }
-        .box.highlight { background: #fef3c7; grid-column: span 2; }
-        .box label { font-size: 9px; text-transform: uppercase; color: #555; letter-spacing: 0.04em; }
-        .box p { margin: 4px 0 0 0; font-size: 13px; }
-        .box .amount { font-size: 22px; font-weight: 700; }
-        .muted { color: #666; font-size: 11px; }
-        .blank { color: #999; font-family: monospace; }
-        h3 { font-size: 12px; margin: 16px 0 6px; }
-        table { width: 100%; border-collapse: collapse; font-size: 11px; }
-        th, td { border: 1px solid #ccc; padding: 4px 6px; text-align: right; }
-        th { background: #f5f5f5; font-weight: 600; }
-        .footnote { font-size: 10px; color: #666; margin-top: 10px; }
-        @media print { body { padding: 0; } }
-      </style></head>
-      <body>
-        ${forms}
-        <script>window.onload = () => window.print();</script>
-      </body></html>`;
+      const out = await PDFDocument.create();
+      const font = await out.embedFont(StandardFonts.Helvetica);
+      const fontBold = await out.embedFont(StandardFonts.HelveticaBold);
+      const black = rgb(0, 0, 0);
 
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write(html);
-    w.document.close();
+      const payer = tenant?.name ?? "Payer";
+      // Each 1099-NEC page holds TWO forms stacked. These offsets are the y-shift (in PDF points,
+      // origin bottom-left) for the top form vs the bottom form on the same page.
+      // The IRS form uses ~264pt tall form blocks on an 8.5x11 (612x792) page.
+      const FORM_OFFSETS = [528, 264]; // top form baseline, bottom form baseline (approx)
+
+      const draw = (page: any, text: string, x: number, yFromFormTop: number, formBaselineY: number, opts: { bold?: boolean; size?: number } = {}) => {
+        if (!text) return;
+        page.drawText(text, {
+          x,
+          y: formBaselineY + (264 - yFromFormTop),
+          size: opts.size ?? 9,
+          font: opts.bold ? fontBold : font,
+          color: black,
+        });
+      };
+
+      for (const r of rows) {
+        const src = await PDFDocument.load(srcBytes);
+        const pageCount = src.getPageCount();
+
+        // Stamp payer + recipient data onto EVERY form (top & bottom) on EVERY copy page.
+        for (let pi = 0; pi < pageCount; pi++) {
+          const page = src.getPage(pi);
+          for (const baseY of FORM_OFFSETS) {
+            // Payer name (block starts near top of form)
+            draw(page, payer, 57, 40, baseY, { bold: true });
+            // Recipient name
+            draw(page, r.custname || r.nickname || "", 57, 192, baseY, { bold: true });
+            // (Recipient street / city are left blank — user hasn't captured recipient address.)
+            // Box 1a Nonemployee compensation
+            const amount = `$${r.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+            draw(page, amount, 315, 128, baseY, { bold: true, size: 10 });
+          }
+        }
+
+        const copied = await out.copyPages(src, src.getPageIndices());
+        copied.forEach((p) => out.addPage(p));
+      }
+
+      const pdfBytes = await out.save();
+      const blob = new Blob([pdfBytes], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = rows.length === 1
+        ? `1099-NEC_${(rows[0].custname || rows[0].nickname || "recipient").replace(/[^a-z0-9]+/gi, "_")}_${year}.pdf`
+        : `1099-NEC_${year}_${rows.length}_recipients.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast({
+        title: `1099-NEC PDF ready`,
+        description: `Filled ${rows.length} recipient${rows.length !== 1 ? "s" : ""}. Verify TIN, address, and amounts before filing.`,
+      });
+    } catch (e: any) {
+      toast({ title: "Couldn't generate 1099-NEC", description: e.message, variant: "destructive" });
+    }
   };
+
 
 
 
