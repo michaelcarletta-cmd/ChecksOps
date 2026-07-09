@@ -162,9 +162,8 @@ export function ContractorDirectoryTab() {
       />
     </div>
   );
-
-  function _unused() { toast; useMutation; useQueryClient; }
 }
+
 
 function ContractorCard({
   contractor,
