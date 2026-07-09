@@ -665,6 +665,14 @@ export function TenantManagement() {
           onClose={() => setUsageTarget(null)}
         />
       )}
+      {proTarget && (
+        <TenantProBadgeManagement
+          tenantId={proTarget.id}
+          tenantName={proTarget.name}
+          isOpen={true}
+          onClose={() => setProTarget(null)}
+        />
+      )}
     </div>
   );
 }
