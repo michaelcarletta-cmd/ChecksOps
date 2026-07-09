@@ -105,17 +105,30 @@ export function HomeownerIntroRequestModal({ open, onOpenChange, contractor }: P
       }
       if (!contractorUserId) throw new Error("Contractor unavailable");
 
-      const { error } = await supabase.from("homeowner_intro_requests").insert({
-        contractor_profile_id: contractor.id,
-        contractor_user_id: contractorUserId,
-        homeowner_name: parsed.data.homeowner_name,
-        homeowner_email: parsed.data.homeowner_email,
-        homeowner_phone: parsed.data.homeowner_phone || null,
-        property_zip: parsed.data.property_zip || null,
-        loss_type: parsed.data.loss_type || null,
-        message: parsed.data.message || null,
-      });
+      const { data: inserted, error } = await supabase
+        .from("homeowner_intro_requests")
+        .insert({
+          contractor_profile_id: contractor.id,
+          contractor_user_id: contractorUserId,
+          homeowner_name: parsed.data.homeowner_name,
+          homeowner_email: parsed.data.homeowner_email,
+          homeowner_phone: parsed.data.homeowner_phone || null,
+          property_zip: parsed.data.property_zip || null,
+          loss_type: parsed.data.loss_type || null,
+          message: parsed.data.message || null,
+        })
+        .select("id")
+        .single();
       if (error) throw error;
+
+      // Fire-and-forget email notification to the contractor
+      if (inserted?.id) {
+        supabase.functions
+          .invoke("notify-homeowner-lead", { body: { lead_id: inserted.id } })
+          .catch(() => {
+            /* non-blocking; the lead is already saved */
+          });
+      }
       setSubmitted(true);
     } catch (e: any) {
       toast.error(e.message ?? "Could not send your request");
