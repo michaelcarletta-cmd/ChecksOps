@@ -28,6 +28,8 @@ import { TenantPartnerManager } from "./TenantPartnerManager";
 import { TenantAIKeySettings } from "./TenantAIKeySettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { GLBASecurityEventsLog } from "@/components/settings/GLBASecurityEventsLog";
+import { ContractorServiceAreaCard } from "@/components/networking/ContractorServiceAreaCard";
+import { Search as SearchIcon } from "lucide-react";
 
 import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
 import { CheckUsageCard } from "@/components/billing/CheckUsageCard";
@@ -118,6 +120,7 @@ export function WhiteLabelSettings() {
             <TabsTrigger value="email" className="text-xs gap-1"><Mail className="h-3 w-3" />Email</TabsTrigger>
             <TabsTrigger value="compliance" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Compliance & Docs</TabsTrigger>
             <TabsTrigger value="guide" className="text-xs gap-1"><HelpCircle className="h-3 w-3" />ChecksOps Guide</TabsTrigger>
+            <TabsTrigger value="directory" className="text-xs gap-1"><SearchIcon className="h-3 w-3" />Find-a-Pro Directory</TabsTrigger>
           </TabsList>
 
 
@@ -181,6 +184,32 @@ export function WhiteLabelSettings() {
 
           <TabsContent value="guide">
             <CheckCenterHelpPanel />
+          </TabsContent>
+
+          <TabsContent value="directory" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <SearchIcon className="h-4 w-4" /> How homeowners find you
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  Verified ChecksOps contractors are listed on the public{" "}
+                  <a href="/find-a-pro" target="_blank" rel="noreferrer" className="text-primary underline">
+                    Find a Pro directory
+                  </a>{" "}
+                  at <code>checksops.com/find-a-pro</code>. Homeowners enter their ZIP to see contractors whose service
+                  area covers them, sorted by distance from your home base.
+                </p>
+                <p>
+                  Set your <strong>ZIP prefixes</strong> (broad coverage), <strong>home-base ZIP</strong> (auto-fills
+                  lat/lng), and <strong>service radius</strong> below. A homeowner match happens when either their ZIP
+                  starts with one of your prefixes <em>or</em> they fall inside your radius.
+                </p>
+              </CardContent>
+            </Card>
+            <ContractorServiceAreaCard />
           </TabsContent>
         </Tabs>
 
