@@ -1,16 +1,30 @@
-import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, Download, FileText, CheckCircle2, Info, Search } from "lucide-react";
+import { AlertTriangle, Download, FileText, CheckCircle2, Info, Search, Pencil } from "lucide-react";
 import { startOfYear, endOfYear, getYear } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import f1099necAsset from "@/assets/f1099nec.pdf.asset.json";
+
+type TaxProfile = {
+  recipient_key: string;
+  recipient_name: string | null;
+  tin: string | null;
+  address_street: string | null;
+  address_city: string | null;
+  address_state: string | null;
+  address_zip: string | null;
+  account_number: string | null;
+  notes: string | null;
+};
 
 
 const THRESHOLD = 600;
