@@ -277,7 +277,7 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
                 {selected.bio && <p className="text-sm text-muted-foreground">{selected.bio}</p>}
                 <div>
                   <div className="text-xs font-semibold uppercase text-muted-foreground mb-1.5">Trades</div>
-                  <div className="flex flex-wrap gap-1.5">{(selected.trades ?? []).map(t => <Badge key={t} variant="outline">{t}</Badge>)}</div>
+                  <div className="flex flex-wrap gap-1.5">{(selected.trades ?? []).map(t => <Badge key={t} variant="outline">{TRADE_LABEL.get(t) ?? t}</Badge>)}</div>
                 </div>
                 <div>
                   <div className="text-xs font-semibold uppercase text-muted-foreground mb-1.5">Serves</div>
