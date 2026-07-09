@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Mail, Phone, MapPin, MessageSquare, Loader2, Inbox, FileImage } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
+import { LinkCheckToLeadButton } from "./LinkCheckToLeadButton";
 
 type Lead = {
   id: string;
