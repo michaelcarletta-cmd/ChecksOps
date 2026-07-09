@@ -31,6 +31,7 @@ const VerifyAccount = lazy(() => import("./pages/VerifyAccount"));
 const VerifyAccountStart = lazy(() => import("./pages/VerifyAccountStart"));
 const PrivacyNotice = lazy(() => import("./pages/PrivacyNotice"));
 const FindAPro = lazy(() => import("./pages/FindAPro"));
+const HomeownerCheckUpload = lazy(() => import("./pages/HomeownerCheckUpload"));
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -80,6 +81,7 @@ function CheckOpsRoutes() {
       <Route path="/admin/tenants" element={<Suspense fallback={<PageLoader />}><AdminTenants /></Suspense>} />
       <Route path="/find-a-pro" element={<Suspense fallback={<PageLoader />}><FindAPro /></Suspense>} />
       <Route path="/pros" element={<Navigate to="/find-a-pro" replace />} />
+      <Route path="/h/upload" element={<Suspense fallback={<PageLoader />}><HomeownerCheckUpload /></Suspense>} />
       <Route path="/wl/:slug/*" element={<LegacyWlRedirect />} />
       <Route path="/:slug/*" element={<Suspense fallback={<PageLoader />}><WhiteLabelApp /></Suspense>} />
       <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFound /></Suspense>} />

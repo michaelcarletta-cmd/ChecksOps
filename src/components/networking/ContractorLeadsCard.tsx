@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Mail, Phone, MapPin, MessageSquare, Loader2, Inbox } from "lucide-react";
+import { Mail, Phone, MapPin, MessageSquare, Loader2, Inbox, FileImage } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 
@@ -58,6 +58,28 @@ export function ContractorLeadsCard() {
       return (data ?? []) as Lead[];
     },
   });
+
+  const { data: uploads } = useQuery({
+    queryKey: ["homeowner-check-uploads"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("homeowner_check_uploads")
+        .select("id, lead_id, file_path, file_mime, note, status, created_at")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const openUpload = async (path: string) => {
+    const { data, error } = await supabase.storage.from("claim-files").createSignedUrl(path, 300);
+    if (error || !data?.signedUrl) {
+      toast.error("Could not open file");
+      return;
+    }
+    window.open(data.signedUrl, "_blank", "noopener");
+  };
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
@@ -210,7 +232,48 @@ export function ContractorLeadsCard() {
             ))}
           </div>
         )}
+
+        {uploads && uploads.length > 0 && (
+          <div className="mt-6 border-t border-border pt-4">
+            <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5">
+              <FileImage className="h-3.5 w-3.5" /> Homeowner check uploads
+            </div>
+            <div className="space-y-2">
+              {uploads.map((u: any) => {
+                const relatedLead = (leads ?? []).find((l) => l.id === u.lead_id);
+                return (
+                  <div
+                    key={u.id}
+                    className="flex items-center justify-between text-sm border border-border rounded-md p-2 gap-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">
+                        {relatedLead?.homeowner_name ?? "Homeowner"}
+                        <span className="text-muted-foreground text-xs ml-2">
+                          {formatDistanceToNow(new Date(u.created_at), { addSuffix: true })}
+                        </span>
+                      </div>
+                      {u.note && <div className="text-xs text-muted-foreground truncate">{u.note}</div>}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="outline" className="text-[10px]">{u.status}</Badge>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => openUpload(u.file_path)}
+                      >
+                        View
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 }
+
