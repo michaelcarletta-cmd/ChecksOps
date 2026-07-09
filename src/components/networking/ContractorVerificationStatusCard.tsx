@@ -155,15 +155,9 @@ export function ContractorVerificationStatusCard({ contractorId }: { contractorI
                 : "Not yet Pro-eligible — one or more Pro requirements are unmet."}
             </div>
             {tier === "pro" ? (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setPro.mutate(false)}
-                disabled={setPro.isPending}
-              >
-                {setPro.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
-                Revoke Pro
-              </Button>
+              <div className="text-[11px] text-muted-foreground">
+                Pro badge active. Contact ChecksOps to revoke.
+              </div>
             ) : (
               <Button
                 size="sm"
