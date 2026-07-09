@@ -77,7 +77,7 @@ export function ContractorServiceAreaCard() {
       const { data, error } = await supabase
         .from("contractor_profiles")
         .select(
-          "id, display_name, bio, trades, service_zip_prefixes, home_base_lat, home_base_lng, service_radius_miles, is_directory_listed, directory_opt_in, tier",
+          "id, display_name, bio, trades, service_zip_prefixes, service_states, home_base_lat, home_base_lng, service_radius_miles, is_directory_listed, directory_opt_in, tier",
         )
         .eq("user_id", user!.id)
         .maybeSingle();
