@@ -1,0 +1,178 @@
+// deno-lint-ignore-file no-explicit-any
+// Public, token-gated homeowner portal. No login required.
+// Actions: get | upload_check | sign_dtp
+import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
+import { createClient } from 'npm:@supabase/supabase-js@2'
+import { z } from 'npm:zod@3.23.8'
+
+const BUCKET = 'claim-files'
+const MAX_BYTES = 15 * 1024 * 1024
+const ALLOWED_MIME = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf',
+])
+const TOKEN_RE = /^[a-f0-9]{32,80}$/i
+
+const Body = z.object({
+  token: z.string().regex(TOKEN_RE),
+  action: z.enum(['get', 'upload_check', 'sign_dtp']),
+  file_base64: z.string().min(100).optional(),
+  file_mime: z.string().max(60).optional(),
+  filename: z.string().max(200).optional(),
+  note: z.string().max(1000).optional(),
+  signature_name: z.string().trim().min(2).max(120).optional(),
+  insurance_carrier: z.string().trim().max(120).optional(),
+  claim_number: z.string().trim().max(80).optional(),
+  policy_number: z.string().trim().max(80).optional(),
+  property_address: z.string().trim().max(240).optional(),
+})
+
+function b64ToBytes(b64: string): Uint8Array {
+  const clean = b64.includes(',') ? b64.split(',').pop()! : b64
+  const bin = atob(clean)
+  const out = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+  return out
+}
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+
+  try {
+    const parsed = Body.safeParse(await req.json())
+    if (!parsed.success) return json({ error: 'invalid body' }, 400)
+    const p = parsed.data
+
+    const admin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    )
+
+    // Resolve the claim by token
+    const { data: lead, error: leadErr } = await admin
+      .from('homeowner_intro_requests')
+      .select(
+        'id, contractor_profile_id, contractor_user_id, homeowner_name, homeowner_email, homeowner_phone, property_zip, loss_type, message, status, created_at, dtp_signed_at, dtp_signature_name, dtp_insurance_carrier, dtp_claim_number, dtp_policy_number, dtp_property_address',
+      )
+      .eq('access_token', p.token)
+      .maybeSingle()
+    if (leadErr || !lead) return json({ error: 'invalid or expired link' }, 404)
+
+    const { data: profile } = await admin
+      .from('contractor_profiles')
+      .select('id, display_name, bio, tier, is_directory_listed, directory_opt_in, user_id')
+      .eq('id', lead.contractor_profile_id)
+      .maybeSingle()
+
+    if (p.action === 'get') {
+      const { data: uploads } = await admin
+        .from('homeowner_check_uploads')
+        .select('id, file_path, status, note, created_at')
+        .eq('lead_id', lead.id)
+        .order('created_at', { ascending: false })
+
+      // Timeline stub: show upload + status events. Real check pipeline
+      // hooks in later (check_intake_items keyed to contractor_user_id +
+      // homeowner_email match). For now surface the homeowner's own uploads.
+      return json({
+        ok: true,
+        lead: {
+          id: lead.id,
+          homeowner_name: lead.homeowner_name,
+          homeowner_email: lead.homeowner_email,
+          property_zip: lead.property_zip,
+          loss_type: lead.loss_type,
+          status: lead.status,
+          created_at: lead.created_at,
+          dtp_signed_at: lead.dtp_signed_at,
+          dtp_signature_name: lead.dtp_signature_name,
+          dtp_insurance_carrier: lead.dtp_insurance_carrier,
+          dtp_claim_number: lead.dtp_claim_number,
+          dtp_policy_number: lead.dtp_policy_number,
+          dtp_property_address: lead.dtp_property_address,
+        },
+        contractor: profile
+          ? {
+              id: profile.id,
+              display_name: profile.display_name,
+              bio: profile.bio,
+              tier: profile.tier,
+            }
+          : null,
+        uploads: uploads ?? [],
+      })
+    }
+
+    if (!profile || !profile.is_directory_listed || !profile.directory_opt_in) {
+      return json({ error: 'contractor not accepting activity' }, 403)
+    }
+
+    if (p.action === 'upload_check') {
+      if (!p.file_base64 || !p.file_mime) return json({ error: 'file required' }, 400)
+      if (!ALLOWED_MIME.has(p.file_mime)) return json({ error: 'unsupported file type' }, 400)
+      const bytes = b64ToBytes(p.file_base64)
+      if (bytes.byteLength > MAX_BYTES) return json({ error: 'file too large (15 MB max)' }, 400)
+
+      const ext =
+        (p.filename?.split('.').pop() ?? '').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin'
+      const objectName = `homeowner-uploads/${profile.user_id}/${lead.id}/${crypto.randomUUID()}.${ext}`
+
+      const { error: upErr } = await admin.storage
+        .from(BUCKET)
+        .upload(objectName, bytes, { contentType: p.file_mime, upsert: false })
+      if (upErr) return json({ error: 'upload failed', detail: upErr.message }, 500)
+
+      const { data: row, error: insErr } = await admin
+        .from('homeowner_check_uploads')
+        .insert({
+          lead_id: lead.id,
+          contractor_profile_id: profile.id,
+          contractor_user_id: profile.user_id,
+          homeowner_email: lead.homeowner_email.toLowerCase(),
+          file_path: objectName,
+          file_mime: p.file_mime,
+          note: p.note ?? null,
+        })
+        .select('id')
+        .single()
+      if (insErr) return json({ error: 'db insert failed', detail: insErr.message }, 500)
+
+      return json({ ok: true, id: row.id })
+    }
+
+    if (p.action === 'sign_dtp') {
+      if (!p.signature_name) return json({ error: 'signature name required' }, 400)
+      const ip =
+        req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+        req.headers.get('cf-connecting-ip') ??
+        null
+      const ua = req.headers.get('user-agent') ?? null
+
+      const { error: updErr } = await admin
+        .from('homeowner_intro_requests')
+        .update({
+          dtp_signed_at: new Date().toISOString(),
+          dtp_signature_name: p.signature_name,
+          dtp_signature_ip: ip,
+          dtp_signature_user_agent: ua,
+          dtp_insurance_carrier: p.insurance_carrier ?? null,
+          dtp_claim_number: p.claim_number ?? null,
+          dtp_policy_number: p.policy_number ?? null,
+          dtp_property_address: p.property_address ?? null,
+        })
+        .eq('id', lead.id)
+      if (updErr) return json({ error: 'could not save signature', detail: updErr.message }, 500)
+
+      return json({ ok: true })
+    }
+
+    return json({ error: 'unknown action' }, 400)
+  } catch (e: any) {
+    return json({ error: e.message ?? 'server error' }, 500)
+  }
+})
