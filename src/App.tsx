@@ -31,6 +31,7 @@ const VerifyAccount = lazy(() => import("./pages/VerifyAccount"));
 const VerifyAccountStart = lazy(() => import("./pages/VerifyAccountStart"));
 const PrivacyNotice = lazy(() => import("./pages/PrivacyNotice"));
 const FindAPro = lazy(() => import("./pages/FindAPro"));
+const HomeownerCheckUpload = lazy(() => import("./pages/HomeownerCheckUpload"));
 
 export const queryClient = new QueryClient({
   defaultOptions: {
