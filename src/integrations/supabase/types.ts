@@ -13973,10 +13973,19 @@ export type Database = {
       }
       homeowner_intro_requests: {
         Row: {
+          access_token: string
           contacted_at: string | null
           contractor_profile_id: string
           contractor_user_id: string
           created_at: string
+          dtp_claim_number: string | null
+          dtp_insurance_carrier: string | null
+          dtp_policy_number: string | null
+          dtp_property_address: string | null
+          dtp_signature_ip: string | null
+          dtp_signature_name: string | null
+          dtp_signature_user_agent: string | null
+          dtp_signed_at: string | null
           homeowner_email: string
           homeowner_name: string
           homeowner_phone: string | null
@@ -13990,10 +13999,19 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          access_token?: string
           contacted_at?: string | null
           contractor_profile_id: string
           contractor_user_id: string
           created_at?: string
+          dtp_claim_number?: string | null
+          dtp_insurance_carrier?: string | null
+          dtp_policy_number?: string | null
+          dtp_property_address?: string | null
+          dtp_signature_ip?: string | null
+          dtp_signature_name?: string | null
+          dtp_signature_user_agent?: string | null
+          dtp_signed_at?: string | null
           homeowner_email: string
           homeowner_name: string
           homeowner_phone?: string | null
@@ -14007,10 +14025,19 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          access_token?: string
           contacted_at?: string | null
           contractor_profile_id?: string
           contractor_user_id?: string
           created_at?: string
+          dtp_claim_number?: string | null
+          dtp_insurance_carrier?: string | null
+          dtp_policy_number?: string | null
+          dtp_property_address?: string | null
+          dtp_signature_ip?: string | null
+          dtp_signature_name?: string | null
+          dtp_signature_user_agent?: string | null
+          dtp_signed_at?: string | null
           homeowner_email?: string
           homeowner_name?: string
           homeowner_phone?: string | null

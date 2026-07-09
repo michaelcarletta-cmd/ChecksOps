@@ -60,6 +60,7 @@ export function HomeownerIntroRequestModal({ open, onOpenChange, contractor }: P
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [leadId, setLeadId] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [submittedEmail, setSubmittedEmail] = useState("");
 
   const reset = () => {
@@ -71,6 +72,7 @@ export function HomeownerIntroRequestModal({ open, onOpenChange, contractor }: P
     setMessage("");
     setSubmitted(false);
     setLeadId(null);
+    setAccessToken(null);
     setSubmittedEmail("");
   };
 
@@ -121,7 +123,7 @@ export function HomeownerIntroRequestModal({ open, onOpenChange, contractor }: P
           loss_type: parsed.data.loss_type || null,
           message: parsed.data.message || null,
         })
-        .select("id")
+        .select("id, access_token")
         .single();
       if (error) throw error;
 
@@ -134,6 +136,7 @@ export function HomeownerIntroRequestModal({ open, onOpenChange, contractor }: P
           });
       }
       setLeadId(inserted?.id ?? null);
+      setAccessToken((inserted as any)?.access_token ?? null);
       setSubmittedEmail(parsed.data.homeowner_email);
       setSubmitted(true);
     } catch (e: any) {
@@ -159,28 +162,30 @@ export function HomeownerIntroRequestModal({ open, onOpenChange, contractor }: P
               <div className="flex items-start gap-2">
                 <ShieldCheck className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
                 <div className="text-sm">
-                  <div className="font-semibold">Already have an insurance check in hand?</div>
+                  <div className="font-semibold">Open your private claim portal</div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Send it securely through ChecksOps instead of handing it over off-platform. Every
-                    endorsement and deposit gets logged, and you'll see the status by email.
+                    No login needed. Sign your Direction to Pay, upload your insurance check, and
+                    watch every endorsement and deposit happen live.
                   </p>
                 </div>
               </div>
               <Button
-                variant="outline"
                 className="w-full"
                 onClick={() => {
-                  const params = new URLSearchParams();
-                  if (leadId) params.set("lead", leadId);
-                  if (contractor?.id) params.set("contractor", contractor.id);
-                  if (submittedEmail) params.set("email", submittedEmail);
-                  window.open(`/h/upload?${params.toString()}`, "_blank", "noopener");
+                  if (accessToken) {
+                    window.open(`/h/claim/${accessToken}`, "_blank", "noopener");
+                  }
                 }}
+                disabled={!accessToken}
               >
-                Send my check securely →
+                Open my claim portal →
               </Button>
+              <p className="text-[10px] text-muted-foreground">
+                Bookmark that page — the private link is your key back in. We also emailed it to{" "}
+                <strong>{submittedEmail}</strong>.
+              </p>
             </div>
-            <Button className="w-full" onClick={() => handleClose(false)}>
+            <Button variant="outline" className="w-full" onClick={() => handleClose(false)}>
               Done
             </Button>
           </div>
