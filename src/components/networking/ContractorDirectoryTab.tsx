@@ -16,6 +16,7 @@ import {
   Search, Star, Briefcase, MapPin, ShieldCheck, Send, Loader2,
   Users, Award, Inbox,
 } from "lucide-react";
+import { ContractorServiceAreaCard } from "./ContractorServiceAreaCard";
 
 type DirectoryRow = {
   id: string;
