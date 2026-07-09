@@ -939,15 +939,32 @@ Deno.serve(async (req) => {
 
 
 
-        // Load branding for email customization
+        // Load branding for email customization — resolve per-tenant from the tenants table
+        // (name, logo, colors, contact) so each tenant's endorsement email shows their brand,
+        // not the platform default. company_branding is used only for endorsement copy overrides.
         const tenantId = (endorsement as any).check_intake_items?.tenant_id;
+        const { data: tenantRow } = tenantId
+          ? await supabase
+              .from("tenants")
+              .select("name, logo_url, primary_color, email_from_name, business_phone, email_reply_to")
+              .eq("id", tenantId)
+              .maybeSingle()
+          : { data: null } as any;
         const { data: brandingRow } = await supabase
           .from("company_branding")
           .select("company_name, company_email, company_phone, endorsement_email_subject, endorsement_email_body, endorsement_email_header_color, endorsement_email_button_color, letterhead_url")
-          .eq("tenant_id", tenantId)
           .limit(1)
           .maybeSingle();
-        const emailBranding: EndorsementBranding = brandingRow || {};
+        const emailBranding: EndorsementBranding = {
+          company_name: tenantRow?.email_from_name || tenantRow?.name || brandingRow?.company_name,
+          company_email: tenantRow?.email_reply_to || brandingRow?.company_email,
+          company_phone: tenantRow?.business_phone || brandingRow?.company_phone,
+          endorsement_email_subject: brandingRow?.endorsement_email_subject,
+          endorsement_email_body: brandingRow?.endorsement_email_body,
+          endorsement_email_header_color: tenantRow?.primary_color || brandingRow?.endorsement_email_header_color,
+          endorsement_email_button_color: tenantRow?.primary_color || brandingRow?.endorsement_email_button_color,
+          letterhead_url: tenantRow?.logo_url || brandingRow?.letterhead_url,
+        };
 
         if (endorsement.contact_email) {
           try {
@@ -1223,13 +1240,20 @@ Deno.serve(async (req) => {
 
                 // Send email notification to team about payment direction
                 try {
+                  const { data: tenantForNotif } = linkedCheck.tenant_id
+                    ? await supabase
+                        .from("tenants")
+                        .select("name, email_from_name, email_reply_to")
+                        .eq("id", linkedCheck.tenant_id)
+                        .maybeSingle()
+                    : { data: null } as any;
                   const { data: brandingForNotif } = await supabase
                     .from("company_branding")
                     .select("company_name, company_email")
                     .limit(1)
                     .maybeSingle();
 
-                  const notifEmail = brandingForNotif?.company_email;
+                  const notifEmail = tenantForNotif?.email_reply_to || brandingForNotif?.company_email;
                   if (notifEmail) {
                     const decisionLabel = paymentDirection === "pay_contractor"
                       ? "Pay Contractor" + (contractorName ? ` (${contractorName})` : "")
@@ -1244,7 +1268,7 @@ Deno.serve(async (req) => {
 
                     const claimLabel = claimInfo?.claim_number || linkedCheck.claim_id;
                     const insuredName = claimInfo?.insured_name || "the insured";
-                    const companyName = brandingForNotif?.company_name || "Freedom Claims";
+                    const companyName = tenantForNotif?.email_from_name || tenantForNotif?.name || brandingForNotif?.company_name || "Freedom Claims";
 
                     await invokeSendEmail(supabaseUrl, serviceKey, {
                       to: notifEmail,
