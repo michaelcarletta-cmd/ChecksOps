@@ -16,6 +16,7 @@ import {
   Search, Star, Briefcase, MapPin, ShieldCheck, Send, Loader2,
   Users, Award, Inbox,
 } from "lucide-react";
+import { ContractorServiceAreaCard } from "./ContractorServiceAreaCard";
 
 type DirectoryRow = {
   id: string;
@@ -80,6 +81,7 @@ export function ContractorDirectoryTab() {
 
   return (
     <div className="space-y-4">
+      <ContractorServiceAreaCard />
       <Card>
         <CardContent className="p-3 md:p-4">
           <div className="flex flex-col md:flex-row gap-2 md:items-center">
