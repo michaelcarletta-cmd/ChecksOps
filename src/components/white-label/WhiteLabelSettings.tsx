@@ -29,6 +29,7 @@ import { TenantAIKeySettings } from "./TenantAIKeySettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { GLBASecurityEventsLog } from "@/components/settings/GLBASecurityEventsLog";
 import { ContractorServiceAreaCard } from "@/components/networking/ContractorServiceAreaCard";
+import { ContractorVerificationStatusCard } from "@/components/networking/ContractorVerificationStatusCard";
 import { Search as SearchIcon } from "lucide-react";
 
 import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
