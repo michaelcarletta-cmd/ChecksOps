@@ -147,13 +147,39 @@ export function HomeownerIntroRequestModal({ open, onOpenChange, contractor }: P
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-md">
         {submitted ? (
-          <div className="py-6 text-center space-y-3">
-            <CheckCircle2 className="h-12 w-12 text-primary mx-auto" />
-            <DialogTitle className="text-xl">Request sent</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              {contractor?.display_name} has been notified. They typically respond within 1 business day.
-              Watch your email — including spam.
-            </p>
+          <div className="py-6 space-y-4">
+            <div className="text-center space-y-2">
+              <CheckCircle2 className="h-12 w-12 text-primary mx-auto" />
+              <DialogTitle className="text-xl">Request sent</DialogTitle>
+              <p className="text-sm text-muted-foreground">
+                {contractor?.display_name} has been notified. They typically respond within 1 business day.
+              </p>
+            </div>
+            <div className="border border-primary/30 bg-primary/5 rounded-lg p-3 space-y-2">
+              <div className="flex items-start gap-2">
+                <ShieldCheck className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <div className="font-semibold">Already have an insurance check in hand?</div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Send it securely through ChecksOps instead of handing it over off-platform. Every
+                    endorsement and deposit gets logged, and you'll see the status by email.
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  const params = new URLSearchParams();
+                  if (leadId) params.set("lead", leadId);
+                  if (contractor?.id) params.set("contractor", contractor.id);
+                  if (submittedEmail) params.set("email", submittedEmail);
+                  window.open(`/h/upload?${params.toString()}`, "_blank", "noopener");
+                }}
+              >
+                Send my check securely →
+              </Button>
+            </div>
             <Button className="w-full" onClick={() => handleClose(false)}>
               Done
             </Button>
