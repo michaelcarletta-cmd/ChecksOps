@@ -18,6 +18,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { toast } from "sonner";
+import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 
 type Lead = {
   id: string;
