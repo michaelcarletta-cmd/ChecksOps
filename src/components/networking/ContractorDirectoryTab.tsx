@@ -43,7 +43,7 @@ const STATE_OPTIONS = [
 ];
 
 export function ContractorDirectoryTab() {
-  const { toast } = useToast();
+
   const [search, setSearch] = useState("");
   const [trade, setTrade] = useState<string>("any");
   const [state, setState] = useState<string>("any");
