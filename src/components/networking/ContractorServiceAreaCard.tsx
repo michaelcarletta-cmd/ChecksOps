@@ -104,6 +104,7 @@ export function ContractorServiceAreaCard() {
   useEffect(() => {
     if (profile) {
       setPrefixes(profile.service_zip_prefixes ?? []);
+      setStates(profile.service_states ?? []);
       setLat(profile.home_base_lat != null ? String(profile.home_base_lat) : "");
       setLng(profile.home_base_lng != null ? String(profile.home_base_lng) : "");
       setRadius(profile.service_radius_miles != null ? String(profile.service_radius_miles) : "");
