@@ -2071,6 +2071,7 @@ export type Database = {
           id: string
           is_multi_payee: boolean | null
           issue_date: string | null
+          lead_id: string | null
           mortgage_final_released_at: string | null
           mortgage_monitoring_type: string
           mortgage_received_at: string | null
@@ -2130,6 +2131,7 @@ export type Database = {
           id?: string
           is_multi_payee?: boolean | null
           issue_date?: string | null
+          lead_id?: string | null
           mortgage_final_released_at?: string | null
           mortgage_monitoring_type?: string
           mortgage_received_at?: string | null
@@ -2189,6 +2191,7 @@ export type Database = {
           id?: string
           is_multi_payee?: boolean | null
           issue_date?: string | null
+          lead_id?: string | null
           mortgage_final_released_at?: string | null
           mortgage_monitoring_type?: string
           mortgage_received_at?: string | null
@@ -2251,6 +2254,13 @@ export type Database = {
             columns: ["deposited_by_tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "check_intake_items_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "homeowner_intro_requests"
             referencedColumns: ["id"]
           },
           {
