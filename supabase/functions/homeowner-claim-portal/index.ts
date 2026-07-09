@@ -76,9 +76,21 @@ Deno.serve(async (req) => {
         .eq('lead_id', lead.id)
         .order('created_at', { ascending: false })
 
-      // Live check pipeline: match by contractor's tenant + claim number the
-      // homeowner entered on their DTP. Falls back to empty when unknown.
-      let checks: any[] = []
+      // Live check pipeline: prefer explicit lead_id link (contractor
+      // manually tied a check to this lead), then fall back to matching by
+      // the homeowner's DTP claim number within the contractor's tenants.
+      const checkMap = new Map<string, any>()
+      const selectCols =
+        'id, amount, check_number, carrier_name, payee_line, check_stage, status, deposited_at, created_at, updated_at, lead_id'
+
+      const { data: linkedRows } = await admin
+        .from('check_intake_items')
+        .select(selectCols)
+        .eq('lead_id', lead.id)
+        .order('created_at', { ascending: false })
+        .limit(20)
+      for (const r of linkedRows ?? []) checkMap.set(r.id, r)
+
       if (lead.dtp_claim_number && profile?.user_id) {
         const { data: tenants } = await admin
           .from('tenant_users')
@@ -88,18 +100,18 @@ Deno.serve(async (req) => {
         if (tenantIds.length) {
           const { data: rows } = await admin
             .from('check_intake_items')
-            .select(
-              'id, amount, check_number, carrier_name, payee_line, check_stage, status, deposited_at, created_at, updated_at',
-            )
+            .select(selectCols)
             .in('tenant_id', tenantIds)
             .or(
               `detected_claim_number.eq.${lead.dtp_claim_number},freedom_claim_number.eq.${lead.dtp_claim_number}`,
             )
             .order('created_at', { ascending: false })
             .limit(20)
-          checks = rows ?? []
+          for (const r of rows ?? []) if (!checkMap.has(r.id)) checkMap.set(r.id, r)
         }
       }
+      const checks = Array.from(checkMap.values())
+
 
       return json({
         ok: true,
