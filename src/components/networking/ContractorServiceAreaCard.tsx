@@ -5,19 +5,43 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Loader2, MapPin, Save, Plus, X, Crosshair } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Loader2, MapPin, Save, Plus, X, Crosshair, Wrench, Globe } from "lucide-react";
 
 type MyProfile = {
   id: string;
   display_name: string | null;
+  bio: string | null;
+  trades: string[] | null;
   service_zip_prefixes: string[] | null;
   home_base_lat: number | null;
   home_base_lng: number | null;
   service_radius_miles: number | null;
+  is_directory_listed: boolean | null;
+  directory_opt_in: boolean | null;
+  tier: string | null;
 };
+
+// Preset trades / specialties homeowners can filter on.
+// Values are stored lowercase-snake in `trades[]`; labels are the display strings.
+const PRESET_TRADES: { value: string; label: string }[] = [
+  { value: "roofing", label: "Roofing" },
+  { value: "water_mitigation", label: "Water Mitigation" },
+  { value: "mold_remediation", label: "Mold Remediation" },
+  { value: "fire_restoration", label: "Fire / Smoke Restoration" },
+  { value: "general_contractor", label: "General Contractor" },
+  { value: "plumbing", label: "Plumbing" },
+  { value: "electrical", label: "Electrical" },
+  { value: "hvac", label: "HVAC" },
+  { value: "flooring", label: "Flooring" },
+  { value: "windows_siding", label: "Windows & Siding" },
+  { value: "public_adjuster", label: "Public Adjuster" },
+  { value: "attorney", label: "Attorney (Insurance)" },
+];
 
 export function ContractorServiceAreaCard() {
   const { user } = useAuth();
@@ -30,7 +54,9 @@ export function ContractorServiceAreaCard() {
     queryFn: async (): Promise<MyProfile | null> => {
       const { data, error } = await supabase
         .from("contractor_profiles")
-        .select("id, display_name, service_zip_prefixes, home_base_lat, home_base_lng, service_radius_miles")
+        .select(
+          "id, display_name, bio, trades, service_zip_prefixes, home_base_lat, home_base_lng, service_radius_miles, is_directory_listed, directory_opt_in, tier",
+        )
         .eq("user_id", user!.id)
         .maybeSingle();
       if (error) throw error;
@@ -45,6 +71,10 @@ export function ContractorServiceAreaCard() {
   const [lng, setLng] = useState<string>("");
   const [radius, setRadius] = useState<string>("");
   const [geocoding, setGeocoding] = useState(false);
+  const [trades, setTrades] = useState<string[]>([]);
+  const [newTrade, setNewTrade] = useState("");
+  const [bio, setBio] = useState("");
+  const [published, setPublished] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -52,6 +82,9 @@ export function ContractorServiceAreaCard() {
       setLat(profile.home_base_lat != null ? String(profile.home_base_lat) : "");
       setLng(profile.home_base_lng != null ? String(profile.home_base_lng) : "");
       setRadius(profile.service_radius_miles != null ? String(profile.service_radius_miles) : "");
+      setTrades(profile.trades ?? []);
+      setBio(profile.bio ?? "");
+      setPublished(!!(profile.is_directory_listed && profile.directory_opt_in));
     }
   }, [profile]);
 
@@ -69,8 +102,18 @@ export function ContractorServiceAreaCard() {
     setPrefixes([...prefixes, p]);
     setNewPrefix("");
   };
-
   const removePrefix = (p: string) => setPrefixes(prefixes.filter((x) => x !== p));
+
+  const toggleTrade = (v: string) =>
+    setTrades((prev) => (prev.includes(v) ? prev.filter((t) => t !== v) : [...prev, v]));
+
+  const addCustomTrade = () => {
+    const v = newTrade.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+    if (!v) return;
+    if (trades.includes(v)) return;
+    setTrades([...trades, v]);
+    setNewTrade("");
+  };
 
   const geocodeHome = async () => {
     if (!/^\d{5}$/.test(homeZip.trim())) {
@@ -113,12 +156,17 @@ export function ContractorServiceAreaCard() {
           home_base_lat: latN,
           home_base_lng: lngN,
           service_radius_miles: radN,
+          trades,
+          bio: bio.trim() || null,
+          is_directory_listed: published,
+          directory_opt_in: published,
+          tier: published ? "pro" : profile.tier ?? "guest",
         })
         .eq("id", profile.id);
       if (error) throw error;
     },
     onSuccess: () => {
-      toast({ title: "Service area saved" });
+      toast({ title: "Profile saved" });
       qc.invalidateQueries({ queryKey: ["my-contractor-profile"] });
       qc.invalidateQueries({ queryKey: ["contractor-directory"] });
     },
@@ -138,6 +186,7 @@ export function ContractorServiceAreaCard() {
         user_id: user.id,
         display_name: displayName,
         service_zip_prefixes: [],
+        trades: [],
       });
       if (error) throw error;
     },
@@ -176,21 +225,52 @@ export function ContractorServiceAreaCard() {
     );
   }
 
+  const isLive = !!(profile.is_directory_listed && profile.directory_opt_in) && profile.tier === "pro";
+
   return (
     <Card className="border-primary/30">
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
-          <MapPin className="h-4 w-4 text-primary" /> My service area
+          <MapPin className="h-4 w-4 text-primary" /> My directory profile
         </CardTitle>
         <CardDescription className="text-xs">
-          Homeowners on the public directory only see you if their ZIP matches one of your prefixes or falls inside your radius.
+          Homeowners on the public directory only see you when your listing is published AND their ZIP matches one of
+          your prefixes or falls inside your radius.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
+        {/* Publish toggle */}
+        <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 p-3">
+          <div className="space-y-0.5">
+            <div className="text-sm font-semibold flex items-center gap-2">
+              <Globe className="h-4 w-4 text-primary" />
+              Publish to checksops.com/find-a-pro
+            </div>
+            <div className="text-[11px] text-muted-foreground">
+              {isLive ? "Live — homeowners can see you now." : "Draft — not visible to homeowners yet."}
+            </div>
+          </div>
+          <Switch checked={published} onCheckedChange={setPublished} />
+        </div>
+
         {/* Currently saved summary */}
         <div className="rounded-md border border-border bg-muted/30 p-3 text-xs space-y-1">
           <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">
             Currently saved
+          </div>
+          <div>
+            <span className="text-muted-foreground">Status: </span>
+            {isLive ? (
+              <Badge className="h-4 px-1.5 text-[10px]">Live</Badge>
+            ) : (
+              <Badge variant="outline" className="h-4 px-1.5 text-[10px]">Draft</Badge>
+            )}
+          </div>
+          <div>
+            <span className="text-muted-foreground">Trades: </span>
+            {(profile.trades?.length ?? 0) > 0
+              ? profile.trades!.join(", ")
+              : <span className="text-muted-foreground italic">none</span>}
           </div>
           <div>
             <span className="text-muted-foreground">ZIP prefixes: </span>
@@ -212,8 +292,79 @@ export function ContractorServiceAreaCard() {
           </div>
         </div>
 
+        {/* Trades / specialties */}
+        <div className="space-y-2 border-t border-border pt-4">
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+            <Wrench className="h-3 w-3" /> Trades &amp; specialties
+          </Label>
+          <div className="flex flex-wrap gap-1.5">
+            {PRESET_TRADES.map((t) => {
+              const active = trades.includes(t.value);
+              return (
+                <button
+                  key={t.value}
+                  type="button"
+                  onClick={() => toggleTrade(t.value)}
+                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                    active
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background hover:bg-muted"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+          {trades.filter((t) => !PRESET_TRADES.some((p) => p.value === t)).length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {trades
+                .filter((t) => !PRESET_TRADES.some((p) => p.value === t))
+                .map((t) => (
+                  <Badge key={t} variant="secondary" className="gap-1 pr-1">
+                    {t}
+                    <button
+                      onClick={() => toggleTrade(t)}
+                      className="hover:text-destructive"
+                      aria-label={`Remove ${t}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Input
+              placeholder="Add custom trade…"
+              value={newTrade}
+              onChange={(e) => setNewTrade(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustomTrade())}
+              className="h-9 w-56"
+              maxLength={40}
+            />
+            <Button size="sm" variant="outline" onClick={addCustomTrade}>
+              <Plus className="h-3 w-3 mr-1" /> Add
+            </Button>
+          </div>
+        </div>
+
+        {/* Short bio */}
+        <div className="space-y-2 border-t border-border pt-4">
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+            Short bio (shown on your card)
+          </Label>
+          <Textarea
+            value={bio}
+            onChange={(e) => setBio(e.target.value.slice(0, 400))}
+            placeholder="A sentence or two homeowners will see on your directory card…"
+            className="min-h-[70px] text-sm"
+          />
+          <p className="text-[10px] text-muted-foreground text-right">{bio.length}/400</p>
+        </div>
+
         {/* ZIP prefixes */}
-        <div className="space-y-2">
+        <div className="space-y-2 border-t border-border pt-4">
           <Label className="text-xs uppercase tracking-wide text-muted-foreground">
             Service ZIP prefixes (first 3 digits)
           </Label>
@@ -288,15 +439,15 @@ export function ContractorServiceAreaCard() {
             </div>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Homeowners within your radius (from the ZIP they entered) will see you as a match, with an
-            approximate distance shown on your card.
+            Homeowners within your radius (from the ZIP they entered) will see you as a match, with an approximate
+            distance shown on your card.
           </p>
         </div>
 
         <div className="flex justify-end">
           <Button onClick={() => save.mutate()} disabled={save.isPending} size="sm">
             {save.isPending ? <Loader2 className="h-3 w-3 mr-2 animate-spin" /> : <Save className="h-3 w-3 mr-2" />}
-            Save service area
+            Save profile
           </Button>
         </div>
       </CardContent>

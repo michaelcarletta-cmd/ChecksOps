@@ -9,10 +9,21 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { ShieldCheck, Star, MapPin, Search, Lock, CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-const TRADE_OPTIONS = [
-  "General Contractor", "Roofing", "Water Mitigation", "Fire Restoration",
-  "Mold Remediation", "Plumbing", "Electrical", "HVAC", "Flooring", "Framing",
+const TRADE_OPTIONS: { value: string; label: string }[] = [
+  { value: "general_contractor", label: "General Contractor" },
+  { value: "roofing", label: "Roofing" },
+  { value: "water_mitigation", label: "Water Mitigation" },
+  { value: "fire_restoration", label: "Fire / Smoke Restoration" },
+  { value: "mold_remediation", label: "Mold Remediation" },
+  { value: "plumbing", label: "Plumbing" },
+  { value: "electrical", label: "Electrical" },
+  { value: "hvac", label: "HVAC" },
+  { value: "flooring", label: "Flooring" },
+  { value: "windows_siding", label: "Windows & Siding" },
+  { value: "public_adjuster", label: "Public Adjuster" },
+  { value: "attorney", label: "Attorney (Insurance)" },
 ];
+const TRADE_LABEL = new Map(TRADE_OPTIONS.map((t) => [t.value, t.label]));
 const STATE_OPTIONS = ["FL","TX","CA","NY","GA","AZ","NC","SC","TN","VA","PA","OH","IL","CO","WA","OR","LA","AL","MS","NJ"];
 
 type PublicContractor = {
@@ -204,7 +215,7 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
               <SelectTrigger><SelectValue placeholder="Trade" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All trades</SelectItem>
-                {TRADE_OPTIONS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                {TRADE_OPTIONS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={state} onValueChange={setState}>
@@ -266,7 +277,7 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
                 {selected.bio && <p className="text-sm text-muted-foreground">{selected.bio}</p>}
                 <div>
                   <div className="text-xs font-semibold uppercase text-muted-foreground mb-1.5">Trades</div>
-                  <div className="flex flex-wrap gap-1.5">{(selected.trades ?? []).map(t => <Badge key={t} variant="outline">{t}</Badge>)}</div>
+                  <div className="flex flex-wrap gap-1.5">{(selected.trades ?? []).map(t => <Badge key={t} variant="outline">{TRADE_LABEL.get(t) ?? t}</Badge>)}</div>
                 </div>
                 <div>
                   <div className="text-xs font-semibold uppercase text-muted-foreground mb-1.5">Serves</div>
@@ -334,7 +345,7 @@ function ContractorCard({ c, onClick }: { c: PublicContractor; onClick: () => vo
         </div>
         {c.bio && <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{c.bio}</p>}
         <div className="flex flex-wrap gap-1 mt-3">
-          {(c.trades ?? []).slice(0, 3).map(t => <Badge key={t} variant="outline" className="text-xs">{t}</Badge>)}
+          {(c.trades ?? []).slice(0, 3).map(t => <Badge key={t} variant="outline" className="text-xs">{TRADE_LABEL.get(t) ?? t}</Badge>)}
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground mt-3">
           {c.distance_miles != null && (
