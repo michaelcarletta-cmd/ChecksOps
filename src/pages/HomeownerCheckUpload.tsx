@@ -116,7 +116,7 @@ export default function HomeownerCheckUpload() {
           const { data: c } = await supabase.functions.invoke("public-contractor-directory", {
             body: { action: "detail", contractorId: cid, email: session.user.email, zip: l?.property_zip ?? "00000" },
           });
-          if (!cancelled) setContractor((c as any)?.contractor ?? null);
+          if (!cancelled) setContractor(((c as any)?.profile ?? null) as Contractor | null);
         }
 
         // Load previous uploads for this session
