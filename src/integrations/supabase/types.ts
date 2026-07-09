@@ -20052,6 +20052,10 @@ export type Database = {
         Args: { p_claim_id: string }
         Returns: string
       }
+      contractor_accepts_leads: {
+        Args: { _profile_id: string; _user_id: string }
+        Returns: boolean
+      }
       contractor_verification_status: {
         Args: { p_contractor_id: string }
         Returns: Json
@@ -21651,6 +21655,21 @@ export type Database = {
         }
         Returns: Json
       }
+      submit_homeowner_intro_request: {
+        Args: {
+          _contractor_profile_id: string
+          _homeowner_email: string
+          _homeowner_name: string
+          _homeowner_phone?: string
+          _loss_type?: string
+          _message?: string
+          _property_zip?: string
+        }
+        Returns: {
+          access_token: string
+          id: string
+        }[]
+      }
       submit_manager_approval: {
         Args: {
           p_actor_id: string
@@ -21705,6 +21724,7 @@ export type Database = {
         }
         Returns: Json
       }
+      whoami: { Args: never; Returns: string }
     }
     Enums: {
       app_role:
