@@ -9773,11 +9773,15 @@ export type Database = {
           created_at: string
           directory_opt_in: boolean
           display_name: string
+          home_base_lat: number | null
+          home_base_lng: number | null
           id: string
           is_directory_listed: boolean
           license_number: string | null
           service_metros: string[]
+          service_radius_miles: number | null
           service_states: string[]
+          service_zip_prefixes: string[]
           tier: string
           trades: string[]
           updated_at: string
@@ -9790,11 +9794,15 @@ export type Database = {
           created_at?: string
           directory_opt_in?: boolean
           display_name: string
+          home_base_lat?: number | null
+          home_base_lng?: number | null
           id?: string
           is_directory_listed?: boolean
           license_number?: string | null
           service_metros?: string[]
+          service_radius_miles?: number | null
           service_states?: string[]
+          service_zip_prefixes?: string[]
           tier?: string
           trades?: string[]
           updated_at?: string
@@ -9807,11 +9815,15 @@ export type Database = {
           created_at?: string
           directory_opt_in?: boolean
           display_name?: string
+          home_base_lat?: number | null
+          home_base_lng?: number | null
           id?: string
           is_directory_listed?: boolean
           license_number?: string | null
           service_metros?: string[]
+          service_radius_miles?: number | null
           service_states?: string[]
+          service_zip_prefixes?: string[]
           tier?: string
           trades?: string[]
           updated_at?: string
@@ -19019,6 +19031,33 @@ export type Database = {
           },
         ]
       }
+      zip_geocache: {
+        Row: {
+          city: string | null
+          created_at: string
+          lat: number
+          lng: number
+          state: string | null
+          zip: string
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string
+          lat: number
+          lng: number
+          state?: string | null
+          zip: string
+        }
+        Update: {
+          city?: string | null
+          created_at?: string
+          lat?: number
+          lng?: number
+          state?: string | null
+          zip?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       check_dashboard_counts: {
@@ -19079,13 +19118,17 @@ export type Database = {
           created_at: string | null
           directory_opt_in: boolean | null
           display_name: string | null
+          home_base_lat: number | null
+          home_base_lng: number | null
           id: string | null
           is_directory_listed: boolean | null
           jobs_count: number | null
           license_number: string | null
           review_count: number | null
           service_metros: string[] | null
+          service_radius_miles: number | null
           service_states: string[] | null
+          service_zip_prefixes: string[] | null
           tier: string | null
           trades: string[] | null
           updated_at: string | null
@@ -20746,6 +20789,37 @@ export type Database = {
           policyholder_name: string
           settlement_notes: string
           status: string
+        }[]
+      }
+      search_public_contractors: {
+        Args: {
+          p_lat?: number
+          p_limit?: number
+          p_lng?: number
+          p_min_rating?: number
+          p_offset?: number
+          p_search?: string
+          p_sort?: string
+          p_states?: string[]
+          p_trades?: string[]
+          p_zip?: string
+        }
+        Returns: {
+          avg_rating: number
+          bio: string
+          created_at: string
+          display_name: string
+          distance_miles: number
+          id: string
+          jobs_count: number
+          review_count: number
+          service_radius_miles: number
+          service_states: string[]
+          service_zip_prefixes: string[]
+          tier: string
+          total_count: number
+          trades: string[]
+          zip_prefix_match: boolean
         }[]
       }
       seed_endorsements_from_payee_line: {

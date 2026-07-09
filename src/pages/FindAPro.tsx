@@ -21,11 +21,15 @@ type PublicContractor = {
   bio: string | null;
   trades: string[] | null;
   service_states: string[] | null;
+  service_zip_prefixes: string[] | null;
+  service_radius_miles: number | null;
   tier: string | null;
   avg_rating: number | null;
   review_count: number | null;
   jobs_count: number | null;
   verified: boolean;
+  distance_miles?: number | null;
+  zip_prefix_match?: boolean;
 };
 
 type Review = { rating: number; comment: string | null; created_at: string };
@@ -316,6 +320,7 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
 }
 
 function ContractorCard({ c, onClick }: { c: PublicContractor; onClick: () => void }) {
+  const local = c.zip_prefix_match || (c.distance_miles != null && c.service_radius_miles != null && c.distance_miles <= c.service_radius_miles);
   return (
     <Card onClick={onClick} className="cursor-pointer hover:border-primary transition-colors">
       <CardContent className="pt-6">
@@ -323,16 +328,22 @@ function ContractorCard({ c, onClick }: { c: PublicContractor; onClick: () => vo
           <h3 className="font-semibold truncate">{c.display_name}</h3>
           <Badge className="gap-1 flex-shrink-0 text-xs"><ShieldCheck className="h-3 w-3" /> Verified</Badge>
         </div>
-        <RatingBadge rating={c.avg_rating} count={c.review_count} />
+        <div className="flex items-center gap-2 flex-wrap">
+          <RatingBadge rating={c.avg_rating} count={c.review_count} />
+          {local && <Badge variant="secondary" className="text-xs gap-1"><MapPin className="h-3 w-3" /> Serves your area</Badge>}
+        </div>
         {c.bio && <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{c.bio}</p>}
         <div className="flex flex-wrap gap-1 mt-3">
           {(c.trades ?? []).slice(0, 3).map(t => <Badge key={t} variant="outline" className="text-xs">{t}</Badge>)}
         </div>
-        {(c.service_states ?? []).length > 0 && (
-          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-3">
-            <MapPin className="h-3 w-3" /> {(c.service_states ?? []).slice(0, 5).join(", ")}
-          </div>
-        )}
+        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-3">
+          {c.distance_miles != null && (
+            <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> ~{Math.round(c.distance_miles)} mi away</span>
+          )}
+          {(c.service_states ?? []).length > 0 && c.distance_miles == null && (
+            <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {(c.service_states ?? []).slice(0, 5).join(", ")}</span>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

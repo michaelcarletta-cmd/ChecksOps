@@ -1,6 +1,5 @@
 // Public homeowner-facing directory. NO auth required.
-// Returns sanitized data only: NEVER expose contractor contact info (email/phone).
-// Also captures the homeowner lead (email + zip) that gated access.
+// Returns sanitized contractor data + distance/local-match signals derived from the homeowner ZIP.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -14,33 +13,48 @@ const admin = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
-// Whitelist of fields safe to return to the public
 const PUBLIC_FIELDS = [
-  "id",
-  "display_name",
-  "bio",
-  "trades",
-  "service_states",
-  "tier",
-  "avg_rating",
-  "review_count",
-  "jobs_count",
-  "created_at",
+  "id", "display_name", "bio", "trades", "service_states",
+  "service_zip_prefixes", "service_radius_miles",
+  "tier", "avg_rating", "review_count", "jobs_count", "created_at",
 ] as const;
 
 function sanitize(row: any) {
   const out: Record<string, any> = {};
   for (const k of PUBLIC_FIELDS) out[k] = row?.[k] ?? null;
-  // Homeowner-facing "verified" badge = Pro tier + directory opt-in (already filtered)
   out.verified = row?.tier === "pro";
+  if (row?.distance_miles != null) out.distance_miles = Number(row.distance_miles);
+  if (row?.zip_prefix_match != null) out.zip_prefix_match = !!row.zip_prefix_match;
   return out;
 }
 
-function isValidEmail(e: string) {
-  return typeof e === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && e.length <= 255;
-}
-function isValidZip(z: string) {
-  return typeof z === "string" && /^\d{5}(-\d{4})?$/.test(z);
+const isValidEmail = (e: string) =>
+  typeof e === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && e.length <= 255;
+const isValidZip = (z: string) => typeof z === "string" && /^\d{5}(-\d{4})?$/.test(z);
+
+// Geocode a US ZIP via Zippopotam.us (free, no key), cached in zip_geocache.
+async function geocodeZip(zip5: string): Promise<{ lat: number; lng: number } | null> {
+  const { data: cached } = await admin
+    .from("zip_geocache").select("lat,lng").eq("zip", zip5).maybeSingle();
+  if (cached) return { lat: Number(cached.lat), lng: Number(cached.lng) };
+
+  try {
+    const res = await fetch(`https://api.zippopotam.us/us/${zip5}`);
+    if (!res.ok) return null;
+    const j = await res.json();
+    const place = j?.places?.[0];
+    if (!place) return null;
+    const lat = Number(place.latitude), lng = Number(place.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    admin.from("zip_geocache").insert({
+      zip: zip5, lat, lng,
+      city: place["place name"] ?? null,
+      state: place["state abbreviation"] ?? null,
+    }).then(() => {});
+    return { lat, lng };
+  } catch {
+    return null;
+  }
 }
 
 Deno.serve(async (req) => {
@@ -52,64 +66,49 @@ Deno.serve(async (req) => {
     const email: string = (body.email ?? "").trim().toLowerCase();
     const zip: string = (body.zip ?? "").trim();
 
-    // Gate: require email + zip on every call
     if (!isValidEmail(email) || !isValidZip(zip)) {
       return new Response(
         JSON.stringify({ error: "Valid email and 5-digit US zip are required." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
+    const zip5 = zip.slice(0, 5);
 
     if (action === "search") {
       const {
-        trades = [],
-        states = [],
-        minRating = 0,
-        search = "",
-        limit = 24,
-        offset = 0,
-        sortBy = "rating",
+        trades = [], states = [], minRating = 0,
+        search = "", limit = 24, offset = 0, sortBy = "rating",
       } = body;
 
-      let query = admin
-        .from("contractor_directory_view")
-        .select("*", { count: "exact" })
-        .eq("is_directory_listed", true)
-        .eq("directory_opt_in", true)
-        .eq("tier", "pro") // homeowner-facing = Pro-verified only
-        .gte("avg_rating", Number(minRating) || 0);
+      const geo = await geocodeZip(zip5);
 
-      if (Array.isArray(trades) && trades.length) query = query.overlaps("trades", trades);
-      if (Array.isArray(states) && states.length) query = query.overlaps("service_states", states);
-      if (typeof search === "string" && search.trim()) {
-        const s = search.trim().replace(/[%_]/g, "").slice(0, 80);
-        query = query.or(`display_name.ilike.%${s}%,bio.ilike.%${s}%`);
-      }
-
-      if (sortBy === "rating") {
-        query = query.order("avg_rating", { ascending: false }).order("review_count", { ascending: false });
-      } else if (sortBy === "jobs") {
-        query = query.order("jobs_count", { ascending: false });
-      } else {
-        query = query.order("created_at", { ascending: false });
-      }
-
-      const lim = Math.max(1, Math.min(Number(limit) || 24, 60));
-      const off = Math.max(0, Number(offset) || 0);
-      query = query.range(off, off + lim - 1);
-
-      const { data, error, count } = await query;
+      const { data, error } = await admin.rpc("search_public_contractors", {
+        p_zip: zip5,
+        p_lat: geo?.lat ?? null,
+        p_lng: geo?.lng ?? null,
+        p_trades: Array.isArray(trades) && trades.length ? trades : null,
+        p_states: Array.isArray(states) && states.length ? states : null,
+        p_min_rating: Number(minRating) || 0,
+        p_search: typeof search === "string" ? search.trim().slice(0, 80) : "",
+        p_sort: ["rating", "jobs", "recent"].includes(sortBy) ? sortBy : "rating",
+        p_limit: Math.max(1, Math.min(Number(limit) || 24, 60)),
+        p_offset: Math.max(0, Number(offset) || 0),
+      });
       if (error) throw error;
 
-      // Fire-and-forget lead capture (browse)
       admin.from("homeowner_directory_leads").insert({
-        email, zip, action: "browse",
+        email, zip: zip5, action: "browse",
         user_agent: req.headers.get("user-agent") ?? null,
         referrer: req.headers.get("referer") ?? null,
       }).then(() => {});
 
+      const total = (data as any[])?.[0]?.total_count ?? 0;
       return new Response(
-        JSON.stringify({ results: (data ?? []).map(sanitize), total: count ?? 0 }),
+        JSON.stringify({
+          results: (data ?? []).map(sanitize),
+          total: Number(total),
+          geocoded: !!geo,
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -145,7 +144,7 @@ Deno.serve(async (req) => {
         .limit(50);
 
       admin.from("homeowner_directory_leads").insert({
-        email, zip, contractor_id: contractorId, action: "view_profile",
+        email, zip: zip5, contractor_id: contractorId, action: "view_profile",
         user_agent: req.headers.get("user-agent") ?? null,
         referrer: req.headers.get("referer") ?? null,
       }).then(() => {});
