@@ -335,29 +335,29 @@ export function TaxSummary() {
           const page = src.getPage(pi);
 
           // ---- PAYER block (left column, top) ----
-          draw(page, payerName, 58, 730, { bold: true, maxWidth: 235 });
-          draw(page, payer.street, 58, 694, { maxWidth: 150 });
-          draw(page, payer.city, 58, 670, { maxWidth: 150 });
-          draw(page, payerPhone, 215, 670, { maxWidth: 90 });
-          draw(page, payer.state, 58, 646, { maxWidth: 115 });
-          draw(page, payer.zip, 215, 646, { maxWidth: 90 });
+          draw(page, payerName, 58, 732, { bold: true, maxWidth: 235 });
+          draw(page, payer.street, 58, 700, { maxWidth: 150 });
+          draw(page, payer.city, 58, 676, { maxWidth: 150 });
+          draw(page, payerPhone, 215, 676, { maxWidth: 80 });
+          draw(page, payer.state, 58, 652, { maxWidth: 115 });
+          draw(page, payer.zip, 258, 652, { maxWidth: 35 });
 
           // ---- Calendar year ----
-          draw(page, String(year), 435, 700, { bold: true, size: 10 });
+          draw(page, String(year), 422, 690, { bold: true, size: 10 });
 
           // ---- TINs ----
-          draw(page, payerEin, 58, 620, { maxWidth: 115 });
+          draw(page, payerEin, 58, 624, { maxWidth: 115 });
           // Recipient TIN — not captured yet, leave blank
 
           // ---- RECIPIENT block ----
-          draw(page, recipientName, 58, 580, { bold: true, maxWidth: 235 });
+          draw(page, recipientName, 58, 586, { bold: true, maxWidth: 235 });
           // recipient street / city / state / zip left blank (not captured)
 
           // ---- Box 1a: Nonemployee compensation ----
-          draw(page, amount, 310, 635, { bold: true, size: 10 });
+          draw(page, amount, 315, 650, { bold: true, size: 10 });
 
           // ---- Account number (recipient nickname as reference) ----
-          draw(page, r.nickname.slice(0, 20), 58, 442, { size: 8, maxWidth: 190 });
+          draw(page, r.nickname.slice(0, 20), 58, 444, { size: 8, maxWidth: 190 });
         }
 
         const copied = await out.copyPages(src, src.getPageIndices());
