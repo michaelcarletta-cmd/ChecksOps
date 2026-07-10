@@ -47,9 +47,25 @@ export function AuthentecheckVerification({
       return url;
     },
     onSuccess: (url) => {
-      // Open as a normal full-size tab, not a constrained popup — OAuth-based
-      // bank redirects (Wells Fargo, Chase, etc. via Plaid) can lose session
-      // state inside small fixed-size popup windows, especially on mobile.
+      // On mobile, popups often render as a half-screen constrained window and
+      // Plaid's OAuth bank redirects lose session state. Navigate the current
+      // tab instead. On desktop, open a full-size new tab.
+      const isMobile = typeof window !== "undefined" &&
+        (window.matchMedia?.("(max-width: 768px)").matches ||
+          /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent));
+
+      qc.invalidateQueries({ queryKey: ["stakeholder-accounts"] });
+      qc.invalidateQueries({ queryKey: ["tenant-primary-accounts"] });
+
+      if (isMobile) {
+        toast({
+          title: "Opening bank login",
+          description: "You'll return here automatically after verifying.",
+        });
+        window.location.href = url;
+        return;
+      }
+
       const win = window.open(url, "_blank", "noopener,noreferrer");
       if (!win) {
         toast({
@@ -63,8 +79,6 @@ export function AuthentecheckVerification({
           description: "Complete sign-in to verify the account. Status updates automatically.",
         });
       }
-      qc.invalidateQueries({ queryKey: ["stakeholder-accounts"] });
-      qc.invalidateQueries({ queryKey: ["tenant-primary-accounts"] });
     },
     onError: (e: any) =>
       toast({ title: "Couldn't start verification", description: e.message, variant: "destructive" }),
