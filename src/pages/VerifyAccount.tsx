@@ -1,13 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle2, AlertTriangle, ShieldCheck, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { CheckCircle2, AlertTriangle, ShieldCheck, Loader2, RefreshCw } from "lucide-react";
 
 /**
  * Landing page after Actum Authentecheck (Plaid) flow completes.
  * Actum redirects the user here; the postback webhook updates the account
- * status server-side. We poll briefly to reflect the latest status.
+ * status server-side. We poll for up to ~5 minutes with backoff and offer
+ * a manual "Check now" button, since Actum's server-to-server postback can
+ * lag or, on some merchant configs, arrive only after Plaid finishes
+ * settling the identity check.
  */
 export default function VerifyAccount() {
   const [params] = useSearchParams();
@@ -20,30 +24,61 @@ export default function VerifyAccount() {
   const [status, setStatus] = useState<string>("pending");
   const [nickname, setNickname] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [elapsedSec, setElapsedSec] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const cancelledRef = useRef(false);
+
+  const fetchStatus = async () => {
+    if (!acct) return null;
+    const { data } = await supabase
+      .from("stakeholder_accounts")
+      .select("verification_status, nickname")
+      .eq("id", acct)
+      .maybeSingle();
+    if (data?.nickname) setNickname(data.nickname);
+    const s = data?.verification_status ?? "pending";
+    setStatus(s);
+    return s;
+  };
 
   useEffect(() => {
-    let cancelled = false;
-    let attempts = 0;
-    const poll = async () => {
-      if (!acct) { setLoading(false); return; }
-      const { data } = await supabase
-        .from("stakeholder_accounts")
-        .select("verification_status, nickname")
-        .eq("id", acct)
-        .maybeSingle();
-      if (cancelled) return;
-      if (data?.nickname) setNickname(data.nickname);
-      const s = data?.verification_status ?? "pending";
-      setStatus(s);
-      setLoading(false);
-      if (s === "pending" && attempts < 10) {
-        attempts += 1;
-        setTimeout(poll, 1500);
-      }
+    cancelledRef.current = false;
+    if (!acct) { setLoading(false); return; }
+
+    const startedAt = Date.now();
+    // Poll with backoff: 1.5s for first 30s, then 5s, then 10s.
+    // Stop after ~5 minutes.
+    const scheduleNext = () => {
+      if (cancelledRef.current) return;
+      const elapsed = (Date.now() - startedAt) / 1000;
+      setElapsedSec(Math.floor(elapsed));
+      if (elapsed > 300) return; // 5 min cap
+      const delay = elapsed < 30 ? 1500 : elapsed < 90 ? 5000 : 10000;
+      setTimeout(async () => {
+        if (cancelledRef.current) return;
+        const s = await fetchStatus();
+        if (s === "verified" || s === "admin_override" || s === "failed") return;
+        scheduleNext();
+      }, delay);
     };
-    poll();
-    return () => { cancelled = true; };
+
+    (async () => {
+      const s = await fetchStatus();
+      setLoading(false);
+      if (s !== "verified" && s !== "admin_override" && s !== "failed") {
+        scheduleNext();
+      }
+    })();
+
+    return () => { cancelledRef.current = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [acct]);
+
+  const manualCheck = async () => {
+    setRefreshing(true);
+    await fetchStatus();
+    setRefreshing(false);
+  };
 
   const verified = status === "verified" || status === "admin_override";
   const failed = status === "failed" || ok === "0";
@@ -79,11 +114,36 @@ export default function VerifyAccount() {
               </p>
             </div>
           ) : (
-            <div className="rounded-md border bg-muted/30 p-4 text-center space-y-2">
+            <div className="rounded-md border bg-muted/30 p-4 text-center space-y-3">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto" />
               <p className="text-sm text-muted-foreground">
-                Finishing verification... you can close this window once your status updates.
+                Waiting for your bank to confirm the verification.
+                {elapsedSec > 20 && (
+                  <> This usually takes a few seconds but can take up to a couple of minutes.</>
+                )}
               </p>
+              <p className="text-xs text-muted-foreground">
+                Keep this page open{elapsedSec > 0 && <> — checked for {elapsedSec}s</>}.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={manualCheck}
+                disabled={refreshing}
+                className="mt-2"
+              >
+                {refreshing
+                  ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Checking...</>
+                  : <><RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Check status now</>}
+              </Button>
+              {elapsedSec > 120 && (
+                <p className="text-xs text-muted-foreground pt-2 border-t">
+                  Still waiting? Your bank sign-in went through, but our system
+                  hasn't received confirmation from the payment processor yet.
+                  Contact the sender — they can mark your account verified
+                  manually.
+                </p>
+              )}
             </div>
           )}
         </CardContent>
