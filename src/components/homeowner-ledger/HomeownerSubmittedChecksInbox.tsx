@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, ImageIcon, CheckCircle2, XCircle, Send } from "lucide-react";
 import { toast } from "sonner";
+import { AttachUploadToClaimDialog } from "./AttachUploadToClaimDialog";
 
 type PendingUpload = {
   id: string;
