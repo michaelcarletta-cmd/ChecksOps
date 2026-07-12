@@ -465,7 +465,7 @@ export function StakeholderAccountSettings() {
 // ---------------------------------------------------------------------------
 function StakeholderCapsBar({ accounts, tenantId }: { accounts: any[]; tenantId?: string }) {
   const { user } = useAuth();
-  const [openDialog, setOpenDialog] = useState<null | "sales_rep" | "subcontractor">(null);
+  const [openDialog, setOpenDialog] = useState<null | "sales_rep" | "subcontractor" | "vendor">(null);
 
   const { data: tenantLimits } = useQuery({
     queryKey: ["tenant-stakeholder-caps", tenantId],
@@ -473,11 +473,11 @@ function StakeholderCapsBar({ accounts, tenantId }: { accounts: any[]; tenantId?
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tenants")
-        .select("max_sales_reps, max_subcontractors")
+        .select("max_sales_reps, max_subcontractors, max_vendors")
         .eq("id", tenantId!)
         .maybeSingle();
       if (error) throw error;
-      return data as { max_sales_reps: number; max_subcontractors: number } | null;
+      return data as { max_sales_reps: number; max_subcontractors: number; max_vendors: number } | null;
     },
   });
 
@@ -500,10 +500,17 @@ function StakeholderCapsBar({ accounts, tenantId }: { accounts: any[]; tenantId?
 
   const maxSalesReps = tenantLimits?.max_sales_reps ?? 5;
   const maxSubs = tenantLimits?.max_subcontractors ?? 10;
+  const maxVendors = tenantLimits?.max_vendors ?? 5;
   const salesCount = accounts.filter((a: any) => a.account_type === "sales_rep").length;
   const subCount = accounts.filter((a: any) => a.account_type === "subcontractor").length;
+  const vendorCount = accounts.filter((a: any) => a.account_type === "vendor").length;
 
-  const CapRow = ({ label, used, max, category }: { label: string; used: number; max: number; category: "sales_rep" | "subcontractor" }) => {
+  const currentLimit =
+    openDialog === "sales_rep" ? maxSalesReps :
+    openDialog === "subcontractor" ? maxSubs :
+    openDialog === "vendor" ? maxVendors : 0;
+
+  const CapRow = ({ label, used, max, category }: { label: string; used: number; max: number; category: "sales_rep" | "subcontractor" | "vendor" }) => {
     const nearCap = used >= max;
     return (
       <div className="flex items-center justify-between text-xs">
@@ -533,6 +540,7 @@ function StakeholderCapsBar({ accounts, tenantId }: { accounts: any[]; tenantId?
         <CardContent className="space-y-1.5">
           <CapRow label="Sales reps" used={salesCount} max={maxSalesReps} category="sales_rep" />
           <CapRow label="Subcontractors" used={subCount} max={maxSubs} category="subcontractor" />
+          <CapRow label="Vendors" used={vendorCount} max={maxVendors} category="vendor" />
         </CardContent>
       </Card>
       {openDialog && (
@@ -540,7 +548,7 @@ function StakeholderCapsBar({ accounts, tenantId }: { accounts: any[]; tenantId?
           open={!!openDialog}
           onOpenChange={(o) => !o && setOpenDialog(null)}
           category={openDialog}
-          currentLimit={openDialog === "sales_rep" ? maxSalesReps : maxSubs}
+          currentLimit={currentLimit}
         />
       )}
     </>
