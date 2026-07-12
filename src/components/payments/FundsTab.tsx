@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DollarSign, ArrowDownCircle, Send, CheckCircle2, AlertCircle, Clock, FileCheck, X } from "lucide-react";
+import { DollarSign, ArrowDownCircle, Send, CheckCircle2, AlertCircle, Clock, FileCheck, X, Home } from "lucide-react";
 import { format } from "date-fns";
 import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
+import { SendHomeownerBankLinkDialog } from "@/components/disbursement/SendHomeownerBankLinkDialog";
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
 
@@ -37,6 +38,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
   const { tenant } = useTenant();
   const qc = useQueryClient();
   const [disburseMode, setDisburseMode] = useState<DisburseMode>(null);
+  const [homeownerLinkOpen, setHomeownerLinkOpen] = useState(false);
 
   const { data: incomingPayments = [], isLoading } = useQuery({
     queryKey: ["incoming-payments", checkIntakeItemId, tenant?.id],
@@ -338,6 +340,24 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
           </CardContent>
         </Card>
       )}
+
+      {/* Homeowner AuthenteCheck bank-link invite */}
+      <div>
+        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setHomeownerLinkOpen(true)}>
+          <Home className="h-3.5 w-3.5 mr-1.5" />
+          Send homeowner AuthenteCheck link
+        </Button>
+        <p className="text-[10px] text-muted-foreground mt-1">
+          Emails the homeowner a secure link to verify their bank. Verified account auto-attaches as a disbursable stakeholder.
+        </p>
+      </div>
+
+      <SendHomeownerBankLinkDialog
+        open={homeownerLinkOpen}
+        onOpenChange={setHomeownerLinkOpen}
+        checkIntakeItemId={checkIntakeItemId}
+        claimId={claimId ?? null}
+      />
 
       {/* Disburse buttons */}
       {availableForDisbursement > 0 && disburseMode === null && (
