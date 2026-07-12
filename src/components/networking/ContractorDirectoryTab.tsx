@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
-  Search, Star, Briefcase, MapPin, ShieldCheck, Send, Loader2,
+  Search, Star, Briefcase, MapPin, ShieldCheck, Crosshair, Send, Loader2,
   Users, Award, Inbox,
 } from "lucide-react";
 import { ContractorServiceAreaCard } from "./ContractorServiceAreaCard";
