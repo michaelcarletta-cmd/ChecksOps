@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
       }).catch((e) => console.error('email invoke failed', e))
     }
 
-    return json({ ok: true, token: tokRow.token, url })
+    return json({ ok: true, token: tokRow.token, url, partner_code: partnerCode })
   } catch (e) {
     console.error('homeowner-ledger-send error', e)
     return json({ error: 'server_error', message: String((e as Error).message) }, 500)
