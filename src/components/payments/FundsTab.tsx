@@ -38,6 +38,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
   const { tenant } = useTenant();
   const qc = useQueryClient();
   const [disburseMode, setDisburseMode] = useState<DisburseMode>(null);
+  const [homeownerLinkOpen, setHomeownerLinkOpen] = useState(false);
 
   const { data: incomingPayments = [], isLoading } = useQuery({
     queryKey: ["incoming-payments", checkIntakeItemId, tenant?.id],
