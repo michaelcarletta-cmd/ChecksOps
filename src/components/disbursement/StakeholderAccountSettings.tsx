@@ -222,6 +222,9 @@ export function StakeholderAccountSettings() {
 
   return (
     <div className="space-y-6">
+      <StakeholderCapsBar accounts={accounts} tenantId={tenant?.id} />
+
+
 
 
       {/* Stakeholder Accounts */}
