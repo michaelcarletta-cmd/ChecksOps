@@ -9784,6 +9784,13 @@ export type Database = {
           created_at: string
           directory_opt_in: boolean
           display_name: string
+          google_business_name: string | null
+          google_place_id: string | null
+          google_rating: number | null
+          google_review_count: number | null
+          google_reviews: Json | null
+          google_reviews_synced_at: string | null
+          google_reviews_url: string | null
           has_open_disputes: boolean
           home_base_lat: number | null
           home_base_lng: number | null
@@ -9811,6 +9818,13 @@ export type Database = {
           created_at?: string
           directory_opt_in?: boolean
           display_name: string
+          google_business_name?: string | null
+          google_place_id?: string | null
+          google_rating?: number | null
+          google_review_count?: number | null
+          google_reviews?: Json | null
+          google_reviews_synced_at?: string | null
+          google_reviews_url?: string | null
           has_open_disputes?: boolean
           home_base_lat?: number | null
           home_base_lng?: number | null
@@ -9838,6 +9852,13 @@ export type Database = {
           created_at?: string
           directory_opt_in?: boolean
           display_name?: string
+          google_business_name?: string | null
+          google_place_id?: string | null
+          google_rating?: number | null
+          google_review_count?: number | null
+          google_reviews?: Json | null
+          google_reviews_synced_at?: string | null
+          google_reviews_url?: string | null
           has_open_disputes?: boolean
           home_base_lat?: number | null
           home_base_lng?: number | null
