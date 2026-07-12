@@ -181,7 +181,7 @@ export function TenantProBadgeManagement({ tenantId, tenantName, isOpen, onClose
                         onClick={() => setPro.mutate({ contractorId: r.id, approve: true })}
                         title={!eligible ? "Contractor has not met all vetting requirements" : undefined}
                       >
-                        {pending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Crown className="h-3 w-3 mr-1" />}
+                        {pending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Crosshair className="h-3 w-3 mr-1" strokeWidth={2.5} />}
                         Approve Pro
                       </Button>
                     )}
