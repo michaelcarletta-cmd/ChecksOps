@@ -95,7 +95,7 @@ function Gate({ onSubmit }: { onSubmit: (g: { email: string; zip: string }) => v
         <div className="w-full max-w-xl">
           <div className="text-center mb-8">
             <Badge className="mb-4 gap-1.5" variant="secondary">
-              <ShieldCheck className="h-3.5 w-3.5" /> ChecksOps Verified Network
+              <Crosshair className="h-3.5 w-3.5" strokeWidth={2.5} /> ChecksOps Verified Network
             </Badge>
             <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
               Find a restoration pro who won't take your money and disappear.
@@ -205,7 +205,7 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
               <p className="text-sm text-muted-foreground">Browsing as {gate.email} · ZIP {gate.zip} · <button onClick={onSignOut} className="underline">change</button></p>
             </div>
             <Badge variant="secondary" className="gap-1.5 hidden md:inline-flex">
-              <ShieldCheck className="h-3.5 w-3.5" /> {total} verified pros
+              <Crosshair className="h-3.5 w-3.5" strokeWidth={2.5} /> {total} verified pros
             </Badge>
           </div>
 
@@ -383,7 +383,7 @@ function TrustStrip() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
       {[
-        { icon: ShieldCheck, title: "Sponsor-verified", body: "Each pro is vouched for by another verified network member before joining." },
+        { icon: Crosshair, title: "Sponsor-verified", body: "Each pro is vouched for by another verified network member before joining." },
         { icon: Star, title: "Real reviews only", body: "Ratings come from tenants who actually paid the contractor on a settled claim." },
         { icon: Lock, title: "Payments on-platform", body: "Pros get paid through ChecksOps, so we can track disputes and revoke bad actors." },
       ].map((f, i) => (
