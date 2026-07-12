@@ -269,8 +269,8 @@ export function StakeholderAccountSettings() {
                   <Select value={form.account_type} onValueChange={(v) => setForm({ ...form, account_type: v })}>
                     <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {Object.entries(ACCOUNT_TYPE_LABELS).map(([v, l]) => (
-                        <SelectItem key={v} value={v} className="text-xs">{l}</SelectItem>
+                      {SELECTABLE_ACCOUNT_TYPES.map((v) => (
+                        <SelectItem key={v} value={v} className="text-xs">{ACCOUNT_TYPE_LABELS[v]}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
