@@ -14083,6 +14083,7 @@ export type Database = {
       homeowner_ledger_check_uploads: {
         Row: {
           amount_estimate: number | null
+          assigned_to_user_id: string | null
           attached_check_id: string | null
           back_path: string | null
           claim_id: string | null
@@ -14090,6 +14091,7 @@ export type Database = {
           front_path: string
           homeowner_note: string | null
           id: string
+          partner_code: string | null
           review_notes: string | null
           reviewed_at: string | null
           reviewed_by: string | null
@@ -14100,6 +14102,7 @@ export type Database = {
         }
         Insert: {
           amount_estimate?: number | null
+          assigned_to_user_id?: string | null
           attached_check_id?: string | null
           back_path?: string | null
           claim_id?: string | null
@@ -14107,6 +14110,7 @@ export type Database = {
           front_path: string
           homeowner_note?: string | null
           id?: string
+          partner_code?: string | null
           review_notes?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -14117,6 +14121,7 @@ export type Database = {
         }
         Update: {
           amount_estimate?: number | null
+          assigned_to_user_id?: string | null
           attached_check_id?: string | null
           back_path?: string | null
           claim_id?: string | null
@@ -14124,6 +14129,7 @@ export type Database = {
           front_path?: string
           homeowner_note?: string | null
           id?: string
+          partner_code?: string | null
           review_notes?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -14238,7 +14244,9 @@ export type Database = {
           homeowner_phone: string | null
           id: string
           last_viewed_at: string | null
+          partner_code: string | null
           revoked_at: string | null
+          sent_by_user_id: string | null
           tenant_id: string
           token: string
           updated_at: string
@@ -14254,7 +14262,9 @@ export type Database = {
           homeowner_phone?: string | null
           id?: string
           last_viewed_at?: string | null
+          partner_code?: string | null
           revoked_at?: string | null
+          sent_by_user_id?: string | null
           tenant_id: string
           token?: string
           updated_at?: string
@@ -14270,7 +14280,9 @@ export type Database = {
           homeowner_phone?: string | null
           id?: string
           last_viewed_at?: string | null
+          partner_code?: string | null
           revoked_at?: string | null
+          sent_by_user_id?: string | null
           tenant_id?: string
           token?: string
           updated_at?: string
