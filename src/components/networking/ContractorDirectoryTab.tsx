@@ -241,7 +241,7 @@ function TierBadge({ tier }: { tier: DirectoryRow["tier"] }) {
   if (tier === "verified") {
     return (
       <Badge variant="outline" className="text-[10px] gap-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
-        <ShieldCheck className="h-3 w-3" /> Verified
+        <Crosshair className="h-3 w-3" strokeWidth={2.5} /> Verified
       </Badge>
     );
   }
