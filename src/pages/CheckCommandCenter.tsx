@@ -93,6 +93,9 @@ const DepositReports = lazy(() =>
 const TenantPartnerManager = lazy(() =>
   import("@/components/white-label/TenantPartnerManager").then(m => ({ default: m.TenantPartnerManager }))
 );
+const HomeownerSubmittedChecksInbox = lazy(() =>
+  import("@/components/homeowner-ledger/HomeownerSubmittedChecksInbox").then(m => ({ default: m.HomeownerSubmittedChecksInbox }))
+);
 const MortgageCompaniesDirectory = lazy(() =>
   import("@/components/checks/MortgageCompaniesDirectory").then(m => ({ default: m.MortgageCompaniesDirectory }))
 );
