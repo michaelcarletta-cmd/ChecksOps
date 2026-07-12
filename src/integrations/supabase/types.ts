@@ -20822,6 +20822,13 @@ export type Database = {
         Args: { _tenant_id: string }
         Returns: Json
       }
+      get_my_tenant_partner_codes: {
+        Args: never
+        Returns: {
+          code: string
+          tenant_id: string
+        }[]
+      }
       get_or_create_notification_preferences: {
         Args: { p_user_id: string }
         Returns: {
