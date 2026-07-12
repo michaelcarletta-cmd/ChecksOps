@@ -13863,6 +13863,106 @@ export type Database = {
         }
         Relationships: []
       }
+      homeowner_bank_link_tokens: {
+        Row: {
+          check_intake_item_id: string | null
+          claim_id: string | null
+          created_at: string
+          expires_at: string
+          homeowner_email: string
+          homeowner_name: string
+          id: string
+          opened_at: string | null
+          scope: string
+          sent_by_user_id: string
+          stakeholder_account_id: string | null
+          status: string
+          tenant_id: string
+          token: string
+          updated_at: string
+          verified_at: string | null
+        }
+        Insert: {
+          check_intake_item_id?: string | null
+          claim_id?: string | null
+          created_at?: string
+          expires_at?: string
+          homeowner_email: string
+          homeowner_name: string
+          id?: string
+          opened_at?: string | null
+          scope: string
+          sent_by_user_id: string
+          stakeholder_account_id?: string | null
+          status?: string
+          tenant_id: string
+          token: string
+          updated_at?: string
+          verified_at?: string | null
+        }
+        Update: {
+          check_intake_item_id?: string | null
+          claim_id?: string | null
+          created_at?: string
+          expires_at?: string
+          homeowner_email?: string
+          homeowner_name?: string
+          id?: string
+          opened_at?: string | null
+          scope?: string
+          sent_by_user_id?: string
+          stakeholder_account_id?: string | null
+          status?: string
+          tenant_id?: string
+          token?: string
+          updated_at?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "homeowner_bank_link_tokens_check_intake_item_id_fkey"
+            columns: ["check_intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "homeowner_bank_link_tokens_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "homeowner_bank_link_tokens_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "homeowner_bank_link_tokens_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "homeowner_bank_link_tokens_stakeholder_account_id_fkey"
+            columns: ["stakeholder_account_id"]
+            isOneToOne: false
+            referencedRelation: "stakeholder_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "homeowner_bank_link_tokens_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       homeowner_check_uploads: {
         Row: {
           contractor_profile_id: string
@@ -17548,10 +17648,15 @@ export type Database = {
           created_at: string
           created_by: string
           custname: string
+          homeowner_email: string | null
+          homeowner_link_token_id: string | null
+          homeowner_name: string | null
           id: string
           is_active: boolean
+          is_partner_payout: boolean
           is_primary: boolean
           nickname: string
+          origin: string
           tenant_id: string
           updated_at: string
           verification_amount_1_cents: number | null
@@ -17582,10 +17687,15 @@ export type Database = {
           created_at?: string
           created_by: string
           custname: string
+          homeowner_email?: string | null
+          homeowner_link_token_id?: string | null
+          homeowner_name?: string | null
           id?: string
           is_active?: boolean
+          is_partner_payout?: boolean
           is_primary?: boolean
           nickname: string
+          origin?: string
           tenant_id: string
           updated_at?: string
           verification_amount_1_cents?: number | null
@@ -17616,10 +17726,15 @@ export type Database = {
           created_at?: string
           created_by?: string
           custname?: string
+          homeowner_email?: string | null
+          homeowner_link_token_id?: string | null
+          homeowner_name?: string | null
           id?: string
           is_active?: boolean
+          is_partner_payout?: boolean
           is_primary?: boolean
           nickname?: string
+          origin?: string
           tenant_id?: string
           updated_at?: string
           verification_amount_1_cents?: number | null
@@ -17636,7 +17751,67 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "stakeholder_accounts_homeowner_link_fk"
+            columns: ["homeowner_link_token_id"]
+            isOneToOne: false
+            referencedRelation: "homeowner_bank_link_tokens"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "stakeholder_accounts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stakeholder_limit_requests: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          reason: string | null
+          requested_by: string
+          requested_limit: number
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          reason?: string | null
+          requested_by: string
+          requested_limit: number
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          reason?: string | null
+          requested_by?: string
+          requested_limit?: number
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stakeholder_limit_requests_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -18881,6 +19056,8 @@ export type Database = {
           legal_business_name: string | null
           logo_url: string | null
           max_checks_per_month: number | null
+          max_sales_reps: number
+          max_subcontractors: number
           monthly_rate_cents: number
           name: string
           partner_code: string
@@ -18945,6 +19122,8 @@ export type Database = {
           legal_business_name?: string | null
           logo_url?: string | null
           max_checks_per_month?: number | null
+          max_sales_reps?: number
+          max_subcontractors?: number
           monthly_rate_cents?: number
           name: string
           partner_code?: string
@@ -19009,6 +19188,8 @@ export type Database = {
           legal_business_name?: string | null
           logo_url?: string | null
           max_checks_per_month?: number | null
+          max_sales_reps?: number
+          max_subcontractors?: number
           monthly_rate_cents?: number
           name?: string
           partner_code?: string
