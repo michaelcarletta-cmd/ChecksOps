@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
         try {
           const { data: staff } = await supabase
             .from('profiles')
-            .select('email, full_name, first_name')
+            .select('email, full_name')
             .eq('id', tok.sent_by_user_id)
             .maybeSingle()
           const { data: tokenRow } = await supabase
