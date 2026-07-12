@@ -97,7 +97,46 @@ Deno.serve(async (req) => {
         })
       }
 
+      // Auto-notify the staff member who sent the link
+      if (tok.sent_by_user_id) {
+        try {
+          const { data: staff } = await supabase
+            .from('profiles')
+            .select('email, full_name, first_name')
+            .eq('id', tok.sent_by_user_id)
+            .maybeSingle()
+          const { data: tokenRow } = await supabase
+            .from('homeowner_ledger_tokens')
+            .select('homeowner_email, homeowner_name')
+            .eq('id', tok.id)
+            .maybeSingle()
+          const staffEmail = (staff as any)?.email
+          if (staffEmail) {
+            const origin = req.headers.get('origin') || 'https://checksops.com'
+            await supabase.functions.invoke('send-transactional-email', {
+              body: {
+                templateName: 'homeowner-upload-alert',
+                recipientEmail: staffEmail,
+                idempotencyKey: `homeowner-upload-alert-${upRow.id}`,
+                templateData: {
+                  staff_name: (staff as any)?.first_name || (staff as any)?.full_name || null,
+                  homeowner_name: tokenRow?.homeowner_name ?? null,
+                  homeowner_email: tokenRow?.homeowner_email ?? null,
+                  partner_code: tok.partner_code ?? null,
+                  amount_estimate: amount_estimate ?? null,
+                  homeowner_note: homeowner_note ?? null,
+                  inbox_url: `${origin}/checks`,
+                },
+              },
+            })
+          }
+        } catch (notifyErr) {
+          console.error('staff notify failed', notifyErr)
+        }
+      }
+
       return json({ ok: true, upload_id: upRow.id })
+
     }
 
     if (kind === 'production_doc') {
