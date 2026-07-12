@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Crown, ShieldCheck, XCircle, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, Crosshair, XCircle, CheckCircle2, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Props {
@@ -144,9 +144,9 @@ export function TenantProBadgeManagement({ tenantId, tenantName, isOpen, onClose
                       <div className="font-medium text-sm truncate">{r.display_name}</div>
                       <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                         {isPro ? (
-                          <Badge className="gap-1 text-xs"><Crown className="h-3 w-3" /> Pro</Badge>
+                          <Badge className="gap-1 text-xs"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> Pro</Badge>
                         ) : r.tier === "verified" ? (
-                          <Badge variant="secondary" className="gap-1 text-xs"><ShieldCheck className="h-3 w-3" /> Verified</Badge>
+                          <Badge variant="secondary" className="gap-1 text-xs"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> Verified</Badge>
                         ) : (
                           <Badge variant="outline" className="text-xs">Guest</Badge>
                         )}
@@ -181,7 +181,7 @@ export function TenantProBadgeManagement({ tenantId, tenantName, isOpen, onClose
                         onClick={() => setPro.mutate({ contractorId: r.id, approve: true })}
                         title={!eligible ? "Contractor has not met all vetting requirements" : undefined}
                       >
-                        {pending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Crown className="h-3 w-3 mr-1" />}
+                        {pending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Crosshair className="h-3 w-3 mr-1" strokeWidth={2.5} />}
                         Approve Pro
                       </Button>
                     )}

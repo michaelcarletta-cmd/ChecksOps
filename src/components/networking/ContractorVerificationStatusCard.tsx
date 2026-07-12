@@ -87,7 +87,7 @@ export function ContractorVerificationStatusCard({ contractorId }: { contractorI
 
   const tierBadge =
     tier === "pro" ? (
-      <Badge className="gap-1"><Crown className="h-3 w-3" /> Pro</Badge>
+      <Badge className="gap-1"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> Pro</Badge>
     ) : tier === "verified" ? (
       <Badge variant="secondary" className="gap-1"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> Verified</Badge>
     ) : (
@@ -98,7 +98,7 @@ export function ContractorVerificationStatusCard({ contractorId }: { contractorI
     <Card className="border-border">
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
-          <ShieldCheck className="h-4 w-4 text-primary" /> Verification status
+          <Crosshair className="h-4 w-4 text-primary" strokeWidth={2.5} /> Verification status
           <span className="ml-auto">{tierBadge}</span>
         </CardTitle>
         <CardDescription className="text-xs">
@@ -164,7 +164,7 @@ export function ContractorVerificationStatusCard({ contractorId }: { contractorI
                 onClick={() => setPro.mutate(true)}
                 disabled={setPro.isPending || !data.eligible_pro}
               >
-                {setPro.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Crown className="h-3 w-3 mr-1" />}
+                {setPro.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Crosshair className="h-3 w-3 mr-1" strokeWidth={2.5} />}
                 Approve Pro
               </Button>
             )}
