@@ -274,7 +274,7 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
               </SheetHeader>
               <div className="mt-4 space-y-4">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge className="gap-1"><ShieldCheck className="h-3 w-3" /> Verified by ChecksOps</Badge>
+                  <Badge className="gap-1"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> Verified by ChecksOps</Badge>
                   <RatingBadge rating={selected.avg_rating} count={selected.review_count} />
                 </div>
                 {selected.bio && <p className="text-sm text-muted-foreground">{selected.bio}</p>}
