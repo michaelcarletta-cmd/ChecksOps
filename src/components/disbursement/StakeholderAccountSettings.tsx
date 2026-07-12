@@ -68,6 +68,8 @@ export function StakeholderAccountSettings() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [capLimitDialog, setCapLimitDialog] = useState<null | "sales_rep" | "subcontractor" | "vendor">(null);
+  const [requestLimitDialog, setRequestLimitDialog] = useState<null | "sales_rep" | "subcontractor" | "vendor">(null);
 
   const { data: accounts = [], isLoading } = useQuery({
     queryKey: ["stakeholder-accounts", tenant?.id],
@@ -84,6 +86,49 @@ export function StakeholderAccountSettings() {
       return data ?? [];
     },
   });
+
+  const { data: tenantCaps } = useQuery({
+    queryKey: ["tenant-stakeholder-caps", tenant?.id],
+    enabled: !!tenant?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tenants")
+        .select("max_sales_reps, max_subcontractors, max_vendors")
+        .eq("id", tenant!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { max_sales_reps: number; max_subcontractors: number; max_vendors: number } | null;
+    },
+  });
+
+  const { data: tenantRole } = useQuery({
+    queryKey: ["tenant-user-role", tenant?.id, user?.id],
+    enabled: !!tenant?.id && !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tenant_users")
+        .select("role")
+        .eq("tenant_id", tenant!.id)
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return (data?.role ?? null) as string | null;
+    },
+  });
+  const canManageTenant = tenantRole === "owner" || tenantRole === "admin";
+
+  const capForType = (t: string): number | null => {
+    if (t === "sales_rep") return tenantCaps?.max_sales_reps ?? 5;
+    if (t === "subcontractor") return tenantCaps?.max_subcontractors ?? 10;
+    if (t === "vendor") return tenantCaps?.max_vendors ?? 5;
+    return null;
+  };
+  const countForType = (t: string) => accounts.filter((a: any) => a.account_type === t).length;
+  const isAtCap = (t: string) => {
+    const max = capForType(t);
+    return max !== null && countForType(t) >= max;
+  };
+
 
 
   const addAccount = useMutation({
