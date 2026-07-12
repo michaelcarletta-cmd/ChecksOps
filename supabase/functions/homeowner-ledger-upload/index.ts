@@ -119,7 +119,7 @@ Deno.serve(async (req) => {
                 recipientEmail: staffEmail,
                 idempotencyKey: `homeowner-upload-alert-${upRow.id}`,
                 templateData: {
-                  staff_name: (staff as any)?.first_name || (staff as any)?.full_name || null,
+                  staff_name: (staff as any)?.full_name || null,
                   homeowner_name: tokenRow?.homeowner_name ?? null,
                   homeowner_email: tokenRow?.homeowner_email ?? null,
                   partner_code: tok.partner_code ?? null,
