@@ -7,8 +7,9 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, X, Users, Handshake, ShieldCheck, MailCheck, Lock } from "lucide-react";
+import { Plus, X, Users, Handshake, ShieldCheck, MailCheck, Lock, Home } from "lucide-react";
 import { VERIFICATION_BADGE_CLASS, VERIFICATION_LABEL, type VerificationStatus } from "@/lib/banking";
+import { SendHomeownerBankLinkDialog } from "./SendHomeownerBankLinkDialog";
 
 interface Props {
   checkIntakeItemId: string;
@@ -26,6 +27,21 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [homeownerDialogOpen, setHomeownerDialogOpen] = useState(false);
+
+  const { data: checkMeta } = useQuery({
+    queryKey: ["check-meta-for-stakeholders", checkIntakeItemId],
+    enabled: !!checkIntakeItemId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("check_intake_items")
+        .select("id, claim_id")
+        .eq("id", checkIntakeItemId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const { data: checkStakeholders = [] } = useQuery({
     queryKey: ["check-stakeholders", checkIntakeItemId],
@@ -100,12 +116,22 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
         <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
           <Users className="h-3 w-3" /> Stakeholders on this check
         </p>
-        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-          <PopoverTrigger asChild>
-            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={availableToAdd.length === 0}>
-              <Plus className="h-3 w-3 mr-1" /> Add
-            </Button>
-          </PopoverTrigger>
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() => setHomeownerDialogOpen(true)}
+            title="Send the homeowner a link to link their bank via AuthenteCheck"
+          >
+            <Home className="h-3 w-3 mr-1" /> Homeowner link
+          </Button>
+          <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+            <PopoverTrigger asChild>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={availableToAdd.length === 0}>
+                <Plus className="h-3 w-3 mr-1" /> Add
+              </Button>
+            </PopoverTrigger>
           <PopoverContent className="w-72 p-2" align="end">
             {availableToAdd.length === 0 ? (
               <p className="text-xs text-muted-foreground p-2">All your accounts are already added.</p>
@@ -129,7 +155,15 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
             )}
           </PopoverContent>
         </Popover>
+        </div>
       </div>
+
+      <SendHomeownerBankLinkDialog
+        open={homeownerDialogOpen}
+        onOpenChange={setHomeownerDialogOpen}
+        checkIntakeItemId={checkIntakeItemId}
+        claimId={(checkMeta?.claim_id as string | null) ?? null}
+      />
 
       {activeCheckStakeholders.length === 0 ? (
         <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground text-center">

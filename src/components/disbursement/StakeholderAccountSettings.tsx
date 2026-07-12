@@ -16,6 +16,7 @@ import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, typ
 import { AchAuthorizationForm } from "./AchAuthorizationForm";
 import { AuthentecheckVerification } from "./AuthentecheckVerification";
 import { usePermissions } from "@/hooks/usePermissions";
+import { RequestStakeholderLimitDialog } from "./RequestStakeholderLimitDialog";
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   operating: "Operating",
@@ -25,6 +26,8 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   insured: "Insured",
   contractor: "Contractor",
   supplier: "Supplier",
+  sales_rep: "Sales rep",
+  homeowner: "Homeowner",
   other: "Other",
 };
 
@@ -36,6 +39,8 @@ const ACCOUNT_TYPE_COLORS: Record<string, string> = {
   insured: "bg-rose-500/10 text-rose-700 border-rose-500/20",
   contractor: "bg-indigo-500/10 text-indigo-700 border-indigo-500/20",
   supplier: "bg-cyan-500/10 text-cyan-700 border-cyan-500/20",
+  sales_rep: "bg-orange-500/10 text-orange-700 border-orange-500/20",
+  homeowner: "bg-pink-500/10 text-pink-700 border-pink-500/20",
   other: "bg-muted text-muted-foreground border-border",
 };
 
@@ -218,6 +223,9 @@ export function StakeholderAccountSettings() {
 
   return (
     <div className="space-y-6">
+      <StakeholderCapsBar accounts={accounts} tenantId={tenant?.id} />
+
+
 
 
       {/* Stakeholder Accounts */}
@@ -441,3 +449,69 @@ export function StakeholderAccountSettings() {
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Sales-rep + subcontractor cap counter with "Request more" button
+// ---------------------------------------------------------------------------
+function StakeholderCapsBar({ accounts, tenantId }: { accounts: any[]; tenantId?: string }) {
+  const [openDialog, setOpenDialog] = useState<null | "sales_rep" | "subcontractor">(null);
+
+  const { data: tenantLimits } = useQuery({
+    queryKey: ["tenant-stakeholder-caps", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tenants")
+        .select("max_sales_reps, max_subcontractors")
+        .eq("id", tenantId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { max_sales_reps: number; max_subcontractors: number } | null;
+    },
+  });
+
+  const maxSalesReps = tenantLimits?.max_sales_reps ?? 5;
+  const maxSubs = tenantLimits?.max_subcontractors ?? 10;
+  const salesCount = accounts.filter((a: any) => a.account_type === "sales_rep").length;
+  const subCount = accounts.filter((a: any) => a.account_type === "subcontractor").length;
+
+  const CapRow = ({ label, used, max, category }: { label: string; used: number; max: number; category: "sales_rep" | "subcontractor" }) => {
+    const nearCap = used >= max;
+    return (
+      <div className="flex items-center justify-between text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">{label}</span>
+          <Badge variant="outline" className={nearCap ? "border-amber-500/40 text-amber-700 bg-amber-500/10" : ""}>
+            {used} / {max}
+          </Badge>
+        </div>
+        <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => setOpenDialog(category)}>
+          Request more
+        </Button>
+      </div>
+    );
+  };
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-xs text-muted-foreground">Team caps</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1.5">
+          <CapRow label="Sales reps" used={salesCount} max={maxSalesReps} category="sales_rep" />
+          <CapRow label="Subcontractors" used={subCount} max={maxSubs} category="subcontractor" />
+        </CardContent>
+      </Card>
+      {openDialog && (
+        <RequestStakeholderLimitDialog
+          open={!!openDialog}
+          onOpenChange={(o) => !o && setOpenDialog(null)}
+          category={openDialog}
+          currentLimit={openDialog === "sales_rep" ? maxSalesReps : maxSubs}
+        />
+      )}
+    </>
+  );
+}
+
