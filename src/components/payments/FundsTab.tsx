@@ -341,6 +341,24 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
         </Card>
       )}
 
+      {/* Homeowner AuthenteCheck bank-link invite */}
+      <div>
+        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setHomeownerLinkOpen(true)}>
+          <Home className="h-3.5 w-3.5 mr-1.5" />
+          Send homeowner AuthenteCheck link
+        </Button>
+        <p className="text-[10px] text-muted-foreground mt-1">
+          Emails the homeowner a secure link to verify their bank. Verified account auto-attaches as a disbursable stakeholder.
+        </p>
+      </div>
+
+      <SendHomeownerBankLinkDialog
+        open={homeownerLinkOpen}
+        onOpenChange={setHomeownerLinkOpen}
+        checkIntakeItemId={checkIntakeItemId}
+        claimId={claimId ?? null}
+      />
+
       {/* Disburse buttons */}
       {availableForDisbursement > 0 && disburseMode === null && (
         <div className="space-y-2">
