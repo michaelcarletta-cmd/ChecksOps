@@ -24,6 +24,7 @@ import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashb
 import { BillingConfigPanel } from "@/components/billing/BillingConfigPanel";
 import { MaintenancePaymentsTracker } from "@/components/settings/MaintenancePaymentsTracker";
 import { TenantProBadgeManagement } from "@/components/settings/TenantProBadgeManagement";
+import { AdminStakeholderLimitRequests } from "@/components/admin/AdminStakeholderLimitRequests";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
