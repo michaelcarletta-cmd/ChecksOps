@@ -1,0 +1,174 @@
+// Send a homeowner an AuthenteCheck bank-verification link.
+// Creates a shell stakeholder_accounts row (origin='homeowner_link') + a
+// homeowner_bank_link_tokens row scoped to a check or the whole claim, then
+// emails the homeowner the existing /verify-account/:token link. When they
+// finish verification, the DB trigger auto-attaches the account as a
+// stakeholder on the target check(s). No changes to the AuthenteCheck flow.
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const authClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: userData, error: userErr } = await authClient.auth.getUser();
+    if (userErr || !userData?.user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    const {
+      tenant_id,
+      scope,                     // 'check' | 'claim'
+      check_intake_item_id,      // required when scope='check'
+      claim_id,                  // required when scope='claim'
+      homeowner_name,
+      homeowner_email,
+    } = await req.json();
+
+    if (!tenant_id) throw new Error("tenant_id is required");
+    if (!["check", "claim"].includes(scope)) throw new Error("scope must be 'check' or 'claim'");
+    if (scope === "check" && !check_intake_item_id) throw new Error("check_intake_item_id is required for check scope");
+    if (scope === "claim" && !claim_id) throw new Error("claim_id is required for claim scope");
+    if (!homeowner_name || !homeowner_email) throw new Error("homeowner_name and homeowner_email are required");
+
+    // Verify sender belongs to tenant
+    const { data: membership } = await supabase
+      .from("tenant_users")
+      .select("tenant_id")
+      .eq("user_id", userData.user.id)
+      .eq("tenant_id", tenant_id)
+      .maybeSingle();
+    if (!membership) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // If scope='check', confirm the check belongs to (or is shared with) this tenant
+    if (scope === "check") {
+      const { data: chk } = await supabase
+        .from("check_intake_items")
+        .select("id, tenant_id, claim_id")
+        .eq("id", check_intake_item_id)
+        .maybeSingle();
+      if (!chk) throw new Error("Check not found");
+      if (chk.tenant_id !== tenant_id) {
+        // allow if shared to this tenant
+        const { data: share } = await supabase
+          .from("shared_checks")
+          .select("id")
+          .eq("check_id", check_intake_item_id)
+          .eq("target_tenant_id", tenant_id)
+          .is("revoked_at", null)
+          .maybeSingle();
+        if (!share) throw new Error("Check not accessible");
+      }
+    }
+
+    const verificationToken = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
+    // 1. Create shell stakeholder_accounts row
+    const nickname = `Homeowner: ${homeowner_name}`;
+    const { data: account, error: acctErr } = await supabase
+      .from("stakeholder_accounts")
+      .insert({
+        tenant_id,
+        created_by: userData.user.id,
+        nickname,
+        account_type: "homeowner",
+        chk_aba: "000000000",         // placeholders — AuthenteCheck fills in on postback
+        chk_acct: "PENDING",
+        acct_type: "C",
+        custname: homeowner_name,
+        is_primary: false,
+        is_active: true,
+        origin: "homeowner_link",
+        homeowner_email,
+        homeowner_name,
+        verification_status: "unverified",
+        verification_token: verificationToken,
+        verification_token_expires_at: expiresAt,
+        verification_recipient_email: homeowner_email,
+      })
+      .select("id, tenant_id, nickname, custname")
+      .single();
+    if (acctErr) throw new Error(`Failed to create stakeholder shell: ${acctErr.message}`);
+
+    // 2. Create link token row + link back to account
+    const linkToken = crypto.randomUUID();
+    const { data: linkRow, error: linkErr } = await supabase
+      .from("homeowner_bank_link_tokens")
+      .insert({
+        tenant_id,
+        sent_by_user_id: userData.user.id,
+        scope,
+        check_intake_item_id: scope === "check" ? check_intake_item_id : null,
+        claim_id: scope === "claim" ? claim_id : (null),
+        homeowner_name,
+        homeowner_email,
+        token: linkToken,
+        status: "sent",
+        stakeholder_account_id: account.id,
+        expires_at: expiresAt,
+      })
+      .select("id")
+      .single();
+    if (linkErr) throw new Error(`Failed to create link token: ${linkErr.message}`);
+
+    await supabase.from("stakeholder_accounts")
+      .update({ homeowner_link_token_id: linkRow.id })
+      .eq("id", account.id);
+
+    // 3. Email the homeowner via the existing verify-account template
+    let emailErr: any = null;
+    try {
+      const res = await supabase.functions.invoke("send-transactional-email", {
+        body: {
+          templateName: "stakeholder-verify-account",
+          recipientEmail: homeowner_email,
+          tenantId: tenant_id,
+          idempotencyKey: `homeowner-bank-link-${linkRow.id}`,
+          templateData: {
+            nickname,
+            custname: homeowner_name,
+            verifyUrl: `${Deno.env.get("APP_BASE_URL") ?? "https://checksops.com"}/verify-account/${verificationToken}`,
+          },
+        },
+      });
+      emailErr = res.error ?? (res.data?.error ? new Error(res.data.error) : null);
+    } catch (e) { emailErr = e; }
+
+    if (emailErr) {
+      const msg = emailErr.message ?? "Failed to send email";
+      console.error("[homeowner-bank-link-send] email failed", msg);
+      return new Response(JSON.stringify({ success: false, error: msg }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      link_token_id: linkRow.id,
+      stakeholder_account_id: account.id,
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  } catch (err: any) {
+    console.error("[homeowner-bank-link-send]", err);
+    return new Response(JSON.stringify({ success: false, error: err.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+});
