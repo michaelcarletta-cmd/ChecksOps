@@ -72,7 +72,7 @@ export function ContractorVerificationStatusCard({ contractorId }: { contractorI
       if (error) throw error;
     },
     onSuccess: (_d, approve) => {
-      toast({ title: approve ? "Pro badge approved" : "Pro badge revoked" });
+      toast({ title: approve ? "OPS badge approved" : "OPS badge revoked" });
       qc.invalidateQueries({ queryKey: ["contractor-verification-status", contractorId] });
       qc.invalidateQueries({ queryKey: ["my-contractor-profile"] });
       qc.invalidateQueries({ queryKey: ["contractor-directory"] });
@@ -87,12 +87,13 @@ export function ContractorVerificationStatusCard({ contractorId }: { contractorI
 
   const tierBadge =
     tier === "pro" ? (
-      <Badge className="gap-1"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> Pro</Badge>
+      <Badge className="gap-1"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> OPS</Badge>
     ) : tier === "verified" ? (
       <Badge variant="secondary" className="gap-1"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> Verified</Badge>
     ) : (
       <Badge variant="outline">Guest (unlisted)</Badge>
     );
+
 
   return (
     <Card className="border-border">
@@ -102,9 +103,10 @@ export function ContractorVerificationStatusCard({ contractorId }: { contractorI
           <span className="ml-auto">{tierBadge}</span>
         </CardTitle>
         <CardDescription className="text-xs">
-          Verified is granted automatically once documents are on file. Pro requires ChecksOps admin approval on top of
+          Verified is granted automatically once documents are on file. OPS requires ChecksOps admin approval on top of
           verified + payment & review thresholds. Badges are removed automatically if standards slip.
         </CardDescription>
+
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
@@ -125,7 +127,7 @@ export function ContractorVerificationStatusCard({ contractorId }: { contractorI
 
         <div className="border-t border-border pt-3">
           <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1.5 font-semibold flex items-center gap-1">
-            <Star className="h-3 w-3" /> Pro requirements (needs all Verified + below)
+            <Star className="h-3 w-3" /> OPS requirements (needs all Verified + below)
           </div>
           <div className="space-y-1.5">
             <CheckRow
@@ -151,12 +153,12 @@ export function ContractorVerificationStatusCard({ contractorId }: { contractorI
           <div className="border-t border-border pt-3 flex items-center gap-2">
             <div className="text-[11px] text-muted-foreground flex-1">
               {data.eligible_pro
-                ? "This contractor meets every Pro requirement."
-                : "Not yet Pro-eligible — one or more Pro requirements are unmet."}
+                ? "This contractor meets every OPS requirement."
+                : "Not yet OPS-eligible — one or more OPS requirements are unmet."}
             </div>
             {tier === "pro" ? (
               <div className="text-[11px] text-muted-foreground">
-                Pro badge active. Contact ChecksOps to revoke.
+                OPS badge active. Contact ChecksOps to revoke.
               </div>
             ) : (
               <Button
@@ -165,7 +167,8 @@ export function ContractorVerificationStatusCard({ contractorId }: { contractorI
                 disabled={setPro.isPending || !data.eligible_pro}
               >
                 {setPro.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Crosshair className="h-3 w-3 mr-1" strokeWidth={2.5} />}
-                Approve Pro
+                Approve OPS
+
               </Button>
             )}
           </div>

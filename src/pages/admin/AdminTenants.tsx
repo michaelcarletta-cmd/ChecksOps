@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
-import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crown, Palette } from "lucide-react";
+import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Palette } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { useRef } from "react";
 import { TenantDocumentsManager } from "@/components/white-label/TenantDocumentsManager";
@@ -300,7 +300,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <TabsTrigger value="integrations" className="flex-1 min-w-[130px] whitespace-nowrap"><Link2 className="w-4 h-4 mr-1" /> Integrations</TabsTrigger>
             
             <TabsTrigger value="billing" className="flex-1 min-w-[100px] whitespace-nowrap"><Receipt className="w-4 h-4 mr-1" /> Billing & Usage</TabsTrigger>
-            <TabsTrigger value="pro-badge" className="flex-1 min-w-[115px] whitespace-nowrap"><Crown className="w-4 h-4 mr-1" /> Pro Badge</TabsTrigger>
+            <TabsTrigger value="pro-badge" className="flex-1 min-w-[115px] whitespace-nowrap"><Crosshair className="w-4 h-4 mr-1" strokeWidth={2.5} /> OPS Badge</TabsTrigger>
             <TabsTrigger value="users" className="flex-1 min-w-[95px] whitespace-nowrap"><Users className="w-4 h-4 mr-1" /> Users</TabsTrigger>
           </TabsList>
 
@@ -333,7 +333,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Crown className="w-5 h-5 text-amber-400" /> Contractor Pro Badge
+                  <Crosshair className="w-5 h-5 text-primary" strokeWidth={2.5} /> Contractor OPS Badge
                 </CardTitle>
                 <CardDescription>
                   Approve or revoke the Find-a-Pro badge for contractor profiles in this tenant.
@@ -341,7 +341,8 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
               </CardHeader>
               <CardContent>
                 <Button onClick={() => setProOpen(true)}>
-                  <Crown className="w-4 h-4 mr-2" /> Manage Pro Badge
+                  <Crosshair className="w-4 h-4 mr-2" strokeWidth={2.5} /> Manage OPS Badge
+
                 </Button>
               </CardContent>
             </Card>
@@ -1414,7 +1415,7 @@ function TenantManagementTable({
                       Notes
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => setProTenant(t)}>
-                      <Crown className="w-4 h-4 mr-1 text-amber-400" /> Pro Badge
+                      <Crosshair className="w-4 h-4 mr-1 text-primary" strokeWidth={2.5} /> OPS Badge
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => onOpen(t)}>
                       Manage →
