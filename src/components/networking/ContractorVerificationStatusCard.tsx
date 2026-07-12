@@ -89,7 +89,7 @@ export function ContractorVerificationStatusCard({ contractorId }: { contractorI
     tier === "pro" ? (
       <Badge className="gap-1"><Crown className="h-3 w-3" /> Pro</Badge>
     ) : tier === "verified" ? (
-      <Badge variant="secondary" className="gap-1"><ShieldCheck className="h-3 w-3" /> Verified</Badge>
+      <Badge variant="secondary" className="gap-1"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> Verified</Badge>
     ) : (
       <Badge variant="outline">Guest (unlisted)</Badge>
     );
