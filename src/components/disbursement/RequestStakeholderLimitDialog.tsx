@@ -14,9 +14,15 @@ import { Loader2 } from "lucide-react";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  category: "sales_rep" | "subcontractor";
+  category: "sales_rep" | "subcontractor" | "vendor";
   currentLimit: number;
 }
+
+const LABELS: Record<Props["category"], string> = {
+  sales_rep: "sales reps",
+  subcontractor: "subcontractors",
+  vendor: "vendors",
+};
 
 export function RequestStakeholderLimitDialog({ open, onOpenChange, category, currentLimit }: Props) {
   const { user } = useAuth();
@@ -26,7 +32,7 @@ export function RequestStakeholderLimitDialog({ open, onOpenChange, category, cu
   const [requested, setRequested] = useState(currentLimit + 5);
   const [reason, setReason] = useState("");
 
-  const label = category === "sales_rep" ? "sales reps" : "subcontractors";
+  const label = LABELS[category];
 
   const submit = useMutation({
     mutationFn: async () => {
