@@ -16,6 +16,7 @@ import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, typ
 import { AchAuthorizationForm } from "./AchAuthorizationForm";
 import { AuthentecheckVerification } from "./AuthentecheckVerification";
 import { usePermissions } from "@/hooks/usePermissions";
+import { RequestStakeholderLimitDialog } from "./RequestStakeholderLimitDialog";
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   operating: "Operating",
