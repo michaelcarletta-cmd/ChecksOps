@@ -87,7 +87,7 @@ export function TenantProBadgeManagement({ tenantId, tenantName, isOpen, onClose
       if (error) throw error;
     },
     onSuccess: (_d, vars) => {
-      toast({ title: vars.approve ? "Pro badge approved" : "Pro badge revoked" });
+      toast({ title: vars.approve ? "OPS badge approved" : "OPS badge revoked" });
       qc.invalidateQueries({ queryKey: ["tenant-contractor-profiles", tenantId] });
       qc.invalidateQueries({ queryKey: ["contractor-verification-status", vars.contractorId] });
       qc.invalidateQueries({ queryKey: ["contractor-directory"] });
@@ -114,11 +114,12 @@ export function TenantProBadgeManagement({ tenantId, tenantName, isOpen, onClose
     <Dialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Pro Badge — {tenantName}</DialogTitle>
+          <DialogTitle>OPS Badge — {tenantName}</DialogTitle>
           <DialogDescription>
-            Contractors must pass every vetting requirement (docs, payments, reviews, tenure, disputes) before the Pro
+            Contractors must pass every vetting requirement (docs, payments, reviews, tenure, disputes) before the OPS
             badge can be approved. Revoke is available at any time.
           </DialogDescription>
+
         </DialogHeader>
         {isLoading ? (
           <div className="flex justify-center py-8">
@@ -144,7 +145,7 @@ export function TenantProBadgeManagement({ tenantId, tenantName, isOpen, onClose
                       <div className="font-medium text-sm truncate">{r.display_name}</div>
                       <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                         {isPro ? (
-                          <Badge className="gap-1 text-xs"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> Pro</Badge>
+                          <Badge className="gap-1 text-xs"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> OPS</Badge>
                         ) : r.tier === "verified" ? (
                           <Badge variant="secondary" className="gap-1 text-xs"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> Verified</Badge>
                         ) : (
@@ -153,7 +154,7 @@ export function TenantProBadgeManagement({ tenantId, tenantName, isOpen, onClose
                         {!isPro && !statusLoading && (
                           eligible ? (
                             <Badge variant="outline" className="gap-1 text-xs text-emerald-500 border-emerald-500/40">
-                              <CheckCircle2 className="h-3 w-3" /> Vetted — ready for Pro
+                              <CheckCircle2 className="h-3 w-3" /> Vetted — ready for OPS
                             </Badge>
                           ) : (
                             <Badge variant="outline" className="gap-1 text-xs text-amber-500 border-amber-500/40">
@@ -161,6 +162,7 @@ export function TenantProBadgeManagement({ tenantId, tenantName, isOpen, onClose
                             </Badge>
                           )
                         )}
+
                       </div>
                     </div>
                     {isPro ? (
@@ -172,7 +174,7 @@ export function TenantProBadgeManagement({ tenantId, tenantName, isOpen, onClose
                         onClick={() => setPro.mutate({ contractorId: r.id, approve: false })}
                       >
                         {pending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <XCircle className="h-3 w-3 mr-1" />}
-                        Revoke Pro
+                        Revoke OPS
                       </Button>
                     ) : (
                       <Button
@@ -182,7 +184,8 @@ export function TenantProBadgeManagement({ tenantId, tenantName, isOpen, onClose
                         title={!eligible ? "Contractor has not met all vetting requirements" : undefined}
                       >
                         {pending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Crosshair className="h-3 w-3 mr-1" strokeWidth={2.5} />}
-                        Approve Pro
+                        Approve OPS
+
                       </Button>
                     )}
                   </div>
