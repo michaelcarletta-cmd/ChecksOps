@@ -324,15 +324,27 @@ export function StakeholderAccountSettings() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Type</Label>
-                  <Select value={form.account_type} onValueChange={(v) => setForm({ ...form, account_type: v })}>
+                  <Select
+                    value={form.account_type}
+                    onValueChange={(v) => {
+                      if (isAtCap(v)) {
+                        setCapLimitDialog(v as any);
+                        return;
+                      }
+                      setForm({ ...form, account_type: v });
+                    }}
+                  >
                     <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {SELECTABLE_ACCOUNT_TYPES.map((v) => (
-                        <SelectItem key={v} value={v} className="text-xs">{ACCOUNT_TYPE_LABELS[v]}</SelectItem>
+                        <SelectItem key={v} value={v} className="text-xs">
+                          {ACCOUNT_TYPE_LABELS[v]}{isAtCap(v) ? " (limit reached)" : ""}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
+
                 <div className="space-y-1 col-span-2">
                   <Label className="text-xs">Account holder name</Label>
                   <Input className="h-8 text-sm" placeholder="Full legal name on account" value={form.custname} onChange={(e) => setForm({ ...form, custname: e.target.value })} />
