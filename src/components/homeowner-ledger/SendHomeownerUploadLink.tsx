@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Send, Link as LinkIcon, Copy, Eye, RefreshCcw } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, Send, Link as LinkIcon, Copy, Eye, RefreshCcw, Tag } from "lucide-react";
 import { toast } from "sonner";
 
 type Token = {
@@ -17,13 +18,10 @@ type Token = {
   view_count: number | null;
   revoked_at: string | null;
   created_at: string;
+  partner_code: string | null;
+  sent_by_user_id: string | null;
 };
 
-/**
- * ChecksOps pre-claim flow: staff sends a homeowner a magic link so they can
- * upload a check image. That upload creates a pending item in the inbox below
- * and, once triaged, becomes the seed of a new claim file.
- */
 export function SendHomeownerUploadLink({ tenantId }: { tenantId?: string }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -31,12 +29,14 @@ export function SendHomeownerUploadLink({ tenantId }: { tenantId?: string }) {
   const [busy, setBusy] = useState(false);
   const [tokens, setTokens] = useState<Token[]>([]);
   const [loading, setLoading] = useState(true);
+  const [partnerCodes, setPartnerCodes] = useState<string[]>([]);
+  const [partnerCode, setPartnerCode] = useState<string>("");
 
   const load = async () => {
     setLoading(true);
     let q = supabase
       .from("homeowner_ledger_tokens")
-      .select("id, token, homeowner_email, homeowner_name, last_viewed_at, view_count, revoked_at, created_at")
+      .select("id, token, homeowner_email, homeowner_name, last_viewed_at, view_count, revoked_at, created_at, partner_code, sent_by_user_id")
       .is("claim_id", null)
       .order("created_at", { ascending: false })
       .limit(20);
@@ -46,10 +46,20 @@ export function SendHomeownerUploadLink({ tenantId }: { tenantId?: string }) {
     setLoading(false);
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [tenantId]);
+  const loadCodes = async () => {
+    const { data } = await supabase.rpc("get_my_tenant_partner_codes");
+    const codes = ((data ?? []) as any[])
+      .filter((r) => !tenantId || r.tenant_id === tenantId)
+      .map((r) => r.code as string);
+    setPartnerCodes(codes);
+    if (codes.length && !partnerCode) setPartnerCode(codes[0]);
+  };
+
+  useEffect(() => { load(); loadCodes(); /* eslint-disable-next-line */ }, [tenantId]);
 
   const send = async () => {
     if (!email && !phone) { toast.error("Add an email or phone"); return; }
+    if (partnerCodes.length && !partnerCode) { toast.error("Pick a partner code"); return; }
     setBusy(true);
     try {
       const { data, error } = await supabase.functions.invoke("homeowner-ledger-send", {
@@ -59,13 +69,14 @@ export function SendHomeownerUploadLink({ tenantId }: { tenantId?: string }) {
           homeowner_email: email || null,
           homeowner_phone: phone || null,
           homeowner_name: name || null,
+          partner_code: partnerCode || null,
           rotate: false,
           origin: window.location.origin,
         },
       });
       if (error) throw new Error(error.message);
       if ((data as any)?.error) throw new Error((data as any).error);
-      toast.success("Upload link sent to homeowner");
+      toast.success(`Upload link sent${partnerCode ? ` (tagged ${partnerCode})` : ""}`);
       setName(""); setEmail(""); setPhone("");
       await load();
     } catch (e: any) {
@@ -94,19 +105,39 @@ export function SendHomeownerUploadLink({ tenantId }: { tenantId?: string }) {
           <LinkIcon className="h-4 w-4" /> Send Homeowner Upload Link
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Emails the homeowner a secure link. Their upload appears below for triage — approving it seeds a new claim file.
+          The link is tagged with your partner code. When the homeowner uploads, the check lands in review assigned to you.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <div className="space-y-1"><Label className="text-xs">Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Homeowner name" /></div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs flex items-center gap-1"><Tag className="h-3 w-3" /> Partner code</Label>
+            {partnerCodes.length > 0 ? (
+              <Select value={partnerCode} onValueChange={setPartnerCode}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Select code" /></SelectTrigger>
+                <SelectContent>
+                  {partnerCodes.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input value={partnerCode} onChange={(e) => setPartnerCode(e.target.value.toUpperCase())} placeholder="e.g. FRDM01" />
+            )}
+          </div>
+          <div className="space-y-1"><Label className="text-xs">Homeowner name</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
           <div className="space-y-1"><Label className="text-xs">Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" /></div>
           <div className="space-y-1"><Label className="text-xs">Phone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(optional)" /></div>
         </div>
-        <Button size="sm" onClick={send} disabled={busy}>
-          {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-          Send upload link
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={send} disabled={busy}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+            Send upload link
+          </Button>
+          {partnerCode && (
+            <Badge variant="outline" className="text-[10px]">
+              <Tag className="h-3 w-3 mr-1" /> Active: {partnerCode}
+            </Badge>
+          )}
+        </div>
 
         <div className="border-t border-border pt-3">
           <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Recent pre-claim links</div>
@@ -123,9 +154,12 @@ export function SendHomeownerUploadLink({ tenantId }: { tenantId?: string }) {
                       <span className="font-medium">{t.homeowner_name || t.homeowner_email || "Homeowner"}</span>
                       {t.homeowner_email && <span className="text-muted-foreground"> • {t.homeowner_email}</span>}
                     </div>
-                    {t.revoked_at
-                      ? <Badge variant="destructive" className="text-[10px]">Revoked</Badge>
-                      : <Badge variant="secondary" className="text-[10px]">Active</Badge>}
+                    <div className="flex items-center gap-1">
+                      {t.partner_code && <Badge variant="outline" className="text-[10px]"><Tag className="h-2.5 w-2.5 mr-1" />{t.partner_code}</Badge>}
+                      {t.revoked_at
+                        ? <Badge variant="destructive" className="text-[10px]">Revoked</Badge>
+                        : <Badge variant="secondary" className="text-[10px]">Active</Badge>}
+                    </div>
                   </div>
                   <div className="text-[10px] text-muted-foreground">
                     {t.last_viewed_at ? `Viewed ${new Date(t.last_viewed_at).toLocaleString()}` : "Not viewed yet"}

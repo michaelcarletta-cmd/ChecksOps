@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
 
     const { data: tok } = await supabase
       .from('homeowner_ledger_tokens')
-      .select('id, tenant_id, claim_id, revoked_at')
+      .select('id, tenant_id, claim_id, revoked_at, partner_code, sent_by_user_id')
       .eq('token', token)
       .maybeSingle()
     if (!tok || tok.revoked_at) return json({ error: 'invalid_token' }, 401)
@@ -78,10 +78,13 @@ Deno.serve(async (req) => {
           back_path: backPath,
           amount_estimate: amount_estimate ?? null,
           homeowner_note: homeowner_note ?? null,
+          partner_code: tok.partner_code ?? null,
+          assigned_to_user_id: tok.sent_by_user_id ?? null,
         })
         .select('id')
         .single()
       if (upErr) throw upErr
+
 
       if (tok.claim_id) {
         await supabase.from('homeowner_ledger_events').insert({

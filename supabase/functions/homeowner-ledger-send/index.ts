@@ -37,6 +37,7 @@ Deno.serve(async (req) => {
       rotate = false,
       tenant_id: tenantIdOverride,
       origin,
+      partner_code: partnerCodeIn,
     } = await req.json()
 
     if (!homeowner_email && !homeowner_phone) {
@@ -60,6 +61,20 @@ Deno.serve(async (req) => {
       .select('user_id').eq('user_id', userId).eq('tenant_id', tenantId).maybeSingle()
     if (!membership) return json({ error: 'forbidden' }, 403)
 
+    // Resolve partner code: use provided one (if valid for tenant) else first alias for this tenant
+    let partnerCode: string | null = null
+    if (partnerCodeIn) {
+      const normalized = String(partnerCodeIn).trim().toUpperCase()
+      const { data: alias } = await svc.from('tenant_partner_code_aliases')
+        .select('code').eq('tenant_id', tenantId).ilike('code', normalized).maybeSingle()
+      if (alias) partnerCode = alias.code
+      else return json({ error: 'invalid_partner_code' }, 400)
+    } else {
+      const { data: firstAlias } = await svc.from('tenant_partner_code_aliases')
+        .select('code').eq('tenant_id', tenantId).order('created_at').limit(1).maybeSingle()
+      partnerCode = firstAlias?.code ?? null
+    }
+
     // Reuse an existing active token for the same claim + email unless rotate requested
     let tokRow: any = null
     if (!rotate && claim_id && homeowner_email) {
@@ -71,6 +86,13 @@ Deno.serve(async (req) => {
         .is('revoked_at', null)
         .maybeSingle()
       tokRow = existing
+      if (tokRow && (tokRow.partner_code !== partnerCode || tokRow.sent_by_user_id !== userId)) {
+        await svc.from('homeowner_ledger_tokens')
+          .update({ partner_code: partnerCode, sent_by_user_id: userId })
+          .eq('id', tokRow.id)
+        tokRow.partner_code = partnerCode
+        tokRow.sent_by_user_id = userId
+      }
     }
 
     if (!tokRow) {
@@ -82,12 +104,15 @@ Deno.serve(async (req) => {
           homeowner_phone: homeowner_phone ?? null,
           homeowner_name: homeowner_name ?? null,
           created_by: userId,
+          sent_by_user_id: userId,
+          partner_code: partnerCode,
         })
         .select('*')
         .single()
       if (cErr) throw cErr
       tokRow = created
     }
+
 
     const base = origin || 'https://checksops.com'
     const url = claim_id
