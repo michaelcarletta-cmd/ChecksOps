@@ -533,9 +533,56 @@ export function StakeholderAccountSettings() {
         })}
         </CardContent>
       </Card>
+
+      {/* Cap-reached popup */}
+      <Dialog open={!!capLimitDialog} onOpenChange={(o) => !o && setCapLimitDialog(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4 text-amber-500" />
+              {capLimitDialog ? ACCOUNT_TYPE_LABELS[capLimitDialog] : ""} limit reached
+            </DialogTitle>
+            <DialogDescription>
+              All {capLimitDialog ? ACCOUNT_TYPE_LABELS[capLimitDialog].toLowerCase() : ""} account
+              slots for your tenant are in use
+              {capLimitDialog ? ` (${countForType(capLimitDialog)} of ${capForType(capLimitDialog)})` : ""}.
+              To add another, request more capacity from ChecksOps below.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setCapLimitDialog(null)}>Close</Button>
+            {canManageTenant ? (
+              <Button
+                size="sm"
+                onClick={() => {
+                  const cat = capLimitDialog;
+                  setCapLimitDialog(null);
+                  if (cat) setRequestLimitDialog(cat);
+                }}
+              >
+                Request more
+              </Button>
+            ) : (
+              <span className="text-[11px] text-muted-foreground italic self-center">
+                Ask an owner/admin to request more
+              </span>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {requestLimitDialog && (
+        <RequestStakeholderLimitDialog
+          open={!!requestLimitDialog}
+          onOpenChange={(o) => !o && setRequestLimitDialog(null)}
+          category={requestLimitDialog}
+          currentLimit={capForType(requestLimitDialog) ?? 0}
+        />
+      )}
     </div>
   );
 }
+
 
 // ---------------------------------------------------------------------------
 // Sales-rep + subcontractor cap counter with "Request more" button
