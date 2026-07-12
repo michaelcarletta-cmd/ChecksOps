@@ -17,6 +17,7 @@ import { AchAuthorizationForm } from "./AchAuthorizationForm";
 import { AuthentecheckVerification } from "./AuthentecheckVerification";
 import { usePermissions } from "@/hooks/usePermissions";
 import { RequestStakeholderLimitDialog } from "./RequestStakeholderLimitDialog";
+import { TenantStakeholderLimitRequests } from "./TenantStakeholderLimitRequests";
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   operating: "Operating",
