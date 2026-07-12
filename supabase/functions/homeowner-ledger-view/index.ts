@@ -37,16 +37,12 @@ Deno.serve(async (req) => {
     if (tok.revoked_at) return json({ error: 'revoked' }, 410)
     if (tok.expires_at && new Date(tok.expires_at) < new Date()) return json({ error: 'expired' }, 410)
 
-    // Record view
-    await supabase.from('homeowner_ledger_tokens')
-      .update({ last_viewed_at: new Date().toISOString(), view_count: undefined as any })
+    // Record view (best-effort)
+    await supabase
+      .from('homeowner_ledger_tokens')
+      .update({ last_viewed_at: new Date().toISOString() })
       .eq('id', tok.id)
-    await supabase.rpc as any // no-op guard
-    await supabase.from('homeowner_ledger_tokens')
-      .update({ view_count: (undefined as any) })
-      .eq('id', tok.id)
-    // Increment via raw update
-    await supabase.rpc('increment_ledger_view', { p_token_id: tok.id }).catch(() => {})
+      .then(() => {}, () => {})
 
     let claim: any = null
     let events: any[] = []
