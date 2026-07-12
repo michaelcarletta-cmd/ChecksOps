@@ -47,7 +47,7 @@ const ACCOUNT_TYPE_COLORS: Record<string, string> = {
 
 const emptyForm = {
   nickname: "",
-  account_type: "operating",
+  account_type: "subcontractor",
   custname: "",
   acct_type: "C",
   is_primary: false,
