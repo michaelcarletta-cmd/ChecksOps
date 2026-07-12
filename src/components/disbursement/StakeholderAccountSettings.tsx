@@ -225,6 +225,10 @@ export function StakeholderAccountSettings() {
     <div className="space-y-6">
       <StakeholderCapsBar accounts={accounts} tenantId={tenant?.id} />
 
+      <TenantStakeholderLimitRequests />
+
+
+
 
 
 
