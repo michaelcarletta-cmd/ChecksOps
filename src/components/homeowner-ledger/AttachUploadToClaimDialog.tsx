@@ -50,12 +50,12 @@ export function AttachUploadToClaimDialog({
     let cancelled = false;
     (async () => {
       setLoading(true);
-      let query = supabase
+      let query: any = supabase
         .from("claims")
         .select("id, claim_number, policyholder_name, policyholder_address")
         .order("created_at", { ascending: false })
         .limit(20);
-      if (tenantId) query = query.eq("tenant_id" as any, tenantId);
+      if (tenantId) query = query.eq("tenant_id", tenantId);
       if (q.trim()) {
         const term = `%${q.trim()}%`;
         query = query.or(`claim_number.ilike.${term},policyholder_name.ilike.${term},policyholder_address.ilike.${term}`);

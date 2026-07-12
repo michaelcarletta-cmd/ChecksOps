@@ -26,6 +26,7 @@ export function HomeownerSubmittedChecksInbox({ tenantId }: { tenantId?: string 
   const [items, setItems] = useState<PendingUpload[]>([]);
   const [loading, setLoading] = useState(true);
   const [signed, setSigned] = useState<Record<string, string>>({});
+  const [attachTarget, setAttachTarget] = useState<PendingUpload | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -105,7 +106,7 @@ export function HomeownerSubmittedChecksInbox({ tenantId }: { tenantId?: string 
                   <div className="text-xs bg-muted p-2 rounded"><strong>Note:</strong> {it.homeowner_note}</div>
                 )}
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => toast.info("Open the claim's Checks tab to attach this image.")}>
+                  <Button size="sm" variant="outline" onClick={() => setAttachTarget(it)}>
                     <CheckCircle2 className="h-3 w-3 mr-1" /> Attach to claim
                   </Button>
                   <Button size="sm" variant="ghost" className="text-destructive" onClick={() => reject(it.id)}>
@@ -117,6 +118,14 @@ export function HomeownerSubmittedChecksInbox({ tenantId }: { tenantId?: string 
           </ul>
         )}
       </CardContent>
+      <AttachUploadToClaimDialog
+        open={!!attachTarget}
+        onOpenChange={(v) => { if (!v) setAttachTarget(null); }}
+        uploadId={attachTarget?.id ?? null}
+        tenantId={attachTarget?.tenant_id ?? tenantId}
+        defaultAmount={attachTarget?.amount_estimate ?? null}
+        onAttached={load}
+      />
     </Card>
   );
 }
