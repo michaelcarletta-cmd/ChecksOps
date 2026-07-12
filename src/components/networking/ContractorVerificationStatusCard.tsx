@@ -98,7 +98,7 @@ export function ContractorVerificationStatusCard({ contractorId }: { contractorI
     <Card className="border-border">
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
-          <ShieldCheck className="h-4 w-4 text-primary" /> Verification status
+          <Crosshair className="h-4 w-4 text-primary" strokeWidth={2.5} /> Verification status
           <span className="ml-auto">{tierBadge}</span>
         </CardTitle>
         <CardDescription className="text-xs">
