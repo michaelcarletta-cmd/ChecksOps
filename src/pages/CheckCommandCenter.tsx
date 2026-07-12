@@ -96,6 +96,10 @@ const TenantPartnerManager = lazy(() =>
 const HomeownerSubmittedChecksInbox = lazy(() =>
   import("@/components/homeowner-ledger/HomeownerSubmittedChecksInbox").then(m => ({ default: m.HomeownerSubmittedChecksInbox }))
 );
+const SendHomeownerUploadLink = lazy(() =>
+  import("@/components/homeowner-ledger/SendHomeownerUploadLink").then(m => ({ default: m.SendHomeownerUploadLink }))
+
+);
 const MortgageCompaniesDirectory = lazy(() =>
   import("@/components/checks/MortgageCompaniesDirectory").then(m => ({ default: m.MortgageCompaniesDirectory }))
 );
@@ -1092,7 +1096,10 @@ export default function CheckCommandCenter() {
                   <TenantPartnerManager />
                 </Suspense>
               </TabsContent>
-              <TabsContent value="homeowner_uploads" className="mt-3">
+              <TabsContent value="homeowner_uploads" className="mt-3 space-y-4">
+                <Suspense fallback={<TabLoader />}>
+                  <SendHomeownerUploadLink />
+                </Suspense>
                 <Suspense fallback={<TabLoader />}>
                   <HomeownerSubmittedChecksInbox />
                 </Suspense>
