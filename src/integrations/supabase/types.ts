@@ -20738,6 +20738,15 @@ export type Database = {
         Args: { p_check_id: string }
         Returns: Json
       }
+      decide_stakeholder_limit_request: {
+        Args: {
+          _approved_limit: number
+          _decision: string
+          _notes: string
+          _request_id: string
+        }
+        Returns: undefined
+      }
       decrypt_pii: {
         Args: { p_ciphertext: string; p_key_name?: string }
         Returns: string
