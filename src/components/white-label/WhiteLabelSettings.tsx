@@ -97,9 +97,25 @@ export function WhiteLabelSettings() {
   const { user, loading } = useAuth();
   const { isAdmin } = usePermissions();
 
+  const { data: tenantRole } = useQuery({
+    queryKey: ["tenant-user-role", tenant?.id, user?.id],
+    enabled: !!tenant?.id && !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("tenant_users")
+        .select("role")
+        .eq("tenant_id", tenant!.id)
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      return (data?.role ?? null) as string | null;
+    },
+  });
+  const canManageTenant = tenantRole === "owner" || tenantRole === "admin" || isAdmin;
+
   if (loading) return <PageLoader />;
   if (!user) return <Navigate to={tenant?.slug ? `${resolveTenantBase(tenant.slug)}/login` : "/login"} replace />;
   const tenantBase = resolveTenantBase(tenant?.slug);
+
 
   return (
     <div className="min-h-screen bg-background">
@@ -129,16 +145,13 @@ export function WhiteLabelSettings() {
           <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
             <TabsTrigger value="profile" className="text-xs gap-1"><Building2 className="h-3 w-3" />Profile</TabsTrigger>
             <TabsTrigger value="usage" className="text-xs gap-1"><Receipt className="h-3 w-3" />Usage</TabsTrigger>
-            <TabsTrigger value="ai-key" className="text-xs gap-1"><KeyRound className="h-3 w-3" />AI Key</TabsTrigger>
-            <TabsTrigger value="users" className="text-xs gap-1"><Users className="h-3 w-3" />Users</TabsTrigger>
-
-            <TabsTrigger value="partners" className="text-xs gap-1"><Link2 className="h-3 w-3" />Partners</TabsTrigger>
-            <TabsTrigger value="banking" className="text-xs gap-1"><Banknote className="h-3 w-3" />Bank Accounts</TabsTrigger>
-            <TabsTrigger value="disbursement" className="text-xs gap-1"><CreditCard className="h-3 w-3" />Disbursement</TabsTrigger>
-
-            <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding & Email</TabsTrigger>
+            {canManageTenant && <TabsTrigger value="ai-key" className="text-xs gap-1"><KeyRound className="h-3 w-3" />AI Key</TabsTrigger>}
+            {canManageTenant && <TabsTrigger value="users" className="text-xs gap-1"><Users className="h-3 w-3" />Users</TabsTrigger>}
+            {canManageTenant && <TabsTrigger value="partners" className="text-xs gap-1"><Link2 className="h-3 w-3" />Partners</TabsTrigger>}
+            {canManageTenant && <TabsTrigger value="banking" className="text-xs gap-1"><Banknote className="h-3 w-3" />Bank Account/Stakeholders</TabsTrigger>}
+            {canManageTenant && <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding & Email</TabsTrigger>}
             <TabsTrigger value="referrals" className="text-xs gap-1"><Gift className="h-3 w-3" />Referrals</TabsTrigger>
-            <TabsTrigger value="compliance" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Compliance & Docs</TabsTrigger>
+            {canManageTenant && <TabsTrigger value="compliance" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Compliance & Docs</TabsTrigger>}
             <TabsTrigger value="guide" className="text-xs gap-1"><HelpCircle className="h-3 w-3" />ChecksOps Guide</TabsTrigger>
             <TabsTrigger value="directory" className="text-xs gap-1"><SearchIcon className="h-3 w-3" />Find-a-Pro Directory</TabsTrigger>
           </TabsList>
@@ -154,50 +167,52 @@ export function WhiteLabelSettings() {
             <TenantBillingAccountPanel />
           </TabsContent>
 
+          {canManageTenant && (
+            <>
+              <TabsContent value="ai-key">
+                <TenantAIKeySettings />
+              </TabsContent>
 
-          <TabsContent value="ai-key">
-            <TenantAIKeySettings />
-          </TabsContent>
+              <TabsContent value="users">
+                {tenant && <TenantUserManager tenantId={tenant.id} />}
+              </TabsContent>
 
+              <TabsContent value="partners">
+                <TenantPartnerManager />
+              </TabsContent>
 
-          <TabsContent value="users">
-            {tenant && <TenantUserManager tenantId={tenant.id} />}
-          </TabsContent>
+              <TabsContent value="banking" className="space-y-6">
+                <TenantBankAccountSettings />
+                <StakeholderAccountSettings />
+              </TabsContent>
 
-          <TabsContent value="partners">
-            <TenantPartnerManager />
-          </TabsContent>
-
-          <TabsContent value="banking">
-            <TenantBankAccountSettings />
-          </TabsContent>
-
-          <TabsContent value="disbursement">
-            <StakeholderAccountSettings />
-          </TabsContent>
-
-          <TabsContent value="branding" className="space-y-6">
-            {tenant && <BrandingSettings tenant={tenant} />}
-            <EmailSenderSettings />
-            <TenantEmailHealthPanel />
-          </TabsContent>
+              <TabsContent value="branding" className="space-y-6">
+                {tenant && <BrandingSettings tenant={tenant} />}
+                <EmailSenderSettings />
+                <TenantEmailHealthPanel />
+              </TabsContent>
+            </>
+          )}
 
           <TabsContent value="referrals">
             <ReferralSettings />
           </TabsContent>
 
 
-          <TabsContent value="compliance" className="space-y-8">
-            <ComplianceSettings />
-            {tenant && (
-              <div className="pt-6 border-t border-border/60">
-                <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
-                  <FileText className="h-4 w-4" /> Tenant Documents
-                </h3>
-                <TenantDocumentsManager tenantId={tenant.id} />
-              </div>
-            )}
-          </TabsContent>
+          {canManageTenant && (
+            <TabsContent value="compliance" className="space-y-8">
+              <ComplianceSettings />
+              {tenant && (
+                <div className="pt-6 border-t border-border/60">
+                  <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+                    <FileText className="h-4 w-4" /> Tenant Documents
+                  </h3>
+                  <TenantDocumentsManager tenantId={tenant.id} />
+                </div>
+              )}
+            </TabsContent>
+          )}
+
 
           <TabsContent value="guide">
             <CheckCenterHelpPanel />

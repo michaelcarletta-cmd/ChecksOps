@@ -18,7 +18,7 @@ import { AchAuthorizationForm } from "./AchAuthorizationForm";
 import { AuthentecheckVerification } from "./AuthentecheckVerification";
 import { usePermissions } from "@/hooks/usePermissions";
 import { RequestStakeholderLimitDialog } from "./RequestStakeholderLimitDialog";
-import { TenantStakeholderLimitRequests } from "./TenantStakeholderLimitRequests";
+
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   operating: "Operating",
@@ -277,7 +277,7 @@ export function StakeholderAccountSettings() {
     <div className="space-y-6">
       <StakeholderCapsBar accounts={accounts} tenantId={tenant?.id} />
 
-      <TenantStakeholderLimitRequests />
+
 
 
 
