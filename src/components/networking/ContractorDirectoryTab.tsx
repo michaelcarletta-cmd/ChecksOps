@@ -234,7 +234,7 @@ function TierBadge({ tier }: { tier: DirectoryRow["tier"] }) {
   if (tier === "pro") {
     return (
       <Badge variant="outline" className="text-[10px] gap-1 bg-amber-500/10 text-amber-600 border-amber-500/30">
-        <Award className="h-3 w-3" /> Pro
+        <Crosshair className="h-3 w-3" strokeWidth={2.5} /> Pro
       </Badge>
     );
   }
