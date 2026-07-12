@@ -144,9 +144,9 @@ export function TenantProBadgeManagement({ tenantId, tenantName, isOpen, onClose
                       <div className="font-medium text-sm truncate">{r.display_name}</div>
                       <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                         {isPro ? (
-                          <Badge className="gap-1 text-xs"><Crown className="h-3 w-3" /> Pro</Badge>
+                          <Badge className="gap-1 text-xs"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> Pro</Badge>
                         ) : r.tier === "verified" ? (
-                          <Badge variant="secondary" className="gap-1 text-xs"><ShieldCheck className="h-3 w-3" /> Verified</Badge>
+                          <Badge variant="secondary" className="gap-1 text-xs"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> Verified</Badge>
                         ) : (
                           <Badge variant="outline" className="text-xs">Guest</Badge>
                         )}
