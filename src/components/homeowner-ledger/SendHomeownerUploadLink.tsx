@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Send, Link as LinkIcon, Copy, Eye, RefreshCcw, Tag } from "lucide-react";
 import { toast } from "sonner";
 
@@ -29,8 +28,7 @@ export function SendHomeownerUploadLink({ tenantId }: { tenantId?: string }) {
   const [busy, setBusy] = useState(false);
   const [tokens, setTokens] = useState<Token[]>([]);
   const [loading, setLoading] = useState(true);
-  const [partnerCodes, setPartnerCodes] = useState<string[]>([]);
-  const [partnerCode, setPartnerCode] = useState<string>("");
+  const [myPartnerCode, setMyPartnerCode] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -46,20 +44,18 @@ export function SendHomeownerUploadLink({ tenantId }: { tenantId?: string }) {
     setLoading(false);
   };
 
-  const loadCodes = async () => {
+  const loadMyCode = async () => {
     const { data } = await supabase.rpc("get_my_tenant_partner_codes");
-    const codes = ((data ?? []) as any[])
+    const first = ((data ?? []) as any[])
       .filter((r) => !tenantId || r.tenant_id === tenantId)
-      .map((r) => r.code as string);
-    setPartnerCodes(codes);
-    if (codes.length && !partnerCode) setPartnerCode(codes[0]);
+      .map((r) => r.code as string)[0] ?? null;
+    setMyPartnerCode(first);
   };
 
-  useEffect(() => { load(); loadCodes(); /* eslint-disable-next-line */ }, [tenantId]);
+  useEffect(() => { load(); loadMyCode(); /* eslint-disable-next-line */ }, [tenantId]);
 
   const send = async () => {
     if (!email && !phone) { toast.error("Add an email or phone"); return; }
-    if (partnerCodes.length && !partnerCode) { toast.error("Pick a partner code"); return; }
     setBusy(true);
     try {
       const { data, error } = await supabase.functions.invoke("homeowner-ledger-send", {
@@ -69,14 +65,14 @@ export function SendHomeownerUploadLink({ tenantId }: { tenantId?: string }) {
           homeowner_email: email || null,
           homeowner_phone: phone || null,
           homeowner_name: name || null,
-          partner_code: partnerCode || null,
           rotate: false,
           origin: window.location.origin,
         },
       });
       if (error) throw new Error(error.message);
       if ((data as any)?.error) throw new Error((data as any).error);
-      toast.success(`Upload link sent${partnerCode ? ` (tagged ${partnerCode})` : ""}`);
+      const code = (data as any)?.partner_code;
+      toast.success(`Upload link sent${code ? ` (tagged ${code})` : ""}`);
       setName(""); setEmail(""); setPhone("");
       await load();
     } catch (e: any) {
@@ -105,39 +101,30 @@ export function SendHomeownerUploadLink({ tenantId }: { tenantId?: string }) {
           <LinkIcon className="h-4 w-4" /> Send Homeowner Upload Link
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          The link is tagged with your partner code. When the homeowner uploads, the check lands in review assigned to you.
+          Your partner code is attached automatically. When the homeowner uploads, the check lands in review assigned to you and we email you an alert.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <Label className="text-xs flex items-center gap-1"><Tag className="h-3 w-3" /> Partner code</Label>
-            {partnerCodes.length > 0 ? (
-              <Select value={partnerCode} onValueChange={setPartnerCode}>
-                <SelectTrigger className="h-9"><SelectValue placeholder="Select code" /></SelectTrigger>
-                <SelectContent>
-                  {partnerCodes.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Input value={partnerCode} onChange={(e) => setPartnerCode(e.target.value.toUpperCase())} placeholder="e.g. FRDM01" />
-            )}
+        {myPartnerCode && (
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-muted-foreground">Sending as:</span>
+            <Badge variant="outline" className="text-[10px]">
+              <Tag className="h-3 w-3 mr-1" /> {myPartnerCode}
+            </Badge>
           </div>
+        )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div className="space-y-1"><Label className="text-xs">Homeowner name</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
           <div className="space-y-1"><Label className="text-xs">Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" /></div>
-          <div className="space-y-1"><Label className="text-xs">Phone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(optional)" /></div>
+          <div className="space-y-1 sm:col-span-2"><Label className="text-xs">Phone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(optional)" /></div>
         </div>
         <div className="flex items-center gap-2">
           <Button size="sm" onClick={send} disabled={busy}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
             Send upload link
           </Button>
-          {partnerCode && (
-            <Badge variant="outline" className="text-[10px]">
-              <Tag className="h-3 w-3 mr-1" /> Active: {partnerCode}
-            </Badge>
-          )}
         </div>
+
 
         <div className="border-t border-border pt-3">
           <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Recent pre-claim links</div>
