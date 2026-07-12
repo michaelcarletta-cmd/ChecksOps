@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { AlertTriangle, Building2, Plus, Trash2, Star, CreditCard, ShieldCheck, MailCheck, Lock, Loader2, Info, ShieldAlert } from "lucide-react";
 import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
@@ -68,6 +69,8 @@ export function StakeholderAccountSettings() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [capLimitDialog, setCapLimitDialog] = useState<null | "sales_rep" | "subcontractor" | "vendor">(null);
+  const [requestLimitDialog, setRequestLimitDialog] = useState<null | "sales_rep" | "subcontractor" | "vendor">(null);
 
   const { data: accounts = [], isLoading } = useQuery({
     queryKey: ["stakeholder-accounts", tenant?.id],
@@ -84,6 +87,49 @@ export function StakeholderAccountSettings() {
       return data ?? [];
     },
   });
+
+  const { data: tenantCaps } = useQuery({
+    queryKey: ["tenant-stakeholder-caps", tenant?.id],
+    enabled: !!tenant?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tenants")
+        .select("max_sales_reps, max_subcontractors, max_vendors")
+        .eq("id", tenant!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { max_sales_reps: number; max_subcontractors: number; max_vendors: number } | null;
+    },
+  });
+
+  const { data: tenantRole } = useQuery({
+    queryKey: ["tenant-user-role", tenant?.id, user?.id],
+    enabled: !!tenant?.id && !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tenant_users")
+        .select("role")
+        .eq("tenant_id", tenant!.id)
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return (data?.role ?? null) as string | null;
+    },
+  });
+  const canManageTenant = tenantRole === "owner" || tenantRole === "admin";
+
+  const capForType = (t: string): number | null => {
+    if (t === "sales_rep") return tenantCaps?.max_sales_reps ?? 5;
+    if (t === "subcontractor") return tenantCaps?.max_subcontractors ?? 10;
+    if (t === "vendor") return tenantCaps?.max_vendors ?? 5;
+    return null;
+  };
+  const countForType = (t: string) => accounts.filter((a: any) => a.account_type === t).length;
+  const isAtCap = (t: string) => {
+    const max = capForType(t);
+    return max !== null && countForType(t) >= max;
+  };
+
 
 
   const addAccount = useMutation({
@@ -247,10 +293,23 @@ export function StakeholderAccountSettings() {
               Stakeholder Accounts
               <Badge variant="outline" className="text-xs">{accounts.length}</Badge>
             </CardTitle>
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowForm(!showForm)}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              onClick={() => {
+                // If they're already at cap on the default type, pop the limit dialog
+                if (!showForm && isAtCap(form.account_type)) {
+                  setCapLimitDialog(form.account_type as any);
+                  return;
+                }
+                setShowForm(!showForm);
+              }}
+            >
               <Plus className="h-3 w-3 mr-1" />
               Add account
             </Button>
+
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -266,15 +325,27 @@ export function StakeholderAccountSettings() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Type</Label>
-                  <Select value={form.account_type} onValueChange={(v) => setForm({ ...form, account_type: v })}>
+                  <Select
+                    value={form.account_type}
+                    onValueChange={(v) => {
+                      if (isAtCap(v)) {
+                        setCapLimitDialog(v as any);
+                        return;
+                      }
+                      setForm({ ...form, account_type: v });
+                    }}
+                  >
                     <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {SELECTABLE_ACCOUNT_TYPES.map((v) => (
-                        <SelectItem key={v} value={v} className="text-xs">{ACCOUNT_TYPE_LABELS[v]}</SelectItem>
+                        <SelectItem key={v} value={v} className="text-xs">
+                          {ACCOUNT_TYPE_LABELS[v]}{isAtCap(v) ? " (limit reached)" : ""}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
+
                 <div className="space-y-1 col-span-2">
                   <Label className="text-xs">Account holder name</Label>
                   <Input className="h-8 text-sm" placeholder="Full legal name on account" value={form.custname} onChange={(e) => setForm({ ...form, custname: e.target.value })} />
@@ -336,7 +407,14 @@ export function StakeholderAccountSettings() {
               <div className="flex gap-2">
                 <Button
                   size="sm"
-                  onClick={() => addAccount.mutate(form)}
+                  onClick={() => {
+                    if (isAtCap(form.account_type)) {
+                      setCapLimitDialog(form.account_type as any);
+                      return;
+                    }
+                    addAccount.mutate(form);
+                  }}
+
                   disabled={
                     addAccount.isPending ||
                     !form.nickname ||
@@ -456,9 +534,56 @@ export function StakeholderAccountSettings() {
         })}
         </CardContent>
       </Card>
+
+      {/* Cap-reached popup */}
+      <Dialog open={!!capLimitDialog} onOpenChange={(o) => !o && setCapLimitDialog(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4 text-amber-500" />
+              {capLimitDialog ? ACCOUNT_TYPE_LABELS[capLimitDialog] : ""} limit reached
+            </DialogTitle>
+            <DialogDescription>
+              All {capLimitDialog ? ACCOUNT_TYPE_LABELS[capLimitDialog].toLowerCase() : ""} account
+              slots for your tenant are in use
+              {capLimitDialog ? ` (${countForType(capLimitDialog)} of ${capForType(capLimitDialog)})` : ""}.
+              To add another, request more capacity from ChecksOps below.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setCapLimitDialog(null)}>Close</Button>
+            {canManageTenant ? (
+              <Button
+                size="sm"
+                onClick={() => {
+                  const cat = capLimitDialog;
+                  setCapLimitDialog(null);
+                  if (cat) setRequestLimitDialog(cat);
+                }}
+              >
+                Request more
+              </Button>
+            ) : (
+              <span className="text-[11px] text-muted-foreground italic self-center">
+                Ask an owner/admin to request more
+              </span>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {requestLimitDialog && (
+        <RequestStakeholderLimitDialog
+          open={!!requestLimitDialog}
+          onOpenChange={(o) => !o && setRequestLimitDialog(null)}
+          category={requestLimitDialog}
+          currentLimit={capForType(requestLimitDialog) ?? 0}
+        />
+      )}
     </div>
   );
 }
+
 
 // ---------------------------------------------------------------------------
 // Sales-rep + subcontractor cap counter with "Request more" button

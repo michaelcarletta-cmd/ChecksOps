@@ -80,10 +80,40 @@ serve(async (req) => {
           .maybeSingle();
         if (!share) throw new Error("Check not accessible");
       }
+
+      // Enforce ONE homeowner AuthenteCheck per check file.
+      // Reject if there's already a non-expired link OR a homeowner stakeholder
+      // already attached to this check.
+      const nowIso = new Date().toISOString();
+      const { data: existingLink } = await supabase
+        .from("homeowner_bank_link_tokens")
+        .select("id, status, expires_at")
+        .eq("check_intake_item_id", check_intake_item_id)
+        .neq("status", "expired")
+        .neq("status", "revoked")
+        .gte("expires_at", nowIso)
+        .maybeSingle();
+      if (existingLink) {
+        return new Response(JSON.stringify({
+          error: "A homeowner bank-link has already been sent for this check. Only one homeowner AuthenteCheck is allowed per check file.",
+        }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const { data: existingHomeownerStakeholder } = await supabase
+        .from("check_stakeholders")
+        .select("id, stakeholder_account_id, stakeholder_accounts!inner(account_type)")
+        .eq("check_intake_item_id", check_intake_item_id)
+        .eq("stakeholder_accounts.account_type", "homeowner")
+        .maybeSingle();
+      if (existingHomeownerStakeholder) {
+        return new Response(JSON.stringify({
+          error: "A homeowner is already linked to this check. Only one homeowner AuthenteCheck is allowed per check file.",
+        }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
     }
 
     const verificationToken = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
 
     // 1. Create shell stakeholder_accounts row
     const nickname = `Homeowner: ${homeowner_name}`;
