@@ -406,7 +406,14 @@ export function StakeholderAccountSettings() {
               <div className="flex gap-2">
                 <Button
                   size="sm"
-                  onClick={() => addAccount.mutate(form)}
+                  onClick={() => {
+                    if (isAtCap(form.account_type)) {
+                      setCapLimitDialog(form.account_type as any);
+                      return;
+                    }
+                    addAccount.mutate(form);
+                  }}
+
                   disabled={
                     addAccount.isPending ||
                     !form.nickname ||
