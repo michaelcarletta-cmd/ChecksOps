@@ -155,7 +155,15 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
             )}
           </PopoverContent>
         </Popover>
+        </div>
       </div>
+
+      <SendHomeownerBankLinkDialog
+        open={homeownerDialogOpen}
+        onOpenChange={setHomeownerDialogOpen}
+        checkIntakeItemId={checkIntakeItemId}
+        claimId={(checkMeta?.claim_id as string | null) ?? null}
+      />
 
       {activeCheckStakeholders.length === 0 ? (
         <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground text-center">
