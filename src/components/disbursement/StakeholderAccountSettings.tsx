@@ -45,6 +45,11 @@ const ACCOUNT_TYPE_COLORS: Record<string, string> = {
   other: "bg-muted text-muted-foreground border-border",
 };
 
+// Types users can pick when creating a new stakeholder account.
+// Legacy values (operating, overhead, insured, contractor, supplier, other)
+// stay in ACCOUNT_TYPE_LABELS so grandfathered accounts still render correctly.
+const SELECTABLE_ACCOUNT_TYPES = ["subcontractor", "vendor", "sales_rep", "homeowner"] as const;
+
 const emptyForm = {
   nickname: "",
   account_type: "subcontractor",
