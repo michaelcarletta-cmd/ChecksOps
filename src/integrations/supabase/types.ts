@@ -19058,6 +19058,7 @@ export type Database = {
           max_checks_per_month: number | null
           max_sales_reps: number
           max_subcontractors: number
+          max_vendors: number
           monthly_rate_cents: number
           name: string
           partner_code: string
@@ -19124,6 +19125,7 @@ export type Database = {
           max_checks_per_month?: number | null
           max_sales_reps?: number
           max_subcontractors?: number
+          max_vendors?: number
           monthly_rate_cents?: number
           name: string
           partner_code?: string
@@ -19190,6 +19192,7 @@ export type Database = {
           max_checks_per_month?: number | null
           max_sales_reps?: number
           max_subcontractors?: number
+          max_vendors?: number
           monthly_rate_cents?: number
           name?: string
           partner_code?: string
