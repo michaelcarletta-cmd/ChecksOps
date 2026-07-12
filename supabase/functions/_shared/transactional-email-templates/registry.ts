@@ -14,6 +14,7 @@ import { template as stakeholderVerifyAccount } from './stakeholder-verify-accou
 import { template as tenantInvoice } from './tenant-invoice.tsx'
 import { template as newHomeownerLead } from './new-homeowner-lead.tsx'
 import { template as homeownerClaimPortalLink } from './homeowner-claim-portal-link.tsx'
+import { template as homeownerLedgerInvite } from './homeowner-ledger-invite.tsx'
 
 export const TEMPLATES: Record<string, TemplateEntry> = {
   'demo-request': demoRequest,
@@ -21,4 +22,5 @@ export const TEMPLATES: Record<string, TemplateEntry> = {
   'tenant-invoice': tenantInvoice,
   'new-homeowner-lead': newHomeownerLead,
   'homeowner-claim-portal-link': homeownerClaimPortalLink,
+  'homeowner-ledger-invite': homeownerLedgerInvite,
 }
