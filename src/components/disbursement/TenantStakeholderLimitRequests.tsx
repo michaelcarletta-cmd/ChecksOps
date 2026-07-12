@@ -31,6 +31,7 @@ type Row = {
 const CATEGORY_LABEL: Record<string, string> = {
   sales_rep: "Sales Reps",
   subcontractor: "Subcontractors",
+  vendor: "Vendors",
 };
 
 export function TenantStakeholderLimitRequests() {
