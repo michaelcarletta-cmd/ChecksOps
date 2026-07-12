@@ -25,6 +25,8 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   insured: "Insured",
   contractor: "Contractor",
   supplier: "Supplier",
+  sales_rep: "Sales rep",
+  homeowner: "Homeowner",
   other: "Other",
 };
 
@@ -36,6 +38,8 @@ const ACCOUNT_TYPE_COLORS: Record<string, string> = {
   insured: "bg-rose-500/10 text-rose-700 border-rose-500/20",
   contractor: "bg-indigo-500/10 text-indigo-700 border-indigo-500/20",
   supplier: "bg-cyan-500/10 text-cyan-700 border-cyan-500/20",
+  sales_rep: "bg-orange-500/10 text-orange-700 border-orange-500/20",
+  homeowner: "bg-pink-500/10 text-pink-700 border-pink-500/20",
   other: "bg-muted text-muted-foreground border-border",
 };
 
