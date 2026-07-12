@@ -93,6 +93,9 @@ const DepositReports = lazy(() =>
 const TenantPartnerManager = lazy(() =>
   import("@/components/white-label/TenantPartnerManager").then(m => ({ default: m.TenantPartnerManager }))
 );
+const HomeownerSubmittedChecksInbox = lazy(() =>
+  import("@/components/homeowner-ledger/HomeownerSubmittedChecksInbox").then(m => ({ default: m.HomeownerSubmittedChecksInbox }))
+);
 const MortgageCompaniesDirectory = lazy(() =>
   import("@/components/checks/MortgageCompaniesDirectory").then(m => ({ default: m.MortgageCompaniesDirectory }))
 );
@@ -1056,6 +1059,7 @@ export default function CheckCommandCenter() {
                 <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
                 <TabsTrigger value="mortgage_cos" className="text-xs gap-1"><Building2 className="h-3 w-3" />Mortgage Cos</TabsTrigger>
                 <TabsTrigger value="partners" className="text-xs gap-1"><Users className="h-3 w-3" />Partners</TabsTrigger>
+                <TabsTrigger value="homeowner_uploads" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3 rotate-180" />Homeowner Uploads</TabsTrigger>
 
               </TabsList>
               <TabsContent value="deposit_ops" className="mt-3">
@@ -1088,6 +1092,12 @@ export default function CheckCommandCenter() {
                   <TenantPartnerManager />
                 </Suspense>
               </TabsContent>
+              <TabsContent value="homeowner_uploads" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <HomeownerSubmittedChecksInbox />
+                </Suspense>
+              </TabsContent>
+
 
             </Tabs>
           </div>
