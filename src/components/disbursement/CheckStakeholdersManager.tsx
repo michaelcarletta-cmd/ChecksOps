@@ -27,6 +27,21 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [homeownerDialogOpen, setHomeownerDialogOpen] = useState(false);
+
+  const { data: checkMeta } = useQuery({
+    queryKey: ["check-meta-for-stakeholders", checkIntakeItemId],
+    enabled: !!checkIntakeItemId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("check_intake_items")
+        .select("id, claim_id")
+        .eq("id", checkIntakeItemId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const { data: checkStakeholders = [] } = useQuery({
     queryKey: ["check-stakeholders", checkIntakeItemId],
