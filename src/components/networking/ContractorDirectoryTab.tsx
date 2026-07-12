@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
-  Search, Star, Briefcase, MapPin, ShieldCheck, Send, Loader2,
+  Search, Star, Briefcase, MapPin, ShieldCheck, Crosshair, Send, Loader2,
   Users, Award, Inbox,
 } from "lucide-react";
 import { ContractorServiceAreaCard } from "./ContractorServiceAreaCard";
@@ -241,7 +241,7 @@ function TierBadge({ tier }: { tier: DirectoryRow["tier"] }) {
   if (tier === "verified") {
     return (
       <Badge variant="outline" className="text-[10px] gap-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
-        <ShieldCheck className="h-3 w-3" /> Verified
+        <Crosshair className="h-3 w-3" strokeWidth={2.5} /> Verified
       </Badge>
     );
   }

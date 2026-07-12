@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ShieldCheck, Star, MapPin, Search, Lock, CheckCircle2, Loader2 } from "lucide-react";
+import { ShieldCheck, Crosshair, Star, MapPin, Search, Lock, CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { HomeownerIntroRequestModal } from "@/components/networking/HomeownerIntroRequestModal";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
@@ -274,7 +274,7 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
               </SheetHeader>
               <div className="mt-4 space-y-4">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge className="gap-1"><ShieldCheck className="h-3 w-3" /> Verified by ChecksOps</Badge>
+                  <Badge className="gap-1"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> Verified by ChecksOps</Badge>
                   <RatingBadge rating={selected.avg_rating} count={selected.review_count} />
                 </div>
                 {selected.bio && <p className="text-sm text-muted-foreground">{selected.bio}</p>}
@@ -345,7 +345,7 @@ function ContractorCard({ c, onClick }: { c: PublicContractor; onClick: () => vo
       <CardContent className="pt-6">
         <div className="flex items-start justify-between mb-2 gap-2">
           <h3 className="font-semibold truncate">{c.display_name}</h3>
-          <Badge className="gap-1 flex-shrink-0 text-xs"><ShieldCheck className="h-3 w-3" /> Verified</Badge>
+          <Badge className="gap-1 flex-shrink-0 text-xs"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> Verified</Badge>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <RatingBadge rating={c.avg_rating} count={c.review_count} />

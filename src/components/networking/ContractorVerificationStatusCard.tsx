@@ -6,7 +6,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, ShieldCheck, Star, CheckCircle2, XCircle, Crown } from "lucide-react";
+import { Loader2, ShieldCheck, Crosshair, Star, CheckCircle2, XCircle, Crown } from "lucide-react";
 
 type Status = {
   found: boolean;
@@ -89,7 +89,7 @@ export function ContractorVerificationStatusCard({ contractorId }: { contractorI
     tier === "pro" ? (
       <Badge className="gap-1"><Crown className="h-3 w-3" /> Pro</Badge>
     ) : tier === "verified" ? (
-      <Badge variant="secondary" className="gap-1"><ShieldCheck className="h-3 w-3" /> Verified</Badge>
+      <Badge variant="secondary" className="gap-1"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> Verified</Badge>
     ) : (
       <Badge variant="outline">Guest (unlisted)</Badge>
     );
