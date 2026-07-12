@@ -116,12 +116,22 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
         <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
           <Users className="h-3 w-3" /> Stakeholders on this check
         </p>
-        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-          <PopoverTrigger asChild>
-            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={availableToAdd.length === 0}>
-              <Plus className="h-3 w-3 mr-1" /> Add
-            </Button>
-          </PopoverTrigger>
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() => setHomeownerDialogOpen(true)}
+            title="Send the homeowner a link to link their bank via AuthenteCheck"
+          >
+            <Home className="h-3 w-3 mr-1" /> Homeowner link
+          </Button>
+          <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+            <PopoverTrigger asChild>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={availableToAdd.length === 0}>
+                <Plus className="h-3 w-3 mr-1" /> Add
+              </Button>
+            </PopoverTrigger>
           <PopoverContent className="w-72 p-2" align="end">
             {availableToAdd.length === 0 ? (
               <p className="text-xs text-muted-foreground p-2">All your accounts are already added.</p>
