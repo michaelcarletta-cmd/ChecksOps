@@ -6,7 +6,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, ShieldCheck, Star, CheckCircle2, XCircle, Crown } from "lucide-react";
+import { Loader2, ShieldCheck, Crosshair, Star, CheckCircle2, XCircle, Crown } from "lucide-react";
 
 type Status = {
   found: boolean;
