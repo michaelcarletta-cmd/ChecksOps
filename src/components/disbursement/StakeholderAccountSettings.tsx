@@ -454,6 +454,7 @@ export function StakeholderAccountSettings() {
 // Sales-rep + subcontractor cap counter with "Request more" button
 // ---------------------------------------------------------------------------
 function StakeholderCapsBar({ accounts, tenantId }: { accounts: any[]; tenantId?: string }) {
+  const { user } = useAuth();
   const [openDialog, setOpenDialog] = useState<null | "sales_rep" | "subcontractor">(null);
 
   const { data: tenantLimits } = useQuery({
@@ -470,6 +471,23 @@ function StakeholderCapsBar({ accounts, tenantId }: { accounts: any[]; tenantId?
     },
   });
 
+  // Only tenant owners/admins may request more capacity.
+  const { data: tenantRole } = useQuery({
+    queryKey: ["tenant-user-role", tenantId, user?.id],
+    enabled: !!tenantId && !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tenant_users")
+        .select("role")
+        .eq("tenant_id", tenantId!)
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return (data?.role ?? null) as string | null;
+    },
+  });
+  const canManageTenant = tenantRole === "owner" || tenantRole === "admin";
+
   const maxSalesReps = tenantLimits?.max_sales_reps ?? 5;
   const maxSubs = tenantLimits?.max_subcontractors ?? 10;
   const salesCount = accounts.filter((a: any) => a.account_type === "sales_rep").length;
@@ -485,9 +503,13 @@ function StakeholderCapsBar({ accounts, tenantId }: { accounts: any[]; tenantId?
             {used} / {max}
           </Badge>
         </div>
-        <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => setOpenDialog(category)}>
-          Request more
-        </Button>
+        {canManageTenant ? (
+          <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => setOpenDialog(category)}>
+            Request more
+          </Button>
+        ) : (
+          <span className="text-[10px] text-muted-foreground italic">Ask an owner to request more</span>
+        )}
       </div>
     );
   };
