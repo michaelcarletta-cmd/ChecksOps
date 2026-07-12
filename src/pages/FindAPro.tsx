@@ -345,7 +345,7 @@ function ContractorCard({ c, onClick }: { c: PublicContractor; onClick: () => vo
       <CardContent className="pt-6">
         <div className="flex items-start justify-between mb-2 gap-2">
           <h3 className="font-semibold truncate">{c.display_name}</h3>
-          <Badge className="gap-1 flex-shrink-0 text-xs"><ShieldCheck className="h-3 w-3" /> Verified</Badge>
+          <Badge className="gap-1 flex-shrink-0 text-xs"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> Verified</Badge>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <RatingBadge rating={c.avg_rating} count={c.review_count} />
