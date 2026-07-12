@@ -17,7 +17,10 @@ type PendingUpload = {
   homeowner_note: string | null;
   status: string;
   created_at: string;
+  partner_code: string | null;
+  assigned_to_user_id: string | null;
 };
+
 
 export function HomeownerSubmittedChecksInbox({ tenantId }: { tenantId?: string }) {
   const [items, setItems] = useState<PendingUpload[]>([]);
@@ -86,8 +89,14 @@ export function HomeownerSubmittedChecksInbox({ tenantId }: { tenantId?: string 
                     </div>
                     <div className="text-muted-foreground">{new Date(it.created_at).toLocaleString()}</div>
                   </div>
-                  <Badge variant="secondary" className="text-[10px]">Pending</Badge>
+                  <div className="flex items-center gap-1">
+                    {it.partner_code && (
+                      <Badge variant="outline" className="text-[10px]">{it.partner_code}</Badge>
+                    )}
+                    <Badge variant="secondary" className="text-[10px]">Pending review</Badge>
+                  </div>
                 </div>
+
                 <div className="grid grid-cols-2 gap-2">
                   <Thumb path={it.front_path} url={signed[it.front_path]} label="Front" />
                   {it.back_path && <Thumb path={it.back_path} url={signed[it.back_path]} label="Back" />}
