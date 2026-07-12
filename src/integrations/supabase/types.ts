@@ -14080,6 +14080,226 @@ export type Database = {
           },
         ]
       }
+      homeowner_ledger_check_uploads: {
+        Row: {
+          amount_estimate: number | null
+          attached_check_id: string | null
+          back_path: string | null
+          claim_id: string | null
+          created_at: string
+          front_path: string
+          homeowner_note: string | null
+          id: string
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          tenant_id: string
+          token_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_estimate?: number | null
+          attached_check_id?: string | null
+          back_path?: string | null
+          claim_id?: string | null
+          created_at?: string
+          front_path: string
+          homeowner_note?: string | null
+          id?: string
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          tenant_id: string
+          token_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_estimate?: number | null
+          attached_check_id?: string | null
+          back_path?: string | null
+          claim_id?: string | null
+          created_at?: string
+          front_path?: string
+          homeowner_note?: string | null
+          id?: string
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          tenant_id?: string
+          token_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "homeowner_ledger_check_uploads_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "homeowner_ledger_check_uploads_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "homeowner_ledger_check_uploads_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "homeowner_ledger_check_uploads_token_id_fkey"
+            columns: ["token_id"]
+            isOneToOne: false
+            referencedRelation: "homeowner_ledger_tokens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      homeowner_ledger_events: {
+        Row: {
+          actor_label: string | null
+          amount: number | null
+          check_id: string | null
+          claim_id: string
+          created_at: string
+          created_by: string | null
+          event_type: string
+          id: string
+          occurred_at: string
+          payload_json: Json
+          tenant_id: string
+        }
+        Insert: {
+          actor_label?: string | null
+          amount?: number | null
+          check_id?: string | null
+          claim_id: string
+          created_at?: string
+          created_by?: string | null
+          event_type: string
+          id?: string
+          occurred_at?: string
+          payload_json?: Json
+          tenant_id: string
+        }
+        Update: {
+          actor_label?: string | null
+          amount?: number | null
+          check_id?: string | null
+          claim_id?: string
+          created_at?: string
+          created_by?: string | null
+          event_type?: string
+          id?: string
+          occurred_at?: string
+          payload_json?: Json
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "homeowner_ledger_events_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "homeowner_ledger_events_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "homeowner_ledger_events_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      homeowner_ledger_tokens: {
+        Row: {
+          claim_id: string | null
+          created_at: string
+          created_by: string | null
+          expires_at: string | null
+          homeowner_email: string | null
+          homeowner_name: string | null
+          homeowner_phone: string | null
+          id: string
+          last_viewed_at: string | null
+          revoked_at: string | null
+          tenant_id: string
+          token: string
+          updated_at: string
+          view_count: number
+        }
+        Insert: {
+          claim_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          homeowner_email?: string | null
+          homeowner_name?: string | null
+          homeowner_phone?: string | null
+          id?: string
+          last_viewed_at?: string | null
+          revoked_at?: string | null
+          tenant_id: string
+          token?: string
+          updated_at?: string
+          view_count?: number
+        }
+        Update: {
+          claim_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          homeowner_email?: string | null
+          homeowner_name?: string | null
+          homeowner_phone?: string | null
+          id?: string
+          last_viewed_at?: string | null
+          revoked_at?: string | null
+          tenant_id?: string
+          token?: string
+          updated_at?: string
+          view_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "homeowner_ledger_tokens_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "homeowner_ledger_tokens_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "homeowner_ledger_tokens_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       increase_settings: {
         Row: {
           id: string
