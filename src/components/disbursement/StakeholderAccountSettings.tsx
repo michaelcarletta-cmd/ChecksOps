@@ -292,10 +292,23 @@ export function StakeholderAccountSettings() {
               Stakeholder Accounts
               <Badge variant="outline" className="text-xs">{accounts.length}</Badge>
             </CardTitle>
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowForm(!showForm)}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              onClick={() => {
+                // If they're already at cap on the default type, pop the limit dialog
+                if (!showForm && isAtCap(form.account_type)) {
+                  setCapLimitDialog(form.account_type as any);
+                  return;
+                }
+                setShowForm(!showForm);
+              }}
+            >
               <Plus className="h-3 w-3 mr-1" />
               Add account
             </Button>
+
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
