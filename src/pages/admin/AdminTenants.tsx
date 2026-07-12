@@ -201,9 +201,6 @@ export default function AdminTenants() {
             <BillingConfigPanel />
             <MaintenancePaymentsTracker />
           </TabsContent>
-          <TabsContent value="limit-requests">
-            <AdminStakeholderLimitRequests />
-          </TabsContent>
         </Tabs>
       </div>
 
