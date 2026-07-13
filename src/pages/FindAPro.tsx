@@ -280,7 +280,8 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge className="gap-1"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> Verified by ChecksOps</Badge>
                   <RatingBadge rating={selected.avg_rating} count={selected.review_count} />
-                  <GoogleRatingBadge rating={selected.google_rating} count={selected.google_review_count} url={selected.google_reviews_url} size="md" />
+                  <GoogleReviewsLink url={selected.google_reviews_url} size="md" />
+
 
                 </div>
                 {selected.bio && <p className="text-sm text-muted-foreground">{selected.bio}</p>}
