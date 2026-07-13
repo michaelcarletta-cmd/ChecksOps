@@ -104,9 +104,21 @@ export function LinkCheckToLeadButton({ leadId, leadClaimNumber }: Props) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button size="sm" variant="outline" className="h-7 text-xs">
-          <Link2 className="h-3 w-3 mr-1" /> Link check
-        </Button>
+        {linkedCheck ? (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1 border-emerald-500/40 text-emerald-300 hover:text-emerald-200"
+          >
+            <CheckCircle2 className="h-3 w-3" />
+            Check linked to Claim{linkedClaimNumber ? ` #${linkedClaimNumber}` : ""}
+            <Pencil className="h-3 w-3 ml-1 opacity-70" />
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" className="h-7 text-xs">
+            <Link2 className="h-3 w-3 mr-1" /> Link check
+          </Button>
+        )}
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[360px] p-3 space-y-2">
         <div className="text-xs text-muted-foreground">
