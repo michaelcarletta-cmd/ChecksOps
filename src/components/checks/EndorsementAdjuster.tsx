@@ -55,6 +55,7 @@ export function EndorsementAdjuster({
   const [activePointerId, setActivePointerId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [detecting, setDetecting] = useState(false);
   // Load real signed endorsement assets for this check
   const [signedEndorsements, setSignedEndorsements] = useState<SignedEndorsementAsset[]>([]);
   const [endorsementsLoading, setEndorsementsLoading] = useState(true);
