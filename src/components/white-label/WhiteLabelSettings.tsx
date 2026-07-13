@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { 
   LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft,
   Loader2, Save, Trash2, Receipt, Banknote, KeyRound, HelpCircle,
@@ -127,6 +128,16 @@ export function WhiteLabelSettings() {
           <span className="text-sm font-medium">{tenant?.name || "Settings"}</span>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="ghost" size="icon" title="ChecksOps Guide" aria-label="Open ChecksOps Guide">
+                <HelpCircle className="h-4 w-4" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+              <CheckCenterHelpPanel />
+            </DialogContent>
+          </Dialog>
           <Button variant="ghost" size="sm" asChild>
             <Link to={`${tenantBase}/checks`}>
               <ArrowLeft className="h-4 w-4 mr-1" /> Back to Checks
@@ -152,7 +163,6 @@ export function WhiteLabelSettings() {
             {canManageTenant && <TabsTrigger value="branding" className="text-xs gap-1"><Palette className="h-3 w-3" />Branding & Email</TabsTrigger>}
             <TabsTrigger value="referrals" className="text-xs gap-1"><Gift className="h-3 w-3" />Referrals</TabsTrigger>
             {canManageTenant && <TabsTrigger value="compliance" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Compliance & Docs</TabsTrigger>}
-            <TabsTrigger value="guide" className="text-xs gap-1"><HelpCircle className="h-3 w-3" />ChecksOps Guide</TabsTrigger>
             <TabsTrigger value="directory" className="text-xs gap-1"><SearchIcon className="h-3 w-3" />Find-a-Pro Directory</TabsTrigger>
           </TabsList>
 
@@ -214,9 +224,7 @@ export function WhiteLabelSettings() {
           )}
 
 
-          <TabsContent value="guide">
-            <CheckCenterHelpPanel />
-          </TabsContent>
+
 
           <TabsContent value="directory" className="space-y-4">
             <Card>
