@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, MapPin, Save, Plus, X, Crosshair, Wrench, Globe, Sparkles } from "lucide-react";
+import { Loader2, MapPin, Save, Plus, X, Crosshair, Wrench, Globe, Sparkles, Star } from "lucide-react";
 
 type MyProfile = {
   id: string;
@@ -25,7 +25,12 @@ type MyProfile = {
   is_directory_listed: boolean | null;
   directory_opt_in: boolean | null;
   tier: string | null;
+  google_business_name: string | null;
+  google_reviews_url: string | null;
+  google_rating: number | null;
+  google_review_count: number | null;
 };
+
 
 const US_STATES: { code: string; name: string }[] = [
   { code: "AL", name: "Alabama" }, { code: "AK", name: "Alaska" }, { code: "AZ", name: "Arizona" },
@@ -77,7 +82,7 @@ export function ContractorServiceAreaCard() {
       const { data, error } = await supabase
         .from("contractor_profiles")
         .select(
-          "id, display_name, bio, trades, service_zip_prefixes, service_states, home_base_lat, home_base_lng, service_radius_miles, is_directory_listed, directory_opt_in, tier",
+          "id, display_name, bio, trades, service_zip_prefixes, service_states, home_base_lat, home_base_lng, service_radius_miles, is_directory_listed, directory_opt_in, tier, google_business_name, google_reviews_url, google_rating, google_review_count",
         )
         .eq("user_id", user!.id)
         .maybeSingle();
@@ -85,6 +90,7 @@ export function ContractorServiceAreaCard() {
       return data as MyProfile | null;
     },
   });
+
 
   const [prefixes, setPrefixes] = useState<string[]>([]);
   const [newPrefix, setNewPrefix] = useState("");
@@ -100,6 +106,9 @@ export function ContractorServiceAreaCard() {
   const [bio, setBio] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [published, setPublished] = useState(false);
+  const [googleUrl, setGoogleUrl] = useState("");
+  const [googleRating, setGoogleRating] = useState<string>("");
+  const [googleReviewCount, setGoogleReviewCount] = useState<string>("");
 
   useEffect(() => {
     if (profile) {
@@ -112,8 +121,12 @@ export function ContractorServiceAreaCard() {
       setBio(profile.bio ?? "");
       setBusinessName(profile.display_name ?? "");
       setPublished(!!(profile.is_directory_listed && profile.directory_opt_in));
+      setGoogleUrl(profile.google_reviews_url ?? "");
+      setGoogleRating(profile.google_rating != null ? String(profile.google_rating) : "");
+      setGoogleReviewCount(profile.google_review_count != null ? String(profile.google_review_count) : "");
     }
   }, [profile]);
+
 
   const addPrefix = () => {
     const p = newPrefix.trim();
@@ -213,6 +226,18 @@ export function ContractorServiceAreaCard() {
       if (published && cleanName.length < 2) {
         throw new Error("Enter your business name before publishing");
       }
+      const gRating = googleRating.trim() ? Number(googleRating) : null;
+      const gCount = googleReviewCount.trim() ? Math.round(Number(googleReviewCount)) : null;
+      if (gRating != null && (!Number.isFinite(gRating) || gRating < 0 || gRating > 5)) {
+        throw new Error("Google rating must be between 0 and 5");
+      }
+      if (gCount != null && (!Number.isFinite(gCount) || gCount < 0)) {
+        throw new Error("Google review count must be a positive number");
+      }
+      const gUrl = googleUrl.trim();
+      if (gUrl && !/^https?:\/\//i.test(gUrl)) {
+        throw new Error("Google reviews URL must start with https://");
+      }
       const { error } = await supabase
         .from("contractor_profiles")
         .update({
@@ -227,6 +252,9 @@ export function ContractorServiceAreaCard() {
           is_directory_listed: published,
           directory_opt_in: published,
           tier: published ? "pro" : profile.tier ?? "guest",
+          google_reviews_url: gUrl || null,
+          google_rating: gRating,
+          google_review_count: gCount,
         })
         .eq("id", profile.id);
       if (error) throw error;
@@ -236,6 +264,7 @@ export function ContractorServiceAreaCard() {
       qc.invalidateQueries({ queryKey: ["my-contractor-profile"] });
       qc.invalidateQueries({ queryKey: ["contractor-directory"] });
     },
+
     onError: (e: any) =>
       toast({ title: "Couldn't save", description: e.message, variant: "destructive" }),
   });
@@ -453,6 +482,56 @@ export function ContractorServiceAreaCard() {
             <p className="text-[10px] text-muted-foreground text-right">{bio.length}/400</p>
           </div>
         </div>
+
+        {/* Google reviews */}
+        <div className="space-y-3 border-t border-border pt-4">
+          <div>
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+              <Star className="h-3 w-3" /> Google reviews (optional)
+            </Label>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Show your Google star rating on your Find-a-Pro card so homeowners see your reputation
+              instantly. Find these numbers on your Google Business Profile.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <div>
+              <Label className="text-[10px] text-muted-foreground">Rating (0–5)</Label>
+              <Input
+                value={googleRating}
+                onChange={(e) => setGoogleRating(e.target.value.replace(/[^0-9.]/g, "").slice(0, 3))}
+                className="h-9"
+                placeholder="4.8"
+                inputMode="decimal"
+              />
+            </div>
+            <div>
+              <Label className="text-[10px] text-muted-foreground">Review count</Label>
+              <Input
+                value={googleReviewCount}
+                onChange={(e) => setGoogleReviewCount(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                className="h-9"
+                placeholder="127"
+                inputMode="numeric"
+              />
+            </div>
+            <div className="md:col-span-1">
+              <Label className="text-[10px] text-muted-foreground">Reviews page URL</Label>
+              <Input
+                value={googleUrl}
+                onChange={(e) => setGoogleUrl(e.target.value.slice(0, 500))}
+                className="h-9"
+                placeholder="https://g.page/r/..."
+              />
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Tip: on Google Maps, open your business → "Reviews" tab → Share → copy link. Keeping these
+            numbers current is on you (there's no live sync).
+          </p>
+        </div>
+
+
 
 
         {/* ZIP prefixes */}
