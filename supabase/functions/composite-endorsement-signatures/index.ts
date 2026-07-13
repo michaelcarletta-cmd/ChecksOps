@@ -68,6 +68,43 @@ async function maybeDownscaleForRaster(
   }
 }
 
+async function maybeNormalizeSignatureDataUrl(
+  bytes: Uint8Array,
+  contentType: string,
+): Promise<{ dataUrl: string; normalized: boolean }> {
+  const lib = await loadImageScript();
+  if (!lib) {
+    return { dataUrl: `data:${contentType};base64,${uint8ToBase64(bytes)}`, normalized: false };
+  }
+
+  try {
+    const decoded = await lib.Image.decode(bytes);
+    const pixels = decoded.width * decoded.height;
+    const longest = Math.max(decoded.width, decoded.height);
+
+    if (pixels <= MAX_SIGNATURE_PIXELS && longest <= MAX_SIGNATURE_LONG_EDGE) {
+      return { dataUrl: `data:${contentType};base64,${uint8ToBase64(bytes)}`, normalized: false };
+    }
+
+    const pixelRatio = Math.sqrt(MAX_SIGNATURE_PIXELS / pixels);
+    const edgeRatio = MAX_SIGNATURE_LONG_EDGE / longest;
+    const ratio = Math.min(1, pixelRatio, edgeRatio);
+    const targetW = Math.max(1, Math.floor(decoded.width * ratio));
+    const targetH = Math.max(1, Math.floor(decoded.height * ratio));
+
+    decoded.resize(targetW, targetH);
+    const encoded = await decoded.encodePNG();
+    console.log(
+      `[COMPOSITE] normalized signature asset ${decoded.width}x${decoded.height} (${pixels}px) -> ${targetW}x${targetH} (${targetW * targetH}px), ${bytes.length}B -> ${encoded.length}B`,
+    );
+
+    return { dataUrl: `data:image/png;base64,${uint8ToBase64(encoded)}`, normalized: true };
+  } catch (e) {
+    console.warn("[COMPOSITE] signature normalization skipped:", e);
+    return { dataUrl: `data:${contentType};base64,${uint8ToBase64(bytes)}`, normalized: false };
+  }
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -912,7 +949,11 @@ function resolvePreferredSignatureRefs(record: EndorsementRecord) {
 }
 
 async function loadSignatureDataUrl(supabase: any, signatureRef: string): Promise<string | null> {
-  if (signatureRef.startsWith("data:image/")) return signatureRef;
+  if (signatureRef.startsWith("data:image/")) {
+    const parsed = parseImageDataUrl(signatureRef);
+    if (!parsed) return signatureRef;
+    return (await maybeNormalizeSignatureDataUrl(parsed.bytes, parsed.contentType)).dataUrl;
+  }
 
   let blob: Blob | null = null;
 
@@ -930,7 +971,27 @@ async function loadSignatureDataUrl(supabase: any, signatureRef: string): Promis
 
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const contentType = blob.type || inferImageContentType(signatureRef);
-  return `data:${contentType};base64,${uint8ToBase64(bytes)}`;
+  return (await maybeNormalizeSignatureDataUrl(bytes, contentType)).dataUrl;
+}
+
+function parseImageDataUrl(value: string): { contentType: string; bytes: Uint8Array } | null {
+  const match = value.match(/^data:(image\/[^;,]+);base64,(.+)$/s);
+  if (!match) return null;
+
+  const binary = atob(match[2]);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  return { contentType: match[1], bytes };
+}
+
+function describeSignatureRef(value: string | null | undefined) {
+  if (!value) return null;
+  if (value.startsWith("data:image/")) return "inline-data-url";
+  if (isHttpUrl(value)) return "remote-url";
+  return value;
 }
 
 function inferImageContentType(path: string) {
