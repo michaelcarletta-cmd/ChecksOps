@@ -4,7 +4,8 @@ import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RotateCcw, Save, AlertCircle, ShieldCheck } from "lucide-react";
+import { RotateCcw, Save, AlertCircle, ShieldCheck, Wand2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import {
   clampEndorsementOverride,
   DEFAULT_ENDORSEMENT_OVERRIDE,
@@ -54,6 +55,7 @@ export function EndorsementAdjuster({
   const [activePointerId, setActivePointerId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [detecting, setDetecting] = useState(false);
   // Load real signed endorsement assets for this check
   const [signedEndorsements, setSignedEndorsements] = useState<SignedEndorsementAsset[]>([]);
   const [endorsementsLoading, setEndorsementsLoading] = useState(true);
@@ -305,6 +307,44 @@ export function EndorsementAdjuster({
     );
     setServerError(null);
   };
+
+  // Quick placement presets — xPct is full-image, yPct is safe-zone-relative
+  const applyPreset = (xPct: number, yPct: number) => {
+    setOverride((prev) => clampEndorsementOverride({ ...prev, xPct, yPct }));
+    setServerError(null);
+  };
+
+  const applySizePreset = (scale: number) => {
+    setOverride((prev) => clampEndorsementOverride({ ...prev, scale }));
+    setServerError(null);
+  };
+
+  const handleAutoDetect = async () => {
+    if (!imageUrl) return;
+    setDetecting(true);
+    setServerError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("detect-endorsement-zone", {
+        body: { imageUrl },
+      });
+      if (error) throw error;
+      if (!data?.detected || !data?.suggested) {
+        toast.error("Couldn't detect the endorsement box. Use presets or drag manually.");
+        return;
+      }
+      const { xPct, yPct, scale } = data.suggested;
+      setOverride((prev) =>
+        clampEndorsementOverride({ ...prev, xPct, yPct, scale, rotationDeg: 0 }),
+      );
+      toast.success("Endorsement zone detected — position updated.");
+    } catch (err: any) {
+      console.error("[EndorsementAdjuster] auto-detect", err);
+      toast.error(err?.message || "Auto-detect failed.");
+    } finally {
+      setDetecting(false);
+    }
+  };
+
 
   // Use actual rendered DOM rect for overlay positioning
   const domRect = wrapRef.current?.getBoundingClientRect();
@@ -559,8 +599,81 @@ export function EndorsementAdjuster({
           <CardTitle className="text-sm">Adjust Endorsement</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Auto-detect + Quick placement */}
+          <div className="space-y-2 rounded-md border border-border/60 bg-muted/30 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-foreground">Easy Placement</p>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleAutoDetect}
+                disabled={detecting || !imageUrl}
+              >
+                {detecting ? (
+                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                ) : (
+                  <Wand2 className="h-3 w-3 mr-1" />
+                )}
+                {detecting ? "Detecting..." : "Auto-Detect Zone"}
+              </Button>
+            </div>
+
+            {/* 3x3 position grid */}
+            <div>
+              <p className="text-[10px] text-muted-foreground mb-1">Position</p>
+              <div className="grid grid-cols-3 gap-1 max-w-[220px]">
+                {[
+                  { label: "↖", x: 0.22, y: 0.15 },
+                  { label: "↑",  x: 0.50, y: 0.15 },
+                  { label: "↗", x: 0.78, y: 0.15 },
+                  { label: "←", x: 0.22, y: 0.50 },
+                  { label: "•",  x: 0.50, y: 0.50 },
+                  { label: "→", x: 0.78, y: 0.50 },
+                  { label: "↙", x: 0.22, y: 0.85 },
+                  { label: "↓", x: 0.50, y: 0.85 },
+                  { label: "↘", x: 0.78, y: 0.85 },
+                ].map((p) => (
+                  <Button
+                    key={p.label}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-base"
+                    onClick={() => applyPreset(p.x, p.y)}
+                    title={`Move to ${p.label}`}
+                  >
+                    {p.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Size presets */}
+            <div>
+              <p className="text-[10px] text-muted-foreground mb-1">Size</p>
+              <div className="flex flex-wrap gap-1">
+                {[
+                  { label: "S", scale: 0.7 },
+                  { label: "M", scale: 1.0 },
+                  { label: "L", scale: 1.3 },
+                  { label: "XL", scale: 1.6 },
+                ].map((s) => (
+                  <Button
+                    key={s.label}
+                    variant={Math.abs((override.scale ?? 1) - s.scale) < 0.05 ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 px-3 text-xs"
+                    onClick={() => applySizePreset(s.scale)}
+                  >
+                    {s.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {/* D-pad nudge buttons */}
           <div className="grid grid-cols-3 gap-2">
+
             <div />
             <Button
               variant="outline"
