@@ -5,9 +5,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Link2, Loader2, CheckCircle2 } from "lucide-react";
+import { Link2, Loader2, CheckCircle2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
+import { Badge } from "@/components/ui/badge";
 
 type Props = {
   leadId: string;
