@@ -5,7 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Link2, Loader2, CheckCircle2 } from "lucide-react";
+import { Link2, Loader2, CheckCircle2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 
@@ -31,6 +31,28 @@ export function LinkCheckToLeadButton({ leadId, leadClaimNumber }: Props) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
+
+  const { data: linkedChecks } = useQuery({
+    queryKey: ["intake-checks-linked-to-lead", leadId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("check_intake_items")
+        .select(
+          "id, amount, check_number, carrier_name, detected_claim_number, freedom_claim_number, check_stage, created_at, lead_id",
+        )
+        .eq("lead_id", leadId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as CheckRow[];
+    },
+  });
+
+  const linkedCheck = (linkedChecks ?? [])[0] ?? null;
+  const linkedClaimNumber =
+    linkedCheck?.freedom_claim_number ||
+    linkedCheck?.detected_claim_number ||
+    leadClaimNumber ||
+    null;
 
   const { data: checks, isLoading } = useQuery({
     queryKey: ["intake-checks-for-lead-picker"],
@@ -70,6 +92,8 @@ export function LinkCheckToLeadButton({ leadId, leadClaimNumber }: Props) {
       if (error) throw error;
       toast.success(unlink ? "Check unlinked" : "Check linked to lead");
       qc.invalidateQueries({ queryKey: ["intake-checks-for-lead-picker"] });
+      qc.invalidateQueries({ queryKey: ["intake-checks-linked-to-lead", leadId] });
+      if (unlink) setOpen(false);
     } catch (e: any) {
       toast.error(e.message ?? "Could not update");
     } finally {
@@ -80,9 +104,21 @@ export function LinkCheckToLeadButton({ leadId, leadClaimNumber }: Props) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button size="sm" variant="outline" className="h-7 text-xs">
-          <Link2 className="h-3 w-3 mr-1" /> Link check
-        </Button>
+        {linkedCheck ? (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1 border-emerald-500/40 text-emerald-300 hover:text-emerald-200"
+          >
+            <CheckCircle2 className="h-3 w-3" />
+            Check linked to Claim{linkedClaimNumber ? ` #${linkedClaimNumber}` : ""}
+            <Pencil className="h-3 w-3 ml-1 opacity-70" />
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" className="h-7 text-xs">
+            <Link2 className="h-3 w-3 mr-1" /> Link check
+          </Button>
+        )}
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[360px] p-3 space-y-2">
         <div className="text-xs text-muted-foreground">
