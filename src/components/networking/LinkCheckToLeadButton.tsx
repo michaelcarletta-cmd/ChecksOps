@@ -32,6 +32,28 @@ export function LinkCheckToLeadButton({ leadId, leadClaimNumber }: Props) {
   const [q, setQ] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
 
+  const { data: linkedChecks } = useQuery({
+    queryKey: ["intake-checks-linked-to-lead", leadId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("check_intake_items")
+        .select(
+          "id, amount, check_number, carrier_name, detected_claim_number, freedom_claim_number, check_stage, created_at, lead_id",
+        )
+        .eq("lead_id", leadId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as CheckRow[];
+    },
+  });
+
+  const linkedCheck = (linkedChecks ?? [])[0] ?? null;
+  const linkedClaimNumber =
+    linkedCheck?.freedom_claim_number ||
+    linkedCheck?.detected_claim_number ||
+    leadClaimNumber ||
+    null;
+
   const { data: checks, isLoading } = useQuery({
     queryKey: ["intake-checks-for-lead-picker"],
     enabled: open,
