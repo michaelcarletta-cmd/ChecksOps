@@ -7,7 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature, ListTree } from "lucide-react";
+import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature, ListTree, HelpCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import {
   DndContext,
   closestCenter,
@@ -647,15 +648,33 @@ export default function Settings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">Manage your claim workflow and dropdown options</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold">Settings</h1>
+          <p className="text-muted-foreground">Manage your claim workflow and dropdown options</p>
+        </div>
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-primary"
+              aria-label="Open ChecksOps Guide"
+              title="ChecksOps Guide — Help"
+            >
+              <HelpCircle className="h-5 w-5" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+            <CheckCenterHelpPanel />
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Tabs defaultValue="workflow" className="space-y-6">
         <TabsList className="flex flex-col md:flex-row md:flex-wrap h-auto w-full bg-muted/40 p-2 gap-1">
           <TabsTrigger value="profile" className="w-full md:w-auto justify-start text-base font-medium px-4">My Profile</TabsTrigger>
-          <TabsTrigger value="checks-guide" className="w-full md:w-auto justify-start text-base font-medium px-4">ChecksOps Guide</TabsTrigger>
+          
           <TabsTrigger value="workflow" className="w-full md:w-auto justify-start text-base font-medium px-4">Workflow Management</TabsTrigger>
           <TabsTrigger value="users" className="w-full md:w-auto justify-start text-base font-medium px-4">User Management</TabsTrigger>
           <TabsTrigger value="automations" className="w-full md:w-auto justify-start text-base font-medium px-4">Automations</TabsTrigger>
