@@ -224,9 +224,7 @@ export function WhiteLabelSettings() {
           )}
 
 
-          <TabsContent value="guide">
-            <CheckCenterHelpPanel />
-          </TabsContent>
+
 
           <TabsContent value="directory" className="space-y-4">
             <Card>
