@@ -43,9 +43,8 @@ type PublicContractor = {
   verified: boolean;
   distance_miles?: number | null;
   zip_prefix_match?: boolean;
-  google_rating?: number | null;
-  google_review_count?: number | null;
   google_reviews_url?: string | null;
+
 };
 
 
@@ -280,7 +279,8 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge className="gap-1"><Crosshair className="h-3 w-3" strokeWidth={2.5} /> Verified by ChecksOps</Badge>
                   <RatingBadge rating={selected.avg_rating} count={selected.review_count} />
-                  <GoogleRatingBadge rating={selected.google_rating} count={selected.google_review_count} url={selected.google_reviews_url} size="md" />
+                  <GoogleReviewsLink url={selected.google_reviews_url} size="md" />
+
 
                 </div>
                 {selected.bio && <p className="text-sm text-muted-foreground">{selected.bio}</p>}
@@ -355,7 +355,8 @@ function ContractorCard({ c, onClick }: { c: PublicContractor; onClick: () => vo
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <RatingBadge rating={c.avg_rating} count={c.review_count} />
-          <GoogleRatingBadge rating={c.google_rating} count={c.google_review_count} url={c.google_reviews_url} />
+          <GoogleReviewsLink url={c.google_reviews_url} />
+
 
           {local && <Badge variant="secondary" className="text-xs gap-1"><MapPin className="h-3 w-3" /> Serves your area</Badge>}
         </div>
@@ -387,38 +388,28 @@ function RatingBadge({ rating, count }: { rating: number | null; count: number |
   );
 }
 
-function GoogleRatingBadge({
-  rating, count, url, size = "sm",
-}: { rating?: number | null; count?: number | null; url?: string | null; size?: "sm" | "md" }) {
-  if (!rating || !count) return null;
-  const content = (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 ${
-        size === "md" ? "py-1 text-sm" : "py-0.5 text-xs"
-      } hover:border-primary transition-colors`}
-      title="Google Reviews"
+function GoogleReviewsLink({
+  url, size = "sm",
+}: { url?: string | null; size?: "sm" | "md" }) {
+  if (!url) return null;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer nofollow"
+      onClick={(e) => e.stopPropagation()}
+      aria-label="View Google reviews"
+      className={`inline-flex items-center gap-1.5 rounded-full border border-border bg-background hover:border-primary transition-colors ${
+        size === "md" ? "px-3 py-1 text-sm" : "px-2 py-0.5 text-xs"
+      }`}
+      title="Opens Google Reviews in a new tab"
     >
       <span className="font-semibold" style={{ color: "#4285F4" }}>G</span>
-      <Star className={`${size === "md" ? "h-3.5 w-3.5" : "h-3 w-3"} fill-yellow-500 text-yellow-500`} />
-      <span className="font-medium">{Number(rating).toFixed(1)}</span>
-      <span className="text-muted-foreground">({count})</span>
-    </span>
+      <span>View Google Reviews</span>
+    </a>
   );
-  if (url) {
-    return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer nofollow"
-        onClick={(e) => e.stopPropagation()}
-        aria-label="View Google reviews"
-      >
-        {content}
-      </a>
-    );
-  }
-  return content;
 }
+
 
 
 function TrustStrip() {

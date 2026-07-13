@@ -107,8 +107,6 @@ export function ContractorServiceAreaCard() {
   const [businessName, setBusinessName] = useState("");
   const [published, setPublished] = useState(false);
   const [googleUrl, setGoogleUrl] = useState("");
-  const [googleRating, setGoogleRating] = useState<string>("");
-  const [googleReviewCount, setGoogleReviewCount] = useState<string>("");
 
   useEffect(() => {
     if (profile) {
@@ -122,10 +120,9 @@ export function ContractorServiceAreaCard() {
       setBusinessName(profile.display_name ?? "");
       setPublished(!!(profile.is_directory_listed && profile.directory_opt_in));
       setGoogleUrl(profile.google_reviews_url ?? "");
-      setGoogleRating(profile.google_rating != null ? String(profile.google_rating) : "");
-      setGoogleReviewCount(profile.google_review_count != null ? String(profile.google_review_count) : "");
     }
   }, [profile]);
+
 
 
   const addPrefix = () => {
@@ -226,14 +223,6 @@ export function ContractorServiceAreaCard() {
       if (published && cleanName.length < 2) {
         throw new Error("Enter your business name before publishing");
       }
-      const gRating = googleRating.trim() ? Number(googleRating) : null;
-      const gCount = googleReviewCount.trim() ? Math.round(Number(googleReviewCount)) : null;
-      if (gRating != null && (!Number.isFinite(gRating) || gRating < 0 || gRating > 5)) {
-        throw new Error("Google rating must be between 0 and 5");
-      }
-      if (gCount != null && (!Number.isFinite(gCount) || gCount < 0)) {
-        throw new Error("Google review count must be a positive number");
-      }
       const gUrl = googleUrl.trim();
       if (gUrl && !/^https?:\/\//i.test(gUrl)) {
         throw new Error("Google reviews URL must start with https://");
@@ -253,9 +242,8 @@ export function ContractorServiceAreaCard() {
           directory_opt_in: published,
           tier: published ? "pro" : profile.tier ?? "guest",
           google_reviews_url: gUrl || null,
-          google_rating: gRating,
-          google_review_count: gCount,
         })
+
         .eq("id", profile.id);
       if (error) throw error;
     },
@@ -483,53 +471,27 @@ export function ContractorServiceAreaCard() {
           </div>
         </div>
 
-        {/* Google reviews */}
-        <div className="space-y-3 border-t border-border pt-4">
-          <div>
-            <Label className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-1">
-              <Star className="h-3 w-3" /> Google reviews (optional)
-            </Label>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              Show your Google star rating on your Find-a-Pro card so homeowners see your reputation
-              instantly. Find these numbers on your Google Business Profile.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-            <div>
-              <Label className="text-[10px] text-muted-foreground">Rating (0–5)</Label>
-              <Input
-                value={googleRating}
-                onChange={(e) => setGoogleRating(e.target.value.replace(/[^0-9.]/g, "").slice(0, 3))}
-                className="h-9"
-                placeholder="4.8"
-                inputMode="decimal"
-              />
-            </div>
-            <div>
-              <Label className="text-[10px] text-muted-foreground">Review count</Label>
-              <Input
-                value={googleReviewCount}
-                onChange={(e) => setGoogleReviewCount(e.target.value.replace(/\D/g, "").slice(0, 5))}
-                className="h-9"
-                placeholder="127"
-                inputMode="numeric"
-              />
-            </div>
-            <div className="md:col-span-1">
-              <Label className="text-[10px] text-muted-foreground">Reviews page URL</Label>
-              <Input
-                value={googleUrl}
-                onChange={(e) => setGoogleUrl(e.target.value.slice(0, 500))}
-                className="h-9"
-                placeholder="https://g.page/r/..."
-              />
-            </div>
-          </div>
+        {/* Google reviews link */}
+        <div className="space-y-2 border-t border-border pt-4">
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+            <Star className="h-3 w-3" /> Google reviews link (optional)
+          </Label>
+          <p className="text-[11px] text-muted-foreground">
+            Paste the link to your Google Business Profile reviews. Homeowners see a "View Google
+            Reviews" button on your Find-a-Pro card that opens Google directly — your real,
+            up-to-date rating shows there. You can't set your own star rating here.
+          </p>
+          <Input
+            value={googleUrl}
+            onChange={(e) => setGoogleUrl(e.target.value.slice(0, 500))}
+            className="h-9"
+            placeholder="https://g.page/r/..."
+          />
           <p className="text-[10px] text-muted-foreground">
-            Tip: on Google Maps, open your business → "Reviews" tab → Share → copy link. Keeping these
-            numbers current is on you (there's no live sync).
+            Tip: on Google Maps, open your business → "Reviews" tab → Share → copy link.
           </p>
         </div>
+
 
 
 
