@@ -79,6 +79,8 @@ async function maybeNormalizeSignatureDataUrl(
 
   try {
     const decoded = await lib.Image.decode(bytes);
+    const originalWidth = decoded.width;
+    const originalHeight = decoded.height;
     const pixels = decoded.width * decoded.height;
     const longest = Math.max(decoded.width, decoded.height);
 
@@ -95,7 +97,7 @@ async function maybeNormalizeSignatureDataUrl(
     decoded.resize(targetW, targetH);
     const encoded = await decoded.encodePNG();
     console.log(
-      `[COMPOSITE] normalized signature asset ${decoded.width}x${decoded.height} (${pixels}px) -> ${targetW}x${targetH} (${targetW * targetH}px), ${bytes.length}B -> ${encoded.length}B`,
+      `[COMPOSITE] normalized signature asset ${originalWidth}x${originalHeight} (${pixels}px) -> ${targetW}x${targetH} (${targetW * targetH}px), ${bytes.length}B -> ${encoded.length}B`,
     );
 
     return { dataUrl: `data:image/png;base64,${uint8ToBase64(encoded)}`, normalized: true };
