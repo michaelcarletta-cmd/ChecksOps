@@ -17,7 +17,9 @@ const PUBLIC_FIELDS = [
   "id", "display_name", "bio", "trades", "service_states",
   "service_zip_prefixes", "service_radius_miles",
   "tier", "avg_rating", "review_count", "jobs_count", "created_at",
+  "google_rating", "google_review_count", "google_reviews_url",
 ] as const;
+
 
 function sanitize(row: any) {
   const out: Record<string, any> = {};

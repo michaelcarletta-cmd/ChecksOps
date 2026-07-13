@@ -43,7 +43,11 @@ type PublicContractor = {
   verified: boolean;
   distance_miles?: number | null;
   zip_prefix_match?: boolean;
+  google_rating?: number | null;
+  google_review_count?: number | null;
+  google_reviews_url?: string | null;
 };
+
 
 type Review = { rating: number; comment: string | null; created_at: string };
 
