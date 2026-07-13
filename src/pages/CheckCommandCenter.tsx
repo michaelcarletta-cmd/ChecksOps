@@ -2817,6 +2817,7 @@ function CheckDetailPanel({
         endorsed_back_image_path?: string;
         output_format?: string;
         db_path_update_committed?: boolean;
+        image_dimensions?: { width?: number; height?: number };
       };
       if (payload.success === false) {
         const e = new Error(payload.error ?? "Final deposit image could not be generated");
@@ -2885,6 +2886,27 @@ function CheckDetailPanel({
         .createSignedUrl(compositedPath, 3600);
 
       if (signedErr) throw signedErr;
+
+      qc.setQueryData(["check-detail", checkId], (current: CheckItem | undefined) => (
+        current
+          ? {
+              ...current,
+              back_image_path: compositedPath,
+              endorsement_override: overrideData
+                ? (overrideData as unknown as Record<string, unknown>)
+                : current.endorsement_override,
+            }
+          : current
+      ));
+      if (signedData?.signedUrl) {
+        qc.setQueryData(["check-back-img", compositedPath], signedData.signedUrl);
+      }
+      if (payload.image_dimensions?.width && payload.image_dimensions?.height) {
+        setBackImageDimensions({
+          width: payload.image_dimensions.width,
+          height: payload.image_dimensions.height,
+        });
+      }
 
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
       qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
@@ -3668,7 +3690,10 @@ function CheckDetailPanel({
                           ));
                           // 2) Then generate final deposit image (forces re-composite with latest override)
                           console.log("[ENDORSEMENT-DEBUG] triggering composite regeneration");
-                          await ensureDepositReadyBackImage(ov);
+                          const generatedUrl = await ensureDepositReadyBackImage(ov);
+                          if (!generatedUrl) {
+                            throw new Error("The endorsement adjustment was saved, but the updated deposit image was not generated.");
+                          }
                           console.log("[ENDORSEMENT-DEBUG] composite regeneration complete, new composite generated");
                           toast({ title: "Endorsement saved & deposit image generated" });
                           setShowEndorsementAdjuster(false);
