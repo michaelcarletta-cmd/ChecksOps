@@ -723,9 +723,6 @@ export default function Settings() {
           <ProfileSettings />
         </TabsContent>
 
-        <TabsContent value="checks-guide" className="w-full">
-          <CheckCenterHelpPanel />
-        </TabsContent>
 
         <TabsContent value="referrals" className="w-full">
           <ReferralSettings />
