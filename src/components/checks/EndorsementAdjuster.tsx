@@ -108,21 +108,25 @@ export function EndorsementAdjuster({
   const ZONE_TOP_PCT = 0.15;
   const ZONE_BOTTOM_PCT = 0.92;
   const ENDORSEMENT_WIDTH_PCT = 0.22;
-  const MAX_RASTER_PIXELS = 2_000_000;
+  const MAX_RASTER_LONG_EDGE = 1200;
+  const MAX_RASTER_PIXELS = 1_200_000;
 
   // The backend compositor downscales oversized check photos before choosing
   // endorsement font/signature sizes. Mirror that here so the preview matches
   // the final saved image instead of using the raw phone-photo dimensions.
   const effectiveImageDimensions = useMemo(() => {
     const pixels = imageWidth * imageHeight;
-    if (!imageWidth || !imageHeight || pixels <= MAX_RASTER_PIXELS) {
+    const longest = Math.max(imageWidth, imageHeight);
+    if (!imageWidth || !imageHeight || (pixels <= MAX_RASTER_PIXELS && longest <= MAX_RASTER_LONG_EDGE)) {
       return { width: imageWidth, height: imageHeight };
     }
 
-    const ratio = Math.sqrt(MAX_RASTER_PIXELS / pixels);
+    const pixelRatio = Math.sqrt(MAX_RASTER_PIXELS / pixels);
+    const edgeRatio = MAX_RASTER_LONG_EDGE / longest;
+    const ratio = Math.min(1, pixelRatio, edgeRatio);
     return {
-      width: Math.max(800, Math.floor(imageWidth * ratio)),
-      height: Math.max(400, Math.floor(imageHeight * ratio)),
+      width: Math.max(1, Math.floor(imageWidth * ratio)),
+      height: Math.max(1, Math.floor(imageHeight * ratio)),
     };
   }, [imageWidth, imageHeight]);
 

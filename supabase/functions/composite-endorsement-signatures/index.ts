@@ -33,9 +33,11 @@ async function maybeDownscaleForRaster(
   width: number,
   height: number,
   maxPixels: number,
+  maxLongEdge: number,
 ): Promise<{ bytes: Uint8Array; width: number; height: number; downscaled: boolean }> {
   const pixels = width * height;
-  if (pixels <= maxPixels) {
+  const longest = Math.max(width, height);
+  if (pixels <= maxPixels && longest <= maxLongEdge) {
     return { bytes, width, height, downscaled: false };
   }
 
@@ -45,9 +47,11 @@ async function maybeDownscaleForRaster(
   }
 
   try {
-    const ratio = Math.sqrt(maxPixels / pixels);
-    const targetW = Math.max(800, Math.floor(width * ratio));
-    const targetH = Math.max(400, Math.floor(height * ratio));
+    const pixelRatio = Math.sqrt(maxPixels / pixels);
+    const edgeRatio = maxLongEdge / longest;
+    const ratio = Math.min(1, pixelRatio, edgeRatio);
+    const targetW = Math.max(1, Math.floor(width * ratio));
+    const targetH = Math.max(1, Math.floor(height * ratio));
 
     const decoded = await lib.Image.decode(bytes);
     decoded.resize(targetW, targetH);
@@ -64,6 +68,45 @@ async function maybeDownscaleForRaster(
   }
 }
 
+async function maybeNormalizeSignatureDataUrl(
+  bytes: Uint8Array,
+  contentType: string,
+): Promise<{ dataUrl: string; normalized: boolean }> {
+  const lib = await loadImageScript();
+  if (!lib) {
+    return { dataUrl: `data:${contentType};base64,${uint8ToBase64(bytes)}`, normalized: false };
+  }
+
+  try {
+    const decoded = await lib.Image.decode(bytes);
+    const originalWidth = decoded.width;
+    const originalHeight = decoded.height;
+    const pixels = decoded.width * decoded.height;
+    const longest = Math.max(decoded.width, decoded.height);
+
+    if (pixels <= MAX_SIGNATURE_PIXELS && longest <= MAX_SIGNATURE_LONG_EDGE) {
+      return { dataUrl: `data:${contentType};base64,${uint8ToBase64(bytes)}`, normalized: false };
+    }
+
+    const pixelRatio = Math.sqrt(MAX_SIGNATURE_PIXELS / pixels);
+    const edgeRatio = MAX_SIGNATURE_LONG_EDGE / longest;
+    const ratio = Math.min(1, pixelRatio, edgeRatio);
+    const targetW = Math.max(1, Math.floor(decoded.width * ratio));
+    const targetH = Math.max(1, Math.floor(decoded.height * ratio));
+
+    decoded.resize(targetW, targetH);
+    const encoded = await decoded.encodePNG();
+    console.log(
+      `[COMPOSITE] normalized signature asset ${originalWidth}x${originalHeight} (${pixels}px) -> ${targetW}x${targetH} (${targetW * targetH}px), ${bytes.length}B -> ${encoded.length}B`,
+    );
+
+    return { dataUrl: `data:image/png;base64,${uint8ToBase64(encoded)}`, normalized: true };
+  } catch (e) {
+    console.warn("[COMPOSITE] signature normalization skipped:", e);
+    return { dataUrl: `data:${contentType};base64,${uint8ToBase64(bytes)}`, normalized: false };
+  }
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -75,20 +118,14 @@ const ZONE_TOP_PCT = 0.15;
 const ZONE_BOTTOM_PCT = 0.92;
 const ENDORSEMENT_LEFT_PCT = 0.38;
 const ENDORSEMENT_WIDTH_PCT = 0.22;
-// Resvg rasterization on the edge runtime hits the per-invocation CPU
-// budget around the ~5 MP mark when the SVG also embeds a multi-MB
-// base64 source image and applies rotation/scale transforms (which is
-// the common deposit case). When we exceed this, the render technically
-// returns but the function is killed before the upload + DB commit can
-// finish — leaving the check with no endorsed back image and surfacing
-// the generic "Could not generate or find the final endorsed back image"
-// toast to the user. Cap conservatively so anything bigger falls back to
-// the SVG path (which embeds the original JPEG + signatures and renders
-// fine in the browser-based deposit viewer).
-// Keep rasterization below the edge CPU danger zone. Larger mobile captures use
-// SVG fallback and the UI renders those via <object>, preserving the full check
-// image while avoiding CPU kills during deposit preview generation.
-const MAX_RASTER_PIXELS = 2_000_000;
+// Keep endorsement compositing aligned with the CheckAlt submitter's 1200px
+// longest-edge normalization without changing CheckAlt's own sizing pipeline.
+// This avoids edge CPU kills on large phone captures while still producing a
+// raster JPEG/PNG that CheckAlt can decode and compress normally.
+const MAX_RASTER_LONG_EDGE = 1200;
+const MAX_RASTER_PIXELS = 1_200_000;
+const MAX_SIGNATURE_LONG_EDGE = 600;
+const MAX_SIGNATURE_PIXELS = 180_000;
 
 type OverrideShape = {
   xPct: number;
@@ -335,6 +372,7 @@ Deno.serve(async (req) => {
       rawDims.width,
       rawDims.height,
       MAX_RASTER_PIXELS,
+      MAX_RASTER_LONG_EDGE,
     );
     const originalBytes = downscaled.bytes;
     const imgWidth = downscaled.width;
@@ -378,7 +416,7 @@ Deno.serve(async (req) => {
         }
 
         console.log(
-          `[COMPOSITE] signature debug | payee=${endorsement.payee_name} | method=${endorsement.signature_method ?? "unknown"} | source=${finalSignatureRef ?? "typed-only"} | loaded=${signatureAssetLoaded}`,
+          `[COMPOSITE] signature debug | payee=${endorsement.payee_name} | method=${endorsement.signature_method ?? "unknown"} | source=${describeSignatureRef(finalSignatureRef) ?? "typed-only"} | loaded=${signatureAssetLoaded}`,
         );
 
         return {
@@ -721,7 +759,7 @@ async function uploadAndFinalize(
       signature_debug: endorsements.map((e) => ({
         payee_name: e.payee_name,
         signature_method: e.signature_method,
-        signature_source: e.finalSignatureRef,
+        signature_source: describeSignatureRef(e.finalSignatureRef),
         signature_asset_loaded: e.signatureAssetLoaded,
         typed_fallback_used: Boolean(e.typedSignatureText),
       })),
@@ -913,7 +951,11 @@ function resolvePreferredSignatureRefs(record: EndorsementRecord) {
 }
 
 async function loadSignatureDataUrl(supabase: any, signatureRef: string): Promise<string | null> {
-  if (signatureRef.startsWith("data:image/")) return signatureRef;
+  if (signatureRef.startsWith("data:image/")) {
+    const parsed = parseImageDataUrl(signatureRef);
+    if (!parsed) return signatureRef;
+    return (await maybeNormalizeSignatureDataUrl(parsed.bytes, parsed.contentType)).dataUrl;
+  }
 
   let blob: Blob | null = null;
 
@@ -931,7 +973,27 @@ async function loadSignatureDataUrl(supabase: any, signatureRef: string): Promis
 
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const contentType = blob.type || inferImageContentType(signatureRef);
-  return `data:${contentType};base64,${uint8ToBase64(bytes)}`;
+  return (await maybeNormalizeSignatureDataUrl(bytes, contentType)).dataUrl;
+}
+
+function parseImageDataUrl(value: string): { contentType: string; bytes: Uint8Array } | null {
+  const match = value.match(/^data:(image\/[^;,]+);base64,(.+)$/s);
+  if (!match) return null;
+
+  const binary = atob(match[2]);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  return { contentType: match[1], bytes };
+}
+
+function describeSignatureRef(value: string | null | undefined) {
+  if (!value) return null;
+  if (value.startsWith("data:image/")) return "inline-data-url";
+  if (isHttpUrl(value)) return "remote-url";
+  return value;
 }
 
 function inferImageContentType(path: string) {
