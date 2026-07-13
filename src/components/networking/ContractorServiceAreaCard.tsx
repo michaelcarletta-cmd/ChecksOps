@@ -25,7 +25,12 @@ type MyProfile = {
   is_directory_listed: boolean | null;
   directory_opt_in: boolean | null;
   tier: string | null;
+  google_business_name: string | null;
+  google_reviews_url: string | null;
+  google_rating: number | null;
+  google_review_count: number | null;
 };
+
 
 const US_STATES: { code: string; name: string }[] = [
   { code: "AL", name: "Alabama" }, { code: "AK", name: "Alaska" }, { code: "AZ", name: "Arizona" },
@@ -77,7 +82,7 @@ export function ContractorServiceAreaCard() {
       const { data, error } = await supabase
         .from("contractor_profiles")
         .select(
-          "id, display_name, bio, trades, service_zip_prefixes, service_states, home_base_lat, home_base_lng, service_radius_miles, is_directory_listed, directory_opt_in, tier",
+          "id, display_name, bio, trades, service_zip_prefixes, service_states, home_base_lat, home_base_lng, service_radius_miles, is_directory_listed, directory_opt_in, tier, google_business_name, google_reviews_url, google_rating, google_review_count",
         )
         .eq("user_id", user!.id)
         .maybeSingle();
@@ -85,6 +90,7 @@ export function ContractorServiceAreaCard() {
       return data as MyProfile | null;
     },
   });
+
 
   const [prefixes, setPrefixes] = useState<string[]>([]);
   const [newPrefix, setNewPrefix] = useState("");
@@ -100,6 +106,9 @@ export function ContractorServiceAreaCard() {
   const [bio, setBio] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [published, setPublished] = useState(false);
+  const [googleUrl, setGoogleUrl] = useState("");
+  const [googleRating, setGoogleRating] = useState<string>("");
+  const [googleReviewCount, setGoogleReviewCount] = useState<string>("");
 
   useEffect(() => {
     if (profile) {
@@ -112,8 +121,12 @@ export function ContractorServiceAreaCard() {
       setBio(profile.bio ?? "");
       setBusinessName(profile.display_name ?? "");
       setPublished(!!(profile.is_directory_listed && profile.directory_opt_in));
+      setGoogleUrl(profile.google_reviews_url ?? "");
+      setGoogleRating(profile.google_rating != null ? String(profile.google_rating) : "");
+      setGoogleReviewCount(profile.google_review_count != null ? String(profile.google_review_count) : "");
     }
   }, [profile]);
+
 
   const addPrefix = () => {
     const p = newPrefix.trim();
@@ -213,6 +226,18 @@ export function ContractorServiceAreaCard() {
       if (published && cleanName.length < 2) {
         throw new Error("Enter your business name before publishing");
       }
+      const gRating = googleRating.trim() ? Number(googleRating) : null;
+      const gCount = googleReviewCount.trim() ? Math.round(Number(googleReviewCount)) : null;
+      if (gRating != null && (!Number.isFinite(gRating) || gRating < 0 || gRating > 5)) {
+        throw new Error("Google rating must be between 0 and 5");
+      }
+      if (gCount != null && (!Number.isFinite(gCount) || gCount < 0)) {
+        throw new Error("Google review count must be a positive number");
+      }
+      const gUrl = googleUrl.trim();
+      if (gUrl && !/^https?:\/\//i.test(gUrl)) {
+        throw new Error("Google reviews URL must start with https://");
+      }
       const { error } = await supabase
         .from("contractor_profiles")
         .update({
@@ -227,6 +252,9 @@ export function ContractorServiceAreaCard() {
           is_directory_listed: published,
           directory_opt_in: published,
           tier: published ? "pro" : profile.tier ?? "guest",
+          google_reviews_url: gUrl || null,
+          google_rating: gRating,
+          google_review_count: gCount,
         })
         .eq("id", profile.id);
       if (error) throw error;
@@ -236,6 +264,7 @@ export function ContractorServiceAreaCard() {
       qc.invalidateQueries({ queryKey: ["my-contractor-profile"] });
       qc.invalidateQueries({ queryKey: ["contractor-directory"] });
     },
+
     onError: (e: any) =>
       toast({ title: "Couldn't save", description: e.message, variant: "destructive" }),
   });
