@@ -2763,14 +2763,14 @@ function CheckDetailPanel({
     return () => clearTimeout(timer);
   }, [check?.status, branchApprovedAt]);
 
-  const ensureDepositReadyBackImage = async () => {
+  const ensureDepositReadyBackImage = async (overrideData?: EndorsementOverride | null) => {
     if (!check?.id || !check.back_image_path) return backImageUrl ?? null;
 
     setPreparingDepositPrint(true);
     try {
       const { data: session } = await supabase.auth.getSession();
       const { data, error } = await supabase.functions.invoke("composite-endorsement-signatures", {
-        body: { checkId: check.id },
+        body: { checkId: check.id, overrideData: overrideData ?? undefined },
         headers: session.session?.access_token
           ? { Authorization: `Bearer ${session.session.access_token}` }
           : undefined,
@@ -3615,7 +3615,7 @@ function CheckDetailPanel({
                         ));
 
                         try {
-                          await ensureDepositReadyBackImage();
+                           await ensureDepositReadyBackImage(nextOverride);
                         } catch (error) {
                           console.error("[CHECK-EXPORT] regenerate after pay-to-order toggle failed", error);
                         }
@@ -3668,7 +3668,7 @@ function CheckDetailPanel({
                           ));
                           // 2) Then generate final deposit image (forces re-composite with latest override)
                           console.log("[ENDORSEMENT-DEBUG] triggering composite regeneration");
-                          await ensureDepositReadyBackImage();
+                          await ensureDepositReadyBackImage(ov);
                           console.log("[ENDORSEMENT-DEBUG] composite regeneration complete, new composite generated");
                           toast({ title: "Endorsement saved & deposit image generated" });
                           setShowEndorsementAdjuster(false);
