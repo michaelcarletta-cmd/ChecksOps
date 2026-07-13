@@ -308,6 +308,44 @@ export function EndorsementAdjuster({
     setServerError(null);
   };
 
+  // Quick placement presets — xPct is full-image, yPct is safe-zone-relative
+  const applyPreset = (xPct: number, yPct: number) => {
+    setOverride((prev) => clampEndorsementOverride({ ...prev, xPct, yPct }));
+    setServerError(null);
+  };
+
+  const applySizePreset = (scale: number) => {
+    setOverride((prev) => clampEndorsementOverride({ ...prev, scale }));
+    setServerError(null);
+  };
+
+  const handleAutoDetect = async () => {
+    if (!imageUrl) return;
+    setDetecting(true);
+    setServerError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("detect-endorsement-zone", {
+        body: { imageUrl },
+      });
+      if (error) throw error;
+      if (!data?.detected || !data?.suggested) {
+        toast.error("Couldn't detect the endorsement box. Use presets or drag manually.");
+        return;
+      }
+      const { xPct, yPct, scale } = data.suggested;
+      setOverride((prev) =>
+        clampEndorsementOverride({ ...prev, xPct, yPct, scale, rotationDeg: 0 }),
+      );
+      toast.success("Endorsement zone detected — position updated.");
+    } catch (err: any) {
+      console.error("[EndorsementAdjuster] auto-detect", err);
+      toast.error(err?.message || "Auto-detect failed.");
+    } finally {
+      setDetecting(false);
+    }
+  };
+
+
   // Use actual rendered DOM rect for overlay positioning
   const domRect = wrapRef.current?.getBoundingClientRect();
   const containerWidthPx = domRect?.width ?? imageWidth;
