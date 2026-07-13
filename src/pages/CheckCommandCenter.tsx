@@ -2301,6 +2301,11 @@ function CheckDetailPanel({
   }, [checkId, qc]);
   const savedOverride = (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null;
   const showPayToOrder = savedOverride?.showPayToOrder ?? false;
+  // Ownership: only the tenant that uploaded the check can edit it. Partners with whom
+  // the check is shared are strictly read-only.
+  const checkOwnerTenantId = (check as any)?.tenant_id as string | null | undefined;
+  const isOwner = !!tenantId && !!checkOwnerTenantId && tenantId === checkOwnerTenantId;
+  const isSharedView = !!check && !isOwner;
 
   const { data: frontImageUrl } = useQuery({
     queryKey: ["check-front-img", check?.front_image_path],
@@ -2547,13 +2552,6 @@ function CheckDetailPanel({
   }, []);
 
   const canUndo = check && ['branch_deposit_required', 'approved_for_deposit', 'loss_draft_required', 'reissue_requested'].includes(check.status) && check.status !== 'deposited';
-
-  // Ownership: only the tenant that uploaded the check can edit it. Partners with whom
-  // the check is shared are strictly read-only (they can still upload loss-draft docs
-  // elsewhere in the UI, but cannot mutate the check or its payees).
-  const checkOwnerTenantId = (check as any)?.tenant_id as string | null | undefined;
-  const isOwner = !!tenantId && !!checkOwnerTenantId && tenantId === checkOwnerTenantId;
-  const isSharedView = !!check && !isOwner;
 
   const handleBypassEndorsements = async () => {
     if (!user?.id || !check) return;
