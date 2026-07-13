@@ -128,6 +128,16 @@ export function WhiteLabelSettings() {
           <span className="text-sm font-medium">{tenant?.name || "Settings"}</span>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="ghost" size="icon" title="ChecksOps Guide" aria-label="Open ChecksOps Guide">
+                <HelpCircle className="h-4 w-4" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+              <CheckCenterHelpPanel />
+            </DialogContent>
+          </Dialog>
           <Button variant="ghost" size="sm" asChild>
             <Link to={`${tenantBase}/checks`}>
               <ArrowLeft className="h-4 w-4 mr-1" /> Back to Checks
