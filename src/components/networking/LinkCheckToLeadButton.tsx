@@ -94,6 +94,8 @@ export function LinkCheckToLeadButton({ leadId, leadClaimNumber }: Props) {
       qc.invalidateQueries({ queryKey: ["intake-checks-for-lead-picker"] });
       qc.invalidateQueries({ queryKey: ["intake-checks-linked-to-lead", leadId] });
       if (unlink) setOpen(false);
+    } catch (e: any) {
+      toast.error(e.message ?? "Could not update");
     } finally {
       setSaving(null);
     }
