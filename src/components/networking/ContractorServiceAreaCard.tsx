@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, MapPin, Save, Plus, X, Crosshair, Wrench, Globe, Sparkles } from "lucide-react";
+import { Loader2, MapPin, Save, Plus, X, Crosshair, Wrench, Globe, Sparkles, Star } from "lucide-react";
 
 type MyProfile = {
   id: string;
