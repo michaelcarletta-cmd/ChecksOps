@@ -108,6 +108,25 @@ export function EndorsementAdjuster({
   const ZONE_TOP_PCT = 0.15;
   const ZONE_BOTTOM_PCT = 0.92;
   const ENDORSEMENT_WIDTH_PCT = 0.22;
+  const MAX_RASTER_PIXELS = 2_000_000;
+
+  // The backend compositor downscales oversized check photos before choosing
+  // endorsement font/signature sizes. Mirror that here so the preview matches
+  // the final saved image instead of using the raw phone-photo dimensions.
+  const effectiveImageDimensions = useMemo(() => {
+    const pixels = imageWidth * imageHeight;
+    if (!imageWidth || !imageHeight || pixels <= MAX_RASTER_PIXELS) {
+      return { width: imageWidth, height: imageHeight };
+    }
+
+    const ratio = Math.sqrt(MAX_RASTER_PIXELS / pixels);
+    return {
+      width: Math.max(800, Math.floor(imageWidth * ratio)),
+      height: Math.max(400, Math.floor(imageHeight * ratio)),
+    };
+  }, [imageWidth, imageHeight]);
+
+  const renderableSignerCount = visibleEndorsements.length || 1;
 
   // Use fitEndorsementLayout to size the on-screen preview text/signatures
   const previewLayout = useMemo(() => {
@@ -117,25 +136,25 @@ export function EndorsementAdjuster({
     // those same image-pixel units, not container/display pixels, or the
     // wrong preset gets selected and the block height (and thus the zone
     // overflow nudge) won't match the final composited result.
-    const safeZoneHeightImgPx = (ZONE_BOTTOM_PCT - ZONE_TOP_PCT) * imageHeight;
+    const safeZoneHeightImgPx = (ZONE_BOTTOM_PCT - ZONE_TOP_PCT) * effectiveImageDimensions.height;
     return fitEndorsementLayout({
-      signerCount: signedEndorsements.length || 1,
+      signerCount: renderableSignerCount,
       zoneHeightPx: safeZoneHeightImgPx,
       requestedScale: override.scale || 1,
     });
-  }, [imageWidth, imageHeight, override.scale, signedEndorsements.length]);
+  }, [effectiveImageDimensions.height, override.scale, renderableSignerCount]);
 
   // Separately, replicate the server compositor's preset selection (which
   // uses image-pixel zone height) purely to compute the same overflow nudge
   // it would apply, so the preview position matches the saved result.
   const serverMeasuredLayout = useMemo(() => {
-    const safeZoneHeightImgPx = (ZONE_BOTTOM_PCT - ZONE_TOP_PCT) * imageHeight;
+    const safeZoneHeightImgPx = (ZONE_BOTTOM_PCT - ZONE_TOP_PCT) * effectiveImageDimensions.height;
     return fitEndorsementLayout({
-      signerCount: signedEndorsements.length || 1,
+      signerCount: renderableSignerCount,
       zoneHeightPx: safeZoneHeightImgPx,
       requestedScale: override.scale || 1,
     });
-  }, [imageHeight, override.scale, signedEndorsements.length]);
+  }, [effectiveImageDimensions.height, override.scale, renderableSignerCount]);
 
   const runNextFrame = (fn: () => void) => {
     if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
@@ -287,7 +306,7 @@ export function EndorsementAdjuster({
   const domRect = wrapRef.current?.getBoundingClientRect();
   const containerWidthPx = domRect?.width ?? imageWidth;
   const containerHeightPx = domRect?.height ?? (imageWidth > 0 ? containerWidthPx * imageHeight / imageWidth : imageHeight);
-  const displayScale = containerWidthPx / imageWidth;
+  const displayScale = containerWidthPx / effectiveImageDimensions.width;
 
   // Zone-relative positioning — must match edge function exactly
   const safeZoneTopPx = ZONE_TOP_PCT * containerHeightPx;
@@ -303,6 +322,19 @@ export function EndorsementAdjuster({
   const sectionGapPx = Math.max(3, Math.round(lineGap * 2)) * displayScale;
   const lineGapPx = lineGap * displayScale;
   const sigHeightPx = signatureHeight * displayScale;
+  const effectiveBlockWidth = effectiveImageDimensions.width * ENDORSEMENT_WIDTH_PCT;
+  const effectiveClientColumnWidth = columns === 2 ? effectiveBlockWidth / 2 : effectiveBlockWidth;
+  const clientSignatureWidthPx = Math.round(
+    Math.min(effectiveClientColumnWidth - 20, Math.round(effectiveImageDimensions.height * 0.1)) * (override.scale || 1),
+  ) * displayScale;
+  const companySignatureWidthPx = Math.round(
+    Math.min(effectiveBlockWidth - 20, Math.round(effectiveImageDimensions.height * 0.1)) * (override.scale || 1),
+  ) * displayScale;
+
+  const clientRows: SignedEndorsementAsset[][] = [];
+  for (let i = 0; i < clientEndorsements.length; i += columns) {
+    clientRows.push(clientEndorsements.slice(i, i + columns));
+  }
 
   // Replicate the server's overflow nudge/clamp so the preview shows the
   // position that will actually be rendered onto the check, not just the
@@ -415,6 +447,7 @@ export function EndorsementAdjuster({
             cursor: dragging ? "grabbing" : "grab",
             opacity: dragging ? 0.92 : 1,
             zIndex: 20,
+            textAlign: "center",
           }}
         >
           {override.showPayToOrder && (
@@ -443,37 +476,40 @@ export function EndorsementAdjuster({
           )}
 
           {/* Client endorsement names from actual signed data */}
-          {clientEndorsements.map((endorsement) => {
-            const isInternalOnly = endorsement.signature_method === "internal" || endorsement.signature_method === "manual";
-            return (
-              <div key={endorsement.id}>
-                <div style={{ fontSize: byLineFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: isInternalOnly ? rowGap * displayScale : lineGapPx, color: "#111111" }}>
-                  {endorsement.payee_name}
-                  {isInternalOnly && (
-                    <span style={{ fontSize: byLineFontPx * 0.7, fontWeight: 400, marginLeft: 4 }}>(physical)</span>
-                  )}
-                </div>
-                {/* Only render electronic signature for portal-signed endorsements */}
-                {!isInternalOnly && (
-                  endorsement.signature_image_url && !endorsement.signature_image_url.startsWith("typed:") ? (
-                    <img
-                      src={endorsement.signature_image_url}
-                      alt={`${endorsement.payee_name} signature`}
-                      style={{ height: sigHeightPx, marginBottom: rowGap * displayScale }}
-                      className="object-contain"
-                      draggable={false}
-                    />
-                  ) : (
-                    <div style={{ fontSize: byLineFontPx, fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', marginBottom: rowGap * displayScale, color: "#111111" }}>
-                      {endorsement.signature_image_url?.startsWith("typed:")
-                        ? endorsement.signature_image_url.slice(6)
-                        : endorsement.payee_name}
+          {clientRows.map((row, rowIndex) => (
+            <div key={`row-${rowIndex}`} className="flex w-full" style={{ gap: columns === 2 ? lineGapPx : 0 }}>
+              {row.map((endorsement) => {
+                const isInternalOnly = endorsement.signature_method === "internal" || endorsement.signature_method === "manual";
+                return (
+                  <div key={endorsement.id} style={{ width: columns === 2 ? "50%" : "100%" }}>
+                    <div style={{ fontSize: byLineFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: isInternalOnly ? rowGap * displayScale : lineGapPx, color: "#111111" }}>
+                      {endorsement.payee_name}
+                      {isInternalOnly && (
+                        <span style={{ fontSize: byLineFontPx * 0.7, fontWeight: 400, marginLeft: 4 }}>(physical)</span>
+                      )}
                     </div>
-                  )
-                )}
-              </div>
-            );
-          })}
+                    {/* Only render electronic signature for portal-signed endorsements */}
+                    {!isInternalOnly && (
+                      endorsement.signature_image_url && !endorsement.signature_image_url.startsWith("typed:") ? (
+                        <img
+                          src={endorsement.signature_image_url}
+                          alt={`${endorsement.payee_name} signature`}
+                          style={{ height: sigHeightPx, width: clientSignatureWidthPx, margin: `0 auto ${rowGap * displayScale}px`, objectFit: "contain" }}
+                          draggable={false}
+                        />
+                      ) : (
+                        <div style={{ fontSize: byLineFontPx, fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', marginBottom: rowGap * displayScale, color: "#111111" }}>
+                          {endorsement.signature_image_url?.startsWith("typed:")
+                            ? endorsement.signature_image_url.slice(6)
+                            : endorsement.payee_name}
+                        </div>
+                      )
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
 
           {visibleCompanyEndorsement && (
             <>
@@ -489,8 +525,7 @@ export function EndorsementAdjuster({
                 <img
                   src={visibleCompanyEndorsement.signature_image_url}
                   alt={`${companyName} signature`}
-                  style={{ height: sigHeightPx }}
-                  className="object-contain"
+                  style={{ height: sigHeightPx, width: companySignatureWidthPx, margin: "0 auto", objectFit: "contain" }}
                   draggable={false}
                 />
               )}

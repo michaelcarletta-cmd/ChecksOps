@@ -2301,6 +2301,11 @@ function CheckDetailPanel({
   }, [checkId, qc]);
   const savedOverride = (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null;
   const showPayToOrder = savedOverride?.showPayToOrder ?? false;
+  // Ownership: only the tenant that uploaded the check can edit it. Partners with whom
+  // the check is shared are strictly read-only.
+  const checkOwnerTenantId = (check as any)?.tenant_id as string | null | undefined;
+  const isOwner = !!tenantId && !!checkOwnerTenantId && tenantId === checkOwnerTenantId;
+  const isSharedView = !!check && !isOwner;
 
   const { data: frontImageUrl } = useQuery({
     queryKey: ["check-front-img", check?.front_image_path],
@@ -2342,17 +2347,63 @@ function CheckDetailPanel({
     },
   });
 
+  const { data: endorsementAdjusterImageUrl } = useQuery({
+    queryKey: ["check-back-img-original-for-adjuster", check?.id, check?.back_image_path],
+    enabled: showEndorsementAdjuster && !!check?.id && !!check?.back_image_path && !isSharedView,
+    queryFn: async () => {
+      const currentPath = toStorageObjectPath(check!.back_image_path);
+      if (!currentPath) return backImageUrl ?? null;
+
+      let sourcePath = currentPath;
+      if (/_endorsed(?:_\d+)?\.[^.]+$/i.test(currentPath)) {
+        const { data: compositeAudits } = await supabase
+          .from("check_audit_log")
+          .select("event_data")
+          .eq("check_id", check!.id)
+          .eq("event_type", "endorsement_signatures_composited")
+          .order("created_at", { ascending: false })
+          .limit(25);
+
+        const matchingAudit = (compositeAudits ?? []).find((audit: any) => {
+          const eventData = audit?.event_data ?? {};
+          return eventData.endorsed_back_image_path === currentPath ||
+            eventData.composited_path === currentPath ||
+            eventData.composited_back_path === currentPath;
+        });
+
+        const auditData = (matchingAudit?.event_data ?? compositeAudits?.[0]?.event_data ?? null) as {
+          original_back_image_path?: string;
+          original_back_path?: string;
+        } | null;
+
+        sourcePath =
+          toStorageObjectPath(auditData?.original_back_image_path) ??
+          toStorageObjectPath(auditData?.original_back_path) ??
+          currentPath;
+      }
+
+      if (sourcePath === currentPath && backImageUrl) return backImageUrl;
+
+      const { data } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(sourcePath, 3600);
+      return data?.signedUrl ?? backImageUrl ?? null;
+    },
+  });
+
+  const endorsementAdjusterSourceUrl = endorsementAdjusterImageUrl ?? backImageUrl ?? null;
+
   useEffect(() => {
     setBackImageDimensions(null);
-    if (!backImageUrl) return;
+    if (!endorsementAdjusterSourceUrl) return;
     let cancelled = false;
     const img = new Image();
     img.onload = () => {
       if (!cancelled) setBackImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
     };
-    img.src = backImageUrl;
+    img.src = endorsementAdjusterSourceUrl;
     return () => { cancelled = true; };
-  }, [backImageUrl]);
+  }, [endorsementAdjusterSourceUrl]);
 
   useEffect(() => {
     setFrontImageDimensions(null);
@@ -2501,13 +2552,6 @@ function CheckDetailPanel({
   }, []);
 
   const canUndo = check && ['branch_deposit_required', 'approved_for_deposit', 'loss_draft_required', 'reissue_requested'].includes(check.status) && check.status !== 'deposited';
-
-  // Ownership: only the tenant that uploaded the check can edit it. Partners with whom
-  // the check is shared are strictly read-only (they can still upload loss-draft docs
-  // elsewhere in the UI, but cannot mutate the check or its payees).
-  const checkOwnerTenantId = (check as any)?.tenant_id as string | null | undefined;
-  const isOwner = !!tenantId && !!checkOwnerTenantId && tenantId === checkOwnerTenantId;
-  const isSharedView = !!check && !isOwner;
 
   const handleBypassEndorsements = async () => {
     if (!user?.id || !check) return;
@@ -2817,6 +2861,7 @@ function CheckDetailPanel({
         endorsed_back_image_path?: string;
         output_format?: string;
         db_path_update_committed?: boolean;
+        image_dimensions?: { width?: number; height?: number };
       };
       if (payload.success === false) {
         const e = new Error(payload.error ?? "Final deposit image could not be generated");
@@ -2886,9 +2931,31 @@ function CheckDetailPanel({
 
       if (signedErr) throw signedErr;
 
+      qc.setQueryData(["check-detail", checkId], (current: CheckItem | undefined) => (
+        current
+          ? {
+              ...current,
+              back_image_path: compositedPath,
+              endorsement_override: overrideData
+                ? (overrideData as unknown as Record<string, unknown>)
+                : current.endorsement_override,
+            }
+          : current
+      ));
+      if (signedData?.signedUrl) {
+        qc.setQueryData(["check-back-img", compositedPath], signedData.signedUrl);
+      }
+      if (payload.image_dimensions?.width && payload.image_dimensions?.height) {
+        setBackImageDimensions({
+          width: payload.image_dimensions.width,
+          height: payload.image_dimensions.height,
+        });
+      }
+
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
       qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
       qc.invalidateQueries({ queryKey: ["check-back-img"] });
+      qc.invalidateQueries({ queryKey: ["check-back-img-original-for-adjuster", checkId] });
       onRefresh();
 
       return signedData?.signedUrl ?? null;
@@ -3632,11 +3699,11 @@ function CheckDetailPanel({
                     </Button>
                   </div>
 
-                  {showEndorsementAdjuster && backImageUrl && backImageDimensions && (
+                  {showEndorsementAdjuster && endorsementAdjusterSourceUrl && backImageDimensions && (
                     <Suspense fallback={<TabLoader />}>
                       <EndorsementAdjuster
                         checkId={checkId}
-                        imageUrl={backImageUrl}
+                        imageUrl={endorsementAdjusterSourceUrl}
                         imageWidth={backImageDimensions.width}
                         imageHeight={backImageDimensions.height}
                         companyName={check?.external_origin?.tenant_name as string || "Freedom Adjustment"}
@@ -3668,7 +3735,10 @@ function CheckDetailPanel({
                           ));
                           // 2) Then generate final deposit image (forces re-composite with latest override)
                           console.log("[ENDORSEMENT-DEBUG] triggering composite regeneration");
-                          await ensureDepositReadyBackImage(ov);
+                          const generatedUrl = await ensureDepositReadyBackImage(ov);
+                          if (!generatedUrl) {
+                            throw new Error("The endorsement adjustment was saved, but the updated deposit image was not generated.");
+                          }
                           console.log("[ENDORSEMENT-DEBUG] composite regeneration complete, new composite generated");
                           toast({ title: "Endorsement saved & deposit image generated" });
                           setShowEndorsementAdjuster(false);
