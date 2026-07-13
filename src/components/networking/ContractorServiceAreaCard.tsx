@@ -107,8 +107,6 @@ export function ContractorServiceAreaCard() {
   const [businessName, setBusinessName] = useState("");
   const [published, setPublished] = useState(false);
   const [googleUrl, setGoogleUrl] = useState("");
-  const [googleRating, setGoogleRating] = useState<string>("");
-  const [googleReviewCount, setGoogleReviewCount] = useState<string>("");
 
   useEffect(() => {
     if (profile) {
@@ -122,10 +120,9 @@ export function ContractorServiceAreaCard() {
       setBusinessName(profile.display_name ?? "");
       setPublished(!!(profile.is_directory_listed && profile.directory_opt_in));
       setGoogleUrl(profile.google_reviews_url ?? "");
-      setGoogleRating(profile.google_rating != null ? String(profile.google_rating) : "");
-      setGoogleReviewCount(profile.google_review_count != null ? String(profile.google_review_count) : "");
     }
   }, [profile]);
+
 
 
   const addPrefix = () => {
@@ -226,14 +223,6 @@ export function ContractorServiceAreaCard() {
       if (published && cleanName.length < 2) {
         throw new Error("Enter your business name before publishing");
       }
-      const gRating = googleRating.trim() ? Number(googleRating) : null;
-      const gCount = googleReviewCount.trim() ? Math.round(Number(googleReviewCount)) : null;
-      if (gRating != null && (!Number.isFinite(gRating) || gRating < 0 || gRating > 5)) {
-        throw new Error("Google rating must be between 0 and 5");
-      }
-      if (gCount != null && (!Number.isFinite(gCount) || gCount < 0)) {
-        throw new Error("Google review count must be a positive number");
-      }
       const gUrl = googleUrl.trim();
       if (gUrl && !/^https?:\/\//i.test(gUrl)) {
         throw new Error("Google reviews URL must start with https://");
@@ -253,9 +242,8 @@ export function ContractorServiceAreaCard() {
           directory_opt_in: published,
           tier: published ? "pro" : profile.tier ?? "guest",
           google_reviews_url: gUrl || null,
-          google_rating: gRating,
-          google_review_count: gCount,
         })
+
         .eq("id", profile.id);
       if (error) throw error;
     },
