@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { 
   LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft,
   Loader2, Save, Trash2, Receipt, Banknote, KeyRound, HelpCircle,
