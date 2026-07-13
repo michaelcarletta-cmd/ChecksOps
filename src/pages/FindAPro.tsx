@@ -45,7 +45,6 @@ type PublicContractor = {
   zip_prefix_match?: boolean;
   google_reviews_url?: string | null;
 
-  google_reviews_url?: string | null;
 };
 
 
