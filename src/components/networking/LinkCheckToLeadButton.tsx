@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Link2, Loader2, CheckCircle2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
-import { Badge } from "@/components/ui/badge";
 
 type Props = {
   leadId: string;
