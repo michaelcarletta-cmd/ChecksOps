@@ -208,8 +208,11 @@ Deno.serve(async (req) => {
   const supabase: any = createClient(supabaseUrl, serviceKey);
 
   try {
-    const { checkId } = await req.json();
+    const { checkId, overrideData } = await req.json();
     if (!checkId) throw new Error("checkId is required");
+    if (overrideData) {
+      console.log("[COMPOSITE] overrideData supplied in request body:", JSON.stringify(overrideData));
+    }
 
     console.log(`[COMPOSITE] check id: ${checkId}`);
 
@@ -273,8 +276,9 @@ Deno.serve(async (req) => {
 
     console.log(`[COMPOSITE] back image path: ${backImagePath}`);
 
+    const overrideForAllowText = (overrideData ?? check.endorsement_override) as Partial<OverrideShape> | null;
     const allowTextOnly = Boolean(
-      (check.endorsement_override as Partial<OverrideShape> | null)?.showPayToOrder,
+      overrideForAllowText?.showPayToOrder,
     );
 
     // ── Strict endorsement fetch ──
@@ -339,8 +343,12 @@ Deno.serve(async (req) => {
       console.log(`[COMPOSITE] using downscaled dimensions: ${imgWidth}x${imgHeight}`);
     }
 
-    const rawOverride = (check.endorsement_override ?? null) as Partial<OverrideShape> | null;
-    console.log("[COMPOSITE] raw endorsement_override from DB:", JSON.stringify(rawOverride));
+    // Prefer overrideData from request body (avoids DB replication lag right after save).
+    const rawOverride = (overrideData ?? check.endorsement_override ?? null) as Partial<OverrideShape> | null;
+    console.log(
+      `[COMPOSITE] raw override source=${overrideData ? "request-body" : "db"}:`,
+      JSON.stringify(rawOverride),
+    );
     const appliedOverride: OverrideShape = {
       xPct: rawOverride?.xPct ?? ENDORSEMENT_LEFT_PCT,
       yPct: rawOverride?.yPct ?? 0.5,
