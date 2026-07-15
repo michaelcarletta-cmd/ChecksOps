@@ -15691,6 +15691,7 @@ export type Database = {
           homeowner_email: string | null
           homeowner_name: string | null
           homeowner_phone: string | null
+          homeowner_ssn_last_four: string | null
           id: string
           insurance_company: string | null
           loan_number: string | null
@@ -15725,6 +15726,7 @@ export type Database = {
           homeowner_email?: string | null
           homeowner_name?: string | null
           homeowner_phone?: string | null
+          homeowner_ssn_last_four?: string | null
           id?: string
           insurance_company?: string | null
           loan_number?: string | null
@@ -15759,6 +15761,7 @@ export type Database = {
           homeowner_email?: string | null
           homeowner_name?: string | null
           homeowner_phone?: string | null
+          homeowner_ssn_last_four?: string | null
           id?: string
           insurance_company?: string | null
           loan_number?: string | null
@@ -20713,6 +20716,7 @@ export type Database = {
           homeowner_email: string | null
           homeowner_name: string | null
           homeowner_phone: string | null
+          homeowner_ssn_last_four: string | null
           id: string
           insurance_company: string | null
           loan_number: string | null
@@ -22511,6 +22515,7 @@ export type Database = {
           homeowner_email: string | null
           homeowner_name: string | null
           homeowner_phone: string | null
+          homeowner_ssn_last_four: string | null
           id: string
           insurance_company: string | null
           loan_number: string | null
