@@ -21589,6 +21589,14 @@ export type Database = {
           similarity: number
         }[]
       }
+      mortgage_agent_can_view_check: {
+        Args: { _check_id: string }
+        Returns: boolean
+      }
+      mortgage_agent_can_view_claim: {
+        Args: { _claim_id: string }
+        Returns: boolean
+      }
       move_to_dlq: {
         Args: {
           dlq_name: string
