@@ -96,7 +96,7 @@ export default function MortgageOpsQueue() {
     );
 
     setLoading(false);
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user) return;
