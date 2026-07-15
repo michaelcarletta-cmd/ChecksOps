@@ -268,7 +268,91 @@ export default function HomeownerClaimPortal() {
     }
   };
 
+  const openSignDialog = (a: ActionRow) => {
+    setSignAction(a);
+    setSignActionName(lead?.dtp_signature_name ?? lead?.homeowner_name ?? "");
+    setSignActionAgree(false);
+  };
+  const submitSignAction = async () => {
+    if (!signAction) return;
+    if (!signActionAgree) return toast.error("Please agree to sign");
+    if (signActionName.trim().length < 2) return toast.error("Type your full legal name");
+    setSignActionBusy(true);
+    try {
+      const { data, error: err } = await supabase.functions.invoke("homeowner-claim-portal", {
+        body: {
+          token,
+          action: "sign_document",
+          doc_id: signAction.id,
+          signature_name: signActionName.trim(),
+          agree: true,
+        },
+      });
+      if (err) throw new Error(err.message);
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success("Document signed");
+      setSignAction(null);
+      await load();
+    } catch (e: any) {
+      toast.error(e.message ?? "Could not sign");
+    } finally {
+      setSignActionBusy(false);
+    }
+  };
+
+  const openIntakeDialog = (a: ActionRow) => {
+    setIntakeAction(a);
+    setIntake({
+      mortgage_servicer: "",
+      loan_number: "",
+      servicer_phone: "",
+      borrower_names: lead?.homeowner_name ?? "",
+      mailing_address: lead?.dtp_property_address ?? "",
+      ssn_last4: "",
+      notes: "",
+      signer_name: lead?.homeowner_name ?? "",
+    });
+  };
+  const submitIntake = async () => {
+    if (!intakeAction) return;
+    if (intake.mortgage_servicer.trim().length < 2) return toast.error("Enter mortgage servicer");
+    if (intake.borrower_names.trim().length < 2) return toast.error("Enter borrower name(s)");
+    if (intake.signer_name.trim().length < 2) return toast.error("Type your full legal name");
+    if (intake.ssn_last4 && !/^\d{4}$/.test(intake.ssn_last4)) return toast.error("SSN last 4 must be 4 digits");
+    setIntakeBusy(true);
+    try {
+      const { data, error: err } = await supabase.functions.invoke("homeowner-claim-portal", {
+        body: {
+          token,
+          action: "submit_mortgage_intake",
+          doc_id: intakeAction.id,
+          signature_name: intake.signer_name.trim(),
+          intake: {
+            mortgage_servicer: intake.mortgage_servicer.trim(),
+            loan_number: intake.loan_number.trim() || undefined,
+            servicer_phone: intake.servicer_phone.trim() || undefined,
+            borrower_names: intake.borrower_names.trim(),
+            mailing_address: intake.mailing_address.trim() || undefined,
+            ssn_last4: intake.ssn_last4.trim() || undefined,
+            notes: intake.notes.trim() || undefined,
+          },
+        },
+      });
+      if (err) throw new Error(err.message);
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success("Mortgage information sent");
+      setIntakeAction(null);
+      await load();
+    } catch (e: any) {
+      toast.error(e.message ?? "Could not submit");
+    } finally {
+      setIntakeBusy(false);
+    }
+  };
+
   const dtpSigned = !!lead?.dtp_signed_at;
+
+
 
 
   if (loading) {
