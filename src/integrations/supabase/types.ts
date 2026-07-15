@@ -15683,14 +15683,23 @@ export type Database = {
           cancelled_at: string | null
           check_intake_item_id: string
           claim_id: string | null
+          claim_number: string | null
           completed_at: string | null
           created_at: string
+          date_of_loss: string | null
           flat_fee_cents: number | null
+          homeowner_email: string | null
+          homeowner_name: string | null
+          homeowner_phone: string | null
           id: string
+          insurance_company: string | null
           loan_number: string | null
+          loss_type: string | null
           mortgage_company: string | null
           mortgage_servicer: string | null
           note: string | null
+          policy_number: string | null
+          property_address: string | null
           requested_by: string | null
           status: string
           stripe_invoice_id: string | null
@@ -15708,14 +15717,23 @@ export type Database = {
           cancelled_at?: string | null
           check_intake_item_id: string
           claim_id?: string | null
+          claim_number?: string | null
           completed_at?: string | null
           created_at?: string
+          date_of_loss?: string | null
           flat_fee_cents?: number | null
+          homeowner_email?: string | null
+          homeowner_name?: string | null
+          homeowner_phone?: string | null
           id?: string
+          insurance_company?: string | null
           loan_number?: string | null
+          loss_type?: string | null
           mortgage_company?: string | null
           mortgage_servicer?: string | null
           note?: string | null
+          policy_number?: string | null
+          property_address?: string | null
           requested_by?: string | null
           status?: string
           stripe_invoice_id?: string | null
@@ -15733,14 +15751,23 @@ export type Database = {
           cancelled_at?: string | null
           check_intake_item_id?: string
           claim_id?: string | null
+          claim_number?: string | null
           completed_at?: string | null
           created_at?: string
+          date_of_loss?: string | null
           flat_fee_cents?: number | null
+          homeowner_email?: string | null
+          homeowner_name?: string | null
+          homeowner_phone?: string | null
           id?: string
+          insurance_company?: string | null
           loan_number?: string | null
+          loss_type?: string | null
           mortgage_company?: string | null
           mortgage_servicer?: string | null
           note?: string | null
+          policy_number?: string | null
+          property_address?: string | null
           requested_by?: string | null
           status?: string
           stripe_invoice_id?: string | null
@@ -20678,14 +20705,23 @@ export type Database = {
           cancelled_at: string | null
           check_intake_item_id: string
           claim_id: string | null
+          claim_number: string | null
           completed_at: string | null
           created_at: string
+          date_of_loss: string | null
           flat_fee_cents: number | null
+          homeowner_email: string | null
+          homeowner_name: string | null
+          homeowner_phone: string | null
           id: string
+          insurance_company: string | null
           loan_number: string | null
+          loss_type: string | null
           mortgage_company: string | null
           mortgage_servicer: string | null
           note: string | null
+          policy_number: string | null
+          property_address: string | null
           requested_by: string | null
           status: string
           stripe_invoice_id: string | null
@@ -22467,14 +22503,23 @@ export type Database = {
           cancelled_at: string | null
           check_intake_item_id: string
           claim_id: string | null
+          claim_number: string | null
           completed_at: string | null
           created_at: string
+          date_of_loss: string | null
           flat_fee_cents: number | null
+          homeowner_email: string | null
+          homeowner_name: string | null
+          homeowner_phone: string | null
           id: string
+          insurance_company: string | null
           loan_number: string | null
+          loss_type: string | null
           mortgage_company: string | null
           mortgage_servicer: string | null
           note: string | null
+          policy_number: string | null
+          property_address: string | null
           requested_by: string | null
           status: string
           stripe_invoice_id: string | null
