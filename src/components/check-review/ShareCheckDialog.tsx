@@ -184,13 +184,6 @@ export function ShareCheckDialog({ checkId, open, onOpenChange }: ShareCheckDial
             </span>
           </div>
         )}
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            {tenants.length === 0
-              ? "No other companies available to share with."
-              : "Already shared with all available companies."}
-          </p>
-        )}
 
         {activeShares.length > 0 && <SharedCheckThread checkId={checkId} />}
       </DialogContent>
