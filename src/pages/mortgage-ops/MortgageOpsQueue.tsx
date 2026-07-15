@@ -40,6 +40,7 @@ export default function MortgageOpsQueue() {
   const navigate = useNavigate();
   const [available, setAvailable] = useState<Request[]>([]);
   const [mine, setMine] = useState<Request[]>([]);
+  const [completed, setCompleted] = useState<Request[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notesById, setNotesById] = useState<Record<string, string>>({});
@@ -60,8 +61,9 @@ export default function MortgageOpsQueue() {
     const { data, error } = await supabase
       .from("mortgage_handling_requests")
       .select("*, tenants:tenant_id(name), check:check_intake_item_id(amount)")
-      .in("status", ["requested", "in_progress"])
-      .order("created_at", { ascending: true });
+      .in("status", ["requested", "in_progress", "completed"])
+      .order("created_at", { ascending: false })
+      .limit(500);
     if (error) {
       toast.error("Failed to load queue");
       setLoading(false);
@@ -72,10 +74,25 @@ export default function MortgageOpsQueue() {
       tenant_name: r.tenants?.name ?? null,
       check_amount: r.check?.amount ?? null,
     }));
-    setAvailable(rows.filter((r) => r.status === "requested" && !r.assigned_employee_id));
-    setMine(rows.filter((r) => r.assigned_employee_id === user?.id && r.status === "in_progress"));
+    // Queued = every unassigned 'requested' row (accurate global count)
+    setAvailable(
+      rows
+        .filter((r) => r.status === "requested" && !r.assigned_employee_id)
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+    );
+    // In progress = every 'in_progress' row (not just mine) so the number matches reality
+    setMine(
+      rows
+        .filter((r) => r.status === "in_progress")
+        .sort((a, b) => new Date(b.accepted_at ?? b.created_at).getTime() - new Date(a.accepted_at ?? a.created_at).getTime()),
+    );
+    setCompleted(
+      rows
+        .filter((r) => r.status === "completed")
+        .sort((a, b) => new Date(b.completed_at ?? b.created_at).getTime() - new Date(a.completed_at ?? a.created_at).getTime()),
+    );
     setLoading(false);
-  }, [user?.id]);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -207,12 +224,16 @@ export default function MortgageOpsQueue() {
         <Tabs defaultValue="available">
           <TabsList>
             <TabsTrigger value="available" className="gap-2">
-              <Inbox className="h-4 w-4" /> Available
+              <Inbox className="h-4 w-4" /> Queued
               <Badge variant="secondary" className="ml-1">{available.length}</Badge>
             </TabsTrigger>
             <TabsTrigger value="mine" className="gap-2">
-              <Clock className="h-4 w-4" /> My tasks
+              <Clock className="h-4 w-4" /> In progress
               <Badge variant="secondary" className="ml-1">{mine.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="completed" className="gap-2">
+              <CheckCircle2 className="h-4 w-4" /> Completed
+              <Badge variant="secondary" className="ml-1">{completed.length}</Badge>
             </TabsTrigger>
           </TabsList>
 
@@ -357,6 +378,59 @@ export default function MortgageOpsQueue() {
                         Cancel
                       </Button>
                     </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </TabsContent>
+
+          <TabsContent value="completed" className="mt-4 space-y-3">
+            {completed.length === 0 ? (
+              <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">
+                No completed tasks yet.
+              </CardContent></Card>
+            ) : (
+              completed.map((r) => (
+                <Card
+                  key={r.id}
+                  className="cursor-pointer hover:border-primary/50 transition-colors"
+                  onClick={() => setDetailId(r.id)}
+                >
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <CardTitle className="text-base">
+                          {r.mortgage_company || r.mortgage_servicer || "Mortgage company"}
+                        </CardTitle>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Tenant: <span className="font-medium">{r.tenant_name || r.tenant_id.slice(0, 8)}</span>
+                          {r.completed_at && (
+                            <> · completed {formatDistanceToNow(new Date(r.completed_at), { addSuffix: true })}</>
+                          )}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> Completed
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="text-sm grid grid-cols-2 gap-x-3 gap-y-1.5">
+                      {r.loan_number && <div><span className="text-muted-foreground">Loan #:</span> {r.loan_number}</div>}
+                      {r.check_amount != null && (
+                        <div><span className="text-muted-foreground">Check:</span> ${Number(r.check_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                      )}
+                      {r.homeowner_name && <div className="truncate"><span className="text-muted-foreground">Homeowner:</span> {r.homeowner_name}</div>}
+                      {r.insurance_company && <div className="truncate"><span className="text-muted-foreground">Insurance:</span> {r.insurance_company}</div>}
+                    </div>
+                    {r.work_notes && (
+                      <div className="text-xs bg-muted/60 rounded p-2 whitespace-pre-wrap max-h-32 overflow-auto">
+                        {r.work_notes}
+                      </div>
+                    )}
+                    <Button variant="outline" size="sm" onClick={() => setDetailId(r.id)}>
+                      <Eye className="h-4 w-4 mr-1" /> View details
+                    </Button>
                   </CardContent>
                 </Card>
               ))
