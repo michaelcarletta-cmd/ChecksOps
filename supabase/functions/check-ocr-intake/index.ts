@@ -865,10 +865,16 @@ Deno.serve(async (req) => {
       log("signed_url_create", "Front URL created");
 
       let backImageUrl: string | null = null;
-      if (check.back_image_path) {
+      // Skip back image if it's an unsupported vision format (e.g. endorsed .svg overlay).
+      // AI vision providers accept png/jpeg/gif/webp only — SVG returns "invalid_image_format".
+      const backPath = check.back_image_path ?? "";
+      const backIsUnsupported = /\.(svg|pdf|tif|tiff|bmp|heic|heif)$/i.test(backPath);
+      if (backPath && backIsUnsupported) {
+        log("signed_url_create", `Skipping back image (unsupported vision format: ${backPath.split(".").pop()})`);
+      } else if (backPath) {
         const { data: backUrlData, error: backUrlErr } = await supabase.storage
           .from("claim-files")
-          .createSignedUrl(check.back_image_path, 300);
+          .createSignedUrl(backPath, 300);
         if (!backUrlErr && backUrlData?.signedUrl) {
           backImageUrl = backUrlData.signedUrl;
           log("signed_url_create", "Back URL created");
