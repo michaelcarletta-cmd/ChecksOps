@@ -161,6 +161,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const [files, setFiles] = useState<CheckFileRow[]>([]);
   const [lossDocs, setLossDocs] = useState<LossDraftDoc[]>([]);
   const [messages, setMessages] = useState<MessageRow[]>([]);
+  const [sigRequests, setSigRequests] = useState<SigRequest[]>([]);
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -245,6 +246,18 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
           .eq("check_id", r.check_intake_item_id)
           .order("created_at", { ascending: true });
         setMessages(((msgs as MessageRow[]) || []).filter((m) => !m.is_deleted));
+      }
+
+      // Signature requests for this claim
+      if (r.claim_id) {
+        const { data: sigs } = await supabase
+          .from("signature_requests")
+          .select("id,document_name,document_path,status,created_at,signature_signers(id,signer_name,signer_email,signer_type,status,signed_at,viewed_at,delivery_status)")
+          .eq("claim_id", r.claim_id)
+          .order("created_at", { ascending: false });
+        setSigRequests((sigs as SigRequest[]) || []);
+      } else {
+        setSigRequests([]);
       }
     } catch (e: any) {
       toast.error(e?.message || "Failed to load request");
