@@ -91,6 +91,9 @@ function CheckOpsRoutes() {
       <Route path="/h/claim/:token" element={<Suspense fallback={<PageLoader />}><HomeownerClaimPortal /></Suspense>} />
       <Route path="/ledger/:token" element={<Suspense fallback={<PageLoader />}><HomeownerLedger /></Suspense>} />
       <Route path="/start-claim/:token" element={<Suspense fallback={<PageLoader />}><HomeownerLedger preClaim /></Suspense>} />
+      <Route path="/mortgage-ops/login" element={<Suspense fallback={<PageLoader />}><MortgageOpsLogin /></Suspense>} />
+      <Route path="/mortgage-ops/queue" element={<Suspense fallback={<PageLoader />}><MortgageOpsQueue /></Suspense>} />
+      <Route path="/mortgage-ops" element={<Navigate to="/mortgage-ops/login" replace />} />
       <Route path="/wl/:slug/*" element={<LegacyWlRedirect />} />
       <Route path="/:slug/*" element={<Suspense fallback={<PageLoader />}><WhiteLabelApp /></Suspense>} />
       <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFound /></Suspense>} />
@@ -111,10 +114,6 @@ function AppRoutes() {
     return <PageLoader />;
   }
 
-  // mortgage.checksops.com → ChecksOps employee ops portal
-  if (isMortgageOpsHost()) {
-    return <MortgageOpsRoutes />;
-  }
 
 
   // Tenant-owned custom domain (e.g. acme-inspections.com) → that tenant's Check Center
