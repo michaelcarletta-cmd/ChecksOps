@@ -117,6 +117,7 @@ export default function HomeownerClaimPortal() {
       setContractor((data as any).contractor);
       setUploads(((data as any).uploads ?? []) as UploadRow[]);
       setChecks(((data as any).checks ?? []) as CheckRow[]);
+      setActions(((data as any).actions ?? []) as ActionRow[]);
       const l = (data as any).lead as Lead;
       setCarrier(l?.dtp_insurance_carrier ?? "");
       setClaimNum(l?.dtp_claim_number ?? "");
