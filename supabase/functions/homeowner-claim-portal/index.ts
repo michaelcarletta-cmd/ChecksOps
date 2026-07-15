@@ -167,6 +167,27 @@ Deno.serve(async (req) => {
       }
       const checks = Array.from(checkMap.values())
 
+      // Homeowner "Action needed" — pending loss draft docs assigned to the homeowner.
+      let actions: any[] = []
+      const lossDraftIds = await resolveLossDraftIds(
+        admin, lead.id, lead.dtp_claim_number ?? null, profile?.user_id ?? null,
+      )
+      if (lossDraftIds.length) {
+        const { data: docs } = await admin
+          .from('loss_draft_documents')
+          .select('id, document_label, requires_signature, signature_status, is_submitted')
+          .in('loss_draft_id', lossDraftIds)
+          .eq('signer_role', 'homeowner')
+          .eq('is_submitted', false)
+          .order('created_at', { ascending: true })
+        actions = (docs ?? []).map((d: any) => ({
+          id: d.id,
+          label: d.document_label,
+          requires_signature: !!d.requires_signature,
+          signature_status: d.signature_status,
+          kind: d.requires_signature ? 'signature' : 'upload',
+        }))
+      }
 
       return json({
         ok: true,
@@ -195,6 +216,31 @@ Deno.serve(async (req) => {
           : null,
         uploads: uploads ?? [],
         checks,
+        actions,
+      })
+    }
+
+    if (p.action === 'list_actions') {
+      const lossDraftIds = await resolveLossDraftIds(
+        admin, lead.id, lead.dtp_claim_number ?? null, profile?.user_id ?? null,
+      )
+      if (!lossDraftIds.length) return json({ ok: true, actions: [] })
+      const { data: docs } = await admin
+        .from('loss_draft_documents')
+        .select('id, document_label, requires_signature, signature_status, is_submitted')
+        .in('loss_draft_id', lossDraftIds)
+        .eq('signer_role', 'homeowner')
+        .eq('is_submitted', false)
+        .order('created_at', { ascending: true })
+      return json({
+        ok: true,
+        actions: (docs ?? []).map((d: any) => ({
+          id: d.id,
+          label: d.document_label,
+          requires_signature: !!d.requires_signature,
+          signature_status: d.signature_status,
+          kind: d.requires_signature ? 'signature' : 'upload',
+        })),
       })
     }
 
