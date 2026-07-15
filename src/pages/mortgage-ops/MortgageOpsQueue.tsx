@@ -29,7 +29,10 @@ interface Request {
   created_at: string;
   accepted_at: string | null;
   completed_at: string | null;
+  homeowner_name: string | null;
+  insurance_company: string | null;
   tenant_name?: string | null;
+  check_amount?: number | null;
 }
 
 export default function MortgageOpsQueue() {
@@ -56,7 +59,7 @@ export default function MortgageOpsQueue() {
   const fetchQueues = useCallback(async () => {
     const { data, error } = await supabase
       .from("mortgage_handling_requests")
-      .select("*, tenants:tenant_id(name)")
+      .select("*, tenants:tenant_id(name), check:check_intake_item_id(amount)")
       .in("status", ["requested", "in_progress"])
       .order("created_at", { ascending: true });
     if (error) {
@@ -67,6 +70,7 @@ export default function MortgageOpsQueue() {
     const rows: Request[] = (data || []).map((r: any) => ({
       ...r,
       tenant_name: r.tenants?.name ?? null,
+      check_amount: r.check?.amount ?? null,
     }));
     setAvailable(rows.filter((r) => r.status === "requested" && !r.assigned_employee_id));
     setMine(rows.filter((r) => r.assigned_employee_id === user?.id && r.status === "in_progress"));
