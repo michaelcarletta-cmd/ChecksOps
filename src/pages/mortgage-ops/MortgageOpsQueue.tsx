@@ -246,11 +246,13 @@ export default function MortgageOpsQueue() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3" onClick={(e) => e.stopPropagation()}>
-                    <div className="text-sm grid grid-cols-2 gap-2">
+                    <div className="text-sm grid grid-cols-2 gap-x-3 gap-y-1.5">
                       {r.loan_number && <div><span className="text-muted-foreground">Loan #:</span> {r.loan_number}</div>}
-                      {r.check_intake_item_id && (
-                        <div className="truncate"><span className="text-muted-foreground">Check:</span> {r.check_intake_item_id.slice(0, 8)}</div>
+                      {r.check_amount != null && (
+                        <div><span className="text-muted-foreground">Check:</span> ${Number(r.check_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                       )}
+                      {r.homeowner_name && <div className="truncate"><span className="text-muted-foreground">Homeowner:</span> {r.homeowner_name}</div>}
+                      {r.insurance_company && <div className="truncate"><span className="text-muted-foreground">Insurance:</span> {r.insurance_company}</div>}
                     </div>
                     {r.notes && (
                       <p className="text-xs bg-muted/40 rounded p-2 whitespace-pre-wrap">{r.notes}</p>
@@ -303,11 +305,13 @@ export default function MortgageOpsQueue() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3" onClick={(e) => e.stopPropagation()}>
-                    <div className="text-sm grid grid-cols-2 gap-2">
+                    <div className="text-sm grid grid-cols-2 gap-x-3 gap-y-1.5">
                       {r.loan_number && <div><span className="text-muted-foreground">Loan #:</span> {r.loan_number}</div>}
-                      {r.check_intake_item_id && (
-                        <div className="truncate"><span className="text-muted-foreground">Check:</span> {r.check_intake_item_id.slice(0, 8)}</div>
+                      {r.check_amount != null && (
+                        <div><span className="text-muted-foreground">Check:</span> ${Number(r.check_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                       )}
+                      {r.homeowner_name && <div className="truncate"><span className="text-muted-foreground">Homeowner:</span> {r.homeowner_name}</div>}
+                      {r.insurance_company && <div className="truncate"><span className="text-muted-foreground">Insurance:</span> {r.insurance_company}</div>}
                     </div>
                     {r.notes && (
                       <p className="text-xs bg-muted/40 rounded p-2 whitespace-pre-wrap">
