@@ -314,6 +314,9 @@ export default function MortgageOpsQueue() {
                       rows={2}
                     />
                     <div className="flex gap-2 flex-wrap">
+                      <Button variant="outline" size="sm" onClick={() => setDetailId(r.id)}>
+                        <Eye className="h-4 w-4 mr-1" /> View details
+                      </Button>
                       <Button
                         variant="secondary"
                         size="sm"
