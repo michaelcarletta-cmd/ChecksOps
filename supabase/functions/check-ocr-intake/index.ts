@@ -544,7 +544,7 @@ async function processStaleOcrBacklog(opts: {
   limit?: number;
 }) {
   const { supabase, supabaseUrl, serviceKey, userId } = opts;
-  const limit = Math.max(1, Math.min(Number(opts.limit ?? 10), 25));
+  const limit = Math.max(1, Math.min(Number(opts.limit ?? 1), 5));
   const pendingCutoffMs = Date.now() - OCR_PENDING_RETRY_AFTER_MS;
   const processingCutoffMs = Date.now() - STALE_LOCK_MS;
 
