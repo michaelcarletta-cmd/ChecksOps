@@ -13,6 +13,8 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
 import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Palette, Briefcase, Home } from "lucide-react";
+import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
+
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { useRef } from "react";
 import { TenantDocumentsManager } from "@/components/white-label/TenantDocumentsManager";
@@ -153,9 +155,10 @@ export default function AdminTenants() {
             <Button variant="ghost" size="sm" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))}>
               <ArrowLeft className="w-4 h-4 mr-1" /> Back
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
+            <Button variant="ghost" size="sm" onClick={() => goToChecksOpsHome(navigate)}>
               <Home className="w-4 h-4 mr-1" /> Home
             </Button>
+
             <Building2 className="w-6 h-6 text-primary" />
             <div>
               <h1 className="text-xl font-semibold">Tenant Management</h1>
