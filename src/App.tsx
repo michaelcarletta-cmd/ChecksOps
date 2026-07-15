@@ -28,6 +28,7 @@ const CheckOpsResetPassword = lazy(() => import("./pages/checkops/CheckOpsResetP
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
 const AdminTenants = lazy(() => import("./pages/admin/AdminTenants"));
+const AdminMortgageOps = lazy(() => import("./pages/admin/AdminMortgageOps"));
 const VerifyAccount = lazy(() => import("./pages/VerifyAccount"));
 const VerifyAccountStart = lazy(() => import("./pages/VerifyAccountStart"));
 const PrivacyNotice = lazy(() => import("./pages/PrivacyNotice"));
@@ -85,6 +86,7 @@ function CheckOpsRoutes() {
       <Route path="/pricing" element={<Suspense fallback={<PageLoader />}><CheckOpsPricing /></Suspense>} />
       <Route path="/privacy-notice" element={<Suspense fallback={<PageLoader />}><PrivacyNotice /></Suspense>} />
       <Route path="/admin/tenants" element={<Suspense fallback={<PageLoader />}><AdminTenants /></Suspense>} />
+      <Route path="/admin/mortgage-ops" element={<Suspense fallback={<PageLoader />}><AdminMortgageOps /></Suspense>} />
       <Route path="/find-a-pro" element={<Suspense fallback={<PageLoader />}><FindAPro /></Suspense>} />
       <Route path="/pros" element={<Navigate to="/find-a-pro" replace />} />
       <Route path="/h/upload" element={<Suspense fallback={<PageLoader />}><HomeownerCheckUpload /></Suspense>} />
