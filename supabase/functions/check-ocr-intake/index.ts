@@ -82,6 +82,7 @@ const CRITICAL_FIELDS = ["amount", "check_number", "payee_line"] as const;
 const CRITICAL_CONFIDENCE_THRESHOLD = 60;
 const OVERALL_CONFIDENCE_THRESHOLD = 50;
 const STALE_LOCK_MS = 5 * 60 * 1000; // increased from 2min — OCR can take 45s per pass, 2min caused duplicate payees on retry
+const OCR_PENDING_RETRY_AFTER_MS = 5 * 60 * 1000;
 const OCR_TIMEOUT_MS = 45_000;
 
 /* ------------------------------------------------------------------ */
@@ -519,6 +520,109 @@ function errResponse(message: string, status: number, stage?: string) {
   });
 }
 
+function isOlderThan(value: unknown, cutoffMs: number): boolean {
+  if (typeof value !== "string") return true;
+  const ms = new Date(value).getTime();
+  return !Number.isFinite(ms) || ms < cutoffMs;
+}
+
+function isInvalidModelFailure(raw: unknown): boolean {
+  const text = typeof raw === "string" ? raw : JSON.stringify(raw ?? {});
+  const lower = text.toLowerCase();
+  return lower.includes("invalid model") ||
+    lower.includes("invalid model id") ||
+    lower.includes("model id") ||
+    lower.includes("model_not_found") ||
+    lower.includes("ai 400");
+}
+
+async function processStaleOcrBacklog(opts: {
+  supabase: any;
+  supabaseUrl: string;
+  serviceKey: string;
+  userId: string | null;
+  limit?: number;
+}) {
+  const { supabase, supabaseUrl, serviceKey, userId } = opts;
+  const limit = Math.max(1, Math.min(Number(opts.limit ?? 10), 25));
+  const pendingCutoffMs = Date.now() - OCR_PENDING_RETRY_AFTER_MS;
+  const processingCutoffMs = Date.now() - STALE_LOCK_MS;
+
+  const { data: candidates, error } = await supabase
+    .from("check_intake_items")
+    .select("id, ocr_status, ocr_heartbeat_at, updated_at, created_at, raw_ocr_front")
+    .in("ocr_status", ["pending", "processing", "failed"])
+    .order("created_at", { ascending: true })
+    .limit(100);
+  if (error) throw error;
+
+  const retryable = (candidates ?? []).filter((row: Record<string, unknown>) => {
+    if (row.ocr_status === "pending") {
+      return isOlderThan(row.updated_at ?? row.created_at, pendingCutoffMs);
+    }
+    if (row.ocr_status === "processing") {
+      return !row.ocr_heartbeat_at || isOlderThan(row.ocr_heartbeat_at, processingCutoffMs);
+    }
+    if (row.ocr_status === "failed") {
+      return isInvalidModelFailure(row.raw_ocr_front);
+    }
+    return false;
+  }).slice(0, limit);
+
+  const results: Array<{ check_id: string; status: number | null; ok: boolean; error?: string }> = [];
+
+  for (const row of retryable) {
+    const checkId = String(row.id);
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/check-ocr-intake`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${serviceKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ checkId, retryReason: "ocr_backlog_retry" }),
+      });
+      const body = await res.json().catch(() => ({}));
+      const ok = res.ok && body?.success !== false;
+      results.push({
+        check_id: checkId,
+        status: res.status,
+        ok,
+        error: ok ? undefined : String(body?.error ?? body?.message ?? "retry failed"),
+      });
+      await logAudit(
+        supabase,
+        checkId,
+        ok ? "ocr_backlog_retry_dispatched" : "ocr_backlog_retry_failed",
+        ok ? "Stale OCR item was retried by backlog monitor" : "Stale OCR retry attempt failed",
+        { original_ocr_status: row.ocr_status, response_status: res.status, response: body },
+        userId,
+      );
+    } catch (retryErr) {
+      const message = retryErr instanceof Error ? retryErr.message : String(retryErr);
+      results.push({ check_id: checkId, status: null, ok: false, error: message });
+      await logAudit(
+        supabase,
+        checkId,
+        "ocr_backlog_retry_failed",
+        "Stale OCR retry attempt failed before reaching OCR processor",
+        { original_ocr_status: row.ocr_status, error: message },
+        userId,
+      );
+    }
+  }
+
+  return {
+    success: true,
+    scanned: candidates?.length ?? 0,
+    retryable: retryable.length,
+    retried: results.length,
+    succeeded: results.filter((r) => r.ok).length,
+    failed: results.filter((r) => !r.ok).length,
+    results,
+  };
+}
+
 function deriveFallbackCheckDate(issueDate: unknown, createdAt: unknown): string {
   if (typeof issueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(issueDate)) {
     return issueDate;
@@ -604,7 +708,6 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-    const lovableKey = "_shared_layer"; // kept for signature compat; shared AI layer handles keys
     log("env_check", "All env vars present");
 
     // ---- Auth ----
@@ -615,20 +718,31 @@ Deno.serve(async (req) => {
 
     if (!supabaseUrl || !serviceKey || !anonKey) return errResponse("Missing backend configuration", 500, stage);
 
-    const anonClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-    });
-    const { data: authData, error: authErr } = await anonClient.auth.getUser(token);
-    if (authErr || !authData?.user) return errResponse("Unauthorized", 401, stage);
-    const userId = authData.user.id;
-    log("auth", "Authenticated", { userId });
-
     // ---- Supabase service client ----
     const supabase = createClient(supabaseUrl, serviceKey);
 
+    let userId: string | null = null;
+    const isServiceRequest = token === serviceKey;
+    if (isServiceRequest) {
+      log("auth", "Authenticated service retry request");
+    } else {
+      const anonClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: `Bearer ${token}` } },
+      });
+      const { data: authData, error: authErr } = await anonClient.auth.getUser(token);
+      if (authErr || !authData?.user) return errResponse("Unauthorized", 401, stage);
+      userId = authData.user.id;
+      log("auth", "Authenticated", { userId });
+    }
+
     // ---- Parse request ----
     stage = "parse_request";
-    const { checkId } = (await req.json().catch(() => ({}))) as { checkId?: string };
+    const { checkId, mode, limit } = (await req.json().catch(() => ({}))) as { checkId?: string; mode?: string; limit?: number };
+    if (mode === "retry-stale") {
+      if (!isServiceRequest) return errResponse("Service authorization required", 403, stage);
+      const result = await processStaleOcrBacklog({ supabase, supabaseUrl, serviceKey, userId, limit });
+      return okResponse(result);
+    }
     if (!checkId) return errResponse("checkId required", 400, stage);
     log("parse_request", "Parsed", { checkId });
 
