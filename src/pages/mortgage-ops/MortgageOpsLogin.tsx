@@ -19,7 +19,7 @@ export default function MortgageOpsLogin() {
   useEffect(() => {
     if (authLoading) return;
     if (user && (userRole === "mortgage_agent" || userRole === "admin")) {
-      navigate("/queue", { replace: true });
+      navigate("/mortgage-ops/queue", { replace: true });
     }
   }, [user, userRole, authLoading, navigate]);
 

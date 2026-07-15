@@ -43,11 +43,11 @@ export default function MortgageOpsQueue() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
-      navigate("/login", { replace: true });
+      navigate("/mortgage-ops/login", { replace: true });
       return;
     }
     if (userRole !== "mortgage_agent" && userRole !== "admin") {
-      navigate("/login", { replace: true });
+      navigate("/mortgage-ops/login", { replace: true });
     }
   }, [user, userRole, authLoading, navigate]);
 
@@ -169,7 +169,7 @@ export default function MortgageOpsQueue() {
 
   const handleSignOut = async () => {
     await signOut();
-    navigate("/login", { replace: true });
+    navigate("/mortgage-ops/login", { replace: true });
   };
 
   if (authLoading || !user) {
