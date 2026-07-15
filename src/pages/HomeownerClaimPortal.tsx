@@ -469,7 +469,9 @@ export default function HomeownerClaimPortal() {
                     <div className="text-sm font-medium">{a.label}</div>
                     <div className="text-[11px] text-muted-foreground mt-0.5">
                       {a.kind === "signature"
-                        ? "Signature required — the check is waiting on this."
+                        ? "E-signature required — the check is waiting on this."
+                        : a.kind === "intake_form"
+                        ? "Mortgage information needed — takes about a minute."
                         : "Upload required — the check is waiting on this."}
                     </div>
                   </div>
@@ -491,10 +493,14 @@ export default function HomeownerClaimPortal() {
                         </>
                       )}
                     </Button>
+                  ) : a.kind === "signature" ? (
+                    <Button size="sm" variant="outline" onClick={() => openSignDialog(a)}>
+                      <PenLine className="h-3.5 w-3.5 mr-1" /> Sign
+                    </Button>
                   ) : (
-                    <Badge variant="outline" className="text-[10px] whitespace-nowrap">
-                      Signature coming soon
-                    </Badge>
+                    <Button size="sm" variant="outline" onClick={() => openIntakeDialog(a)}>
+                      <Landmark className="h-3.5 w-3.5 mr-1" /> Fill in
+                    </Button>
                   )}
                 </div>
               ))}
