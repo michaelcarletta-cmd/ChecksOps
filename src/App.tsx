@@ -120,6 +120,12 @@ function AppRoutes() {
     return <PageLoader />;
   }
 
+  // mortgage.checksops.com → ChecksOps employee ops portal
+  if (isMortgageOpsHost()) {
+    return <MortgageOpsRoutes />;
+  }
+
+
   // Tenant-owned custom domain (e.g. acme-inspections.com) → that tenant's Check Center
   if (tenantSlug) {
     return <CustomDomainWhiteLabelApp slug={tenantSlug} />;
