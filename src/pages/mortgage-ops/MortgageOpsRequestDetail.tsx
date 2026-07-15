@@ -559,8 +559,6 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                 </CardContent>
               </Card>
             )}
-              </CardContent>
-            </Card>
 
             {/* Updates / messages with tenant */}
             {check?.id && (
