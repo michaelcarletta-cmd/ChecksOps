@@ -41,10 +41,24 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
     queryFn: async () => {
       const { data } = await supabase
         .from("check_intake_items")
-        .select("mortgage_monitoring_type, mortgage_sent_at, mortgage_tracking_number, mortgage_received_at, mortgage_final_released_at")
+        .select("mortgage_monitoring_type, mortgage_sent_at, mortgage_tracking_number, mortgage_received_at, mortgage_final_released_at, tenant_id, claim_id, check_number")
         .eq("id", checkId)
         .single();
-      return data;
+      return data as any;
+    },
+  });
+
+  const { data: deskRequest, refetch: refetchDesk } = useQuery({
+    queryKey: ["mortgage-desk-request", checkId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("mortgage_handling_requests")
+        .select("id, status, mortgage_company, loan_number, created_at, completed_at, billing_status")
+        .eq("check_intake_item_id", checkId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data as any;
     },
   });
 
