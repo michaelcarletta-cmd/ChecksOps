@@ -316,55 +316,46 @@ export default function AdminMortgageOps() {
 }
 
 function HireAgentDialog({ onDone }: { onDone: () => void }) {
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<{ email: string; tempPassword: string | null } | null>(null);
 
   const submit = async () => {
-    const clean = email.trim().toLowerCase();
-    if (!clean) return toast.error("Enter an email");
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = fullName.trim();
+    if (!cleanName) return toast.error("Enter the agent's name");
+    if (!cleanEmail) return toast.error("Enter an email");
     setSubmitting(true);
     try {
-      const { data: profile, error: pErr } = await supabase
-        .from("profiles")
-        .select("id, email")
-        .ilike("email", clean)
-        .maybeSingle();
-      if (pErr) throw pErr;
-      if (!profile) {
-        toast.error("No account found with that email. Ask them to sign up first.");
-        setSubmitting(false);
-        return;
-      }
-      // Guardrail: block if they also have staff/admin
-      const { data: existing } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", profile.id);
-      const conflict = (existing || []).some((r: any) => r.role === "staff" || r.role === "admin");
-      if (conflict) {
-        toast.error("This user has staff/admin role. Remove those first — mortgage_agent must be scoped-only.");
-        setSubmitting(false);
-        return;
-      }
-      const already = (existing || []).some((r: any) => r.role === "mortgage_agent");
-      if (already) {
-        toast.info("User already has mortgage ops access.");
-        setSubmitting(false);
-        onDone();
-        return;
-      }
-      const { error: insErr } = await supabase
-        .from("user_roles")
-        .insert({ user_id: profile.id, role: "mortgage_agent" });
-      if (insErr) throw insErr;
-      toast.success(`Granted mortgage ops access to ${profile.email}`);
+      const { data, error } = await supabase.functions.invoke("hire-mortgage-agent", {
+        body: { full_name: cleanName, email: cleanEmail, password: password || undefined },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const d = data as { email: string; temp_password: string | null; created: boolean };
+      toast.success(
+        d.created
+          ? `Hired ${d.email} — mortgage ops only access granted`
+          : `Granted mortgage ops access to ${d.email}`
+      );
+      setResult({ email: d.email, tempPassword: d.temp_password });
+      setFullName("");
       setEmail("");
-      onDone();
+      setPassword("");
+      // Keep dialog open if a temp password was generated so admin can copy it
+      if (!d.temp_password) onDone();
     } catch (e: any) {
-      toast.error(e.message || "Failed");
+      toast.error(e.message || "Failed to hire agent");
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const close = () => {
+    setResult(null);
+    onDone();
   };
 
   return (
@@ -372,27 +363,82 @@ function HireAgentDialog({ onDone }: { onDone: () => void }) {
       <DialogHeader>
         <DialogTitle>Hire Mortgage Ops Agent</DialogTitle>
         <DialogDescription>
-          Grants the <code>mortgage_agent</code> role. The user must already have an account. Access is automatically
-          scoped to checks/claims with active mortgage handling requests only.
+          Creates a <strong>mortgage-ops-only</strong> account. This user will <em>only</em> see checks and claims
+          tied to active mortgage handling requests — they cannot access the rest of the platform.
         </DialogDescription>
       </DialogHeader>
-      <div className="space-y-3 py-2">
-        <Label htmlFor="agent-email">Email</Label>
-        <Input
-          id="agent-email"
-          type="email"
-          placeholder="agent@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          autoFocus
-        />
-      </div>
-      <DialogFooter>
-        <Button onClick={submit} disabled={submitting}>
-          {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Plus className="w-4 h-4 mr-1" />}
-          Grant Access
-        </Button>
-      </DialogFooter>
+
+      {result?.tempPassword ? (
+        <div className="space-y-3 py-2">
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+            <p className="font-medium mb-2">Account created. Share these credentials securely:</p>
+            <div className="font-mono text-xs space-y-1">
+              <div><span className="text-muted-foreground">Email:</span> {result.email}</div>
+              <div><span className="text-muted-foreground">Temp password:</span> {result.tempPassword}</div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              This password won't be shown again. Have the agent change it after first login.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() =>
+                navigator.clipboard.writeText(
+                  `Email: ${result.email}\nPassword: ${result.tempPassword}`
+                ).then(() => toast.success("Copied"))
+              }
+            >
+              Copy credentials
+            </Button>
+            <Button onClick={close}>Done</Button>
+          </DialogFooter>
+        </div>
+      ) : (
+        <>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label htmlFor="agent-name">Full name</Label>
+              <Input
+                id="agent-name"
+                placeholder="Jane Smith"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label htmlFor="agent-email">Email</Label>
+              <Input
+                id="agent-email"
+                type="email"
+                placeholder="agent@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="agent-pass">Temporary password (optional)</Label>
+              <Input
+                id="agent-pass"
+                type="text"
+                placeholder="Leave blank to auto-generate"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Minimum 8 characters. If blank, one will be generated and shown to you once.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={submit} disabled={submitting}>
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Plus className="w-4 h-4 mr-1" />}
+              Hire Agent
+            </Button>
+          </DialogFooter>
+        </>
+      )}
     </DialogContent>
   );
 }
