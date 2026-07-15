@@ -70,6 +70,15 @@ interface RequestRow {
   created_at: string;
   accepted_at: string | null;
   assigned_employee_id: string | null;
+  policy_number: string | null;
+  claim_number: string | null;
+  insurance_company: string | null;
+  loss_type: string | null;
+  date_of_loss: string | null;
+  homeowner_name: string | null;
+  homeowner_email: string | null;
+  homeowner_phone: string | null;
+  property_address: string | null;
 }
 
 interface ClaimRow {
@@ -402,32 +411,48 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
               <Card><CardContent className="py-4 text-sm text-muted-foreground">No check linked to this request.</CardContent></Card>
             )}
 
-            {/* Claim / homeowner info */}
-            {claim && (
+            {/* Claim / homeowner info — prefer tenant-provided request fields, fall back to claim */}
+            {(claim || req.homeowner_name || req.claim_number || req.policy_number) && (
               <Card>
                 <CardContent className="pt-4 space-y-3">
                   <div className="font-semibold text-sm flex items-center gap-2">
                     <Home className="h-4 w-4" /> Claim & homeowner
                   </div>
                   <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
-                    <Field label="Claim #" value={claim.claim_number || "—"} />
-                    <Field label="Policy #" value={claim.policy_number || "—"} />
-                    <Field label="Loss type" value={claim.loss_type || "—"} />
-                    <Field label="Date of loss" value={claim.loss_date ? format(new Date(claim.loss_date), "MMM d, yyyy") : "—"} />
-                    <Field label="Insurance" value={claim.insurance_company || "—"} className="col-span-2" />
-                    <Field label={<><User className="h-3 w-3 inline mr-1" />Homeowner</>} value={claim.policyholder_name || "—"} className="col-span-2" />
-                    {claim.policyholder_email && <Field label={<><Mail className="h-3 w-3 inline mr-1" />Email</>} value={claim.policyholder_email} />}
-                    {claim.policyholder_phone && <Field label={<><Phone className="h-3 w-3 inline mr-1" />Phone</>} value={claim.policyholder_phone} />}
-                    {claim.policyholder_address && <Field label={<><MapPin className="h-3 w-3 inline mr-1" />Address</>} value={claim.policyholder_address} className="col-span-2" />}
-                    {claim.adjuster_name && <Field label="Adjuster" value={`${claim.adjuster_name}${claim.adjuster_phone ? ` · ${claim.adjuster_phone}` : ""}`} className="col-span-2" />}
-                    {claim.loan_number && !req.loan_number && <Field label="Loan # (claim)" value={claim.loan_number} />}
+                    <Field label="Claim #" value={req.claim_number || claim?.claim_number || "—"} />
+                    <Field label="Policy #" value={req.policy_number || claim?.policy_number || "—"} />
+                    <Field label="Loss type" value={req.loss_type || claim?.loss_type || "—"} />
+                    <Field
+                      label="Date of loss"
+                      value={
+                        req.date_of_loss
+                          ? format(new Date(req.date_of_loss), "MMM d, yyyy")
+                          : claim?.loss_date
+                          ? format(new Date(claim.loss_date), "MMM d, yyyy")
+                          : "—"
+                      }
+                    />
+                    <Field label="Insurance" value={req.insurance_company || claim?.insurance_company || "—"} className="col-span-2" />
+                    <Field label={<><User className="h-3 w-3 inline mr-1" />Homeowner</>} value={req.homeowner_name || claim?.policyholder_name || "—"} className="col-span-2" />
+                    {(req.homeowner_email || claim?.policyholder_email) && (
+                      <Field label={<><Mail className="h-3 w-3 inline mr-1" />Email</>} value={req.homeowner_email || claim!.policyholder_email!} />
+                    )}
+                    {(req.homeowner_phone || claim?.policyholder_phone) && (
+                      <Field label={<><Phone className="h-3 w-3 inline mr-1" />Phone</>} value={req.homeowner_phone || claim!.policyholder_phone!} />
+                    )}
+                    {(req.property_address || claim?.policyholder_address) && (
+                      <Field label={<><MapPin className="h-3 w-3 inline mr-1" />Address</>} value={req.property_address || claim!.policyholder_address!} className="col-span-2" />
+                    )}
+                    {claim?.adjuster_name && <Field label="Adjuster" value={`${claim.adjuster_name}${claim.adjuster_phone ? ` · ${claim.adjuster_phone}` : ""}`} className="col-span-2" />}
+                    {claim?.loan_number && !req.loan_number && <Field label="Loan # (claim)" value={claim.loan_number} />}
                   </div>
-                  {claim.loss_description && (
+                  {claim?.loss_description && (
                     <div className="text-xs bg-muted/40 rounded p-2 whitespace-pre-wrap">{claim.loss_description}</div>
                   )}
                 </CardContent>
               </Card>
             )}
+
 
             {/* Loss draft documents */}
             {lossDocs.length > 0 && (
