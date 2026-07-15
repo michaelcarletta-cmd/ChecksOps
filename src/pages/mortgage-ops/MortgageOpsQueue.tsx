@@ -114,19 +114,39 @@ export default function MortgageOpsQueue() {
       _status: status,
       _notes: notes,
     });
-    setBusyId(null);
     if (error) {
+      setBusyId(null);
       toast.error(error.message);
       return;
     }
-    toast.success(status === "completed" ? "Marked complete" : "Cancelled");
     setNotesById((prev) => {
       const next = { ...prev };
       delete next[id];
       return next;
     });
+
+    if (status === "completed") {
+      // Trigger billing
+      const { data: bill, error: billErr } = await supabase.functions.invoke("bill-mortgage-handling", {
+        body: { request_id: id },
+      });
+      setBusyId(null);
+      if (billErr || !bill?.ok) {
+        const detail = (bill as any)?.error || billErr?.message || "billing failed";
+        toast.error(`Marked complete — billing failed: ${detail}`);
+      } else if ((bill as any)?.already_billed) {
+        toast.success("Marked complete (already billed)");
+      } else {
+        const dollars = ((bill as any).flat_fee_cents / 100).toFixed(2);
+        toast.success(`Marked complete — billed $${dollars} to ${(bill as any).tenant_name}`);
+      }
+    } else {
+      setBusyId(null);
+      toast.success("Cancelled");
+    }
     void fetchQueues();
   };
+
 
   const handleAppendNote = async (id: string) => {
     const notes = notesById[id]?.trim();

@@ -53,7 +53,7 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
     queryFn: async () => {
       const { data } = await supabase
         .from("mortgage_handling_requests")
-        .select("id, status, mortgage_company, loan_number, created_at, completed_at, billing_status")
+        .select("id, status, mortgage_company, loan_number, created_at, completed_at, billing_status, billed_at, flat_fee_cents")
         .eq("check_intake_item_id", checkId)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -61,6 +61,7 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
       return data as any;
     },
   });
+
 
   const { data: draws = [] } = useQuery({
     queryKey: ["check-mortgage-draws", checkId],
@@ -270,14 +271,23 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
         </div>
       )}
       {deskRequest?.status === "completed" && (
-        <div className="rounded-md bg-emerald-500/10 p-3 text-xs flex items-center gap-2">
+        <div className="rounded-md bg-emerald-500/10 p-3 text-xs flex items-center gap-2 flex-wrap">
           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
           <span>ChecksOps completed mortgage handling</span>
           {deskRequest.completed_at && (
             <span className="text-muted-foreground">· {format(new Date(deskRequest.completed_at), "MMM d, yyyy")}</span>
           )}
+          {deskRequest.billing_status === "billed" && deskRequest.flat_fee_cents != null && (
+            <span className="text-muted-foreground">
+              · billed ${(deskRequest.flat_fee_cents / 100).toFixed(2)}
+            </span>
+          )}
+          {deskRequest.billing_status === "failed" && (
+            <span className="text-destructive">· billing failed — support has been notified</span>
+          )}
         </div>
       )}
+
 
 
 
