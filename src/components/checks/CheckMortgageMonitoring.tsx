@@ -30,6 +30,11 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
   const [drawNotes, setDrawNotes] = useState("");
   const [showDrawForm, setShowDrawForm] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showDeskDialog, setShowDeskDialog] = useState(false);
+  const [deskCompany, setDeskCompany] = useState("");
+  const [deskLoan, setDeskLoan] = useState("");
+  const [deskNote, setDeskNote] = useState("");
+  const [deskSubmitting, setDeskSubmitting] = useState(false);
 
   const { data: check } = useQuery({
     queryKey: ["check-mortgage-data", checkId],
