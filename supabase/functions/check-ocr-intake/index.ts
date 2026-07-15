@@ -790,6 +790,27 @@ Deno.serve(async (req) => {
     });
 
     if (!keyResult.isSystemTenant && !tenantApiKey) {
+      if (keyResult.status === "invalid" || keyResult.status === "unverified") {
+        log("tenant_key", "Tenant key unavailable — OCR will use platform AI fallback", {
+          tenantId,
+          status: keyResult.status,
+        });
+        await supabase
+          .from("tenant_openai_credentials")
+          .update({
+            last_validated_at: new Date().toISOString(),
+            last_error: "OCR used platform AI fallback because tenant key is not currently active.",
+          })
+          .eq("tenant_id", tenantId);
+        await logAudit(
+          supabase,
+          checkId,
+          "ocr_tenant_ai_fallback",
+          "Tenant OpenAI key is not active; OCR continued through platform AI gateway",
+          { tenant_id: tenantId, status: keyResult.status },
+          userId,
+        );
+      } else {
       const reason =
         keyResult.status === "missing"
           ? "No OpenAI API key configured for this tenant. Add one in Settings → AI Key."
@@ -800,6 +821,7 @@ Deno.serve(async (req) => {
         `Check OCR blocked: ${reason}`,
         { tenant_id: tenantId, status: keyResult.status }, userId);
       return errResponse(reason, 402, stage);
+      }
     }
 
 
