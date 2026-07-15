@@ -128,6 +128,26 @@ interface MessageRow {
   is_deleted: boolean;
 }
 
+interface SigSigner {
+  id: string;
+  signer_name: string;
+  signer_email: string;
+  signer_type: string;
+  status: string;
+  signed_at: string | null;
+  viewed_at: string | null;
+  delivery_status: string | null;
+}
+
+interface SigRequest {
+  id: string;
+  document_name: string;
+  document_path: string;
+  status: string;
+  created_at: string;
+  signature_signers: SigSigner[];
+}
+
 interface TenantRow { id: string; name: string | null; }
 
 export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onAction }: Props) {
