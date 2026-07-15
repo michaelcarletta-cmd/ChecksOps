@@ -28,6 +28,7 @@ const CheckOpsResetPassword = lazy(() => import("./pages/checkops/CheckOpsResetP
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
 const AdminTenants = lazy(() => import("./pages/admin/AdminTenants"));
+const AdminMortgageOps = lazy(() => import("./pages/admin/AdminMortgageOps"));
 const VerifyAccount = lazy(() => import("./pages/VerifyAccount"));
 const VerifyAccountStart = lazy(() => import("./pages/VerifyAccountStart"));
 const PrivacyNotice = lazy(() => import("./pages/PrivacyNotice"));
