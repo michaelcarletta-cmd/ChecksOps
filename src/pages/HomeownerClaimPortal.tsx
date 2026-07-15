@@ -19,9 +19,19 @@ import {
   ClipboardCheck,
   ArrowLeft,
   Lock,
+  Landmark,
+  PenLine,
 } from "lucide-react";
 import { toast } from "sonner";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type Lead = {
   id: string;
@@ -55,9 +65,10 @@ type CheckRow = {
 type ActionRow = {
   id: string;
   label: string;
+  document_type: string | null;
   requires_signature: boolean;
   signature_status: string;
-  kind: 'upload' | 'signature';
+  kind: 'upload' | 'signature' | 'intake_form';
 };
 
 const MAX_MB = 15;
