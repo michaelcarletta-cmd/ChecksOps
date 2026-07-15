@@ -187,7 +187,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
 
         const { data: fRows } = await supabase
           .from("check_files")
-          .select("id,file_name,file_path,category,description,created_at,requires_signature,signer_role,signature_status")
+          .select("id,file_name,file_path,category,description,created_at")
           .eq("check_intake_item_id", r.check_intake_item_id)
           .order("created_at", { ascending: false });
         setFiles((fRows as CheckFileRow[]) || []);
