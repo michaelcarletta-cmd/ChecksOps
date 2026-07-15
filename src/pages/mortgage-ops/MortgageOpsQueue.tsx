@@ -221,7 +221,11 @@ export default function MortgageOpsQueue() {
               </CardContent></Card>
             ) : (
               available.map((r) => (
-                <Card key={r.id}>
+                <Card
+                  key={r.id}
+                  className="cursor-pointer hover:border-primary/50 transition-colors"
+                  onClick={() => setDetailId(r.id)}
+                >
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -237,7 +241,7 @@ export default function MortgageOpsQueue() {
                       <Badge>Requested</Badge>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-3">
+                  <CardContent className="space-y-3" onClick={(e) => e.stopPropagation()}>
                     <div className="text-sm grid grid-cols-2 gap-2">
                       {r.loan_number && <div><span className="text-muted-foreground">Loan #:</span> {r.loan_number}</div>}
                       {r.check_intake_item_id && (
