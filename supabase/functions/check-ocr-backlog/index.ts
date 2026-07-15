@@ -15,6 +15,14 @@ Deno.serve(async (req) => {
       });
     }
 
+    const token = req.headers.get("authorization")?.replace("Bearer ", "");
+    if (token !== serviceKey) {
+      return new Response(JSON.stringify({ error: "Service authorization required" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const body = await req.json().catch(() => ({}));
     const limit = Math.max(1, Math.min(Number(body?.limit ?? 1), 5));
 
