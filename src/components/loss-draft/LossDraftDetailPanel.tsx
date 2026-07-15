@@ -28,6 +28,8 @@ import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButt
 import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { CheckMessageThread } from "@/components/check-messages/CheckMessageThread";
+import { SendToMortgageDeskButton } from "./SendToMortgageDeskButton";
+import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 const isUnknownServicer = (value?: string | null) =>
@@ -55,6 +57,7 @@ export function LossDraftDetailPanel({
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { tenantId } = useTenantFilter();
   const { data: draft } = useLossDraftDetail(lossDraftId);
   const { data: releases = [] } = useLossDraftReleases(lossDraftId);
   const { data: docs = [] } = useLossDraftDocs(lossDraftId);
@@ -243,6 +246,17 @@ export function LossDraftDetailPanel({
               variant="outline"
               className="h-7 text-xs"
             />
+            {tenantId && (
+              <SendToMortgageDeskButton
+                checkIntakeItemId={draft.check_intake_item_id}
+                tenantId={tenantId}
+                claimId={draft.claim_id}
+                defaultMortgageCompany={
+                  isUnknownServicer(draft.mortgage_servicer) ? "" : draft.mortgage_servicer
+                }
+              />
+            )}
+
 
           </div>
         )}
