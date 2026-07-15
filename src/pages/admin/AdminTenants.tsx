@@ -155,9 +155,10 @@ export default function AdminTenants() {
             <Button variant="ghost" size="sm" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))}>
               <ArrowLeft className="w-4 h-4 mr-1" /> Back
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
+            <Button variant="ghost" size="sm" onClick={() => goToChecksOpsHome(navigate)}>
               <Home className="w-4 h-4 mr-1" /> Home
             </Button>
+
             <Building2 className="w-6 h-6 text-primary" />
             <div>
               <h1 className="text-xl font-semibold">Tenant Management</h1>
