@@ -27,6 +27,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
+import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
 
 interface Props {
   requestId: string | null;
@@ -518,6 +519,18 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                   </div>
                   {claim?.loss_description && (
                     <div className="text-xs bg-muted/40 rounded p-2 whitespace-pre-wrap">{claim.loss_description}</div>
+                  )}
+                  {req.claim_id && (
+                    <div className="pt-1">
+                      <SendCheckTrackingLinkButton
+                        claimId={req.claim_id}
+                        tenantId={req.tenant_id}
+                        defaultName={req.homeowner_name || claim?.policyholder_name}
+                        defaultEmail={req.homeowner_email || claim?.policyholder_email}
+                        defaultPhone={req.homeowner_phone || claim?.policyholder_phone}
+                        label="Send tracking link to homeowner"
+                      />
+                    </div>
                   )}
                 </CardContent>
               </Card>
