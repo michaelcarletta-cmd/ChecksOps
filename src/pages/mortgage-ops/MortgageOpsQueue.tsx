@@ -80,19 +80,23 @@ export default function MortgageOpsQueue() {
         .filter((r) => r.status === "requested" && !r.assigned_employee_id)
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
     );
-    // In progress = every 'in_progress' row (not just mine) so the number matches reality
+    // In progress = only rows I personally accepted. Each request has exactly
+    // one handler (assigned_employee_id), so other agents' work should NOT
+    // appear in my "In progress" list.
     setMine(
       rows
-        .filter((r) => r.status === "in_progress")
+        .filter((r) => r.status === "in_progress" && r.assigned_employee_id === user?.id)
         .sort((a, b) => new Date(b.accepted_at ?? b.created_at).getTime() - new Date(a.accepted_at ?? a.created_at).getTime()),
     );
+    // Completed = only tasks I closed out.
     setCompleted(
       rows
-        .filter((r) => r.status === "completed")
+        .filter((r) => r.status === "completed" && r.assigned_employee_id === user?.id)
         .sort((a, b) => new Date(b.completed_at ?? b.created_at).getTime() - new Date(a.completed_at ?? a.created_at).getTime()),
     );
+
     setLoading(false);
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user) return;
