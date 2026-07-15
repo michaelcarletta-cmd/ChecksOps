@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Share2, X, Loader2 } from "lucide-react";
+import { Share2, X, Loader2, AlertTriangle } from "lucide-react";
 import { SharedCheckThread } from "./SharedCheckThread";
 import { useToast } from "@/hooks/use-toast";
 
