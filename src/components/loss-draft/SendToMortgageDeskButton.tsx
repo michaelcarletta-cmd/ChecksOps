@@ -49,6 +49,7 @@ export function SendToMortgageDeskButton({
   const [homeownerName, setHomeownerName] = useState("");
   const [homeownerEmail, setHomeownerEmail] = useState("");
   const [homeownerPhone, setHomeownerPhone] = useState("");
+  const [homeownerSsnLast4, setHomeownerSsnLast4] = useState("");
   const [propertyAddress, setPropertyAddress] = useState("");
   const [prefilled, setPrefilled] = useState(false);
 
@@ -118,6 +119,11 @@ export function SendToMortgageDeskButton({
       toast({ title: "Homeowner name required", description: "Mortgage Ops needs this to speak with the lender.", variant: "destructive" });
       return;
     }
+    const ssn = homeownerSsnLast4.trim();
+    if (ssn && !/^\d{4}$/.test(ssn)) {
+      toast({ title: "SSN must be 4 digits", variant: "destructive" });
+      return;
+    }
     setSubmitting(true);
     const { data: userData } = await supabase.auth.getUser();
     const { error } = await supabase.from("mortgage_handling_requests").insert({
@@ -136,6 +142,7 @@ export function SendToMortgageDeskButton({
       homeowner_name: homeownerName.trim() || null,
       homeowner_email: homeownerEmail.trim() || null,
       homeowner_phone: homeownerPhone.trim() || null,
+      homeowner_ssn_last_four: ssn || null,
       property_address: propertyAddress.trim() || null,
     } as any);
     if (error) {
@@ -255,6 +262,17 @@ export function SendToMortgageDeskButton({
               <div className="space-y-1.5">
                 <Label htmlFor="ho-phone">Homeowner phone</Label>
                 <Input id="ho-phone" value={homeownerPhone} onChange={(e) => setHomeownerPhone(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ho-ssn4">SSN — last 4</Label>
+                <Input
+                  id="ho-ssn4"
+                  inputMode="numeric"
+                  maxLength={4}
+                  placeholder="e.g. 1234"
+                  value={homeownerSsnLast4}
+                  onChange={(e) => setHomeownerSsnLast4(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="prop-addr">Property address</Label>

@@ -78,6 +78,7 @@ interface RequestRow {
   homeowner_name: string | null;
   homeowner_email: string | null;
   homeowner_phone: string | null;
+  homeowner_ssn_last_four: string | null;
   property_address: string | null;
 }
 
@@ -127,6 +128,26 @@ interface MessageRow {
   is_deleted: boolean;
 }
 
+interface SigSigner {
+  id: string;
+  signer_name: string;
+  signer_email: string;
+  signer_type: string;
+  status: string;
+  signed_at: string | null;
+  viewed_at: string | null;
+  delivery_status: string | null;
+}
+
+interface SigRequest {
+  id: string;
+  document_name: string;
+  document_path: string;
+  status: string;
+  created_at: string;
+  signature_signers: SigSigner[];
+}
+
 interface TenantRow { id: string; name: string | null; }
 
 export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onAction }: Props) {
@@ -140,6 +161,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const [files, setFiles] = useState<CheckFileRow[]>([]);
   const [lossDocs, setLossDocs] = useState<LossDraftDoc[]>([]);
   const [messages, setMessages] = useState<MessageRow[]>([]);
+  const [sigRequests, setSigRequests] = useState<SigRequest[]>([]);
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -225,6 +247,18 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
           .order("created_at", { ascending: true });
         setMessages(((msgs as MessageRow[]) || []).filter((m) => !m.is_deleted));
       }
+
+      // Signature requests for this claim
+      if (r.claim_id) {
+        const { data: sigs } = await supabase
+          .from("signature_requests")
+          .select("id,document_name,document_path,status,created_at,signature_signers(id,signer_name,signer_email,signer_type,status,signed_at,viewed_at,delivery_status)")
+          .eq("claim_id", r.claim_id)
+          .order("created_at", { ascending: false });
+        setSigRequests((sigs as SigRequest[]) || []);
+      } else {
+        setSigRequests([]);
+      }
     } catch (e: any) {
       toast.error(e?.message || "Failed to load request");
     } finally {
@@ -274,7 +308,6 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     if (!check?.id || !user?.id) return;
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop() || "bin";
       const path = `checks/${check.id}/mortgage-ops/${Date.now()}-${file.name.replace(/[^a-z0-9.\-_]/gi, "_")}`;
       const { error: upErr } = await supabase.storage
         .from("claim-files")
@@ -292,22 +325,56 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         uploaded_by: user.id,
         description: uploadDesc || null,
       });
-      // Note: check_files does not carry signature metadata; the intent is
-      // conveyed via category "mortgage_ops_signature" and the tenant message below.
-      const _sigIntent = uploadForSignature;
       if (insErr) throw insErr;
 
-      // Also post a message notifying the tenant
+      // If this is a signature doc AND we have a claim + homeowner email,
+      // dispatch a real e-signature request (same rails as Freedom CRM).
+      const homeownerEmail = req?.homeowner_email || claim?.policyholder_email;
+      const homeownerName = req?.homeowner_name || claim?.policyholder_name;
+      const isPdf = /\.pdf$/i.test(file.name);
+      let dispatched = false;
+
+      if (uploadForSignature && req?.claim_id && homeownerEmail && homeownerName && isPdf) {
+        const { data: sigReq, error: sigErr } = await supabase
+          .from("signature_requests")
+          .insert({
+            claim_id: req.claim_id,
+            document_name: file.name,
+            document_path: path,
+            document_type: "authorization",
+            field_data: [],
+            status: "draft",
+          })
+          .select("id")
+          .single();
+        if (!sigErr && sigReq?.id) {
+          await supabase.from("signature_signers").insert({
+            signature_request_id: sigReq.id,
+            signer_name: homeownerName,
+            signer_email: homeownerEmail,
+            signer_type: "policyholder",
+            signing_order: 1,
+          });
+          const { error: sendErr } = await supabase.functions.invoke("send-signature-request", {
+            body: { requestId: sigReq.id, skipEmail: false },
+          });
+          if (!sendErr) dispatched = true;
+        }
+      }
+
+      // Post message into tenant thread so both sides see the timeline
       await supabase.from("check_messages").insert({
         check_id: check.id,
         sender_id: user.id,
-        body: uploadForSignature
-          ? `📄 Mortgage Ops uploaded a document for homeowner signature: "${file.name}"${uploadDesc ? ` — ${uploadDesc}` : ""}. Please forward to the homeowner via your signature workflow.`
+        body: dispatched
+          ? `📄 Mortgage Ops sent "${file.name}" to ${homeownerName} (${homeownerEmail}) for e-signature${uploadDesc ? ` — ${uploadDesc}` : ""}. Status will update in the Signature requests panel.`
+          : uploadForSignature
+          ? `📄 Mortgage Ops uploaded a document for homeowner signature: "${file.name}"${uploadDesc ? ` — ${uploadDesc}` : ""}. ${req?.claim_id ? "Missing homeowner email or non-PDF — please route via your signature workflow." : "Please forward to the homeowner via your signature workflow."}`
           : `📎 Mortgage Ops attached a document: "${file.name}"${uploadDesc ? ` — ${uploadDesc}` : ""}.`,
       });
 
       setUploadDesc("");
-      toast.success("Document uploaded");
+      toast.success(dispatched ? "Sent to homeowner for signature" : "Document uploaded");
       void load();
     } catch (e: any) {
       toast.error(e?.message || "Upload failed");
@@ -443,6 +510,9 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                     {(req.property_address || claim?.policyholder_address) && (
                       <Field label={<><MapPin className="h-3 w-3 inline mr-1" />Address</>} value={req.property_address || claim!.policyholder_address!} className="col-span-2" />
                     )}
+                    {req.homeowner_ssn_last_four && (
+                      <Field label="SSN (last 4)" value={`•••-••-${req.homeowner_ssn_last_four}`} />
+                    )}
                     {claim?.adjuster_name && <Field label="Adjuster" value={`${claim.adjuster_name}${claim.adjuster_phone ? ` · ${claim.adjuster_phone}` : ""}`} className="col-span-2" />}
                     {claim?.loan_number && !req.loan_number && <Field label="Loan # (claim)" value={claim.loan_number} />}
                   </div>
@@ -559,6 +629,58 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                 </CardContent>
               </Card>
             )}
+
+            {/* Signature requests — sent to homeowner via e-sign */}
+            {req.claim_id && (
+              <Card>
+                <CardContent className="pt-4 space-y-3">
+                  <div className="font-semibold text-sm flex items-center gap-2">
+                    <FileText className="h-4 w-4" /> Signature requests
+                    <span className="text-xs text-muted-foreground font-normal">({sigRequests.length})</span>
+                  </div>
+                  {sigRequests.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      No signature requests yet. Upload a PDF above with "Requires homeowner signature" on to email it to the homeowner for e-signature — the same flow as Freedom CRM.
+                    </p>
+                  ) : (
+                    <ul className="text-sm divide-y divide-border">
+                      {sigRequests.map((s) => (
+                        <li key={s.id} className="py-2 space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate font-medium">{s.document_name}</span>
+                            <Badge variant={s.status === "completed" ? "default" : s.status === "declined" || s.status === "failed" ? "destructive" : "secondary"} className="text-[10px]">
+                              {s.status.replace("_", " ")}
+                            </Badge>
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">
+                            Sent {formatDistanceToNow(new Date(s.created_at), { addSuffix: true })}
+                          </div>
+                          {s.signature_signers?.map((sg) => (
+                            <div key={sg.id} className="text-xs flex items-center justify-between gap-2 pl-2">
+                              <span className="truncate">
+                                {sg.signer_name} <span className="text-muted-foreground">· {sg.signer_email}</span>
+                              </span>
+                              <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                                {sg.status === "signed" && sg.signed_at
+                                  ? `Signed ${format(new Date(sg.signed_at), "MMM d")}`
+                                  : sg.viewed_at
+                                  ? `Viewed ${format(new Date(sg.viewed_at), "MMM d")}`
+                                  : sg.delivery_status === "sent"
+                                  ? "Email sent"
+                                  : sg.delivery_status === "failed"
+                                  ? "Send failed"
+                                  : sg.status}
+                              </span>
+                            </div>
+                          ))}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
 
             {/* Updates / messages with tenant */}
             {check?.id && (

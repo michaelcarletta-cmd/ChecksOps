@@ -29,7 +29,10 @@ interface Request {
   created_at: string;
   accepted_at: string | null;
   completed_at: string | null;
+  homeowner_name: string | null;
+  insurance_company: string | null;
   tenant_name?: string | null;
+  check_amount?: number | null;
 }
 
 export default function MortgageOpsQueue() {
@@ -56,7 +59,7 @@ export default function MortgageOpsQueue() {
   const fetchQueues = useCallback(async () => {
     const { data, error } = await supabase
       .from("mortgage_handling_requests")
-      .select("*, tenants:tenant_id(name)")
+      .select("*, tenants:tenant_id(name), check:check_intake_item_id(amount)")
       .in("status", ["requested", "in_progress"])
       .order("created_at", { ascending: true });
     if (error) {
@@ -67,6 +70,7 @@ export default function MortgageOpsQueue() {
     const rows: Request[] = (data || []).map((r: any) => ({
       ...r,
       tenant_name: r.tenants?.name ?? null,
+      check_amount: r.check?.amount ?? null,
     }));
     setAvailable(rows.filter((r) => r.status === "requested" && !r.assigned_employee_id));
     setMine(rows.filter((r) => r.assigned_employee_id === user?.id && r.status === "in_progress"));
@@ -242,11 +246,13 @@ export default function MortgageOpsQueue() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3" onClick={(e) => e.stopPropagation()}>
-                    <div className="text-sm grid grid-cols-2 gap-2">
+                    <div className="text-sm grid grid-cols-2 gap-x-3 gap-y-1.5">
                       {r.loan_number && <div><span className="text-muted-foreground">Loan #:</span> {r.loan_number}</div>}
-                      {r.check_intake_item_id && (
-                        <div className="truncate"><span className="text-muted-foreground">Check:</span> {r.check_intake_item_id.slice(0, 8)}</div>
+                      {r.check_amount != null && (
+                        <div><span className="text-muted-foreground">Check:</span> ${Number(r.check_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                       )}
+                      {r.homeowner_name && <div className="truncate"><span className="text-muted-foreground">Homeowner:</span> {r.homeowner_name}</div>}
+                      {r.insurance_company && <div className="truncate"><span className="text-muted-foreground">Insurance:</span> {r.insurance_company}</div>}
                     </div>
                     {r.notes && (
                       <p className="text-xs bg-muted/40 rounded p-2 whitespace-pre-wrap">{r.notes}</p>
@@ -299,11 +305,13 @@ export default function MortgageOpsQueue() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3" onClick={(e) => e.stopPropagation()}>
-                    <div className="text-sm grid grid-cols-2 gap-2">
+                    <div className="text-sm grid grid-cols-2 gap-x-3 gap-y-1.5">
                       {r.loan_number && <div><span className="text-muted-foreground">Loan #:</span> {r.loan_number}</div>}
-                      {r.check_intake_item_id && (
-                        <div className="truncate"><span className="text-muted-foreground">Check:</span> {r.check_intake_item_id.slice(0, 8)}</div>
+                      {r.check_amount != null && (
+                        <div><span className="text-muted-foreground">Check:</span> ${Number(r.check_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                       )}
+                      {r.homeowner_name && <div className="truncate"><span className="text-muted-foreground">Homeowner:</span> {r.homeowner_name}</div>}
+                      {r.insurance_company && <div className="truncate"><span className="text-muted-foreground">Insurance:</span> {r.insurance_company}</div>}
                     </div>
                     {r.notes && (
                       <p className="text-xs bg-muted/40 rounded p-2 whitespace-pre-wrap">
