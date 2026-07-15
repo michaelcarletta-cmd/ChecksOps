@@ -15089,6 +15089,7 @@ export type Database = {
           notes: string | null
           requires_signature: boolean
           signature_status: string
+          signed_at: string | null
           signer_role: string
           submitted_at: string | null
           submitted_by: string | null
@@ -15108,6 +15109,7 @@ export type Database = {
           notes?: string | null
           requires_signature?: boolean
           signature_status?: string
+          signed_at?: string | null
           signer_role?: string
           submitted_at?: string | null
           submitted_by?: string | null
@@ -15127,6 +15129,7 @@ export type Database = {
           notes?: string | null
           requires_signature?: boolean
           signature_status?: string
+          signed_at?: string | null
           signer_role?: string
           submitted_at?: string | null
           submitted_by?: string | null
@@ -15144,6 +15147,92 @@ export type Database = {
             foreignKeyName: "loss_draft_documents_loss_draft_id_fkey"
             columns: ["loss_draft_id"]
             isOneToOne: false
+            referencedRelation: "loss_draft_tracking"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      loss_draft_mortgage_intake: {
+        Row: {
+          borrower_names: string
+          created_at: string
+          id: string
+          lead_id: string | null
+          loan_number: string | null
+          loss_draft_document_id: string | null
+          loss_draft_id: string
+          mailing_address: string | null
+          mortgage_servicer: string
+          notes: string | null
+          servicer_phone: string | null
+          signer_ip: string | null
+          signer_name: string
+          signer_user_agent: string | null
+          ssn_last4: string | null
+          updated_at: string
+        }
+        Insert: {
+          borrower_names: string
+          created_at?: string
+          id?: string
+          lead_id?: string | null
+          loan_number?: string | null
+          loss_draft_document_id?: string | null
+          loss_draft_id: string
+          mailing_address?: string | null
+          mortgage_servicer: string
+          notes?: string | null
+          servicer_phone?: string | null
+          signer_ip?: string | null
+          signer_name: string
+          signer_user_agent?: string | null
+          ssn_last4?: string | null
+          updated_at?: string
+        }
+        Update: {
+          borrower_names?: string
+          created_at?: string
+          id?: string
+          lead_id?: string | null
+          loan_number?: string | null
+          loss_draft_document_id?: string | null
+          loss_draft_id?: string
+          mailing_address?: string | null
+          mortgage_servicer?: string
+          notes?: string | null
+          servicer_phone?: string | null
+          signer_ip?: string | null
+          signer_name?: string
+          signer_user_agent?: string | null
+          ssn_last4?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loss_draft_mortgage_intake_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "homeowner_intro_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loss_draft_mortgage_intake_loss_draft_document_id_fkey"
+            columns: ["loss_draft_document_id"]
+            isOneToOne: false
+            referencedRelation: "loss_draft_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loss_draft_mortgage_intake_loss_draft_id_fkey"
+            columns: ["loss_draft_id"]
+            isOneToOne: true
+            referencedRelation: "loss_draft_dashboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loss_draft_mortgage_intake_loss_draft_id_fkey"
+            columns: ["loss_draft_id"]
+            isOneToOne: true
             referencedRelation: "loss_draft_tracking"
             referencedColumns: ["id"]
           },
