@@ -1113,7 +1113,8 @@ Rules:
       return fc !== undefined && fc < CRITICAL_CONFIDENCE_THRESHOLD;
     });
     const overallFailed = ocrConfidence !== null && ocrConfidence < OVERALL_CONFIDENCE_THRESHOLD;
-    const needsManualReview = criticalFailed || overallFailed || amountMissing;
+    const claimNumberMissing = !parsed.claim_number || String(parsed.claim_number).trim() === "";
+    const needsManualReview = criticalFailed || overallFailed || amountMissing || claimNumberMissing;
 
     const eligibility = evaluateEligibility(payees, isMultiPayee, ocrConfidence, fieldConfidence);
     if (amountMissing) {
