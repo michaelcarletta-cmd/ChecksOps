@@ -52,6 +52,13 @@ type CheckRow = {
   created_at: string | null;
   updated_at: string | null;
 };
+type ActionRow = {
+  id: string;
+  label: string;
+  requires_signature: boolean;
+  signature_status: string;
+  kind: 'upload' | 'signature';
+};
 
 const MAX_MB = 15;
 const ENDORSED_STAGES = new Set([
@@ -72,6 +79,10 @@ export default function HomeownerClaimPortal() {
   const [uploads, setUploads] = useState<UploadRow[]>([]);
   const [checks, setChecks] = useState<CheckRow[]>([]);
   const [pending, setPending] = useState(false);
+  const [actions, setActions] = useState<ActionRow[]>([]);
+  const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+  const actionFileInput = useRef<HTMLInputElement>(null);
+  const pendingActionRef = useRef<string | null>(null);
 
   // Upload state
   const [file, setFile] = useState<File | null>(null);
@@ -106,6 +117,7 @@ export default function HomeownerClaimPortal() {
       setContractor((data as any).contractor);
       setUploads(((data as any).uploads ?? []) as UploadRow[]);
       setChecks(((data as any).checks ?? []) as CheckRow[]);
+      setActions(((data as any).actions ?? []) as ActionRow[]);
       const l = (data as any).lead as Lead;
       setCarrier(l?.dtp_insurance_carrier ?? "");
       setClaimNum(l?.dtp_claim_number ?? "");
@@ -195,7 +207,38 @@ export default function HomeownerClaimPortal() {
     }
   };
 
+  const completeActionFile = async (docId: string, f: File) => {
+    if (f.size > MAX_MB * 1024 * 1024) {
+      toast.error(`File too large (${MAX_MB} MB max)`);
+      return;
+    }
+    setActionBusyId(docId);
+    try {
+      const b64 = await fileToBase64(f);
+      const { data, error: err } = await supabase.functions.invoke("homeowner-claim-portal", {
+        body: {
+          token,
+          action: "complete_action",
+          doc_id: docId,
+          file_base64: b64,
+          file_mime: f.type || "application/octet-stream",
+          filename: f.name,
+        },
+      });
+      if (err) throw new Error(err.message);
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success("Sent to your contractor");
+      await load();
+    } catch (e: any) {
+      toast.error(e.message ?? "Could not submit");
+    } finally {
+      setActionBusyId(null);
+      pendingActionRef.current = null;
+    }
+  };
+
   const dtpSigned = !!lead?.dtp_signed_at;
+
 
   if (loading) {
     return (
@@ -274,8 +317,79 @@ export default function HomeownerClaimPortal() {
           </CardContent>
         </Card>
 
+        {/* Hidden file input reused by every Action-needed upload button */}
+        <input
+          ref={actionFileInput}
+          type="file"
+          accept="image/*,application/pdf,.doc,.docx"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            const id = pendingActionRef.current;
+            if (f && id) completeActionFile(id, f);
+            e.target.value = "";
+          }}
+        />
+
+        {/* Action needed */}
+        {actions.length > 0 && (
+          <Card className="border-primary/50">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileSignature className="h-4 w-4 text-primary" />
+                Action needed
+                <Badge className="ml-1 text-[10px]">{actions.length}</Badge>
+              </CardTitle>
+              <CardDescription>
+                Your check can't move forward until these are done. Each item is waiting on you.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {actions.map((a) => (
+                <div
+                  key={a.id}
+                  className="flex items-start justify-between gap-3 rounded-md border border-border p-3"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">{a.label}</div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      {a.kind === "signature"
+                        ? "Signature required — the check is waiting on this."
+                        : "Upload required — the check is waiting on this."}
+                    </div>
+                  </div>
+                  {a.kind === "upload" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={actionBusyId === a.id}
+                      onClick={() => {
+                        pendingActionRef.current = a.id;
+                        actionFileInput.current?.click();
+                      }}
+                    >
+                      {actionBusyId === a.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <>
+                          <Upload className="h-3.5 w-3.5 mr-1" /> Upload
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] whitespace-nowrap">
+                      Signature coming soon
+                    </Badge>
+                  )}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Timeline */}
         <Card>
+
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <ClipboardCheck className="h-4 w-4" /> Claim activity
