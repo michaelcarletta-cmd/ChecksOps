@@ -86,6 +86,7 @@ function CheckOpsRoutes() {
       <Route path="/pricing" element={<Suspense fallback={<PageLoader />}><CheckOpsPricing /></Suspense>} />
       <Route path="/privacy-notice" element={<Suspense fallback={<PageLoader />}><PrivacyNotice /></Suspense>} />
       <Route path="/admin/tenants" element={<Suspense fallback={<PageLoader />}><AdminTenants /></Suspense>} />
+      <Route path="/admin/mortgage-ops" element={<Suspense fallback={<PageLoader />}><AdminMortgageOps /></Suspense>} />
       <Route path="/find-a-pro" element={<Suspense fallback={<PageLoader />}><FindAPro /></Suspense>} />
       <Route path="/pros" element={<Navigate to="/find-a-pro" replace />} />
       <Route path="/h/upload" element={<Suspense fallback={<PageLoader />}><HomeownerCheckUpload /></Suspense>} />
