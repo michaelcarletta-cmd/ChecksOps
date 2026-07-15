@@ -246,6 +246,17 @@ export function LossDraftDetailPanel({
               variant="outline"
               className="h-7 text-xs"
             />
+            {tenantId && (
+              <SendToMortgageDeskButton
+                checkIntakeItemId={draft.check_intake_item_id}
+                tenantId={tenantId}
+                claimId={draft.claim_id}
+                defaultMortgageCompany={
+                  isUnknownServicer(draft.mortgage_servicer) ? "" : draft.mortgage_servicer
+                }
+              />
+            )}
+
 
           </div>
         )}
