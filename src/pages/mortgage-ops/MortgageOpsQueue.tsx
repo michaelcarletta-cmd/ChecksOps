@@ -247,14 +247,19 @@ export default function MortgageOpsQueue() {
                     {r.notes && (
                       <p className="text-xs bg-muted/40 rounded p-2 whitespace-pre-wrap">{r.notes}</p>
                     )}
-                    <Button
-                      onClick={() => handleAccept(r.id)}
-                      disabled={busyId === r.id}
-                      size="sm"
-                    >
-                      {busyId === r.id ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-                      Accept task
-                    </Button>
+                    <div className="flex gap-2 flex-wrap">
+                      <Button
+                        onClick={() => handleAccept(r.id)}
+                        disabled={busyId === r.id}
+                        size="sm"
+                      >
+                        {busyId === r.id ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                        Accept task
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setDetailId(r.id)}>
+                        <Eye className="h-4 w-4 mr-1" /> View details
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))
