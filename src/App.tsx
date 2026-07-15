@@ -8,7 +8,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useCustomDomainTenant } from "./hooks/useCustomDomainTenant";
 import { CustomDomainWhiteLabelApp } from "./components/white-label/CustomDomainWhiteLabelApp";
 import { AuthProvider } from "./hooks/useAuth";
-import { isMortgageOpsHost } from "./lib/checkopsHost";
+
 import { bootstrapEmbedContext } from "./lib/embedContext";
 
 // Capture Freedom CRM embed params (?embed=1&partner=...&freedom_claim_id=...)
@@ -38,15 +38,6 @@ const HomeownerLedger = lazy(() => import("./pages/HomeownerLedger"));
 const MortgageOpsLogin = lazy(() => import("./pages/mortgage-ops/MortgageOpsLogin"));
 const MortgageOpsQueue = lazy(() => import("./pages/mortgage-ops/MortgageOpsQueue"));
 
-function MortgageOpsRoutes() {
-  return (
-    <Routes>
-      <Route path="/login" element={<Suspense fallback={<PageLoader />}><MortgageOpsLogin /></Suspense>} />
-      <Route path="/queue" element={<Suspense fallback={<PageLoader />}><MortgageOpsQueue /></Suspense>} />
-      <Route path="*" element={<Navigate to="/login" replace />} />
-    </Routes>
-  );
-}
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -100,6 +91,9 @@ function CheckOpsRoutes() {
       <Route path="/h/claim/:token" element={<Suspense fallback={<PageLoader />}><HomeownerClaimPortal /></Suspense>} />
       <Route path="/ledger/:token" element={<Suspense fallback={<PageLoader />}><HomeownerLedger /></Suspense>} />
       <Route path="/start-claim/:token" element={<Suspense fallback={<PageLoader />}><HomeownerLedger preClaim /></Suspense>} />
+      <Route path="/mortgage-ops/login" element={<Suspense fallback={<PageLoader />}><MortgageOpsLogin /></Suspense>} />
+      <Route path="/mortgage-ops/queue" element={<Suspense fallback={<PageLoader />}><MortgageOpsQueue /></Suspense>} />
+      <Route path="/mortgage-ops" element={<Navigate to="/mortgage-ops/login" replace />} />
       <Route path="/wl/:slug/*" element={<LegacyWlRedirect />} />
       <Route path="/:slug/*" element={<Suspense fallback={<PageLoader />}><WhiteLabelApp /></Suspense>} />
       <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFound /></Suspense>} />
@@ -120,10 +114,6 @@ function AppRoutes() {
     return <PageLoader />;
   }
 
-  // mortgage.checksops.com → ChecksOps employee ops portal
-  if (isMortgageOpsHost()) {
-    return <MortgageOpsRoutes />;
-  }
 
 
   // Tenant-owned custom domain (e.g. acme-inspections.com) → that tenant's Check Center
