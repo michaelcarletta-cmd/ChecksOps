@@ -8,8 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { toast } from "@/hooks/use-toast";
+import {
   Building2, Truck, PackageCheck, ArrowDownToLine,
-  Lock, CheckCircle2, Plus, DollarSign,
+  Lock, CheckCircle2, Plus, DollarSign, Headset,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -26,16 +30,35 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
   const [drawNotes, setDrawNotes] = useState("");
   const [showDrawForm, setShowDrawForm] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showDeskDialog, setShowDeskDialog] = useState(false);
+  const [deskCompany, setDeskCompany] = useState("");
+  const [deskLoan, setDeskLoan] = useState("");
+  const [deskNote, setDeskNote] = useState("");
+  const [deskSubmitting, setDeskSubmitting] = useState(false);
 
   const { data: check } = useQuery({
     queryKey: ["check-mortgage-data", checkId],
     queryFn: async () => {
       const { data } = await supabase
         .from("check_intake_items")
-        .select("mortgage_monitoring_type, mortgage_sent_at, mortgage_tracking_number, mortgage_received_at, mortgage_final_released_at")
+        .select("mortgage_monitoring_type, mortgage_sent_at, mortgage_tracking_number, mortgage_received_at, mortgage_final_released_at, tenant_id, claim_id, check_number")
         .eq("id", checkId)
         .single();
-      return data;
+      return data as any;
+    },
+  });
+
+  const { data: deskRequest, refetch: refetchDesk } = useQuery({
+    queryKey: ["mortgage-desk-request", checkId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("mortgage_handling_requests")
+        .select("id, status, mortgage_company, loan_number, created_at, completed_at, billing_status")
+        .eq("check_intake_item_id", checkId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data as any;
     },
   });
 
@@ -115,7 +138,61 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
     refresh();
   }
 
+  async function submitDeskRequest() {
+    if (!check?.tenant_id) return;
+    if (!deskCompany.trim()) {
+      toast({ title: "Mortgage company required", variant: "destructive" });
+      return;
+    }
+    setDeskSubmitting(true);
+    const { data: userData } = await supabase.auth.getUser();
+    const { error } = await supabase.from("mortgage_handling_requests").insert({
+      tenant_id: check.tenant_id,
+      check_intake_item_id: checkId,
+      claim_id: check.claim_id ?? null,
+      mortgage_company: deskCompany.trim(),
+      loan_number: deskLoan.trim() || null,
+      note: deskNote.trim() || null,
+      requested_by: userData.user?.id ?? null,
+    } as any).select("id").single();
+    if (error) {
+      // 23505 = duplicate open request; the partial unique index catches it
+      const dup = /duplicate|unique/i.test(error.message);
+      toast({
+        title: dup ? "Request already open" : "Could not create request",
+        description: dup ? "A ChecksOps mortgage request is already active for this check." : error.message,
+        variant: "destructive",
+      });
+      setDeskSubmitting(false);
+      if (dup) { setShowDeskDialog(false); refetchDesk(); }
+      return;
+    }
+    // Fire-and-forget notification (never blocks the user)
+    const { data: created } = await supabase
+      .from("mortgage_handling_requests")
+      .select("id")
+      .eq("check_intake_item_id", checkId)
+      .in("status", ["requested", "in_progress"])
+      .maybeSingle();
+    if (created?.id) {
+      supabase.functions.invoke("notify-mortgage-handling-request", {
+        body: { request_id: created.id },
+      }).catch(() => {});
+    }
+    toast({ title: "ChecksOps has been notified", description: "Our team will contact the mortgage company." });
+    setShowDeskDialog(false);
+    setDeskCompany(""); setDeskLoan(""); setDeskNote("");
+    setDeskSubmitting(false);
+    refetchDesk();
+  }
+
   if (!check) return null;
+
+  const deskStatusLabel = deskRequest?.status === "requested" ? "Requested"
+    : deskRequest?.status === "in_progress" ? "In progress"
+    : deskRequest?.status === "completed" ? "Completed"
+    : null;
+  const deskOpen = deskRequest && ["requested", "in_progress"].includes(deskRequest.status);
 
   return (
     <div className="space-y-3">
@@ -123,7 +200,16 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
       <div className="flex items-center gap-2">
         <Building2 className="h-4 w-4 text-amber-400" />
         <span className="text-sm font-semibold">Mortgage / Loss Draft</span>
+        {deskStatusLabel && (
+          <Badge
+            variant={deskRequest?.status === "completed" ? "default" : "secondary"}
+            className="text-[10px] gap-1"
+          >
+            <Headset className="h-2.5 w-2.5" /> ChecksOps handling: {deskStatusLabel}
+          </Badge>
+        )}
       </div>
+
 
       {/* Monitoring type selection */}
       {monitoringType === "not_set" ? (
@@ -148,6 +234,52 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
           </Button>
         </div>
       )}
+
+      {/* ChecksOps Mortgage Desk — request live-people help */}
+      {monitoringType === "monitored" && !deskOpen && deskRequest?.status !== "completed" && (
+        <div className="rounded-md border border-dashed border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+          <div className="flex items-start gap-2">
+            <Headset className="h-4 w-4 text-amber-400 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-xs font-semibold">Want us to handle the mortgage company?</p>
+              <p className="text-[11px] text-muted-foreground">
+                ChecksOps staff will contact the mortgage company on your behalf. Flat fee billed on completion.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowDeskDialog(true)}
+          >
+            <Headset className="h-3.5 w-3.5 mr-1" /> Have ChecksOps contact the mortgage company
+          </Button>
+        </div>
+      )}
+      {deskOpen && (
+        <div className="rounded-md bg-muted/40 p-3 text-xs space-y-1">
+          <div className="flex items-center gap-2">
+            <Headset className="h-3.5 w-3.5 text-amber-400" />
+            <span className="font-semibold">ChecksOps is handling this mortgage company</span>
+          </div>
+          <div className="text-muted-foreground">
+            {deskRequest?.mortgage_company ?? "—"}
+            {deskRequest?.loan_number ? ` · Loan #${deskRequest.loan_number}` : ""}
+            {" · "}Requested {format(new Date(deskRequest!.created_at), "MMM d")}
+          </div>
+        </div>
+      )}
+      {deskRequest?.status === "completed" && (
+        <div className="rounded-md bg-emerald-500/10 p-3 text-xs flex items-center gap-2">
+          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+          <span>ChecksOps completed mortgage handling</span>
+          {deskRequest.completed_at && (
+            <span className="text-muted-foreground">· {format(new Date(deskRequest.completed_at), "MMM d, yyyy")}</span>
+          )}
+        </div>
+      )}
+
+
 
       {/* Sent status display */}
       {isSent && (
@@ -303,6 +435,55 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
           )}
         </div>
       )}
+
+      <Dialog open={showDeskDialog} onOpenChange={setShowDeskDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Headset className="h-4 w-4 text-amber-400" /> Have ChecksOps contact the mortgage company
+            </DialogTitle>
+            <DialogDescription>
+              Our staff will reach out to the mortgage company for this check. You'll be billed a flat fee when the task is completed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Mortgage company *</label>
+              <Input
+                value={deskCompany}
+                onChange={(e) => setDeskCompany(e.target.value)}
+                placeholder="e.g. Chase Home Lending"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Loan number (optional)</label>
+              <Input
+                value={deskLoan}
+                onChange={(e) => setDeskLoan(e.target.value)}
+                placeholder="Loan #"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Anything we should know? (optional)</label>
+              <Textarea
+                value={deskNote}
+                onChange={(e) => setDeskNote(e.target.value)}
+                placeholder="Prior contact, servicer requirements, urgency…"
+                className="min-h-[70px]"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowDeskDialog(false)} disabled={deskSubmitting}>
+              Cancel
+            </Button>
+            <Button onClick={submitDeskRequest} disabled={deskSubmitting || !deskCompany.trim()}>
+              {deskSubmitting ? "Submitting…" : "Send to ChecksOps"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
