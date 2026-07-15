@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Plus, RefreshCw, Trash2, Briefcase, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, RefreshCw, Trash2, Briefcase, ShieldAlert, KeyRound } from "lucide-react";
 
 const ALLOWED_EMAIL = "mcarletta@freedomadj.com";
 
@@ -136,6 +136,15 @@ export default function AdminMortgageOps() {
     loadAgents();
   };
 
+  const sendPasswordReset = async (agent: AgentRow) => {
+    if (!agent.email) return toast.error("No email on file for this agent");
+    const { error } = await supabase.auth.resetPasswordForEmail(agent.email, {
+      redirectTo: `${window.location.origin}/mortgage-ops/login`,
+    });
+    if (error) return toast.error(error.message);
+    toast.success(`Password reset email sent to ${agent.email}`);
+  };
+
   const unassignRequest = async (req: RequestRow) => {
     const { error } = await supabase
       .from("mortgage_handling_requests")
@@ -240,6 +249,14 @@ export default function AdminMortgageOps() {
                       </TableCell>
                       <TableCell className="text-right space-x-2">
                         <Button size="sm" variant="outline" onClick={() => openAgent(a)}>Manage</Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => sendPasswordReset(a)}
+                          title="Send password reset email"
+                        >
+                          <KeyRound className="w-4 h-4" />
+                        </Button>
                         <Button size="sm" variant="ghost" onClick={() => removeAgent(a)}>
                           <Trash2 className="w-4 h-4" />
                         </Button>

@@ -24,6 +24,7 @@ import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { assessCheckValidity, isAtRisk } from "@/lib/checkValidity";
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
+import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
 
 
 /* ------------------------------------------------------------------ */
@@ -406,6 +407,33 @@ export function CheckReviewQueue({
     return Array.from(groups.values()).sort((a, b) => new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime());
   }, [linkedClaims, reviewChecks, searchQuery]);
 
+  // Duplicate detection: same check_number + amount + carrier_name (all present).
+  // The earliest-created check keeps "original"; later ones are flagged duplicates.
+  const duplicateInfo = useMemo(() => {
+    const groups = new Map<string, ReviewCheck[]>();
+    reviewChecks.forEach((c) => {
+      const num = (c.check_number ?? "").trim().toLowerCase();
+      const amt = c.amount != null ? String(c.amount) : "";
+      const carrier = (c.carrier_name ?? "").trim().toLowerCase();
+      if (!num || !amt || !carrier) return;
+      const key = `${num}|${amt}|${carrier}`;
+      const arr = groups.get(key) ?? [];
+      arr.push(c);
+      groups.set(key, arr);
+    });
+    const duplicateIds = new Set<string>();
+    const originalIds = new Set<string>();
+    groups.forEach((arr) => {
+      if (arr.length < 2) return;
+      const sorted = [...arr].sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+      originalIds.add(sorted[0].id);
+      sorted.slice(1).forEach((c) => duplicateIds.add(c.id));
+    });
+    return { duplicateIds, originalIds };
+  }, [reviewChecks]);
+
   function getReviewReason(check: ReviewCheck): string {
     const reasons: string[] = [];
     if (check.ocr_needs_verification) reasons.push("Needs Verification");
@@ -491,6 +519,17 @@ export function CheckReviewQueue({
                     {check.check_payees.length} payee{check.check_payees.length > 1 ? "s" : ""}
                   </Badge>
                 )}
+                {duplicateInfo.duplicateIds.has(check.id) && (
+                  <Badge variant="outline" className="text-[10px] bg-destructive/15 text-destructive border-destructive/30">
+                    <AlertTriangle className="h-2.5 w-2.5 mr-1" />
+                    Duplicate
+                  </Badge>
+                )}
+                {duplicateInfo.originalIds.has(check.id) && (
+                  <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-500 border-amber-500/30">
+                    Has duplicates
+                  </Badge>
+                )}
               </div>
               <div
                 className="mt-2 flex items-center gap-1.5"
@@ -534,6 +573,17 @@ export function CheckReviewQueue({
                 >
                   <Share2 className="h-3.5 w-3.5" />
                 </Button>
+                <AdminDeleteCheckButton
+                  checkId={check.id}
+                  checkNumber={check.check_number}
+                  size="icon"
+                  variant="ghost"
+                  label=""
+                  className="h-7 w-7 shrink-0 p-0"
+                  onDeleted={() => {
+                    qc.invalidateQueries({ queryKey: ["check-review-queue", tenantId] });
+                  }}
+                />
               </div>
                 </CardContent>
               </Card>
@@ -827,7 +877,16 @@ export function ReviewDecisionPanel({
       <div className="p-4 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-semibold">Review Check #{check.check_number || "—"}</h3>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <AdminDeleteCheckButton
+              checkId={checkId}
+              checkNumber={check.check_number}
+              size="sm"
+              variant="outline"
+              onDeleted={() => {
+                qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+              }}
+            />
             {frontImageUrl && (
               <Button size="sm" variant="outline" onClick={() => setFrontViewerOpen(true)}>
                 <FileImage className="h-3 w-3 mr-1" /> Front
