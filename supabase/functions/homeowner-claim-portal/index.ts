@@ -241,7 +241,7 @@ Deno.serve(async (req) => {
       if (!lossDraftIds.length) return json({ ok: true, actions: [] })
       const { data: docs } = await admin
         .from('loss_draft_documents')
-        .select('id, document_label, requires_signature, signature_status, is_submitted')
+        .select('id, document_type, document_label, requires_signature, signature_status, is_submitted')
         .in('loss_draft_id', lossDraftIds)
         .eq('signer_role', 'homeowner')
         .eq('is_submitted', false)
@@ -251,9 +251,12 @@ Deno.serve(async (req) => {
         actions: (docs ?? []).map((d: any) => ({
           id: d.id,
           label: d.document_label,
+          document_type: d.document_type,
           requires_signature: !!d.requires_signature,
           signature_status: d.signature_status,
-          kind: d.requires_signature ? 'signature' : 'upload',
+          kind: d.document_type === 'mortgage_intake'
+            ? 'intake_form'
+            : d.requires_signature ? 'signature' : 'upload',
         })),
       })
     }
