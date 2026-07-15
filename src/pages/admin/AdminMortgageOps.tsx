@@ -10,6 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { ArrowLeft, Loader2, Plus, RefreshCw, Trash2, Briefcase, ShieldAlert, KeyRound, Home } from "lucide-react";
+import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
+
 
 const ALLOWED_EMAIL = "mcarletta@freedomadj.com";
 
