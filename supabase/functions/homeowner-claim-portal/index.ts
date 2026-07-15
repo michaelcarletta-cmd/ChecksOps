@@ -4,6 +4,7 @@
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { z } from 'npm:zod@3.23.8'
+import { PDFDocument, StandardFonts, rgb } from 'npm:pdf-lib@1.17.1'
 
 const BUCKET = 'claim-files'
 const LOSS_DRAFT_BUCKET = 'loss-draft-documents'
