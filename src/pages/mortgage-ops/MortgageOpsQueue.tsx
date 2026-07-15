@@ -40,6 +40,7 @@ export default function MortgageOpsQueue() {
   const navigate = useNavigate();
   const [available, setAvailable] = useState<Request[]>([]);
   const [mine, setMine] = useState<Request[]>([]);
+  const [completed, setCompleted] = useState<Request[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notesById, setNotesById] = useState<Record<string, string>>({});
@@ -60,8 +61,9 @@ export default function MortgageOpsQueue() {
     const { data, error } = await supabase
       .from("mortgage_handling_requests")
       .select("*, tenants:tenant_id(name), check:check_intake_item_id(amount)")
-      .in("status", ["requested", "in_progress"])
-      .order("created_at", { ascending: true });
+      .in("status", ["requested", "in_progress", "completed"])
+      .order("created_at", { ascending: false })
+      .limit(500);
     if (error) {
       toast.error("Failed to load queue");
       setLoading(false);
@@ -72,10 +74,25 @@ export default function MortgageOpsQueue() {
       tenant_name: r.tenants?.name ?? null,
       check_amount: r.check?.amount ?? null,
     }));
-    setAvailable(rows.filter((r) => r.status === "requested" && !r.assigned_employee_id));
-    setMine(rows.filter((r) => r.assigned_employee_id === user?.id && r.status === "in_progress"));
+    // Queued = every unassigned 'requested' row (accurate global count)
+    setAvailable(
+      rows
+        .filter((r) => r.status === "requested" && !r.assigned_employee_id)
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+    );
+    // In progress = every 'in_progress' row (not just mine) so the number matches reality
+    setMine(
+      rows
+        .filter((r) => r.status === "in_progress")
+        .sort((a, b) => new Date(b.accepted_at ?? b.created_at).getTime() - new Date(a.accepted_at ?? a.created_at).getTime()),
+    );
+    setCompleted(
+      rows
+        .filter((r) => r.status === "completed")
+        .sort((a, b) => new Date(b.completed_at ?? b.created_at).getTime() - new Date(a.completed_at ?? a.created_at).getTime()),
+    );
     setLoading(false);
-  }, [user?.id]);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
