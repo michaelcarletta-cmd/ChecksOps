@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Plus, RefreshCw, Trash2, Briefcase, ShieldAlert, KeyRound } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, RefreshCw, Trash2, Briefcase, ShieldAlert, KeyRound, Home } from "lucide-react";
 
 const ALLOWED_EMAIL = "mcarletta@freedomadj.com";
 
@@ -172,6 +172,9 @@ export default function AdminMortgageOps() {
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" onClick={() => navigate("/admin/tenants")}>
               <ArrowLeft className="w-4 h-4 mr-1" /> Back
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
+              <Home className="w-4 h-4 mr-1" /> Home
             </Button>
             <Briefcase className="w-6 h-6 text-primary" />
             <div>
