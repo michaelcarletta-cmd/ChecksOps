@@ -68,19 +68,28 @@ export default function AdminMortgageOps() {
       setLoading(false);
       return;
     }
-    const userIds = (roles || []).map((r) => r.user_id);
-    if (userIds.length === 0) {
+    // Pull every request that has an assignee — an admin may be actively working
+    // mortgage-ops queues without holding the mortgage_agent role, and we still
+    // want their counts to appear so the dashboard reflects reality.
+    const { data: reqs } = await supabase
+      .from("mortgage_handling_requests")
+      .select("assigned_employee_id, status")
+      .not("assigned_employee_id", "is", null);
+
+    const agentUserIds = new Set((roles || []).map((r) => r.user_id));
+    const assigneeIds = new Set(
+      (reqs || []).map((r: any) => r.assigned_employee_id).filter(Boolean)
+    );
+    const allUserIds = Array.from(new Set([...agentUserIds, ...assigneeIds]));
+    if (allUserIds.length === 0) {
       setAgents([]);
       setLoading(false);
       return;
     }
-    const [{ data: profiles }, { data: reqs }] = await Promise.all([
-      supabase.from("profiles").select("id, email, full_name").in("id", userIds),
-      supabase
-        .from("mortgage_handling_requests")
-        .select("assigned_employee_id, status")
-        .in("assigned_employee_id", userIds),
-    ]);
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, email, full_name")
+      .in("id", allUserIds);
     const profMap = new Map((profiles || []).map((p: any) => [p.id, p]));
     const counts = new Map<string, { active: number; in_progress: number; completed: number }>();
     (reqs || []).forEach((r: any) => {
@@ -91,12 +100,13 @@ export default function AdminMortgageOps() {
       if (r.status === "completed") c.completed += 1;
       counts.set(r.assigned_employee_id, c);
     });
-    const rows: AgentRow[] = (roles || []).map((r) => {
-      const p: any = profMap.get(r.user_id);
-      const c = counts.get(r.user_id) || { active: 0, in_progress: 0, completed: 0 };
+    const roleMap = new Map((roles || []).map((r) => [r.user_id, r.id]));
+    const rows: AgentRow[] = allUserIds.map((uid) => {
+      const p: any = profMap.get(uid);
+      const c = counts.get(uid) || { active: 0, in_progress: 0, completed: 0 };
       return {
-        user_id: r.user_id,
-        role_id: r.id,
+        user_id: uid,
+        role_id: roleMap.get(uid) ?? "",
         email: p?.email ?? null,
         full_name: p?.full_name ?? null,
         active_requests: c.active,
@@ -108,6 +118,7 @@ export default function AdminMortgageOps() {
     setAgents(rows);
     setLoading(false);
   }, []);
+
 
   useEffect(() => {
     if (authorized) loadAgents();
