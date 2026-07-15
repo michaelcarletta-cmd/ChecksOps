@@ -3,7 +3,7 @@ import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
 const ROLE_CACHE_KEY = "cached_user_role";
-const ROLE_PRIORITY = ["admin", "staff", "read_only", "guided", "contractor", "client"] as const;
+const ROLE_PRIORITY = ["admin", "staff", "mortgage_agent", "read_only", "guided", "contractor", "client"] as const;
 
 function getCachedRole(forUserId?: string | null): string | null {
   try {

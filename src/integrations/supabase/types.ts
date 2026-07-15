@@ -20566,6 +20566,39 @@ export type Database = {
         Returns: unknown
       }
       _st_within: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      accept_mortgage_handling_request: {
+        Args: { _request_id: string }
+        Returns: {
+          accepted_at: string | null
+          assigned_employee_id: string | null
+          billed_at: string | null
+          billing_error: string | null
+          billing_status: string
+          cancelled_at: string | null
+          check_intake_item_id: string
+          claim_id: string | null
+          completed_at: string | null
+          created_at: string
+          flat_fee_cents: number | null
+          id: string
+          loan_number: string | null
+          mortgage_company: string | null
+          mortgage_servicer: string | null
+          note: string | null
+          requested_by: string | null
+          status: string
+          stripe_invoice_item_id: string | null
+          tenant_id: string
+          updated_at: string
+          work_notes: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "mortgage_handling_requests"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       acquire_darwin_job: {
         Args: {
           p_claimed_by: string
@@ -22313,6 +22346,39 @@ export type Database = {
       system_tenant_id: { Args: never; Returns: string }
       to_standard_caps: { Args: { input: string }; Returns: string }
       unlockrows: { Args: { "": string }; Returns: number }
+      update_mortgage_handling_request_status: {
+        Args: { _notes?: string; _request_id: string; _status: string }
+        Returns: {
+          accepted_at: string | null
+          assigned_employee_id: string | null
+          billed_at: string | null
+          billing_error: string | null
+          billing_status: string
+          cancelled_at: string | null
+          check_intake_item_id: string
+          claim_id: string | null
+          completed_at: string | null
+          created_at: string
+          flat_fee_cents: number | null
+          id: string
+          loan_number: string | null
+          mortgage_company: string | null
+          mortgage_servicer: string | null
+          note: string | null
+          requested_by: string | null
+          status: string
+          stripe_invoice_item_id: string | null
+          tenant_id: string
+          updated_at: string
+          work_notes: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "mortgage_handling_requests"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       updategeometrysrid: {
         Args: {
           catalogn_name: string
@@ -22364,6 +22430,7 @@ export type Database = {
         | "referrer"
         | "read_only"
         | "guided"
+        | "mortgage_agent"
       automation_mode: "active" | "passive" | "suspended" | "closed"
       cash_job_status:
         | "estimate"
@@ -22636,6 +22703,7 @@ export const Constants = {
         "referrer",
         "read_only",
         "guided",
+        "mortgage_agent",
       ],
       automation_mode: ["active", "passive", "suspended", "closed"],
       cash_job_status: [

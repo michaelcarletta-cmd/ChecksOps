@@ -34,3 +34,15 @@ export function isCheckOpsHost(hostname: string = typeof window !== "undefined" 
   if (hostname.endsWith(".checksops.app")) return true;
   return false;
 }
+
+const MORTGAGE_OPS_HOSTS = [
+  "mortgage.checksops.com",
+  "mortgage.checkops.com",
+];
+
+export function isMortgageOpsHost(
+  hostname: string = typeof window !== "undefined" ? window.location.hostname : ""
+): boolean {
+  if (!hostname) return false;
+  return MORTGAGE_OPS_HOSTS.includes(hostname);
+}
