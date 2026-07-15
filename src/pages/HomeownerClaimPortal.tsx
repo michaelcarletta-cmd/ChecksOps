@@ -111,6 +111,26 @@ export default function HomeownerClaimPortal() {
   const [agree, setAgree] = useState(false);
   const [signing, setSigning] = useState(false);
 
+  // Signature dialog for signature-required docs
+  const [signAction, setSignAction] = useState<ActionRow | null>(null);
+  const [signActionName, setSignActionName] = useState("");
+  const [signActionAgree, setSignActionAgree] = useState(false);
+  const [signActionBusy, setSignActionBusy] = useState(false);
+
+  // Mortgage intake dialog
+  const [intakeAction, setIntakeAction] = useState<ActionRow | null>(null);
+  const [intakeBusy, setIntakeBusy] = useState(false);
+  const [intake, setIntake] = useState({
+    mortgage_servicer: "",
+    loan_number: "",
+    servicer_phone: "",
+    borrower_names: "",
+    mailing_address: "",
+    ssn_last4: "",
+    notes: "",
+    signer_name: "",
+  });
+
   useEffect(() => {
     document.title = "Your claim portal | ChecksOps";
   }, []);
