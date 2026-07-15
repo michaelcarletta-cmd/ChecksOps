@@ -1,22 +1,28 @@
 // deno-lint-ignore-file no-explicit-any
 // Public, token-gated homeowner portal. No login required.
-// Actions: get | upload_check | sign_dtp
+// Actions: get | upload_check | sign_dtp | list_actions | complete_action
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { z } from 'npm:zod@3.23.8'
 
 const BUCKET = 'claim-files'
+const LOSS_DRAFT_BUCKET = 'loss-draft-documents'
 const MAX_BYTES = 15 * 1024 * 1024
 const ALLOWED_MIME = new Set([
   'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf',
+])
+const ACTION_MIME = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ])
 const TOKEN_RE = /^[a-f0-9]{32,80}$/i
 
 const Body = z.object({
   token: z.string().regex(TOKEN_RE),
-  action: z.enum(['get', 'upload_check', 'sign_dtp']),
+  action: z.enum(['get', 'upload_check', 'sign_dtp', 'list_actions', 'complete_action']),
   file_base64: z.string().min(100).optional(),
-  file_mime: z.string().max(60).optional(),
+  file_mime: z.string().max(120).optional(),
   filename: z.string().max(200).optional(),
   note: z.string().max(1000).optional(),
   signature_name: z.string().trim().min(2).max(120).optional(),
@@ -24,7 +30,34 @@ const Body = z.object({
   claim_number: z.string().trim().max(80).optional(),
   policy_number: z.string().trim().max(80).optional(),
   property_address: z.string().trim().max(240).optional(),
+  doc_id: z.string().uuid().optional(),
 })
+
+async function resolveLossDraftIds(admin: any, leadId: string, dtpClaimNumber: string | null, contractorUserId: string | null): Promise<string[]> {
+  const checkIds = new Set<string>()
+  const { data: linked } = await admin
+    .from('check_intake_items')
+    .select('id')
+    .eq('lead_id', leadId)
+  for (const r of linked ?? []) checkIds.add(r.id)
+
+  if (dtpClaimNumber && contractorUserId) {
+    const { data: tenants } = await admin
+      .from('tenant_users').select('tenant_id').eq('user_id', contractorUserId)
+    const tenantIds = (tenants ?? []).map((t: any) => t.tenant_id).filter(Boolean)
+    if (tenantIds.length) {
+      const { data: rows } = await admin
+        .from('check_intake_items').select('id').in('tenant_id', tenantIds)
+        .or(`detected_claim_number.eq.${dtpClaimNumber},freedom_claim_number.eq.${dtpClaimNumber}`)
+      for (const r of rows ?? []) checkIds.add(r.id)
+    }
+  }
+  if (!checkIds.size) return []
+  const { data: lds } = await admin
+    .from('loss_draft_tracking').select('id')
+    .in('check_intake_item_id', Array.from(checkIds))
+  return (lds ?? []).map((r: any) => r.id)
+}
 
 function b64ToBytes(b64: string): Uint8Array {
   const clean = b64.includes(',') ? b64.split(',').pop()! : b64
