@@ -470,7 +470,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                           <div className="truncate font-medium">{f.file_name}</div>
                           <div className="text-[11px] text-muted-foreground flex flex-wrap gap-x-2">
                             {f.category && <span>{f.category}</span>}
-                            {f.requires_signature && <span className="text-amber-600">for signature ({f.signature_status || "pending"})</span>}
+                            {f.category === "mortgage_ops_signature" && <span className="text-amber-600">for homeowner signature</span>}
                             <span>{formatDistanceToNow(new Date(f.created_at), { addSuffix: true })}</span>
                           </div>
                           {f.description && <div className="text-xs text-muted-foreground truncate">{f.description}</div>}
