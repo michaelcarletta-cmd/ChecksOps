@@ -379,6 +379,171 @@ Deno.serve(async (req) => {
       return json({ ok: true })
     }
 
+    if (p.action === 'sign_document') {
+      if (!p.doc_id) return json({ error: 'doc_id required' }, 400)
+      if (!p.signature_name) return json({ error: 'signature name required' }, 400)
+      if (!p.agree) return json({ error: 'agreement required' }, 400)
+
+      const lossDraftIds = await resolveLossDraftIds(
+        admin, lead.id, lead.dtp_claim_number ?? null, profile?.user_id ?? null,
+      )
+      if (!lossDraftIds.length) return json({ error: 'no matching loss draft' }, 404)
+
+      const { data: doc, error: docErr } = await admin
+        .from('loss_draft_documents')
+        .select('id, loss_draft_id, signer_role, requires_signature, document_type, document_label')
+        .eq('id', p.doc_id)
+        .maybeSingle()
+      if (docErr || !doc) return json({ error: 'document not found' }, 404)
+      if (!lossDraftIds.includes(doc.loss_draft_id) || doc.signer_role !== 'homeowner' || !doc.requires_signature) {
+        return json({ error: 'not authorized for this document' }, 403)
+      }
+
+      const { data: ldRow } = await admin
+        .from('loss_draft_tracking')
+        .select('mortgage_servicer, loan_number')
+        .eq('id', doc.loss_draft_id)
+        .maybeSingle()
+
+      const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+        ?? req.headers.get('cf-connecting-ip') ?? null
+      const ua = req.headers.get('user-agent') ?? null
+      const signedAt = new Date()
+
+      // Build a signed PDF for the document (LPOA / authorization letter / etc.)
+      const pdf = await PDFDocument.create()
+      const page = pdf.addPage([612, 792])
+      const font = await pdf.embedFont(StandardFonts.Helvetica)
+      const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
+      const script = await pdf.embedFont(StandardFonts.TimesRomanItalic)
+      const black = rgb(0, 0, 0)
+      const gray = rgb(0.35, 0.35, 0.35)
+
+      const draw = (text: string, x: number, y: number, size = 11, f = font, color = black) =>
+        page.drawText(text, { x, y, size, font: f, color })
+
+      draw(doc.document_label, 54, 740, 18, bold)
+      draw('Homeowner authorization — executed via ChecksOps homeowner portal', 54, 720, 10, font, gray)
+
+      let y = 690
+      const bodyLines = [
+        `I, ${p.signature_name}, the homeowner and named insured, authorize`,
+        `${profile?.display_name ?? 'my contractor'} and ChecksOps to act on my behalf with`,
+        `my mortgage servicer${ldRow?.mortgage_servicer ? ` (${ldRow.mortgage_servicer})` : ''} regarding the`,
+        `insurance loss draft check for my property${lead.dtp_property_address ? ` at ${lead.dtp_property_address}` : ''}.`,
+        ``,
+        `This authorization covers requesting endorsement, providing required loss`,
+        `draft documentation, requesting draw releases, and exchanging status`,
+        `information related to loan${ldRow?.loan_number ? ` #${ldRow.loan_number}` : ''}${lead.dtp_claim_number ? ` and claim #${lead.dtp_claim_number}` : ''}.`,
+        ``,
+        `This authorization is limited to the above loss and remains in effect`,
+        `until I revoke it in writing.`,
+      ]
+      for (const line of bodyLines) { draw(line, 54, y, 11); y -= 16 }
+
+      y -= 24
+      draw('Signature', 54, y, 10, bold, gray); y -= 22
+      draw(p.signature_name, 54, y, 22, script); y -= 6
+      page.drawLine({ start: { x: 54, y: y }, end: { x: 300, y }, thickness: 0.5, color: gray })
+      y -= 14
+      draw(`Typed name: ${p.signature_name}`, 54, y, 10); y -= 14
+      draw(`Signed: ${signedAt.toISOString()}`, 54, y, 10); y -= 14
+      if (ip) { draw(`IP: ${ip}`, 54, y, 10); y -= 14 }
+      draw(`Document: ${doc.document_type ?? 'signed_document'} · ${doc.id}`, 54, y, 8, font, gray)
+
+      const pdfBytes = await pdf.save()
+      const filePath = `${doc.loss_draft_id}/${doc.id}/signed-${crypto.randomUUID()}.pdf`
+      const fileName = `${doc.document_label.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-signed.pdf`
+
+      const { error: upErr } = await admin.storage
+        .from(LOSS_DRAFT_BUCKET)
+        .upload(filePath, pdfBytes, { contentType: 'application/pdf', upsert: true })
+      if (upErr) return json({ error: 'upload failed', detail: upErr.message }, 500)
+
+      const { error: updErr } = await admin
+        .from('loss_draft_documents')
+        .update({
+          is_submitted: true,
+          submitted_at: signedAt.toISOString(),
+          signed_at: signedAt.toISOString(),
+          signature_status: 'signed',
+          file_path: filePath,
+          file_name: fileName,
+          notes: `E-signed by ${p.signature_name}${ip ? ` from ${ip}` : ''}${ua ? ` · ${ua.slice(0, 120)}` : ''}`,
+        })
+        .eq('id', doc.id)
+      if (updErr) return json({ error: 'could not save', detail: updErr.message }, 500)
+
+      return json({ ok: true })
+    }
+
+    if (p.action === 'submit_mortgage_intake') {
+      if (!p.doc_id) return json({ error: 'doc_id required' }, 400)
+      if (!p.intake) return json({ error: 'intake fields required' }, 400)
+      if (!p.signature_name) return json({ error: 'signature name required' }, 400)
+
+      const lossDraftIds = await resolveLossDraftIds(
+        admin, lead.id, lead.dtp_claim_number ?? null, profile?.user_id ?? null,
+      )
+      if (!lossDraftIds.length) return json({ error: 'no matching loss draft' }, 404)
+
+      const { data: doc, error: docErr } = await admin
+        .from('loss_draft_documents')
+        .select('id, loss_draft_id, signer_role, document_type, document_label')
+        .eq('id', p.doc_id)
+        .maybeSingle()
+      if (docErr || !doc) return json({ error: 'document not found' }, 404)
+      if (!lossDraftIds.includes(doc.loss_draft_id) || doc.signer_role !== 'homeowner' || doc.document_type !== 'mortgage_intake') {
+        return json({ error: 'not authorized for this document' }, 403)
+      }
+
+      const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+        ?? req.headers.get('cf-connecting-ip') ?? null
+      const ua = req.headers.get('user-agent') ?? null
+      const now = new Date().toISOString()
+
+      const { error: upsertErr } = await admin
+        .from('loss_draft_mortgage_intake')
+        .upsert({
+          loss_draft_id: doc.loss_draft_id,
+          lead_id: lead.id,
+          loss_draft_document_id: doc.id,
+          mortgage_servicer: p.intake.mortgage_servicer,
+          loan_number: p.intake.loan_number ?? null,
+          servicer_phone: p.intake.servicer_phone ?? null,
+          borrower_names: p.intake.borrower_names,
+          mailing_address: p.intake.mailing_address ?? null,
+          ssn_last4: p.intake.ssn_last4 ?? null,
+          notes: p.intake.notes ?? null,
+          signer_name: p.signature_name,
+          signer_ip: ip,
+          signer_user_agent: ua,
+        }, { onConflict: 'loss_draft_id' })
+      if (upsertErr) return json({ error: 'could not save intake', detail: upsertErr.message }, 500)
+
+      // Also seed the loss_draft_tracking servicer/loan fields if empty
+      await admin
+        .from('loss_draft_tracking')
+        .update({
+          mortgage_servicer: p.intake.mortgage_servicer,
+          loan_number: p.intake.loan_number ?? null,
+        })
+        .eq('id', doc.loss_draft_id)
+        .or('mortgage_servicer.is.null,mortgage_servicer.ilike.%unknown%')
+
+      const { error: updErr } = await admin
+        .from('loss_draft_documents')
+        .update({
+          is_submitted: true,
+          submitted_at: now,
+          notes: `Mortgage intake submitted by ${p.signature_name}${ip ? ` from ${ip}` : ''}`,
+        })
+        .eq('id', doc.id)
+      if (updErr) return json({ error: 'could not mark complete', detail: updErr.message }, 500)
+
+      return json({ ok: true })
+    }
+
     return json({ error: 'unknown action' }, 400)
   } catch (e: any) {
     return json({ error: e.message ?? 'server error' }, 500)
