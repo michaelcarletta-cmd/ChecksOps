@@ -184,9 +184,10 @@ export default function AdminMortgageOps() {
             <Button variant="ghost" size="sm" onClick={() => navigate("/admin/tenants")}>
               <ArrowLeft className="w-4 h-4 mr-1" /> Back
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
+            <Button variant="ghost" size="sm" onClick={() => goToChecksOpsHome(navigate)}>
               <Home className="w-4 h-4 mr-1" /> Home
             </Button>
+
             <Briefcase className="w-6 h-6 text-primary" />
             <div>
               <h1 className="text-xl font-semibold">Mortgage Ops Management</h1>
