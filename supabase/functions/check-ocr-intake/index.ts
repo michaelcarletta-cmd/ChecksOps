@@ -72,6 +72,7 @@ interface AmountFallbackResult {
 }
 
 type VisionContentPart = { type: string; text?: string; image_url?: { url: string } };
+type VisionOptions = Parameters<typeof callVision>[0];
 
 const VALID_PAYEE_TYPES = new Set([
   "insured", "mortgage_company", "contractor", "public_adjuster", "unknown",
@@ -81,6 +82,7 @@ const CRITICAL_FIELDS = ["amount", "check_number", "payee_line"] as const;
 const CRITICAL_CONFIDENCE_THRESHOLD = 60;
 const OVERALL_CONFIDENCE_THRESHOLD = 50;
 const STALE_LOCK_MS = 5 * 60 * 1000; // increased from 2min — OCR can take 45s per pass, 2min caused duplicate payees on retry
+const OCR_PENDING_RETRY_AFTER_MS = 5 * 60 * 1000;
 const OCR_TIMEOUT_MS = 45_000;
 
 /* ------------------------------------------------------------------ */
@@ -110,6 +112,112 @@ function logAudit(
   });
 }
 
+function shouldFallbackTenantAiError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return lower.includes("ai 400") ||
+    lower.includes("ai 401") ||
+    lower.includes("ai 403") ||
+    lower.includes("invalid model") ||
+    lower.includes("model id") ||
+    lower.includes("model_not_found") ||
+    lower.includes("incorrect api key") ||
+    lower.includes("invalid api key");
+}
+
+async function validateTenantKeyForOcrFallback(
+  supabase: any,
+  tenantId: string | null,
+  tenantApiKey: string,
+  originalError: string,
+): Promise<{ ok: boolean; status: number | null }> {
+  let status: number | null = null;
+  let ok = false;
+
+  try {
+    const probe = await fetch("https://api.openai.com/v1/models", {
+      headers: { Authorization: `Bearer ${tenantApiKey}` },
+    });
+    status = probe.status;
+    await probe.text();
+    ok = probe.ok;
+  } catch (probeErr) {
+    console.warn("[check-ocr-intake] tenant key validation probe failed", {
+      error: probeErr instanceof Error ? probeErr.message : String(probeErr),
+    });
+  }
+
+  if (tenantId) {
+    const updates: Record<string, unknown> = {
+      last_validated_at: new Date().toISOString(),
+      last_error: ok
+        ? `OCR provider fallback used after: ${originalError}`.slice(0, 500)
+        : `OpenAI key validation failed during OCR fallback${status ? ` (${status})` : ""}: ${originalError}`.slice(0, 500),
+    };
+    if (!ok) updates.status = "invalid";
+
+    const { error } = await supabase
+      .from("tenant_openai_credentials")
+      .update(updates)
+      .eq("tenant_id", tenantId);
+    if (error) {
+      console.warn("[check-ocr-intake] tenant key status update failed", { error: error.message });
+    }
+  }
+
+  return { ok, status };
+}
+
+async function callVisionWithTenantFallback(opts: {
+  supabase: any;
+  tenantId: string | null;
+  tenantApiKey: string | null;
+  checkId: string;
+  userId: string | null;
+  stageLabel: string;
+  options: VisionOptions;
+}): Promise<Awaited<ReturnType<typeof callVision>>> {
+  const { supabase, tenantId, tenantApiKey, checkId, userId, stageLabel, options } = opts;
+
+  try {
+    return await callVision({ ...options, apiKey: tenantApiKey ?? undefined });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!tenantApiKey || !shouldFallbackTenantAiError(message)) {
+      throw error;
+    }
+
+    const validation = await validateTenantKeyForOcrFallback(
+      supabase,
+      tenantId,
+      tenantApiKey,
+      message,
+    );
+
+    log(stageLabel, "Tenant OpenAI request failed — retrying through platform AI gateway", {
+      tenantId,
+      validation_ok: validation.ok,
+      validation_status: validation.status,
+      original_error: message,
+    });
+
+    await logAudit(
+      supabase,
+      checkId,
+      "ocr_tenant_ai_fallback",
+      "Tenant OpenAI request failed; retried OCR through platform AI gateway",
+      {
+        tenant_id: tenantId,
+        validation_ok: validation.ok,
+        validation_status: validation.status,
+        original_error: message,
+      },
+      userId,
+    );
+
+    return await callVision({ ...options, apiKey: undefined });
+  }
+}
+
 function normalizeAmountValue(raw: string | null): string | null {
   if (!raw) return null;
 
@@ -131,7 +239,11 @@ function normalizeAmountValue(raw: string | null): string | null {
 }
 
 async function extractAmountWithFocusedPass(
+  supabase: any,
+  tenantId: string | null,
   tenantApiKey: string | null,
+  checkId: string,
+  userId: string | null,
   frontImageUrl: string,
   backImageUrl: string | null,
 ): Promise<AmountFallbackResult> {
@@ -166,11 +278,18 @@ Rules:
   const timeout = setTimeout(() => controller.abort(), 30_000);
 
   try {
-    const visionResult = await callVision({
-      model: MODEL_VISION_STRONG,
-      messages: [{ role: "user", content }],
-      jsonMode: true,
-      apiKey: tenantApiKey ?? undefined,
+    const visionResult = await callVisionWithTenantFallback({
+      supabase,
+      tenantId,
+      tenantApiKey,
+      checkId,
+      userId,
+      stageLabel: "amount_fallback",
+      options: {
+        model: MODEL_VISION_STRONG,
+        messages: [{ role: "user", content }],
+        jsonMode: true,
+      },
     });
 
     const rawText = visionResult.text;
@@ -401,6 +520,109 @@ function errResponse(message: string, status: number, stage?: string) {
   });
 }
 
+function isOlderThan(value: unknown, cutoffMs: number): boolean {
+  if (typeof value !== "string") return true;
+  const ms = new Date(value).getTime();
+  return !Number.isFinite(ms) || ms < cutoffMs;
+}
+
+function isInvalidModelFailure(raw: unknown): boolean {
+  const text = typeof raw === "string" ? raw : JSON.stringify(raw ?? {});
+  const lower = text.toLowerCase();
+  return lower.includes("invalid model") ||
+    lower.includes("invalid model id") ||
+    lower.includes("model id") ||
+    lower.includes("model_not_found") ||
+    lower.includes("ai 400");
+}
+
+async function processStaleOcrBacklog(opts: {
+  supabase: any;
+  supabaseUrl: string;
+  serviceKey: string;
+  userId: string | null;
+  limit?: number;
+}) {
+  const { supabase, supabaseUrl, serviceKey, userId } = opts;
+  const limit = Math.max(1, Math.min(Number(opts.limit ?? 1), 5));
+  const pendingCutoffMs = Date.now() - OCR_PENDING_RETRY_AFTER_MS;
+  const processingCutoffMs = Date.now() - STALE_LOCK_MS;
+
+  const { data: candidates, error } = await supabase
+    .from("check_intake_items")
+    .select("id, ocr_status, ocr_heartbeat_at, updated_at, created_at, raw_ocr_front")
+    .in("ocr_status", ["pending", "processing", "failed"])
+    .order("created_at", { ascending: true })
+    .limit(100);
+  if (error) throw error;
+
+  const retryable = (candidates ?? []).filter((row: Record<string, unknown>) => {
+    if (row.ocr_status === "pending") {
+      return isOlderThan(row.updated_at ?? row.created_at, pendingCutoffMs);
+    }
+    if (row.ocr_status === "processing") {
+      return !row.ocr_heartbeat_at || isOlderThan(row.ocr_heartbeat_at, processingCutoffMs);
+    }
+    if (row.ocr_status === "failed") {
+      return isInvalidModelFailure(row.raw_ocr_front);
+    }
+    return false;
+  }).slice(0, limit);
+
+  const results: Array<{ check_id: string; status: number | null; ok: boolean; error?: string }> = [];
+
+  for (const row of retryable) {
+    const checkId = String(row.id);
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/check-ocr-intake`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${serviceKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ checkId, retryReason: "ocr_backlog_retry" }),
+      });
+      const body = await res.json().catch(() => ({}));
+      const ok = res.ok && body?.success !== false;
+      results.push({
+        check_id: checkId,
+        status: res.status,
+        ok,
+        error: ok ? undefined : String(body?.error ?? body?.message ?? "retry failed"),
+      });
+      await logAudit(
+        supabase,
+        checkId,
+        ok ? "ocr_backlog_retry_dispatched" : "ocr_backlog_retry_failed",
+        ok ? "Stale OCR item was retried by backlog monitor" : "Stale OCR retry attempt failed",
+        { original_ocr_status: row.ocr_status, response_status: res.status, response: body },
+        userId,
+      );
+    } catch (retryErr) {
+      const message = retryErr instanceof Error ? retryErr.message : String(retryErr);
+      results.push({ check_id: checkId, status: null, ok: false, error: message });
+      await logAudit(
+        supabase,
+        checkId,
+        "ocr_backlog_retry_failed",
+        "Stale OCR retry attempt failed before reaching OCR processor",
+        { original_ocr_status: row.ocr_status, error: message },
+        userId,
+      );
+    }
+  }
+
+  return {
+    success: true,
+    scanned: candidates?.length ?? 0,
+    retryable: retryable.length,
+    retried: results.length,
+    succeeded: results.filter((r) => r.ok).length,
+    failed: results.filter((r) => !r.ok).length,
+    results,
+  };
+}
+
 function deriveFallbackCheckDate(issueDate: unknown, createdAt: unknown): string {
   if (typeof issueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(issueDate)) {
     return issueDate;
@@ -416,7 +638,7 @@ function deriveFallbackCheckDate(issueDate: unknown, createdAt: unknown): string
 async function ensureClaimCheckLinkOnFailure(
   supabase: any,
   check: Record<string, unknown>,
-  userId: string,
+  userId: string | null,
   reason: string,
 ) {
   const checkId = typeof check.id === "string" ? check.id : null;
@@ -451,7 +673,7 @@ async function ensureClaimCheckLinkOnFailure(
     check_date: deriveFallbackCheckDate(check.issue_date, check.created_at),
     amount: typeof check.amount === "number" && Number.isFinite(check.amount) ? check.amount : 0,
     check_type: "initial",
-    created_by: userId,
+    ...(userId ? { created_by: userId } : {}),
     check_number: typeof check.check_number === "string" ? check.check_number : null,
     carrier_name: typeof check.carrier_name === "string" ? check.carrier_name : null,
     payee_line: typeof check.payee_line === "string" ? check.payee_line : null,
@@ -486,7 +708,6 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-    const lovableKey = "_shared_layer"; // kept for signature compat; shared AI layer handles keys
     log("env_check", "All env vars present");
 
     // ---- Auth ----
@@ -497,20 +718,31 @@ Deno.serve(async (req) => {
 
     if (!supabaseUrl || !serviceKey || !anonKey) return errResponse("Missing backend configuration", 500, stage);
 
-    const anonClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-    });
-    const { data: authData, error: authErr } = await anonClient.auth.getUser(token);
-    if (authErr || !authData?.user) return errResponse("Unauthorized", 401, stage);
-    const userId = authData.user.id;
-    log("auth", "Authenticated", { userId });
-
     // ---- Supabase service client ----
     const supabase = createClient(supabaseUrl, serviceKey);
 
+    let userId: string | null = null;
+    const isServiceRequest = token === serviceKey;
+    if (isServiceRequest) {
+      log("auth", "Authenticated service retry request");
+    } else {
+      const anonClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: `Bearer ${token}` } },
+      });
+      const { data: authData, error: authErr } = await anonClient.auth.getUser(token);
+      if (authErr || !authData?.user) return errResponse("Unauthorized", 401, stage);
+      userId = authData.user.id;
+      log("auth", "Authenticated", { userId });
+    }
+
     // ---- Parse request ----
     stage = "parse_request";
-    const { checkId } = (await req.json().catch(() => ({}))) as { checkId?: string };
+    const { checkId, mode, limit } = (await req.json().catch(() => ({}))) as { checkId?: string; mode?: string; limit?: number };
+    if (mode === "retry-stale") {
+      if (!isServiceRequest) return errResponse("Service authorization required", 403, stage);
+      const result = await processStaleOcrBacklog({ supabase, supabaseUrl, serviceKey, userId, limit });
+      return okResponse(result);
+    }
     if (!checkId) return errResponse("checkId required", 400, stage);
     log("parse_request", "Parsed", { checkId });
 
@@ -558,6 +790,27 @@ Deno.serve(async (req) => {
     });
 
     if (!keyResult.isSystemTenant && !tenantApiKey) {
+      if (keyResult.status === "invalid" || keyResult.status === "unverified") {
+        log("tenant_key", "Tenant key unavailable — OCR will use platform AI fallback", {
+          tenantId,
+          status: keyResult.status,
+        });
+        await supabase
+          .from("tenant_openai_credentials")
+          .update({
+            last_validated_at: new Date().toISOString(),
+            last_error: "OCR used platform AI fallback because tenant key is not currently active.",
+          })
+          .eq("tenant_id", tenantId);
+        await logAudit(
+          supabase,
+          checkId,
+          "ocr_tenant_ai_fallback",
+          "Tenant OpenAI key is not active; OCR continued through platform AI gateway",
+          { tenant_id: tenantId, status: keyResult.status },
+          userId,
+        );
+      } else {
       const reason =
         keyResult.status === "missing"
           ? "No OpenAI API key configured for this tenant. Add one in Settings → AI Key."
@@ -568,6 +821,7 @@ Deno.serve(async (req) => {
         `Check OCR blocked: ${reason}`,
         { tenant_id: tenantId, status: keyResult.status }, userId);
       return errResponse(reason, 402, stage);
+      }
     }
 
 
@@ -671,13 +925,20 @@ Rules:
         // Use the STRONG vision model for check OCR. The cheap model
         // (gpt-4o-mini) frequently returns blank/incorrect fields on dense
         // check images (amount box, payee line, MICR check number).
-        visionResult = await callVision({
-          model: MODEL_VISION_STRONG,
-          messages: [{ role: "user", content }],
-          jsonMode: true,
-          temperature: 0,
-          maxTokens: 4000,
-          apiKey: tenantApiKey ?? undefined,
+        visionResult = await callVisionWithTenantFallback({
+          supabase,
+          tenantId,
+          tenantApiKey,
+          checkId,
+          userId,
+          stageLabel: "ocr_request_sent",
+          options: {
+            model: MODEL_VISION_STRONG,
+            messages: [{ role: "user", content }],
+            jsonMode: true,
+            temperature: 0,
+            maxTokens: 4000,
+          },
         });
       } catch (fetchErr) {
         const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
@@ -730,7 +991,15 @@ Rules:
       if (!parsed.amount) {
         stage = "amount_fallback";
         try {
-          const fallback = await extractAmountWithFocusedPass(tenantApiKey, frontImageUrl, backImageUrl);
+          const fallback = await extractAmountWithFocusedPass(
+            supabase,
+            tenantId,
+            tenantApiKey,
+            checkId,
+            userId,
+            frontImageUrl,
+            backImageUrl,
+          );
           if (fallback.amount) {
             parsed.amount = fallback.amount;
             if (fallback.confidence !== null) {

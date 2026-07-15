@@ -7,6 +7,15 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+async function consumeJsonOrText(response: Response) {
+  const text = await response.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return { raw: text };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -52,10 +61,40 @@ serve(async (req) => {
     const probe = await fetch("https://api.openai.com/v1/models", {
       headers: { Authorization: `Bearer ${key}` },
     });
-    await probe.text();
+    const probeBody = await consumeJsonOrText(probe);
 
-    const newStatus = probe.ok ? "active" : "invalid";
-    const errMsg = probe.ok ? null : `OpenAI returned ${probe.status}`;
+    let completionOk = false;
+    let completionStatus: number | null = null;
+    let completionError: string | null = null;
+
+    if (probe.ok) {
+      const completionProbe = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Return exactly: ok" }],
+          max_tokens: 5,
+          temperature: 0,
+        }),
+      });
+      completionStatus = completionProbe.status;
+      const completionBody = await consumeJsonOrText(completionProbe);
+      completionOk = completionProbe.ok;
+      if (!completionProbe.ok) {
+        completionError = completionBody?.error?.message ?? `OpenAI chat test returned ${completionProbe.status}`;
+      }
+    }
+
+    const newStatus = probe.ok && completionOk ? "active" : "invalid";
+    const errMsg = probe.ok
+      ? completionOk
+        ? null
+        : completionError
+      : probeBody?.error?.message ?? `OpenAI returned ${probe.status}`;
 
     await admin
       .from("tenant_openai_credentials")
@@ -67,7 +106,7 @@ serve(async (req) => {
       .eq("tenant_id", tenant_id);
 
     return new Response(
-      JSON.stringify({ ok: probe.ok, status: newStatus, error: errMsg }),
+      JSON.stringify({ ok: probe.ok && completionOk, status: newStatus, error: errMsg, completion_status: completionStatus }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
