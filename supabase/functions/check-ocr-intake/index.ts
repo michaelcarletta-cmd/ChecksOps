@@ -638,7 +638,7 @@ function deriveFallbackCheckDate(issueDate: unknown, createdAt: unknown): string
 async function ensureClaimCheckLinkOnFailure(
   supabase: any,
   check: Record<string, unknown>,
-  userId: string,
+  userId: string | null,
   reason: string,
 ) {
   const checkId = typeof check.id === "string" ? check.id : null;
@@ -673,7 +673,7 @@ async function ensureClaimCheckLinkOnFailure(
     check_date: deriveFallbackCheckDate(check.issue_date, check.created_at),
     amount: typeof check.amount === "number" && Number.isFinite(check.amount) ? check.amount : 0,
     check_type: "initial",
-    created_by: userId,
+    ...(userId ? { created_by: userId } : {}),
     check_number: typeof check.check_number === "string" ? check.check_number : null,
     carrier_name: typeof check.carrier_name === "string" ? check.carrier_name : null,
     payee_line: typeof check.payee_line === "string" ? check.payee_line : null,
@@ -903,13 +903,20 @@ Rules:
         // Use the STRONG vision model for check OCR. The cheap model
         // (gpt-4o-mini) frequently returns blank/incorrect fields on dense
         // check images (amount box, payee line, MICR check number).
-        visionResult = await callVision({
-          model: MODEL_VISION_STRONG,
-          messages: [{ role: "user", content }],
-          jsonMode: true,
-          temperature: 0,
-          maxTokens: 4000,
-          apiKey: tenantApiKey ?? undefined,
+        visionResult = await callVisionWithTenantFallback({
+          supabase,
+          tenantId,
+          tenantApiKey,
+          checkId,
+          userId,
+          stageLabel: "ocr_request_sent",
+          options: {
+            model: MODEL_VISION_STRONG,
+            messages: [{ role: "user", content }],
+            jsonMode: true,
+            temperature: 0,
+            maxTokens: 4000,
+          },
         });
       } catch (fetchErr) {
         const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
@@ -962,7 +969,15 @@ Rules:
       if (!parsed.amount) {
         stage = "amount_fallback";
         try {
-          const fallback = await extractAmountWithFocusedPass(tenantApiKey, frontImageUrl, backImageUrl);
+          const fallback = await extractAmountWithFocusedPass(
+            supabase,
+            tenantId,
+            tenantApiKey,
+            checkId,
+            userId,
+            frontImageUrl,
+            backImageUrl,
+          );
           if (fallback.amount) {
             parsed.amount = fallback.amount;
             if (fallback.confidence !== null) {
