@@ -457,7 +457,14 @@ Deno.serve(async (req) => {
           check_stage: isNativePaired ? "review" : (body.check.check_stage ?? "review"),
           check_source: "insurance",
           deposit_recommendation: body.check.deposit_recommendation ?? null,
-          ocr_status: body.check.ocr_status ?? "completed",
+          // If upstream didn't send OCR data, mark as pending so our own OCR
+          // backlog worker picks it up. Only mark completed when the source
+          // actually provided extracted fields.
+          ocr_status:
+            body.check.ocr_status ??
+            (body.check.carrier_name || body.check.check_number || body.check.amount
+              ? "completed"
+              : "pending"),
           freedom_claim_id: body.freedom_claim_id ?? null,
           freedom_claim_number: body.freedom_claim_number ?? null,
           ...(isNativePaired ? {} : (initialPartnerStatus ?? {})),
