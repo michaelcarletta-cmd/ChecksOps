@@ -282,10 +282,10 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         source: "mortgage_ops",
         uploaded_by: user.id,
         description: uploadDesc || null,
-        requires_signature: uploadForSignature,
-        signer_role: uploadForSignature ? "homeowner" : null,
-        signature_status: uploadForSignature ? "pending" : null,
       });
+      // Note: check_files does not carry signature metadata; the intent is
+      // conveyed via category "mortgage_ops_signature" and the tenant message below.
+      const _sigIntent = uploadForSignature;
       if (insErr) throw insErr;
 
       // Also post a message notifying the tenant
