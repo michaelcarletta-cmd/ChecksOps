@@ -22364,6 +22364,7 @@ export type Database = {
         | "referrer"
         | "read_only"
         | "guided"
+        | "mortgage_agent"
       automation_mode: "active" | "passive" | "suspended" | "closed"
       cash_job_status:
         | "estimate"
@@ -22636,6 +22637,7 @@ export const Constants = {
         "referrer",
         "read_only",
         "guided",
+        "mortgage_agent",
       ],
       automation_mode: ["active", "passive", "suspended", "closed"],
       cash_job_status: [
