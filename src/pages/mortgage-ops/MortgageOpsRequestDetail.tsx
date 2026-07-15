@@ -70,6 +70,15 @@ interface RequestRow {
   created_at: string;
   accepted_at: string | null;
   assigned_employee_id: string | null;
+  policy_number: string | null;
+  claim_number: string | null;
+  insurance_company: string | null;
+  loss_type: string | null;
+  date_of_loss: string | null;
+  homeowner_name: string | null;
+  homeowner_email: string | null;
+  homeowner_phone: string | null;
+  property_address: string | null;
 }
 
 interface ClaimRow {
