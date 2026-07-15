@@ -15087,6 +15087,9 @@ export type Database = {
           is_submitted: boolean
           loss_draft_id: string
           notes: string | null
+          requires_signature: boolean
+          signature_status: string
+          signer_role: string
           submitted_at: string | null
           submitted_by: string | null
           updated_at: string
@@ -15103,6 +15106,9 @@ export type Database = {
           is_submitted?: boolean
           loss_draft_id: string
           notes?: string | null
+          requires_signature?: boolean
+          signature_status?: string
+          signer_role?: string
           submitted_at?: string | null
           submitted_by?: string | null
           updated_at?: string
@@ -15119,6 +15125,9 @@ export type Database = {
           is_submitted?: boolean
           loss_draft_id?: string
           notes?: string | null
+          requires_signature?: boolean
+          signature_status?: string
+          signer_role?: string
           submitted_at?: string | null
           submitted_by?: string | null
           updated_at?: string
