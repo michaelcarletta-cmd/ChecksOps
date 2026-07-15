@@ -383,6 +383,59 @@ export default function MortgageOpsQueue() {
               ))
             )}
           </TabsContent>
+
+          <TabsContent value="completed" className="mt-4 space-y-3">
+            {completed.length === 0 ? (
+              <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">
+                No completed tasks yet.
+              </CardContent></Card>
+            ) : (
+              completed.map((r) => (
+                <Card
+                  key={r.id}
+                  className="cursor-pointer hover:border-primary/50 transition-colors"
+                  onClick={() => setDetailId(r.id)}
+                >
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <CardTitle className="text-base">
+                          {r.mortgage_company || r.mortgage_servicer || "Mortgage company"}
+                        </CardTitle>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Tenant: <span className="font-medium">{r.tenant_name || r.tenant_id.slice(0, 8)}</span>
+                          {r.completed_at && (
+                            <> · completed {formatDistanceToNow(new Date(r.completed_at), { addSuffix: true })}</>
+                          )}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> Completed
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="text-sm grid grid-cols-2 gap-x-3 gap-y-1.5">
+                      {r.loan_number && <div><span className="text-muted-foreground">Loan #:</span> {r.loan_number}</div>}
+                      {r.check_amount != null && (
+                        <div><span className="text-muted-foreground">Check:</span> ${Number(r.check_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                      )}
+                      {r.homeowner_name && <div className="truncate"><span className="text-muted-foreground">Homeowner:</span> {r.homeowner_name}</div>}
+                      {r.insurance_company && <div className="truncate"><span className="text-muted-foreground">Insurance:</span> {r.insurance_company}</div>}
+                    </div>
+                    {r.work_notes && (
+                      <div className="text-xs bg-muted/60 rounded p-2 whitespace-pre-wrap max-h-32 overflow-auto">
+                        {r.work_notes}
+                      </div>
+                    )}
+                    <Button variant="outline" size="sm" onClick={() => setDetailId(r.id)}>
+                      <Eye className="h-4 w-4 mr-1" /> View details
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </TabsContent>
         </Tabs>
       </main>
 
