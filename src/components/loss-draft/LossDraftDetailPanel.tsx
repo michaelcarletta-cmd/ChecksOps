@@ -57,6 +57,7 @@ export function LossDraftDetailPanel({
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { tenantId } = useTenantFilter();
   const { data: draft } = useLossDraftDetail(lossDraftId);
   const { data: releases = [] } = useLossDraftReleases(lossDraftId);
   const { data: docs = [] } = useLossDraftDocs(lossDraftId);
