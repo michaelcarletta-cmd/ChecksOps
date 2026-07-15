@@ -10,7 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
   Building2, AlertTriangle, Clock, DollarSign, FileWarning,
-  ChevronRight, RefreshCw, Landmark, ArrowRightLeft,
+  ChevronRight, RefreshCw, Landmark, ArrowRightLeft, ArrowLeft,
 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { LossDraftDetailPanel } from "./LossDraftDetailPanel";
@@ -162,93 +162,112 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
         onFilterChange={setFilter}
       />
 
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]">
-        {/* Table */}
-        <Card>
-          <CardContent className="p-0">
-            <ScrollArea className="h-[calc(100vh-16rem)] min-h-[22rem] max-h-[42rem]">
-              {isLoading ? (
-                <div className="p-8 text-center text-muted-foreground">Loading loss drafts...</div>
-              ) : filtered.length === 0 ? (
-                <div className="p-8 text-center text-muted-foreground">
-                  <Landmark className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                  No loss drafts in this view
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Claim</TableHead>
-                      <TableHead>Servicer</TableHead>
-                      <TableHead className="text-right">Escrowed</TableHead>
-                      <TableHead className="text-right">Released</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Alerts</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filtered.map(d => {
-                      const sc = escrowStatusConfig[d.escrow_status] ?? { label: d.escrow_status, color: "" };
-                      const overdue = d.follow_up_date && new Date(d.follow_up_date) < new Date();
-                      return (
-                        <TableRow
-                          key={d.id}
-                          className={`cursor-pointer transition-colors ${selectedId === d.id ? "bg-accent/50" : ""}`}
-                          onClick={() => setSelectedId(d.id)}
-                        >
-                          <TableCell>
-                            <div className="text-sm font-medium">
-                              {d.claim_number || (d.check_number ? `Check #${d.check_number}` : "No claim")}
-                            </div>
-                            <div className="text-xs text-muted-foreground truncate max-w-[160px]">
-                              {d.policyholder_name || d.payee_line || "—"}
-                            </div>
-                            {!d.claim_number && (
-                              <div className="text-[10px] text-muted-foreground truncate max-w-[160px]">
-                                {d.insurance_company || d.carrier_name}
-                                {d.check_amount ? ` · $${Number(d.check_amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : ""}
+      <div
+        className={
+          selectedId
+            ? "grid items-start gap-4 grid-cols-1"
+            : "grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]"
+        }
+      >
+        {/* Table — hidden when a check is expanded */}
+        {!selectedId && (
+          <Card>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[calc(100vh-16rem)] min-h-[22rem] max-h-[42rem]">
+                {isLoading ? (
+                  <div className="p-8 text-center text-muted-foreground">Loading loss drafts...</div>
+                ) : filtered.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground">
+                    <Landmark className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                    No loss drafts in this view
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Claim</TableHead>
+                        <TableHead>Servicer</TableHead>
+                        <TableHead className="text-right">Escrowed</TableHead>
+                        <TableHead className="text-right">Released</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Alerts</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filtered.map(d => {
+                        const sc = escrowStatusConfig[d.escrow_status] ?? { label: d.escrow_status, color: "" };
+                        const overdue = d.follow_up_date && new Date(d.follow_up_date) < new Date();
+                        return (
+                          <TableRow
+                            key={d.id}
+                            className={`cursor-pointer transition-colors ${selectedId === d.id ? "bg-accent/50" : ""}`}
+                            onClick={() => setSelectedId(d.id)}
+                          >
+                            <TableCell>
+                              <div className="text-sm font-medium">
+                                {d.claim_number || (d.check_number ? `Check #${d.check_number}` : "No claim")}
                               </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-sm max-w-[120px] truncate">{d.mortgage_servicer}</TableCell>
-                          <TableCell className="text-right font-semibold tabular-nums text-sm">
-                            ${(d.total_escrowed ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums text-sm text-emerald-400">
-                            ${(d.draw_amount_released ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                          </TableCell>
-                          <TableCell>
-                            <Badge className={`text-[10px] ${sc.color}`}>{sc.label}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1">
-                              {d.is_stale && <span title="Stale — no contact 14+ days"><AlertTriangle className="h-3.5 w-3.5 text-red-400" /></span>}
-                              {d.missing_docs_count > 0 && <span title={`${d.missing_docs_count} missing docs`}><FileWarning className="h-3.5 w-3.5 text-amber-400" /></span>}
-                              {overdue && <span title="Overdue follow-up"><Clock className="h-3.5 w-3.5 text-orange-400" /></span>}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              )}
-            </ScrollArea>
-          </CardContent>
-        </Card>
+                              <div className="text-xs text-muted-foreground truncate max-w-[160px]">
+                                {d.policyholder_name || d.payee_line || "—"}
+                              </div>
+                              {!d.claim_number && (
+                                <div className="text-[10px] text-muted-foreground truncate max-w-[160px]">
+                                  {d.insurance_company || d.carrier_name}
+                                  {d.check_amount ? ` · $${Number(d.check_amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : ""}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-sm max-w-[120px] truncate">{d.mortgage_servicer}</TableCell>
+                            <TableCell className="text-right font-semibold tabular-nums text-sm">
+                              ${(d.total_escrowed ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums text-sm text-emerald-400">
+                              ${(d.draw_amount_released ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={`text-[10px] ${sc.color}`}>{sc.label}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                {d.is_stale && <span title="Stale — no contact 14+ days"><AlertTriangle className="h-3.5 w-3.5 text-red-400" /></span>}
+                                {d.missing_docs_count > 0 && <span title={`${d.missing_docs_count} missing docs`}><FileWarning className="h-3.5 w-3.5 text-amber-400" /></span>}
+                                {overdue && <span title="Overdue follow-up"><Clock className="h-3.5 w-3.5 text-orange-400" /></span>}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        )}
 
-        {/* Detail panel */}
+        {/* Detail panel — full-width when a check is expanded */}
         {selectedId ? (
-          <LossDraftDetailPanel
-            lossDraftId={selectedId}
-            onUpdate={() => {
-              qc.invalidateQueries({ queryKey: ["loss-draft-dashboard"] });
-              qc.invalidateQueries({ queryKey: ["loss-draft-counts"] });
-            }}
-            onSelectId={setSelectedId}
-          />
+          <div className="space-y-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedId(null)}
+              className="gap-1.5 h-8 px-2 text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to list
+            </Button>
+            <LossDraftDetailPanel
+              lossDraftId={selectedId}
+              onUpdate={() => {
+                qc.invalidateQueries({ queryKey: ["loss-draft-dashboard"] });
+                qc.invalidateQueries({ queryKey: ["loss-draft-counts"] });
+              }}
+              onSelectId={setSelectedId}
+            />
+          </div>
         ) : (
-          <Card className="flex items-center justify-center h-[calc(100vh-16rem)] min-h-[22rem] max-h-[42rem]">
+          <Card className="hidden lg:flex items-center justify-center h-[calc(100vh-16rem)] min-h-[22rem] max-h-[42rem]">
             <div className="text-center text-muted-foreground">
               <Landmark className="h-12 w-12 mx-auto mb-3 opacity-30" />
               <p className="text-sm">Select a loss draft to manage</p>

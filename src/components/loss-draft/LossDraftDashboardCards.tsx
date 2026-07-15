@@ -60,11 +60,11 @@ export function LossDraftDashboardCards({
           >
             <CardContent className="p-3 flex items-center gap-2">
               <c.icon className={`h-4 w-4 ${c.color} shrink-0`} />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className={`font-bold ${c.isText ? "text-sm" : "text-lg"} leading-tight`}>
                   {c.value}
                 </p>
-                <p className="text-[10px] text-muted-foreground truncate">{c.label}</p>
+                <p className="text-[10px] text-muted-foreground leading-tight break-words">{c.label}</p>
               </div>
             </CardContent>
           </Card>
