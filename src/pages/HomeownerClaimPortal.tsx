@@ -317,8 +317,79 @@ export default function HomeownerClaimPortal() {
           </CardContent>
         </Card>
 
+        {/* Hidden file input reused by every Action-needed upload button */}
+        <input
+          ref={actionFileInput}
+          type="file"
+          accept="image/*,application/pdf,.doc,.docx"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            const id = pendingActionRef.current;
+            if (f && id) completeActionFile(id, f);
+            e.target.value = "";
+          }}
+        />
+
+        {/* Action needed */}
+        {actions.length > 0 && (
+          <Card className="border-primary/50">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileSignature className="h-4 w-4 text-primary" />
+                Action needed
+                <Badge className="ml-1 text-[10px]">{actions.length}</Badge>
+              </CardTitle>
+              <CardDescription>
+                Your check can't move forward until these are done. Each item is waiting on you.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {actions.map((a) => (
+                <div
+                  key={a.id}
+                  className="flex items-start justify-between gap-3 rounded-md border border-border p-3"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">{a.label}</div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      {a.kind === "signature"
+                        ? "Signature required — the check is waiting on this."
+                        : "Upload required — the check is waiting on this."}
+                    </div>
+                  </div>
+                  {a.kind === "upload" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={actionBusyId === a.id}
+                      onClick={() => {
+                        pendingActionRef.current = a.id;
+                        actionFileInput.current?.click();
+                      }}
+                    >
+                      {actionBusyId === a.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <>
+                          <Upload className="h-3.5 w-3.5 mr-1" /> Upload
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] whitespace-nowrap">
+                      Signature coming soon
+                    </Badge>
+                  )}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Timeline */}
         <Card>
+
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <ClipboardCheck className="h-4 w-4" /> Claim activity
