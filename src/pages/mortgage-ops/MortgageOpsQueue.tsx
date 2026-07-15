@@ -40,6 +40,7 @@ export default function MortgageOpsQueue() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notesById, setNotesById] = useState<Record<string, string>>({});
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
