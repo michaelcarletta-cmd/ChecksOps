@@ -630,6 +630,58 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
               </Card>
             )}
 
+            {/* Signature requests — sent to homeowner via e-sign */}
+            {req.claim_id && (
+              <Card>
+                <CardContent className="pt-4 space-y-3">
+                  <div className="font-semibold text-sm flex items-center gap-2">
+                    <FileText className="h-4 w-4" /> Signature requests
+                    <span className="text-xs text-muted-foreground font-normal">({sigRequests.length})</span>
+                  </div>
+                  {sigRequests.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      No signature requests yet. Upload a PDF above with "Requires homeowner signature" on to email it to the homeowner for e-signature — the same flow as Freedom CRM.
+                    </p>
+                  ) : (
+                    <ul className="text-sm divide-y divide-border">
+                      {sigRequests.map((s) => (
+                        <li key={s.id} className="py-2 space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate font-medium">{s.document_name}</span>
+                            <Badge variant={s.status === "completed" ? "default" : s.status === "declined" || s.status === "failed" ? "destructive" : "secondary"} className="text-[10px]">
+                              {s.status.replace("_", " ")}
+                            </Badge>
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">
+                            Sent {formatDistanceToNow(new Date(s.created_at), { addSuffix: true })}
+                          </div>
+                          {s.signature_signers?.map((sg) => (
+                            <div key={sg.id} className="text-xs flex items-center justify-between gap-2 pl-2">
+                              <span className="truncate">
+                                {sg.signer_name} <span className="text-muted-foreground">· {sg.signer_email}</span>
+                              </span>
+                              <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                                {sg.status === "signed" && sg.signed_at
+                                  ? `Signed ${format(new Date(sg.signed_at), "MMM d")}`
+                                  : sg.viewed_at
+                                  ? `Viewed ${format(new Date(sg.viewed_at), "MMM d")}`
+                                  : sg.delivery_status === "sent"
+                                  ? "Email sent"
+                                  : sg.delivery_status === "failed"
+                                  ? "Send failed"
+                                  : sg.status}
+                              </span>
+                            </div>
+                          ))}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+
             {/* Updates / messages with tenant */}
             {check?.id && (
               <Card>
