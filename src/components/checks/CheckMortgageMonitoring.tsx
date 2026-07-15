@@ -435,6 +435,55 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
           )}
         </div>
       )}
+
+      <Dialog open={showDeskDialog} onOpenChange={setShowDeskDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Headset className="h-4 w-4 text-amber-400" /> Have ChecksOps contact the mortgage company
+            </DialogTitle>
+            <DialogDescription>
+              Our staff will reach out to the mortgage company for this check. You'll be billed a flat fee when the task is completed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Mortgage company *</label>
+              <Input
+                value={deskCompany}
+                onChange={(e) => setDeskCompany(e.target.value)}
+                placeholder="e.g. Chase Home Lending"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Loan number (optional)</label>
+              <Input
+                value={deskLoan}
+                onChange={(e) => setDeskLoan(e.target.value)}
+                placeholder="Loan #"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Anything we should know? (optional)</label>
+              <Textarea
+                value={deskNote}
+                onChange={(e) => setDeskNote(e.target.value)}
+                placeholder="Prior contact, servicer requirements, urgency…"
+                className="min-h-[70px]"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowDeskDialog(false)} disabled={deskSubmitting}>
+              Cancel
+            </Button>
+            <Button onClick={submitDeskRequest} disabled={deskSubmitting || !deskCompany.trim()}>
+              {deskSubmitting ? "Submitting…" : "Send to ChecksOps"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
