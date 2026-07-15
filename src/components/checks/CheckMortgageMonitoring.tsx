@@ -53,7 +53,7 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
     queryFn: async () => {
       const { data } = await supabase
         .from("mortgage_handling_requests")
-        .select("id, status, mortgage_company, loan_number, created_at, completed_at, billing_status")
+        .select("id, status, mortgage_company, loan_number, created_at, completed_at, billing_status, billed_at, flat_fee_cents")
         .eq("check_intake_item_id", checkId)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -61,6 +61,7 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
       return data as any;
     },
   });
+
 
   const { data: draws = [] } = useQuery({
     queryKey: ["check-mortgage-draws", checkId],
