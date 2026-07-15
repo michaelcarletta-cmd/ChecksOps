@@ -8,8 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Building2, LogOut, Inbox, CheckCircle2, Loader2, Clock } from "lucide-react";
+import { Building2, LogOut, Inbox, CheckCircle2, Loader2, Clock, Eye } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { MortgageOpsRequestDetail } from "./MortgageOpsRequestDetail";
 
 interface Request {
   id: string;
@@ -39,6 +40,7 @@ export default function MortgageOpsQueue() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notesById, setNotesById] = useState<Record<string, string>>({});
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -245,14 +247,19 @@ export default function MortgageOpsQueue() {
                     {r.notes && (
                       <p className="text-xs bg-muted/40 rounded p-2 whitespace-pre-wrap">{r.notes}</p>
                     )}
-                    <Button
-                      onClick={() => handleAccept(r.id)}
-                      disabled={busyId === r.id}
-                      size="sm"
-                    >
-                      {busyId === r.id ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-                      Accept task
-                    </Button>
+                    <div className="flex gap-2 flex-wrap">
+                      <Button
+                        onClick={() => handleAccept(r.id)}
+                        disabled={busyId === r.id}
+                        size="sm"
+                      >
+                        {busyId === r.id ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                        Accept task
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setDetailId(r.id)}>
+                        <Eye className="h-4 w-4 mr-1" /> View details
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))
@@ -307,6 +314,9 @@ export default function MortgageOpsQueue() {
                       rows={2}
                     />
                     <div className="flex gap-2 flex-wrap">
+                      <Button variant="outline" size="sm" onClick={() => setDetailId(r.id)}>
+                        <Eye className="h-4 w-4 mr-1" /> View details
+                      </Button>
                       <Button
                         variant="secondary"
                         size="sm"
@@ -338,6 +348,13 @@ export default function MortgageOpsQueue() {
           </TabsContent>
         </Tabs>
       </main>
+
+      <MortgageOpsRequestDetail
+        requestId={detailId}
+        open={!!detailId}
+        onOpenChange={(o) => { if (!o) setDetailId(null); }}
+        onAction={fetchQueues}
+      />
     </div>
   );
 }

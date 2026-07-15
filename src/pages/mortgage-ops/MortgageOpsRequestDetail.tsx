@@ -1,0 +1,582 @@
+import { useEffect, useState, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { toast } from "sonner";
+import {
+  Loader2,
+  Send,
+  FileText,
+  Upload,
+  Download,
+  CheckCircle2,
+  Building2,
+  Home,
+  User,
+  DollarSign,
+  Calendar,
+  Hash,
+  Phone,
+  Mail,
+  MapPin,
+} from "lucide-react";
+import { formatDistanceToNow, format } from "date-fns";
+
+interface Props {
+  requestId: string | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onAction?: () => void;
+}
+
+interface CheckRow {
+  id: string;
+  tenant_id: string | null;
+  claim_id: string | null;
+  amount: number | null;
+  check_number: string | null;
+  carrier_name: string | null;
+  payee_line: string | null;
+  payee_address: string | null;
+  property_address: string | null;
+  issue_date: string | null;
+  detected_claim_number: string | null;
+  front_image_path: string | null;
+  back_image_path: string | null;
+  status: string | null;
+  check_stage: string | null;
+  funds_type: string | null;
+  routing_number: string | null;
+  account_number: string | null;
+}
+
+interface RequestRow {
+  id: string;
+  tenant_id: string;
+  check_intake_item_id: string | null;
+  claim_id: string | null;
+  mortgage_company: string | null;
+  mortgage_servicer: string | null;
+  loan_number: string | null;
+  status: string;
+  note: string | null;
+  work_notes: string | null;
+  created_at: string;
+  accepted_at: string | null;
+  assigned_employee_id: string | null;
+}
+
+interface ClaimRow {
+  id: string;
+  claim_number: string | null;
+  policyholder_name: string | null;
+  policyholder_email: string | null;
+  policyholder_phone: string | null;
+  policyholder_address: string | null;
+  loss_type: string | null;
+  loss_date: string | null;
+  loss_description: string | null;
+  insurance_company: string | null;
+  adjuster_name: string | null;
+  adjuster_phone: string | null;
+  adjuster_email: string | null;
+  loan_number: string | null;
+  policy_number: string | null;
+}
+
+interface CheckFileRow {
+  id: string;
+  file_name: string;
+  file_path: string;
+  category: string | null;
+  description: string | null;
+  created_at: string;
+}
+
+interface LossDraftDoc {
+  id: string;
+  document_type: string;
+  document_label: string | null;
+  is_required: boolean;
+  is_submitted: boolean;
+  submitted_at: string | null;
+  file_id: string | null;
+  notes: string | null;
+}
+
+interface MessageRow {
+  id: string;
+  sender_id: string;
+  body: string;
+  created_at: string;
+  is_deleted: boolean;
+}
+
+interface TenantRow { id: string; name: string | null; }
+
+export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onAction }: Props) {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [req, setReq] = useState<RequestRow | null>(null);
+  const [check, setCheck] = useState<CheckRow | null>(null);
+  const [claim, setClaim] = useState<ClaimRow | null>(null);
+  const [tenant, setTenant] = useState<TenantRow | null>(null);
+  const [images, setImages] = useState<{ front?: string; back?: string }>({});
+  const [files, setFiles] = useState<CheckFileRow[]>([]);
+  const [lossDocs, setLossDocs] = useState<LossDraftDoc[]>([]);
+  const [messages, setMessages] = useState<MessageRow[]>([]);
+  const [draft, setDraft] = useState("");
+  const [posting, setPosting] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadDesc, setUploadDesc] = useState("");
+  const [uploadForSignature, setUploadForSignature] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!requestId) return;
+    setLoading(true);
+    try {
+      const { data: r, error: rErr } = await supabase
+        .from("mortgage_handling_requests")
+        .select("*")
+        .eq("id", requestId)
+        .maybeSingle();
+      if (rErr || !r) throw rErr || new Error("not found");
+      setReq(r as RequestRow);
+
+      const tenantP = supabase.from("tenants").select("id,name").eq("id", r.tenant_id).maybeSingle();
+      const checkP = r.check_intake_item_id
+        ? supabase
+            .from("check_intake_items")
+            .select(
+              "id,tenant_id,claim_id,amount,check_number,carrier_name,payee_line,payee_address,property_address,issue_date,detected_claim_number,front_image_path,back_image_path,status,check_stage,funds_type,routing_number,account_number"
+            )
+            .eq("id", r.check_intake_item_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null } as any);
+      const claimP = r.claim_id
+        ? supabase
+            .from("claims")
+            .select(
+              "id,claim_number,policyholder_name,policyholder_email,policyholder_phone,policyholder_address,loss_type,loss_date,loss_description,insurance_company,adjuster_name,adjuster_phone,adjuster_email,loan_number,policy_number"
+            )
+            .eq("id", r.claim_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null } as any);
+
+      const [tRes, cRes, clRes] = await Promise.all([tenantP, checkP, claimP]);
+      setTenant((tRes.data as TenantRow) || null);
+      setCheck((cRes.data as CheckRow) || null);
+      setClaim((clRes.data as ClaimRow) || null);
+
+      if (r.check_intake_item_id) {
+        // Signed image URLs
+        const { data: img } = await supabase.functions.invoke("get-check-image-urls", {
+          body: { check_id: r.check_intake_item_id },
+        });
+        if (img?.front_url || img?.back_url) {
+          setImages({ front: img.front_url, back: img.back_url });
+        } else {
+          setImages({});
+        }
+
+        const { data: fRows } = await supabase
+          .from("check_files")
+          .select("id,file_name,file_path,category,description,created_at")
+          .eq("check_intake_item_id", r.check_intake_item_id)
+          .order("created_at", { ascending: false });
+        setFiles((fRows as CheckFileRow[]) || []);
+
+        // Loss draft docs
+        const { data: ldt } = await supabase
+          .from("loss_draft_tracking")
+          .select("id")
+          .eq("check_intake_item_id", r.check_intake_item_id)
+          .maybeSingle();
+        if (ldt?.id) {
+          const { data: docs } = await supabase
+            .from("loss_draft_documents")
+            .select("id,document_type,document_label,is_required,is_submitted,submitted_at,file_id,notes")
+            .eq("loss_draft_id", ldt.id)
+            .order("is_required", { ascending: false });
+          setLossDocs((docs as LossDraftDoc[]) || []);
+        } else {
+          setLossDocs([]);
+        }
+
+        const { data: msgs } = await supabase
+          .from("check_messages")
+          .select("id,sender_id,body,created_at,is_deleted")
+          .eq("check_id", r.check_intake_item_id)
+          .order("created_at", { ascending: true });
+        setMessages(((msgs as MessageRow[]) || []).filter((m) => !m.is_deleted));
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to load request");
+    } finally {
+      setLoading(false);
+    }
+  }, [requestId]);
+
+  useEffect(() => {
+    if (open && requestId) void load();
+  }, [open, requestId, load]);
+
+  // Realtime subscribe to messages
+  useEffect(() => {
+    if (!open || !check?.id) return;
+    const ch = supabase
+      .channel(`mops-msg-${check.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "check_messages", filter: `check_id=eq.${check.id}` },
+        () => void load()
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [open, check?.id, load]);
+
+  const postMessage = async () => {
+    if (!draft.trim() || !check?.id || !user?.id) return;
+    setPosting(true);
+    const { error } = await supabase.from("check_messages").insert({
+      check_id: check.id,
+      sender_id: user.id,
+      body: draft.trim(),
+    });
+    setPosting(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setDraft("");
+    toast.success("Update sent to tenant");
+    void load();
+  };
+
+  const uploadDoc = async (file: File) => {
+    if (!check?.id || !user?.id) return;
+    setUploading(true);
+    try {
+      const ext = file.name.split(".").pop() || "bin";
+      const path = `checks/${check.id}/mortgage-ops/${Date.now()}-${file.name.replace(/[^a-z0-9.\-_]/gi, "_")}`;
+      const { error: upErr } = await supabase.storage
+        .from("claim-files")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) throw upErr;
+
+      const { error: insErr } = await supabase.from("check_files").insert({
+        check_intake_item_id: check.id,
+        file_name: file.name,
+        file_path: path,
+        file_type: file.type,
+        file_size: file.size,
+        category: uploadForSignature ? "mortgage_ops_signature" : "mortgage_ops",
+        source: "mortgage_ops",
+        uploaded_by: user.id,
+        description: uploadDesc || null,
+      });
+      // Note: check_files does not carry signature metadata; the intent is
+      // conveyed via category "mortgage_ops_signature" and the tenant message below.
+      const _sigIntent = uploadForSignature;
+      if (insErr) throw insErr;
+
+      // Also post a message notifying the tenant
+      await supabase.from("check_messages").insert({
+        check_id: check.id,
+        sender_id: user.id,
+        body: uploadForSignature
+          ? `📄 Mortgage Ops uploaded a document for homeowner signature: "${file.name}"${uploadDesc ? ` — ${uploadDesc}` : ""}. Please forward to the homeowner via your signature workflow.`
+          : `📎 Mortgage Ops attached a document: "${file.name}"${uploadDesc ? ` — ${uploadDesc}` : ""}.`,
+      });
+
+      setUploadDesc("");
+      toast.success("Document uploaded");
+      void load();
+    } catch (e: any) {
+      toast.error(e?.message || "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const downloadFile = async (path: string, name: string) => {
+    const { data, error } = await supabase.storage
+      .from("claim-files")
+      .createSignedUrl(path, 300, { download: name });
+    if (error || !data?.signedUrl) {
+      toast.error("Could not open file");
+      return;
+    }
+    window.open(data.signedUrl, "_blank", "noopener");
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-primary" />
+            Mortgage Handling Request
+          </SheetTitle>
+        </SheetHeader>
+
+        {loading || !req ? (
+          <div className="py-16 flex justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="mt-4 space-y-5">
+            {/* Header block */}
+            <Card>
+              <CardContent className="pt-4 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-semibold">
+                    {req.mortgage_company || req.mortgage_servicer || "Mortgage company"}
+                  </div>
+                  <Badge variant={req.status === "requested" ? "default" : "secondary"}>
+                    {req.status}
+                  </Badge>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Tenant: <span className="font-medium text-foreground">{tenant?.name || req.tenant_id.slice(0, 8)}</span>
+                  {" · "}Requested {formatDistanceToNow(new Date(req.created_at), { addSuffix: true })}
+                </div>
+                {req.loan_number && (
+                  <div className="text-sm"><Hash className="h-3 w-3 inline mr-1" />Loan #: <span className="font-medium">{req.loan_number}</span></div>
+                )}
+                {req.note && (
+                  <div className="text-xs bg-muted/40 rounded p-2 whitespace-pre-wrap">
+                    <span className="text-muted-foreground">Tenant note: </span>{req.note}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Check details */}
+            {check ? (
+              <Card>
+                <CardContent className="pt-4 space-y-3">
+                  <div className="font-semibold text-sm flex items-center gap-2">
+                    <DollarSign className="h-4 w-4" /> Check details
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                    <Field label="Amount" value={check.amount != null ? `$${Number(check.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"} />
+                    <Field label="Check #" value={check.check_number || "—"} />
+                    <Field label="Carrier" value={check.carrier_name || "—"} />
+                    <Field label="Issue date" value={check.issue_date ? format(new Date(check.issue_date), "MMM d, yyyy") : "—"} />
+                    <Field label="Payee" value={check.payee_line || "—"} className="col-span-2" />
+                    {check.payee_address && <Field label="Payee address" value={check.payee_address} className="col-span-2" />}
+                    {check.property_address && <Field label="Property" value={check.property_address} className="col-span-2" />}
+                    {check.detected_claim_number && <Field label="Claim # (from check)" value={check.detected_claim_number} />}
+                    {check.funds_type && <Field label="Funds type" value={check.funds_type} />}
+                    <Field label="Stage" value={check.check_stage || check.status || "—"} />
+                  </div>
+
+                  {(images.front || images.back) && (
+                    <div className="grid grid-cols-2 gap-2 pt-2">
+                      {images.front && (
+                        <a href={images.front} target="_blank" rel="noopener noreferrer" className="block">
+                          <img src={images.front} alt="Check front" className="w-full rounded border border-border" />
+                          <div className="text-[10px] text-center text-muted-foreground mt-1">Front</div>
+                        </a>
+                      )}
+                      {images.back && (
+                        <a href={images.back} target="_blank" rel="noopener noreferrer" className="block">
+                          <img src={images.back} alt="Check back" className="w-full rounded border border-border" />
+                          <div className="text-[10px] text-center text-muted-foreground mt-1">Back</div>
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <Card><CardContent className="py-4 text-sm text-muted-foreground">No check linked to this request.</CardContent></Card>
+            )}
+
+            {/* Claim / homeowner info */}
+            {claim && (
+              <Card>
+                <CardContent className="pt-4 space-y-3">
+                  <div className="font-semibold text-sm flex items-center gap-2">
+                    <Home className="h-4 w-4" /> Claim & homeowner
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                    <Field label="Claim #" value={claim.claim_number || "—"} />
+                    <Field label="Policy #" value={claim.policy_number || "—"} />
+                    <Field label="Loss type" value={claim.loss_type || "—"} />
+                    <Field label="Date of loss" value={claim.loss_date ? format(new Date(claim.loss_date), "MMM d, yyyy") : "—"} />
+                    <Field label="Insurance" value={claim.insurance_company || "—"} className="col-span-2" />
+                    <Field label={<><User className="h-3 w-3 inline mr-1" />Homeowner</>} value={claim.policyholder_name || "—"} className="col-span-2" />
+                    {claim.policyholder_email && <Field label={<><Mail className="h-3 w-3 inline mr-1" />Email</>} value={claim.policyholder_email} />}
+                    {claim.policyholder_phone && <Field label={<><Phone className="h-3 w-3 inline mr-1" />Phone</>} value={claim.policyholder_phone} />}
+                    {claim.policyholder_address && <Field label={<><MapPin className="h-3 w-3 inline mr-1" />Address</>} value={claim.policyholder_address} className="col-span-2" />}
+                    {claim.adjuster_name && <Field label="Adjuster" value={`${claim.adjuster_name}${claim.adjuster_phone ? ` · ${claim.adjuster_phone}` : ""}`} className="col-span-2" />}
+                    {claim.loan_number && !req.loan_number && <Field label="Loan # (claim)" value={claim.loan_number} />}
+                  </div>
+                  {claim.loss_description && (
+                    <div className="text-xs bg-muted/40 rounded p-2 whitespace-pre-wrap">{claim.loss_description}</div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Loss draft documents */}
+            {lossDocs.length > 0 && (
+              <Card>
+                <CardContent className="pt-4 space-y-2">
+                  <div className="font-semibold text-sm flex items-center gap-2">
+                    <FileText className="h-4 w-4" /> Loss draft documents ({lossDocs.filter((d) => d.is_submitted).length}/{lossDocs.length})
+                  </div>
+                  <ul className="text-sm divide-y divide-border">
+                    {lossDocs.map((d) => (
+                      <li key={d.id} className="py-1.5 flex items-center justify-between gap-2">
+                        <span className="truncate">
+                          {d.document_label || d.document_type}
+                          {d.is_required && <span className="text-[10px] ml-1 text-destructive">required</span>}
+                        </span>
+                        <Badge variant={d.is_submitted ? "secondary" : "outline"} className="text-[10px]">
+                          {d.is_submitted ? "submitted" : "pending"}
+                        </Badge>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Files */}
+            <Card>
+              <CardContent className="pt-4 space-y-3">
+                <div className="font-semibold text-sm flex items-center justify-between">
+                  <span className="flex items-center gap-2"><FileText className="h-4 w-4" /> Attachments</span>
+                  <span className="text-xs text-muted-foreground">{files.length}</span>
+                </div>
+                {files.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No attachments yet.</p>
+                ) : (
+                  <ul className="text-sm divide-y divide-border">
+                    {files.map((f) => (
+                      <li key={f.id} className="py-2 flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">{f.file_name}</div>
+                          <div className="text-[11px] text-muted-foreground flex flex-wrap gap-x-2">
+                            {f.category && <span>{f.category}</span>}
+                            {f.category === "mortgage_ops_signature" && <span className="text-amber-600">for homeowner signature</span>}
+                            <span>{formatDistanceToNow(new Date(f.created_at), { addSuffix: true })}</span>
+                          </div>
+                          {f.description && <div className="text-xs text-muted-foreground truncate">{f.description}</div>}
+                        </div>
+                        <Button size="sm" variant="ghost" onClick={() => downloadFile(f.file_path, f.file_name)}>
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {check?.id && req.status === "in_progress" && req.assigned_employee_id === user?.id && (
+                  <div className="border-t border-border pt-3 space-y-2">
+                    <div className="text-xs font-medium">Upload a document</div>
+                    <Input
+                      placeholder="What is this? (e.g. Mortgagee endorsement page)"
+                      value={uploadDesc}
+                      onChange={(e) => setUploadDesc(e.target.value)}
+                    />
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={uploadForSignature}
+                        onChange={(e) => setUploadForSignature(e.target.checked)}
+                      />
+                      Mark as requiring homeowner signature (notifies tenant to send)
+                    </label>
+                    <label className="inline-flex">
+                      <input
+                        type="file"
+                        className="hidden"
+                        disabled={uploading}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) void uploadDoc(f);
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                      <Button asChild size="sm" disabled={uploading} variant="secondary">
+                        <span>
+                          {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
+                          Upload document
+                        </span>
+                      </Button>
+                    </label>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Updates / messages with tenant */}
+            {check?.id && (
+              <Card>
+                <CardContent className="pt-4 space-y-3">
+                  <div className="font-semibold text-sm flex items-center gap-2">
+                    <Send className="h-4 w-4" /> Updates to tenant
+                  </div>
+                  <div className="max-h-64 overflow-auto space-y-2 border border-border rounded p-2 bg-muted/20">
+                    {messages.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-4">No messages yet.</p>
+                    ) : (
+                      messages.map((m) => (
+                        <div key={m.id} className={`text-sm rounded p-2 ${m.sender_id === user?.id ? "bg-primary/10 ml-8" : "bg-card mr-8 border border-border"}`}>
+                          <div className="whitespace-pre-wrap">{m.body}</div>
+                          <div className="text-[10px] text-muted-foreground mt-1">
+                            {m.sender_id === user?.id ? "You" : "Tenant"} · {formatDistanceToNow(new Date(m.created_at), { addSuffix: true })}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  {req.status === "in_progress" && req.assigned_employee_id === user?.id && (
+                    <div className="space-y-2">
+                      <Textarea
+                        rows={2}
+                        placeholder="Send an update to the tenant (also visible in their check thread)…"
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                      />
+                      <Button size="sm" disabled={posting || !draft.trim()} onClick={postMessage}>
+                        {posting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
+                        Send update
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            <Separator />
+            <div className="text-[11px] text-muted-foreground">
+              Request ID: {req.id}
+            </div>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function Field({ label, value, className }: { label: React.ReactNode; value: React.ReactNode; className?: string }) {
+  return (
+    <div className={className}>
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="truncate">{value}</div>
+    </div>
+  );
+}
