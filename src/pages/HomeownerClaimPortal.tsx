@@ -784,6 +784,149 @@ export default function HomeownerClaimPortal() {
           it like a password. Don't share it.
         </p>
       </div>
+
+      {/* Signature dialog */}
+      <Dialog open={!!signAction} onOpenChange={(o) => !o && setSignAction(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base flex items-center gap-2">
+              <FileSignature className="h-4 w-4" /> {signAction?.label}
+            </DialogTitle>
+            <DialogDescription>
+              Your typed name below acts as your legal signature. We record the time, your IP
+              address, and browser, and generate a signed PDF that goes straight to your
+              contractor and your mortgage servicer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="text-xs text-muted-foreground border border-border rounded-md p-3">
+              I, the undersigned homeowner, authorize{" "}
+              <strong className="text-foreground">{contractor?.display_name}</strong> and ChecksOps
+              to act on my behalf with my mortgage servicer regarding the insurance loss draft
+              check for my property
+              {lead?.dtp_property_address ? ` at ${lead.dtp_property_address}` : ""}. This
+              authorization is limited to this loss and remains in effect until I revoke it in
+              writing.
+            </div>
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="sign-agree"
+                checked={signActionAgree}
+                onCheckedChange={(v) => setSignActionAgree(!!v)}
+              />
+              <label htmlFor="sign-agree" className="text-xs">
+                I have read and agree. My typed name is my signature.
+              </label>
+            </div>
+            <Field label="Type your full legal name to sign">
+              <Input
+                value={signActionName}
+                onChange={(e) => setSignActionName(e.target.value)}
+                placeholder="First Last"
+                maxLength={120}
+              />
+            </Field>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSignAction(null)}>Cancel</Button>
+            <Button onClick={submitSignAction} disabled={signActionBusy || !signActionAgree}>
+              {signActionBusy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Sign document
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mortgage intake dialog */}
+      <Dialog open={!!intakeAction} onOpenChange={(o) => !o && setIntakeAction(null)}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-base flex items-center gap-2">
+              <Landmark className="h-4 w-4" /> {intakeAction?.label ?? "Mortgage information"}
+            </DialogTitle>
+            <DialogDescription>
+              This helps us contact your mortgage servicer so they can endorse the check
+              alongside you. We only share it with your contractor and the servicer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Field label="Mortgage servicer">
+              <Input
+                value={intake.mortgage_servicer}
+                onChange={(e) => setIntake({ ...intake, mortgage_servicer: e.target.value })}
+                placeholder="e.g. Wells Fargo Home Mortgage"
+                maxLength={160}
+              />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Loan number">
+                <Input
+                  value={intake.loan_number}
+                  onChange={(e) => setIntake({ ...intake, loan_number: e.target.value })}
+                  maxLength={80}
+                />
+              </Field>
+              <Field label="Servicer phone">
+                <Input
+                  value={intake.servicer_phone}
+                  onChange={(e) => setIntake({ ...intake, servicer_phone: e.target.value })}
+                  maxLength={40}
+                />
+              </Field>
+            </div>
+            <Field label="Borrower name(s) as on the loan">
+              <Input
+                value={intake.borrower_names}
+                onChange={(e) => setIntake({ ...intake, borrower_names: e.target.value })}
+                maxLength={240}
+              />
+            </Field>
+            <Field label="Mailing address on file with servicer">
+              <Input
+                value={intake.mailing_address}
+                onChange={(e) => setIntake({ ...intake, mailing_address: e.target.value })}
+                maxLength={300}
+              />
+            </Field>
+            <Field label="Last 4 of primary borrower's SSN (optional)">
+              <Input
+                value={intake.ssn_last4}
+                onChange={(e) => setIntake({ ...intake, ssn_last4: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                inputMode="numeric"
+                maxLength={4}
+                placeholder="1234"
+              />
+            </Field>
+            <Field label="Anything else we should know? (optional)">
+              <Textarea
+                value={intake.notes}
+                onChange={(e) => setIntake({ ...intake, notes: e.target.value.slice(0, 1000) })}
+                className="min-h-[60px]"
+              />
+            </Field>
+            <Separator />
+            <Field label="Type your full legal name to confirm">
+              <Input
+                value={intake.signer_name}
+                onChange={(e) => setIntake({ ...intake, signer_name: e.target.value })}
+                placeholder="First Last"
+                maxLength={120}
+              />
+            </Field>
+            <p className="text-[10px] text-muted-foreground">
+              By submitting, you confirm this information is accurate to the best of your
+              knowledge. ChecksOps records the time, your IP, and browser.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIntakeAction(null)}>Cancel</Button>
+            <Button onClick={submitIntake} disabled={intakeBusy}>
+              {intakeBusy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Submit mortgage info
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Shell>
   );
 }
