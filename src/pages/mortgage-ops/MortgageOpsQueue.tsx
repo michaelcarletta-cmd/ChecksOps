@@ -224,12 +224,16 @@ export default function MortgageOpsQueue() {
         <Tabs defaultValue="available">
           <TabsList>
             <TabsTrigger value="available" className="gap-2">
-              <Inbox className="h-4 w-4" /> Available
+              <Inbox className="h-4 w-4" /> Queued
               <Badge variant="secondary" className="ml-1">{available.length}</Badge>
             </TabsTrigger>
             <TabsTrigger value="mine" className="gap-2">
-              <Clock className="h-4 w-4" /> My tasks
+              <Clock className="h-4 w-4" /> In progress
               <Badge variant="secondary" className="ml-1">{mine.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="completed" className="gap-2">
+              <CheckCircle2 className="h-4 w-4" /> Completed
+              <Badge variant="secondary" className="ml-1">{completed.length}</Badge>
             </TabsTrigger>
           </TabsList>
 
