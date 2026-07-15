@@ -138,7 +138,61 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
     refresh();
   }
 
+  async function submitDeskRequest() {
+    if (!check?.tenant_id) return;
+    if (!deskCompany.trim()) {
+      toast({ title: "Mortgage company required", variant: "destructive" });
+      return;
+    }
+    setDeskSubmitting(true);
+    const { data: userData } = await supabase.auth.getUser();
+    const { error } = await supabase.from("mortgage_handling_requests").insert({
+      tenant_id: check.tenant_id,
+      check_intake_item_id: checkId,
+      claim_id: check.claim_id ?? null,
+      mortgage_company: deskCompany.trim(),
+      loan_number: deskLoan.trim() || null,
+      note: deskNote.trim() || null,
+      requested_by: userData.user?.id ?? null,
+    } as any).select("id").single();
+    if (error) {
+      // 23505 = duplicate open request; the partial unique index catches it
+      const dup = /duplicate|unique/i.test(error.message);
+      toast({
+        title: dup ? "Request already open" : "Could not create request",
+        description: dup ? "A ChecksOps mortgage request is already active for this check." : error.message,
+        variant: "destructive",
+      });
+      setDeskSubmitting(false);
+      if (dup) { setShowDeskDialog(false); refetchDesk(); }
+      return;
+    }
+    // Fire-and-forget notification (never blocks the user)
+    const { data: created } = await supabase
+      .from("mortgage_handling_requests")
+      .select("id")
+      .eq("check_intake_item_id", checkId)
+      .in("status", ["requested", "in_progress"])
+      .maybeSingle();
+    if (created?.id) {
+      supabase.functions.invoke("notify-mortgage-handling-request", {
+        body: { request_id: created.id },
+      }).catch(() => {});
+    }
+    toast({ title: "ChecksOps has been notified", description: "Our team will contact the mortgage company." });
+    setShowDeskDialog(false);
+    setDeskCompany(""); setDeskLoan(""); setDeskNote("");
+    setDeskSubmitting(false);
+    refetchDesk();
+  }
+
   if (!check) return null;
+
+  const deskStatusLabel = deskRequest?.status === "requested" ? "Requested"
+    : deskRequest?.status === "in_progress" ? "In progress"
+    : deskRequest?.status === "completed" ? "Completed"
+    : null;
+  const deskOpen = deskRequest && ["requested", "in_progress"].includes(deskRequest.status);
 
   return (
     <div className="space-y-3">
@@ -146,7 +200,16 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
       <div className="flex items-center gap-2">
         <Building2 className="h-4 w-4 text-amber-400" />
         <span className="text-sm font-semibold">Mortgage / Loss Draft</span>
+        {deskStatusLabel && (
+          <Badge
+            variant={deskRequest?.status === "completed" ? "default" : "secondary"}
+            className="text-[10px] gap-1"
+          >
+            <Headset className="h-2.5 w-2.5" /> ChecksOps handling: {deskStatusLabel}
+          </Badge>
+        )}
       </div>
+
 
       {/* Monitoring type selection */}
       {monitoringType === "not_set" ? (
