@@ -308,6 +308,60 @@ Deno.serve(async (req) => {
       return json({ ok: true })
     }
 
+    if (p.action === 'complete_action') {
+      if (!p.doc_id) return json({ error: 'doc_id required' }, 400)
+      const lossDraftIds = await resolveLossDraftIds(
+        admin, lead.id, lead.dtp_claim_number ?? null, profile?.user_id ?? null,
+      )
+      if (!lossDraftIds.length) return json({ error: 'no matching loss draft' }, 404)
+
+      const { data: doc, error: docErr } = await admin
+        .from('loss_draft_documents')
+        .select('id, loss_draft_id, signer_role, requires_signature, document_label')
+        .eq('id', p.doc_id)
+        .maybeSingle()
+      if (docErr || !doc) return json({ error: 'document not found' }, 404)
+      if (!lossDraftIds.includes(doc.loss_draft_id) || doc.signer_role !== 'homeowner') {
+        return json({ error: 'not authorized for this document' }, 403)
+      }
+
+      let filePath: string | null = null
+      let fileName: string | null = null
+      if (p.file_base64) {
+        if (!p.file_mime || !ACTION_MIME.has(p.file_mime)) {
+          return json({ error: 'unsupported file type' }, 400)
+        }
+        const bytes = b64ToBytes(p.file_base64)
+        if (bytes.byteLength > MAX_BYTES) return json({ error: 'file too large (15 MB max)' }, 400)
+        const ext = (p.filename?.split('.').pop() ?? '').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin'
+        filePath = `${doc.loss_draft_id}/${doc.id}/${crypto.randomUUID()}.${ext}`
+        fileName = p.filename ?? `${doc.document_label}.${ext}`
+        const { error: upErr } = await admin.storage
+          .from(LOSS_DRAFT_BUCKET)
+          .upload(filePath, bytes, { contentType: p.file_mime, upsert: true })
+        if (upErr) return json({ error: 'upload failed', detail: upErr.message }, 500)
+      } else if (!doc.requires_signature) {
+        return json({ error: 'file required' }, 400)
+      }
+
+      const patch: Record<string, unknown> = {
+        is_submitted: true,
+        submitted_at: new Date().toISOString(),
+      }
+      if (filePath) {
+        patch.file_path = filePath
+        patch.file_name = fileName
+      }
+
+      const { error: updErr } = await admin
+        .from('loss_draft_documents')
+        .update(patch)
+        .eq('id', doc.id)
+      if (updErr) return json({ error: 'could not save', detail: updErr.message }, 500)
+
+      return json({ ok: true })
+    }
+
     return json({ error: 'unknown action' }, 400)
   } catch (e: any) {
     return json({ error: e.message ?? 'server error' }, 500)
