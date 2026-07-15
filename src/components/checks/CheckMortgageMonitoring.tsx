@@ -235,6 +235,52 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
         </div>
       )}
 
+      {/* ChecksOps Mortgage Desk — request live-people help */}
+      {monitoringType === "monitored" && !deskOpen && deskRequest?.status !== "completed" && (
+        <div className="rounded-md border border-dashed border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+          <div className="flex items-start gap-2">
+            <Headset className="h-4 w-4 text-amber-400 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-xs font-semibold">Want us to handle the mortgage company?</p>
+              <p className="text-[11px] text-muted-foreground">
+                ChecksOps staff will contact the mortgage company on your behalf. Flat fee billed on completion.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowDeskDialog(true)}
+          >
+            <Headset className="h-3.5 w-3.5 mr-1" /> Have ChecksOps contact the mortgage company
+          </Button>
+        </div>
+      )}
+      {deskOpen && (
+        <div className="rounded-md bg-muted/40 p-3 text-xs space-y-1">
+          <div className="flex items-center gap-2">
+            <Headset className="h-3.5 w-3.5 text-amber-400" />
+            <span className="font-semibold">ChecksOps is handling this mortgage company</span>
+          </div>
+          <div className="text-muted-foreground">
+            {deskRequest?.mortgage_company ?? "—"}
+            {deskRequest?.loan_number ? ` · Loan #${deskRequest.loan_number}` : ""}
+            {" · "}Requested {format(new Date(deskRequest!.created_at), "MMM d")}
+          </div>
+        </div>
+      )}
+      {deskRequest?.status === "completed" && (
+        <div className="rounded-md bg-emerald-500/10 p-3 text-xs flex items-center gap-2">
+          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+          <span>ChecksOps completed mortgage handling</span>
+          {deskRequest.completed_at && (
+            <span className="text-muted-foreground">· {format(new Date(deskRequest.completed_at), "MMM d, yyyy")}</span>
+          )}
+        </div>
+      )}
+
+
+
       {/* Sent status display */}
       {isSent && (
         <div className="rounded-md bg-muted/50 p-3 space-y-1 text-sm">
