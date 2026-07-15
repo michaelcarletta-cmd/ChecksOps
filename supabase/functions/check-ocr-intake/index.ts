@@ -911,6 +911,14 @@ Rules:
 - Amount must be numeric only. Date must be YYYY-MM-DD.
 - CRITICAL for amount: The check amount appears in TWO places — a numeric box (usually right side) AND written out in words on the "dollars" line. Check BOTH locations. Even if one is partially obscured, use the other. The amount should almost NEVER be null for a valid check. If you can read the written-out amount (e.g. "Two thousand five hundred ten and 27/100"), convert it to numeric (2510.27). Only return null if BOTH the numeric and written amounts are completely unreadable.
 - CRITICAL for MICR (routing/account): Look at the bottom edge of the check for the magnetic ink line printed in the special MICR font. The format is typically: ⑆ROUTING⑆ ACCOUNT⑈ CHECK#  (transit/routing is 9 digits flanked by ⑆ symbols, then the account number, then the check number flanked by ⑈). Extract routing_number as the 9-digit number, account_number as the variable-length account digits. Return digits only — strip the special MICR symbols (⑆ ⑇ ⑈ ⑉) and any spaces. If the MICR line is not visible or unreadable, return null for both.
+- CRITICAL for claim_number: The claim number is often NOT on the main check body — check EVERY region including: (a) the memo/"For" line, (b) the payment stub/voucher area (usually the top or bottom third, often perforated), (c) any table of columns labeled "Claim #", "Claim No", "Claim Number", "Loss #", "File #", "Policy #", "Reference", "Ref", or "Invoice #", (d) small print near the payee address, (e) endorsement/description text. Carrier-specific hints:
+    * Church Mutual: claim number appears on the voucher stub as "Claim Number" or "Claim No." — usually 7-10 digits or a letter+digits combo, printed in a small labeled field near the payment description.
+    * Liberty Mutual / Safeco: often "Claim #" on the stub with a dash (e.g. 059984564-0001).
+    * Allstate: 10-digit numeric under "Claim Number" label on stub.
+    * USAA: 9-digit numeric under "Claim/Loss".
+    * Farmers: hyphenated (e.g. 7010285647-1) on stub.
+    * State Farm: "Claim Number" with a letter suffix (e.g. 12-3456-A78).
+  Scan the ENTIRE image, including any stub, before returning null for claim_number.
 - Return ONLY the JSON object, no markdown, no explanation.`;
 
       const content: VisionContentPart[] = [
