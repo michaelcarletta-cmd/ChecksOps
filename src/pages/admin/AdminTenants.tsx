@@ -160,6 +160,9 @@ export default function AdminTenants() {
             </div>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate("/admin/mortgage-ops")}>
+              <Briefcase className="w-4 h-4 mr-1" /> Mortgage Ops
+            </Button>
             <Button variant="ghost" size="sm" onClick={loadTenants}>
               <RefreshCw className="w-4 h-4 mr-1" /> Refresh
             </Button>
