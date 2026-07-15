@@ -78,6 +78,7 @@ interface RequestRow {
   homeowner_name: string | null;
   homeowner_email: string | null;
   homeowner_phone: string | null;
+  homeowner_ssn_last_four: string | null;
   property_address: string | null;
 }
 
@@ -442,6 +443,9 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                     )}
                     {(req.property_address || claim?.policyholder_address) && (
                       <Field label={<><MapPin className="h-3 w-3 inline mr-1" />Address</>} value={req.property_address || claim!.policyholder_address!} className="col-span-2" />
+                    )}
+                    {req.homeowner_ssn_last_four && (
+                      <Field label="SSN (last 4)" value={`•••-••-${req.homeowner_ssn_last_four}`} />
                     )}
                     {claim?.adjuster_name && <Field label="Adjuster" value={`${claim.adjuster_name}${claim.adjuster_phone ? ` · ${claim.adjuster_phone}` : ""}`} className="col-span-2" />}
                     {claim?.loan_number && !req.loan_number && <Field label="Loan # (claim)" value={claim.loan_number} />}
