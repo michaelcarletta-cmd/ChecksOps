@@ -348,6 +348,13 @@ export default function MortgageOpsQueue() {
           </TabsContent>
         </Tabs>
       </main>
+
+      <MortgageOpsRequestDetail
+        requestId={detailId}
+        open={!!detailId}
+        onOpenChange={(o) => { if (!o) setDetailId(null); }}
+        onAction={fetchQueues}
+      />
     </div>
   );
 }
