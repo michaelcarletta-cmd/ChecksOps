@@ -508,44 +508,57 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                   </ul>
                 )}
 
-                {check?.id && req.status === "in_progress" && req.assigned_employee_id === user?.id && (
-                  <div className="border-t border-border pt-3 space-y-2">
-                    <div className="text-xs font-medium">Upload a document</div>
-                    <Input
-                      placeholder="What is this? (e.g. Mortgagee endorsement page)"
-                      value={uploadDesc}
-                      onChange={(e) => setUploadDesc(e.target.value)}
-                    />
-                    <label className="flex items-center gap-2 text-xs">
-                      <input
-                        type="checkbox"
-                        checked={uploadForSignature}
-                        onChange={(e) => setUploadForSignature(e.target.checked)}
-                      />
-                      Mark as requiring homeowner signature (notifies tenant to send)
-                    </label>
-                    <label className="inline-flex">
-                      <input
-                        type="file"
-                        className="hidden"
-                        disabled={uploading}
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) void uploadDoc(f);
-                          e.currentTarget.value = "";
-                        }}
-                      />
-                      <Button asChild size="sm" disabled={uploading} variant="secondary">
-                        <span>
-                          {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
-                          Upload document
-                        </span>
-                      </Button>
-                    </label>
-                  </div>
-                )}
               </CardContent>
             </Card>
+
+            {/* Send document for homeowner signature */}
+            {check?.id && req.status === "in_progress" && req.assigned_employee_id === user?.id && (
+              <Card className="border-primary/40">
+                <CardContent className="pt-4 space-y-3">
+                  <div className="font-semibold text-sm flex items-center gap-2">
+                    <Send className="h-4 w-4 text-primary" /> Send document to homeowner
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Upload a document (e.g. 3rd-party authorization, mortgagee endorsement).
+                    If it needs the homeowner's signature, keep the checkbox on — the tenant will
+                    be notified in their check thread to route it to the homeowner
+                    {req.homeowner_name ? ` (${req.homeowner_name})` : ""}
+                    {req.homeowner_email ? ` at ${req.homeowner_email}` : ""}.
+                  </p>
+                  <Input
+                    placeholder="Document name / purpose (e.g. 3rd-party authorization)"
+                    value={uploadDesc}
+                    onChange={(e) => setUploadDesc(e.target.value)}
+                  />
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={uploadForSignature}
+                      onChange={(e) => setUploadForSignature(e.target.checked)}
+                    />
+                    Requires homeowner signature (tenant will be notified to send)
+                  </label>
+                  <label className="inline-flex">
+                    <input
+                      type="file"
+                      className="hidden"
+                      disabled={uploading}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) void uploadDoc(f);
+                        e.currentTarget.value = "";
+                      }}
+                    />
+                    <Button asChild size="sm" disabled={uploading}>
+                      <span>
+                        {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
+                        {uploadForSignature ? "Upload & send for signature" : "Upload document"}
+                      </span>
+                    </Button>
+                  </label>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Updates / messages with tenant */}
             {check?.id && (
