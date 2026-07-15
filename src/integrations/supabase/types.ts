@@ -15548,6 +15548,123 @@ export type Database = {
         }
         Relationships: []
       }
+      mortgage_desk_config: {
+        Row: {
+          charge_immediately: boolean
+          created_at: string
+          default_flat_fee_cents: number
+          id: boolean
+          notification_email: string | null
+          updated_at: string
+        }
+        Insert: {
+          charge_immediately?: boolean
+          created_at?: string
+          default_flat_fee_cents?: number
+          id?: boolean
+          notification_email?: string | null
+          updated_at?: string
+        }
+        Update: {
+          charge_immediately?: boolean
+          created_at?: string
+          default_flat_fee_cents?: number
+          id?: boolean
+          notification_email?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      mortgage_handling_requests: {
+        Row: {
+          accepted_at: string | null
+          assigned_employee_id: string | null
+          billed_at: string | null
+          billing_error: string | null
+          billing_status: string
+          cancelled_at: string | null
+          check_intake_item_id: string
+          claim_id: string | null
+          completed_at: string | null
+          created_at: string
+          flat_fee_cents: number | null
+          id: string
+          loan_number: string | null
+          mortgage_company: string | null
+          mortgage_servicer: string | null
+          note: string | null
+          requested_by: string | null
+          status: string
+          stripe_invoice_item_id: string | null
+          tenant_id: string
+          updated_at: string
+          work_notes: string | null
+        }
+        Insert: {
+          accepted_at?: string | null
+          assigned_employee_id?: string | null
+          billed_at?: string | null
+          billing_error?: string | null
+          billing_status?: string
+          cancelled_at?: string | null
+          check_intake_item_id: string
+          claim_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          flat_fee_cents?: number | null
+          id?: string
+          loan_number?: string | null
+          mortgage_company?: string | null
+          mortgage_servicer?: string | null
+          note?: string | null
+          requested_by?: string | null
+          status?: string
+          stripe_invoice_item_id?: string | null
+          tenant_id: string
+          updated_at?: string
+          work_notes?: string | null
+        }
+        Update: {
+          accepted_at?: string | null
+          assigned_employee_id?: string | null
+          billed_at?: string | null
+          billing_error?: string | null
+          billing_status?: string
+          cancelled_at?: string | null
+          check_intake_item_id?: string
+          claim_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          flat_fee_cents?: number | null
+          id?: string
+          loan_number?: string | null
+          mortgage_company?: string | null
+          mortgage_servicer?: string | null
+          note?: string | null
+          requested_by?: string | null
+          status?: string
+          stripe_invoice_item_id?: string | null
+          tenant_id?: string
+          updated_at?: string
+          work_notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mortgage_handling_requests_check_intake_item_id_fkey"
+            columns: ["check_intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mortgage_handling_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mortgage_releases: {
         Row: {
           amount: number
