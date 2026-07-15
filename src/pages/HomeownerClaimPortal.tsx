@@ -207,7 +207,38 @@ export default function HomeownerClaimPortal() {
     }
   };
 
+  const completeActionFile = async (docId: string, f: File) => {
+    if (f.size > MAX_MB * 1024 * 1024) {
+      toast.error(`File too large (${MAX_MB} MB max)`);
+      return;
+    }
+    setActionBusyId(docId);
+    try {
+      const b64 = await fileToBase64(f);
+      const { data, error: err } = await supabase.functions.invoke("homeowner-claim-portal", {
+        body: {
+          token,
+          action: "complete_action",
+          doc_id: docId,
+          file_base64: b64,
+          file_mime: f.type || "application/octet-stream",
+          filename: f.name,
+        },
+      });
+      if (err) throw new Error(err.message);
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success("Sent to your contractor");
+      await load();
+    } catch (e: any) {
+      toast.error(e.message ?? "Could not submit");
+    } finally {
+      setActionBusyId(null);
+      pendingActionRef.current = null;
+    }
+  };
+
   const dtpSigned = !!lead?.dtp_signed_at;
+
 
   if (loading) {
     return (
