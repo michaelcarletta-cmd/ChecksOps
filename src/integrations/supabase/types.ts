@@ -15595,6 +15595,7 @@ export type Database = {
           note: string | null
           requested_by: string | null
           status: string
+          stripe_invoice_id: string | null
           stripe_invoice_item_id: string | null
           tenant_id: string
           updated_at: string
@@ -15619,6 +15620,7 @@ export type Database = {
           note?: string | null
           requested_by?: string | null
           status?: string
+          stripe_invoice_id?: string | null
           stripe_invoice_item_id?: string | null
           tenant_id: string
           updated_at?: string
@@ -15643,6 +15645,7 @@ export type Database = {
           note?: string | null
           requested_by?: string | null
           status?: string
+          stripe_invoice_id?: string | null
           stripe_invoice_item_id?: string | null
           tenant_id?: string
           updated_at?: string
@@ -20587,6 +20590,7 @@ export type Database = {
           note: string | null
           requested_by: string | null
           status: string
+          stripe_invoice_id: string | null
           stripe_invoice_item_id: string | null
           tenant_id: string
           updated_at: string
@@ -22367,6 +22371,7 @@ export type Database = {
           note: string | null
           requested_by: string | null
           status: string
+          stripe_invoice_id: string | null
           stripe_invoice_item_id: string | null
           tenant_id: string
           updated_at: string
