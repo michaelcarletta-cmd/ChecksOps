@@ -21646,6 +21646,10 @@ export type Database = {
         }
         Returns: number
       }
+      normalize_endorsement_payee_type: {
+        Args: { _t: string }
+        Returns: string
+      }
       normalize_mortgage_company_name: {
         Args: { p_name: string }
         Returns: string
