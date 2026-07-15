@@ -97,9 +97,6 @@ interface CheckFileRow {
   category: string | null;
   description: string | null;
   created_at: string;
-  requires_signature?: boolean | null;
-  signer_role?: string | null;
-  signature_status?: string | null;
 }
 
 interface LossDraftDoc {
