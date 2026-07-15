@@ -176,6 +176,22 @@ export function ShareCheckDialog({ checkId, open, onOpenChange }: ShareCheckDial
           </p>
         )}
 
+        {availableTenants.length > 0 && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-700 dark:text-amber-400">
+            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+            <span>
+              If the partner doesn't have a verified payout account yet, the share still succeeds — they'll add and verify one before disbursement.
+            </span>
+          </div>
+        )}
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {tenants.length === 0
+              ? "No other companies available to share with."
+              : "Already shared with all available companies."}
+          </p>
+        )}
+
         {activeShares.length > 0 && <SharedCheckThread checkId={checkId} />}
       </DialogContent>
     </Dialog>
