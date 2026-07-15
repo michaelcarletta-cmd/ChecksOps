@@ -8,8 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Building2, LogOut, Inbox, CheckCircle2, Loader2, Clock } from "lucide-react";
+import { Building2, LogOut, Inbox, CheckCircle2, Loader2, Clock, Eye } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { MortgageOpsRequestDetail } from "./MortgageOpsRequestDetail";
 
 interface Request {
   id: string;
