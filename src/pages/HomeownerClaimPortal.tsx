@@ -52,6 +52,13 @@ type CheckRow = {
   created_at: string | null;
   updated_at: string | null;
 };
+type ActionRow = {
+  id: string;
+  label: string;
+  requires_signature: boolean;
+  signature_status: string;
+  kind: 'upload' | 'signature';
+};
 
 const MAX_MB = 15;
 const ENDORSED_STAGES = new Set([
