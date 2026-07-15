@@ -21,7 +21,7 @@ const TOKEN_RE = /^[a-f0-9]{32,80}$/i
 
 const Body = z.object({
   token: z.string().regex(TOKEN_RE),
-  action: z.enum(['get', 'upload_check', 'sign_dtp', 'list_actions', 'complete_action']),
+  action: z.enum(['get', 'upload_check', 'sign_dtp', 'list_actions', 'complete_action', 'sign_document', 'submit_mortgage_intake']),
   file_base64: z.string().min(100).optional(),
   file_mime: z.string().max(120).optional(),
   filename: z.string().max(200).optional(),
@@ -32,6 +32,16 @@ const Body = z.object({
   policy_number: z.string().trim().max(80).optional(),
   property_address: z.string().trim().max(240).optional(),
   doc_id: z.string().uuid().optional(),
+  agree: z.boolean().optional(),
+  intake: z.object({
+    mortgage_servicer: z.string().trim().min(2).max(160),
+    loan_number: z.string().trim().max(80).optional(),
+    servicer_phone: z.string().trim().max(40).optional(),
+    borrower_names: z.string().trim().min(2).max(240),
+    mailing_address: z.string().trim().max(300).optional(),
+    ssn_last4: z.string().trim().regex(/^\d{4}$/).optional(),
+    notes: z.string().trim().max(1000).optional(),
+  }).optional(),
 })
 
 async function resolveLossDraftIds(admin: any, leadId: string, dtpClaimNumber: string | null, contractorUserId: string | null): Promise<string[]> {
