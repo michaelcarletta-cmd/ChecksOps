@@ -72,6 +72,7 @@ interface AmountFallbackResult {
 }
 
 type VisionContentPart = { type: string; text?: string; image_url?: { url: string } };
+type VisionOptions = Parameters<typeof callVision>[0];
 
 const VALID_PAYEE_TYPES = new Set([
   "insured", "mortgage_company", "contractor", "public_adjuster", "unknown",
@@ -110,6 +111,112 @@ function logAudit(
   });
 }
 
+function shouldFallbackTenantAiError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return lower.includes("ai 400") ||
+    lower.includes("ai 401") ||
+    lower.includes("ai 403") ||
+    lower.includes("invalid model") ||
+    lower.includes("model id") ||
+    lower.includes("model_not_found") ||
+    lower.includes("incorrect api key") ||
+    lower.includes("invalid api key");
+}
+
+async function validateTenantKeyForOcrFallback(
+  supabase: any,
+  tenantId: string | null,
+  tenantApiKey: string,
+  originalError: string,
+): Promise<{ ok: boolean; status: number | null }> {
+  let status: number | null = null;
+  let ok = false;
+
+  try {
+    const probe = await fetch("https://api.openai.com/v1/models", {
+      headers: { Authorization: `Bearer ${tenantApiKey}` },
+    });
+    status = probe.status;
+    await probe.text();
+    ok = probe.ok;
+  } catch (probeErr) {
+    console.warn("[check-ocr-intake] tenant key validation probe failed", {
+      error: probeErr instanceof Error ? probeErr.message : String(probeErr),
+    });
+  }
+
+  if (tenantId) {
+    const updates: Record<string, unknown> = {
+      last_validated_at: new Date().toISOString(),
+      last_error: ok
+        ? `OCR provider fallback used after: ${originalError}`.slice(0, 500)
+        : `OpenAI key validation failed during OCR fallback${status ? ` (${status})` : ""}: ${originalError}`.slice(0, 500),
+    };
+    if (!ok) updates.status = "invalid";
+
+    const { error } = await supabase
+      .from("tenant_openai_credentials")
+      .update(updates)
+      .eq("tenant_id", tenantId);
+    if (error) {
+      console.warn("[check-ocr-intake] tenant key status update failed", { error: error.message });
+    }
+  }
+
+  return { ok, status };
+}
+
+async function callVisionWithTenantFallback(opts: {
+  supabase: any;
+  tenantId: string | null;
+  tenantApiKey: string | null;
+  checkId: string;
+  userId: string | null;
+  stageLabel: string;
+  options: VisionOptions;
+}): Promise<Awaited<ReturnType<typeof callVision>>> {
+  const { supabase, tenantId, tenantApiKey, checkId, userId, stageLabel, options } = opts;
+
+  try {
+    return await callVision({ ...options, apiKey: tenantApiKey ?? undefined });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!tenantApiKey || !shouldFallbackTenantAiError(message)) {
+      throw error;
+    }
+
+    const validation = await validateTenantKeyForOcrFallback(
+      supabase,
+      tenantId,
+      tenantApiKey,
+      message,
+    );
+
+    log(stageLabel, "Tenant OpenAI request failed — retrying through platform AI gateway", {
+      tenantId,
+      validation_ok: validation.ok,
+      validation_status: validation.status,
+      original_error: message,
+    });
+
+    await logAudit(
+      supabase,
+      checkId,
+      "ocr_tenant_ai_fallback",
+      "Tenant OpenAI request failed; retried OCR through platform AI gateway",
+      {
+        tenant_id: tenantId,
+        validation_ok: validation.ok,
+        validation_status: validation.status,
+        original_error: message,
+      },
+      userId,
+    );
+
+    return await callVision({ ...options, apiKey: undefined });
+  }
+}
+
 function normalizeAmountValue(raw: string | null): string | null {
   if (!raw) return null;
 
@@ -131,7 +238,11 @@ function normalizeAmountValue(raw: string | null): string | null {
 }
 
 async function extractAmountWithFocusedPass(
+  supabase: any,
+  tenantId: string | null,
   tenantApiKey: string | null,
+  checkId: string,
+  userId: string | null,
   frontImageUrl: string,
   backImageUrl: string | null,
 ): Promise<AmountFallbackResult> {
@@ -166,11 +277,18 @@ Rules:
   const timeout = setTimeout(() => controller.abort(), 30_000);
 
   try {
-    const visionResult = await callVision({
-      model: MODEL_VISION_STRONG,
-      messages: [{ role: "user", content }],
-      jsonMode: true,
-      apiKey: tenantApiKey ?? undefined,
+    const visionResult = await callVisionWithTenantFallback({
+      supabase,
+      tenantId,
+      tenantApiKey,
+      checkId,
+      userId,
+      stageLabel: "amount_fallback",
+      options: {
+        model: MODEL_VISION_STRONG,
+        messages: [{ role: "user", content }],
+        jsonMode: true,
+      },
     });
 
     const rawText = visionResult.text;
