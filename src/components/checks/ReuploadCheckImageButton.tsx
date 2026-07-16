@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
 
 /**
  * Admin-only "Reupload Front/Back Image" button. Uploads a new image to the
@@ -41,6 +42,7 @@ export function ReuploadCheckImageButton({
   const qc = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [pendingCrop, setPendingCrop] = useState<File | null>(null);
 
   // A path is a real storage object only if it exists AND is not a legacy signed URL.
   const pathIsUsable =
@@ -114,12 +116,26 @@ export function ReuploadCheckImageButton({
 
   return (
     <>
+      <CheckImageCropper
+        open={!!pendingCrop}
+        file={pendingCrop}
+        title={side === "back" ? "Crop back of check" : "Crop front of check"}
+        onCancel={() => setPendingCrop(null)}
+        onConfirm={(cropped) => { setPendingCrop(null); handleFile(cropped); }}
+      />
       <input
         ref={inputRef}
         type="file"
         accept="image/*,application/pdf"
         className="hidden"
-        onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (!f) return;
+          // PDFs skip the cropper (handled as passthrough anyway)
+          if (f.type === "application/pdf") handleFile(f);
+          else setPendingCrop(f);
+          if (inputRef.current) inputRef.current.value = "";
+        }}
       />
       <Button
         size={size}

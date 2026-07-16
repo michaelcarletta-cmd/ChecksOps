@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Upload, X, Image, RefreshCw, CheckCircle2, Clock, Eye } from "lucide-react";
+import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
 
 interface Props {
   cashJobId: string;
@@ -60,6 +61,7 @@ export function CashJobCheckUpload({
   const [showForm, setShowForm] = useState(false);
   const [frontFile, setFrontFile] = useState<File | null>(null);
   const [backFile, setBackFile] = useState<File | null>(null);
+  const [pendingCrop, setPendingCrop] = useState<{ file: File; side: "front" | "back" } | null>(null);
   const [paymentClass, setPaymentClass] = useState("initial_deposit");
   const [uploading, setUploading] = useState(false);
 
@@ -153,6 +155,18 @@ export function CashJobCheckUpload({
 
   return (
     <div className="space-y-3">
+      <CheckImageCropper
+        open={!!pendingCrop}
+        file={pendingCrop?.file ?? null}
+        title={pendingCrop?.side === "back" ? "Crop back of check" : "Crop front of check"}
+        onCancel={() => setPendingCrop(null)}
+        onConfirm={(cropped) => {
+          if (pendingCrop?.side === "front") setFrontFile(cropped);
+          else if (pendingCrop?.side === "back") setBackFile(cropped);
+          setPendingCrop(null);
+        }}
+      />
+
 
       {/* Existing checks */}
       {existingChecks.length > 0 && (
@@ -271,7 +285,7 @@ export function CashJobCheckUpload({
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={(e) => setFrontFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) setPendingCrop({ file: f, side: "front" }); e.currentTarget.value = ""; }}
               />
             </div>
 
@@ -304,7 +318,7 @@ export function CashJobCheckUpload({
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={(e) => setBackFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) setPendingCrop({ file: f, side: "back" }); e.currentTarget.value = ""; }}
               />
             </div>
 

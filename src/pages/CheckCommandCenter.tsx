@@ -41,6 +41,7 @@ import { ViewCheckImageButton } from "@/components/checks/ViewCheckImageButton";
 import { toStorageObjectPath } from "@/lib/storagePath";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
 import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
+import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
 import { EndorsementOverride } from "@/lib/endorsementLayout";
 import { LossDraftDetailPanel } from "@/components/loss-draft/LossDraftDetailPanel";
 import { ArrowDownToLine, FileBarChart } from "lucide-react";
@@ -2007,6 +2008,7 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
   const { tenantId } = useTenantFilter();
   const [frontFile, setFrontFile] = useState<File | null>(null);
   const [backFile, setBackFile] = useState<File | null>(null);
+  const [pendingCrop, setPendingCrop] = useState<{ file: File; side: "front" | "back" } | null>(null);
   const [claimId, setClaimId] = useState<string>("");
   const [claimSearch, setClaimSearch] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -2167,12 +2169,37 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 
       <div>
         <Label>Front of Check *</Label>
-        <Input type="file" accept="image/*" onChange={(e) => setFrontFile(e.target.files?.[0] ?? null)} />
+        <Input type="file" accept="image/*" onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) setPendingCrop({ file: f, side: "front" });
+          e.currentTarget.value = "";
+        }} />
+        {frontFile && (
+          <p className="text-xs text-muted-foreground mt-1 truncate">✓ {frontFile.name}</p>
+        )}
       </div>
       <div>
         <Label>Back of Check</Label>
-        <Input type="file" accept="image/*" onChange={(e) => setBackFile(e.target.files?.[0] ?? null)} />
+        <Input type="file" accept="image/*" onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) setPendingCrop({ file: f, side: "back" });
+          e.currentTarget.value = "";
+        }} />
+        {backFile && (
+          <p className="text-xs text-muted-foreground mt-1 truncate">✓ {backFile.name}</p>
+        )}
       </div>
+      <CheckImageCropper
+        open={!!pendingCrop}
+        file={pendingCrop?.file ?? null}
+        title={pendingCrop?.side === "back" ? "Crop back of check" : "Crop front of check"}
+        onCancel={() => setPendingCrop(null)}
+        onConfirm={(cropped) => {
+          if (pendingCrop?.side === "front") setFrontFile(cropped);
+          else if (pendingCrop?.side === "back") setBackFile(cropped);
+          setPendingCrop(null);
+        }}
+      />
       {/* Link to Claim is intentionally hidden — this product is sold as a
           standalone check operations platform. When a tenant integrates an
           external CRM, the claim-linking UI will be re-enabled here. */}

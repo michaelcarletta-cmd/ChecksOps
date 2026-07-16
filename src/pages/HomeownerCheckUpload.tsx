@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
+import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
 
 type Lead = {
   id: string;
@@ -62,6 +63,7 @@ export default function HomeownerCheckUpload() {
   const [loading, setLoading] = useState(false);
 
   const [file, setFile] = useState<File | null>(null);
+  const [pendingCrop, setPendingCrop] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -167,6 +169,11 @@ export default function HomeownerCheckUpload() {
       toast.error(`File too large (${MAX_MB} MB max)`);
       return;
     }
+    // Route images through the cropper first; PDFs skip it.
+    if (f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name)) {
+      setPendingCrop(f);
+      return;
+    }
     setFile(f);
     if (f.type.startsWith("image/")) {
       const url = URL.createObjectURL(f);
@@ -174,6 +181,13 @@ export default function HomeownerCheckUpload() {
     } else {
       setPreview(null);
     }
+  };
+
+  // Called after the user confirms a crop from the CheckImageCropper dialog
+  const applyCroppedFile = (cropped: File) => {
+    setFile(cropped);
+    const url = URL.createObjectURL(cropped);
+    setPreview(url);
   };
 
   const upload = async () => {
@@ -291,7 +305,15 @@ export default function HomeownerCheckUpload() {
 
   return (
     <Shell>
+      <CheckImageCropper
+        open={!!pendingCrop}
+        file={pendingCrop}
+        title="Crop the check"
+        onCancel={() => setPendingCrop(null)}
+        onConfirm={(cropped) => { setPendingCrop(null); applyCroppedFile(cropped); }}
+      />
       <div className="max-w-2xl mx-auto space-y-4">
+
         <div className="flex items-center justify-between">
           <div>
             <div className="text-xs text-muted-foreground">Signed in as</div>
