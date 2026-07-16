@@ -33,6 +33,29 @@ export default function CheckOpsLogin() {
   }, [user?.id, authLoading]);
 
   const resolveAndRedirect = async (userId: string) => {
+    // Block mortgage-only accounts from entering ChecksOps.
+    const { data: roleRows } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+    const roles = new Set((roleRows ?? []).map((r) => r.role));
+    const hasChecksOpsRole =
+      roles.has("admin") ||
+      roles.has("staff") ||
+      roles.has("read_only") ||
+      roles.has("guided") ||
+      roles.has("contractor") ||
+      roles.has("client");
+    if (!hasChecksOpsRole && roles.has("mortgage_agent")) {
+      await supabase.auth.signOut();
+      toast({
+        title: "Wrong portal",
+        description: "This account is for the Mortgage Desk. Please sign in at /mortgage-ops/login.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const { data } = await supabase
       .from("tenant_users")
       .select("tenant_id, tenants!inner(slug, subscription_status)")

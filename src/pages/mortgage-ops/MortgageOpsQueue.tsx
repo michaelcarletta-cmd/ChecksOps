@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { mortgageSupabase as supabase } from "@/integrations/supabase/mortgageClient";
+import { useMortgageAuth } from "@/hooks/useMortgageAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,7 +37,7 @@ interface Request {
 }
 
 export default function MortgageOpsQueue() {
-  const { user, userRole, signOut, loading: authLoading } = useAuth();
+  const { user, userRole, signOut, loading: authLoading } = useMortgageAuth();
   const navigate = useNavigate();
   const [available, setAvailable] = useState<Request[]>([]);
   const [mine, setMine] = useState<Request[]>([]);
