@@ -155,6 +155,18 @@ export function CashJobCheckUpload({
 
   return (
     <div className="space-y-3">
+      <CheckImageCropper
+        open={!!pendingCrop}
+        file={pendingCrop?.file ?? null}
+        title={pendingCrop?.side === "back" ? "Crop back of check" : "Crop front of check"}
+        onCancel={() => setPendingCrop(null)}
+        onConfirm={(cropped) => {
+          if (pendingCrop?.side === "front") setFrontFile(cropped);
+          else if (pendingCrop?.side === "back") setBackFile(cropped);
+          setPendingCrop(null);
+        }}
+      />
+
 
       {/* Existing checks */}
       {existingChecks.length > 0 && (
