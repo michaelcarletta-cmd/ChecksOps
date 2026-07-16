@@ -382,6 +382,7 @@ export function SendToMortgageDeskButton({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
-  );
+    );
+  }
 }
+
