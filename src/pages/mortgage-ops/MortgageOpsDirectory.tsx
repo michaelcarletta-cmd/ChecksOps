@@ -1,53 +1,55 @@
 import { useEffect, useMemo, useState } from "react";
 import { mortgageSupabase as supabase } from "@/integrations/supabase/mortgageClient";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Building2, Mail, Phone, Globe, MapPin, Search, User, Loader2 } from "lucide-react";
+import {
+  Building2, Mail, Phone, Globe, MapPin, Search, User, Loader2, Plus, Pencil, Trash2,
+} from "lucide-react";
+import {
+  MortgageCompanyEditorDialog,
+  type MortgageCompanyRecord,
+} from "@/components/checks/MortgageCompanyEditorDialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
-interface MortgageCompany {
-  id: string;
-  name: string;
-  contact_name: string | null;
-  phone: string | null;
-  phone_extension: string | null;
-  email: string | null;
-  mortgage_site: string | null;
-  address_line_1: string | null;
-  address_line_2: string | null;
-  address_line_3: string | null;
-  address_line_4: string | null;
-  address_line_5: string | null;
-}
-
-function formatAddress(c: MortgageCompany) {
+function formatAddress(c: MortgageCompanyRecord) {
   return [c.address_line_1, c.address_line_2, c.address_line_3, c.address_line_4, c.address_line_5]
     .filter((l) => l && l.trim())
     .join(", ");
 }
 
 export function MortgageOpsDirectory() {
-  const [companies, setCompanies] = useState<MortgageCompany[]>([]);
+  const [companies, setCompanies] = useState<MortgageCompanyRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<MortgageCompanyRecord | null>(null);
+  const [deactivateTarget, setDeactivateTarget] = useState<MortgageCompanyRecord | null>(null);
+
+  const fetchCompanies = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("mortgage_companies")
+      .select(
+        "id, name, contact_name, phone, phone_extension, email, mortgage_site, address_line_1, address_line_2, address_line_3, address_line_4, address_line_5, is_active"
+      )
+      .eq("is_active", true)
+      .order("name");
+    if (error) {
+      toast.error("Failed to load mortgage directory");
+    } else {
+      setCompanies((data || []) as MortgageCompanyRecord[]);
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
-    (async () => {
-      const { data, error } = await supabase
-        .from("mortgage_companies")
-        .select(
-          "id, name, contact_name, phone, phone_extension, email, mortgage_site, address_line_1, address_line_2, address_line_3, address_line_4, address_line_5"
-        )
-        .eq("is_active", true)
-        .order("name");
-      if (error) {
-        toast.error("Failed to load mortgage directory");
-      } else {
-        setCompanies((data || []) as MortgageCompany[]);
-      }
-      setLoading(false);
-    })();
+    void fetchCompanies();
   }, []);
 
   const filtered = useMemo(() => {
@@ -63,18 +65,43 @@ export function MortgageOpsDirectory() {
     );
   }, [companies, search]);
 
+  const openNew = () => { setEditing(null); setDialogOpen(true); };
+  const openEdit = (c: MortgageCompanyRecord) => { setEditing(c); setDialogOpen(true); };
+
+  const confirmDeactivate = async () => {
+    if (!deactivateTarget) return;
+    const { error } = await supabase
+      .from("mortgage_companies")
+      .update({ is_active: false })
+      .eq("id", deactivateTarget.id);
+    if (error) {
+      toast.error("Failed to remove company");
+    } else {
+      toast.success(`${deactivateTarget.name} removed from directory`);
+      setDeactivateTarget(null);
+      void fetchCompanies();
+    }
+  };
+
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Building2 className="h-5 w-5" />
-            Mortgage Directory
-            <Badge variant="secondary" className="ml-1">{companies.length}</Badge>
-          </CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Phone numbers, emails, and mailing addresses for the mortgage companies we work with.
-          </p>
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Building2 className="h-5 w-5" />
+                Mortgage Directory
+                <Badge variant="secondary" className="ml-1">{companies.length}</Badge>
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Phone numbers, emails, mailing addresses, and online claim check portals for mortgage servicers.
+              </p>
+            </div>
+            <Button size="sm" onClick={openNew}>
+              <Plus className="h-4 w-4 mr-1" /> Add Company
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="relative">
@@ -106,10 +133,32 @@ export function MortgageOpsDirectory() {
             return (
               <Card key={c.id}>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-primary" />
-                    {c.name}
-                  </CardTitle>
+                  <div className="flex items-start justify-between gap-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-primary" />
+                      {c.name}
+                    </CardTitle>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => openEdit(c)}
+                        title="Edit company"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        onClick={() => setDeactivateTarget(c)}
+                        title="Remove from directory"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   {c.contact_name && (
@@ -178,6 +227,32 @@ export function MortgageOpsDirectory() {
           })}
         </div>
       )}
+
+      <MortgageCompanyEditorDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        company={editing}
+        supabaseClient={supabase}
+        onSaved={() => void fetchCompanies()}
+      />
+
+      <AlertDialog open={!!deactivateTarget} onOpenChange={(o) => !o && setDeactivateTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {deactivateTarget?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This hides the company from the directory. Existing loss drafts and mortgage requests
+              tied to this company are not affected. You can re-add it later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeactivate} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
