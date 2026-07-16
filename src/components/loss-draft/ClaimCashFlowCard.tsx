@@ -10,6 +10,8 @@ interface Props {
 
 // Only these payment methods count as insurance proceeds
 const INSURANCE_METHODS = ["insurance_check", "insurance_payment", "check"];
+// Check statuses that should NOT count toward insurance received
+const EXCLUDED_CHECK_STATUSES = ["reissue_requested", "rejected", "voided", "cancelled"];
 
 export function ClaimCashFlowCard({ claimId }: Props) {
   const { data: payments = [] } = useQuery({
@@ -17,9 +19,22 @@ export function ClaimCashFlowCard({ claimId }: Props) {
     queryFn: async () => {
       const { data } = await supabase
         .from("claim_payments")
-        .select("amount, direction, payment_method")
+        .select("amount, direction, payment_method, check_intake_item_id")
         .eq("claim_id", claimId)
         .eq("direction", "inbound");
+      return data ?? [];
+    },
+  });
+
+  // Source of truth: any check linked to this claim (covers checks that were
+  // uploaded/linked after OCR and never got a claim_payments row).
+  const { data: checks = [] } = useQuery({
+    queryKey: ["claim-checks-cashflow", claimId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("check_intake_items")
+        .select("id, amount, status, check_stage, check_source")
+        .eq("claim_id", claimId);
       return data ?? [];
     },
   });
@@ -35,15 +50,37 @@ export function ClaimCashFlowCard({ claimId }: Props) {
     },
   });
 
-  // Filter to insurance-only payments
+  // Insurance received: union of claim_payments (inbound) + linked check_intake_items,
+  // deduped by check id so we don't double count.
   const insurancePayments = payments.filter(
-    p => !p.payment_method || INSURANCE_METHODS.includes(p.payment_method)
+    (p: any) => !p.payment_method || INSURANCE_METHODS.includes(p.payment_method)
   );
-  const totalReceived = insurancePayments.reduce((s, p) => s + (p.amount ?? 0), 0);
+  const paidCheckIds = new Set(
+    insurancePayments.map((p: any) => p.check_intake_item_id).filter(Boolean)
+  );
+  const eligibleChecks = checks.filter(
+    (c: any) =>
+      Number(c.amount ?? 0) > 0 &&
+      !EXCLUDED_CHECK_STATUSES.includes(c.status) &&
+      (c.check_source ?? "insurance") === "insurance"
+  );
+  const paymentsTotal = insurancePayments.reduce((s: number, p: any) => s + (p.amount ?? 0), 0);
+  const extraFromChecks = eligibleChecks
+    .filter((c: any) => !paidCheckIds.has(c.id))
+    .reduce((s: number, c: any) => s + Number(c.amount ?? 0), 0);
+  const totalReceived = paymentsTotal + extraFromChecks;
+
   const totalEscrowed = drafts.reduce((s, d) => s + (d.total_escrowed ?? 0), 0);
-  const totalReleased = drafts.reduce((s, d) => s + (d.draw_amount_released ?? 0), 0);
+  const draftsReleased = drafts.reduce((s, d) => s + (d.draw_amount_released ?? 0), 0);
+  // Also count any checks manually advanced to funds_released (draw released to homeowner)
+  const checksReleased = eligibleChecks
+    .filter((c: any) => c.check_stage === "funds_released")
+    .reduce((s: number, c: any) => s + Number(c.amount ?? 0), 0);
+  const totalReleased = draftsReleased + checksReleased;
   const totalHoldback = drafts.reduce((s, d) => s + (d.holdback_amount ?? 0), 0);
-  const releasePercent = totalEscrowed > 0 ? (totalReleased / totalEscrowed) * 100 : 0;
+  const releasePercent = totalEscrowed > 0
+    ? (Math.min(totalReleased, totalEscrowed) / totalEscrowed) * 100
+    : 0;
 
   const activeDrafts = drafts.filter(d => d.escrow_status !== "final_release_complete");
   const nextAction = activeDrafts.length === 0
