@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { mortgageSupabase as supabase } from "@/integrations/supabase/mortgageClient";
-import { useAuth } from "@/hooks/useMortgageAuth";
+import { useMortgageAuth } from "@/hooks/useMortgageAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
