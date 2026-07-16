@@ -167,6 +167,51 @@ export function LossDraftDetailPanel({
           )}
         </div>
 
+        {/* Two-mortgagee endorsement sequencing */}
+        {(() => {
+          const d = draft as any;
+          const order: number | null = d.endorsement_order ?? null;
+          const predId: string | null = d.predecessor_loss_draft_id ?? null;
+          if (!order) return null;
+          const predecessor = predId ? (related as any[]).find((r) => r.id === predId) : null;
+          const successor = order === 1
+            ? (related as any[]).find((r) => r.predecessor_loss_draft_id === lossDraftId)
+            : null;
+
+          if (order === 2 && predecessor) {
+            const returned = !!predecessor.check_received_back_date;
+            return (
+              <div className={`mt-2 rounded-md border p-2 text-xs ${returned ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-amber-500/40 bg-amber-500/10 text-amber-200"}`}>
+                <div className="font-medium">
+                  {returned ? "✅ Ready to send" : "⏳ Waiting on 1st mortgagee"}
+                </div>
+                <div className="text-[11px] opacity-90">
+                  {returned
+                    ? `${predecessor.mortgage_servicer} returned the endorsed check. This is the 2nd mortgagee — send now.`
+                    : `Do not send yet. ${predecessor.mortgage_servicer} must endorse and return the check first.`}
+                </div>
+              </div>
+            );
+          }
+          if (order === 1) {
+            const returned = !!d.check_received_back_date;
+            return (
+              <div className="mt-2 rounded-md border border-primary/40 bg-primary/10 p-2 text-xs">
+                <div className="font-medium">1st of 2 mortgagees on this check</div>
+                <div className="text-[11px] text-muted-foreground">
+                  {successor
+                    ? returned
+                      ? `Endorsed check received — forward to ${successor.mortgage_servicer} next.`
+                      : `After ${draft.mortgage_servicer} endorses and returns the check, send to ${successor.mortgage_servicer}.`
+                    : "2nd mortgagee not yet configured."}
+                </div>
+              </div>
+            );
+          }
+          return null;
+        })()}
+
+
         {draft.check_intake_items && (
           <div className="rounded-md border border-border/60 bg-muted/30 p-2 text-xs space-y-0.5">
             <div className="flex items-center justify-between gap-2">

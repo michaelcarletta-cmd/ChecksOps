@@ -151,7 +151,7 @@ export function useRelatedLossDrafts(lossDraftId: string) {
       if (!current) return [];
       const { data, error } = await supabase
         .from("loss_draft_tracking")
-        .select("id, mortgage_servicer")
+        .select("id, mortgage_servicer, endorsement_order, predecessor_loss_draft_id, check_sent_date, check_received_back_date, escrow_status")
         .or(`check_intake_item_id.eq.${current.check_intake_item_id},claim_id.eq.${current.claim_id}`)
         .neq("id", lossDraftId);
       if (error) throw error;

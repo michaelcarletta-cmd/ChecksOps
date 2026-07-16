@@ -15313,6 +15313,7 @@ export type Database = {
           draw_amount_released: number | null
           draw_amount_requested: number | null
           draw_stage: number
+          endorsement_order: number | null
           escrow_status: string
           follow_up_count: number | null
           follow_up_date: string | null
@@ -15329,6 +15330,7 @@ export type Database = {
           mortgage_company_id: string | null
           mortgage_servicer: string
           notes: string | null
+          predecessor_loss_draft_id: string | null
           shipping_method_return: string | null
           shipping_method_sent: string | null
           total_escrowed: number | null
@@ -15347,6 +15349,7 @@ export type Database = {
           draw_amount_released?: number | null
           draw_amount_requested?: number | null
           draw_stage?: number
+          endorsement_order?: number | null
           escrow_status?: string
           follow_up_count?: number | null
           follow_up_date?: string | null
@@ -15363,6 +15366,7 @@ export type Database = {
           mortgage_company_id?: string | null
           mortgage_servicer: string
           notes?: string | null
+          predecessor_loss_draft_id?: string | null
           shipping_method_return?: string | null
           shipping_method_sent?: string | null
           total_escrowed?: number | null
@@ -15381,6 +15385,7 @@ export type Database = {
           draw_amount_released?: number | null
           draw_amount_requested?: number | null
           draw_stage?: number
+          endorsement_order?: number | null
           escrow_status?: string
           follow_up_count?: number | null
           follow_up_date?: string | null
@@ -15397,6 +15402,7 @@ export type Database = {
           mortgage_company_id?: string | null
           mortgage_servicer?: string
           notes?: string | null
+          predecessor_loss_draft_id?: string | null
           shipping_method_return?: string | null
           shipping_method_sent?: string | null
           total_escrowed?: number | null
@@ -15438,6 +15444,20 @@ export type Database = {
             columns: ["mortgage_company_id"]
             isOneToOne: false
             referencedRelation: "mortgage_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loss_draft_tracking_predecessor_loss_draft_id_fkey"
+            columns: ["predecessor_loss_draft_id"]
+            isOneToOne: false
+            referencedRelation: "loss_draft_dashboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loss_draft_tracking_predecessor_loss_draft_id_fkey"
+            columns: ["predecessor_loss_draft_id"]
+            isOneToOne: false
+            referencedRelation: "loss_draft_tracking"
             referencedColumns: ["id"]
           },
         ]
