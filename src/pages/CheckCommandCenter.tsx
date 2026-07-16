@@ -907,6 +907,30 @@ export default function CheckCommandCenter() {
     refetchInterval: 60_000,
   });
 
+  // Funds received — settled disbursement splits paid TO one of THIS tenant's
+  // stakeholder accounts by another tenant (the mirror of Funds Released).
+  const { data: fundsReceived = [] } = useQuery({
+    queryKey: ["funds-received", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("disbursement_splits")
+        .select(`
+          id, amount, settled_at, recipient_name, method, external_check_number, tenant_id,
+          stakeholder_accounts!inner (nickname, custname, tenant_id),
+          sender:tenants!disbursement_splits_tenant_id_fkey ( name )
+        `)
+        .eq("stakeholder_accounts.tenant_id", tenantId!)
+        .neq("tenant_id", tenantId!)
+        .eq("status", "settled")
+        .order("settled_at", { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!tenantId,
+    refetchInterval: 60_000,
+  });
+
   // Total unread internal messages across all check threads (for tab badge)
   const { data: totalUnreadMessages = 0 } = useQuery({
     queryKey: ["check-unread-total"],
