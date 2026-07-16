@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase as defaultSupabase } from "@/integrations/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,6 +49,8 @@ interface Props {
   /** Pre-fill the name field when creating a new entry (e.g. from a loss draft). */
   initialName?: string;
   onSaved?: (saved: MortgageCompanyRecord) => void;
+  /** Supabase client to use — defaults to the ChecksOps client. Pass mortgageSupabase from the Mortgage Ops portal. */
+  supabaseClient?: SupabaseClient<any>;
 }
 
 export function MortgageCompanyEditorDialog({
@@ -56,7 +59,9 @@ export function MortgageCompanyEditorDialog({
   company,
   initialName,
   onSaved,
+  supabaseClient,
 }: Props) {
+  const supabase = supabaseClient ?? defaultSupabase;
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
 
