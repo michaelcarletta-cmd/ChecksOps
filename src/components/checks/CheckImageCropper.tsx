@@ -437,9 +437,13 @@ async function cropImageFile(originalFile: File, url: string, rect: Rect): Promi
     0, 0, canvas.width, canvas.height,
   );
   const mime = "image/jpeg";
-  const blob: Blob = await new Promise((res) =>
-    canvas.toBlob((b) => res(b as Blob), mime, 0.92) ?? res(new Blob())
-  );
+  const blob: Blob = await new Promise((res, rej) => {
+    canvas.toBlob((b) => {
+      if (b && b.size > 0) res(b);
+      else rej(new Error("Canvas produced an empty image"));
+    }, mime, 0.92);
+  });
+  if (!blob || blob.size === 0) return originalFile;
   const baseName = originalFile.name.replace(/\.(heic|heif|png|webp|jpe?g)$/i, "");
   return new File([blob], `${baseName || "check"}_cropped.jpg`, { type: mime });
 }
