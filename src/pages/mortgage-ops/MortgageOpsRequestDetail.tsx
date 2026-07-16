@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { FieldPlacementEditor } from "@/components/claim-detail/FieldPlacementEditor";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -28,6 +30,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
+
 
 interface Props {
   requestId: string | null;
@@ -168,6 +171,18 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const [uploading, setUploading] = useState(false);
   const [uploadDesc, setUploadDesc] = useState("");
   const [uploadForSignature, setUploadForSignature] = useState(true);
+
+  // Field-placement flow (mirrors Freedom CRM's SignatureRequests dialog).
+  // When a signature PDF is uploaded, we hold it here and show the placer
+  // dialog before actually dispatching the e-sign request.
+  const [placerOpen, setPlacerOpen] = useState(false);
+  const [pendingDoc, setPendingDoc] = useState<{
+    path: string;
+    url: string;
+    fileName: string;
+  } | null>(null);
+  const [placedFields, setPlacedFields] = useState<any[]>([]);
+  const [sending, setSending] = useState(false);
 
   const load = useCallback(async () => {
     if (!requestId) return;
@@ -328,59 +343,99 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
       });
       if (insErr) throw insErr;
 
-      // If this is a signature doc AND we have a claim + homeowner email,
-      // dispatch a real e-signature request (same rails as Freedom CRM).
       const homeownerEmail = req?.homeowner_email || claim?.policyholder_email;
       const homeownerName = req?.homeowner_name || claim?.policyholder_name;
       const isPdf = /\.pdf$/i.test(file.name);
-      let dispatched = false;
 
+      // Signature PDF with a valid homeowner recipient → open the field
+      // placer instead of dispatching immediately. Same UX as Freedom CRM.
       if (uploadForSignature && req?.claim_id && homeownerEmail && homeownerName && isPdf) {
-        const { data: sigReq, error: sigErr } = await supabase
-          .from("signature_requests")
-          .insert({
-            claim_id: req.claim_id,
-            document_name: file.name,
-            document_path: path,
-            document_type: "authorization",
-            field_data: [],
-            status: "draft",
-          })
-          .select("id")
-          .single();
-        if (!sigErr && sigReq?.id) {
-          await supabase.from("signature_signers").insert({
-            signature_request_id: sigReq.id,
-            signer_name: homeownerName,
-            signer_email: homeownerEmail,
-            signer_type: "policyholder",
-            signing_order: 1,
-          });
-          const { error: sendErr } = await supabase.functions.invoke("send-signature-request", {
-            body: { requestId: sigReq.id, skipEmail: false },
-          });
-          if (!sendErr) dispatched = true;
+        const { data: signed } = await supabase.storage
+          .from("claim-files")
+          .createSignedUrl(path, 3600);
+        if (signed?.signedUrl) {
+          setPendingDoc({ path, url: signed.signedUrl, fileName: file.name });
+          setPlacedFields([]);
+          setPlacerOpen(true);
+          toast.success("Document uploaded — place signature fields, then send.");
+          setUploadDesc("");
+          void load();
+          return;
         }
       }
 
-      // Post message into tenant thread so both sides see the timeline
+      // Non-PDF / no homeowner / not-for-signature → attach + notify tenant.
       await supabase.from("check_messages").insert({
         check_id: check.id,
         sender_id: user.id,
-        body: dispatched
-          ? `📄 Mortgage Ops sent "${file.name}" to ${homeownerName} (${homeownerEmail}) for e-signature${uploadDesc ? ` — ${uploadDesc}` : ""}. Status will update in the Signature requests panel.`
-          : uploadForSignature
+        body: uploadForSignature
           ? `📄 Mortgage Ops uploaded a document for homeowner signature: "${file.name}"${uploadDesc ? ` — ${uploadDesc}` : ""}. ${req?.claim_id ? "Missing homeowner email or non-PDF — please route via your signature workflow." : "Please forward to the homeowner via your signature workflow."}`
           : `📎 Mortgage Ops attached a document: "${file.name}"${uploadDesc ? ` — ${uploadDesc}` : ""}.`,
       });
 
       setUploadDesc("");
-      toast.success(dispatched ? "Sent to homeowner for signature" : "Document uploaded");
+      toast.success("Document uploaded");
       void load();
     } catch (e: any) {
       toast.error(e?.message || "Upload failed");
     } finally {
       setUploading(false);
+    }
+  };
+
+  const sendPlacedSignatureRequest = async () => {
+    if (!pendingDoc || !check?.id || !user?.id || !req?.claim_id) return;
+    const homeownerEmail = req?.homeowner_email || claim?.policyholder_email;
+    const homeownerName = req?.homeowner_name || claim?.policyholder_name;
+    if (!homeownerEmail || !homeownerName) {
+      toast.error("Missing homeowner email or name");
+      return;
+    }
+    setSending(true);
+    try {
+      const { data: sigReq, error: sigErr } = await supabase
+        .from("signature_requests")
+        .insert({
+          claim_id: req.claim_id,
+          document_name: pendingDoc.fileName,
+          document_path: pendingDoc.path,
+          document_type: "authorization",
+          field_data: placedFields as any,
+          status: "draft",
+        })
+        .select("id")
+        .single();
+      if (sigErr || !sigReq?.id) throw sigErr || new Error("Failed to create signature request");
+
+      const { error: signerErr } = await supabase.from("signature_signers").insert({
+        signature_request_id: sigReq.id,
+        signer_name: homeownerName,
+        signer_email: homeownerEmail,
+        signer_type: "policyholder",
+        signing_order: 1,
+      });
+      if (signerErr) throw signerErr;
+
+      const { error: sendErr } = await supabase.functions.invoke("send-signature-request", {
+        body: { requestId: sigReq.id, skipEmail: false },
+      });
+      if (sendErr) throw sendErr;
+
+      await supabase.from("check_messages").insert({
+        check_id: check.id,
+        sender_id: user.id,
+        body: `📄 Mortgage Ops sent "${pendingDoc.fileName}" to ${homeownerName} (${homeownerEmail}) for e-signature with ${placedFields.length} placed field${placedFields.length === 1 ? "" : "s"}. Status will update in the Signature requests panel.`,
+      });
+
+      toast.success("Sent to homeowner for signature");
+      setPlacerOpen(false);
+      setPendingDoc(null);
+      setPlacedFields([]);
+      void load();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to send for signature");
+    } finally {
+      setSending(false);
     }
   };
 
@@ -396,6 +451,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   };
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
         <SheetHeader>
@@ -742,6 +798,43 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         )}
       </SheetContent>
     </Sheet>
+
+    {/* Signature field placer — same UX as Freedom CRM. */}
+    <Dialog open={placerOpen} onOpenChange={(v) => { if (!sending) setPlacerOpen(v); }}>
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Place signature fields</DialogTitle>
+          <DialogDescription>
+            Click the document to drop signature, date, or text fields where the homeowner
+            should sign. When you're ready, click Send to email the request.
+          </DialogDescription>
+        </DialogHeader>
+        {pendingDoc && (
+          <FieldPlacementEditor
+            documentUrl={pendingDoc.url}
+            onFieldsChange={setPlacedFields}
+            signerCount={1}
+          />
+        )}
+        <DialogFooter className="gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setPlacerOpen(false)}
+            disabled={sending}
+          >
+            Save draft (don't send yet)
+          </Button>
+          <Button onClick={sendPlacedSignatureRequest} disabled={sending}>
+            {sending ? (
+              <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Sending…</>
+            ) : (
+              <><Send className="h-4 w-4 mr-1" /> Send to homeowner ({placedFields.length} field{placedFields.length === 1 ? "" : "s"})</>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 
