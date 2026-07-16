@@ -59,7 +59,9 @@ export function MortgageCompanyEditorDialog({
   company,
   initialName,
   onSaved,
+  supabaseClient,
 }: Props) {
+  const supabase = supabaseClient ?? defaultSupabase;
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
 
