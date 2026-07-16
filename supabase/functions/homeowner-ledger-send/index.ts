@@ -56,10 +56,22 @@ Deno.serve(async (req) => {
     }
     if (!tenantId) return json({ error: 'no_tenant' }, 400)
 
-    // Confirm staff belongs to this tenant
+    // Confirm staff belongs to this tenant, OR is a cross-tenant ops role
+    // (mortgage_agent/admin) handling a mortgage request tied to this claim.
     const { data: membership } = await svc.from('tenant_users')
       .select('user_id').eq('user_id', userId).eq('tenant_id', tenantId).maybeSingle()
-    if (!membership) return json({ error: 'forbidden' }, 403)
+    if (!membership) {
+      const { data: roles } = await svc.from('user_roles')
+        .select('role').eq('user_id', userId)
+      const isOps = (roles ?? []).some((r: any) => r.role === 'mortgage_agent' || r.role === 'admin')
+      let opsAllowed = false
+      if (isOps && claim_id) {
+        const { data: mreq } = await svc.from('mortgage_handling_requests')
+          .select('id').eq('claim_id', claim_id).eq('tenant_id', tenantId).limit(1).maybeSingle()
+        opsAllowed = !!mreq
+      }
+      if (!opsAllowed) return json({ error: 'forbidden' }, 403)
+    }
 
     // Resolve partner code: use provided one (if valid for tenant) else first alias for this tenant
     let partnerCode: string | null = null
