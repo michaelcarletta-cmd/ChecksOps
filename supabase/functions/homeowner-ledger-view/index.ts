@@ -50,11 +50,15 @@ Deno.serve(async (req) => {
     let pending_upload_count = 0
 
     if (tok.claim_id) {
-      const { data: c } = await supabase
+      const { data: c, error: claimErr } = await supabase
         .from('claims')
-        .select('id, claim_number, property_address, loss_type, status, created_at')
+        .select('id, claim_number, property_address:policyholder_address, loss_type, status, created_at')
         .eq('id', tok.claim_id)
         .maybeSingle()
+      if (claimErr) {
+        console.error('homeowner-ledger-view claim lookup failed', claimErr)
+        return json({ error: 'claim_lookup_failed', message: claimErr.message }, 500)
+      }
       claim = c
 
       const { data: ev } = await supabase
