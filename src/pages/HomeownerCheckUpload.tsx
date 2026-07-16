@@ -63,6 +63,7 @@ export default function HomeownerCheckUpload() {
   const [loading, setLoading] = useState(false);
 
   const [file, setFile] = useState<File | null>(null);
+  const [pendingCrop, setPendingCrop] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [uploading, setUploading] = useState(false);
