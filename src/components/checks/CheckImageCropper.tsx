@@ -318,8 +318,7 @@ function handleCursor(h: string): string {
 
 async function detectCheckBBox(src: string, natW: number, natH: number): Promise<Rect> {
   const img = await loadImage(src);
-  // Downsample to speed up analysis
-  const targetW = 400;
+  const targetW = 500;
   const scale = Math.min(1, targetW / natW);
   const w = Math.max(50, Math.round(natW * scale));
   const h = Math.max(50, Math.round(natH * scale));
@@ -333,75 +332,95 @@ async function detectCheckBBox(src: string, natW: number, natH: number): Promise
   try {
     data = ctx.getImageData(0, 0, w, h).data;
   } catch {
-    return fallbackRect(natW, natH); // tainted (cross-origin) — bail
+    return fallbackRect(natW, natH);
   }
 
-  // Sample the four 6% corner patches for background color estimate
-  const patch = Math.max(4, Math.round(Math.min(w, h) * 0.06));
-  const bg = averagePatches(data, w, h, patch);
+  // Grayscale luminance array
+  const lum = new Uint8ClampedArray(w * h);
+  for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+    lum[j] = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) | 0;
+  }
 
-  // Threshold: pixel is "check" if it differs from bg by > 45 (Manhattan on RGB)
-  const THRESH = 45;
+  // --- Strategy A: check is brighter paper on darker background.
+  // Sample corners for background luminance, then find pixels significantly brighter.
+  const patch = Math.max(6, Math.round(Math.min(w, h) * 0.06));
+  const bgLum = sampleCornerLuminance(lum, w, h, patch);
+  const brightThresh = Math.min(230, bgLum + 40);
 
-  // Row/col projections of "foreground" pixel counts
-  const rowCounts = new Uint32Array(h);
-  const colCounts = new Uint32Array(w);
+  const rowB = new Uint32Array(h);
+  const colB = new Uint32Array(w);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4;
-      const dr = Math.abs(data[i] - bg.r);
-      const dg = Math.abs(data[i + 1] - bg.g);
-      const db = Math.abs(data[i + 2] - bg.b);
-      if (dr + dg + db > THRESH) {
-        rowCounts[y]++;
-        colCounts[x]++;
+      if (lum[y * w + x] > brightThresh) {
+        rowB[y]++;
+        colB[x]++;
       }
     }
   }
 
-  // Find bbox using 3% of dimension as minimum density along that row/col
-  const rowMin = Math.max(3, Math.round(w * 0.03));
-  const colMin = Math.max(3, Math.round(h * 0.03));
-
-  const top = firstAbove(rowCounts, rowMin);
-  const bottom = lastAbove(rowCounts, rowMin);
-  const left = firstAbove(colCounts, colMin);
-  const right = lastAbove(colCounts, colMin);
-
-  if (top < 0 || bottom < 0 || left < 0 || right < 0 || right - left < 20 || bottom - top < 10) {
-    return fallbackRect(natW, natH);
+  // --- Strategy B: edge density (Sobel-lite). Check has printed text/borders.
+  const rowE = new Uint32Array(h);
+  const colE = new Uint32Array(w);
+  const edgeThresh = 30;
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const gx = Math.abs(lum[y * w + x + 1] - lum[y * w + x - 1]);
+      const gy = Math.abs(lum[(y + 1) * w + x] - lum[(y - 1) * w + x]);
+      if (gx + gy > edgeThresh) {
+        rowE[y]++;
+        colE[x]++;
+      }
+    }
   }
 
-  // Add tiny padding, convert back to natural coords
-  const pad = 2;
-  const x0 = Math.max(0, left - pad) / scale;
-  const y0 = Math.max(0, top - pad) / scale;
-  const x1 = Math.min(w - 1, right + pad) / scale;
-  const y1 = Math.min(h - 1, bottom + pad) / scale;
+  const tryBBox = (rows: Uint32Array, cols: Uint32Array, minFrac: number): Rect | null => {
+    const rowMin = Math.max(3, Math.round(w * minFrac));
+    const colMin = Math.max(3, Math.round(h * minFrac));
+    const top = firstAbove(rows, rowMin);
+    const bottom = lastAbove(rows, rowMin);
+    const left = firstAbove(cols, colMin);
+    const right = lastAbove(cols, colMin);
+    if (top < 0 || bottom < 0 || left < 0 || right < 0) return null;
+    if (right - left < w * 0.25 || bottom - top < h * 0.15) return null;
+    return { x: left, y: top, w: right - left, h: bottom - top };
+  };
 
+  // Prefer brightness-based result if it covers a reasonable area; else edge-based.
+  let box = tryBBox(rowB, colB, 0.05);
+  const area = (r: Rect | null) => (r ? r.w * r.h : 0);
+  if (!box || area(box) < w * h * 0.1) {
+    const edgeBox = tryBBox(rowE, colE, 0.04);
+    if (edgeBox && area(edgeBox) > area(box)) box = edgeBox;
+  }
+  if (!box) return fallbackRect(natW, natH);
+
+  const pad = 4;
+  const x0 = Math.max(0, box.x - pad) / scale;
+  const y0 = Math.max(0, box.y - pad) / scale;
+  const x1 = Math.min(w - 1, box.x + box.w + pad) / scale;
+  const y1 = Math.min(h - 1, box.y + box.h + pad) / scale;
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+function sampleCornerLuminance(lum: Uint8ClampedArray, w: number, h: number, patch: number): number {
+  const corners = [[0, 0], [w - patch, 0], [0, h - patch], [w - patch, h - patch]];
+  const values: number[] = [];
+  for (const [cx, cy] of corners) {
+    let sum = 0, n = 0;
+    for (let y = cy; y < cy + patch; y++) {
+      for (let x = cx; x < cx + patch; x++) {
+        sum += lum[y * w + x]; n++;
+      }
+    }
+    values.push(sum / n);
+  }
+  // Use median of the 4 corners so one bright corner doesn't skew it
+  values.sort((a, b) => a - b);
+  return (values[1] + values[2]) / 2;
 }
 
 function fallbackRect(natW: number, natH: number): Rect {
   return { x: natW * 0.05, y: natH * 0.15, w: natW * 0.9, h: natH * 0.7 };
-}
-
-function averagePatches(
-  data: Uint8ClampedArray, w: number, h: number, patch: number
-): { r: number; g: number; b: number } {
-  const corners = [
-    [0, 0], [w - patch, 0], [0, h - patch], [w - patch, h - patch],
-  ];
-  let r = 0, g = 0, b = 0, n = 0;
-  for (const [cx, cy] of corners) {
-    for (let y = cy; y < cy + patch; y++) {
-      for (let x = cx; x < cx + patch; x++) {
-        const i = (y * w + x) * 4;
-        r += data[i]; g += data[i + 1]; b += data[i + 2]; n++;
-      }
-    }
-  }
-  return { r: r / n, g: g / n, b: b / n };
 }
 
 function firstAbove(arr: Uint32Array, min: number): number {
