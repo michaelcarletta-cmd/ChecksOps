@@ -169,6 +169,11 @@ export default function HomeownerCheckUpload() {
       toast.error(`File too large (${MAX_MB} MB max)`);
       return;
     }
+    // Route images through the cropper first; PDFs skip it.
+    if (f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name)) {
+      setPendingCrop(f);
+      return;
+    }
     setFile(f);
     if (f.type.startsWith("image/")) {
       const url = URL.createObjectURL(f);
