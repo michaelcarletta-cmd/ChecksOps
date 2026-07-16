@@ -117,6 +117,8 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
         return;
       }
 
+      const hasSecond = showSecond && servicer2.trim().length > 0;
+
       const { data: inserted, error } = await supabase
         .from("loss_draft_tracking")
         .insert({
@@ -129,6 +131,9 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
           total_escrowed: amount ? parseFloat(amount) : 0,
           notes: notes || null,
           created_by: user?.id,
+          // When a 2nd mortgagee is present on the same check, mark this
+          // one as endorsement order 1 (goes out first).
+          endorsement_order: hasSecond ? 1 : null,
         })
         .select("id")
         .single();
@@ -141,13 +146,15 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
         action: "created",
         actor_id: user?.id,
         amount: amount ? parseFloat(amount) : null,
-        notes: `Created loss draft for ${servicer}`,
+        notes: `Created loss draft for ${servicer}${hasSecond ? " (1st of 2 mortgagees on check)" : ""}`,
       });
 
       // Optionally create a 2nd loss_draft row when the same check has a
-      // second mortgage company on it. We don't fail the whole operation
-      // if the secondary insert fails — primary is already saved.
-      if (showSecond && servicer2.trim()) {
+      // second mortgage company on it. The 2nd draft is sequenced AFTER
+      // the first — it can't be sent until the first check comes back
+      // endorsed. We don't fail the whole operation if the secondary
+      // insert fails — primary is already saved.
+      if (hasSecond) {
         try {
           const trimmed2 = servicer2.trim();
           const { data: existing2 } = await supabase
@@ -168,7 +175,9 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
                 loss_draft_email: email2 || null,
                 loan_number: loanNumber2 || null,
                 created_by: user?.id,
-              })
+                endorsement_order: 2,
+                predecessor_loss_draft_id: inserted.id,
+              } as any)
               .select("id")
               .single();
             if (inserted2?.id) {
@@ -177,7 +186,7 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
                 loss_draft_id: inserted2.id,
                 action: "created",
                 actor_id: user?.id,
-                notes: `Created loss draft for ${trimmed2} (2nd mortgagee on check)`,
+                notes: `Created loss draft for ${trimmed2} (2nd mortgagee on check — waits for ${servicer.trim()} to return endorsed check)`,
               });
             }
           }
