@@ -343,59 +343,99 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
       });
       if (insErr) throw insErr;
 
-      // If this is a signature doc AND we have a claim + homeowner email,
-      // dispatch a real e-signature request (same rails as Freedom CRM).
       const homeownerEmail = req?.homeowner_email || claim?.policyholder_email;
       const homeownerName = req?.homeowner_name || claim?.policyholder_name;
       const isPdf = /\.pdf$/i.test(file.name);
-      let dispatched = false;
 
+      // Signature PDF with a valid homeowner recipient → open the field
+      // placer instead of dispatching immediately. Same UX as Freedom CRM.
       if (uploadForSignature && req?.claim_id && homeownerEmail && homeownerName && isPdf) {
-        const { data: sigReq, error: sigErr } = await supabase
-          .from("signature_requests")
-          .insert({
-            claim_id: req.claim_id,
-            document_name: file.name,
-            document_path: path,
-            document_type: "authorization",
-            field_data: [],
-            status: "draft",
-          })
-          .select("id")
-          .single();
-        if (!sigErr && sigReq?.id) {
-          await supabase.from("signature_signers").insert({
-            signature_request_id: sigReq.id,
-            signer_name: homeownerName,
-            signer_email: homeownerEmail,
-            signer_type: "policyholder",
-            signing_order: 1,
-          });
-          const { error: sendErr } = await supabase.functions.invoke("send-signature-request", {
-            body: { requestId: sigReq.id, skipEmail: false },
-          });
-          if (!sendErr) dispatched = true;
+        const { data: signed } = await supabase.storage
+          .from("claim-files")
+          .createSignedUrl(path, 3600);
+        if (signed?.signedUrl) {
+          setPendingDoc({ path, url: signed.signedUrl, fileName: file.name });
+          setPlacedFields([]);
+          setPlacerOpen(true);
+          toast.success("Document uploaded — place signature fields, then send.");
+          setUploadDesc("");
+          void load();
+          return;
         }
       }
 
-      // Post message into tenant thread so both sides see the timeline
+      // Non-PDF / no homeowner / not-for-signature → attach + notify tenant.
       await supabase.from("check_messages").insert({
         check_id: check.id,
         sender_id: user.id,
-        body: dispatched
-          ? `📄 Mortgage Ops sent "${file.name}" to ${homeownerName} (${homeownerEmail}) for e-signature${uploadDesc ? ` — ${uploadDesc}` : ""}. Status will update in the Signature requests panel.`
-          : uploadForSignature
+        body: uploadForSignature
           ? `📄 Mortgage Ops uploaded a document for homeowner signature: "${file.name}"${uploadDesc ? ` — ${uploadDesc}` : ""}. ${req?.claim_id ? "Missing homeowner email or non-PDF — please route via your signature workflow." : "Please forward to the homeowner via your signature workflow."}`
           : `📎 Mortgage Ops attached a document: "${file.name}"${uploadDesc ? ` — ${uploadDesc}` : ""}.`,
       });
 
       setUploadDesc("");
-      toast.success(dispatched ? "Sent to homeowner for signature" : "Document uploaded");
+      toast.success("Document uploaded");
       void load();
     } catch (e: any) {
       toast.error(e?.message || "Upload failed");
     } finally {
       setUploading(false);
+    }
+  };
+
+  const sendPlacedSignatureRequest = async () => {
+    if (!pendingDoc || !check?.id || !user?.id || !req?.claim_id) return;
+    const homeownerEmail = req?.homeowner_email || claim?.policyholder_email;
+    const homeownerName = req?.homeowner_name || claim?.policyholder_name;
+    if (!homeownerEmail || !homeownerName) {
+      toast.error("Missing homeowner email or name");
+      return;
+    }
+    setSending(true);
+    try {
+      const { data: sigReq, error: sigErr } = await supabase
+        .from("signature_requests")
+        .insert({
+          claim_id: req.claim_id,
+          document_name: pendingDoc.fileName,
+          document_path: pendingDoc.path,
+          document_type: "authorization",
+          field_data: placedFields as any,
+          status: "draft",
+        })
+        .select("id")
+        .single();
+      if (sigErr || !sigReq?.id) throw sigErr || new Error("Failed to create signature request");
+
+      const { error: signerErr } = await supabase.from("signature_signers").insert({
+        signature_request_id: sigReq.id,
+        signer_name: homeownerName,
+        signer_email: homeownerEmail,
+        signer_type: "policyholder",
+        signing_order: 1,
+      });
+      if (signerErr) throw signerErr;
+
+      const { error: sendErr } = await supabase.functions.invoke("send-signature-request", {
+        body: { requestId: sigReq.id, skipEmail: false },
+      });
+      if (sendErr) throw sendErr;
+
+      await supabase.from("check_messages").insert({
+        check_id: check.id,
+        sender_id: user.id,
+        body: `📄 Mortgage Ops sent "${pendingDoc.fileName}" to ${homeownerName} (${homeownerEmail}) for e-signature with ${placedFields.length} placed field${placedFields.length === 1 ? "" : "s"}. Status will update in the Signature requests panel.`,
+      });
+
+      toast.success("Sent to homeowner for signature");
+      setPlacerOpen(false);
+      setPendingDoc(null);
+      setPlacedFields([]);
+      void load();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to send for signature");
+    } finally {
+      setSending(false);
     }
   };
 
