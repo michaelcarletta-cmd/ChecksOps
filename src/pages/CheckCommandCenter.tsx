@@ -1585,8 +1585,35 @@ export default function CheckCommandCenter() {
                 </ScrollArea>
               </CardContent>
             </Card>
+
+            {selectedCheck && (
+              <div
+                className={`transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${isMobile && !selectedCheck ? "hidden" : ""}`}
+                style={!isMobile ? { width: "60%" } : undefined}
+              >
+                <div className="space-y-2">
+                  {isMobile && (
+                    <div className="sticky top-0 z-10 bg-background border-b pb-2 mb-2 -mx-4 px-4">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1 -ml-2 h-8 text-xs"
+                        onClick={() => setSelectedCheck(null)}
+                      >
+                        <ArrowLeft className="h-4 w-4" /> Back to funds received
+                      </Button>
+                    </div>
+                  )}
+                  <CheckDetailPanel
+                    checkId={selectedCheck}
+                    onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
+
 
 
 
