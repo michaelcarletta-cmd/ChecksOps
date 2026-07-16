@@ -1416,6 +1416,75 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
+        {activeTab === "fundsreceived" && (
+          <div className="mt-3">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Banknote className="h-4 w-4 text-sky-400" />
+                  Funds Received ({fundsReceived.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[calc(100vh-400px)]">
+                  {fundsReceived.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground">
+                      No funds received from partner tenants yet
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>From</TableHead>
+                          <TableHead>Recipient Account</TableHead>
+                          <TableHead>Method</TableHead>
+                          <TableHead>Ref</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead>Date Received</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {fundsReceived.map((split: any) => {
+                          const acct = split.stakeholder_accounts;
+                          const senderName = split.sender?.name ?? "Partner tenant";
+                          return (
+                            <TableRow key={split.id}>
+                              <TableCell className="text-sm font-medium">{senderName}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {acct?.nickname ?? acct?.custname ?? "—"}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {split.method ? (
+                                  <Badge variant="outline" className="text-[10px] uppercase">
+                                    {String(split.method).replace(/_/g, " ")}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-xs font-mono text-muted-foreground">
+                                {split.external_check_number ? `Ck #${split.external_check_number}` : "—"}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums font-semibold text-sky-400">
+                                ${Number(split.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {split.settled_at ? format(new Date(split.settled_at), "MMM d, yyyy") : "—"}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+
+
 
         {/* Review Tab — only renders when active */}
         {activeTab === "review" && (
