@@ -922,10 +922,19 @@ export default function CheckCommandCenter() {
       const tenantName = (tRow?.name ?? "").trim();
 
       const baseSelect = `
-        id, amount, settled_at, recipient_name, method, external_check_number, tenant_id,
+        id, amount, settled_at, created_at, recipient_name, method, external_check_number, tenant_id,
         stakeholder_accounts (nickname, custname, tenant_id),
-        sender:tenants!disbursement_splits_tenant_id_fkey ( name )
+        sender:tenants!disbursement_splits_tenant_id_fkey ( name ),
+        disbursement_batches (
+          id, check_intake_item_id,
+          check_intake_items:check_intake_item_id (
+            id, check_number, carrier_name, property_address, funds_type, amount,
+            claim_id, detected_claim_number, payee_line,
+            claims:claim_id ( claim_number, policyholder_name )
+          )
+        )
       `;
+
 
       const [linkedRes, byNameRes] = await Promise.all([
         supabase
