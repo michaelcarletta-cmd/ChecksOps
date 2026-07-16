@@ -444,6 +444,10 @@ export default function MortgageOpsQueue() {
               ))
             )}
           </TabsContent>
+
+          <TabsContent value="directory" className="mt-4">
+            <MortgageOpsDirectory />
+          </TabsContent>
         </Tabs>
       </main>
 
