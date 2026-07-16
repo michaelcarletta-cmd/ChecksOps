@@ -798,6 +798,43 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         )}
       </SheetContent>
     </Sheet>
+
+    {/* Signature field placer — same UX as Freedom CRM. */}
+    <Dialog open={placerOpen} onOpenChange={(v) => { if (!sending) setPlacerOpen(v); }}>
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Place signature fields</DialogTitle>
+          <DialogDescription>
+            Click the document to drop signature, date, or text fields where the homeowner
+            should sign. When you're ready, click Send to email the request.
+          </DialogDescription>
+        </DialogHeader>
+        {pendingDoc && (
+          <FieldPlacementEditor
+            documentUrl={pendingDoc.url}
+            onFieldsChange={setPlacedFields}
+            signerCount={1}
+          />
+        )}
+        <DialogFooter className="gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setPlacerOpen(false)}
+            disabled={sending}
+          >
+            Save draft (don't send yet)
+          </Button>
+          <Button onClick={sendPlacedSignatureRequest} disabled={sending}>
+            {sending ? (
+              <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Sending…</>
+            ) : (
+              <><Send className="h-4 w-4 mr-1" /> Send to homeowner ({placedFields.length} field{placedFields.length === 1 ? "" : "s"})</>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 
