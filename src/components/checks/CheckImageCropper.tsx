@@ -186,6 +186,9 @@ export function CheckImageCropper({ file, open, onCancel, onConfirm, title = "Cr
     try {
       const cropped = await cropImageFile(srcFile, imgUrl, rect);
       onConfirm(cropped);
+    } catch (e) {
+      console.error("[CheckImageCropper] crop failed, using original file", e);
+      onConfirm(srcFile);
     } finally {
       setBusy(false);
     }
