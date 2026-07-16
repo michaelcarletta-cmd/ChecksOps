@@ -110,6 +110,9 @@ export function SendToMortgageDeskButton({
   }, [open, prefilled, claimId, checkIntakeItemId]);
 
   const openStatuses = ["requested", "in_progress"];
+  const activeRequests = (requests || []).filter((r: any) => r.status !== "cancelled");
+  const hasAnyActive = activeRequests.length > 0;
+  const hasTwo = activeRequests.length >= 2;
   const isOpen = request && openStatuses.includes(request.status);
   const isCompleted = request?.status === "completed";
 
@@ -129,13 +132,26 @@ export function SendToMortgageDeskButton({
     }
     setSubmitting(true);
     const { data: userData } = await supabase.auth.getUser();
+
+    // If adding a 2nd mortgagee, tag the new row order=2 and link to the first.
+    // Also backfill order=1 + total=2 on the existing first request.
+    const orderFields: any = isSecond && firstRequest?.id
+      ? {
+          endorsement_order: 2,
+          total_mortgagees: 2,
+          predecessor_request_id: firstRequest.id,
+        }
+      : hasAnyActive
+      ? {}
+      : {};
+
     const { error } = await supabase.from("mortgage_handling_requests").insert({
       tenant_id: tenantId,
       check_intake_item_id: checkIntakeItemId,
       claim_id: claimId ?? null,
       mortgage_company: company.trim(),
       loan_number: loan.trim() || null,
-      note: note.trim() || null,
+      note: isSecond ? `[2nd mortgagee — send after 1st is endorsed & returned] ${note.trim()}`.trim() : (note.trim() || null),
       requested_by: userData.user?.id ?? null,
       policy_number: policyNumber.trim() || null,
       claim_number: claimNumber.trim() || null,
@@ -147,6 +163,7 @@ export function SendToMortgageDeskButton({
       homeowner_phone: homeownerPhone.trim() || null,
       homeowner_ssn_last_four: ssn || null,
       property_address: propertyAddress.trim() || null,
+      ...orderFields,
     } as any);
     if (error) {
       const dup = /duplicate|unique/i.test(error.message);
@@ -161,11 +178,21 @@ export function SendToMortgageDeskButton({
       if (dup) { setOpen(false); refetch(); }
       return;
     }
+
+    // If this was the 2nd mortgagee, update the 1st with order=1, total=2
+    if (isSecond && firstRequest?.id) {
+      await supabase
+        .from("mortgage_handling_requests")
+        .update({ endorsement_order: 1, total_mortgagees: 2 } as any)
+        .eq("id", firstRequest.id);
+    }
+
     const { data: created } = await supabase
       .from("mortgage_handling_requests")
       .select("id")
       .eq("check_intake_item_id", checkIntakeItemId)
-      .in("status", openStatuses)
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
     if (created?.id) {
       supabase.functions.invoke("notify-mortgage-handling-request", {
@@ -173,24 +200,71 @@ export function SendToMortgageDeskButton({
       }).catch(() => {});
     }
     toast({
-      title: "Sent to ChecksOps Mortgage Desk",
-      description: "Our team has been notified and will contact the mortgage company.",
+      title: isSecond ? "2nd mortgagee sent to Mortgage Desk" : "Sent to ChecksOps Mortgage Desk",
+      description: isSecond
+        ? "Mortgage Ops will hold this one until the 1st mortgagee endorses and returns the check."
+        : "Our team has been notified and will contact the mortgage company.",
     });
     setOpen(false);
+    setIsSecond(false);
+    setCompany("");
+    setLoan("");
     setNote("");
     setSubmitting(false);
     refetch();
   }
 
-  if (isOpen) {
+  const openDialog = (second: boolean) => {
+    setIsSecond(second);
+    if (second) {
+      // Reset only the mortgagee-specific fields; keep claim/homeowner prefill
+      setCompany("");
+      setLoan("");
+      setNote("");
+    }
+    setOpen(true);
+  };
+
+  // Render: badge for active, + optional "Add 2nd mortgagee" button
+  if (isOpen && !hasTwo) {
     return (
-      <Badge
-        variant="outline"
-        className={`h-7 gap-1 border-blue-400/40 text-blue-400 bg-blue-400/5 ${className ?? ""}`}
-      >
-        <Headset className="h-3 w-3" />
-        Mortgage Desk: {request?.status === "in_progress" ? "In progress" : "Requested"}
-      </Badge>
+      <div className={`flex flex-wrap items-center gap-2 ${className ?? ""}`}>
+        <Badge
+          variant="outline"
+          className="h-7 gap-1 border-blue-400/40 text-blue-400 bg-blue-400/5"
+        >
+          <Headset className="h-3 w-3" />
+          Mortgage Desk: {request?.status === "in_progress" ? "In progress" : "Requested"}
+          {request?.mortgage_company ? ` · ${request.mortgage_company}` : ""}
+        </Badge>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs gap-1 border-primary/40 text-primary hover:bg-primary/10"
+          onClick={() => openDialog(true)}
+        >
+          <Headset className="h-3 w-3" />
+          Add 2nd mortgagee
+        </Button>
+        {renderDialog()}
+      </div>
+    );
+  }
+
+  if (hasTwo) {
+    return (
+      <div className={`flex flex-wrap items-center gap-2 ${className ?? ""}`}>
+        {activeRequests.map((r: any, idx: number) => (
+          <Badge
+            key={r.id}
+            variant="outline"
+            className="h-7 gap-1 border-blue-400/40 text-blue-400 bg-blue-400/5"
+          >
+            <Headset className="h-3 w-3" />
+            {idx === 0 ? "1st" : "2nd"}: {r.mortgage_company || "Mortgage"} · {r.status}
+          </Badge>
+        ))}
+      </div>
     );
   }
 
@@ -200,19 +274,28 @@ export function SendToMortgageDeskButton({
         size="sm"
         variant="outline"
         className={`h-7 text-xs gap-1 border-primary/40 text-primary hover:bg-primary/10 ${className ?? ""}`}
-        onClick={() => setOpen(true)}
+        onClick={() => openDialog(false)}
       >
         <Headset className="h-3 w-3" />
         {isCompleted ? "Send to Mortgage Desk again" : "Send to Mortgage Desk"}
       </Button>
+      {renderDialog()}
+    </>
+  );
 
+  function renderDialog() {
+    return (
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Send to ChecksOps Mortgage Desk</DialogTitle>
+            <DialogTitle>
+              {isSecond ? "Send 2nd mortgagee to Mortgage Desk" : "Send to ChecksOps Mortgage Desk"}
+            </DialogTitle>
             <DialogDescription>
-              Confirm the claim and homeowner info below — the mortgage ops team uses this
-              when calling the lender, chasing endorsements, and managing draw requests.
+              {isSecond
+                ? "This check has two mortgagees. Mortgage Ops will send it to this lender AFTER the 1st mortgagee endorses and returns the check."
+                : "Confirm the claim and homeowner info below — the mortgage ops team uses this when calling the lender, chasing endorsements, and managing draw requests."}
+
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
