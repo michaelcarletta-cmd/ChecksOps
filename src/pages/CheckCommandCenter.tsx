@@ -907,29 +907,61 @@ export default function CheckCommandCenter() {
     refetchInterval: 60_000,
   });
 
-  // Funds received — settled disbursement splits paid TO one of THIS tenant's
-  // stakeholder accounts by another tenant (the mirror of Funds Released).
+  // Funds received — settled disbursement splits paid TO this tenant by another
+  // tenant. Two ways to match: (a) linked to one of our stakeholder_accounts, or
+  // (b) external check where recipient_name matches our tenant name.
   const { data: fundsReceived = [] } = useQuery({
     queryKey: ["funds-received", tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("disbursement_splits")
-        .select(`
-          id, amount, settled_at, recipient_name, method, external_check_number, tenant_id,
-          stakeholder_accounts!inner (nickname, custname, tenant_id),
-          sender:tenants!disbursement_splits_tenant_id_fkey ( name )
-        `)
-        .eq("stakeholder_accounts.tenant_id", tenantId!)
-        .neq("tenant_id", tenantId!)
-        .eq("status", "settled")
-        .order("settled_at", { ascending: false })
-        .limit(100);
-      if (error) throw error;
-      return data ?? [];
+      // Look up current tenant name for recipient_name matching.
+      const { data: tRow } = await supabase
+        .from("tenants")
+        .select("name")
+        .eq("id", tenantId!)
+        .maybeSingle();
+      const tenantName = (tRow?.name ?? "").trim();
+
+      const baseSelect = `
+        id, amount, settled_at, recipient_name, method, external_check_number, tenant_id,
+        stakeholder_accounts (nickname, custname, tenant_id),
+        sender:tenants!disbursement_splits_tenant_id_fkey ( name )
+      `;
+
+      const [linkedRes, byNameRes] = await Promise.all([
+        supabase
+          .from("disbursement_splits")
+          .select(baseSelect)
+          .eq("stakeholder_accounts.tenant_id", tenantId!)
+          .neq("tenant_id", tenantId!)
+          .eq("status", "settled")
+          .order("settled_at", { ascending: false })
+          .limit(100),
+        tenantName
+          ? supabase
+              .from("disbursement_splits")
+              .select(baseSelect)
+              .ilike("recipient_name", tenantName)
+              .neq("tenant_id", tenantId!)
+              .eq("status", "settled")
+              .order("settled_at", { ascending: false })
+              .limit(100)
+          : Promise.resolve({ data: [] as any[], error: null }),
+      ]);
+
+      if (linkedRes.error) throw linkedRes.error;
+      if ((byNameRes as any).error) throw (byNameRes as any).error;
+
+      const merged = new Map<string, any>();
+      for (const row of (linkedRes.data ?? []) as any[]) merged.set(row.id, row);
+      for (const row of ((byNameRes as any).data ?? []) as any[]) if (!merged.has(row.id)) merged.set(row.id, row);
+      return Array.from(merged.values()).sort((a, b) =>
+        new Date(b.settled_at ?? 0).getTime() - new Date(a.settled_at ?? 0).getTime()
+      );
     },
     enabled: !!tenantId,
     refetchInterval: 60_000,
   });
+
 
   // Total unread internal messages across all check threads (for tab badge)
   const { data: totalUnreadMessages = 0 } = useQuery({
