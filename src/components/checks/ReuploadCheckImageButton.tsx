@@ -42,6 +42,7 @@ export function ReuploadCheckImageButton({
   const qc = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [pendingCrop, setPendingCrop] = useState<File | null>(null);
 
   // A path is a real storage object only if it exists AND is not a legacy signed URL.
   const pathIsUsable =
