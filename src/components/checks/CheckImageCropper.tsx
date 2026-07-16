@@ -422,22 +422,6 @@ function sampleCornerLuminance(lum: Uint8ClampedArray, w: number, h: number, pat
 function fallbackRect(natW: number, natH: number): Rect {
   return { x: natW * 0.05, y: natH * 0.15, w: natW * 0.9, h: natH * 0.7 };
 }
-  data: Uint8ClampedArray, w: number, h: number, patch: number
-): { r: number; g: number; b: number } {
-  const corners = [
-    [0, 0], [w - patch, 0], [0, h - patch], [w - patch, h - patch],
-  ];
-  let r = 0, g = 0, b = 0, n = 0;
-  for (const [cx, cy] of corners) {
-    for (let y = cy; y < cy + patch; y++) {
-      for (let x = cx; x < cx + patch; x++) {
-        const i = (y * w + x) * 4;
-        r += data[i]; g += data[i + 1]; b += data[i + 2]; n++;
-      }
-    }
-  }
-  return { r: r / n, g: g / n, b: b / n };
-}
 
 function firstAbove(arr: Uint32Array, min: number): number {
   for (let i = 0; i < arr.length; i++) if (arr[i] >= min) return i;
