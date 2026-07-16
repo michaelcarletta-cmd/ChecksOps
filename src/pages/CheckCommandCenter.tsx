@@ -1322,7 +1322,7 @@ export default function CheckCommandCenter() {
                             const linked = check?.claim_id ? claimLookup.get(check.claim_id) : null;
                             const embeddedClaim = check?.claims ?? null;
                             const claimNumber = linked?.claim_number || embeddedClaim?.claim_number || check?.detected_claim_number || "Unlinked claim";
-                            const policyholderName = linked?.policyholder_name || embeddedClaim?.policyholder_name || check?.payee_line || "Unknown insured";
+                            const policyholderName = linked?.policyholder_name || embeddedClaim?.policyholder_name || extractInsuredName(check?.payee_line) || "Unknown insured";
                             const hasClaim = !!(linked?.claim_number || embeddedClaim?.claim_number || check?.detected_claim_number);
 
                             const key = hasClaim
@@ -1476,7 +1476,7 @@ export default function CheckCommandCenter() {
                             const check = batch?.check_intake_items;
                             const embeddedClaim = check?.claims ?? null;
                             const claimNumber = embeddedClaim?.claim_number || check?.detected_claim_number || "Unlinked claim";
-                            const policyholderName = embeddedClaim?.policyholder_name || check?.payee_line || "Unknown insured";
+                            const policyholderName = embeddedClaim?.policyholder_name || extractInsuredName(check?.payee_line) || "Unknown insured";
                             const hasClaim = !!(embeddedClaim?.claim_number || check?.detected_claim_number);
 
                             const key = hasClaim
