@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Upload, X, Image, RefreshCw, CheckCircle2, Clock, Eye } from "lucide-react";
+import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
 
 interface Props {
   cashJobId: string;
