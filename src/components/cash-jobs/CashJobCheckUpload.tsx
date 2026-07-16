@@ -61,6 +61,7 @@ export function CashJobCheckUpload({
   const [showForm, setShowForm] = useState(false);
   const [frontFile, setFrontFile] = useState<File | null>(null);
   const [backFile, setBackFile] = useState<File | null>(null);
+  const [pendingCrop, setPendingCrop] = useState<{ file: File; side: "front" | "back" } | null>(null);
   const [paymentClass, setPaymentClass] = useState("initial_deposit");
   const [uploading, setUploading] = useState(false);
 
