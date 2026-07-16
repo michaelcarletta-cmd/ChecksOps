@@ -8,9 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Building2, LogOut, Inbox, CheckCircle2, Loader2, Clock, Eye } from "lucide-react";
+import { Building2, LogOut, Inbox, CheckCircle2, Loader2, Clock, Eye, BookUser } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { MortgageOpsRequestDetail } from "./MortgageOpsRequestDetail";
+import { MortgageOpsDirectory } from "./MortgageOpsDirectory";
 
 interface Request {
   id: string;
@@ -239,6 +240,9 @@ export default function MortgageOpsQueue() {
               <CheckCircle2 className="h-4 w-4" /> Completed
               <Badge variant="secondary" className="ml-1">{completed.length}</Badge>
             </TabsTrigger>
+            <TabsTrigger value="directory" className="gap-2">
+              <BookUser className="h-4 w-4" /> Directory
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="available" className="mt-4 space-y-3">
@@ -439,6 +443,10 @@ export default function MortgageOpsQueue() {
                 </Card>
               ))
             )}
+          </TabsContent>
+
+          <TabsContent value="directory" className="mt-4">
+            <MortgageOpsDirectory />
           </TabsContent>
         </Tabs>
       </main>
