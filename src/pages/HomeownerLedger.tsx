@@ -45,13 +45,16 @@ type Summary = {
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n || 0);
 
-const EVENT_META: Record<EventType, { icon: React.ElementType; label: string; tone: string }> = {
+const EVENT_META: Record<string, { icon: React.ElementType; label: string; tone: string }> = {
   check_received:          { icon: Banknote,     label: "Check received",          tone: "text-emerald-400" },
   supplement_check:        { icon: Banknote,     label: "Supplement check",        tone: "text-emerald-400" },
   depreciation_check:      { icon: Banknote,     label: "Depreciation check",      tone: "text-emerald-400" },
   deductible_check:        { icon: Banknote,     label: "Deductible check",        tone: "text-emerald-400" },
   endorsement_requested:   { icon: PenTool,      label: "Signature requested",     tone: "text-amber-400"   },
   endorsement_signed:      { icon: CheckCircle2, label: "Signature collected",     tone: "text-emerald-400" },
+  endorsements_sent:       { icon: Send,         label: "Signatures sent",         tone: "text-amber-400"   },
+  ready_for_deposit:       { icon: CheckCircle2, label: "Ready for deposit",       tone: "text-emerald-400" },
+  loss_draft_routing:      { icon: FileText,     label: "Loss draft routing",      tone: "text-amber-400"   },
   deposited:               { icon: Wallet,       label: "Deposited",               tone: "text-sky-400"     },
   cleared:                 { icon: CheckCircle2, label: "Cleared",                 tone: "text-sky-400"     },
   funds_released:          { icon: Send,         label: "Funds released",          tone: "text-primary"     },
@@ -59,7 +62,10 @@ const EVENT_META: Record<EventType, { icon: React.ElementType; label: string; to
   production_confirmed:    { icon: Hammer,       label: "Confirmed start",         tone: "text-emerald-400" },
   production_doc_uploaded: { icon: FileText,     label: "Production doc uploaded", tone: "text-muted-foreground" },
   homeowner_check_upload:  { icon: ImagePlus,    label: "You uploaded a check",    tone: "text-primary"     },
+  homeowner_upload_attached:{ icon: ImagePlus,   label: "Upload attached to claim",tone: "text-primary"     },
 };
+
+const FALLBACK_META = { icon: FileText, label: "Update", tone: "text-muted-foreground" };
 
 export default function HomeownerLedger({ preClaim = false }: { preClaim?: boolean }) {
   const { token } = useParams<{ token: string }>();
@@ -174,7 +180,7 @@ function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () =>
               )}
               <ol className="relative border-l border-border ml-2 space-y-4">
                 {g.events.map((e) => {
-                  const meta = EVENT_META[e.event_type];
+                  const meta = EVENT_META[e.event_type] ?? FALLBACK_META;
                   const Icon = meta.icon;
                   return (
                     <li key={e.id} className="ml-4">
