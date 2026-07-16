@@ -2007,6 +2007,7 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
   const { tenantId } = useTenantFilter();
   const [frontFile, setFrontFile] = useState<File | null>(null);
   const [backFile, setBackFile] = useState<File | null>(null);
+  const [pendingCrop, setPendingCrop] = useState<{ file: File; side: "front" | "back" } | null>(null);
   const [claimId, setClaimId] = useState<string>("");
   const [claimSearch, setClaimSearch] = useState("");
   const [uploading, setUploading] = useState(false);
