@@ -1037,6 +1037,7 @@ export default function CheckCommandCenter() {
 
             { key: "reissue",      label: "Reissue",           count: reissueRequested.length,    icon: RotateCcw,      gradient: "from-red-500/20 to-rose-500/10",      accent: "text-red-400",     ring: "ring-red-500/30" },
             { key: "fundsreleased", label: "Funds Released",   count: fundsReleased.length,       icon: Banknote,       gradient: "from-emerald-500/20 to-teal-500/10",  accent: "text-emerald-400", ring: "ring-emerald-500/30" },
+            { key: "fundsreceived", label: "Funds Received",   count: fundsReceived.length,       icon: Banknote,       gradient: "from-sky-500/20 to-blue-500/10",      accent: "text-sky-400",     ring: "ring-sky-500/30" },
             // Partners moved into Manager → Partners sub-tab (2026-07-07).
             ...(canAccessManager ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield, gradient: "from-indigo-500/20 to-blue-500/10", accent: "text-indigo-400", ring: "ring-indigo-500/30" }] : []),
             { key: "messages",     label: "Messages",          count: totalUnreadMessages || null, icon: MessageSquare, gradient: "from-rose-500/20 to-pink-500/10",     accent: "text-rose-400",    ring: "ring-rose-500/30" },
