@@ -482,6 +482,31 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     window.open(data.signedUrl, "_blank", "noopener");
   };
 
+  const updateEndorsementDate = async (field: "check_sent_date" | "check_received_back_date") => {
+    if (!req?.id) return;
+    setSavingDates(true);
+    const patch: any = { [field]: new Date().toISOString() };
+    const { error } = await supabase
+      .from("mortgage_handling_requests")
+      .update(patch)
+      .eq("id", req.id);
+    setSavingDates(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(field === "check_sent_date" ? "Marked check sent to mortgage" : "Marked check received back");
+    void load();
+    onAction?.();
+  };
+
+  // Two-mortgagee sequencing (mirrors Loss Draft banner)
+  const isMulti = (req?.total_mortgagees ?? 0) === 2 || siblings.length >= 2;
+  const myOrder = req?.endorsement_order ?? null;
+  const firstSibling = siblings.find((s) => s.endorsement_order === 1) || (siblings.length >= 2 ? siblings[0] : null);
+  const firstReturned = !!firstSibling?.check_received_back_date;
+
+
   return (
     <>
     <Sheet open={open} onOpenChange={onOpenChange}>
