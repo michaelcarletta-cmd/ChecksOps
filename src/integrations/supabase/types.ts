@@ -15702,11 +15702,14 @@ export type Database = {
           billing_status: string
           cancelled_at: string | null
           check_intake_item_id: string
+          check_received_back_date: string | null
+          check_sent_date: string | null
           claim_id: string | null
           claim_number: string | null
           completed_at: string | null
           created_at: string
           date_of_loss: string | null
+          endorsement_order: number | null
           flat_fee_cents: number | null
           homeowner_email: string | null
           homeowner_name: string | null
@@ -15720,12 +15723,14 @@ export type Database = {
           mortgage_servicer: string | null
           note: string | null
           policy_number: string | null
+          predecessor_request_id: string | null
           property_address: string | null
           requested_by: string | null
           status: string
           stripe_invoice_id: string | null
           stripe_invoice_item_id: string | null
           tenant_id: string
+          total_mortgagees: number | null
           updated_at: string
           work_notes: string | null
         }
@@ -15737,11 +15742,14 @@ export type Database = {
           billing_status?: string
           cancelled_at?: string | null
           check_intake_item_id: string
+          check_received_back_date?: string | null
+          check_sent_date?: string | null
           claim_id?: string | null
           claim_number?: string | null
           completed_at?: string | null
           created_at?: string
           date_of_loss?: string | null
+          endorsement_order?: number | null
           flat_fee_cents?: number | null
           homeowner_email?: string | null
           homeowner_name?: string | null
@@ -15755,12 +15763,14 @@ export type Database = {
           mortgage_servicer?: string | null
           note?: string | null
           policy_number?: string | null
+          predecessor_request_id?: string | null
           property_address?: string | null
           requested_by?: string | null
           status?: string
           stripe_invoice_id?: string | null
           stripe_invoice_item_id?: string | null
           tenant_id: string
+          total_mortgagees?: number | null
           updated_at?: string
           work_notes?: string | null
         }
@@ -15772,11 +15782,14 @@ export type Database = {
           billing_status?: string
           cancelled_at?: string | null
           check_intake_item_id?: string
+          check_received_back_date?: string | null
+          check_sent_date?: string | null
           claim_id?: string | null
           claim_number?: string | null
           completed_at?: string | null
           created_at?: string
           date_of_loss?: string | null
+          endorsement_order?: number | null
           flat_fee_cents?: number | null
           homeowner_email?: string | null
           homeowner_name?: string | null
@@ -15790,12 +15803,14 @@ export type Database = {
           mortgage_servicer?: string | null
           note?: string | null
           policy_number?: string | null
+          predecessor_request_id?: string | null
           property_address?: string | null
           requested_by?: string | null
           status?: string
           stripe_invoice_id?: string | null
           stripe_invoice_item_id?: string | null
           tenant_id?: string
+          total_mortgagees?: number | null
           updated_at?: string
           work_notes?: string | null
         }
@@ -15805,6 +15820,13 @@ export type Database = {
             columns: ["check_intake_item_id"]
             isOneToOne: false
             referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mortgage_handling_requests_predecessor_request_id_fkey"
+            columns: ["predecessor_request_id"]
+            isOneToOne: false
+            referencedRelation: "mortgage_handling_requests"
             referencedColumns: ["id"]
           },
           {
@@ -20727,11 +20749,14 @@ export type Database = {
           billing_status: string
           cancelled_at: string | null
           check_intake_item_id: string
+          check_received_back_date: string | null
+          check_sent_date: string | null
           claim_id: string | null
           claim_number: string | null
           completed_at: string | null
           created_at: string
           date_of_loss: string | null
+          endorsement_order: number | null
           flat_fee_cents: number | null
           homeowner_email: string | null
           homeowner_name: string | null
@@ -20745,12 +20770,14 @@ export type Database = {
           mortgage_servicer: string | null
           note: string | null
           policy_number: string | null
+          predecessor_request_id: string | null
           property_address: string | null
           requested_by: string | null
           status: string
           stripe_invoice_id: string | null
           stripe_invoice_item_id: string | null
           tenant_id: string
+          total_mortgagees: number | null
           updated_at: string
           work_notes: string | null
         }
@@ -22563,11 +22590,14 @@ export type Database = {
           billing_status: string
           cancelled_at: string | null
           check_intake_item_id: string
+          check_received_back_date: string | null
+          check_sent_date: string | null
           claim_id: string | null
           claim_number: string | null
           completed_at: string | null
           created_at: string
           date_of_loss: string | null
+          endorsement_order: number | null
           flat_fee_cents: number | null
           homeowner_email: string | null
           homeowner_name: string | null
@@ -22581,12 +22611,14 @@ export type Database = {
           mortgage_servicer: string | null
           note: string | null
           policy_number: string | null
+          predecessor_request_id: string | null
           property_address: string | null
           requested_by: string | null
           status: string
           stripe_invoice_id: string | null
           stripe_invoice_item_id: string | null
           tenant_id: string
+          total_mortgagees: number | null
           updated_at: string
           work_notes: string | null
         }

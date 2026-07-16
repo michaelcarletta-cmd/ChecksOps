@@ -84,7 +84,23 @@ interface RequestRow {
   homeowner_phone: string | null;
   homeowner_ssn_last_four: string | null;
   property_address: string | null;
+  endorsement_order?: number | null;
+  total_mortgagees?: number | null;
+  predecessor_request_id?: string | null;
+  check_sent_date?: string | null;
+  check_received_back_date?: string | null;
 }
+
+interface SiblingRequestRow {
+  id: string;
+  mortgage_company: string | null;
+  status: string;
+  endorsement_order: number | null;
+  check_sent_date: string | null;
+  check_received_back_date: string | null;
+  completed_at: string | null;
+}
+
 
 interface ClaimRow {
   id: string;
@@ -166,7 +182,10 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const [lossDocs, setLossDocs] = useState<LossDraftDoc[]>([]);
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [sigRequests, setSigRequests] = useState<SigRequest[]>([]);
+  const [siblings, setSiblings] = useState<SiblingRequestRow[]>([]);
+  const [savingDates, setSavingDates] = useState(false);
   const [draft, setDraft] = useState("");
+
   const [posting, setPosting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadDesc, setUploadDesc] = useState("");
@@ -275,6 +294,19 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
       } else {
         setSigRequests([]);
       }
+
+      // Sibling mortgage requests on the same check (two-mortgagee sequencing)
+      if (r.check_intake_item_id) {
+        const { data: sibs } = await supabase
+          .from("mortgage_handling_requests")
+          .select("id,mortgage_company,status,endorsement_order,check_sent_date,check_received_back_date,completed_at" as any)
+          .eq("check_intake_item_id", r.check_intake_item_id)
+          .order("created_at", { ascending: true });
+        setSiblings(((sibs as any[]) || []) as SiblingRequestRow[]);
+      } else {
+        setSiblings([]);
+      }
+
     } catch (e: any) {
       toast.error(e?.message || "Failed to load request");
     } finally {
@@ -450,6 +482,31 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     window.open(data.signedUrl, "_blank", "noopener");
   };
 
+  const updateEndorsementDate = async (field: "check_sent_date" | "check_received_back_date") => {
+    if (!req?.id) return;
+    setSavingDates(true);
+    const patch: any = { [field]: new Date().toISOString() };
+    const { error } = await supabase
+      .from("mortgage_handling_requests")
+      .update(patch)
+      .eq("id", req.id);
+    setSavingDates(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(field === "check_sent_date" ? "Marked check sent to mortgage" : "Marked check received back");
+    void load();
+    onAction?.();
+  };
+
+  // Two-mortgagee sequencing (mirrors Loss Draft banner)
+  const isMulti = (req?.total_mortgagees ?? 0) === 2 || siblings.length >= 2;
+  const myOrder = req?.endorsement_order ?? null;
+  const firstSibling = siblings.find((s) => s.endorsement_order === 1) || (siblings.length >= 2 ? siblings[0] : null);
+  const firstReturned = !!firstSibling?.check_received_back_date;
+
+
   return (
     <>
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -492,6 +549,99 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                 )}
               </CardContent>
             </Card>
+
+            {/* Two-mortgagee sequencing banner */}
+            {isMulti && (
+              <Card className={
+                myOrder === 2 && !firstReturned
+                  ? "border-amber-500/40 bg-amber-500/5"
+                  : "border-blue-500/40 bg-blue-500/5"
+              }>
+                <CardContent className="pt-4 space-y-2 text-sm">
+                  <div className="font-semibold flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    {myOrder === 1
+                      ? "1st of 2 mortgagees on this check"
+                      : myOrder === 2
+                      ? "2nd of 2 mortgagees on this check"
+                      : "Two mortgagees on this check"}
+                  </div>
+                  {myOrder === 1 && (
+                    <div className="text-xs text-muted-foreground">
+                      Send this check to the 1st mortgagee for endorsement. Once endorsed and returned, forward it to the 2nd mortgagee.
+                    </div>
+                  )}
+                  {myOrder === 2 && !firstReturned && (
+                    <div className="text-xs text-amber-500">
+                      ⏳ Waiting on 1st mortgagee{firstSibling?.mortgage_company ? ` (${firstSibling.mortgage_company})` : ""} to endorse and return the check before sending here.
+                    </div>
+                  )}
+                  {myOrder === 2 && firstReturned && (
+                    <div className="text-xs text-emerald-500">
+                      ✅ 1st mortgagee returned the endorsed check — ready to send to this mortgagee.
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
+                    <div>
+                      <div className="text-muted-foreground">Check sent to mortgagee</div>
+                      <div className="font-medium">
+                        {req.check_sent_date ? format(new Date(req.check_sent_date), "MMM d, yyyy") : "—"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Endorsed check received back</div>
+                      <div className="font-medium">
+                        {req.check_received_back_date ? format(new Date(req.check_received_back_date), "MMM d, yyyy") : "—"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      disabled={savingDates || !!req.check_sent_date || (myOrder === 2 && !firstReturned)}
+                      onClick={() => updateEndorsementDate("check_sent_date")}
+                    >
+                      <Send className="h-3 w-3 mr-1" />
+                      Mark check sent
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      disabled={savingDates || !req.check_sent_date || !!req.check_received_back_date}
+                      onClick={() => updateEndorsementDate("check_received_back_date")}
+                    >
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Mark received back
+                    </Button>
+                  </div>
+                  {siblings.length > 0 && (
+                    <div className="pt-2 space-y-1">
+                      {siblings.map((s) => (
+                        <div key={s.id} className="text-[11px] flex items-center justify-between gap-2 border-t border-border/40 pt-1">
+                          <span className="truncate">
+                            <span className="text-muted-foreground">{s.endorsement_order === 1 ? "1st" : s.endorsement_order === 2 ? "2nd" : "•"}:</span>{" "}
+                            <span className="font-medium">{s.mortgage_company || "Mortgage"}</span>
+                            {s.id === req.id && <span className="ml-1 text-primary">(this request)</span>}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {s.check_received_back_date
+                              ? "returned"
+                              : s.check_sent_date
+                              ? "sent"
+                              : s.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+
 
             {/* Check details */}
             {check ? (
