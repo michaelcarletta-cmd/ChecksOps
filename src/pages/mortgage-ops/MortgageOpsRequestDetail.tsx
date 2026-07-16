@@ -451,6 +451,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   };
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
         <SheetHeader>
