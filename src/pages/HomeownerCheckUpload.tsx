@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
+import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
 
 type Lead = {
   id: string;
