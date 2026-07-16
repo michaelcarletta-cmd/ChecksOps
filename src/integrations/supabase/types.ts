@@ -21054,6 +21054,14 @@ export type Database = {
         Args: { p_check_id: string }
         Returns: Json
       }
+      current_tenant_is_check_funds_recipient: {
+        Args: { _check_id: string }
+        Returns: boolean
+      }
+      current_tenant_is_claim_funds_recipient: {
+        Args: { _claim_id: string }
+        Returns: boolean
+      }
       decide_stakeholder_limit_request: {
         Args: {
           _approved_limit: number
