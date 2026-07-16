@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { mortgageSupabase as supabase } from "@/integrations/supabase/mortgageClient";
+import { useAuth } from "@/hooks/useMortgageAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,7 @@ export default function MortgageOpsLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const { user, userRole, loading: authLoading } = useAuth();
+  const { user, userRole, loading: authLoading } = useMortgageAuth();
   const navigate = useNavigate();
 
   useEffect(() => {

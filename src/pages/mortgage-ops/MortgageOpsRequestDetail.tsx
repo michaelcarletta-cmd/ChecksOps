@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { mortgageSupabase as supabase } from "@/integrations/supabase/mortgageClient";
+import { useAuth } from "@/hooks/useMortgageAuth";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -152,7 +152,7 @@ interface SigRequest {
 interface TenantRow { id: string; name: string | null; }
 
 export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onAction }: Props) {
-  const { user } = useAuth();
+  const { user } = useMortgageAuth();
   const [loading, setLoading] = useState(false);
   const [req, setReq] = useState<RequestRow | null>(null);
   const [check, setCheck] = useState<CheckRow | null>(null);
