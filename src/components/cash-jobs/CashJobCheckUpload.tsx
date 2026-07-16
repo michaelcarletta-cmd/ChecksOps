@@ -306,7 +306,7 @@ export function CashJobCheckUpload({
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={(e) => setBackFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) setPendingCrop({ file: f, side: "back" }); e.currentTarget.value = ""; }}
               />
             </div>
 
