@@ -35,6 +35,7 @@ export function SendToMortgageDeskButton({
   className,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const [isSecond, setIsSecond] = useState(false);
   const [company, setCompany] = useState(defaultMortgageCompany ?? "");
   const [loan, setLoan] = useState(defaultLoanNumber ?? "");
   const [note, setNote] = useState("");
@@ -53,20 +54,22 @@ export function SendToMortgageDeskButton({
   const [propertyAddress, setPropertyAddress] = useState("");
   const [prefilled, setPrefilled] = useState(false);
 
-  const { data: request, refetch } = useQuery({
-    queryKey: ["mortgage-desk-request", checkIntakeItemId],
+  // All requests for this check (supports two-mortgagee flow)
+  const { data: requests, refetch } = useQuery({
+    queryKey: ["mortgage-desk-requests", checkIntakeItemId],
     queryFn: async () => {
       const { data } = await supabase
         .from("mortgage_handling_requests")
-        .select("id, status, completed_at, created_at")
+        .select("id, status, completed_at, created_at, mortgage_company, endorsement_order, total_mortgagees, predecessor_request_id" as any)
         .eq("check_intake_item_id", checkIntakeItemId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      return data;
+        .order("created_at", { ascending: true });
+      return (data as any[]) || [];
     },
     enabled: !!checkIntakeItemId,
   });
+  const request = requests?.[requests.length - 1] as any;
+  const firstRequest = requests?.[0] as any;
+
 
   // Prefill context from claim + check when the dialog opens
   useEffect(() => {
