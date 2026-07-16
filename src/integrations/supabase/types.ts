@@ -21387,6 +21387,31 @@ export type Database = {
         Args: { _month_end?: string; _month_start?: string; _tenant_id: string }
         Returns: Json
       }
+      get_tenant_funds_received: {
+        Args: { _tenant_id: string }
+        Returns: {
+          amount: number
+          carrier_name: string
+          check_amount: number
+          check_intake_item_id: string
+          check_number: string
+          claim_id: string
+          claim_number: string
+          created_at: string
+          detected_claim_number: string
+          external_check_number: string
+          funds_type: string
+          id: string
+          method: string
+          payee_line: string
+          policyholder_name: string
+          property_address: string
+          recipient_name: string
+          sender_name: string
+          settled_at: string
+          tenant_id: string
+        }[]
+      }
       get_tenant_users_with_profiles: {
         Args: { _tenant_id: string }
         Returns: {
