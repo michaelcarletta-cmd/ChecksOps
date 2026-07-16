@@ -2168,12 +2168,37 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 
       <div>
         <Label>Front of Check *</Label>
-        <Input type="file" accept="image/*" onChange={(e) => setFrontFile(e.target.files?.[0] ?? null)} />
+        <Input type="file" accept="image/*" onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) setPendingCrop({ file: f, side: "front" });
+          e.currentTarget.value = "";
+        }} />
+        {frontFile && (
+          <p className="text-xs text-muted-foreground mt-1 truncate">✓ {frontFile.name}</p>
+        )}
       </div>
       <div>
         <Label>Back of Check</Label>
-        <Input type="file" accept="image/*" onChange={(e) => setBackFile(e.target.files?.[0] ?? null)} />
+        <Input type="file" accept="image/*" onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) setPendingCrop({ file: f, side: "back" });
+          e.currentTarget.value = "";
+        }} />
+        {backFile && (
+          <p className="text-xs text-muted-foreground mt-1 truncate">✓ {backFile.name}</p>
+        )}
       </div>
+      <CheckImageCropper
+        open={!!pendingCrop}
+        file={pendingCrop?.file ?? null}
+        title={pendingCrop?.side === "back" ? "Crop back of check" : "Crop front of check"}
+        onCancel={() => setPendingCrop(null)}
+        onConfirm={(cropped) => {
+          if (pendingCrop?.side === "front") setFrontFile(cropped);
+          else if (pendingCrop?.side === "back") setBackFile(cropped);
+          setPendingCrop(null);
+        }}
+      />
       {/* Link to Claim is intentionally hidden — this product is sold as a
           standalone check operations platform. When a tenant integrates an
           external CRM, the claim-linking UI will be re-enabled here. */}
