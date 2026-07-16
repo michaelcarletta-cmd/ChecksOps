@@ -294,6 +294,19 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
       } else {
         setSigRequests([]);
       }
+
+      // Sibling mortgage requests on the same check (two-mortgagee sequencing)
+      if (r.check_intake_item_id) {
+        const { data: sibs } = await supabase
+          .from("mortgage_handling_requests")
+          .select("id,mortgage_company,status,endorsement_order,check_sent_date,check_received_back_date,completed_at" as any)
+          .eq("check_intake_item_id", r.check_intake_item_id)
+          .order("created_at", { ascending: true });
+        setSiblings(((sibs as any[]) || []) as SiblingRequestRow[]);
+      } else {
+        setSiblings([]);
+      }
+
     } catch (e: any) {
       toast.error(e?.message || "Failed to load request");
     } finally {
