@@ -182,7 +182,10 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const [lossDocs, setLossDocs] = useState<LossDraftDoc[]>([]);
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [sigRequests, setSigRequests] = useState<SigRequest[]>([]);
+  const [siblings, setSiblings] = useState<SiblingRequestRow[]>([]);
+  const [savingDates, setSavingDates] = useState(false);
   const [draft, setDraft] = useState("");
+
   const [posting, setPosting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadDesc, setUploadDesc] = useState("");
