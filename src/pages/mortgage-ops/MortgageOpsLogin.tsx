@@ -18,21 +18,44 @@ export default function MortgageOpsLogin() {
 
   useEffect(() => {
     if (authLoading) return;
-    if (user && (userRole === "mortgage_agent" || userRole === "admin")) {
+    if (!user) return;
+    if (userRole === "mortgage_agent" || userRole === "admin") {
       navigate("/mortgage-ops/queue", { replace: true });
+    } else if (userRole) {
+      // Signed in but not authorized for the Mortgage Desk — kick them out
+      // of this portal's isolated session so they can't reach queue routes.
+      supabase.auth.signOut();
+      toast.error("This portal is for ChecksOps mortgage agents only.");
     }
   }, [user, userRole, authLoading, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
+      setLoading(false);
       toast.error(error.message);
       return;
     }
-    // useAuth effect will bounce to /queue if role qualifies
+    // Verify role before allowing access — a ChecksOps-only user must not be
+    // able to enter the Mortgage Desk even if their credentials are valid.
+    const userId = data.user?.id;
+    if (userId) {
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId);
+      const roleSet = new Set((roles ?? []).map((r) => r.role));
+      if (!roleSet.has("mortgage_agent") && !roleSet.has("admin")) {
+        await supabase.auth.signOut();
+        setLoading(false);
+        toast.error("This account doesn't have access to the Mortgage Desk.");
+        return;
+      }
+    }
+    setLoading(false);
+    // useMortgageAuth effect will bounce to /queue.
   };
 
   return (
