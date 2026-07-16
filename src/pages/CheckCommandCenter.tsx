@@ -1476,7 +1476,7 @@ export default function CheckCommandCenter() {
                             const check = batch?.check_intake_items;
                             const embeddedClaim = check?.claims ?? null;
                             const claimNumber = embeddedClaim?.claim_number || check?.detected_claim_number || "Unlinked claim";
-                            const policyholderName = embeddedClaim?.policyholder_name || check?.payee_line || "Unknown insured";
+                            const policyholderName = embeddedClaim?.policyholder_name || extractInsuredName(check?.payee_line) || "Unknown insured";
                             const hasClaim = !!(embeddedClaim?.claim_number || check?.detected_claim_number);
 
                             const key = hasClaim
