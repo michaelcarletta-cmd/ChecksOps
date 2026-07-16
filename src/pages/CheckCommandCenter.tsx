@@ -907,6 +907,30 @@ export default function CheckCommandCenter() {
     refetchInterval: 60_000,
   });
 
+  // Funds received — settled disbursement splits paid TO one of THIS tenant's
+  // stakeholder accounts by another tenant (the mirror of Funds Released).
+  const { data: fundsReceived = [] } = useQuery({
+    queryKey: ["funds-received", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("disbursement_splits")
+        .select(`
+          id, amount, settled_at, recipient_name, method, external_check_number, tenant_id,
+          stakeholder_accounts!inner (nickname, custname, tenant_id),
+          sender:tenants!disbursement_splits_tenant_id_fkey ( name )
+        `)
+        .eq("stakeholder_accounts.tenant_id", tenantId!)
+        .neq("tenant_id", tenantId!)
+        .eq("status", "settled")
+        .order("settled_at", { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!tenantId,
+    refetchInterval: 60_000,
+  });
+
   // Total unread internal messages across all check threads (for tab badge)
   const { data: totalUnreadMessages = 0 } = useQuery({
     queryKey: ["check-unread-total"],
@@ -1013,6 +1037,7 @@ export default function CheckCommandCenter() {
 
             { key: "reissue",      label: "Reissue",           count: reissueRequested.length,    icon: RotateCcw,      gradient: "from-red-500/20 to-rose-500/10",      accent: "text-red-400",     ring: "ring-red-500/30" },
             { key: "fundsreleased", label: "Funds Released",   count: fundsReleased.length,       icon: Banknote,       gradient: "from-emerald-500/20 to-teal-500/10",  accent: "text-emerald-400", ring: "ring-emerald-500/30" },
+            { key: "fundsreceived", label: "Funds Received",   count: fundsReceived.length,       icon: Banknote,       gradient: "from-sky-500/20 to-blue-500/10",      accent: "text-sky-400",     ring: "ring-sky-500/30" },
             // Partners moved into Manager → Partners sub-tab (2026-07-07).
             ...(canAccessManager ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield, gradient: "from-indigo-500/20 to-blue-500/10", accent: "text-indigo-400", ring: "ring-indigo-500/30" }] : []),
             { key: "messages",     label: "Messages",          count: totalUnreadMessages || null, icon: MessageSquare, gradient: "from-rose-500/20 to-pink-500/10",     accent: "text-rose-400",    ring: "ring-rose-500/30" },
@@ -1391,6 +1416,75 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
+        {activeTab === "fundsreceived" && (
+          <div className="mt-3">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Banknote className="h-4 w-4 text-sky-400" />
+                  Funds Received ({fundsReceived.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[calc(100vh-400px)]">
+                  {fundsReceived.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground">
+                      No funds received from partner tenants yet
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>From</TableHead>
+                          <TableHead>Recipient Account</TableHead>
+                          <TableHead>Method</TableHead>
+                          <TableHead>Ref</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead>Date Received</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {fundsReceived.map((split: any) => {
+                          const acct = split.stakeholder_accounts;
+                          const senderName = split.sender?.name ?? "Partner tenant";
+                          return (
+                            <TableRow key={split.id}>
+                              <TableCell className="text-sm font-medium">{senderName}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {acct?.nickname ?? acct?.custname ?? "—"}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {split.method ? (
+                                  <Badge variant="outline" className="text-[10px] uppercase">
+                                    {String(split.method).replace(/_/g, " ")}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-xs font-mono text-muted-foreground">
+                                {split.external_check_number ? `Ck #${split.external_check_number}` : "—"}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums font-semibold text-sky-400">
+                                ${Number(split.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {split.settled_at ? format(new Date(split.settled_at), "MMM d, yyyy") : "—"}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+
+
 
         {/* Review Tab — only renders when active */}
         {activeTab === "review" && (
@@ -1484,7 +1578,7 @@ export default function CheckCommandCenter() {
 
 
         {/* All other tabs — only render the active one */}
-        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "manager" && activeTab !== "reissue" && activeTab !== "branch" && activeTab !== "messages" && activeTab !== "partners" && activeTab !== "fundsreleased" && (
+        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "manager" && activeTab !== "reissue" && activeTab !== "branch" && activeTab !== "messages" && activeTab !== "partners" && activeTab !== "fundsreleased" && activeTab !== "fundsreceived" && (
           <div className="mt-3 flex flex-col md:flex-row gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
             {/* Check list — hidden on mobile when a check is selected */}
             <Card
