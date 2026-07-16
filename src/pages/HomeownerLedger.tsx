@@ -180,7 +180,7 @@ function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () =>
               )}
               <ol className="relative border-l border-border ml-2 space-y-4">
                 {g.events.map((e) => {
-                  const meta = EVENT_META[e.event_type];
+                  const meta = EVENT_META[e.event_type] ?? FALLBACK_META;
                   const Icon = meta.icon;
                   return (
                     <li key={e.id} className="ml-4">
