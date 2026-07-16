@@ -135,17 +135,25 @@ export function MortgageOpsDirectory() {
                       </a>
                     </div>
                   )}
-                  {c.mortgage_site && (
-                    <div className="flex items-center gap-2">
-                      <Globe className="h-4 w-4 text-muted-foreground" />
-                      <a
-                        href={c.mortgage_site.startsWith("http") ? c.mortgage_site : `https://${c.mortgage_site}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="hover:underline break-all"
-                      >
-                        {c.mortgage_site}
-                      </a>
+                  {c.mortgage_site ? (
+                    <div className="flex items-start gap-2">
+                      <Globe className="h-4 w-4 text-muted-foreground mt-0.5" />
+                      <div className="flex flex-col">
+                        <span className="text-xs text-muted-foreground">Online claim check portal</span>
+                        <a
+                          href={c.mortgage_site.startsWith("http") ? c.mortgage_site : `https://${c.mortgage_site}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="hover:underline break-all"
+                        >
+                          {c.mortgage_site}
+                        </a>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Globe className="h-4 w-4" />
+                      No online claim check portal — mail check to address above
                     </div>
                   )}
                   {address && (
