@@ -84,7 +84,23 @@ interface RequestRow {
   homeowner_phone: string | null;
   homeowner_ssn_last_four: string | null;
   property_address: string | null;
+  endorsement_order?: number | null;
+  total_mortgagees?: number | null;
+  predecessor_request_id?: string | null;
+  check_sent_date?: string | null;
+  check_received_back_date?: string | null;
 }
+
+interface SiblingRequestRow {
+  id: string;
+  mortgage_company: string | null;
+  status: string;
+  endorsement_order: number | null;
+  check_sent_date: string | null;
+  check_received_back_date: string | null;
+  completed_at: string | null;
+}
+
 
 interface ClaimRow {
   id: string;
