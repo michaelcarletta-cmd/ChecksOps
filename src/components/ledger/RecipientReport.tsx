@@ -22,6 +22,7 @@ const TYPE_LABELS: Record<string, string> = {
   supplier: "Suppliers",
   adjuster: "Adjusters",
   vendor: "Vendors",
+  client: "Clients",
   insured: "Insured",
   overhead: "Overhead",
   operating: "Operating",
@@ -32,6 +33,7 @@ const CATEGORY_TILES: { key: string; label: string }[] = [
   { key: "subcontractor", label: "Subs" },
   { key: "contractor", label: "Contractors" },
   { key: "sales_rep", label: "Sales Reps" },
+  { key: "client", label: "Clients" },
   { key: "appraisal", label: "Appraisal" },
   { key: "supplier", label: "Suppliers" },
   { key: "adjuster", label: "Adjusters" },
@@ -45,6 +47,7 @@ const TYPE_COLORS: Record<string, string> = {
   sales_rep: "text-pink-600 border-pink-500/30 bg-pink-500/10",
   appraisal: "text-indigo-600 border-indigo-500/30 bg-indigo-500/10",
   adjuster: "text-orange-600 border-orange-500/30 bg-orange-500/10",
+  client: "text-teal-600 border-teal-500/30 bg-teal-500/10",
   insured: "text-cyan-600 border-cyan-500/30 bg-cyan-500/10",
   other: "text-muted-foreground border-border bg-muted/30",
 };
