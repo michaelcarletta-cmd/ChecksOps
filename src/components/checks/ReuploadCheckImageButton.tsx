@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
 
 /**
  * Admin-only "Reupload Front/Back Image" button. Uploads a new image to the
