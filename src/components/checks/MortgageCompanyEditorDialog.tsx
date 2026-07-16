@@ -49,6 +49,8 @@ interface Props {
   /** Pre-fill the name field when creating a new entry (e.g. from a loss draft). */
   initialName?: string;
   onSaved?: (saved: MortgageCompanyRecord) => void;
+  /** Supabase client to use — defaults to the ChecksOps client. Pass mortgageSupabase from the Mortgage Ops portal. */
+  supabaseClient?: SupabaseClient<any>;
 }
 
 export function MortgageCompanyEditorDialog({
