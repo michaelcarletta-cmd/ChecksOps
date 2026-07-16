@@ -183,6 +183,13 @@ export default function HomeownerCheckUpload() {
     }
   };
 
+  // Called after the user confirms a crop from the CheckImageCropper dialog
+  const applyCroppedFile = (cropped: File) => {
+    setFile(cropped);
+    const url = URL.createObjectURL(cropped);
+    setPreview(url);
+  };
+
   const upload = async () => {
     if (!file || !contractor) return;
     setUploading(true);
