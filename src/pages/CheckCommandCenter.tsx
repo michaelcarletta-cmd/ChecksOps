@@ -908,64 +908,46 @@ export default function CheckCommandCenter() {
   });
 
   // Funds received — settled disbursement splits paid TO this tenant by another
-  // tenant. Two ways to match: (a) linked to one of our stakeholder_accounts, or
-  // (b) external check where recipient_name matches our tenant name.
+  // tenant. Uses a backend helper so recipient tenants can see the same check
+  // context as Funds Released even when the split was paid by name only.
   const { data: fundsReceived = [] } = useQuery({
     queryKey: ["funds-received", tenantId],
     queryFn: async () => {
-      // Look up current tenant name for recipient_name matching.
-      const { data: tRow } = await supabase
-        .from("tenants")
-        .select("name")
-        .eq("id", tenantId!)
-        .maybeSingle();
-      const tenantName = (tRow?.name ?? "").trim();
+      const { data, error } = await supabase.rpc("get_tenant_funds_received" as any, {
+        _tenant_id: tenantId!,
+      });
 
-      const baseSelect = `
-        id, amount, settled_at, created_at, recipient_name, method, external_check_number, tenant_id,
-        stakeholder_accounts (nickname, custname, tenant_id),
-        sender:tenants!disbursement_splits_tenant_id_fkey ( name ),
-        disbursement_batches (
-          id, check_intake_item_id,
-          check_intake_items:check_intake_item_id (
-            id, check_number, carrier_name, property_address, funds_type, amount,
-            claim_id, detected_claim_number, payee_line,
-            claims:claim_id ( claim_number, policyholder_name )
-          )
-        )
-      `;
+      if (error) throw error;
 
-
-      const [linkedRes, byNameRes] = await Promise.all([
-        supabase
-          .from("disbursement_splits")
-          .select(baseSelect)
-          .eq("stakeholder_accounts.tenant_id", tenantId!)
-          .neq("tenant_id", tenantId!)
-          .eq("status", "settled")
-          .order("settled_at", { ascending: false })
-          .limit(100),
-        tenantName
-          ? supabase
-              .from("disbursement_splits")
-              .select(baseSelect)
-              .ilike("recipient_name", tenantName)
-              .neq("tenant_id", tenantId!)
-              .eq("status", "settled")
-              .order("settled_at", { ascending: false })
-              .limit(100)
-          : Promise.resolve({ data: [] as any[], error: null }),
-      ]);
-
-      if (linkedRes.error) throw linkedRes.error;
-      if ((byNameRes as any).error) throw (byNameRes as any).error;
-
-      const merged = new Map<string, any>();
-      for (const row of (linkedRes.data ?? []) as any[]) merged.set(row.id, row);
-      for (const row of ((byNameRes as any).data ?? []) as any[]) if (!merged.has(row.id)) merged.set(row.id, row);
-      return Array.from(merged.values()).sort((a, b) =>
-        new Date(b.settled_at ?? 0).getTime() - new Date(a.settled_at ?? 0).getTime()
-      );
+      return ((data ?? []) as any[]).map((row) => ({
+        id: row.id,
+        amount: row.amount,
+        settled_at: row.settled_at,
+        created_at: row.created_at,
+        recipient_name: row.recipient_name,
+        method: row.method,
+        external_check_number: row.external_check_number,
+        tenant_id: row.tenant_id,
+        sender: { name: row.sender_name },
+        disbursement_batches: {
+          check_intake_item_id: row.check_intake_item_id,
+          check_intake_items: {
+            id: row.check_intake_item_id,
+            check_number: row.check_number,
+            carrier_name: row.carrier_name,
+            property_address: row.property_address,
+            funds_type: row.funds_type,
+            amount: row.check_amount,
+            claim_id: row.claim_id,
+            detected_claim_number: row.detected_claim_number,
+            payee_line: row.payee_line,
+            claims: {
+              claim_number: row.claim_number,
+              policyholder_name: row.policyholder_name,
+            },
+          },
+        },
+      }));
     },
     enabled: !!tenantId,
     refetchInterval: 60_000,
