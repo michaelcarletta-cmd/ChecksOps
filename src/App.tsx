@@ -111,12 +111,17 @@ function LegacyWlRedirect() {
 
 function AppRoutes() {
   const { tenantSlug, loading } = useCustomDomainTenant();
+  const pathname = window.location.pathname;
 
   if (loading) {
     return <PageLoader />;
   }
 
-
+  // Public token links must work on any host, including tenant custom domains.
+  // Otherwise emailed homeowner links can be caught by the tenant app and redirected to login.
+  if (isPublicTokenRoute(pathname)) {
+    return <CheckOpsRoutes />;
+  }
 
   // Tenant-owned custom domain (e.g. acme-inspections.com) → that tenant's Check Center
   if (tenantSlug) {
@@ -126,6 +131,20 @@ function AppRoutes() {
   // Everything else (checkops.com, checksops.com, lovable previews, localhost)
   // serves the ChecksOps marketing + platform.
   return <CheckOpsRoutes />;
+}
+
+function isPublicTokenRoute(pathname: string): boolean {
+  return (
+    pathname === "/sign" ||
+    pathname === "/endorse" ||
+    pathname === "/unsubscribe" ||
+    pathname.startsWith("/ledger/") ||
+    pathname.startsWith("/start-claim/") ||
+    pathname.startsWith("/payment-direction/") ||
+    pathname.startsWith("/verify-account/") ||
+    pathname.startsWith("/h/upload") ||
+    pathname.startsWith("/h/claim/")
+  );
 }
 
 const App = () => (
