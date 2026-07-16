@@ -305,7 +305,15 @@ export default function HomeownerCheckUpload() {
 
   return (
     <Shell>
+      <CheckImageCropper
+        open={!!pendingCrop}
+        file={pendingCrop}
+        title="Crop the check"
+        onCancel={() => setPendingCrop(null)}
+        onConfirm={(cropped) => { setPendingCrop(null); applyCroppedFile(cropped); }}
+      />
       <div className="max-w-2xl mx-auto space-y-4">
+
         <div className="flex items-center justify-between">
           <div>
             <div className="text-xs text-muted-foreground">Signed in as</div>
