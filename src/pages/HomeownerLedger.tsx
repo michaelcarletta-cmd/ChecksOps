@@ -261,6 +261,87 @@ function PreClaimView({ token, homeowner, pending, onRefresh }: {
   );
 }
 
+function PendingSignaturesPanel({ token, pending }: { token: string; pending: PendingSignature[] }) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  if (!pending || pending.length === 0) return null;
+
+  const openSignLink = async (signerId: string) => {
+    setBusyId(signerId);
+    try {
+      const { data, error } = await supabase.functions.invoke("homeowner-ledger-sign-link", {
+        body: { token, signer_id: signerId },
+      });
+      if (error) throw new Error(error.message);
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const url = (data as any)?.sign_url;
+      if (!url) throw new Error("No sign link returned");
+      window.location.href = url;
+    } catch (e: any) {
+      toast.error(e.message || "Could not open signing page");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <PenTool className="h-4 w-4 text-amber-400" /> Signatures
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {pending.map((r) => (
+          <div key={r.request_id} className="rounded-lg border border-border p-3 space-y-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-sm font-medium truncate">{r.document_name}</div>
+                {r.sent_at && (
+                  <div className="text-[11px] text-muted-foreground">
+                    Sent {new Date(r.sent_at).toLocaleString()}
+                  </div>
+                )}
+              </div>
+              <Badge variant="secondary" className="text-[10px]">Awaiting signatures</Badge>
+            </div>
+            <ul className="space-y-1.5">
+              {r.signers.map((s) => (
+                <li key={s.signer_id} className="flex items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {s.status === "signed" ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                    ) : (
+                      <PenTool className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                    )}
+                    <span className="truncate">
+                      {s.name || s.email}
+                      {s.is_homeowner ? " (you)" : ""}
+                    </span>
+                  </div>
+                  {s.status === "signed" ? (
+                    <span className="text-[10px] text-emerald-400">Signed</span>
+                  ) : s.is_homeowner ? (
+                    <Button
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      disabled={busyId === s.signer_id}
+                      onClick={() => openSignLink(s.signer_id)}
+                    >
+                      {busyId === s.signer_id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Sign now"}
+                    </Button>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">Pending</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 function TotalTile({ label, value, tone, highlight }: { label: string; value: number; tone: string; highlight?: boolean }) {
   return (
     <div className={`rounded-lg border p-3 ${highlight ? "border-primary/50 bg-primary/5" : "border-border"}`}>
