@@ -272,6 +272,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     requestId = body.requestId;
     const skipEmail: boolean = body.skipEmail === true;
+    const senderOverride: string | null = body.senderOverride || body.sender_override || null;
 
     if (!requestId) throw new Error("requestId is required");
 
