@@ -29,6 +29,63 @@ async function hashToken(raw: string): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+async function resolveLedgerContext(
+  sb: any,
+  claimId?: string | null,
+  checkIntakeItemId?: string | null,
+): Promise<{ claimId: string | null; tenantId: string | null; checkId: string | null }> {
+  if (checkIntakeItemId) {
+    const { data: checkRow } = await sb
+      .from("check_intake_items")
+      .select("id, claim_id, tenant_id")
+      .eq("id", checkIntakeItemId)
+      .maybeSingle();
+    if (checkRow?.tenant_id) {
+      return {
+        claimId: checkRow.claim_id ?? claimId ?? null,
+        tenantId: checkRow.tenant_id,
+        checkId: checkRow.id,
+      };
+    }
+  }
+
+  if (claimId) {
+    const { data: checkRow } = await sb
+      .from("check_intake_items")
+      .select("id, tenant_id")
+      .eq("claim_id", claimId)
+      .not("tenant_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (checkRow?.tenant_id) return { claimId, tenantId: checkRow.tenant_id, checkId: checkRow.id ?? null };
+
+    const { data: reqRow } = await sb
+      .from("mortgage_handling_requests")
+      .select("tenant_id, check_intake_item_id")
+      .eq("claim_id", claimId)
+      .not("tenant_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (reqRow?.tenant_id) {
+      return { claimId, tenantId: reqRow.tenant_id, checkId: reqRow.check_intake_item_id ?? null };
+    }
+
+    const { data: tokenRow } = await sb
+      .from("homeowner_ledger_tokens")
+      .select("tenant_id")
+      .eq("claim_id", claimId)
+      .not("tenant_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (tokenRow?.tenant_id) return { claimId, tenantId: tokenRow.tenant_id, checkId: null };
+  }
+
+  return { claimId: claimId ?? null, tenantId: null, checkId: checkIntakeItemId ?? null };
+}
+
 // ---------------------------------------------------------------------------
 // Standalone signed certificate for non-PDF originals (e.g. DOCX)
 // ---------------------------------------------------------------------------
@@ -330,7 +387,9 @@ Deno.serve(async (req) => {
     }
 
     const request = signer.signature_requests;
-    const claimId = request.claim_id;
+    const checkIntakeItemId = (request as any).check_intake_item_id ?? null;
+    const ledgerContext = await resolveLedgerContext(sb, request.claim_id, checkIntakeItemId);
+    const claimId = ledgerContext.claimId;
 
     // Enforce signer ordering
     if (signer.signing_order > 1) {
@@ -472,12 +531,12 @@ Deno.serve(async (req) => {
     // Mirror signed event to homeowner ledger
     if (claimId) {
       try {
-        const { data: cRow } = await sb.from("claims").select("tenant_id").eq("id", claimId).maybeSingle();
-        const tenantId = (cRow as any)?.tenant_id;
+        const tenantId = ledgerContext.tenantId;
         if (tenantId) {
           await sb.from("homeowner_ledger_events").insert({
             tenant_id: tenantId,
             claim_id: claimId,
+            check_id: ledgerContext.checkId,
             event_type: "endorsement_signed",
             occurred_at: new Date().toISOString(),
             actor_label: signer.signer_name,
@@ -487,6 +546,7 @@ Deno.serve(async (req) => {
               signer_name: signer.signer_name,
               signer_email: signer.signer_email,
               document_name: request.document_name,
+              document_label: request.document_name,
             },
           });
         }
@@ -527,7 +587,6 @@ Deno.serve(async (req) => {
 
       // Attempt PDF flattening
       try {
-        const checkIntakeItemId = (request as any).check_intake_item_id ?? null;
         if (!claimId && !checkIntakeItemId) {
           throw new Error(
             "Cannot generate final PDF: signature request is not linked to a claim or check",
