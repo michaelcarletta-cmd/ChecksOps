@@ -21,6 +21,8 @@ interface Props {
   variant?: "default" | "outline" | "ghost" | "secondary";
   label?: string;
   className?: string;
+  /** Force sender identity (e.g., 'checksops' for Mortgage Ops desk). */
+  senderOverride?: "checksops" | null;
 }
 
 /**
