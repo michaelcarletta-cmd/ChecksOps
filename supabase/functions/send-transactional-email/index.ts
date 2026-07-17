@@ -291,12 +291,26 @@ Deno.serve(async (req) => {
     if (senderOverride === 'checksops') {
       // Force platform ChecksOps identity (used by Mortgage Ops desk, which
       // handles work across many tenants and must always appear as ChecksOps).
-      sender = {
-        from: 'ChecksOps <notify@checksops.com>',
-        senderDomain: 'notify.checksops.com',
-        replyTo: 'notify@checksops.com',
-        provider: 'lovable',
-        usingCustomDomain: false,
+      // Falls back to the tenant's verified sender for the From address until
+      // notify.checksops.com is verified in the email provider — display name
+      // + reply-to still say ChecksOps so the recipient experience is correct.
+      const checksopsFrom = Deno.env.get('CHECKSOPS_FROM_EMAIL')
+      if (checksopsFrom) {
+        sender = {
+          from: `ChecksOps <${checksopsFrom}>`,
+          senderDomain: 'notify.checksops.com',
+          replyTo: 'notify@checksops.com',
+          provider: 'lovable',
+          usingCustomDomain: false,
+        }
+      } else {
+        // Keep the tenant's verified From address, override display name + reply-to.
+        const tenantFromEmail = sender.from.replace(/^.*<([^>]+)>.*$/, '$1') || sender.from
+        sender = {
+          ...sender,
+          from: `ChecksOps <${tenantFromEmail}>`,
+          replyTo: 'notify@checksops.com',
+        }
       }
     }
   } catch (err) {

@@ -245,11 +245,14 @@ export function LossDraftDocsManager({
           .eq("id", docId);
       }
 
-      toast({ title: "Template generated", description: "Place signature fields, then send to the homeowner." });
+      toast({ title: "Template generated", description: docId ? "Place signature fields, then send to the homeowner." : "Downloading…" });
       setTemplateOpen(null);
       onChanged();
 
-      if (onSendForSignature && data.signed_url && docId) {
+      if (!docId && data.signed_url) {
+        // Blank/download-only flow — just open the PDF
+        window.open(data.signed_url, "_blank");
+      } else if (onSendForSignature && data.signed_url && docId) {
         onSendForSignature({
           docId,
           path: data.path,
@@ -426,6 +429,27 @@ export function LossDraftDocsManager({
         <Button size="sm" variant="outline" onClick={() => setAddOpen(true)}>
           <Plus className="h-3 w-3 mr-1" /> Add document
         </Button>
+      </div>
+
+      {/* Quick-download ChecksOps letterhead templates */}
+      <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border p-2 bg-muted/20">
+        <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+          <Sparkles className="h-3 w-3" /> ChecksOps letterhead:
+        </span>
+        <Select
+          onValueChange={(v) => {
+            const preset = PRESETS.find((p) => p.key === v);
+            if (preset?.template) openTemplateFor(preset);
+          }}
+        >
+          <SelectTrigger className="h-7 text-[11px] w-[220px]">
+            <SelectValue placeholder="Download blank template…" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="tpa">Third Party Authorization</SelectItem>
+            <SelectItem value="lien_waiver">Waiver of Lien</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {docs.length === 0 ? (
