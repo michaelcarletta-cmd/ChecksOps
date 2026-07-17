@@ -1747,11 +1747,12 @@ export default function CheckCommandCenter() {
                     (() => {
                       const hideDepositCol = activeTab === "endorsements" || activeTab === "ready" || activeTab === "deposited";
                       const hideReadySignal = activeTab === "ready" || activeTab === "deposited";
-                      const colCount = hideDepositCol ? 7 : 8;
+                      const colCount = (hideDepositCol ? 7 : 8) + 1;
                       return (
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="w-8"></TableHead>
                           <TableHead>Check</TableHead>
                           <TableHead>Carrier / Property</TableHead>
                           <TableHead className="text-right">Amount</TableHead>
