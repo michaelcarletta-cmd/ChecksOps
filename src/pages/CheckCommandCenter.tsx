@@ -549,6 +549,38 @@ export default function CheckCommandCenter() {
     }
   }, [selectedCheck, reviewCheckId, isMobile]);
 
+  // Realtime: reflect check status/stage changes immediately without manual refresh
+  useEffect(() => {
+    if (!tenantId) return;
+    const channel = supabase
+      .channel(`check-command-center-${tenantId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "check_intake_items", filter: `tenant_id=eq.${tenantId}` },
+        (payload: any) => {
+          qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+          qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+          qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+          qc.invalidateQueries({ queryKey: ["loss-draft-counts", tenantId] });
+          const id = payload?.new?.id ?? payload?.old?.id;
+          if (id) qc.invalidateQueries({ queryKey: ["check-detail", id] });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "check_endorsements" },
+        () => {
+          qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+          qc.invalidateQueries({ queryKey: ["check-endorsements-summary"] });
+          qc.invalidateQueries({ queryKey: ["check-endorsement-signatures"] });
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [tenantId, qc]);
+
   const { data: tenantMembershipRole } = useQuery({
     queryKey: ["check-command-center-tenant-role", tenantId, user?.id],
     queryFn: async () => {
