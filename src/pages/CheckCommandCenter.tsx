@@ -1830,6 +1830,7 @@ export default function CheckCommandCenter() {
                                   onChange={() => toggleBulk(check.id)}
                                 />
                               </TableCell>
+                              <TableCell className="font-mono text-sm">
                                 <div className="flex items-center gap-1.5">
                                   #{check.check_number || "—"}
                                   {isShared && <SharedChecksBadge sourceTenantName={sourceTenantName} />}
