@@ -33,7 +33,13 @@ export default function CheckOpsLogin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, authLoading]);
 
-  const resolveAndRedirect = async (userId: string) => {
+  const resolveAndRedirect = async (userId: string, emailHint?: string | null) => {
+    // Master merchant (platform owner) always lands on their home tenant, regardless of memberships/roles.
+    const emailLc = (emailHint ?? user?.email ?? "").trim().toLowerCase();
+    if (isMasterMerchant(emailLc) || emailLc === MASTER_MERCHANT_EMAIL) {
+      navigate(`/freedom/checks`, { replace: true });
+      return;
+    }
     // Block mortgage-only accounts from entering ChecksOps.
     const { data: roleRows } = await supabase
       .from("user_roles")
