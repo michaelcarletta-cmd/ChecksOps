@@ -469,6 +469,31 @@ Deno.serve(async (req) => {
       },
     });
 
+    // Mirror signed event to homeowner ledger
+    if (claimId) {
+      try {
+        const { data: cRow } = await sb.from("claims").select("tenant_id").eq("id", claimId).maybeSingle();
+        const tenantId = (cRow as any)?.tenant_id;
+        if (tenantId) {
+          await sb.from("homeowner_ledger_events").insert({
+            tenant_id: tenantId,
+            claim_id: claimId,
+            event_type: "endorsement_signed",
+            occurred_at: new Date().toISOString(),
+            actor_label: signer.signer_name,
+            payload_json: {
+              signature_request_id: request.id,
+              signer_id: signer.id,
+              signer_name: signer.signer_name,
+              signer_email: signer.signer_email,
+              document_name: request.document_name,
+            },
+          });
+        }
+      } catch (e) { console.error("ledger mirror (signed) failed", e); }
+    }
+
+
     // Check if all signers have signed
     const { data: allSigners, error: allSignersError } = await sb
       .from("signature_signers")
