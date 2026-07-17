@@ -179,6 +179,9 @@ function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () =>
 
       <UploadPanel token={token} onDone={onRefresh} />
 
+      <PendingSignaturesPanel token={token} pending={data.pending_signatures ?? []} />
+
+
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-base">Timeline</CardTitle></CardHeader>
         <CardContent className="space-y-6">
