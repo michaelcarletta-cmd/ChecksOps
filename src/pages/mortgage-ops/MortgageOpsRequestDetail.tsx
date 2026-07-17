@@ -754,6 +754,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                         defaultEmail={req.homeowner_email || claim?.policyholder_email}
                         defaultPhone={req.homeowner_phone || claim?.policyholder_phone}
                         label="Send tracking link to homeowner"
+                        senderOverride="checksops"
                       />
                     </div>
                   )}

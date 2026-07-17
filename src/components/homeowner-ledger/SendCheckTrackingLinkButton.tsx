@@ -21,6 +21,8 @@ interface Props {
   variant?: "default" | "outline" | "ghost" | "secondary";
   label?: string;
   className?: string;
+  /** Force sender identity (e.g., 'checksops' for Mortgage Ops desk). */
+  senderOverride?: "checksops" | null;
 }
 
 /**
@@ -37,6 +39,7 @@ export function SendCheckTrackingLinkButton({
   variant = "outline",
   label = "Send tracking link",
   className,
+  senderOverride = null,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(defaultName || "");
@@ -78,6 +81,7 @@ export function SendCheckTrackingLinkButton({
           homeowner_name: name || null,
           rotate: false,
           origin: window.location.origin,
+          sender_override: senderOverride,
         },
       });
       if (error) throw new Error(error.message);
