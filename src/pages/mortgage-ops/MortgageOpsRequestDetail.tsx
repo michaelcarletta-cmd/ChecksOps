@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
+import { LossDraftDocsManager } from "@/components/loss-draft/LossDraftDocsManager";
 
 
 interface Props {
