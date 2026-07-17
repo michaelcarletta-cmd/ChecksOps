@@ -377,8 +377,15 @@ Deno.serve(async (req) => {
     } catch (_e) { /* fall back to default sender */ }
 
     // Mortgage Ops desk sends everything as ChecksOps regardless of tenant branding.
+    // If checksops.com isn't verified in Resend yet, fall back to the default verified
+    // sender but keep the ChecksOps display name + reply-to so homeowners still see
+    // ChecksOps and replies route correctly. Once checksops.com (or notify.checksops.com)
+    // is verified in Resend, set the CHECKSOPS_FROM_EMAIL secret to switch over.
     if (senderOverride === "checksops") {
-      tenantFromOverride = "ChecksOps <notify@checksops.com>";
+      const checksopsFromEmail = Deno.env.get("CHECKSOPS_FROM_EMAIL");
+      const defaultFromEmail = Deno.env.get("FROM_EMAIL") || "claims@freedomclaims.work";
+      const fromAddress = checksopsFromEmail || defaultFromEmail;
+      tenantFromOverride = `ChecksOps <${fromAddress}>`;
       tenantReplyTo = "notify@checksops.com";
       branding.company_name = "ChecksOps";
       branding.company_email = "notify@checksops.com";
