@@ -1,0 +1,1 @@
+UPDATE public.checkalt_config SET cached_jwt = NULL, cached_jwt_expires_at = NULL WHERE singleton = true;
