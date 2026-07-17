@@ -21870,6 +21870,18 @@ export type Database = {
         }
         Returns: Json
       }
+      resolve_homeowner_ledger_context: {
+        Args: {
+          p_check_intake_item_id?: string
+          p_claim_id?: string
+          p_loss_draft_id?: string
+        }
+        Returns: {
+          resolved_check_id: string
+          resolved_claim_id: string
+          resolved_tenant_id: string
+        }[]
+      }
       review_manager_approval: {
         Args: {
           p_approval_id: string
