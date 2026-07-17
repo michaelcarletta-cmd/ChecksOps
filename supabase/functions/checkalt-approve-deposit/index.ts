@@ -1,9 +1,9 @@
 // Resolves a deposit parked in manual review (status 40 / pending_approval) by
 // calling FinCapture's `/fincapture/deposit/approve` endpoint.
 //
-// Per the official ClearingWorks OpenAPI spec (FinCaptureAPIDepositApprovalRequest):
-//   action = 2 -> approval
-//   action = 1 -> rejection (optional rejectCode/rejectNotes)
+// Per CheckAlt production behavior (confirmed 2026-07-17):
+//   action = 1 -> approval
+//   action = 2 -> rejection (optional rejectCode/rejectNotes)
 //   no rejectCode supplied -> defaults server-side to reject reason 1721 ("Rejected Through API")
 //
 // Valid payload fields: fiKey, referenceNumber (int64), action, approvedAmount,
