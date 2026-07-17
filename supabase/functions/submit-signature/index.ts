@@ -644,17 +644,33 @@ Deno.serve(async (req) => {
             content: `✅ All signatures completed for "${request.document_name}" — signed PDF generated`,
             update_type: "esign",
           });
-        } else if (checkIntakeItemId) {
-          // Attach to the check's Files section
+        }
+
+        // Resolve check_intake_item_id: prefer explicit link, otherwise
+        // fall back to the source attachment row that was sent for signature
+        // (Mortgage Ops flow: request has claim_id only).
+        let resolvedCheckId = checkIntakeItemId as string | null;
+        if (!resolvedCheckId && request.document_path) {
+          const { data: srcFile } = await sb
+            .from("check_files")
+            .select("check_intake_item_id")
+            .eq("file_path", request.document_path)
+            .maybeSingle();
+          resolvedCheckId = srcFile?.check_intake_item_id ?? null;
+        }
+
+        if (resolvedCheckId) {
+          // Attach signed PDF to the check's Files section
           const { data: existingCheckFile } = await sb
             .from("check_files")
             .select("id")
             .eq("signature_request_id", request.id)
+            .eq("category", "signed_dtp")
             .maybeSingle();
 
           if (!existingCheckFile) {
             await sb.from("check_files").insert({
-              check_intake_item_id: checkIntakeItemId,
+              check_intake_item_id: resolvedCheckId,
               file_name: `${signedFileName}.pdf`,
               file_path: storagePath,
               file_type: "application/pdf",
