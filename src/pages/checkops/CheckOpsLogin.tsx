@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { useAuth } from "@/hooks/useAuth";
+import { isMasterMerchant, MASTER_MERCHANT_EMAIL } from "@/lib/masterMerchant";
 
 /**
  * Generic ChecksOps sign-in page at checkops.com/login.
@@ -32,7 +33,13 @@ export default function CheckOpsLogin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, authLoading]);
 
-  const resolveAndRedirect = async (userId: string) => {
+  const resolveAndRedirect = async (userId: string, emailHint?: string | null) => {
+    // Master merchant (platform owner) always lands on their home tenant, regardless of memberships/roles.
+    const emailLc = (emailHint ?? user?.email ?? "").trim().toLowerCase();
+    if (isMasterMerchant(emailLc) || emailLc === MASTER_MERCHANT_EMAIL) {
+      navigate(`/freedom/checks`, { replace: true });
+      return;
+    }
     // Block mortgage-only accounts from entering ChecksOps.
     const { data: roleRows } = await supabase
       .from("user_roles")
@@ -90,7 +97,7 @@ export default function CheckOpsLogin() {
       if (error) throw error;
       const authedId = data.user?.id;
       if (!authedId) throw new Error("Unable to start your session");
-      await resolveAndRedirect(authedId);
+      await resolveAndRedirect(authedId, data.user?.email ?? email);
     } catch (err: any) {
       toast({
         title: "Sign in failed",
