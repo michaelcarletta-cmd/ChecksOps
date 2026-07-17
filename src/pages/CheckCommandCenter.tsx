@@ -505,6 +505,42 @@ export default function CheckCommandCenter() {
   // helpOpen state removed — help moved to Settings → ChecksOps Guide
   const [shareCheckId, setShareCheckId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
+  const [bulkRunning, setBulkRunning] = useState(false);
+
+  const toggleBulk = useCallback((id: string) => {
+    setBulkSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+  const clearBulk = useCallback(() => setBulkSelected(new Set()), []);
+  const runBulkDecision = useCallback(async (path: string, label: string) => {
+    if (!user?.id || bulkSelected.size === 0) return;
+    setBulkRunning(true);
+    const ids = Array.from(bulkSelected);
+    let ok = 0; const failed: string[] = [];
+    for (const id of ids) {
+      const { error } = await supabase.rpc("submit_check_review_decision_safe", {
+        p_check_id: id,
+        p_reviewer_id: user.id,
+        p_deposit_path: path,
+        p_reviewer_notes: `Bulk decision: ${label}`,
+      });
+      if (error) failed.push(error.message); else ok++;
+    }
+    setBulkRunning(false);
+    if (failed.length === 0) {
+      sonnerToast.success(`${ok} check${ok === 1 ? "" : "s"} moved to ${label}`);
+    } else {
+      sonnerToast.error(`${ok} succeeded, ${failed.length} failed. ${failed[0] ?? ""}`);
+    }
+    clearBulk();
+    qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+    qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+    qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+  }, [bulkSelected, user?.id, clearBulk]);
 
   // On mobile, scroll to top when a check is opened or review check is opened
   useEffect(() => {
@@ -1701,6 +1737,21 @@ export default function CheckCommandCenter() {
               style={!isMobile ? { width: selectedCheck ? "40%" : "80%" } : undefined}
             >
               <CardContent className="p-0 h-full">
+                {bulkSelected.size > 0 && (
+                  <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b bg-primary/10 backdrop-blur px-3 py-2">
+                    <span className="text-xs font-semibold text-foreground">
+                      {bulkSelected.size} selected
+                    </span>
+                    <div className="flex flex-wrap gap-1 ml-auto">
+                      <Button size="sm" variant="outline" disabled={bulkRunning} onClick={() => runBulkDecision("endorsements_in_progress", "Endorsing")}>Endorsing</Button>
+                      <Button size="sm" variant="outline" disabled={bulkRunning} onClick={() => runBulkDecision("needs_review", "Review")}>Review</Button>
+                      <Button size="sm" variant="outline" disabled={bulkRunning} onClick={() => runBulkDecision("loss_draft_required", "Loss Draft")}>Loss Draft</Button>
+                      <Button size="sm" variant="outline" disabled={bulkRunning} onClick={() => runBulkDecision("reissue_requested", "Reissue")}>Reissue</Button>
+                      <Button size="sm" variant="outline" disabled={bulkRunning} className="text-destructive" onClick={() => { if (confirm(`Void ${bulkSelected.size} check(s)?`)) runBulkDecision("voided", "Void"); }}>Void</Button>
+                      <Button size="sm" variant="ghost" disabled={bulkRunning} onClick={clearBulk}>Clear</Button>
+                    </div>
+                  </div>
+                )}
                 <div className="overflow-x-auto h-full">
                 <ScrollArea className="h-[calc(100vh-400px)]">
                   {isLoading ? (
@@ -1711,11 +1762,12 @@ export default function CheckCommandCenter() {
                     (() => {
                       const hideDepositCol = activeTab === "endorsements" || activeTab === "ready" || activeTab === "deposited";
                       const hideReadySignal = activeTab === "ready" || activeTab === "deposited";
-                      const colCount = hideDepositCol ? 7 : 8;
+                      const colCount = (hideDepositCol ? 7 : 8) + 1;
                       return (
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="w-8"></TableHead>
                           <TableHead>Check</TableHead>
                           <TableHead>Carrier / Property</TableHead>
                           <TableHead className="text-right">Amount</TableHead>
@@ -1730,7 +1782,32 @@ export default function CheckCommandCenter() {
                         {groupedFilteredChecks.map((group) => (
                           <Fragment key={group.key}>
                             <TableRow key={`${group.key}-header`} className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold">
-                              <TableCell colSpan={colCount} className="py-3">
+                              <TableCell className="py-3 w-8">
+                                {group.checks.length > 1 && (() => {
+                                  const groupIds = group.checks.map((c) => c.id);
+                                  const allChecked = groupIds.every((id) => bulkSelected.has(id));
+                                  const someChecked = !allChecked && groupIds.some((id) => bulkSelected.has(id));
+                                  return (
+                                    <input
+                                      type="checkbox"
+                                      className="h-4 w-4 accent-primary cursor-pointer"
+                                      checked={allChecked}
+                                      ref={(el) => { if (el) el.indeterminate = someChecked; }}
+                                      onClick={(e) => e.stopPropagation()}
+                                      onChange={() => {
+                                        setBulkSelected((prev) => {
+                                          const next = new Set(prev);
+                                          if (allChecked) groupIds.forEach((id) => next.delete(id));
+                                          else groupIds.forEach((id) => next.add(id));
+                                          return next;
+                                        });
+                                      }}
+                                      title="Select all checks in this file"
+                                    />
+                                  );
+                                })()}
+                              </TableCell>
+                              <TableCell colSpan={colCount - 1} className="py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                   <ClaimCheckFileHeader group={group} hideReadySignal={hideReadySignal} />
                                 </div>
@@ -1751,14 +1828,23 @@ export default function CheckCommandCenter() {
                               const RecIcon = rec?.icon ?? null;
                               const canDelete = canDeleteAnyCheck;
                               const isSelected = selectedCheck === check.id;
+                              const isBulk = bulkSelected.has(check.id);
                               const isShared = (check as any)._shared;
                               const sourceTenantName = (check as any)._sourceTenantName;
                               return (
                                 <TableRow
                                   key={check.id}
-                                  className={`cursor-pointer transition-colors ${isSelected ? "bg-accent" : ""}`}
+                                  className={`cursor-pointer transition-colors ${isSelected ? "bg-accent" : ""} ${isBulk ? "bg-primary/5" : ""}`}
                                   onClick={() => setSelectedCheck(isSelected ? null : check.id)}
                                 >
+                              <TableCell className="w-8" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 accent-primary cursor-pointer"
+                                  checked={isBulk}
+                                  onChange={() => toggleBulk(check.id)}
+                                />
+                              </TableCell>
                               <TableCell className="font-mono text-sm">
                                 <div className="flex items-center gap-1.5">
                                   #{check.check_number || "—"}
