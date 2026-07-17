@@ -180,6 +180,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const [images, setImages] = useState<{ front?: string; back?: string }>({});
   const [files, setFiles] = useState<CheckFileRow[]>([]);
   const [lossDocs, setLossDocs] = useState<LossDraftDoc[]>([]);
+  const [lossDraftId, setLossDraftId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [sigRequests, setSigRequests] = useState<SigRequest[]>([]);
   const [siblings, setSiblings] = useState<SiblingRequestRow[]>([]);
