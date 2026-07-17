@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import {
   ShieldCheck, Loader2, ImagePlus, Upload, CheckCircle2,
   Banknote, Send, PenTool, Wallet, Hammer, FileText, AlertCircle,
+  Phone, Building2, MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
@@ -79,6 +80,14 @@ const EVENT_META: Record<string, { icon: React.ElementType; label: string; tone:
   production_doc_uploaded: { icon: FileText,     label: "Production doc uploaded", tone: "text-muted-foreground" },
   homeowner_check_upload:  { icon: ImagePlus,    label: "You uploaded a check",    tone: "text-primary"     },
   homeowner_upload_attached:{ icon: ImagePlus,   label: "Upload attached to claim",tone: "text-primary"     },
+  document_uploaded:       { icon: Upload,       label: "Document uploaded",       tone: "text-primary"     },
+  document_signed_all:     { icon: CheckCircle2, label: "Document fully signed",   tone: "text-emerald-400" },
+  mortgage_check_sent:     { icon: Send,         label: "Check sent to mortgage",  tone: "text-amber-400"   },
+  mortgage_check_returned: { icon: CheckCircle2, label: "Endorsed check returned", tone: "text-emerald-400" },
+  mortgage_followup:       { icon: Phone,        label: "Call to mortgage",        tone: "text-sky-400"     },
+  mortgage_update:         { icon: Building2,    label: "Mortgage Ops update",     tone: "text-sky-400"     },
+  contractor_upload:       { icon: Upload,       label: "Contractor uploaded",     tone: "text-primary"     },
+  ops_note:                { icon: MessageSquare,label: "Team update",             tone: "text-muted-foreground" },
 };
 
 const FALLBACK_META = { icon: FileText, label: "Update", tone: "text-muted-foreground" };
@@ -218,6 +227,14 @@ function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () =>
                         {e.payload_json?.check_number ? ` • #${e.payload_json.check_number}` : ""}
                         {e.payload_json?.recipient_type ? ` • ${e.payload_json.recipient_type}` : ""}
                       </div>
+                      {(e.payload_json?.note || e.payload_json?.document_label) && (
+                        <div className="mt-1 text-xs text-foreground/90 bg-muted/40 rounded px-2 py-1 whitespace-pre-wrap">
+                          {e.payload_json?.document_label && (
+                            <div className="font-medium">{e.payload_json.document_label}{e.payload_json?.file_name ? ` — ${e.payload_json.file_name}` : ""}</div>
+                          )}
+                          {e.payload_json?.note && <div>{e.payload_json.note}</div>}
+                        </div>
+                      )}
                     </li>
                   );
                 })}

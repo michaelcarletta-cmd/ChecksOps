@@ -197,6 +197,10 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const [uploadDesc, setUploadDesc] = useState("");
   const [uploadForSignature, setUploadForSignature] = useState(true);
 
+  const [updateKind, setUpdateKind] = useState<"mortgage_followup" | "mortgage_update">("mortgage_followup");
+  const [updateNote, setUpdateNote] = useState("");
+  const [postingUpdate, setPostingUpdate] = useState(false);
+
   // Field-placement flow (mirrors Freedom CRM's SignatureRequests dialog).
   // When a signature PDF is uploaded, we hold it here and show the placer
   // dialog before actually dispatching the e-sign request.
@@ -519,6 +523,34 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     onAction?.();
   };
 
+  const postMortgageUpdate = async () => {
+    if (!req?.claim_id || !updateNote.trim()) {
+      toast.error("Add a note first");
+      return;
+    }
+    setPostingUpdate(true);
+    const { error } = await supabase.from("homeowner_ledger_events").insert({
+      tenant_id: req.tenant_id,
+      claim_id: req.claim_id,
+      event_type: updateKind,
+      occurred_at: new Date().toISOString(),
+      actor_label: updateKind === "mortgage_followup"
+        ? `Called ${req.mortgage_company || "mortgage company"}`
+        : "Mortgage Ops update",
+      payload_json: { note: updateNote.trim(), mortgage_company: req.mortgage_company },
+      created_by: user?.id ?? null,
+    } as any);
+    setPostingUpdate(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setUpdateNote("");
+    toast.success("Posted to homeowner timeline");
+    onAction?.();
+  };
+
+
   // Two-mortgagee sequencing (mirrors Loss Draft banner)
   const isMulti = (req?.total_mortgagees ?? 0) === 2 || siblings.length >= 2;
   const myOrder = req?.endorsement_order ?? null;
@@ -661,6 +693,59 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
             )}
 
 
+            {/* Log update to homeowner timeline */}
+            {req.claim_id && (
+              <Card>
+                <CardContent className="pt-4 space-y-2">
+                  <div className="font-semibold text-sm flex items-center gap-2">
+                    <FileText className="h-4 w-4" /> Log update to homeowner timeline
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Post a note the homeowner (and contractor) will see on their live claim timeline.
+                  </p>
+                  <div className="flex gap-1.5 flex-wrap">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={updateKind === "mortgage_followup" ? "default" : "outline"}
+                      className="h-7 text-xs"
+                      onClick={() => setUpdateKind("mortgage_followup")}
+                    >
+                      <Phone className="h-3 w-3 mr-1" /> Call to mortgage
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={updateKind === "mortgage_update" ? "default" : "outline"}
+                      className="h-7 text-xs"
+                      onClick={() => setUpdateKind("mortgage_update")}
+                    >
+                      <Send className="h-3 w-3 mr-1" /> General update
+                    </Button>
+                  </div>
+                  <Textarea
+                    value={updateNote}
+                    onChange={(e) => setUpdateNote(e.target.value)}
+                    placeholder={updateKind === "mortgage_followup"
+                      ? "e.g. Spoke with Sarah at ServiceMac — TPA received, waiting on inspection."
+                      : "e.g. Sent endorsed check + waiver of lien to mortgage overnight."}
+                    rows={2}
+                    className="text-sm"
+                  />
+                  <div className="flex justify-end">
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs"
+                      disabled={postingUpdate || !updateNote.trim()}
+                      onClick={postMortgageUpdate}
+                    >
+                      {postingUpdate ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Send className="h-3 w-3 mr-1" />}
+                      Post to timeline
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Check details */}
             {check ? (
