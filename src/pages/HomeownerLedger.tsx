@@ -15,17 +15,10 @@ import {
 import { toast } from "sonner";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 
-type EventType =
-  | "check_received" | "endorsement_requested" | "endorsement_signed"
-  | "deposited" | "cleared" | "funds_released"
-  | "production_projected" | "production_confirmed" | "production_doc_uploaded"
-  | "supplement_check" | "depreciation_check" | "deductible_check"
-  | "homeowner_check_upload";
-
 type LedgerEvent = {
   id: string;
   check_id: string | null;
-  event_type: EventType;
+  event_type: string;
   occurred_at: string;
   amount: number | null;
   actor_label: string | null;
@@ -80,6 +73,7 @@ const EVENT_META: Record<string, { icon: React.ElementType; label: string; tone:
   production_doc_uploaded: { icon: FileText,     label: "Production doc uploaded", tone: "text-muted-foreground" },
   homeowner_check_upload:  { icon: ImagePlus,    label: "You uploaded a check",    tone: "text-primary"     },
   homeowner_upload_attached:{ icon: ImagePlus,   label: "Upload attached to claim",tone: "text-primary"     },
+  document_sent:           { icon: Send,         label: "Document sent",           tone: "text-amber-400"   },
   document_uploaded:       { icon: Upload,       label: "Document uploaded",       tone: "text-primary"     },
   document_signed_all:     { icon: CheckCircle2, label: "Document fully signed",   tone: "text-emerald-400" },
   mortgage_check_sent:     { icon: Send,         label: "Check sent to mortgage",  tone: "text-amber-400"   },
