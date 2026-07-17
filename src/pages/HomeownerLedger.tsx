@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import {
   ShieldCheck, Loader2, ImagePlus, Upload, CheckCircle2,
   Banknote, Send, PenTool, Wallet, Hammer, FileText, AlertCircle,
+  Phone, Building2, MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
