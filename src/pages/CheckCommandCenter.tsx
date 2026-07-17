@@ -505,6 +505,42 @@ export default function CheckCommandCenter() {
   // helpOpen state removed — help moved to Settings → ChecksOps Guide
   const [shareCheckId, setShareCheckId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
+  const [bulkRunning, setBulkRunning] = useState(false);
+
+  const toggleBulk = useCallback((id: string) => {
+    setBulkSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+  const clearBulk = useCallback(() => setBulkSelected(new Set()), []);
+  const runBulkDecision = useCallback(async (path: string, label: string) => {
+    if (!user?.id || bulkSelected.size === 0) return;
+    setBulkRunning(true);
+    const ids = Array.from(bulkSelected);
+    let ok = 0; const failed: string[] = [];
+    for (const id of ids) {
+      const { error } = await supabase.rpc("submit_check_review_decision_safe", {
+        p_check_id: id,
+        p_reviewer_id: user.id,
+        p_deposit_path: path,
+        p_reviewer_notes: `Bulk decision: ${label}`,
+      });
+      if (error) failed.push(error.message); else ok++;
+    }
+    setBulkRunning(false);
+    if (failed.length === 0) {
+      sonnerToast.success(`${ok} check${ok === 1 ? "" : "s"} moved to ${label}`);
+    } else {
+      sonnerToast.error(`${ok} succeeded, ${failed.length} failed. ${failed[0] ?? ""}`);
+    }
+    clearBulk();
+    qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+    qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+    qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+  }, [bulkSelected, user?.id, clearBulk]);
 
   // On mobile, scroll to top when a check is opened or review check is opened
   useEffect(() => {
