@@ -39,6 +39,7 @@ export function SendCheckTrackingLinkButton({
   variant = "outline",
   label = "Send tracking link",
   className,
+  senderOverride = null,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(defaultName || "");
