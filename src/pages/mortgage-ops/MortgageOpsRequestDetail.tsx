@@ -443,6 +443,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         .from("signature_requests")
         .insert({
           claim_id: req.claim_id,
+          check_intake_item_id: check?.id ?? null,
           document_name: pendingDoc.fileName,
           document_path: pendingDoc.path,
           document_type: "authorization",
@@ -452,6 +453,16 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         .select("id")
         .single();
       if (sigErr || !sigReq?.id) throw sigErr || new Error("Failed to create signature request");
+
+      // Link the source attachment row (the unsigned upload) to this request
+      // so completion can drop the SIGNED PDF into the same Attachments list.
+      if (check?.id) {
+        await supabase
+          .from("check_files")
+          .update({ signature_request_id: sigReq.id })
+          .eq("check_intake_item_id", check.id)
+          .eq("file_path", pendingDoc.path);
+      }
 
       const { error: signerErr } = await supabase.from("signature_signers").insert({
         signature_request_id: sigReq.id,
