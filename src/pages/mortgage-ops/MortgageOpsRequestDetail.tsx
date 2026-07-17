@@ -548,6 +548,8 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     setUpdateNote("");
     toast.success("Posted to homeowner timeline");
     onAction?.();
+  };
+
 
   // Two-mortgagee sequencing (mirrors Loss Draft banner)
   const isMulti = (req?.total_mortgagees ?? 0) === 2 || siblings.length >= 2;
