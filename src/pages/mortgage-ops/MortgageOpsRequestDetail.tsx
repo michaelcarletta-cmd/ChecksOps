@@ -693,6 +693,59 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
             )}
 
 
+            {/* Log update to homeowner timeline */}
+            {req.claim_id && (
+              <Card>
+                <CardContent className="pt-4 space-y-2">
+                  <div className="font-semibold text-sm flex items-center gap-2">
+                    <FileText className="h-4 w-4" /> Log update to homeowner timeline
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Post a note the homeowner (and contractor) will see on their live claim timeline.
+                  </p>
+                  <div className="flex gap-1.5 flex-wrap">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={updateKind === "mortgage_followup" ? "default" : "outline"}
+                      className="h-7 text-xs"
+                      onClick={() => setUpdateKind("mortgage_followup")}
+                    >
+                      <Phone className="h-3 w-3 mr-1" /> Call to mortgage
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={updateKind === "mortgage_update" ? "default" : "outline"}
+                      className="h-7 text-xs"
+                      onClick={() => setUpdateKind("mortgage_update")}
+                    >
+                      <Send className="h-3 w-3 mr-1" /> General update
+                    </Button>
+                  </div>
+                  <Textarea
+                    value={updateNote}
+                    onChange={(e) => setUpdateNote(e.target.value)}
+                    placeholder={updateKind === "mortgage_followup"
+                      ? "e.g. Spoke with Sarah at ServiceMac — TPA received, waiting on inspection."
+                      : "e.g. Sent endorsed check + waiver of lien to mortgage overnight."}
+                    rows={2}
+                    className="text-sm"
+                  />
+                  <div className="flex justify-end">
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs"
+                      disabled={postingUpdate || !updateNote.trim()}
+                      onClick={postMortgageUpdate}
+                    >
+                      {postingUpdate ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Send className="h-3 w-3 mr-1" />}
+                      Post to timeline
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Check details */}
             {check ? (
