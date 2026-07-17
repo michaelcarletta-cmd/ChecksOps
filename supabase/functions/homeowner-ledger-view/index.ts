@@ -83,12 +83,20 @@ Deno.serve(async (req) => {
       }
       totals.remaining = totals.received - totals.released
 
-      // Pending signature requests for this claim (any signer not yet signed)
+      // Pending signature requests for this claim (including requests linked through check intake)
+      const { data: claimChecks } = await supabase
+        .from('check_intake_items')
+        .select('id')
+        .eq('claim_id', tok.claim_id)
+      const checkIds = (claimChecks ?? []).map((r: any) => r.id).filter(Boolean)
+      const signatureFilter = checkIds.length > 0
+        ? `claim_id.eq.${tok.claim_id},check_intake_item_id.in.(${checkIds.join(',')})`
+        : `claim_id.eq.${tok.claim_id}`
       const { data: sreqs } = await supabase
         .from('signature_requests')
         .select('id, document_name, status, sent_at, signature_signers(id, signer_name, signer_email, status, signed_at)')
-        .eq('claim_id', tok.claim_id)
-        .in('status', ['pending', 'sent', 'partial'])
+        .or(signatureFilter)
+        .in('status', ['pending', 'sent', 'partial', 'in_progress'])
         .order('sent_at', { ascending: false })
         .limit(50)
       const homeownerEmail = (tok.homeowner_email || '').toLowerCase()
