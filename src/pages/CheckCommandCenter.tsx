@@ -1737,6 +1737,21 @@ export default function CheckCommandCenter() {
               style={!isMobile ? { width: selectedCheck ? "40%" : "80%" } : undefined}
             >
               <CardContent className="p-0 h-full">
+                {bulkSelected.size > 0 && (
+                  <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b bg-primary/10 backdrop-blur px-3 py-2">
+                    <span className="text-xs font-semibold text-foreground">
+                      {bulkSelected.size} selected
+                    </span>
+                    <div className="flex flex-wrap gap-1 ml-auto">
+                      <Button size="sm" variant="outline" disabled={bulkRunning} onClick={() => runBulkDecision("endorsements_in_progress", "Endorsing")}>Endorsing</Button>
+                      <Button size="sm" variant="outline" disabled={bulkRunning} onClick={() => runBulkDecision("needs_review", "Review")}>Review</Button>
+                      <Button size="sm" variant="outline" disabled={bulkRunning} onClick={() => runBulkDecision("loss_draft_required", "Loss Draft")}>Loss Draft</Button>
+                      <Button size="sm" variant="outline" disabled={bulkRunning} onClick={() => runBulkDecision("reissue_requested", "Reissue")}>Reissue</Button>
+                      <Button size="sm" variant="outline" disabled={bulkRunning} className="text-destructive" onClick={() => { if (confirm(`Void ${bulkSelected.size} check(s)?`)) runBulkDecision("voided", "Void"); }}>Void</Button>
+                      <Button size="sm" variant="ghost" disabled={bulkRunning} onClick={clearBulk}>Clear</Button>
+                    </div>
+                  </div>
+                )}
                 <div className="overflow-x-auto h-full">
                 <ScrollArea className="h-[calc(100vh-400px)]">
                   {isLoading ? (
