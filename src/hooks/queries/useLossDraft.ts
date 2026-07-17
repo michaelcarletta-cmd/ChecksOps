@@ -63,6 +63,8 @@ export interface LossDraftDoc {
   notes: string | null;
   file_path: string | null;
   file_name: string | null;
+  signature_request_id?: string | null;
+  is_template_generated?: boolean | null;
 }
 
 export interface LossDraftAuditEntry {
