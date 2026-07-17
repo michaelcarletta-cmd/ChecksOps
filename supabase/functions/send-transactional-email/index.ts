@@ -45,11 +45,13 @@ Deno.serve(async (req) => {
   let messageId: string
   let templateData: Record<string, any> = {}
   let tenantId: string | null = null
+  let senderOverride: string | null = null
   try {
     const body = await req.json()
     templateName = body.templateName || body.template_name
     recipientEmail = body.recipientEmail || body.recipient_email
     tenantId = body.tenantId || body.tenant_id || null
+    senderOverride = body.senderOverride || body.sender_override || null
     messageId = crypto.randomUUID()
     idempotencyKey = body.idempotencyKey || body.idempotency_key || messageId
     if (body.templateData && typeof body.templateData === 'object') {
@@ -286,6 +288,17 @@ Deno.serve(async (req) => {
     resolvedSubject =
       typeof template.subject === 'function' ? template.subject(templateData) : template.subject
     sender = await resolveTenantSender(supabase, tenantId)
+    if (senderOverride === 'checksops') {
+      // Force platform ChecksOps identity (used by Mortgage Ops desk, which
+      // handles work across many tenants and must always appear as ChecksOps).
+      sender = {
+        from: 'ChecksOps <notify@checksops.com>',
+        senderDomain: 'notify.checksops.com',
+        replyTo: 'notify@checksops.com',
+        provider: 'lovable',
+        usingCustomDomain: false,
+      }
+    }
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err)
     console.error('Failed to render email or resolve sender', { templateName, error: errorMsg })

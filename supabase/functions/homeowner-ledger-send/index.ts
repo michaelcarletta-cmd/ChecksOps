@@ -38,6 +38,7 @@ Deno.serve(async (req) => {
       tenant_id: tenantIdOverride,
       origin,
       partner_code: partnerCodeIn,
+      sender_override: senderOverride,
     } = await req.json()
 
     if (!homeowner_email && !homeowner_phone) {
@@ -136,6 +137,8 @@ Deno.serve(async (req) => {
         body: {
           templateName: 'homeowner-ledger-invite',
           recipientEmail: homeowner_email,
+          tenantId: senderOverride === 'checksops' ? null : tenantId,
+          senderOverride: senderOverride || null,
           idempotencyKey: `ledger-invite-${tokRow.id}-${Date.now()}`,
           templateData: {
             homeowner_name: homeowner_name || null,
