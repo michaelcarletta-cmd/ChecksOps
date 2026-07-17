@@ -607,6 +607,32 @@ Deno.serve(async (req) => {
           }
         }
 
+        // Also update matching loss_draft_documents row so Mortgage Ops sees the signed PDF
+        try {
+          const { data: ldDocs } = await sb
+            .from("loss_draft_documents")
+            .select("id")
+            .eq("signature_request_id", request.id);
+          if (ldDocs && ldDocs.length > 0) {
+            const signedName = `SIGNED - ${request.document_name}.pdf`;
+            for (const ld of ldDocs) {
+              await sb
+                .from("loss_draft_documents")
+                .update({
+                  file_path: storagePath,
+                  file_name: signedName,
+                  is_submitted: true,
+                  submitted_at: completedAt,
+                  signature_status: "signed",
+                  signed_at: completedAt,
+                })
+                .eq("id", ld.id);
+            }
+          }
+        } catch (ldErr) {
+          console.error("loss_draft_documents update failed", ldErr);
+        }
+
         await log(sb, {
           request_id: request.id, signer_id: null, claim_id: claimId,
           stage: "pdf_flattened", status: "ok",
