@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
+import { LossDraftDocsManager } from "@/components/loss-draft/LossDraftDocsManager";
 
 
 interface Props {
@@ -132,12 +133,16 @@ interface CheckFileRow {
 interface LossDraftDoc {
   id: string;
   document_type: string;
-  document_label: string | null;
+  document_label: string;
   is_required: boolean;
   is_submitted: boolean;
   submitted_at: string | null;
   file_id: string | null;
   notes: string | null;
+  file_path: string | null;
+  file_name: string | null;
+  signature_request_id: string | null;
+  is_template_generated: boolean | null;
 }
 
 interface MessageRow {
@@ -180,6 +185,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const [images, setImages] = useState<{ front?: string; back?: string }>({});
   const [files, setFiles] = useState<CheckFileRow[]>([]);
   const [lossDocs, setLossDocs] = useState<LossDraftDoc[]>([]);
+  const [lossDraftId, setLossDraftId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [sigRequests, setSigRequests] = useState<SigRequest[]>([]);
   const [siblings, setSiblings] = useState<SiblingRequestRow[]>([]);
@@ -199,6 +205,8 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     path: string;
     url: string;
     fileName: string;
+    lossDraftDocId?: string;
+    documentLabel?: string;
   } | null>(null);
   const [placedFields, setPlacedFields] = useState<any[]>([]);
   const [sending, setSending] = useState(false);
@@ -265,13 +273,15 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
           .eq("check_intake_item_id", r.check_intake_item_id)
           .maybeSingle();
         if (ldt?.id) {
+          setLossDraftId(ldt.id);
           const { data: docs } = await supabase
             .from("loss_draft_documents")
-            .select("id,document_type,document_label,is_required,is_submitted,submitted_at,file_id,notes")
+            .select("id,document_type,document_label,is_required,is_submitted,submitted_at,file_id,notes,file_path,file_name,signature_request_id,is_template_generated" as any)
             .eq("loss_draft_id", ldt.id)
-            .order("is_required", { ascending: false });
-          setLossDocs((docs as LossDraftDoc[]) || []);
+            .order("created_at", { ascending: true });
+          setLossDocs((docs as unknown as LossDraftDoc[]) || []);
         } else {
+          setLossDraftId(null);
           setLossDocs([]);
         }
 
@@ -452,6 +462,15 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         body: { requestId: sigReq.id, skipEmail: false },
       });
       if (sendErr) throw sendErr;
+
+      // If this document was generated/attached from the loss-draft docs list,
+      // link the signature request back so status shows on the doc row.
+      if (pendingDoc.lossDraftDocId) {
+        await supabase
+          .from("loss_draft_documents")
+          .update({ signature_request_id: sigReq.id } as any)
+          .eq("id", pendingDoc.lossDraftDocId);
+      }
 
       await supabase.from("check_messages").insert({
         check_id: check.id,
@@ -743,26 +762,35 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
             )}
 
 
-            {/* Loss draft documents */}
-            {lossDocs.length > 0 && (
+            {/* Loss draft documents — add/generate/upload/send */}
+            {lossDraftId && (
               <Card>
-                <CardContent className="pt-4 space-y-2">
-                  <div className="font-semibold text-sm flex items-center gap-2">
-                    <FileText className="h-4 w-4" /> Loss draft documents ({lossDocs.filter((d) => d.is_submitted).length}/{lossDocs.length})
-                  </div>
-                  <ul className="text-sm divide-y divide-border">
-                    {lossDocs.map((d) => (
-                      <li key={d.id} className="py-1.5 flex items-center justify-between gap-2">
-                        <span className="truncate">
-                          {d.document_label || d.document_type}
-                          {d.is_required && <span className="text-[10px] ml-1 text-destructive">required</span>}
-                        </span>
-                        <Badge variant={d.is_submitted ? "secondary" : "outline"} className="text-[10px]">
-                          {d.is_submitted ? "submitted" : "pending"}
-                        </Badge>
-                      </li>
-                    ))}
-                  </ul>
+                <CardContent className="pt-4">
+                  <LossDraftDocsManager
+                    supabaseClient={supabase}
+                    lossDraftId={lossDraftId}
+                    claimId={req.claim_id}
+                    actorId={user?.id ?? null}
+                    docs={lossDocs as any}
+                    onChanged={() => void load()}
+                    canSendSignature={!!(req.homeowner_email && (req.homeowner_name || claim?.policyholder_name))}
+                    onSendForSignature={({ docId, path, fileName, documentLabel, signedUrl }) => {
+                      setPendingDoc({ path, url: signedUrl, fileName, lossDraftDocId: docId, documentLabel });
+                      setPlacedFields([]);
+                      setPlacerOpen(true);
+                    }}
+                    claimContext={{
+                      homeowner_name: req.homeowner_name || claim?.policyholder_name,
+                      homeowner_email: req.homeowner_email || claim?.policyholder_email,
+                      property_address: req.property_address || claim?.policyholder_address || check?.property_address,
+                      claim_number: req.claim_number || claim?.claim_number || check?.detected_claim_number,
+                      policy_number: req.policy_number || claim?.policy_number,
+                      carrier: req.insurance_company || claim?.insurance_company || check?.carrier_name,
+                      loss_date: req.date_of_loss || claim?.loss_date,
+                      mortgage_company: req.mortgage_company,
+                      loan_number: req.loan_number || claim?.loan_number,
+                    }}
+                  />
                 </CardContent>
               </Card>
             )}
