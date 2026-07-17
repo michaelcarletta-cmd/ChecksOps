@@ -523,6 +523,32 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     onAction?.();
   };
 
+  const postMortgageUpdate = async () => {
+    if (!req?.claim_id || !updateNote.trim()) {
+      toast.error("Add a note first");
+      return;
+    }
+    setPostingUpdate(true);
+    const { error } = await supabase.from("homeowner_ledger_events").insert({
+      tenant_id: req.tenant_id,
+      claim_id: req.claim_id,
+      event_type: updateKind,
+      occurred_at: new Date().toISOString(),
+      actor_label: updateKind === "mortgage_followup"
+        ? `Called ${req.mortgage_company || "mortgage company"}`
+        : "Mortgage Ops update",
+      payload_json: { note: updateNote.trim(), mortgage_company: req.mortgage_company },
+      created_by: user?.id ?? null,
+    } as any);
+    setPostingUpdate(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setUpdateNote("");
+    toast.success("Posted to homeowner timeline");
+    onAction?.();
+
   // Two-mortgagee sequencing (mirrors Loss Draft banner)
   const isMulti = (req?.total_mortgagees ?? 0) === 2 || siblings.length >= 2;
   const myOrder = req?.endorsement_order ?? null;
