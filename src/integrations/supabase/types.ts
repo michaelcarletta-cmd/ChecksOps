@@ -15085,9 +15085,11 @@ export type Database = {
           id: string
           is_required: boolean
           is_submitted: boolean
+          is_template_generated: boolean
           loss_draft_id: string
           notes: string | null
           requires_signature: boolean
+          signature_request_id: string | null
           signature_status: string
           signed_at: string | null
           signer_role: string
@@ -15105,9 +15107,11 @@ export type Database = {
           id?: string
           is_required?: boolean
           is_submitted?: boolean
+          is_template_generated?: boolean
           loss_draft_id: string
           notes?: string | null
           requires_signature?: boolean
+          signature_request_id?: string | null
           signature_status?: string
           signed_at?: string | null
           signer_role?: string
@@ -15125,9 +15129,11 @@ export type Database = {
           id?: string
           is_required?: boolean
           is_submitted?: boolean
+          is_template_generated?: boolean
           loss_draft_id?: string
           notes?: string | null
           requires_signature?: boolean
+          signature_request_id?: string | null
           signature_status?: string
           signed_at?: string | null
           signer_role?: string
@@ -15148,6 +15154,13 @@ export type Database = {
             columns: ["loss_draft_id"]
             isOneToOne: false
             referencedRelation: "loss_draft_tracking"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loss_draft_documents_signature_request_id_fkey"
+            columns: ["signature_request_id"]
+            isOneToOne: false
+            referencedRelation: "signature_requests"
             referencedColumns: ["id"]
           },
         ]
