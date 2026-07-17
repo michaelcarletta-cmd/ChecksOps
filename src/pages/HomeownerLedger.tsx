@@ -227,6 +227,14 @@ function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () =>
                         {e.payload_json?.check_number ? ` • #${e.payload_json.check_number}` : ""}
                         {e.payload_json?.recipient_type ? ` • ${e.payload_json.recipient_type}` : ""}
                       </div>
+                      {(e.payload_json?.note || e.payload_json?.document_label) && (
+                        <div className="mt-1 text-xs text-foreground/90 bg-muted/40 rounded px-2 py-1 whitespace-pre-wrap">
+                          {e.payload_json?.document_label && (
+                            <div className="font-medium">{e.payload_json.document_label}{e.payload_json?.file_name ? ` — ${e.payload_json.file_name}` : ""}</div>
+                          )}
+                          {e.payload_json?.note && <div>{e.payload_json.note}</div>}
+                        </div>
+                      )}
                     </li>
                   );
                 })}
