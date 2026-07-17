@@ -462,6 +462,15 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
       });
       if (sendErr) throw sendErr;
 
+      // If this document was generated/attached from the loss-draft docs list,
+      // link the signature request back so status shows on the doc row.
+      if (pendingDoc.lossDraftDocId) {
+        await supabase
+          .from("loss_draft_documents")
+          .update({ signature_request_id: sigReq.id } as any)
+          .eq("id", pendingDoc.lossDraftDocId);
+      }
+
       await supabase.from("check_messages").insert({
         check_id: check.id,
         sender_id: user.id,
