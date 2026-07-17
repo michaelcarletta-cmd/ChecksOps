@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
     const payload: Record<string, unknown> = {
       fiKey,
       referenceNumber: Number(deposit.checkalt_reference),
-      action: action === "approve" ? 2 : 1,
+      action: action === "approve" ? 1 : 2,
     };
     if (action === "approve") {
       if (approved_amount !== undefined) payload.approvedAmount = approved_amount;
