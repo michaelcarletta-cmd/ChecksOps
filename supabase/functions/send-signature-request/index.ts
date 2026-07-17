@@ -376,6 +376,14 @@ Deno.serve(async (req) => {
       }
     } catch (_e) { /* fall back to default sender */ }
 
+    // Mortgage Ops desk sends everything as ChecksOps regardless of tenant branding.
+    if (senderOverride === "checksops") {
+      tenantFromOverride = "ChecksOps <notify@checksops.com>";
+      tenantReplyTo = "notify@checksops.com";
+      branding.company_name = "ChecksOps";
+      branding.company_email = "notify@checksops.com";
+    }
+
     claimId = request.claim_id;
     const signersArr: any[] = request.signature_signers || [];
 
