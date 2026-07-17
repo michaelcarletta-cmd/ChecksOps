@@ -48,6 +48,63 @@ async function failRequest(sb: any, id: string, error: string) {
     .eq("id", id);
 }
 
+async function resolveLedgerContext(
+  sb: any,
+  claimId?: string | null,
+  checkIntakeItemId?: string | null,
+): Promise<{ claimId: string | null; tenantId: string | null; checkId: string | null }> {
+  if (checkIntakeItemId) {
+    const { data: checkRow } = await sb
+      .from("check_intake_items")
+      .select("id, claim_id, tenant_id")
+      .eq("id", checkIntakeItemId)
+      .maybeSingle();
+    if (checkRow?.tenant_id) {
+      return {
+        claimId: checkRow.claim_id ?? claimId ?? null,
+        tenantId: checkRow.tenant_id,
+        checkId: checkRow.id,
+      };
+    }
+  }
+
+  if (claimId) {
+    const { data: checkRow } = await sb
+      .from("check_intake_items")
+      .select("id, tenant_id")
+      .eq("claim_id", claimId)
+      .not("tenant_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (checkRow?.tenant_id) return { claimId, tenantId: checkRow.tenant_id, checkId: checkRow.id ?? null };
+
+    const { data: reqRow } = await sb
+      .from("mortgage_handling_requests")
+      .select("tenant_id, check_intake_item_id")
+      .eq("claim_id", claimId)
+      .not("tenant_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (reqRow?.tenant_id) {
+      return { claimId, tenantId: reqRow.tenant_id, checkId: reqRow.check_intake_item_id ?? null };
+    }
+
+    const { data: tokenRow } = await sb
+      .from("homeowner_ledger_tokens")
+      .select("tenant_id")
+      .eq("claim_id", claimId)
+      .not("tenant_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (tokenRow?.tenant_id) return { claimId, tenantId: tokenRow.tenant_id, checkId: null };
+  }
+
+  return { claimId: claimId ?? null, tenantId: null, checkId: checkIntakeItemId ?? null };
+}
+
 function respond(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -332,17 +389,14 @@ Deno.serve(async (req) => {
       .maybeSingle();
     const branding: BrandingConfig = brandingRow || {};
 
+    const ledgerContext = await resolveLedgerContext(sb, request.claim_id, request.check_intake_item_id);
+
     // Resolve tenant-specific From / Reply-To and visual branding (white-label override).
     // Tenant comes from claim or shared check_intake_item; falls back to Freedom default.
     let tenantFromOverride: string | null = null;
     let tenantReplyTo: string | null = null;
     try {
-      let tenantId: string | null = null;
-      if (request.claim_id) {
-        const { data: cl } = await sb
-          .from("claims").select("tenant_id").eq("id", request.claim_id).maybeSingle();
-        tenantId = (cl as any)?.tenant_id ?? null;
-      }
+      let tenantId: string | null = ledgerContext.tenantId;
       if (!tenantId && request.check_intake_item_id) {
         const { data: ck } = await sb
           .from("check_intake_items").select("tenant_id").eq("id", request.check_intake_item_id).maybeSingle();
@@ -394,7 +448,7 @@ Deno.serve(async (req) => {
       branding.company_email = "notify@checksops.com";
     }
 
-    claimId = request.claim_id;
+    claimId = ledgerContext.claimId;
     const signersArr: any[] = request.signature_signers || [];
 
     await log(sb, {
@@ -586,8 +640,7 @@ Deno.serve(async (req) => {
 
       // Mirror to homeowner ledger so the homeowner sees signature activity live
       try {
-        const { data: cRow } = await sb.from("claims").select("tenant_id").eq("id", claimId).maybeSingle();
-        const tenantId = (cRow as any)?.tenant_id;
+        const tenantId = ledgerContext.tenantId;
         if (tenantId) {
           const nowIso = new Date().toISOString();
           const rows = results
@@ -597,6 +650,7 @@ Deno.serve(async (req) => {
               return {
                 tenant_id: tenantId,
                 claim_id: claimId,
+                check_id: ledgerContext.checkId,
                 event_type: "endorsement_requested",
                 occurred_at: nowIso,
                 actor_label: branding.company_name || "Claims team",
@@ -606,6 +660,7 @@ Deno.serve(async (req) => {
                   signer_name: s?.signer_name || null,
                   signer_email: s?.signer_email || null,
                   document_name: request.document_name,
+                  document_label: request.document_name,
                 },
               };
             });

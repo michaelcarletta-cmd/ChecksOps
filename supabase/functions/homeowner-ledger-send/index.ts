@@ -7,6 +7,28 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
+async function resolveTenantForClaim(svc: any, claimId: string): Promise<string | null> {
+  const { data: checkRow } = await svc
+    .from('check_intake_items')
+    .select('tenant_id')
+    .eq('claim_id', claimId)
+    .not('tenant_id', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (checkRow?.tenant_id) return checkRow.tenant_id
+
+  const { data: requestRow } = await svc
+    .from('mortgage_handling_requests')
+    .select('tenant_id')
+    .eq('claim_id', claimId)
+    .not('tenant_id', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return requestRow?.tenant_id ?? null
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -48,8 +70,7 @@ Deno.serve(async (req) => {
     // Resolve tenant
     let tenantId = tenantIdOverride as string | undefined
     if (claim_id && !tenantId) {
-      const { data: c } = await svc.from('claims').select('tenant_id').eq('id', claim_id).maybeSingle()
-      tenantId = c?.tenant_id
+      tenantId = (await resolveTenantForClaim(svc, claim_id)) ?? undefined
     }
     if (!tenantId) {
       const { data: tu } = await svc.from('tenant_users').select('tenant_id').eq('user_id', userId).limit(1).maybeSingle()
