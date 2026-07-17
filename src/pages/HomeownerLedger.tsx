@@ -31,6 +31,21 @@ type LedgerEvent = {
   payload_json: Record<string, any>;
 };
 
+type PendingSigner = {
+  signer_id: string;
+  name: string | null;
+  email: string | null;
+  status: string;
+  signed_at: string | null;
+  is_homeowner: boolean;
+};
+type PendingSignature = {
+  request_id: string;
+  document_name: string;
+  sent_at: string | null;
+  signers: PendingSigner[];
+};
+
 type Summary = {
   ok: boolean;
   mode: "claim" | "pre_claim";
@@ -39,6 +54,7 @@ type Summary = {
   events: LedgerEvent[];
   totals: { received: number; deposited: number; released: number; remaining: number };
   pending_upload_count: number;
+  pending_signatures?: PendingSignature[];
   can_upload: boolean;
 };
 
