@@ -197,6 +197,10 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const [uploadDesc, setUploadDesc] = useState("");
   const [uploadForSignature, setUploadForSignature] = useState(true);
 
+  const [updateKind, setUpdateKind] = useState<"mortgage_followup" | "mortgage_update">("mortgage_followup");
+  const [updateNote, setUpdateNote] = useState("");
+  const [postingUpdate, setPostingUpdate] = useState(false);
+
   // Field-placement flow (mirrors Freedom CRM's SignatureRequests dialog).
   // When a signature PDF is uploaded, we hold it here and show the placer
   // dialog before actually dispatching the e-sign request.
