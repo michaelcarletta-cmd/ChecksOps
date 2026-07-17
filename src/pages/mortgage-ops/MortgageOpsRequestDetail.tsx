@@ -459,7 +459,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
       if (signerErr) throw signerErr;
 
       const { error: sendErr } = await supabase.functions.invoke("send-signature-request", {
-        body: { requestId: sigReq.id, skipEmail: false },
+        body: { requestId: sigReq.id, skipEmail: false, senderOverride: "checksops" },
       });
       if (sendErr) throw sendErr;
 
