@@ -382,10 +382,13 @@ Deno.serve(async (req) => {
     // ChecksOps and replies route correctly. Once checksops.com (or notify.checksops.com)
     // is verified in Resend, set the CHECKSOPS_FROM_EMAIL secret to switch over.
     if (senderOverride === "checksops") {
-      const checksopsFromEmail = Deno.env.get("CHECKSOPS_FROM_EMAIL");
-      const defaultFromEmail = Deno.env.get("FROM_EMAIL") || "claims@freedomclaims.work";
-      const fromAddress = checksopsFromEmail || defaultFromEmail;
-      tenantFromOverride = `ChecksOps <${fromAddress}>`;
+      // checksops.com is NOT verified in Resend (notify.checksops.com is delegated
+      // to Lovable Emails NS, which blocks third-party verification on that host).
+      // Sending "from: notify@checksops.com" via Resend gets accepted but silently
+      // undelivered. Force the verified Resend sender (freedomclaims.work) and keep
+      // the ChecksOps display name + reply-to so homeowners still see ChecksOps.
+      const verifiedFromEmail = Deno.env.get("FROM_EMAIL") || "claims@freedomclaims.work";
+      tenantFromOverride = `ChecksOps <${verifiedFromEmail}>`;
       tenantReplyTo = "notify@checksops.com";
       branding.company_name = "ChecksOps";
       branding.company_email = "notify@checksops.com";
