@@ -1,0 +1,1 @@
+UPDATE public.check_intake_items SET status = 'deposited', check_stage = 'deposited', updated_at = now() WHERE id = '8350f5fe-973e-479b-9c6a-31160ae25df5';
