@@ -200,6 +200,8 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     path: string;
     url: string;
     fileName: string;
+    lossDraftDocId?: string;
+    documentLabel?: string;
   } | null>(null);
   const [placedFields, setPlacedFields] = useState<any[]>([]);
   const [sending, setSending] = useState(false);
