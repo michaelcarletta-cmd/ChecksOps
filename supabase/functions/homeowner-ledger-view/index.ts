@@ -48,6 +48,7 @@ Deno.serve(async (req) => {
     let events: any[] = []
     let totals = { received: 0, deposited: 0, released: 0, remaining: 0 }
     let pending_upload_count = 0
+    let pending_signatures: any[] = []
 
     if (tok.claim_id) {
       const { data: c, error: claimErr } = await supabase
@@ -81,6 +82,29 @@ Deno.serve(async (req) => {
         }
       }
       totals.remaining = totals.received - totals.released
+
+      // Pending signature requests for this claim (any signer not yet signed)
+      const { data: sreqs } = await supabase
+        .from('signature_requests')
+        .select('id, document_name, status, sent_at, signature_signers(id, signer_name, signer_email, status, signed_at)')
+        .eq('claim_id', tok.claim_id)
+        .in('status', ['pending', 'sent', 'partial'])
+        .order('sent_at', { ascending: false })
+        .limit(50)
+      const homeownerEmail = (tok.homeowner_email || '').toLowerCase()
+      pending_signatures = (sreqs ?? []).map((r: any) => ({
+        request_id: r.id,
+        document_name: r.document_name,
+        sent_at: r.sent_at,
+        signers: (r.signature_signers || []).map((s: any) => ({
+          signer_id: s.id,
+          name: s.signer_name,
+          email: s.signer_email,
+          status: s.status,
+          signed_at: s.signed_at,
+          is_homeowner: (s.signer_email || '').toLowerCase() === homeownerEmail,
+        })),
+      })).filter((r: any) => r.signers.some((s: any) => s.status !== 'signed'))
     } else {
       // Pre-claim: show pending uploads for this token
       const { count } = await supabase
@@ -98,6 +122,7 @@ Deno.serve(async (req) => {
       events,
       totals,
       pending_upload_count,
+      pending_signatures,
       can_upload: true,
     })
   } catch (e) {

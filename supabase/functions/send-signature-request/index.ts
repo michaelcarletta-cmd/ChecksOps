@@ -580,6 +580,35 @@ Deno.serve(async (req) => {
         content: `📝 Signature request sent for "${request.document_name}" to ${signerNames}`,
         update_type: "esign",
       });
+
+      // Mirror to homeowner ledger so the homeowner sees signature activity live
+      try {
+        const { data: cRow } = await sb.from("claims").select("tenant_id").eq("id", claimId).maybeSingle();
+        const tenantId = (cRow as any)?.tenant_id;
+        if (tenantId) {
+          const nowIso = new Date().toISOString();
+          const rows = results
+            .filter((r) => r.success)
+            .map((r) => {
+              const s = signersArr.find((x: any) => x.id === r.signer_id);
+              return {
+                tenant_id: tenantId,
+                claim_id: claimId,
+                event_type: "endorsement_requested",
+                occurred_at: nowIso,
+                actor_label: branding.company_name || "Claims team",
+                payload_json: {
+                  signature_request_id: requestId,
+                  signer_id: r.signer_id,
+                  signer_name: s?.signer_name || null,
+                  signer_email: s?.signer_email || null,
+                  document_name: request.document_name,
+                },
+              };
+            });
+          if (rows.length > 0) await sb.from("homeowner_ledger_events").insert(rows);
+        }
+      } catch (e) { console.error("ledger mirror (requested) failed", e); }
     }
 
     await log(sb, {
