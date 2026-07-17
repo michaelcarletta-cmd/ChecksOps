@@ -1,0 +1,1 @@
+UPDATE public.checkalt_config SET base_url = 'https://api2.checkalt.com', fi_key = '6D1A76C4-637B-4DAE-87DA-8E70B8E8B40D', cached_jwt = NULL, cached_jwt_expires_at = NULL, updated_at = now();
