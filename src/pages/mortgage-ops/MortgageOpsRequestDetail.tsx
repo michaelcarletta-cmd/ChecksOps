@@ -268,13 +268,15 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
           .eq("check_intake_item_id", r.check_intake_item_id)
           .maybeSingle();
         if (ldt?.id) {
+          setLossDraftId(ldt.id);
           const { data: docs } = await supabase
             .from("loss_draft_documents")
-            .select("id,document_type,document_label,is_required,is_submitted,submitted_at,file_id,notes")
+            .select("id,document_type,document_label,is_required,is_submitted,submitted_at,file_id,notes,file_path,file_name,signature_request_id,is_template_generated" as any)
             .eq("loss_draft_id", ldt.id)
-            .order("is_required", { ascending: false });
+            .order("created_at", { ascending: true });
           setLossDocs((docs as LossDraftDoc[]) || []);
         } else {
+          setLossDraftId(null);
           setLossDocs([]);
         }
 
