@@ -428,6 +428,27 @@ export function LossDraftDocsManager({
         </Button>
       </div>
 
+      {/* Quick-download ChecksOps letterhead templates */}
+      <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border p-2 bg-muted/20">
+        <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+          <Sparkles className="h-3 w-3" /> ChecksOps letterhead:
+        </span>
+        <Select
+          onValueChange={(v) => {
+            const preset = PRESETS.find((p) => p.key === v);
+            if (preset?.template) openTemplateFor(preset);
+          }}
+        >
+          <SelectTrigger className="h-7 text-[11px] w-[220px]">
+            <SelectValue placeholder="Download blank template…" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="tpa">Third Party Authorization</SelectItem>
+            <SelectItem value="lien_waiver">Waiver of Lien</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       {docs.length === 0 ? (
         <p className="text-xs text-muted-foreground italic py-2">
           No documents yet. Click "Add document" to pick from the checklist or generate a
