@@ -97,7 +97,7 @@ export default function CheckOpsLogin() {
       if (error) throw error;
       const authedId = data.user?.id;
       if (!authedId) throw new Error("Unable to start your session");
-      await resolveAndRedirect(authedId);
+      await resolveAndRedirect(authedId, data.user?.email ?? email);
     } catch (err: any) {
       toast({
         title: "Sign in failed",
