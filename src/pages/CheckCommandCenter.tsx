@@ -1767,7 +1767,32 @@ export default function CheckCommandCenter() {
                         {groupedFilteredChecks.map((group) => (
                           <Fragment key={group.key}>
                             <TableRow key={`${group.key}-header`} className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold">
-                              <TableCell colSpan={colCount} className="py-3">
+                              <TableCell className="py-3 w-8">
+                                {group.checks.length > 1 && (() => {
+                                  const groupIds = group.checks.map((c) => c.id);
+                                  const allChecked = groupIds.every((id) => bulkSelected.has(id));
+                                  const someChecked = !allChecked && groupIds.some((id) => bulkSelected.has(id));
+                                  return (
+                                    <input
+                                      type="checkbox"
+                                      className="h-4 w-4 accent-primary cursor-pointer"
+                                      checked={allChecked}
+                                      ref={(el) => { if (el) el.indeterminate = someChecked; }}
+                                      onClick={(e) => e.stopPropagation()}
+                                      onChange={() => {
+                                        setBulkSelected((prev) => {
+                                          const next = new Set(prev);
+                                          if (allChecked) groupIds.forEach((id) => next.delete(id));
+                                          else groupIds.forEach((id) => next.add(id));
+                                          return next;
+                                        });
+                                      }}
+                                      title="Select all checks in this file"
+                                    />
+                                  );
+                                })()}
+                              </TableCell>
+                              <TableCell colSpan={colCount - 1} className="py-3">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                   <ClaimCheckFileHeader group={group} hideReadySignal={hideReadySignal} />
                                 </div>
@@ -1788,15 +1813,23 @@ export default function CheckCommandCenter() {
                               const RecIcon = rec?.icon ?? null;
                               const canDelete = canDeleteAnyCheck;
                               const isSelected = selectedCheck === check.id;
+                              const isBulk = bulkSelected.has(check.id);
                               const isShared = (check as any)._shared;
                               const sourceTenantName = (check as any)._sourceTenantName;
                               return (
                                 <TableRow
                                   key={check.id}
-                                  className={`cursor-pointer transition-colors ${isSelected ? "bg-accent" : ""}`}
+                                  className={`cursor-pointer transition-colors ${isSelected ? "bg-accent" : ""} ${isBulk ? "bg-primary/5" : ""}`}
                                   onClick={() => setSelectedCheck(isSelected ? null : check.id)}
                                 >
-                              <TableCell className="font-mono text-sm">
+                              <TableCell className="w-8" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 accent-primary cursor-pointer"
+                                  checked={isBulk}
+                                  onChange={() => toggleBulk(check.id)}
+                                />
+                              </TableCell>
                                 <div className="flex items-center gap-1.5">
                                   #{check.check_number || "—"}
                                   {isShared && <SharedChecksBadge sourceTenantName={sourceTenantName} />}
