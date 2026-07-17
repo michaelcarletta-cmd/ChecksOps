@@ -81,6 +81,7 @@ export function SendCheckTrackingLinkButton({
           homeowner_name: name || null,
           rotate: false,
           origin: window.location.origin,
+          sender_override: senderOverride,
         },
       });
       if (error) throw new Error(error.message);
