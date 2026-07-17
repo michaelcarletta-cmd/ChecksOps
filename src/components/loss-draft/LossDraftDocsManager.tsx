@@ -482,6 +482,28 @@ export function LossDraftDocsManager({
                         <Send className="h-3 w-3 mr-1" /> Send for signature
                       </Button>
                     )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-[11px]"
+                      disabled={uploadingDocId === d.id}
+                      onClick={() => handleReplaceFile(d)}
+                    >
+                      {uploadingDocId === d.id ? (
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      ) : (
+                        <Upload className="h-3 w-3 mr-1" />
+                      )}
+                      Replace
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 text-[11px] text-destructive"
+                      onClick={() => handleRemoveFile(d)}
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" /> Remove file
+                    </Button>
                   </>
                 ) : (
                   <>
