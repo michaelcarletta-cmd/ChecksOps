@@ -315,6 +315,37 @@ export function LossDraftDocsManager({
     }
   };
 
+  const handleRemoveFile = async (doc: LossDraftDocRow) => {
+    if (!doc.file_path) return;
+    if (!confirm(`Remove the attached file from "${doc.document_label}"? The document row will stay so you can upload a new one.`)) return;
+    try {
+      const bucket = doc.is_template_generated ? "claim-files" : "loss-draft-documents";
+      await supabase.storage.from(bucket).remove([doc.file_path]);
+      const { error } = await supabase
+        .from("loss_draft_documents")
+        .update({
+          file_path: null,
+          file_name: null,
+          file_id: null,
+          is_submitted: false,
+          submitted_at: null,
+          is_template_generated: false,
+          signature_request_id: null,
+        })
+        .eq("id", doc.id);
+      if (error) throw error;
+      toast({ title: "Attachment removed" });
+      onChanged();
+    } catch (e: any) {
+      toast({ title: "Remove failed", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleReplaceFile = (doc: LossDraftDocRow) => {
+    setUploadingDocId(doc.id);
+    fileInputRef.current?.click();
+  };
+
   const handleToggle = async (doc: LossDraftDocRow) => {
     try {
       const { error } = await supabase
