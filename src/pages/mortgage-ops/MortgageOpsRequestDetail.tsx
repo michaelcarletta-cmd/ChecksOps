@@ -132,12 +132,16 @@ interface CheckFileRow {
 interface LossDraftDoc {
   id: string;
   document_type: string;
-  document_label: string | null;
+  document_label: string;
   is_required: boolean;
   is_submitted: boolean;
   submitted_at: string | null;
   file_id: string | null;
   notes: string | null;
+  file_path: string | null;
+  file_name: string | null;
+  signature_request_id: string | null;
+  is_template_generated: boolean | null;
 }
 
 interface MessageRow {
