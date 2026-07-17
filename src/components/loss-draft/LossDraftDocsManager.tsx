@@ -245,11 +245,14 @@ export function LossDraftDocsManager({
           .eq("id", docId);
       }
 
-      toast({ title: "Template generated", description: "Place signature fields, then send to the homeowner." });
+      toast({ title: "Template generated", description: docId ? "Place signature fields, then send to the homeowner." : "Downloading…" });
       setTemplateOpen(null);
       onChanged();
 
-      if (onSendForSignature && data.signed_url && docId) {
+      if (!docId && data.signed_url) {
+        // Blank/download-only flow — just open the PDF
+        window.open(data.signed_url, "_blank");
+      } else if (onSendForSignature && data.signed_url && docId) {
         onSendForSignature({
           docId,
           path: data.path,
