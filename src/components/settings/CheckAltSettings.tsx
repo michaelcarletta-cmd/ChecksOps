@@ -46,6 +46,8 @@ export function CheckAltSettings() {
     business_unit: "",
     depositor_account_id: "",
     default_enabled: false,
+    auto_approve_enabled: false,
+    auto_approve_max_dollars: "",
     notes: "",
   });
 
@@ -58,6 +60,11 @@ export function CheckAltSettings() {
         business_unit: cfg.business_unit ?? "",
         depositor_account_id: cfg.depositor_account_id ?? "",
         default_enabled: !!cfg.default_enabled,
+        auto_approve_enabled: !!(cfg as any).auto_approve_enabled,
+        auto_approve_max_dollars:
+          (cfg as any).auto_approve_max_cents != null
+            ? String(((cfg as any).auto_approve_max_cents as number) / 100)
+            : "",
         notes: cfg.notes ?? "",
       });
     }
@@ -65,6 +72,8 @@ export function CheckAltSettings() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const maxDollars = form.auto_approve_max_dollars.trim();
+      const maxCents = maxDollars ? Math.round(parseFloat(maxDollars) * 100) : null;
       const { error } = await supabase
         .from("checkalt_config")
         .update({
@@ -74,8 +83,10 @@ export function CheckAltSettings() {
           business_unit: form.business_unit.trim() || null,
           depositor_account_id: form.depositor_account_id.trim() || null,
           default_enabled: form.default_enabled,
+          auto_approve_enabled: form.auto_approve_enabled,
+          auto_approve_max_cents: Number.isFinite(maxCents as number) ? maxCents : null,
           notes: form.notes.trim() || null,
-        })
+        } as any)
         .eq("singleton", true);
       if (error) throw error;
     },
