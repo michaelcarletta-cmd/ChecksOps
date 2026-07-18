@@ -46,6 +46,8 @@ export function CheckAltSettings() {
     business_unit: "",
     depositor_account_id: "",
     default_enabled: false,
+    auto_approve_enabled: false,
+    auto_approve_max_dollars: "",
     notes: "",
   });
 
@@ -58,6 +60,11 @@ export function CheckAltSettings() {
         business_unit: cfg.business_unit ?? "",
         depositor_account_id: cfg.depositor_account_id ?? "",
         default_enabled: !!cfg.default_enabled,
+        auto_approve_enabled: !!(cfg as any).auto_approve_enabled,
+        auto_approve_max_dollars:
+          (cfg as any).auto_approve_max_cents != null
+            ? String(((cfg as any).auto_approve_max_cents as number) / 100)
+            : "",
         notes: cfg.notes ?? "",
       });
     }
@@ -65,6 +72,8 @@ export function CheckAltSettings() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const maxDollars = form.auto_approve_max_dollars.trim();
+      const maxCents = maxDollars ? Math.round(parseFloat(maxDollars) * 100) : null;
       const { error } = await supabase
         .from("checkalt_config")
         .update({
@@ -74,8 +83,10 @@ export function CheckAltSettings() {
           business_unit: form.business_unit.trim() || null,
           depositor_account_id: form.depositor_account_id.trim() || null,
           default_enabled: form.default_enabled,
+          auto_approve_enabled: form.auto_approve_enabled,
+          auto_approve_max_cents: Number.isFinite(maxCents as number) ? maxCents : null,
           notes: form.notes.trim() || null,
-        })
+        } as any)
         .eq("singleton", true);
       if (error) throw error;
     },
@@ -354,6 +365,49 @@ export function CheckAltSettings() {
               </p>
             </div>
           </div>
+
+          <div className="space-y-3 rounded-md border border-border/60 bg-muted/30 p-3">
+            <div className="flex items-start gap-3">
+              <Switch
+                id="auto_approve_enabled"
+                checked={form.auto_approve_enabled}
+                onCheckedChange={(v) => setForm({ ...form, auto_approve_enabled: v })}
+                disabled={!form.default_enabled}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="auto_approve_enabled" className="cursor-pointer">
+                  Auto-approve clean deposits
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  When on, deposits CheckAlt parks in pending approval are approved
+                  automatically. Any deposit CheckAlt flags (duplicate MICR, amount
+                  mismatch, poor image quality, risk warning, exception, hold) is
+                  always skipped and left for manual review.
+                </p>
+              </div>
+            </div>
+
+            {form.auto_approve_enabled && (
+              <div className="space-y-1.5 pl-11">
+                <Label htmlFor="auto_approve_max_dollars">Auto-approve ceiling (USD, optional)</Label>
+                <Input
+                  id="auto_approve_max_dollars"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="e.g. 10000 — leave blank for no limit"
+                  value={form.auto_approve_max_dollars}
+                  onChange={(e) =>
+                    setForm({ ...form, auto_approve_max_dollars: e.target.value })
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Deposits over this amount still require a human to approve.
+                </p>
+              </div>
+            )}
+          </div>
+
 
           <div className="space-y-1.5">
             <Label htmlFor="notes">Internal notes</Label>
