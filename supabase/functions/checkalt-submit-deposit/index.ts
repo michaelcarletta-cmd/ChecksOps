@@ -183,7 +183,7 @@ Deno.serve(async (req) => {
     // --- look up tenant-specific CheckAlt account ---
     const { data: tenantAccount, error: taErr } = await supabase
       .from("checkalt_tenant_accounts")
-      .select("sso_user_id, deposit_account_number, last_register_payload")
+      .select("sso_user_id, deposit_account_number, last_register_payload, auto_approve_enabled, auto_approve_max_cents")
       .eq("tenant_id", check.tenant_id)
       .maybeSingle();
     if (taErr) throw taErr;
@@ -193,6 +193,7 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
+
 
     // --- create pending deposit row immediately (audit anchor) ---
     const { data: depositRow, error: depErr } = await supabase
@@ -332,9 +333,13 @@ Deno.serve(async (req) => {
         // of a human. Also honor an optional amount ceiling.
         let autoApprovePayload: any = null;
         let autoApproveSkipReason: string | null = null;
-        if (isPendingApproval && reference && (cfg as any).auto_approve_enabled) {
+        // Per-tenant settings take precedence over the global checkalt_config defaults.
+        const autoApproveEnabled = tenantAccount.auto_approve_enabled ?? (cfg as any).auto_approve_enabled ?? false;
+        const tenantMaxCents = tenantAccount.auto_approve_max_cents;
+        if (isPendingApproval && reference && autoApproveEnabled) {
           const amountCents = Math.round(Number(check.amount) * 100);
-          const maxCents = (cfg as any).auto_approve_max_cents as number | null;
+          const maxCents = (tenantMaxCents ?? (cfg as any).auto_approve_max_cents) as number | null;
+
 
           const flagText = (
             String(submitJson?.statusDescription ?? "") + " " +

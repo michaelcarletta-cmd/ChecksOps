@@ -7,6 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { BarChart3, Receipt, Landmark, ArrowDownCircle, CheckCircle2 } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
+import { TenantAutoApproveCard } from "./TenantAutoApproveCard";
+
 
 export function TenantUsageTracker() {
   const { tenant } = useTenant();
@@ -95,7 +97,10 @@ export function TenantUsageTracker() {
         </Card>
       </div>
 
+      <TenantAutoApproveCard />
+
       <Card>
+
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <ArrowDownCircle className="h-4 w-4 text-primary" />
