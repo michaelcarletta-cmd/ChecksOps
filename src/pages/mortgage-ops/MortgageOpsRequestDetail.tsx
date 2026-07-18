@@ -389,6 +389,51 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     void load();
   };
 
+  const sendInvoice = async (previewOnly: boolean) => {
+    if (!req) return;
+    const services = Math.round(parseFloat(invoiceServices || "0") * 100);
+    const shipping = invoiceShipping ? Math.round(parseFloat(invoiceShipping) * 100) : 0;
+    if (!services && !shipping) {
+      toast.error("Enter at least one charge");
+      return;
+    }
+    if (!previewOnly && !invoiceRecipient.trim()) {
+      toast.error("Recipient email required");
+      return;
+    }
+    setInvoiceBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-mortgage-ops-invoice", {
+        body: {
+          request_id: req.id,
+          services_cents: services,
+          shipping_cents: shipping,
+          shipping_description: invoiceShippingDesc,
+          recipient_email: invoiceRecipient.trim(),
+          recipient_name: tenant?.name || undefined,
+          notes: invoiceNotes.trim() || undefined,
+          preview_only: previewOnly,
+        },
+      });
+      if (error) throw error;
+      if (data?.invoice_url) {
+        window.open(data.invoice_url, "_blank");
+      }
+      if (previewOnly) {
+        toast.success("Invoice preview opened");
+      } else if (data?.email_sent) {
+        toast.success(`Invoice sent to ${invoiceRecipient}`);
+        void load();
+      } else {
+        toast.error(`Invoice generated but email failed: ${data?.email_error || "unknown"}`);
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to send invoice");
+    } finally {
+      setInvoiceBusy(false);
+    }
+  };
+
   const uploadDoc = async (file: File) => {
     if (!check?.id || !user?.id) return;
     setUploading(true);
