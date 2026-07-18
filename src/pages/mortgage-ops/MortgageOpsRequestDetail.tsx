@@ -242,6 +242,13 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         .maybeSingle();
       if (rErr || !r) throw rErr || new Error("not found");
       setReq(r as RequestRow);
+      // Hydrate invoice draft from stored values (or defaults)
+      const rr = r as any;
+      setInvoiceServices(((rr.invoice_services_cents ?? 1000) / 100).toFixed(2));
+      setInvoiceShipping(rr.invoice_shipping_cents ? (rr.invoice_shipping_cents / 100).toFixed(2) : "");
+      setInvoiceShippingDesc(rr.invoice_shipping_description || "2-Day shipping label");
+      setInvoiceRecipient(rr.invoice_recipient_email || "");
+      setInvoiceNotes(rr.invoice_notes || "");
 
       const tenantP = supabase.from("tenants").select("id,name").eq("id", r.tenant_id).maybeSingle();
       const checkP = r.check_intake_item_id
