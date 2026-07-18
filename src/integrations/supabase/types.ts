@@ -15730,6 +15730,14 @@ export type Database = {
           homeowner_ssn_last_four: string | null
           id: string
           insurance_company: string | null
+          invoice_notes: string | null
+          invoice_number: string | null
+          invoice_recipient_email: string | null
+          invoice_sent_at: string | null
+          invoice_services_cents: number | null
+          invoice_shipping_cents: number | null
+          invoice_shipping_description: string | null
+          invoice_url: string | null
           loan_number: string | null
           loss_type: string | null
           mortgage_company: string | null
@@ -15770,6 +15778,14 @@ export type Database = {
           homeowner_ssn_last_four?: string | null
           id?: string
           insurance_company?: string | null
+          invoice_notes?: string | null
+          invoice_number?: string | null
+          invoice_recipient_email?: string | null
+          invoice_sent_at?: string | null
+          invoice_services_cents?: number | null
+          invoice_shipping_cents?: number | null
+          invoice_shipping_description?: string | null
+          invoice_url?: string | null
           loan_number?: string | null
           loss_type?: string | null
           mortgage_company?: string | null
@@ -15810,6 +15826,14 @@ export type Database = {
           homeowner_ssn_last_four?: string | null
           id?: string
           insurance_company?: string | null
+          invoice_notes?: string | null
+          invoice_number?: string | null
+          invoice_recipient_email?: string | null
+          invoice_sent_at?: string | null
+          invoice_services_cents?: number | null
+          invoice_shipping_cents?: number | null
+          invoice_shipping_description?: string | null
+          invoice_url?: string | null
           loan_number?: string | null
           loss_type?: string | null
           mortgage_company?: string | null
@@ -20777,6 +20801,14 @@ export type Database = {
           homeowner_ssn_last_four: string | null
           id: string
           insurance_company: string | null
+          invoice_notes: string | null
+          invoice_number: string | null
+          invoice_recipient_email: string | null
+          invoice_sent_at: string | null
+          invoice_services_cents: number | null
+          invoice_shipping_cents: number | null
+          invoice_shipping_description: string | null
+          invoice_url: string | null
           loan_number: string | null
           loss_type: string | null
           mortgage_company: string | null
@@ -22630,6 +22662,14 @@ export type Database = {
           homeowner_ssn_last_four: string | null
           id: string
           insurance_company: string | null
+          invoice_notes: string | null
+          invoice_number: string | null
+          invoice_recipient_email: string | null
+          invoice_sent_at: string | null
+          invoice_services_cents: number | null
+          invoice_shipping_cents: number | null
+          invoice_shipping_description: string | null
+          invoice_url: string | null
           loan_number: string | null
           loss_type: string | null
           mortgage_company: string | null

@@ -90,6 +90,14 @@ interface RequestRow {
   predecessor_request_id?: string | null;
   check_sent_date?: string | null;
   check_received_back_date?: string | null;
+  invoice_url?: string | null;
+  invoice_sent_at?: string | null;
+  invoice_recipient_email?: string | null;
+  invoice_services_cents?: number | null;
+  invoice_shipping_cents?: number | null;
+  invoice_shipping_description?: string | null;
+  invoice_notes?: string | null;
+  invoice_number?: string | null;
 }
 
 interface SiblingRequestRow {
@@ -201,6 +209,14 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const [updateNote, setUpdateNote] = useState("");
   const [postingUpdate, setPostingUpdate] = useState(false);
 
+  // Invoice draft state — auto-populated when request is completed.
+  const [invoiceServices, setInvoiceServices] = useState<string>("10.00");
+  const [invoiceShipping, setInvoiceShipping] = useState<string>("");
+  const [invoiceShippingDesc, setInvoiceShippingDesc] = useState<string>("2-Day shipping label");
+  const [invoiceRecipient, setInvoiceRecipient] = useState<string>("");
+  const [invoiceNotes, setInvoiceNotes] = useState<string>("");
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
+
   // Field-placement flow (mirrors Freedom CRM's SignatureRequests dialog).
   // When a signature PDF is uploaded, we hold it here and show the placer
   // dialog before actually dispatching the e-sign request.
@@ -226,6 +242,13 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         .maybeSingle();
       if (rErr || !r) throw rErr || new Error("not found");
       setReq(r as RequestRow);
+      // Hydrate invoice draft from stored values (or defaults)
+      const rr = r as any;
+      setInvoiceServices(((rr.invoice_services_cents ?? 1000) / 100).toFixed(2));
+      setInvoiceShipping(rr.invoice_shipping_cents ? (rr.invoice_shipping_cents / 100).toFixed(2) : "");
+      setInvoiceShippingDesc(rr.invoice_shipping_description || "2-Day shipping label");
+      setInvoiceRecipient(rr.invoice_recipient_email || "");
+      setInvoiceNotes(rr.invoice_notes || "");
 
       const tenantP = supabase.from("tenants").select("id,name").eq("id", r.tenant_id).maybeSingle();
       const checkP = r.check_intake_item_id
@@ -364,6 +387,51 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     setDraft("");
     toast.success("Update sent to tenant");
     void load();
+  };
+
+  const sendInvoice = async (previewOnly: boolean) => {
+    if (!req) return;
+    const services = Math.round(parseFloat(invoiceServices || "0") * 100);
+    const shipping = invoiceShipping ? Math.round(parseFloat(invoiceShipping) * 100) : 0;
+    if (!services && !shipping) {
+      toast.error("Enter at least one charge");
+      return;
+    }
+    if (!previewOnly && !invoiceRecipient.trim()) {
+      toast.error("Recipient email required");
+      return;
+    }
+    setInvoiceBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-mortgage-ops-invoice", {
+        body: {
+          request_id: req.id,
+          services_cents: services,
+          shipping_cents: shipping,
+          shipping_description: invoiceShippingDesc,
+          recipient_email: invoiceRecipient.trim(),
+          recipient_name: tenant?.name || undefined,
+          notes: invoiceNotes.trim() || undefined,
+          preview_only: previewOnly,
+        },
+      });
+      if (error) throw error;
+      if (data?.invoice_url) {
+        window.open(data.invoice_url, "_blank");
+      }
+      if (previewOnly) {
+        toast.success("Invoice preview opened");
+      } else if (data?.email_sent) {
+        toast.success(`Invoice sent to ${invoiceRecipient}`);
+        void load();
+      } else {
+        toast.error(`Invoice generated but email failed: ${data?.email_error || "unknown"}`);
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to send invoice");
+    } finally {
+      setInvoiceBusy(false);
+    }
   };
 
   const uploadDoc = async (file: File) => {
@@ -1064,6 +1132,123 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                 </CardContent>
               </Card>
             )}
+
+            {/* Invoice draft — auto-populated when task is completed. */}
+            <Card>
+              <CardContent className="pt-4 space-y-3">
+                <div className="font-semibold text-sm flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" /> Invoice to contractor
+                  {req.invoice_sent_at && (
+                    <Badge variant="default" className="text-[10px]">
+                      Sent {formatDistanceToNow(new Date(req.invoice_sent_at), { addSuffix: true })}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  ChecksOps-branded invoice for mortgage handling. Defaults to $10 for services;
+                  add the 2-day shipping label cost you actually paid.
+                </p>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Services</label>
+                    <div className="flex items-center gap-1">
+                      <span className="text-sm text-muted-foreground">$</span>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={invoiceServices}
+                        onChange={(e) => setInvoiceServices(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Shipping label</label>
+                    <div className="flex items-center gap-1">
+                      <span className="text-sm text-muted-foreground">$</span>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                        value={invoiceShipping}
+                        onChange={(e) => setInvoiceShipping(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Shipping description</label>
+                  <Input
+                    value={invoiceShippingDesc}
+                    onChange={(e) => setInvoiceShippingDesc(e.target.value)}
+                    className="h-8 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Send to (contractor email)</label>
+                  <Input
+                    type="email"
+                    placeholder="billing@contractor.com"
+                    value={invoiceRecipient}
+                    onChange={(e) => setInvoiceRecipient(e.target.value)}
+                    className="h-8 text-sm"
+                  />
+                  {tenant?.name && (
+                    <p className="text-[10px] text-muted-foreground mt-1">Billing tenant: {tenant.name}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Notes (optional)</label>
+                  <Textarea
+                    rows={2}
+                    placeholder="Anything to add to the invoice…"
+                    value={invoiceNotes}
+                    onChange={(e) => setInvoiceNotes(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Total:</span>{" "}
+                    <strong>
+                      $
+                      {(
+                        (parseFloat(invoiceServices || "0") || 0) +
+                        (parseFloat(invoiceShipping || "0") || 0)
+                      ).toFixed(2)}
+                    </strong>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" disabled={invoiceBusy} onClick={() => sendInvoice(true)}>
+                      {invoiceBusy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <FileText className="h-4 w-4 mr-1" />}
+                      Preview
+                    </Button>
+                    <Button size="sm" disabled={invoiceBusy || !invoiceRecipient.trim()} onClick={() => sendInvoice(false)}>
+                      {invoiceBusy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
+                      {req.invoice_sent_at ? "Resend invoice" : "Send invoice"}
+                    </Button>
+                  </div>
+                </div>
+
+                {req.invoice_url && (
+                  <a
+                    href={req.invoice_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                  >
+                    <Download className="h-3 w-3" /> View last saved invoice ({req.invoice_number})
+                  </a>
+                )}
+              </CardContent>
+            </Card>
 
             <Separator />
             <div className="text-[11px] text-muted-foreground">
