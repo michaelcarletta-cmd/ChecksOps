@@ -2935,6 +2935,8 @@ export type Database = {
       }
       checkalt_tenant_accounts: {
         Row: {
+          auto_approve_enabled: boolean
+          auto_approve_max_cents: number | null
           created_at: string
           deposit_account_number: string
           email: string
@@ -2949,6 +2951,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          auto_approve_enabled?: boolean
+          auto_approve_max_cents?: number | null
           created_at?: string
           deposit_account_number: string
           email: string
@@ -2963,6 +2967,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          auto_approve_enabled?: boolean
+          auto_approve_max_cents?: number | null
           created_at?: string
           deposit_account_number?: string
           email?: string
