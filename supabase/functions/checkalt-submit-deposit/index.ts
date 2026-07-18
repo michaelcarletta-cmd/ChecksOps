@@ -183,7 +183,7 @@ Deno.serve(async (req) => {
     // --- look up tenant-specific CheckAlt account ---
     const { data: tenantAccount, error: taErr } = await supabase
       .from("checkalt_tenant_accounts")
-      .select("sso_user_id, deposit_account_number, last_register_payload")
+      .select("sso_user_id, deposit_account_number, last_register_payload, auto_approve_enabled, auto_approve_max_cents")
       .eq("tenant_id", check.tenant_id)
       .maybeSingle();
     if (taErr) throw taErr;
@@ -193,6 +193,7 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
+
 
     // --- create pending deposit row immediately (audit anchor) ---
     const { data: depositRow, error: depErr } = await supabase
