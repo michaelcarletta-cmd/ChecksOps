@@ -63,7 +63,9 @@ export function DisbursementConsole({
 
   const [allocations, setAllocations] = useState<Record<string, string>>({});
   const [usePercent, setUsePercent] = useState(false);
-  const [deliverySpeed, setDeliverySpeed] = useState<"same_day" | "instant">("same_day");
+  const [deliverySpeed, setDeliverySpeed] = useState<"next_day" | "same_day" | "instant">("next_day");
+  const SPEED_FEES: Record<string, number> = { next_day: 0.95, same_day: 1.15, instant: 1.65 };
+  const SPEED_LABELS: Record<string, string> = { next_day: "Next Day", same_day: "Same Day", instant: "Instant" };
   const [adminOverride, setAdminOverride] = useState(false);
   const { isAdmin } = usePermissions();
 
@@ -397,38 +399,25 @@ export function DisbursementConsole({
           <RadioGroup 
             value={deliverySpeed} 
             onValueChange={(v) => setDeliverySpeed(v as any)}
-            className="grid grid-cols-2 gap-3"
+            className="grid grid-cols-3 gap-2"
           >
-            <div>
-              <RadioGroupItem
-                value="same_day"
-                id="same_day"
-                className="peer sr-only"
-              />
-              <Label
-                htmlFor="same_day"
-                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
-              >
-                <Clock className="mb-2 h-5 w-5" />
-                <span className="text-[11px] font-semibold">Same Day</span>
-                <span className="text-[10px] text-muted-foreground">$1.00 fee</span>
-              </Label>
-            </div>
-            <div>
-              <RadioGroupItem
-                value="instant"
-                id="instant"
-                className="peer sr-only"
-              />
-              <Label
-                htmlFor="instant"
-                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
-              >
-                <Zap className="mb-2 h-5 w-5 text-amber-500" />
-                <span className="text-[11px] font-semibold">Instant</span>
-                <span className="text-[10px] text-muted-foreground">$1.50 fee</span>
-              </Label>
-            </div>
+            {([
+              { value: "next_day", label: "Next Day", fee: 0.95, Icon: Clock, iconClass: "" },
+              { value: "same_day", label: "Same Day", fee: 1.15, Icon: Clock, iconClass: "text-blue-500" },
+              { value: "instant", label: "Instant", fee: 1.65, Icon: Zap, iconClass: "text-amber-500" },
+            ] as const).map(({ value, label, fee, Icon, iconClass }) => (
+              <div key={value}>
+                <RadioGroupItem value={value} id={value} className="peer sr-only" />
+                <Label
+                  htmlFor={value}
+                  className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-2 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                >
+                  <Icon className={`mb-1 h-4 w-4 ${iconClass}`} />
+                  <span className="text-[11px] font-semibold">{label}</span>
+                  <span className="text-[10px] text-muted-foreground">${fee.toFixed(2)}</span>
+                </Label>
+              </div>
+            ))}
           </RadioGroup>
         </div>
 
@@ -580,14 +569,21 @@ export function DisbursementConsole({
             <><Clock className="h-4 w-4 mr-2" />Funds available in ~{hoursRemaining}h</>
           ) : hasUnverifiedAllocations && !adminOverride ? (
             <><ShieldAlert className="h-4 w-4 mr-2" />Verify accounts to send</>
-          ) : (
-            <><Send className="h-4 w-4 mr-2" />{isBalanced ? "Send all disbursements" : `Send $${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })} (partial)`}{adminOverride && hasUnverifiedAllocations ? " (override)" : ""}</>
-          )}
+          ) : (() => {
+              const recipientCount = Object.values(allocations).filter(v => parseFloat(v || "0") > 0).length;
+              const fee = SPEED_FEES[deliverySpeed];
+              const speedLabel = SPEED_LABELS[deliverySpeed];
+              const amountText = `$${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+              const recipText = recipientCount > 0 ? ` to ${recipientCount} recipient${recipientCount === 1 ? "" : "s"}` : "";
+              return (
+                <><Send className="h-4 w-4 mr-2" />Send {amountText}{recipText} — {speedLabel} (${fee.toFixed(2)}/ea){adminOverride && hasUnverifiedAllocations ? " · override" : ""}</>
+              );
+            })()}
         </Button>
 
 
         <p className="text-xs text-center text-muted-foreground">
-          Credits arrive same-day or next banking day via Actum ACH
+          One click sends every allocated stakeholder in a single {SPEED_LABELS[deliverySpeed]} ACH batch via Actum.
         </p>
       </CardContent>
     </Card>
