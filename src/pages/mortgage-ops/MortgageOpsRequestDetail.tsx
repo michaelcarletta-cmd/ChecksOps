@@ -90,6 +90,14 @@ interface RequestRow {
   predecessor_request_id?: string | null;
   check_sent_date?: string | null;
   check_received_back_date?: string | null;
+  invoice_url?: string | null;
+  invoice_sent_at?: string | null;
+  invoice_recipient_email?: string | null;
+  invoice_services_cents?: number | null;
+  invoice_shipping_cents?: number | null;
+  invoice_shipping_description?: string | null;
+  invoice_notes?: string | null;
+  invoice_number?: string | null;
 }
 
 interface SiblingRequestRow {
