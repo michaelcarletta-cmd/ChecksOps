@@ -7,6 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { BarChart3, Receipt, Landmark, ArrowDownCircle, CheckCircle2 } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
+import { TenantAutoApproveCard } from "./TenantAutoApproveCard";
+
 
 export function TenantUsageTracker() {
   const { tenant } = useTenant();
