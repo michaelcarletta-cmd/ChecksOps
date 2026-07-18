@@ -97,7 +97,10 @@ export function TenantUsageTracker() {
         </Card>
       </div>
 
+      <TenantAutoApproveCard />
+
       <Card>
+
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <ArrowDownCircle className="h-4 w-4 text-primary" />
