@@ -2795,6 +2795,8 @@ export type Database = {
       }
       checkalt_config: {
         Row: {
+          auto_approve_enabled: boolean
+          auto_approve_max_cents: number | null
           base_url: string | null
           business_unit: string | null
           cached_jwt: string | null
@@ -2812,6 +2814,8 @@ export type Database = {
           webhook_secret: string | null
         }
         Insert: {
+          auto_approve_enabled?: boolean
+          auto_approve_max_cents?: number | null
           base_url?: string | null
           business_unit?: string | null
           cached_jwt?: string | null
@@ -2829,6 +2833,8 @@ export type Database = {
           webhook_secret?: string | null
         }
         Update: {
+          auto_approve_enabled?: boolean
+          auto_approve_max_cents?: number | null
           base_url?: string | null
           business_unit?: string | null
           cached_jwt?: string | null
