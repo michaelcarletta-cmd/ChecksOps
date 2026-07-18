@@ -322,9 +322,62 @@ Deno.serve(async (req) => {
         // the manager approves it; the 48-hour release hold starts only after
         // that approval succeeds.
         const apiStatus = Number(submitJson?.status ?? submitJson?.statusCode);
-        const isPendingApproval = apiStatus === 40;
-        const internalStatus = isPendingApproval ? "pending_approval" : "submitted";
-        const statusIso = new Date().toISOString();
+        let isPendingApproval = apiStatus === 40;
+        let internalStatus = isPendingApproval ? "pending_approval" : "submitted";
+        let statusIso = new Date().toISOString();
+
+        // --- Auto-approve pending_approval deposits if configured and clean ---
+        // Skip auto-approve when CheckAlt returned any flags/exceptions or a
+        // risk-related status description — those should always land in front
+        // of a human. Also honor an optional amount ceiling.
+        let autoApprovePayload: any = null;
+        let autoApproveSkipReason: string | null = null;
+        if (isPendingApproval && reference && (cfg as any).auto_approve_enabled) {
+          const amountCents = Math.round(Number(check.amount) * 100);
+          const maxCents = (cfg as any).auto_approve_max_cents as number | null;
+
+          const flagText = (
+            String(submitJson?.statusDescription ?? "") + " " +
+            JSON.stringify(submitJson?.warnings ?? "") + " " +
+            JSON.stringify(submitJson?.exceptions ?? "")
+          ).toLowerCase();
+          const hasFlags =
+            (Array.isArray(submitJson?.exceptions) && submitJson.exceptions.length > 0) ||
+            (Array.isArray(submitJson?.warnings) && submitJson.warnings.length > 0) ||
+            (Array.isArray(submitJson?.riskFactors) && submitJson.riskFactors.length > 0) ||
+            /duplicate|fraud|risk|exception|warning|hold|suspect|mismatch|unreadable/.test(flagText);
+
+          if (hasFlags) {
+            autoApproveSkipReason = "flagged_by_checkalt";
+          } else if (maxCents != null && amountCents > maxCents) {
+            autoApproveSkipReason = "over_max_amount";
+          } else {
+            try {
+              const approveResp = await checkAltFetch(supabase, "/fincapture/deposit/approve", {
+                method: "POST",
+                body: JSON.stringify({
+                  fiKey: cfg.fi_key,
+                  referenceNumber: Number(reference),
+                  action: 1,
+                }),
+              });
+              const approveJson = await approveResp.json().catch(() => ({}));
+              if (approveResp.ok && approveJson?.success === true) {
+                autoApprovePayload = approveJson;
+                isPendingApproval = false;
+                internalStatus = "submitted";
+                statusIso = new Date().toISOString();
+                console.log("[checkalt-submit-deposit] auto-approved", reference);
+              } else {
+                autoApproveSkipReason = `auto_approve_failed:${approveJson?.statusDescription ?? approveResp.status}`;
+                console.warn("[checkalt-submit-deposit] auto-approve failed", approveResp.status, approveJson);
+              }
+            } catch (approveErr) {
+              autoApproveSkipReason = `auto_approve_error:${(approveErr as Error).message}`;
+              console.error("[checkalt-submit-deposit] auto-approve error", approveErr);
+            }
+          }
+        }
 
         await supabase
           .from("checkalt_deposits")
@@ -332,7 +385,15 @@ Deno.serve(async (req) => {
             checkalt_reference: reference ?? null,
             status: internalStatus,
             submitted_at: statusIso,
-            last_status_payload: submitJson,
+            last_status_payload: {
+              ...submitJson,
+              _auto_approve: autoApprovePayload
+                ? { approved: true, response: autoApprovePayload }
+                : autoApproveSkipReason
+                  ? { approved: false, skip_reason: autoApproveSkipReason }
+                  : undefined,
+            },
+            approved_at: autoApprovePayload ? statusIso : null,
           })
           .eq("id", depositRow.id);
 
