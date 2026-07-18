@@ -209,6 +209,14 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const [updateNote, setUpdateNote] = useState("");
   const [postingUpdate, setPostingUpdate] = useState(false);
 
+  // Invoice draft state — auto-populated when request is completed.
+  const [invoiceServices, setInvoiceServices] = useState<string>("10.00");
+  const [invoiceShipping, setInvoiceShipping] = useState<string>("");
+  const [invoiceShippingDesc, setInvoiceShippingDesc] = useState<string>("2-Day shipping label");
+  const [invoiceRecipient, setInvoiceRecipient] = useState<string>("");
+  const [invoiceNotes, setInvoiceNotes] = useState<string>("");
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
+
   // Field-placement flow (mirrors Freedom CRM's SignatureRequests dialog).
   // When a signature PDF is uploaded, we hold it here and show the placer
   // dialog before actually dispatching the e-sign request.
