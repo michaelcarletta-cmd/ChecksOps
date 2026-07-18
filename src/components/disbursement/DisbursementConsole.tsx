@@ -569,14 +569,21 @@ export function DisbursementConsole({
             <><Clock className="h-4 w-4 mr-2" />Funds available in ~{hoursRemaining}h</>
           ) : hasUnverifiedAllocations && !adminOverride ? (
             <><ShieldAlert className="h-4 w-4 mr-2" />Verify accounts to send</>
-          ) : (
-            <><Send className="h-4 w-4 mr-2" />{isBalanced ? "Send all disbursements" : `Send $${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })} (partial)`}{adminOverride && hasUnverifiedAllocations ? " (override)" : ""}</>
-          )}
+          ) : (() => {
+              const recipientCount = Object.values(allocations).filter(v => parseFloat(v || "0") > 0).length;
+              const fee = SPEED_FEES[deliverySpeed];
+              const speedLabel = SPEED_LABELS[deliverySpeed];
+              const amountText = `$${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+              const recipText = recipientCount > 0 ? ` to ${recipientCount} recipient${recipientCount === 1 ? "" : "s"}` : "";
+              return (
+                <><Send className="h-4 w-4 mr-2" />Send {amountText}{recipText} — {speedLabel} (${fee.toFixed(2)}/ea){adminOverride && hasUnverifiedAllocations ? " · override" : ""}</>
+              );
+            })()}
         </Button>
 
 
         <p className="text-xs text-center text-muted-foreground">
-          Credits arrive same-day or next banking day via Actum ACH
+          One click sends every allocated stakeholder in a single {SPEED_LABELS[deliverySpeed]} ACH batch via Actum.
         </p>
       </CardContent>
     </Card>
