@@ -576,7 +576,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <header className="border-b border-border bg-background">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
           <img
-            src={homeownerOpsLogo.url}
+            src={homeownerOpsLogo}
             alt="Homeowner Ops"
             className="h-12 sm:h-16 w-auto object-contain"
           />
