@@ -157,6 +157,7 @@ Deno.serve(async (req) => {
         const byCheck = new Map<string, any>()
         for (const e of (endorsements ?? []) as any[]) {
           if (isDone(e)) continue
+          if (!isSent(e)) continue
           const meta = checkMeta.get(e.check_id)
           if (!byCheck.has(e.check_id)) {
             byCheck.set(e.check_id, {
