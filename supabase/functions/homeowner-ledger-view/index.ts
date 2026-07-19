@@ -49,6 +49,7 @@ Deno.serve(async (req) => {
     let totals = { received: 0, deposited: 0, released: 0, remaining: 0 }
     let pending_upload_count = 0
     let pending_signatures: any[] = []
+    let pending_endorsements: any[] = []
 
     if (tok.claim_id) {
       const { data: c, error: claimErr } = await supabase
