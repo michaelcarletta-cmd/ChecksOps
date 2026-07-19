@@ -9,6 +9,7 @@ import {
   Trash2,
   Loader2,
   FileSignature,
+  Send,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -122,6 +123,34 @@ export function CheckFilesSection({ checkIntakeItemId }: CheckFilesSectionProps)
     onError: (err: Error) =>
       toast({
         title: "Could not delete",
+        description: err.message,
+        variant: "destructive",
+      }),
+  });
+
+  const sendToHomeownerMutation = useMutation({
+    mutationFn: async (file: CheckFile) => {
+      const { data, error } = await supabase.functions.invoke(
+        "send-file-to-homeowner",
+        { body: { check_file_id: file.id } },
+      );
+      if (error) {
+        const details = (error as any).context
+          ? await (error as any).context.text().catch(() => "")
+          : (error as Error).message;
+        throw new Error(details || (error as Error).message);
+      }
+      return data;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Sent to homeowner",
+        description: "Timeline updated and email sent from notify@checksops.com.",
+      });
+    },
+    onError: (err: Error) =>
+      toast({
+        title: "Could not send",
         description: err.message,
         variant: "destructive",
       }),
