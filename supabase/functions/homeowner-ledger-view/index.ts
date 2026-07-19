@@ -158,7 +158,7 @@ Deno.serve(async (req) => {
           }
         })
       }
-      ;(globalThis as any).__he = homeownerEndorsements
+      }
     } else {
       // Pre-claim: show pending uploads for this token
       const { count } = await supabase
