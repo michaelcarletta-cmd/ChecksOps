@@ -62,7 +62,7 @@ export default function MortgageOpsLogin() {
   return (
     <div className="min-h-screen flex flex-col items-center bg-background p-4 pt-10 sm:pt-16">
       <img
-        src={mortgageOpsLogo.url}
+        src={mortgageOpsLogo}
         alt="Mortgage Ops"
         className="mb-8 h-24 sm:h-32 w-auto object-contain select-none"
         draggable={false}
