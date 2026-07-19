@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
+import homeownerOpsLogo from "@/assets/homeowner-ops-logo.png.asset.json";
 
 type LedgerEvent = {
   id: string;
