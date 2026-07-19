@@ -389,7 +389,7 @@ function TotalTile({ label, value, tone, highlight }: { label: string; value: nu
   );
 }
 
-function UploadPanel({ token, onDone, preClaim }: { token: string; onDone: () => void; preClaim?: boolean }) {
+function UploadPanel({ token, onDone, preClaim, hideHeader }: { token: string; onDone: () => void; preClaim?: boolean; hideHeader?: boolean }) {
   const [front, setFront] = useState<File | null>(null);
   const [back, setBack] = useState<File | null>(null);
   const [amount, setAmount] = useState("");
