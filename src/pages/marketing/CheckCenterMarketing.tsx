@@ -290,7 +290,7 @@ export default function CheckCenterMarketing() {
       {/* Top Nav */}
       <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-4 md:px-6 h-14 flex items-center justify-between">
-          <CheckOpsLogo className="text-foreground text-base" />
+          <CheckOpsLogo className="text-foreground h-9 sm:h-10 md:h-12" />
           <nav className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
             <a href="#capabilities" className="hover:text-foreground transition-colors">Capabilities</a>
             <a href="#workflow" className="hover:text-foreground transition-colors">Workflow</a>
@@ -724,7 +724,7 @@ export default function CheckCenterMarketing() {
       <footer className="border-t border-border/40 bg-card/30">
         <div className="mx-auto max-w-7xl px-4 md:px-6 py-10 space-y-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <CheckOpsLogo className="text-foreground text-sm" />
+            <CheckOpsLogo className="text-foreground h-8" />
             <p className="text-xs text-muted-foreground">
               © {new Date().getFullYear()} ChecksOps. All rights reserved.
             </p>
