@@ -28,7 +28,7 @@ export function CheckOpsLogo({
     <img
       src={src}
       alt="ChecksOps"
-      className={cn("inline-block w-auto h-[1.6em] select-none", className)}
+      className={cn("inline-block w-auto h-[3.25em] select-none", className)}
       draggable={false}
     />
   );
