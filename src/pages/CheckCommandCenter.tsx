@@ -1722,11 +1722,13 @@ export default function CheckCommandCenter() {
                   )}
                   <CardContent className="p-0">
                     <Tabs defaultValue="review">
-                      <TabsList className="w-full rounded-none sticky top-[88px] md:top-0 z-10 bg-muted">
-                        <TabsTrigger value="review" className="flex-1 text-xs">Review</TabsTrigger>
-                        <TabsTrigger value="settlement" className="flex-1 text-xs">Settlement</TabsTrigger>
-                        <TabsTrigger value="packet" className="flex-1 text-xs">Deposit Packet</TabsTrigger>
-                      </TabsList>
+                      <div className="sticky top-[88px] md:top-0 z-10 bg-muted overflow-x-auto scrollbar-hide">
+                        <TabsList className="w-max min-w-full rounded-none flex-nowrap justify-start">
+                          <TabsTrigger value="review" className="text-xs whitespace-nowrap px-3">Review</TabsTrigger>
+                          <TabsTrigger value="settlement" className="text-xs whitespace-nowrap px-3">Settlement</TabsTrigger>
+                          <TabsTrigger value="packet" className="text-xs whitespace-nowrap px-3">Packet</TabsTrigger>
+                        </TabsList>
+                      </div>
                       <TabsContent value="review" className="mt-0">
                         <ReviewDecisionPanel
                           checkId={reviewCheckId}
