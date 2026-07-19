@@ -3604,6 +3604,11 @@ function CheckDetailPanel({
 
           <ScrollArea className="h-[calc(100vh-340px)] min-h-[400px]">
             <TabsContent value="overview" className="p-4 space-y-3 mt-0">
+              <PostHomeownerUpdateCard
+                claimId={check.claim_id ?? null}
+                tenantId={(check as any).tenant_id ?? null}
+                compact
+              />
               <DepositStatusPanel
                 checkId={checkId}
                 depositedAt={check.deposited_at ?? null}
