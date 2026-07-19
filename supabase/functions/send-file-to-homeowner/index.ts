@@ -92,9 +92,10 @@ Deno.serve(async (req) => {
       claim_id: check.claim_id,
       check_id: file.check_intake_item_id,
       event_type: 'document_shared',
-      title: `Document shared: ${file.file_name}`,
-      description: note || null,
-      metadata: {
+      actor_label: 'Claim team',
+      payload_json: {
+        title: `Document shared: ${file.file_name}`,
+        description: note || null,
         file_name: file.file_name,
         file_url: fileUrl,
         check_file_id: file.id,
