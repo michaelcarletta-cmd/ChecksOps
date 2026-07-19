@@ -1,0 +1,280 @@
+import { useEffect, useRef, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "@/hooks/use-toast";
+import {
+  FileText, Upload, Loader2, Trash2, Download, Palette, Home as HomeIcon,
+  FileSignature, Image as ImageIcon,
+} from "lucide-react";
+
+// Categories stored as doc_type = `library:<category>:<slug>`
+type LibraryCategory = "template" | "shingle" | "siding" | "letterhead";
+
+const CATEGORIES: {
+  key: LibraryCategory;
+  label: string;
+  description: string;
+  accept: string;
+  icon: any;
+}[] = [
+  {
+    key: "template",
+    label: "Templates",
+    description:
+      "Reusable PDF/DOCX templates (TPA, contracts, waivers) mortgage ops and files can send.",
+    accept: ".pdf,.doc,.docx",
+    icon: FileSignature,
+  },
+  {
+    key: "shingle",
+    label: "Shingle catalog",
+    description: "Shingle color/style samples the homeowner picks from.",
+    accept: "image/*,.pdf",
+    icon: HomeIcon,
+  },
+  {
+    key: "siding",
+    label: "Siding catalog",
+    description: "Siding color/style samples the homeowner picks from.",
+    accept: "image/*,.pdf",
+    icon: Palette,
+  },
+  {
+    key: "letterhead",
+    label: "Letterhead",
+    description: "Logo, footer, signature blocks used on generated docs & emails.",
+    accept: "image/*,.pdf,.doc,.docx",
+    icon: ImageIcon,
+  },
+];
+
+interface LibraryRow {
+  id: string;
+  tenant_id: string;
+  doc_type: string;
+  file_path: string;
+  file_name: string;
+  mime_type: string | null;
+  file_size: number | null;
+  notes: string | null;
+  created_at: string;
+}
+
+const BUCKET = "tenant-documents";
+const PREFIX = "library:";
+
+export function TenantDocumentLibrary({ tenantId }: { tenantId: string }) {
+  const [rows, setRows] = useState<LibraryRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("tenant_documents" as any)
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .like("doc_type", `${PREFIX}%`)
+      .order("created_at", { ascending: false });
+    if (error) {
+      toast({ title: "Failed to load library", description: error.message, variant: "destructive" });
+    } else {
+      setRows(((data as any) || []) as LibraryRow[]);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [tenantId]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileText className="h-4 w-4" /> Document Library
+        </CardTitle>
+        <CardDescription>
+          Templates, color catalogs, and letterhead assets your team reuses across claims.
+          Files here appear in mortgage ops, loss draft docs, and the homeowner selection flow.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Tabs defaultValue="template">
+          <TabsList className="grid grid-cols-4 w-full">
+            {CATEGORIES.map((c) => (
+              <TabsTrigger key={c.key} value={c.key} className="text-xs">
+                <c.icon className="h-3.5 w-3.5 mr-1" /> {c.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {CATEGORIES.map((c) => {
+            const catRows = rows.filter((r) => r.doc_type.startsWith(`${PREFIX}${c.key}:`));
+            return (
+              <TabsContent key={c.key} value={c.key} className="space-y-3 pt-4">
+                <p className="text-xs text-muted-foreground">{c.description}</p>
+                <UploadBar
+                  tenantId={tenantId}
+                  category={c.key}
+                  accept={c.accept}
+                  onDone={load}
+                />
+                {loading ? (
+                  <div className="py-6 flex justify-center">
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                  </div>
+                ) : catRows.length === 0 ? (
+                  <div className="text-center text-xs text-muted-foreground border rounded-md py-6">
+                    Nothing here yet.
+                  </div>
+                ) : (
+                  <ul className="space-y-2">
+                    {catRows.map((row) => (
+                      <LibraryItem key={row.id} row={row} onChange={load} />
+                    ))}
+                  </ul>
+                )}
+              </TabsContent>
+            );
+          })}
+        </Tabs>
+      </CardContent>
+    </Card>
+  );
+}
+
+function UploadBar({
+  tenantId, category, accept, onDone,
+}: { tenantId: string; category: LibraryCategory; accept: string; onDone: () => void }) {
+  const { user } = useAuth();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+
+  const handleUpload = async (file: File) => {
+    if (file.size > 25 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Maximum 25MB.", variant: "destructive" });
+      return;
+    }
+    setUploading(true);
+    try {
+      const ext = file.name.split(".").pop() || "bin";
+      const path = `${tenantId}/library/${category}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from(BUCKET)
+        .upload(path, file, { upsert: false, contentType: file.type });
+      if (upErr) throw upErr;
+
+      const slug = (displayName || file.name)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 60) || crypto.randomUUID().slice(0, 8);
+
+      const { error: insErr } = await supabase.from("tenant_documents" as any).insert({
+        tenant_id: tenantId,
+        doc_type: `${PREFIX}${category}:${slug}`,
+        file_path: path,
+        file_name: displayName || file.name,
+        mime_type: file.type,
+        file_size: file.size,
+        uploaded_by: user?.id ?? null,
+      });
+      if (insErr) throw insErr;
+      toast({ title: "Added to library" });
+      setDisplayName("");
+      onDone();
+    } catch (e: any) {
+      toast({ title: "Upload failed", description: e.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-end gap-2 rounded border border-border p-3">
+      <div className="space-y-1 flex-1 min-w-[180px]">
+        <Label className="text-xs">Display name (optional)</Label>
+        <Input
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+          placeholder="e.g. Third Party Authorization"
+          className="h-8"
+        />
+      </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept={accept}
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleUpload(f);
+        }}
+      />
+      <Button
+        size="sm"
+        onClick={() => fileRef.current?.click()}
+        disabled={uploading}
+      >
+        {uploading
+          ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+          : <Upload className="w-3.5 h-3.5 mr-1" />}
+        Upload
+      </Button>
+    </div>
+  );
+}
+
+function LibraryItem({ row, onChange }: { row: LibraryRow; onChange: () => void }) {
+  const open = async () => {
+    const { data, error } = await supabase.storage
+      .from(BUCKET)
+      .createSignedUrl(row.file_path, 60 * 5);
+    if (error || !data) {
+      toast({ title: "Could not open", description: error?.message, variant: "destructive" });
+      return;
+    }
+    window.open(data.signedUrl, "_blank");
+  };
+
+  const remove = async () => {
+    if (!confirm(`Delete "${row.file_name}"?`)) return;
+    await supabase.storage.from(BUCKET).remove([row.file_path]);
+    const { error } = await supabase.from("tenant_documents" as any).delete().eq("id", row.id);
+    if (error) {
+      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Removed" });
+    onChange();
+  };
+
+  const slug = row.doc_type.split(":").slice(2).join(":");
+
+  return (
+    <li className="flex items-center gap-2 border rounded-md p-2">
+      <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium truncate">{row.file_name}</p>
+          {slug && <Badge variant="outline" className="text-[10px]">{slug}</Badge>}
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          {new Date(row.created_at).toLocaleDateString()}
+          {row.file_size ? ` · ${(row.file_size / 1024).toFixed(0)} KB` : ""}
+        </p>
+      </div>
+      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={open} title="Open">
+        <Download className="h-3.5 w-3.5" />
+      </Button>
+      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={remove} title="Delete">
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
+    </li>
+  );
+}

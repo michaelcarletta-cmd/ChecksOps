@@ -16,6 +16,7 @@ import { template as newHomeownerLead } from './new-homeowner-lead.tsx'
 import { template as homeownerClaimPortalLink } from './homeowner-claim-portal-link.tsx'
 import { template as homeownerLedgerInvite } from './homeowner-ledger-invite.tsx'
 import { template as homeownerUploadAlert } from './homeowner-upload-alert.tsx'
+import { template as homeownerDocumentShared } from './homeowner-document-shared.tsx'
 
 export const TEMPLATES: Record<string, TemplateEntry> = {
   'demo-request': demoRequest,
@@ -25,4 +26,5 @@ export const TEMPLATES: Record<string, TemplateEntry> = {
   'homeowner-claim-portal-link': homeownerClaimPortalLink,
   'homeowner-ledger-invite': homeownerLedgerInvite,
   'homeowner-upload-alert': homeownerUploadAlert,
+  'homeowner-document-shared': homeownerDocumentShared,
 }
