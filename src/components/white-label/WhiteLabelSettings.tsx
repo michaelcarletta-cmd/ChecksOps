@@ -25,6 +25,7 @@ import { StakeholderAccountSettings } from "@/components/disbursement/Stakeholde
 import { TenantBankAccountSettings } from "@/components/settings/TenantBankAccountSettings";
 import { TenantUserManager } from "./TenantUserManager";
 import { TenantDocumentsManager } from "./TenantDocumentsManager";
+import { TenantDocumentLibrary } from "@/components/settings/TenantDocumentLibrary";
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { TenantAIKeySettings } from "./TenantAIKeySettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
@@ -218,6 +219,11 @@ export function WhiteLabelSettings() {
                     <FileText className="h-4 w-4" /> Tenant Documents
                   </h3>
                   <TenantDocumentsManager tenantId={tenant.id} />
+                </div>
+              )}
+              {tenant && (
+                <div className="pt-6 border-t border-border/60">
+                  <TenantDocumentLibrary tenantId={tenant.id} />
                 </div>
               )}
             </TabsContent>
