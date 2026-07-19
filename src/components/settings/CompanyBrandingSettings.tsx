@@ -697,7 +697,7 @@ export function CompanyBrandingSettings() {
           </div>
           <div className="mt-4 space-y-3">
             <p className="font-medium text-sm">Signature Field Coordinates</p>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
               <div><Label className="text-xs">Page</Label><Input type="number" value={sigCoords.page} onChange={(e) => setSigCoords({...sigCoords, page: +e.target.value})} /></div>
               <div><Label className="text-xs">X</Label><Input type="number" value={sigCoords.x} onChange={(e) => setSigCoords({...sigCoords, x: +e.target.value})} /></div>
               <div><Label className="text-xs">Y</Label><Input type="number" value={sigCoords.y} onChange={(e) => setSigCoords({...sigCoords, y: +e.target.value})} /></div>
@@ -705,7 +705,7 @@ export function CompanyBrandingSettings() {
               <div><Label className="text-xs">Height</Label><Input type="number" value={sigCoords.h} onChange={(e) => setSigCoords({...sigCoords, h: +e.target.value})} /></div>
             </div>
             <p className="font-medium text-sm">Date Field Coordinates</p>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
               <div><Label className="text-xs">Page</Label><Input type="number" value={dateCoords.page} onChange={(e) => setDateCoords({...dateCoords, page: +e.target.value})} /></div>
               <div><Label className="text-xs">X</Label><Input type="number" value={dateCoords.x} onChange={(e) => setDateCoords({...dateCoords, x: +e.target.value})} /></div>
               <div><Label className="text-xs">Y</Label><Input type="number" value={dateCoords.y} onChange={(e) => setDateCoords({...dateCoords, y: +e.target.value})} /></div>

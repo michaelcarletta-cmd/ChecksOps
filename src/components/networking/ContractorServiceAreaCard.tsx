@@ -612,7 +612,7 @@ export function ContractorServiceAreaCard() {
               Look up
             </Button>
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <div>
               <Label className="text-[10px] text-muted-foreground">Latitude</Label>
               <Input value={lat} onChange={(e) => setLat(e.target.value)} className="h-9" placeholder="25.7617" />

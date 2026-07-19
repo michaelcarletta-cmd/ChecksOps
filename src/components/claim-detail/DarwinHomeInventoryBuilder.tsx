@@ -214,7 +214,7 @@ export const DarwinHomeInventoryBuilder = ({ claimId, claim }: DarwinHomeInvento
                       <Input placeholder="UN55TU7000" value={formData.model_number} onChange={(e) => setFormData({ ...formData, model_number: e.target.value })} />
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label>Quantity</Label>
                       <Input type="number" min="1" value={formData.quantity} onChange={(e) => setFormData({ ...formData, quantity: e.target.value })} />

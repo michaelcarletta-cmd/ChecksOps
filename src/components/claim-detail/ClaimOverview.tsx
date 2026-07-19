@@ -496,7 +496,7 @@ function AdditionalContacts({ claimId }: { claimId: string }) {
               <div key={c.id} className="flex items-center justify-between gap-2 rounded-md border p-2">
                 {editingId === c.id ? (
                   <>
-                    <div className="grid grid-cols-3 gap-2 flex-1 min-w-0">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1 min-w-0">
                       <Input value={editValues.name} onChange={e => setEditValues(p => ({ ...p, name: e.target.value }))} className="h-7 text-sm" />
                       <Input placeholder="XXX-XXX-XXXX" value={editValues.phone} onChange={e => setEditValues(p => ({ ...p, phone: formatPhoneInput(e.target.value) }))} className="h-7 text-sm" maxLength={12} />
                       <Input value={editValues.email} onChange={e => setEditValues(p => ({ ...p, email: e.target.value }))} className="h-7 text-sm" />

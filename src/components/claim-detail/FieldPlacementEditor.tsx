@@ -630,12 +630,12 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
                 onLoadSuccess={onDocumentLoadSuccess}
                 onLoadError={onDocumentLoadError}
                 loading={
-                  <div className="flex items-center justify-center h-96 w-[600px]">
+                  <div className="flex items-center justify-center h-96 w-full max-w-[600px]">
                     <p className="text-muted-foreground">Loading PDF...</p>
                   </div>
                 }
                 error={
-                  <div className="flex flex-col items-center justify-center h-96 w-[600px] bg-muted/20 border rounded">
+                  <div className="flex flex-col items-center justify-center h-96 w-full max-w-[600px] bg-muted/20 border rounded">
                     <p className="text-muted-foreground mb-4">Could not load PDF preview</p>
                     <Button variant="outline" onClick={() => window.open(documentUrl, '_blank')}>
                       Open PDF in New Tab
