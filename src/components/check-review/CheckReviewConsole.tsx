@@ -26,6 +26,7 @@ import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
+import { PostHomeownerUpdateCard } from "@/components/homeowner-ledger/PostHomeownerUpdateCard";
 
 
 /* ------------------------------------------------------------------ */
