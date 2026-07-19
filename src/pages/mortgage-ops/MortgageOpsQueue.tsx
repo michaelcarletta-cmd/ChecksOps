@@ -12,6 +12,7 @@ import { Building2, LogOut, Inbox, CheckCircle2, Loader2, Clock, Eye, BookUser }
 import { formatDistanceToNow } from "date-fns";
 import { MortgageOpsRequestDetail } from "./MortgageOpsRequestDetail";
 import { MortgageOpsDirectory } from "./MortgageOpsDirectory";
+import mortgageOpsLogo from "@/assets/mortgage-ops-logo.png.asset.json";
 
 interface Request {
   id: string;
