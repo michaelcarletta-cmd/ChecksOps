@@ -140,6 +140,13 @@ Deno.serve(async (req) => {
           .order('created_at', { ascending: true })
         const appUrl = (Deno.env.get('SIGN_BASE_URL') || 'https://checksops.com').replace(/\/$/, '')
         const isDone = (e: any) => e.signed_at || ['signed', 'waived', 'endorsed', 'completed', 'complete'].includes((e.status || '').toLowerCase())
+        // Only show endorsements that the tenant has actually sent — not
+        // every insured/mortgage payee row that exists in the database.
+        const isSent = (e: any) => {
+          if (e.request_sent_at) return true
+          const s = (e.status || '').toLowerCase()
+          return ['sent', 'requested', 'in_progress', 'pending_signature', 'awaiting_signature'].includes(s)
+        }
         const isHomeownerParty = (e: any) => {
           if (e.payee_type !== 'insured') return false
           const emailHit = homeownerEmail && (e.contact_email || '').toLowerCase() === homeownerEmail
@@ -150,6 +157,7 @@ Deno.serve(async (req) => {
         const byCheck = new Map<string, any>()
         for (const e of (endorsements ?? []) as any[]) {
           if (isDone(e)) continue
+          if (!isSent(e)) continue
           const meta = checkMeta.get(e.check_id)
           if (!byCheck.has(e.check_id)) {
             byCheck.set(e.check_id, {
