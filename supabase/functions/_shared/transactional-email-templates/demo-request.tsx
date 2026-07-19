@@ -22,7 +22,7 @@ const DemoRequestEmail = ({ name, email, company, role, notes }: DemoRequestProp
     <Body style={main}>
       <Container style={container}>
         <Section style={logoSection}>
-          <Img src={LOGO_URL} alt={SITE_NAME} width="180" style={logo} />
+          <Img src={LOGO_URL} alt={SITE_NAME} width="320" style={logo} />
         </Section>
         <Heading style={h1}>New demo request</Heading>
         <Text style={text}>
