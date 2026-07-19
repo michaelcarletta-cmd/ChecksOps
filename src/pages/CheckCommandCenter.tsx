@@ -1722,11 +1722,11 @@ export default function CheckCommandCenter() {
                   )}
                   <CardContent className="p-0">
                     <Tabs defaultValue="review">
-                       <div className="sticky top-[88px] md:top-0 z-10 bg-muted overflow-x-auto">
+                       <div className="sticky top-[88px] md:top-0 z-10 bg-muted w-full overflow-x-auto scrollbar-hide">
                          <TabsList className="w-max min-w-full rounded-none flex-nowrap justify-start">
-                           <TabsTrigger value="review" className="text-sm whitespace-nowrap px-4">Review</TabsTrigger>
-                           <TabsTrigger value="settlement" className="text-sm whitespace-nowrap px-4">Settlement</TabsTrigger>
-                           <TabsTrigger value="packet" className="text-sm whitespace-nowrap px-4">Deposit Packet</TabsTrigger>
+                           <TabsTrigger value="review" className="text-xs whitespace-nowrap px-2 sm:px-3">Review</TabsTrigger>
+                           <TabsTrigger value="settlement" className="text-xs whitespace-nowrap px-2 sm:px-3">Settlement</TabsTrigger>
+                           <TabsTrigger value="packet" className="text-xs whitespace-nowrap px-2 sm:px-3">Deposit Packet</TabsTrigger>
                          </TabsList>
                        </div>
                       <TabsContent value="review" className="mt-0">
@@ -3604,6 +3604,11 @@ function CheckDetailPanel({
 
           <ScrollArea className="h-[calc(100vh-340px)] min-h-[400px]">
             <TabsContent value="overview" className="p-4 space-y-3 mt-0">
+              <PostHomeownerUpdateCard
+                claimId={check.claim_id ?? null}
+                tenantId={(check as any).tenant_id ?? null}
+                compact
+              />
               <DepositStatusPanel
                 checkId={checkId}
                 depositedAt={check.deposited_at ?? null}
@@ -4218,14 +4223,9 @@ function CheckDetailPanel({
             </TabsContent>
           </ScrollArea>
         </Tabs>
-        {/* Persistent homeowner update card — visible across every check detail tab */}
-        <div className="border-t px-4 py-3 space-y-3 bg-muted/20">
-          <PostHomeownerUpdateCard
-            claimId={check.claim_id ?? null}
-            tenantId={(check as any).tenant_id ?? null}
-            compact
-          />
-          {!isSharedView && (
+        {/* Admin tools — hidden by default, available on every tab */}
+        {!isSharedView && (
+          <div className="border-t px-4 py-2 bg-muted/20">
             <details className="group">
               <summary className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer list-none flex justify-end select-none">
                 <span className="underline underline-offset-2">Admin tools</span>
@@ -4240,8 +4240,8 @@ function CheckDetailPanel({
                 </div>
               </div>
             </details>
-          )}
-        </div>
+          </div>
+        )}
       </CardContent>
     </Card>
 
