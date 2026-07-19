@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Building2 } from "lucide-react";
+import mortgageOpsLogo from "@/assets/mortgage-ops-logo.png.asset.json";
 
 export default function MortgageOpsLogin() {
   const [email, setEmail] = useState("");
@@ -62,10 +63,12 @@ export default function MortgageOpsLogin() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-2 h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-            <Building2 className="h-6 w-6 text-primary" />
-          </div>
-          <CardTitle>ChecksOps Mortgage Desk</CardTitle>
+          <img
+            src={mortgageOpsLogo.url}
+            alt="Mortgage Ops"
+            className="mx-auto mb-3 h-20 w-auto object-contain select-none"
+            draggable={false}
+          />
           <p className="text-sm text-muted-foreground">Employee sign-in</p>
         </CardHeader>
         <CardContent>
