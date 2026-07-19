@@ -248,6 +248,31 @@ function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () =>
   );
 }
 
+function CollapsibleUpload({ token, onDone }: { token: string; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Card>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/40 transition-colors rounded-t-lg"
+      >
+        <span className="flex items-center gap-2 text-sm font-medium">
+          <Plus className="h-4 w-4 text-primary" />
+          Send a new check or document
+        </span>
+        {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+      </button>
+      {open && (
+        <div className="border-t border-border">
+          <UploadPanel token={token} onDone={() => { onDone(); setOpen(false); }} hideHeader />
+        </div>
+      )}
+    </Card>
+  );
+}
+
+
 function PreClaimView({ token, homeowner, pending, onRefresh }: {
   token: string; homeowner: { name: string | null; email: string | null }; pending: number; onRefresh: () => void;
 }) {
