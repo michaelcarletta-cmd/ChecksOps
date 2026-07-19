@@ -4226,15 +4226,20 @@ function CheckDetailPanel({
             compact
           />
           {!isSharedView && (
-            <div className="flex justify-end">
-              <div className="w-full sm:w-auto sm:max-w-xs">
-                <StatusOverride
-                  checkId={checkId}
-                  currentStatus={check.status}
-                  onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); qc.invalidateQueries({ queryKey: ["check-intake-items"] }); onRefresh(); }}
-                />
+            <details className="group">
+              <summary className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer list-none flex justify-end select-none">
+                <span className="underline underline-offset-2">Admin tools</span>
+              </summary>
+              <div className="mt-2 flex justify-end">
+                <div className="w-full sm:w-auto sm:max-w-xs">
+                  <StatusOverride
+                    checkId={checkId}
+                    currentStatus={check.status}
+                    onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); qc.invalidateQueries({ queryKey: ["check-intake-items"] }); onRefresh(); }}
+                  />
+                </div>
               </div>
-            </div>
+            </details>
           )}
         </div>
       </CardContent>
