@@ -41,6 +41,17 @@ type PendingSignature = {
   signers: PendingSigner[];
 };
 
+type PendingEndorsement = {
+  endorsement_id: string;
+  check_id: string;
+  check_number: string | null;
+  check_amount: number | null;
+  payee_name: string;
+  status: string;
+  sent_at: string | null;
+  sign_url: string | null;
+};
+
 type Summary = {
   ok: boolean;
   mode: "claim" | "pre_claim";
@@ -50,6 +61,7 @@ type Summary = {
   totals: { received: number; deposited: number; released: number; remaining: number };
   pending_upload_count: number;
   pending_signatures?: PendingSignature[];
+  pending_endorsements?: PendingEndorsement[];
   can_upload: boolean;
 };
 
