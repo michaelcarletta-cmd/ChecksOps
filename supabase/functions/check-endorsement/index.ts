@@ -857,7 +857,7 @@ Deno.serve(async (req) => {
 
         const { data: endorsement, error: eErr } = await supabase
           .from("check_endorsements")
-          .select("*, check_intake_items(check_number, carrier_name, amount, tenant_id)")
+          .select("*, check_intake_items(check_number, carrier_name, amount, tenant_id, claim_id)")
           .eq("id", endorsementId)
           .single();
 
