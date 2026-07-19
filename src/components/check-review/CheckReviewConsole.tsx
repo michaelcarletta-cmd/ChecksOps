@@ -26,6 +26,7 @@ import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
+import { PostHomeownerUpdateCard } from "@/components/homeowner-ledger/PostHomeownerUpdateCard";
 
 
 /* ------------------------------------------------------------------ */
@@ -1067,15 +1068,21 @@ export function ReviewDecisionPanel({
             </div>
           )}
 
-          <div className="pt-1">
+          <div className="pt-1 space-y-2">
             <SendCheckTrackingLinkButton
               claimId={check.claim_id}
               tenantId={(check as any).tenant_id}
               className="w-full"
               label="Send tracking link to homeowner"
             />
+            <PostHomeownerUpdateCard
+              claimId={check.claim_id}
+              tenantId={(check as any).tenant_id}
+              compact
+            />
           </div>
         </div>
+
 
 
         {/* Funds type + property address — visible to all partners with shared access */}
