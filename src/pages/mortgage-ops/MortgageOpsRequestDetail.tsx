@@ -391,7 +391,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
 
   const sendInvoice = async (previewOnly: boolean) => {
     if (!req) return;
-    const services = Math.round(parseFloat(invoiceServices || "0") * 100);
+    const services = 1000; // Fixed $10 services fee — not editable
     const shipping = invoiceShipping ? Math.round(parseFloat(invoiceShipping) * 100) : 0;
     if (!services && !shipping) {
       toast.error("Enter at least one charge");
