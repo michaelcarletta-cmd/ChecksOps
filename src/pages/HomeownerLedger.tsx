@@ -41,15 +41,20 @@ type PendingSignature = {
   signers: PendingSigner[];
 };
 
-type PendingEndorsement = {
+type PendingEndorsementParty = {
   endorsement_id: string;
+  payee_name: string;
+  payee_type: "insured" | "mortgage_company" | string;
+  status: string;
+  sent_at: string | null;
+  is_homeowner: boolean;
+  sign_url: string | null;
+};
+type PendingEndorsement = {
   check_id: string;
   check_number: string | null;
   check_amount: number | null;
-  payee_name: string;
-  status: string;
-  sent_at: string | null;
-  sign_url: string | null;
+  parties: PendingEndorsementParty[];
 };
 
 type Summary = {
