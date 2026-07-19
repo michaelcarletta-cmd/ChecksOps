@@ -41,6 +41,17 @@ type PendingSignature = {
   signers: PendingSigner[];
 };
 
+type PendingEndorsement = {
+  endorsement_id: string;
+  check_id: string;
+  check_number: string | null;
+  check_amount: number | null;
+  payee_name: string;
+  status: string;
+  sent_at: string | null;
+  sign_url: string | null;
+};
+
 type Summary = {
   ok: boolean;
   mode: "claim" | "pre_claim";
@@ -50,6 +61,7 @@ type Summary = {
   totals: { received: number; deposited: number; released: number; remaining: number };
   pending_upload_count: number;
   pending_signatures?: PendingSignature[];
+  pending_endorsements?: PendingEndorsement[];
   can_upload: boolean;
 };
 
@@ -185,6 +197,7 @@ function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () =>
 
       <CollapsibleUpload token={token} onDone={onRefresh} />
 
+      <PendingEndorsementsPanel pending={data.pending_endorsements ?? []} />
       <PendingSignaturesPanel token={token} pending={data.pending_signatures ?? []} />
 
 
@@ -297,6 +310,42 @@ function PreClaimView({ token, homeowner, pending, onRefresh }: {
       </Card>
       <UploadPanel token={token} onDone={onRefresh} preClaim />
     </>
+  );
+}
+
+function PendingEndorsementsPanel({ pending }: { pending: PendingEndorsement[] }) {
+  if (!pending || pending.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <PenTool className="h-4 w-4 text-amber-400" /> Checks awaiting your signature
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {pending.map((e) => (
+          <div key={e.endorsement_id} className="rounded-lg border border-border p-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-medium truncate">
+                Check {e.check_number ? `#${e.check_number}` : ""}
+                {e.check_amount != null && <span className="text-muted-foreground"> — {fmt(Number(e.check_amount))}</span>}
+              </div>
+              <div className="text-[11px] text-muted-foreground truncate">
+                Endorsement for {e.payee_name}
+                {e.sent_at ? ` • sent ${new Date(e.sent_at).toLocaleDateString()}` : ""}
+              </div>
+            </div>
+            {e.sign_url ? (
+              <Button size="sm" className="h-8 px-3 text-xs shrink-0" onClick={() => { window.location.href = e.sign_url!; }}>
+                Sign now
+              </Button>
+            ) : (
+              <Badge variant="secondary" className="text-[10px]">Awaiting link</Badge>
+            )}
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }
 

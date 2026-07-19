@@ -49,6 +49,7 @@ Deno.serve(async (req) => {
     let totals = { received: 0, deposited: 0, released: 0, remaining: 0 }
     let pending_upload_count = 0
     let pending_signatures: any[] = []
+    let pending_endorsements: any[] = []
 
     if (tok.claim_id) {
       const { data: c, error: claimErr } = await supabase
@@ -70,25 +71,36 @@ Deno.serve(async (req) => {
         .limit(500)
       events = ev ?? []
 
-      for (const e of events) {
-        const amt = Number(e.amount ?? 0)
-        if (e.event_type === 'check_received' || e.event_type === 'supplement_check'
-          || e.event_type === 'depreciation_check' || e.event_type === 'deductible_check') {
-          totals.received += amt
-        } else if (e.event_type === 'deposited') {
+      // Authoritative totals: derive from check_intake_items + claim_disbursements
+      // (events can be stale/backfilled inconsistently).
+      const { data: allChecks } = await supabase
+        .from('check_intake_items')
+        .select('id, amount, check_stage, check_number')
+        .eq('claim_id', tok.claim_id)
+      const checks = (allChecks ?? []) as Array<{ id: string; amount: number | null; check_stage: string | null; check_number: string | null }>
+      for (const c of checks) {
+        const amt = Number(c.amount ?? 0)
+        totals.received += amt
+        if (['deposited', 'cleared'].includes((c.check_stage || '').toLowerCase())) {
           totals.deposited += amt
-        } else if (e.event_type === 'funds_released') {
-          totals.released += amt
         }
       }
-      totals.remaining = totals.received - totals.released
-
-      // Pending signature requests for this claim (including requests linked through check intake)
-      const { data: claimChecks } = await supabase
-        .from('check_intake_items')
-        .select('id')
+      const { data: disb } = await supabase
+        .from('claim_disbursements')
+        .select('amount, status')
         .eq('claim_id', tok.claim_id)
-      const checkIds = (claimChecks ?? []).map((r: any) => r.id).filter(Boolean)
+      for (const d of (disb ?? [])) {
+        const s = ((d as any).status || '').toLowerCase()
+        if (s !== 'cancelled' && s !== 'failed') {
+          totals.released += Number((d as any).amount ?? 0)
+        }
+      }
+      totals.remaining = Math.max(0, totals.received - totals.released)
+
+      const checkIds = checks.map((c) => c.id)
+      const checkMeta = new Map(checks.map((c) => [c.id, c]))
+
+      // Pending document e-signature requests for this claim
       const signatureFilter = checkIds.length > 0
         ? `claim_id.eq.${tok.claim_id},check_intake_item_id.in.(${checkIds.join(',')})`
         : `claim_id.eq.${tok.claim_id}`
@@ -100,6 +112,8 @@ Deno.serve(async (req) => {
         .order('sent_at', { ascending: false })
         .limit(50)
       const homeownerEmail = (tok.homeowner_email || '').toLowerCase()
+      const homeownerName = (tok.homeowner_name || '').toLowerCase().trim()
+      const nameParts = homeownerName.split(/\s+/).filter((p) => p.length >= 3)
       pending_signatures = (sreqs ?? []).map((r: any) => ({
         request_id: r.id,
         document_name: r.document_name,
@@ -113,6 +127,37 @@ Deno.serve(async (req) => {
           is_homeowner: (s.signer_email || '').toLowerCase() === homeownerEmail,
         })),
       })).filter((r: any) => r.signers.some((s: any) => s.status !== 'signed'))
+
+      // Per-check endorsements the homeowner needs to sign (insured only).
+      // Match by contact_email OR name overlap with the ledger homeowner.
+      if (checkIds.length > 0) {
+        const { data: endorsements } = await supabase
+          .from('check_endorsements')
+          .select('id, check_id, payee_name, payee_type, status, token, contact_email, signed_at, request_sent_at')
+          .in('check_id', checkIds)
+          .eq('payee_type', 'insured')
+          .order('created_at', { ascending: true })
+        const appUrl = (Deno.env.get('SIGN_BASE_URL') || 'https://checksops.com').replace(/\/$/, '')
+        pending_endorsements = (endorsements ?? []).filter((e: any) => {
+          if (e.signed_at || ['signed', 'waived', 'endorsed', 'completed', 'complete'].includes((e.status || '').toLowerCase())) return false
+          const emailHit = homeownerEmail && (e.contact_email || '').toLowerCase() === homeownerEmail
+          const nameLc = (e.payee_name || '').toLowerCase()
+          const nameHit = nameParts.length > 0 && nameParts.some((p) => nameLc.includes(p))
+          return emailHit || nameHit
+        }).map((e: any) => {
+          const meta = checkMeta.get(e.check_id)
+          return {
+            endorsement_id: e.id,
+            check_id: e.check_id,
+            check_number: meta?.check_number ?? null,
+            check_amount: meta?.amount ?? null,
+            payee_name: e.payee_name,
+            status: e.status,
+            sent_at: e.request_sent_at,
+            sign_url: e.token ? `${appUrl}/endorse?token=${e.token}` : null,
+          }
+        })
+      }
     } else {
       // Pre-claim: show pending uploads for this token
       const { count } = await supabase
@@ -131,6 +176,7 @@ Deno.serve(async (req) => {
       totals,
       pending_upload_count,
       pending_signatures,
+      pending_endorsements,
       can_upload: true,
     })
   } catch (e) {
