@@ -345,7 +345,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
       <div>
         <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setHomeownerLinkOpen(true)}>
           <Home className="h-3.5 w-3.5 mr-1.5" />
-          Send homeowner AuthenteCheck link
+          Send Homeowner Payment Link
         </Button>
         <p className="text-[10px] text-muted-foreground mt-1">
           Emails the homeowner a secure link to verify their bank. Verified account auto-attaches as a disbursable stakeholder.
