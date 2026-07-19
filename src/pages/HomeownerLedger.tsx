@@ -41,15 +41,20 @@ type PendingSignature = {
   signers: PendingSigner[];
 };
 
-type PendingEndorsement = {
+type PendingEndorsementParty = {
   endorsement_id: string;
+  payee_name: string;
+  payee_type: "insured" | "mortgage_company" | string;
+  status: string;
+  sent_at: string | null;
+  is_homeowner: boolean;
+  sign_url: string | null;
+};
+type PendingEndorsement = {
   check_id: string;
   check_number: string | null;
   check_amount: number | null;
-  payee_name: string;
-  status: string;
-  sent_at: string | null;
-  sign_url: string | null;
+  parties: PendingEndorsementParty[];
 };
 
 type Summary = {
@@ -315,33 +320,45 @@ function PreClaimView({ token, homeowner, pending, onRefresh }: {
 
 function PendingEndorsementsPanel({ pending }: { pending: PendingEndorsement[] }) {
   if (!pending || pending.length === 0) return null;
+  const partyLabel = (t: string) => t === "mortgage_company" ? "Mortgage company" : t === "insured" ? "Homeowner" : t;
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2">
-          <PenTool className="h-4 w-4 text-amber-400" /> Checks awaiting your signature
+          <PenTool className="h-4 w-4 text-amber-400" /> Checks awaiting signature
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {pending.map((e) => (
-          <div key={e.endorsement_id} className="rounded-lg border border-border p-3 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-sm font-medium truncate">
-                Check {e.check_number ? `#${e.check_number}` : ""}
-                {e.check_amount != null && <span className="text-muted-foreground"> — {fmt(Number(e.check_amount))}</span>}
-              </div>
-              <div className="text-[11px] text-muted-foreground truncate">
-                Endorsement for {e.payee_name}
-                {e.sent_at ? ` • sent ${new Date(e.sent_at).toLocaleDateString()}` : ""}
-              </div>
+        {pending.map((chk) => (
+          <div key={chk.check_id} className="rounded-lg border border-border p-3 space-y-2">
+            <div className="text-sm font-medium">
+              Check {chk.check_number ? `#${chk.check_number}` : ""}
+              {chk.check_amount != null && <span className="text-muted-foreground"> — {fmt(Number(chk.check_amount))}</span>}
             </div>
-            {e.sign_url ? (
-              <Button size="sm" className="h-8 px-3 text-xs shrink-0" onClick={() => { window.location.href = e.sign_url!; }}>
-                Sign now
-              </Button>
-            ) : (
-              <Badge variant="secondary" className="text-[10px]">Awaiting link</Badge>
-            )}
+            <ul className="space-y-1.5">
+              {chk.parties.map((p) => (
+                <li key={p.endorsement_id} className="flex items-center justify-between gap-2 text-xs rounded bg-muted/40 px-2 py-1.5">
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">
+                      {partyLabel(p.payee_type)}
+                      <span className="text-muted-foreground font-normal"> · {p.payee_name}</span>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {p.sent_at ? `Requested ${new Date(p.sent_at).toLocaleDateString()}` : "Awaiting request"}
+                    </div>
+                  </div>
+                  {p.sign_url ? (
+                    <Button size="sm" className="h-7 px-2 text-[11px] shrink-0" onClick={() => { window.location.href = p.sign_url!; }}>
+                      Sign now
+                    </Button>
+                  ) : (
+                    <Badge variant="secondary" className="text-[10px] shrink-0">
+                      {p.payee_type === "mortgage_company" ? "Handled by mortgage" : "Awaiting signature"}
+                    </Badge>
+                  )}
+                </li>
+              ))}
+            </ul>
           </div>
         ))}
       </CardContent>
