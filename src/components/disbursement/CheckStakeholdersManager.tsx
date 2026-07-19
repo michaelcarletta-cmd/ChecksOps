@@ -10,6 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Plus, X, Users, Handshake, ShieldCheck, MailCheck, Lock, Home } from "lucide-react";
 import { VERIFICATION_BADGE_CLASS, VERIFICATION_LABEL, type VerificationStatus } from "@/lib/banking";
 import { SendHomeownerBankLinkDialog } from "./SendHomeownerBankLinkDialog";
+import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
 
 interface Props {
   checkIntakeItemId: string;
@@ -116,7 +117,15 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
         <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
           <Users className="h-3 w-3" /> Stakeholders on this check
         </p>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-wrap justify-end">
+          <SendCheckTrackingLinkButton
+            claimId={(checkMeta?.claim_id as string | null) ?? null}
+            tenantId={tenant?.id ?? null}
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            label="Tracking link"
+          />
           <Button
             size="sm"
             variant="outline"
@@ -124,7 +133,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
             onClick={() => setHomeownerDialogOpen(true)}
             title="Send the homeowner a link to link their bank via AuthenteCheck"
           >
-            <Home className="h-3 w-3 mr-1" /> Homeowner link
+            <Home className="h-3 w-3 mr-1" /> Bank link
           </Button>
           <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
             <PopoverTrigger asChild>
