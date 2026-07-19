@@ -4223,14 +4223,9 @@ function CheckDetailPanel({
             </TabsContent>
           </ScrollArea>
         </Tabs>
-        {/* Persistent homeowner update card — visible across every check detail tab */}
-        <div className="border-t px-4 py-3 space-y-3 bg-muted/20">
-          <PostHomeownerUpdateCard
-            claimId={check.claim_id ?? null}
-            tenantId={(check as any).tenant_id ?? null}
-            compact
-          />
-          {!isSharedView && (
+        {/* Admin tools — hidden by default, available on every tab */}
+        {!isSharedView && (
+          <div className="border-t px-4 py-2 bg-muted/20">
             <details className="group">
               <summary className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer list-none flex justify-end select-none">
                 <span className="underline underline-offset-2">Admin tools</span>
@@ -4245,8 +4240,8 @@ function CheckDetailPanel({
                 </div>
               </div>
             </details>
-          )}
-        </div>
+          </div>
+        )}
       </CardContent>
     </Card>
 
