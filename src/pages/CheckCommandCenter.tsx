@@ -1722,13 +1722,13 @@ export default function CheckCommandCenter() {
                   )}
                   <CardContent className="p-0">
                     <Tabs defaultValue="review">
-                      <div className="sticky top-[88px] md:top-0 z-10 bg-muted overflow-x-auto scrollbar-hide">
-                        <TabsList className="w-max min-w-full rounded-none flex-nowrap justify-start">
-                          <TabsTrigger value="review" className="text-xs whitespace-nowrap px-3">Review</TabsTrigger>
-                          <TabsTrigger value="settlement" className="text-xs whitespace-nowrap px-3">Settlement</TabsTrigger>
-                          <TabsTrigger value="packet" className="text-xs whitespace-nowrap px-3">Packet</TabsTrigger>
-                        </TabsList>
-                      </div>
+                       <div className="sticky top-[88px] md:top-0 z-10 bg-muted overflow-x-auto">
+                         <TabsList className="w-max min-w-full rounded-none flex-nowrap justify-start">
+                           <TabsTrigger value="review" className="text-sm whitespace-nowrap px-4">Review</TabsTrigger>
+                           <TabsTrigger value="settlement" className="text-sm whitespace-nowrap px-4">Settlement</TabsTrigger>
+                           <TabsTrigger value="packet" className="text-sm whitespace-nowrap px-4">Deposit Packet</TabsTrigger>
+                         </TabsList>
+                       </div>
                       <TabsContent value="review" className="mt-0">
                         <ReviewDecisionPanel
                           checkId={reviewCheckId}
@@ -4226,15 +4226,20 @@ function CheckDetailPanel({
             compact
           />
           {!isSharedView && (
-            <div className="flex justify-end">
-              <div className="w-full sm:w-auto sm:max-w-xs">
-                <StatusOverride
-                  checkId={checkId}
-                  currentStatus={check.status}
-                  onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); qc.invalidateQueries({ queryKey: ["check-intake-items"] }); onRefresh(); }}
-                />
+            <details className="group">
+              <summary className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer list-none flex justify-end select-none">
+                <span className="underline underline-offset-2">Admin tools</span>
+              </summary>
+              <div className="mt-2 flex justify-end">
+                <div className="w-full sm:w-auto sm:max-w-xs">
+                  <StatusOverride
+                    checkId={checkId}
+                    currentStatus={check.status}
+                    onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); qc.invalidateQueries({ queryKey: ["check-intake-items"] }); onRefresh(); }}
+                  />
+                </div>
               </div>
-            </div>
+            </details>
           )}
         </div>
       </CardContent>
