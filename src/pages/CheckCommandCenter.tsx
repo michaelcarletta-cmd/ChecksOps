@@ -4218,6 +4218,25 @@ function CheckDetailPanel({
             </TabsContent>
           </ScrollArea>
         </Tabs>
+        {/* Persistent homeowner update card — visible across every check detail tab */}
+        <div className="border-t px-4 py-3 space-y-3 bg-muted/20">
+          <PostHomeownerUpdateCard
+            claimId={check.claim_id ?? null}
+            tenantId={(check as any).tenant_id ?? null}
+            compact
+          />
+          {!isSharedView && (
+            <div className="flex justify-end">
+              <div className="w-full sm:w-auto sm:max-w-xs">
+                <StatusOverride
+                  checkId={checkId}
+                  currentStatus={check.status}
+                  onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); qc.invalidateQueries({ queryKey: ["check-intake-items"] }); onRefresh(); }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
 
