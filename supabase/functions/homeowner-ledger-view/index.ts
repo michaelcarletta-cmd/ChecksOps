@@ -138,7 +138,8 @@ Deno.serve(async (req) => {
           .eq('payee_type', 'insured')
           .order('created_at', { ascending: true })
         const appUrl = (Deno.env.get('SIGN_BASE_URL') || 'https://checksops.com').replace(/\/$/, '')
-        homeownerEndorsements = (endorsements ?? []).filter((e: any) => {
+        homeownerEndorsements: pending_endorsements
+        pending_endorsements = (endorsements ?? []).filter((e: any) => {
           if (e.signed_at || ['signed', 'waived', 'endorsed', 'completed', 'complete'].includes((e.status || '').toLowerCase())) return false
           const emailHit = homeownerEmail && (e.contact_email || '').toLowerCase() === homeownerEmail
           const nameLc = (e.payee_name || '').toLowerCase()
