@@ -724,7 +724,7 @@ export default function CheckCenterMarketing() {
       <footer className="border-t border-border/40 bg-card/30">
         <div className="mx-auto max-w-7xl px-4 md:px-6 py-10 space-y-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <CheckOpsLogo className="text-foreground text-sm" />
+            <CheckOpsLogo className="text-foreground h-8" />
             <p className="text-xs text-muted-foreground">
               © {new Date().getFullYear()} ChecksOps. All rights reserved.
             </p>
