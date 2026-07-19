@@ -1068,15 +1068,21 @@ export function ReviewDecisionPanel({
             </div>
           )}
 
-          <div className="pt-1">
+          <div className="pt-1 space-y-2">
             <SendCheckTrackingLinkButton
               claimId={check.claim_id}
               tenantId={(check as any).tenant_id}
               className="w-full"
               label="Send tracking link to homeowner"
             />
+            <PostHomeownerUpdateCard
+              claimId={check.claim_id}
+              tenantId={(check as any).tenant_id}
+              compact
+            />
           </div>
         </div>
+
 
 
         {/* Funds type + property address — visible to all partners with shared access */}
