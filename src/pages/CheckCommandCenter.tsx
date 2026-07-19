@@ -51,6 +51,7 @@ import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
 import { DepositStatusPanel } from "@/components/check-review/DepositStatusPanel";
 import { SignatureStatusPanel } from "@/components/check-review/SignatureStatusPanel";
 import { ReviewSettlementTab } from "@/components/check-review/ReviewSettlementTab";
+import { PostHomeownerUpdateCard } from "@/components/homeowner-ledger/PostHomeownerUpdateCard";
 import { Share2 } from "lucide-react";
 import { ShieldCheck } from "lucide-react";
 import { CheckValidityBadge } from "@/components/checks/CheckValidityBadge";
@@ -1721,11 +1722,13 @@ export default function CheckCommandCenter() {
                   )}
                   <CardContent className="p-0">
                     <Tabs defaultValue="review">
-                      <TabsList className="w-full rounded-none sticky top-[88px] md:top-0 z-10 bg-muted">
-                        <TabsTrigger value="review" className="flex-1 text-xs">Review</TabsTrigger>
-                        <TabsTrigger value="settlement" className="flex-1 text-xs">Settlement</TabsTrigger>
-                        <TabsTrigger value="packet" className="flex-1 text-xs">Deposit Packet</TabsTrigger>
-                      </TabsList>
+                      <div className="sticky top-[88px] md:top-0 z-10 bg-muted overflow-x-auto scrollbar-hide">
+                        <TabsList className="w-max min-w-full rounded-none flex-nowrap justify-start">
+                          <TabsTrigger value="review" className="text-xs whitespace-nowrap px-3">Review</TabsTrigger>
+                          <TabsTrigger value="settlement" className="text-xs whitespace-nowrap px-3">Settlement</TabsTrigger>
+                          <TabsTrigger value="packet" className="text-xs whitespace-nowrap px-3">Packet</TabsTrigger>
+                        </TabsList>
+                      </div>
                       <TabsContent value="review" className="mt-0">
                         <ReviewDecisionPanel
                           checkId={reviewCheckId}
@@ -2483,8 +2486,8 @@ function StatusOverride({
 
   if (!editing) {
     return (
-      <Button variant="outline" size="sm" className="w-full text-xs h-7" onClick={() => { setNewStatus(currentStatus); setEditing(true); }}>
-        <Pencil className="h-3 w-3 mr-1" /> Override Status (admin)
+      <Button variant="ghost" size="sm" className="text-[10px] h-6 px-2 text-muted-foreground hover:text-foreground" onClick={() => { setNewStatus(currentStatus); setEditing(true); }}>
+        <Pencil className="h-3 w-3 mr-1" /> Override status
       </Button>
     );
   }
@@ -3700,14 +3703,7 @@ function CheckDetailPanel({
               />
               <DetailRow label="OCR Status" value={check.ocr_status} />
               {!isSharedView && (
-                <>
-                  <RerunOcrButton checkId={checkId} onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
-                  <StatusOverride
-                    checkId={checkId}
-                    currentStatus={check.status}
-                    onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); qc.invalidateQueries({ queryKey: ["check-intake-items"] }); onRefresh(); }}
-                  />
-                </>
+                <RerunOcrButton checkId={checkId} onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
               )}
               <Separator />
               {/* Inline front/back previews removed — the front of the check
@@ -4222,6 +4218,25 @@ function CheckDetailPanel({
             </TabsContent>
           </ScrollArea>
         </Tabs>
+        {/* Persistent homeowner update card — visible across every check detail tab */}
+        <div className="border-t px-4 py-3 space-y-3 bg-muted/20">
+          <PostHomeownerUpdateCard
+            claimId={check.claim_id ?? null}
+            tenantId={(check as any).tenant_id ?? null}
+            compact
+          />
+          {!isSharedView && (
+            <div className="flex justify-end">
+              <div className="w-full sm:w-auto sm:max-w-xs">
+                <StatusOverride
+                  checkId={checkId}
+                  currentStatus={check.status}
+                  onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); qc.invalidateQueries({ queryKey: ["check-intake-items"] }); onRefresh(); }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
 
