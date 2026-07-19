@@ -1069,7 +1069,28 @@ Deno.serve(async (req) => {
           actor_id: ud.user.id,
         });
 
+        // Mirror to homeowner timeline so insureds see each signature request
         if (anyDelivered) {
+          const claimId = (endorsement as any).check_intake_items?.claim_id ?? null;
+          const tenantId = (endorsement as any).check_intake_items?.tenant_id ?? null;
+          const checkAmount = (endorsement as any).check_intake_items?.amount ?? null;
+          if (claimId && tenantId) {
+            await supabase.from("homeowner_ledger_events").insert({
+              tenant_id: tenantId,
+              claim_id: claimId,
+              check_id: endorsement.check_id,
+              event_type: "endorsement_requested",
+              occurred_at: new Date().toISOString(),
+              amount: checkAmount,
+              actor_label: "ChecksOps",
+              payload_json: {
+                endorsement_id: endorsementId,
+                payee_name: endorsement.payee_name,
+                payee_type: endorsement.payee_type,
+                method: "email",
+              },
+            }).then(() => {}, (err: any) => console.error("homeowner_ledger_events insert failed", err));
+          }
           await supabase.from("check_intake_items")
             .update({ status: "endorsements_in_progress" })
             .eq("id", endorsement.check_id);
