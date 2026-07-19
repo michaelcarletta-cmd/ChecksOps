@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import {
   ShieldCheck, Loader2, ImagePlus, Upload, CheckCircle2,
   Banknote, Send, PenTool, Wallet, Hammer, FileText, AlertCircle,
-  Phone, Building2, MessageSquare,
+  Phone, Building2, MessageSquare, ChevronDown, ChevronUp, Palette, Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
@@ -82,6 +82,8 @@ const EVENT_META: Record<string, { icon: React.ElementType; label: string; tone:
   mortgage_update:         { icon: Building2,    label: "Mortgage Ops update",     tone: "text-sky-400"     },
   contractor_upload:       { icon: Upload,       label: "Contractor uploaded",     tone: "text-primary"     },
   ops_note:                { icon: MessageSquare,label: "Team update",             tone: "text-muted-foreground" },
+  selection_request:       { icon: Palette,      label: "Selections requested",    tone: "text-amber-400"   },
+  selection_completed:     { icon: CheckCircle2, label: "Selections submitted",    tone: "text-emerald-400" },
 };
 
 const FALLBACK_META = { icon: FileText, label: "Update", tone: "text-muted-foreground" };
@@ -180,7 +182,7 @@ function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () =>
         </CardContent>
       </Card>
 
-      <UploadPanel token={token} onDone={onRefresh} />
+      <CollapsibleUpload token={token} onDone={onRefresh} />
 
       <PendingSignaturesPanel token={token} pending={data.pending_signatures ?? []} />
 
@@ -245,6 +247,31 @@ function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () =>
     </>
   );
 }
+
+function CollapsibleUpload({ token, onDone }: { token: string; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Card>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/40 transition-colors rounded-t-lg"
+      >
+        <span className="flex items-center gap-2 text-sm font-medium">
+          <Plus className="h-4 w-4 text-primary" />
+          Send a new check or document
+        </span>
+        {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+      </button>
+      {open && (
+        <div className="border-t border-border">
+          <UploadPanel token={token} onDone={() => { onDone(); setOpen(false); }} hideHeader />
+        </div>
+      )}
+    </Card>
+  );
+}
+
 
 function PreClaimView({ token, homeowner, pending, onRefresh }: {
   token: string; homeowner: { name: string | null; email: string | null }; pending: number; onRefresh: () => void;
@@ -362,7 +389,7 @@ function TotalTile({ label, value, tone, highlight }: { label: string; value: nu
   );
 }
 
-function UploadPanel({ token, onDone, preClaim }: { token: string; onDone: () => void; preClaim?: boolean }) {
+function UploadPanel({ token, onDone, preClaim, hideHeader }: { token: string; onDone: () => void; preClaim?: boolean; hideHeader?: boolean }) {
   const [front, setFront] = useState<File | null>(null);
   const [back, setBack] = useState<File | null>(null);
   const [amount, setAmount] = useState("");
@@ -402,13 +429,15 @@ function UploadPanel({ token, onDone, preClaim }: { token: string; onDone: () =>
     }
   };
 
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">
-          {preClaim ? "Upload your check" : "Send a new check or document"}
-        </CardTitle>
-      </CardHeader>
+  const inner = (
+    <>
+      {!hideHeader && (
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">
+            {preClaim ? "Upload your check" : "Send a new check or document"}
+          </CardTitle>
+        </CardHeader>
+      )}
       <CardContent className="space-y-3">
         {!preClaim && (
           <div className="flex gap-2 text-xs">
@@ -437,8 +466,10 @@ function UploadPanel({ token, onDone, preClaim }: { token: string; onDone: () =>
           Send securely
         </Button>
       </CardContent>
-    </Card>
+    </>
   );
+
+  return hideHeader ? <div>{inner}</div> : <Card>{inner}</Card>;
 }
 
 function FilePicker({ label, file, onPick, inputRef }: {
