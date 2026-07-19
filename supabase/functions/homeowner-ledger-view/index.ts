@@ -130,7 +130,6 @@ Deno.serve(async (req) => {
 
       // Per-check endorsements the homeowner needs to sign (insured only).
       // Match by contact_email OR name overlap with the ledger homeowner.
-      let homeownerEndorsements: any[] = []
       if (checkIds.length > 0) {
         const { data: endorsements } = await supabase
           .from('check_endorsements')
