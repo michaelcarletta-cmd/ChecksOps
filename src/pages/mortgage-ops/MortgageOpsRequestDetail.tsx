@@ -1151,19 +1151,19 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Services</label>
+                    <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Services (fixed)</label>
                     <div className="flex items-center gap-1">
                       <span className="text-sm text-muted-foreground">$</span>
                       <Input
                         type="number"
-                        step="0.01"
-                        min="0"
                         value={invoiceServices}
-                        onChange={(e) => setInvoiceServices(e.target.value)}
-                        className="h-8 text-sm"
+                        readOnly
+                        disabled
+                        className="h-8 text-sm bg-muted cursor-not-allowed"
                       />
                     </div>
                   </div>
+
                   <div>
                     <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Shipping label</label>
                     <div className="flex items-center gap-1">
