@@ -215,7 +215,7 @@ export default function MortgageOpsQueue() {
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img
-              src={mortgageOpsLogo.url}
+              src={mortgageOpsLogo}
               alt="Mortgage Ops"
               className="h-12 sm:h-16 w-auto object-contain select-none"
               draggable={false}
