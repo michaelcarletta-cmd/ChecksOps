@@ -158,7 +158,6 @@ Deno.serve(async (req) => {
           }
         })
       }
-      }
     } else {
       // Pre-claim: show pending uploads for this token
       const { count } = await supabase
