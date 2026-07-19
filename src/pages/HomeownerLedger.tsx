@@ -466,8 +466,10 @@ function UploadPanel({ token, onDone, preClaim, hideHeader }: { token: string; o
           Send securely
         </Button>
       </CardContent>
-    </Card>
+    </>
   );
+
+  return hideHeader ? <div>{inner}</div> : <Card>{inner}</Card>;
 }
 
 function FilePicker({ label, file, onPick, inputRef }: {
