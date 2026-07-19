@@ -3703,14 +3703,7 @@ function CheckDetailPanel({
               />
               <DetailRow label="OCR Status" value={check.ocr_status} />
               {!isSharedView && (
-                <>
-                  <RerunOcrButton checkId={checkId} onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
-                  <StatusOverride
-                    checkId={checkId}
-                    currentStatus={check.status}
-                    onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); qc.invalidateQueries({ queryKey: ["check-intake-items"] }); onRefresh(); }}
-                  />
-                </>
+                <RerunOcrButton checkId={checkId} onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
               )}
               <Separator />
               {/* Inline front/back previews removed — the front of the check
