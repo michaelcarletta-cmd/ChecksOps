@@ -182,7 +182,7 @@ function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () =>
         </CardContent>
       </Card>
 
-      <UploadPanel token={token} onDone={onRefresh} />
+      <CollapsibleUpload token={token} onDone={onRefresh} />
 
       <PendingSignaturesPanel token={token} pending={data.pending_signatures ?? []} />
 
