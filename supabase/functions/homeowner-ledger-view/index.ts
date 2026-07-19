@@ -128,35 +128,50 @@ Deno.serve(async (req) => {
         })),
       })).filter((r: any) => r.signers.some((s: any) => s.status !== 'signed'))
 
-      // Per-check endorsements the homeowner needs to sign (insured only).
-      // Match by contact_email OR name overlap with the ledger homeowner.
+      // Per-check pending endorsements — only Insured + Mortgage parties are
+      // shown to the homeowner (PA/contractor signatures are internal).
+      // Grouped per check so the homeowner sees who still owes a signature.
       if (checkIds.length > 0) {
         const { data: endorsements } = await supabase
           .from('check_endorsements')
           .select('id, check_id, payee_name, payee_type, status, token, contact_email, signed_at, request_sent_at')
           .in('check_id', checkIds)
-          .eq('payee_type', 'insured')
+          .in('payee_type', ['insured', 'mortgage_company'])
           .order('created_at', { ascending: true })
         const appUrl = (Deno.env.get('SIGN_BASE_URL') || 'https://checksops.com').replace(/\/$/, '')
-        pending_endorsements = (endorsements ?? []).filter((e: any) => {
-          if (e.signed_at || ['signed', 'waived', 'endorsed', 'completed', 'complete'].includes((e.status || '').toLowerCase())) return false
+        const isDone = (e: any) => e.signed_at || ['signed', 'waived', 'endorsed', 'completed', 'complete'].includes((e.status || '').toLowerCase())
+        const isHomeownerParty = (e: any) => {
+          if (e.payee_type !== 'insured') return false
           const emailHit = homeownerEmail && (e.contact_email || '').toLowerCase() === homeownerEmail
           const nameLc = (e.payee_name || '').toLowerCase()
           const nameHit = nameParts.length > 0 && nameParts.some((p) => nameLc.includes(p))
-          return emailHit || nameHit
-        }).map((e: any) => {
+          return emailHit || nameHit || !homeownerEmail // default assume yes if no email on token
+        }
+        const byCheck = new Map<string, any>()
+        for (const e of (endorsements ?? []) as any[]) {
+          if (isDone(e)) continue
           const meta = checkMeta.get(e.check_id)
-          return {
+          if (!byCheck.has(e.check_id)) {
+            byCheck.set(e.check_id, {
+              check_id: e.check_id,
+              check_number: meta?.check_number ?? null,
+              check_amount: meta?.amount ?? null,
+              parties: [] as any[],
+            })
+          }
+          byCheck.get(e.check_id).parties.push({
             endorsement_id: e.id,
-            check_id: e.check_id,
-            check_number: meta?.check_number ?? null,
-            check_amount: meta?.amount ?? null,
             payee_name: e.payee_name,
+            payee_type: e.payee_type, // 'insured' | 'mortgage_company'
             status: e.status,
             sent_at: e.request_sent_at,
-            sign_url: e.token ? `${appUrl}/endorse?token=${e.token}` : null,
-          }
-        })
+            is_homeowner: isHomeownerParty(e),
+            sign_url: (e.payee_type === 'insured' && isHomeownerParty(e) && e.token)
+              ? `${appUrl}/endorse?token=${e.token}`
+              : null,
+          })
+        }
+        pending_endorsements = Array.from(byCheck.values())
       }
     } else {
       // Pre-claim: show pending uploads for this token
