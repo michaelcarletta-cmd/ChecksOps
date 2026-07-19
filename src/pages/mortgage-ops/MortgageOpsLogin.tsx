@@ -60,15 +60,16 @@ export default function MortgageOpsLogin() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="min-h-screen flex flex-col items-center bg-background p-4 pt-10 sm:pt-16">
+      <img
+        src={mortgageOpsLogo.url}
+        alt="Mortgage Ops"
+        className="mb-8 h-24 sm:h-32 w-auto object-contain select-none"
+        draggable={false}
+      />
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <img
-            src={mortgageOpsLogo.url}
-            alt="Mortgage Ops"
-            className="mx-auto mb-3 h-20 w-auto object-contain select-none"
-            draggable={false}
-          />
+          <CardTitle>ChecksOps Mortgage Desk</CardTitle>
           <p className="text-sm text-muted-foreground">Employee sign-in</p>
         </CardHeader>
         <CardContent>
