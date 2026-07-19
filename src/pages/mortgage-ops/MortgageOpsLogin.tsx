@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Building2 } from "lucide-react";
-import mortgageOpsLogo from "@/assets/mortgage-ops-logo.png.asset.json";
+import mortgageOpsLogo from "@/assets/mortgage-ops-logo.png";
 
 export default function MortgageOpsLogin() {
   const [email, setEmail] = useState("");
