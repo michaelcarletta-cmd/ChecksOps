@@ -177,7 +177,7 @@ Deno.serve(async (req) => {
       totals,
       pending_upload_count,
       pending_signatures,
-      pending_endorsements: (globalThis as any).__he ?? [],
+      pending_endorsements,
       can_upload: true,
     })
   } catch (e) {
