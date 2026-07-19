@@ -11,6 +11,7 @@ import { DollarSign, ArrowDownCircle, Send, CheckCircle2, AlertCircle, Clock, Fi
 import { format } from "date-fns";
 import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
 import { SendHomeownerBankLinkDialog } from "@/components/disbursement/SendHomeownerBankLinkDialog";
+import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
 
