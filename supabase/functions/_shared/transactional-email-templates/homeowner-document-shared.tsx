@@ -23,7 +23,7 @@ const Email = ({ homeowner_name, portal_url, document_name, document_url, note, 
     <Body style={main}>
       <Container style={container}>
         <Section style={logoSection}>
-          <Img src={LOGO_URL} alt={SITE_NAME} width="180" style={{ display: 'block', height: 'auto' }} />
+          <Img src={LOGO_URL} alt={SITE_NAME} width="320" style={{ display: 'block', height: 'auto' }} />
         </Section>
         <Heading style={h1}>A new document was shared with you</Heading>
         <Text style={text}>

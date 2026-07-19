@@ -20,7 +20,7 @@ const Email = ({ nickname, custname, verifyUrl }: Props) => (
     <Body style={main}>
       <Container style={container}>
         <Section style={logoSection}>
-          <Img src={LOGO_URL} alt={SITE_NAME} width="180" style={logo} />
+          <Img src={LOGO_URL} alt={SITE_NAME} width="320" style={logo} />
         </Section>
         <Heading style={h1}>Link your bank account</Heading>
         <Text style={text}>

@@ -27,7 +27,7 @@ const Email = ({
     <Body style={main}>
       <Container style={container}>
         <Section style={logoSection}>
-          <Img src={LOGO_URL} alt={SITE_NAME} width="180" style={{ display: 'block', height: 'auto' }} />
+          <Img src={LOGO_URL} alt={SITE_NAME} width="320" style={{ display: 'block', height: 'auto' }} />
         </Section>
         <Heading style={h1}>New homeowner check upload</Heading>
         <Text style={text}>

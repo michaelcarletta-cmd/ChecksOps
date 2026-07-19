@@ -45,7 +45,7 @@ const TenantInvoice = ({
     <Body style={main}>
       <Container style={container}>
         <Section style={logoSection}>
-          <Img src={LOGO_URL} alt={SITE_NAME} width="180" style={logo} />
+          <Img src={LOGO_URL} alt={SITE_NAME} width="320" style={logo} />
         </Section>
         <Heading style={h1}>Invoice {invoice_number ? `#${invoice_number}` : ''}</Heading>
         <Text style={text}>
