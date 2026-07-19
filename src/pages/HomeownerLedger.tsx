@@ -82,6 +82,8 @@ const EVENT_META: Record<string, { icon: React.ElementType; label: string; tone:
   mortgage_update:         { icon: Building2,    label: "Mortgage Ops update",     tone: "text-sky-400"     },
   contractor_upload:       { icon: Upload,       label: "Contractor uploaded",     tone: "text-primary"     },
   ops_note:                { icon: MessageSquare,label: "Team update",             tone: "text-muted-foreground" },
+  selection_request:       { icon: Palette,      label: "Selections requested",    tone: "text-amber-400"   },
+  selection_completed:     { icon: CheckCircle2, label: "Selections submitted",    tone: "text-emerald-400" },
 };
 
 const FALLBACK_META = { icon: FileText, label: "Update", tone: "text-muted-foreground" };
