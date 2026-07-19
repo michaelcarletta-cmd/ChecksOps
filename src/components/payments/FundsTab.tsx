@@ -342,14 +342,24 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
         </Card>
       )}
 
-      {/* Homeowner AuthenteCheck bank-link invite */}
-      <div>
-        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setHomeownerLinkOpen(true)}>
-          <Home className="h-3.5 w-3.5 mr-1.5" />
-          Send Homeowner Payment Link
-        </Button>
-        <p className="text-[10px] text-muted-foreground mt-1">
-          Emails the homeowner a secure link to verify their bank. Verified account auto-attaches as a disbursable stakeholder.
+      {/* Homeowner links */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setHomeownerLinkOpen(true)}>
+            <Home className="h-3.5 w-3.5 mr-1.5" />
+            Send Homeowner Payment Link
+          </Button>
+          <SendCheckTrackingLinkButton
+            claimId={claimId ?? null}
+            tenantId={tenant?.id ?? null}
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            label="Send Homeowner Tracking Link"
+          />
+        </div>
+        <p className="text-[10px] text-muted-foreground">
+          Payment link: homeowner verifies their bank via AuthenteCheck. Tracking link: homeowner sees the full timeline for every check on this claim.
         </p>
       </div>
 
