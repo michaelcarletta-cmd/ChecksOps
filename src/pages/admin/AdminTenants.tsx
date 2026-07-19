@@ -422,7 +422,7 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
           <Input value={customDomain} onChange={(e) => setCustomDomain(e.target.value)} placeholder="checks.acme.com" />
           <p className="text-xs text-muted-foreground">Optional. If set, the tenant's portal lives at this domain.</p>
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-2">
             <Label>Plan Tier</Label>
             <Select value={planTier} onValueChange={setPlanTier}>

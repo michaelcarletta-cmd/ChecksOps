@@ -178,7 +178,7 @@ export function OCWPaymentDialog({
                   onChange={(e) => setFormData({ ...formData, line_2: e.target.value })}
                 />
               </div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <div>
                   <Label>City *</Label>
                   <Input

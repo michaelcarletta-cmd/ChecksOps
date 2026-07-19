@@ -415,7 +415,7 @@ ${!paymentLink ? "" : `<p style="font-size: 12px; color: #666;">Or copy this lin
 
         <div className="space-y-6">
           {/* Invoice Details */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <Label>Invoice Number</Label>
               <Input

@@ -87,8 +87,50 @@ All colors MUST be HSL.
     -webkit-overflow-scrolling: touch;
   }
 
-  html {
+  html,
+  body {
     overscroll-behavior-y: auto;
+    /* Prevent stray wide children from causing horizontal page scroll on mobile.
+       `clip` (not `hidden`) keeps position: sticky working. */
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  /* Media never overflows its container */
+  img,
+  svg,
+  video,
+  canvas,
+  audio,
+  iframe,
+  embed,
+  object {
+    max-width: 100%;
+  }
+
+  img,
+  video {
+    height: auto;
+  }
+
+  /* Long unbroken strings (emails, URLs, IDs, hashes) wrap instead of
+     blowing out their container or overlapping neighbouring text. */
+  p,
+  span,
+  a,
+  li,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  dd,
+  dt,
+  label,
+  td,
+  th {
+    overflow-wrap: break-word;
   }
 
   @media (max-width: 767px) {
@@ -101,6 +143,18 @@ All colors MUST be HSL.
 
   h1, h2, h3, h4, h5, h6 {
     @apply font-display;
+  }
+
+  /* Respect users who prefer reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 

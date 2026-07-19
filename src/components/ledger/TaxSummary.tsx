@@ -766,7 +766,7 @@ export function TaxSummary() {
               <Label className="text-xs">Street address</Label>
               <Input value={form.address_street ?? ""} onChange={(e) => setForm({ ...form, address_street: e.target.value })} />
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <div className="col-span-1">
                 <Label className="text-xs">City</Label>
                 <Input value={form.address_city ?? ""} onChange={(e) => setForm({ ...form, address_city: e.target.value })} />

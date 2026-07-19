@@ -282,7 +282,7 @@ Write in professional insurance claim language suitable for a Proof of Loss form
               {/* Adjuster Information */}
               <Card className="p-4 space-y-4">
                 <h3 className="font-semibold">Adjuster Information</h3>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <Label>Adjuster Name</Label>
                     <Input
@@ -366,7 +366,7 @@ Write in professional insurance claim language suitable for a Proof of Loss form
               {/* Claimed Amounts */}
               <Card className="p-4 space-y-4">
                 <h3 className="font-semibold">Claimed Amounts</h3>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <Label>Building Damage ($)</Label>
                     <Input

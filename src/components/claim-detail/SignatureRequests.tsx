@@ -569,7 +569,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                 </div>
                 {signers.map((signer, index) => (
                   <div key={index} className="flex gap-2 items-start">
-                    <div className="flex-1 grid grid-cols-3 gap-2">
+                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <Input
                         placeholder="Name"
                         value={signer.name}

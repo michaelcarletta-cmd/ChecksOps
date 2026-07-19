@@ -288,7 +288,7 @@ export function QuickTaskBar() {
           <Plus className="h-5 w-5" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[400px] p-0" align="end">
+      <PopoverContent className="w-[min(400px,calc(100vw-2rem))] p-0" align="end">
         <div className="p-4 border-b">
           <h3 className="font-semibold flex items-center gap-2">
             <Plus className="h-4 w-4" />

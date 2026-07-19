@@ -176,7 +176,7 @@ export function CashJobForm({ onSave, onCancel, initialData }: Props) {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Estimate date</Label>
               <Input className="h-8 text-sm" type="date" value={form.estimate_date} onChange={(e) => setForm({ ...form, estimate_date: e.target.value })} />

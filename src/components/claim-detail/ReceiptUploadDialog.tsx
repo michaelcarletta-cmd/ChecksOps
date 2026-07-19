@@ -593,7 +593,7 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
                           placeholder="Vendor name"
                           className="h-8 text-sm"
                         />
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                           <Input
                             type="date"
                             value={r.editDate}

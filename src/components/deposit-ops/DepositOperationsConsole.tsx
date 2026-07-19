@@ -851,7 +851,7 @@ function DepositItemDetail({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {attachmentTypes.map((at) => {
               const existing = attachments.filter((a) => (a as Record<string, unknown>).attachment_type === at.value);
               return (
