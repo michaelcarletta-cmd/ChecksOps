@@ -429,13 +429,15 @@ function UploadPanel({ token, onDone, preClaim, hideHeader }: { token: string; o
     }
   };
 
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">
-          {preClaim ? "Upload your check" : "Send a new check or document"}
-        </CardTitle>
-      </CardHeader>
+  const inner = (
+    <>
+      {!hideHeader && (
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">
+            {preClaim ? "Upload your check" : "Send a new check or document"}
+          </CardTitle>
+        </CardHeader>
+      )}
       <CardContent className="space-y-3">
         {!preClaim && (
           <div className="flex gap-2 text-xs">
