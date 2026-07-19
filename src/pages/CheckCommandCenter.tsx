@@ -2486,8 +2486,8 @@ function StatusOverride({
 
   if (!editing) {
     return (
-      <Button variant="outline" size="sm" className="w-full text-xs h-7" onClick={() => { setNewStatus(currentStatus); setEditing(true); }}>
-        <Pencil className="h-3 w-3 mr-1" /> Override Status (admin)
+      <Button variant="ghost" size="sm" className="text-[10px] h-6 px-2 text-muted-foreground hover:text-foreground" onClick={() => { setNewStatus(currentStatus); setEditing(true); }}>
+        <Pencil className="h-3 w-3 mr-1" /> Override status
       </Button>
     );
   }
