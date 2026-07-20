@@ -18,7 +18,7 @@ const PageLoader = () => (
 export default function CheckOpsLanding() {
   return (
     <div className="relative">
-      <div className="fixed top-3 right-3 z-50 md:top-4 md:right-4">
+      <div className="absolute top-3 right-3 z-40 md:top-4 md:right-4">
         <Button asChild size="sm" variant="secondary" className="shadow-lg">
           <Link to="/login">Sign In</Link>
         </Button>
