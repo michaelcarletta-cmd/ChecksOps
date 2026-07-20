@@ -204,7 +204,7 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
         <div className="max-w-6xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-primary via-blue-400 to-cyan-300 bg-clip-text text-transparent">Vetted Restoration Pros</h1>
+              <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-primary via-primary/70 to-white bg-clip-text text-transparent">Vetted Restoration Pros</h1>
               <p className="text-sm text-muted-foreground">Browsing as {gate.email} · ZIP {gate.zip} · <button onClick={onSignOut} className="underline">change</button></p>
             </div>
             <Badge variant="secondary" className="gap-1.5 hidden md:inline-flex">
