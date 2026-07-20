@@ -18,7 +18,7 @@ All colors MUST be HSL.
     --popover: 223 23% 9%;
     --popover-foreground: 220 18% 92%;
 
-    --primary: 217 91% 60%;
+    --primary: 69 32% 29%;
     --primary-foreground: 220 25% 96%;
 
     --secondary: 223 18% 15%;
@@ -41,7 +41,7 @@ All colors MUST be HSL.
 
     --border: 220 16% 20%;
     --input: 220 16% 18%;
-    --ring: 217 91% 60%;
+    --ring: 69 32% 29%;
 
     --radius: 0.5rem;
 
@@ -52,9 +52,9 @@ All colors MUST be HSL.
     --sidebar-accent: 220 13% 90%;
     --sidebar-accent-foreground: 224 30% 12%;
     --sidebar-border: 221 20% 14%;
-    --sidebar-ring: 217 91% 60%;
+    --sidebar-ring: 69 32% 29%;
 
-    --chart-1: 217 91% 60%;
+    --chart-1: 69 32% 29%;
     --chart-2: 200 80% 54%;
     --chart-3: 145 65% 40%;
     --chart-4: 38 92% 58%;
@@ -81,7 +81,7 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground font-sans;
     font-feature-settings: "cv11", "ss01";
-    background-image: radial-gradient(circle at top center, hsl(216 72% 20% / 0.28) 0%, transparent 42%);
+    background-image: radial-gradient(circle at top center, hsl(69 32% 20% / 0.28) 0%, transparent 42%);
     background-attachment: fixed;
     overscroll-behavior-y: auto;
     -webkit-overflow-scrolling: touch;
