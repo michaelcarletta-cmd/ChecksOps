@@ -124,76 +124,110 @@ const PayoutMockup = () => (
   </div>
 );
 
-const HeroMockup = () => (
-  <div className="relative w-full max-w-full min-w-0 rounded-xl border border-border/60 bg-card/80 backdrop-blur shadow-2xl overflow-hidden">
-    {/* Fake window chrome */}
-    <div className="h-8 border-b border-border/50 bg-muted/40 flex items-center px-3 gap-1.5">
-      <span className="h-2.5 w-2.5 rounded-full bg-destructive/70" />
-      <span className="h-2.5 w-2.5 rounded-full bg-warning/70" />
-      <span className="h-2.5 w-2.5 rounded-full bg-success/70" />
-      <span className="ml-3 text-[10px] text-muted-foreground font-mono">checksops.com</span>
+const HeroMockup = () => {
+  const lanes = [
+    { label: "Review",            count: 4,  icon: ClipboardCheck, accent: "text-blue-400",    grad: "from-blue-500/20 to-cyan-500/10" },
+    { label: "Endorsing",         count: 7,  icon: Send,           accent: "text-amber-400",   grad: "from-amber-500/20 to-orange-500/10" },
+    { label: "Ready for Deposit", count: 12, icon: CheckCircle2,   accent: "text-emerald-400", grad: "from-emerald-500/20 to-green-500/10" },
+    { label: "Deposited",         count: 27, icon: Banknote,       accent: "text-primary",     grad: "from-primary/20 to-blue-500/10" },
+    { label: "Loss Draft",        count: 3,  icon: Landmark,       accent: "text-purple-400",  grad: "from-purple-500/20 to-violet-500/10" },
+    { label: "Funds Released",    count: 9,  icon: Banknote,       accent: "text-emerald-400", grad: "from-emerald-500/20 to-teal-500/10" },
+  ];
+  return (
+    <div className="relative w-full max-w-full min-w-0 rounded-xl border border-border/60 bg-card/80 backdrop-blur shadow-2xl overflow-hidden">
+      {/* Fake window chrome */}
+      <div className="h-8 border-b border-border/50 bg-muted/40 flex items-center px-3 gap-1.5">
+        <span className="h-2.5 w-2.5 rounded-full bg-destructive/70" />
+        <span className="h-2.5 w-2.5 rounded-full bg-warning/70" />
+        <span className="h-2.5 w-2.5 rounded-full bg-success/70" />
+        <span className="ml-3 text-[10px] text-muted-foreground font-mono">checksops.com</span>
+      </div>
+      {/* App header (mirrors WhiteLabelCheckCenter) */}
+      <div className="h-10 border-b border-border/40 bg-background/95 flex items-center px-3 gap-2">
+        <div className="h-5 w-5 rounded bg-[#596032]" />
+        <span className="text-[11px] font-semibold">Check Command Center</span>
+        <Badge variant="outline" className="text-[8px] px-1.5 py-0 h-4 border-primary/30 text-primary hidden sm:inline-flex">
+          <ShieldCheck className="h-2.5 w-2.5 mr-0.5" /> pro
+        </Badge>
+        <div className="ml-auto flex items-center gap-1.5">
+          <div className="h-5 w-5 rounded bg-muted/60" />
+          <div className="h-5 w-5 rounded bg-muted/60" />
+          <div className="h-5 w-5 rounded bg-muted/60" />
+        </div>
+      </div>
+      <div className="p-3 md:p-5 space-y-4">
+        {/* Lane tiles — mirror real dashboard */}
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+          {lanes.map((l, i) => {
+            const Icon = l.icon;
+            const active = i === 0;
+            return (
+              <div
+                key={l.label}
+                className={`rounded-lg border p-2 flex flex-col items-center justify-center gap-1 bg-gradient-to-br ${l.grad} ${
+                  active ? "border-primary/40 ring-2 ring-primary/20" : "border-border/50"
+                }`}
+              >
+                <Icon className={`h-4 w-4 ${l.accent}`} />
+                <span className="text-[9px] font-semibold text-center leading-tight break-words">{l.label}</span>
+                <Badge className={`text-[9px] px-1.5 py-0 h-4 ${active ? "bg-foreground/10 text-foreground" : "bg-muted text-muted-foreground"}`}>
+                  {l.count}
+                </Badge>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Check file card + sub-tabs (mirrors expanded review) */}
+        <div className="rounded-lg border border-border/50 bg-muted/20 overflow-hidden">
+          <div className="px-3 py-2 border-b border-border/40 flex items-center gap-2 flex-wrap">
+            <ClipboardCheck className="h-3.5 w-3.5 text-blue-400" />
+            <span className="text-[11px] font-semibold">Smith Claim · #CL-4501</span>
+            <Badge className="text-[9px] px-1.5 py-0 h-4 bg-blue-500/15 text-blue-400 border-blue-500/30">3 checks</Badge>
+            <span className="ml-auto text-[10px] font-mono font-semibold">$124,450.00</span>
+          </div>
+          <div className="flex gap-1 border-b border-border/40 px-2 pt-1.5 text-[10px] overflow-x-auto">
+            {[
+              { l: "Overview", active: true },
+              { l: "Endorsements", active: false },
+              { l: "Payees", active: false },
+              { l: "Funds", active: false },
+              { l: "Files", active: false },
+              { l: "Partners", active: false },
+              { l: "Audit", active: false },
+            ].map((t) => (
+              <div
+                key={t.l}
+                className={`px-2 py-1 rounded-t-md whitespace-nowrap ${
+                  t.active ? "bg-primary/15 text-primary border-b-2 border-primary" : "text-muted-foreground"
+                }`}
+              >
+                {t.l}
+              </div>
+            ))}
+          </div>
+          <div className="p-2 space-y-1.5">
+            {[
+              { payee: "John & Jane Smith", amount: "$24,850.00", carrier: "Allstate",    status: "Ready",      statusColor: "bg-emerald-500/15 text-emerald-400" },
+              { payee: "Condition One Commercial", amount: "$12,400.00", carrier: "State Farm", status: "Endorsing",  statusColor: "bg-amber-500/15 text-amber-400" },
+              { payee: "Wells Fargo Loss Draft",   amount: "$87,200.00", carrier: "Travelers",  status: "Loss Draft", statusColor: "bg-purple-500/15 text-purple-400" },
+            ].map((r, i) => (
+              <div key={i} className="grid grid-cols-[2.5rem_minmax(0,1fr)] sm:flex sm:items-center gap-2 sm:gap-3 rounded-md border border-border/40 bg-card p-2 min-w-0">
+                <div className="h-7 w-10 rounded bg-gradient-to-br from-emerald-500/20 to-[#596032]/20 border border-border/40 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-medium leading-tight break-words">{r.payee}</p>
+                  <p className="text-[9px] text-muted-foreground">{r.carrier} · Check #{4501 + i}</p>
+                </div>
+                <div className="text-[10px] font-mono font-semibold hidden sm:block">{r.amount}</div>
+                <span className={`col-span-2 justify-self-start sm:justify-self-auto text-[9px] px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap ${r.statusColor}`}>{r.status}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
-      <div className="p-3 md:p-6 space-y-4">
-      {/* Dashboard cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 md:gap-3">
-        {[
-          { label: "Manual Review", count: 4, icon: AlertTriangle, color: "text-orange-400", bg: "bg-orange-500/10" },
-          { label: "Branch Deposit", count: 12, icon: Building2, color: "text-[#7d8548]", bg: "bg-[#596032]/10" },
-          { label: "Reissue", count: 2, icon: RotateCcw, color: "text-amber-400", bg: "bg-amber-500/10" },
-          { label: "Approved", count: 27, icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/10" },
-        ].map((c) => (
-          <div key={c.label} className="rounded-lg border border-border/60 bg-card p-2.5 md:p-3 flex items-center gap-2 min-w-0">
-            <div className={`p-1.5 rounded-md ${c.bg} ${c.color}`}>
-              <c.icon className="h-3.5 w-3.5 md:h-4 md:w-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-lg md:text-xl font-bold leading-none">{c.count}</p>
-              <p className="text-[9px] md:text-[10px] text-muted-foreground leading-tight break-words">{c.label}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-border/50 text-[11px] overflow-x-auto">
-        {[
-          { l: "Intake", icon: Inbox, active: false },
-          { l: "Review", icon: ClipboardCheck, active: true },
-          { l: "Endorsing", icon: Send, active: false },
-          { l: "Ready", icon: FileCheck, active: false },
-          { l: "Loss Draft", icon: Landmark, active: false },
-        ].map((t) => (
-          <div
-            key={t.l}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-t-md whitespace-nowrap ${
-              t.active ? "bg-primary/15 text-primary border-b-2 border-primary" : "text-muted-foreground"
-            }`}
-          >
-            <t.icon className="h-3 w-3" />
-            {t.l}
-          </div>
-        ))}
-      </div>
-      {/* Check row */}
-      <div className="space-y-2 min-w-0">
-        {[
-          { payee: "John & Jane Smith", amount: "$24,850.00", carrier: "Allstate", status: "Ready", statusColor: "bg-emerald-500/15 text-emerald-400" },
-          { payee: "Condition One Commercial", amount: "$12,400.00", carrier: "State Farm", status: "Endorsing", statusColor: "bg-amber-500/15 text-amber-400" },
-          { payee: "Wells Fargo", amount: "$87,200.00", carrier: "Travelers", status: "Loss Draft", statusColor: "bg-orange-500/15 text-orange-400" },
-        ].map((r, i) => (
-          <div key={i} className="grid grid-cols-[3rem_minmax(0,1fr)] sm:flex sm:items-center gap-2 sm:gap-3 rounded-md border border-border/50 bg-muted/20 p-2.5 min-w-0">
-            <div className="h-8 w-12 rounded bg-gradient-to-br from-emerald-500/20 to-[#596032]/20 border border-border/40 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium leading-tight break-words">{r.payee}</p>
-              <p className="text-[10px] text-muted-foreground">{r.carrier} • Check #{4501 + i}</p>
-            </div>
-            <div className="text-xs font-mono font-semibold hidden sm:block">{r.amount}</div>
-            <span className={`col-span-2 justify-self-start sm:justify-self-auto text-[9px] px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap ${r.statusColor}`}>{r.status}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  </div>
-);
+  );
+};
 
 export default function CheckCenterMarketing() {
   const supportEmail = "checksopsadmin@gmail.com";
