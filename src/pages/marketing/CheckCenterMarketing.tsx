@@ -83,10 +83,10 @@ const PayoutMockup = () => (
   <div className="rounded-xl border border-border/60 bg-card/80 shadow-xl overflow-hidden">
     <div className="p-4 border-b border-border/40 bg-muted/20 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <Wallet className="h-4 w-4 text-blue-400" />
+        <Wallet className="h-4 w-4 text-[#7d8548]" />
         <span className="text-sm font-semibold">Send Payment</span>
       </div>
-      <Badge variant="outline" className="text-[10px] border-blue-500/30 text-blue-400 bg-blue-500/10">
+      <Badge variant="outline" className="text-[10px] border-[#596032]/30 text-[#7d8548] bg-[#596032]/10">
         ACH · Verified account
       </Badge>
     </div>
@@ -117,7 +117,7 @@ const PayoutMockup = () => (
           <span>Tokenized · no bank details re-entered</span>
         </div>
       </div>
-      <Button size="sm" className="w-full gap-1.5 bg-blue-500 hover:bg-blue-500/90 text-white">
+      <Button size="sm" className="w-full gap-1.5 bg-[#596032] hover:bg-[#596032]/90 text-white">
         <Send className="h-3.5 w-3.5" /> Send $8,420.00
       </Button>
     </div>
@@ -138,7 +138,7 @@ const HeroMockup = () => (
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 md:gap-3">
         {[
           { label: "Manual Review", count: 4, icon: AlertTriangle, color: "text-orange-400", bg: "bg-orange-500/10" },
-          { label: "Branch Deposit", count: 12, icon: Building2, color: "text-blue-400", bg: "bg-blue-500/10" },
+          { label: "Branch Deposit", count: 12, icon: Building2, color: "text-[#7d8548]", bg: "bg-[#596032]/10" },
           { label: "Reissue", count: 2, icon: RotateCcw, color: "text-amber-400", bg: "bg-amber-500/10" },
           { label: "Approved", count: 27, icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/10" },
         ].map((c) => (
@@ -181,7 +181,7 @@ const HeroMockup = () => (
           { payee: "Wells Fargo", amount: "$87,200.00", carrier: "Travelers", status: "Loss Draft", statusColor: "bg-orange-500/15 text-orange-400" },
         ].map((r, i) => (
           <div key={i} className="grid grid-cols-[3rem_minmax(0,1fr)] sm:flex sm:items-center gap-2 sm:gap-3 rounded-md border border-border/50 bg-muted/20 p-2.5 min-w-0">
-            <div className="h-8 w-12 rounded bg-gradient-to-br from-emerald-500/20 to-blue-500/20 border border-border/40 flex-shrink-0" />
+            <div className="h-8 w-12 rounded bg-gradient-to-br from-emerald-500/20 to-[#596032]/20 border border-border/40 flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium leading-tight break-words">{r.payee}</p>
               <p className="text-[10px] text-muted-foreground">{r.carrier} • Check #{4501 + i}</p>
@@ -329,7 +329,7 @@ export default function CheckCenterMarketing() {
           className="absolute inset-0 pointer-events-none opacity-70"
           style={{
             backgroundImage:
-              "radial-gradient(ellipse at 20% 0%, hsl(217 91% 60% / 0.18) 0%, transparent 50%), radial-gradient(ellipse at 85% 15%, hsl(200 80% 54% / 0.14) 0%, transparent 45%)",
+              "radial-gradient(ellipse at 20% 0%, hsl(69 32% 40% / 0.18) 0%, transparent 50%), radial-gradient(ellipse at 85% 15%, hsl(75 28% 45% / 0.14) 0%, transparent 45%)",
           }}
         />
         <div className="relative mx-auto max-w-7xl min-w-0 px-4 md:px-6 pt-14 md:pt-24 pb-16 md:pb-24 grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
@@ -341,7 +341,7 @@ export default function CheckCenterMarketing() {
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05]">
               Every claim check.
               <br />
-              <span className="bg-gradient-to-r from-primary via-blue-400 to-cyan-300 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-primary via-[#7d8548] to-[#c4cb92] bg-clip-text text-transparent">
                 Under control.
               </span>
             </h1>
@@ -364,7 +364,7 @@ export default function CheckCenterMarketing() {
             </div>
           </div>
           <div className="relative min-w-0 max-w-full">
-            <div className="absolute -inset-6 bg-gradient-to-tr from-primary/20 via-transparent to-blue-400/10 blur-3xl" />
+            <div className="absolute -inset-6 bg-gradient-to-tr from-primary/20 via-transparent to-[#7d8548]/10 blur-3xl" />
             <div className="relative">
               <HeroMockup />
             </div>
@@ -508,12 +508,12 @@ export default function CheckCenterMarketing() {
                     <Building2 className="h-4 w-4 text-primary" />
                     <span className="text-sm font-semibold">Condition One Commercial</span>
                   </div>
-                  <Badge variant="outline" className="text-[10px] border-blue-500/30 text-blue-400 bg-blue-500/10 gap-1">
+                  <Badge variant="outline" className="text-[10px] border-[#596032]/30 text-[#7d8548] bg-[#596032]/10 gap-1">
                     <Share2 className="h-2.5 w-2.5" /> Shared by Freedom
                   </Badge>
                 </div>
                 <div className="p-5 space-y-3">
-                  <div className="rounded-md border border-blue-500/30 bg-blue-500/5 p-3 text-xs text-blue-300">
+                  <div className="rounded-md border border-[#596032]/30 bg-[#596032]/5 p-3 text-xs text-[#a5ad78]">
                     <Lock className="h-3.5 w-3.5 inline mr-1.5" />
                     Shared check — read only. Upload loss-draft documents below.
                   </div>
@@ -587,7 +587,7 @@ export default function CheckCenterMarketing() {
             {/* Payout side */}
             <div className="space-y-5">
               <div className="flex items-center gap-2">
-                <div className="h-9 w-9 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center">
+                <div className="h-9 w-9 rounded-lg bg-[#596032]/10 text-[#7d8548] flex items-center justify-center">
                   <Send className="h-4 w-4" />
                 </div>
                 <h3 className="text-lg font-semibold">Pay the subs, vendors, and reps</h3>
@@ -605,7 +605,7 @@ export default function CheckCenterMarketing() {
                   "Every disbursement tied to a claim, draw, and approver in the audit log",
                 ].map((t) => (
                   <li key={t} className="flex gap-2 items-start">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-blue-400 mt-0.5 flex-shrink-0" />
+                    <CheckCircle2 className="h-3.5 w-3.5 text-[#7d8548] mt-0.5 flex-shrink-0" />
                     <span>{t}</span>
                   </li>
                 ))}

@@ -59,7 +59,7 @@ export default function CheckOpsPricing() {
           className="absolute inset-0 pointer-events-none opacity-70"
           style={{
             backgroundImage:
-              "radial-gradient(ellipse at 20% 0%, hsl(217 91% 60% / 0.18) 0%, transparent 50%), radial-gradient(ellipse at 85% 15%, hsl(200 80% 54% / 0.14) 0%, transparent 45%)",
+              "radial-gradient(ellipse at 20% 0%, hsl(69 32% 40% / 0.18) 0%, transparent 50%), radial-gradient(ellipse at 85% 15%, hsl(75 28% 45% / 0.14) 0%, transparent 45%)",
           }}
         />
         <div className="relative mx-auto max-w-5xl px-4 md:px-6 pt-14 md:pt-20 pb-10 text-center">
@@ -70,7 +70,7 @@ export default function CheckOpsPricing() {
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight leading-[1.05]">
             Simple, predictable
             <br />
-            <span className="bg-gradient-to-r from-primary via-blue-400 to-cyan-300 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-primary via-[#7d8548] to-[#c4cb92] bg-clip-text text-transparent">
               ChecksOps pricing.
             </span>
           </h1>
@@ -86,7 +86,7 @@ export default function CheckOpsPricing() {
         <div className="grid md:grid-cols-3 gap-4 md:gap-6">
           {/* Platform */}
           <Card className="border-border/50 bg-card/60 relative overflow-hidden">
-            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-blue-400 to-cyan-300" />
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-[#7d8548] to-[#c4cb92]" />
             <CardContent className="p-6 md:p-8">
               <div className="flex items-center gap-2 text-primary mb-3">
                 <Building2 className="h-5 w-5" />
@@ -111,7 +111,7 @@ export default function CheckOpsPricing() {
 
           {/* Per check — featured */}
           <Card className="border-primary/40 bg-card/80 relative overflow-hidden ring-1 ring-primary/20 md:scale-[1.02]">
-            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-blue-500 to-primary" />
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-[#596032] to-primary" />
             <Badge className="absolute top-4 right-4 bg-primary/15 text-primary border-primary/30 hover:bg-primary/15">
               Usage
             </Badge>
@@ -138,7 +138,7 @@ export default function CheckOpsPricing() {
 
           {/* Maintenance */}
           <Card className="border-border/50 bg-card/60 relative overflow-hidden">
-            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-300 via-blue-400 to-primary" />
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#c4cb92] via-[#7d8548] to-primary" />
             <CardContent className="p-6 md:p-8">
               <div className="flex items-center gap-2 text-primary mb-3">
                 <Wrench className="h-5 w-5" />
