@@ -1722,7 +1722,7 @@ export default function CheckCommandCenter() {
                   )}
                   <CardContent className="p-0">
                     <Tabs defaultValue="review">
-                       <div className="sticky top-[88px] md:top-0 z-10 bg-muted w-full overflow-x-auto scrollbar-hide">
+                       <div className="sticky top-[104px] md:top-0 z-10 bg-muted w-full overflow-x-auto scrollbar-hide border-b">
                          <TabsList className="w-max min-w-full rounded-none flex-nowrap justify-start">
                            <TabsTrigger value="review" className="text-xs whitespace-nowrap px-2 sm:px-3">Review</TabsTrigger>
                            <TabsTrigger value="settlement" className="text-xs whitespace-nowrap px-2 sm:px-3">Settlement</TabsTrigger>
