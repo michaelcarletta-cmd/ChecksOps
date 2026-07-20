@@ -72,7 +72,7 @@ type TenantUserRow = {
 };
 
 const PLAN_TIERS = ["starter", "pro", "enterprise"] as const;
-const TENANT_ROLES = ["owner", "admin", "member", "viewer"];
+const TENANT_ROLES = ["admin", "operator", "viewer"];
 
 export default function AdminTenants() {
   const navigate = useNavigate();
