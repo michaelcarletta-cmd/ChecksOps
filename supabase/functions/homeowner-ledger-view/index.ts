@@ -69,7 +69,40 @@ Deno.serve(async (req) => {
         .eq('claim_id', tok.claim_id)
         .order('occurred_at', { ascending: false })
         .limit(500)
-      events = ev ?? []
+      // Collapse batched per-payee sends into a single homeowner-facing entry.
+      // Multiple concurrent endorsement inserts can race past the DB-side
+      // 5-minute dedupe; group here as a safety net so the timeline shows one
+      // "signature request sent" per check per 15-minute window.
+      const COLLAPSE_TYPES = new Set(['endorsement_requested', 'endorsements_sent'])
+      const WINDOW_MS = 15 * 60 * 1000
+      const seenBuckets = new Map<string, { rep: any; count: number; names: Set<string> }>()
+      const collapsed: any[] = []
+      for (const row of (ev ?? []) as any[]) {
+        if (!COLLAPSE_TYPES.has(row.event_type) || !row.check_id) {
+          collapsed.push(row)
+          continue
+        }
+        const bucketMs = Math.floor(new Date(row.occurred_at).getTime() / WINDOW_MS)
+        const key = `${row.check_id}|${row.event_type}|${bucketMs}`
+        const existing = seenBuckets.get(key)
+        const payeeName = row.payload_json?.payee_name as string | undefined
+        if (!existing) {
+          const bucket = { rep: row, count: 1, names: new Set<string>() }
+          if (payeeName) bucket.names.add(payeeName)
+          seenBuckets.set(key, bucket)
+          collapsed.push(row)
+        } else {
+          existing.count += 1
+          if (payeeName) existing.names.add(payeeName)
+          existing.rep.payload_json = {
+            ...(existing.rep.payload_json || {}),
+            batched: true,
+            batched_count: existing.count,
+            batched_payees: Array.from(existing.names),
+          }
+        }
+      }
+      events = collapsed
 
       // Authoritative totals: derive from check_intake_items + claim_disbursements
       // (events can be stale/backfilled inconsistently).
