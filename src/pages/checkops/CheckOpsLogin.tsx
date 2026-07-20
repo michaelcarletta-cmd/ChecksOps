@@ -114,7 +114,7 @@ export default function CheckOpsLogin() {
       <Card className="w-full max-w-md border-border/50">
         <CardHeader className="text-center space-y-3 pb-2">
           <div className="mx-auto">
-            <CheckOpsLogo className="h-32" />
+            <CheckOpsLogo className="h-16 md:h-20" />
           </div>
           <CardTitle className="text-xl md:text-2xl">Sign in to ChecksOps</CardTitle>
           <p className="text-xs text-muted-foreground">
