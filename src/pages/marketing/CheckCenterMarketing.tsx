@@ -691,12 +691,11 @@ export default function CheckCenterMarketing() {
           <div>
             <Badge variant="outline" className="mb-4">Book a demo</Badge>
             <h2 className="text-3xl md:text-4xl font-bold tracking-tight">
-              See it with your own checks.
+              See ChecksOps in action.
             </h2>
             <p className="mt-4 text-muted-foreground text-lg leading-relaxed">
-              A 20-minute live walkthrough. Bring a sample check photo — we'll run it through
-              intake, review, endorsement, and show you exactly what partner sharing looks like
-              from both sides.
+              A 20-minute live walkthrough of our platform. We'll show you intake, review,
+              endorsement, deposit, and exactly what partner sharing looks like from both sides.
             </p>
             <div className="mt-8 space-y-3">
               {[
