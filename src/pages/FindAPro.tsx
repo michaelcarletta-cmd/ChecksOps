@@ -435,7 +435,7 @@ function PublicHeader() {
     <header className="border-b border-border">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
         <a href="/" className="flex items-center" aria-label="ChecksOps home">
-          <CheckOpsLogo className="text-foreground text-xl" />
+          <CheckOpsLogo className="h-8 md:h-10" />
         </a>
         <div className="text-xs text-muted-foreground">For homeowners</div>
       </div>
