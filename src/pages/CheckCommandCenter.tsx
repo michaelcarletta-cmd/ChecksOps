@@ -963,6 +963,27 @@ export default function CheckCommandCenter() {
     refetchOnWindowFocus: false, // Prevent page jump/refresh when switching tabs
   });
 
+  // Phase 8 (high-scale aggregates): pull true per-lane counts and totals from
+  // an RPC so tab badges stay accurate even when a tenant has more than the
+  // 2,000 rows the queue query loads. Falls back gracefully if the RPC errors.
+  const { data: stageTotals } = useQuery({
+    queryKey: ["check-stage-totals", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_check_stage_totals", {
+        p_tenant_id: tenantId!,
+      });
+      if (error) throw error;
+      const map = new Map<string, { count: number; total: number }>();
+      for (const row of (data ?? []) as Array<{ stage: string; count: number; total_amount: number }>) {
+        map.set(row.stage, { count: Number(row.count) || 0, total: Number(row.total_amount) || 0 });
+      }
+      return map;
+    },
+    enabled: !!tenantId,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+
   // Partner checks — ONLY checks explicitly shared via shared_checks table.
   // Partnerships enable the ability to share, but do NOT auto-share every check.
   const { data: sharedChecks = [] } = useQuery({
@@ -1459,12 +1480,19 @@ export default function CheckCommandCenter() {
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
         {/* Unified gradient nav cards — all primary navigation */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-9 gap-2 md:gap-3">
-          {[
-            { key: "review",       label: "Review",            count: needsReview.length,         icon: ClipboardCheck, gradient: "from-blue-500/20 to-cyan-500/10",     accent: "text-blue-400",    ring: "ring-blue-500/30" },
-            { key: "endorsements", label: "Endorsing",         count: awaitingEndorsement.length, icon: Send,           gradient: "from-amber-500/20 to-orange-500/10",  accent: "text-amber-400",   ring: "ring-amber-500/30" },
-            { key: "ready",        label: "Ready for Deposit", count: readyForDeposit.length,     icon: CheckCircle2,   gradient: "from-emerald-500/20 to-green-500/10", accent: "text-emerald-400", ring: "ring-emerald-500/30" },
-            { key: "deposited",    label: "Deposited",         count: depositedChecks.length,     icon: Banknote,       gradient: "from-primary/20 to-blue-500/10",      accent: "text-primary",     ring: "ring-primary/30" },
-            { key: "lossdraft",    label: "Loss Draft",        count: (lossDraftCounts as any)?.total_active ?? 0, icon: Landmark,       gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400",  ring: "ring-purple-500/30" },
+          {(() => {
+            // Phase 8: prefer RPC totals for tab badges when the user has no
+            // active search/class filter, so counts stay accurate past the
+            // 2,000-row queue cap. Fall back to in-memory counts otherwise.
+            const useAggregate = !searchQuery.trim() && classFilter === "all" && !!stageTotals;
+            const laneCount = (key: string, fallback: number) =>
+              useAggregate ? (stageTotals!.get(key)?.count ?? 0) : fallback;
+            return [
+            { key: "review",       label: "Review",            count: laneCount("review", needsReview.length),         icon: ClipboardCheck, gradient: "from-blue-500/20 to-cyan-500/10",     accent: "text-blue-400",    ring: "ring-blue-500/30" },
+            { key: "endorsements", label: "Endorsing",         count: laneCount("endorsing", awaitingEndorsement.length), icon: Send,           gradient: "from-amber-500/20 to-orange-500/10",  accent: "text-amber-400",   ring: "ring-amber-500/30" },
+            { key: "ready",        label: "Ready for Deposit", count: laneCount("ready", readyForDeposit.length),     icon: CheckCircle2,   gradient: "from-emerald-500/20 to-green-500/10", accent: "text-emerald-400", ring: "ring-emerald-500/30" },
+            { key: "deposited",    label: "Deposited",         count: laneCount("deposited", depositedChecks.length),     icon: Banknote,       gradient: "from-primary/20 to-blue-500/10",      accent: "text-primary",     ring: "ring-primary/30" },
+            { key: "lossdraft",    label: "Loss Draft",        count: (lossDraftCounts as any)?.total_active ?? laneCount("lossdraft", 0), icon: Landmark,       gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400",  ring: "ring-purple-500/30" },
             // Bank Deposit card intentionally removed — users are pushed to CheckAlt for RDC.
             // The branch_deposit_required status still exists in the pipeline as a fallback,
             // but is no longer surfaced as a top-level tab in the command center.
@@ -1499,7 +1527,8 @@ export default function CheckCommandCenter() {
                 )}
               </button>
             );
-          })}
+          });
+          })()}
         </div>
 
         {/* Loss Draft Tab */}
