@@ -587,6 +587,11 @@ export default function CheckCommandCenter() {
   const [searchQuery, setSearchQuery] = useState("");
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const [bulkRunning, setBulkRunning] = useState(false);
+  // Phase 9: deposited history is fetched in its own paginated query so the
+  // main active-queue query never blows past its 2,000-row cap on tenants
+  // with hundreds of thousands of historical deposits. Images stay forever.
+  const DEPOSITED_PAGE_SIZE = 200;
+  const [depositedLimit, setDepositedLimit] = useState(DEPOSITED_PAGE_SIZE);
 
   const toggleBulk = useCallback((id: string) => {
     setBulkSelected((prev) => {
