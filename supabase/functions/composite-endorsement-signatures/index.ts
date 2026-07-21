@@ -123,8 +123,8 @@ const ENDORSEMENT_WIDTH_PCT = 0.22;
 // longest-edge normalization without changing CheckAlt's own sizing pipeline.
 // This avoids edge CPU kills on large phone captures while still producing a
 // raster JPEG/PNG that CheckAlt can decode and compress normally.
-const MAX_RASTER_LONG_EDGE = 1200;
-const MAX_RASTER_PIXELS = 1_200_000;
+const MAX_RASTER_LONG_EDGE = 1000;
+const MAX_RASTER_PIXELS = 800_000;
 const MAX_SIGNATURE_LONG_EDGE = 600;
 const MAX_SIGNATURE_PIXELS = 180_000;
 
