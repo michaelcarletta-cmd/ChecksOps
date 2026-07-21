@@ -110,8 +110,8 @@ export function EndorsementAdjuster({
   const ZONE_TOP_PCT = 0.15;
   const ZONE_BOTTOM_PCT = 0.92;
   const ENDORSEMENT_WIDTH_PCT = 0.22;
-  const MAX_RASTER_LONG_EDGE = 1200;
-  const MAX_RASTER_PIXELS = 1_200_000;
+  const MAX_RASTER_LONG_EDGE = 1000;
+  const MAX_RASTER_PIXELS = 800_000;
 
   // The backend compositor downscales oversized check photos before choosing
   // endorsement font/signature sizes. Mirror that here so the preview matches
