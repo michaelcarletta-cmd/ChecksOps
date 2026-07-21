@@ -2896,11 +2896,31 @@ function CheckDetailPanel({
     staleTime: 5 * 60 * 1000,
     retry: 1,
     queryFn: async () => {
+      // Prefer the explicit pristine-original pointer written by the adjuster
+      // on approve. This is the most reliable source and survives any future
+      // renames of the composited deposit artifact.
+      const explicitOriginal = toStorageObjectPath(
+        ((check as any)?.back_image_original_path as string | null) ?? null,
+      );
+      if (explicitOriginal) {
+        const { data } = await supabase.storage
+          .from("claim-files")
+          .createSignedUrl(explicitOriginal, 3600);
+        if (data?.signedUrl) return data.signedUrl;
+      }
+
       const currentPath = toStorageObjectPath(check!.back_image_path);
       if (!currentPath) return backImageUrl ?? null;
 
+      // Detect any known "already-composited" back artifact so we don't feed
+      // the composite back into the editor (which stacks endorsements).
+      const isComposite =
+        /_endorsed(?:_\d+)?\.[^.]+$/i.test(currentPath) ||
+        /endorsed_deposit_[^/]+\.[^.]+$/i.test(currentPath) ||
+        /\.svg(\?|$)/i.test(currentPath);
+
       let sourcePath = currentPath;
-      if (/_endorsed(?:_\d+)?\.[^.]+$/i.test(currentPath)) {
+      if (isComposite) {
         const { data: compositeAudits } = await supabase
           .from("check_audit_log")
           .select("event_data")
