@@ -1,4 +1,5 @@
-import { Fragment, lazy, Suspense, useState, useMemo, useCallback, useEffect } from "react";
+import { Fragment, lazy, Suspense, useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -1086,6 +1087,30 @@ export default function CheckCommandCenter() {
 
 
   const groupedFilteredChecks = useMemo<CheckGroup[]>(() => buildCheckGroups(filteredChecks as CheckItem[]), [buildCheckGroups, filteredChecks]);
+
+  // Phase 4: flatten grouped queue into a single item list for virtualization.
+  type FlatQueueItem =
+    | { kind: "header"; group: CheckGroup; key: string }
+    | { kind: "row"; group: CheckGroup; check: CheckItem; key: string };
+  const flatQueueItems = useMemo<FlatQueueItem[]>(() => {
+    const out: FlatQueueItem[] = [];
+    for (const g of groupedFilteredChecks) {
+      out.push({ kind: "header", group: g, key: `${g.key}-h` });
+      for (const c of g.checks) out.push({ kind: "row", group: g, check: c, key: c.id });
+    }
+    return out;
+  }, [groupedFilteredChecks]);
+  const VIRTUALIZE_THRESHOLD = 100;
+  const shouldVirtualizeQueue = flatQueueItems.length > VIRTUALIZE_THRESHOLD;
+  const queueScrollRef = useRef<HTMLDivElement>(null);
+  const queueVirtualizer = useVirtualizer({
+    count: flatQueueItems.length,
+    getScrollElement: () => queueScrollRef.current,
+    estimateSize: (i) => (flatQueueItems[i]?.kind === "header" ? 64 : 68),
+    overscan: 12,
+    measureElement: (el) => el?.getBoundingClientRect().height ?? 68,
+  });
+
   const groupedReissueRequested = useMemo<CheckGroup[]>(() => buildCheckGroups(reissueRequested), [buildCheckGroups, reissueRequested]);
   const groupedBranchDeposit = useMemo<CheckGroup[]>(() => buildCheckGroups(branchDeposit), [buildCheckGroups, branchDeposit]);
 
@@ -2013,8 +2038,6 @@ export default function CheckCommandCenter() {
                   </div>
                 </div>
                 <div className="overflow-x-auto h-full">
-                <ScrollArea className="h-[calc(100vh-460px)] min-h-[300px]">
-
                   {isLoading ? (
                     <div className="p-8 text-center text-muted-foreground">Loading checks...</div>
                   ) : filteredChecks.length === 0 ? (
@@ -2024,203 +2047,244 @@ export default function CheckCommandCenter() {
                       const hideDepositCol = activeTab === "endorsements" || activeTab === "ready" || activeTab === "deposited";
                       const hideReadySignal = activeTab === "ready" || activeTab === "deposited";
                       const colCount = (hideDepositCol ? 7 : 8) + 1;
-                      return (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-8"></TableHead>
-                          <TableHead>Check</TableHead>
-                          <TableHead>Carrier / Property</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
-                          <TableHead>Class</TableHead>
-                          <TableHead>Payees</TableHead>
-                          <TableHead>Status</TableHead>
-                          {!hideDepositCol && <TableHead>Deposit</TableHead>}
-                          <TableHead className="w-20"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {groupedFilteredChecks.map((group) => (
-                          <Fragment key={group.key}>
-                            <TableRow key={`${group.key}-header`} className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold">
-                              <TableCell className="py-3 w-8">
-                                {group.checks.length > 1 && (() => {
-                                  const groupIds = group.checks.map((c) => c.id);
-                                  const allChecked = groupIds.every((id) => bulkSelected.has(id));
-                                  const someChecked = !allChecked && groupIds.some((id) => bulkSelected.has(id));
-                                  return (
-                                    <input
-                                      type="checkbox"
-                                      className="h-4 w-4 accent-primary cursor-pointer"
-                                      checked={allChecked}
-                                      ref={(el) => { if (el) el.indeterminate = someChecked; }}
-                                      onClick={(e) => e.stopPropagation()}
-                                      onChange={() => {
-                                        setBulkSelected((prev) => {
-                                          const next = new Set(prev);
-                                          if (allChecked) groupIds.forEach((id) => next.delete(id));
-                                          else groupIds.forEach((id) => next.add(id));
-                                          return next;
-                                        });
-                                      }}
-                                      title="Select all checks in this file"
-                                    />
-                                  );
-                                })()}
-                              </TableCell>
-                              <TableCell colSpan={colCount - 1} className="py-3">
-                                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                  <ClaimCheckFileHeader group={group} hideReadySignal={hideReadySignal} />
-                                </div>
-                              </TableCell>
-                            </TableRow>
 
-                            {group.checks.map((check) => {
-                              const effStatus = getEffectiveStatus(check);
-                              // Suppress the AI "Ready for Deposit" recommendation badge once
-                              // the status badge already conveys it (avoids two badges / two
-                              // colors for the same thing).
-                              const suppressRec =
-                                check.deposit_recommendation === "ready_for_deposit" &&
-                                (effStatus === "approved_for_deposit" || effStatus === "deposited");
-                              const rec = check.deposit_recommendation && !suppressRec
-                                ? recommendationConfig[check.deposit_recommendation]
-                                : null;
-                              const RecIcon = rec?.icon ?? null;
-                              const canDelete = canDeleteAnyCheck;
-                              const isSelected = selectedCheck === check.id;
-                              const isBulk = bulkSelected.has(check.id);
-                              const isShared = (check as any)._shared;
-                              const sourceTenantName = (check as any)._sourceTenantName;
+                      const renderHeaderRow = (group: CheckGroup) => (
+                        <TableRow key={`${group.key}-header`} className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold">
+                          <TableCell className="py-3 w-8">
+                            {group.checks.length > 1 && (() => {
+                              const groupIds = group.checks.map((c) => c.id);
+                              const allChecked = groupIds.every((id) => bulkSelected.has(id));
+                              const someChecked = !allChecked && groupIds.some((id) => bulkSelected.has(id));
                               return (
-                                <TableRow
-                                  key={check.id}
-                                  className={`cursor-pointer transition-colors ${isSelected ? "bg-accent" : ""} ${isBulk ? "bg-primary/5" : ""}`}
-                                  onMouseEnter={() => prefetchCheckDetail(check.id)}
-                                  onFocus={() => prefetchCheckDetail(check.id)}
-                                  onClick={() => setSelectedCheck(isSelected ? null : check.id)}
-                                >
-                              <TableCell className="w-8" onClick={(e) => e.stopPropagation()}>
                                 <input
                                   type="checkbox"
                                   className="h-4 w-4 accent-primary cursor-pointer"
-                                  checked={isBulk}
-                                  onChange={() => toggleBulk(check.id)}
+                                  checked={allChecked}
+                                  ref={(el) => { if (el) el.indeterminate = someChecked; }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={() => {
+                                    setBulkSelected((prev) => {
+                                      const next = new Set(prev);
+                                      if (allChecked) groupIds.forEach((id) => next.delete(id));
+                                      else groupIds.forEach((id) => next.add(id));
+                                      return next;
+                                    });
+                                  }}
+                                  title="Select all checks in this file"
                                 />
-                              </TableCell>
-                              <TableCell className="font-mono text-sm">
-                                <div className="flex items-center gap-1.5">
-                                  #{check.check_number || "—"}
-                                  {isShared && <SharedChecksBadge sourceTenantName={sourceTenantName} />}
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-sm md:max-w-[180px]">
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="break-words md:truncate leading-tight">{check.carrier_name || "Pending OCR"}</span>
-                                  <CheckValidityBadge issueDate={check.issue_date} expirationDays={check.expiration_days} hideWhenSafe />
-                                  {check.property_address && (
-                                    <span className="text-[10px] text-muted-foreground break-words md:truncate leading-tight" title={check.property_address}>
-                                      📍 {check.property_address}
-                                    </span>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-right font-semibold tabular-nums">
-                                {check.amount != null
-                                  ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
-                                  : "—"}
-                              </TableCell>
+                              );
+                            })()}
+                          </TableCell>
+                          <TableCell colSpan={colCount - 1} className="py-3">
+                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                              <ClaimCheckFileHeader group={group} hideReadySignal={hideReadySignal} />
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+
+                      const renderCheckRow = (check: CheckItem) => {
+                        const effStatus = getEffectiveStatus(check);
+                        const suppressRec =
+                          check.deposit_recommendation === "ready_for_deposit" &&
+                          (effStatus === "approved_for_deposit" || effStatus === "deposited");
+                        const rec = check.deposit_recommendation && !suppressRec
+                          ? recommendationConfig[check.deposit_recommendation]
+                          : null;
+                        const RecIcon = rec?.icon ?? null;
+                        const canDelete = canDeleteAnyCheck;
+                        const isSelected = selectedCheck === check.id;
+                        const isBulk = bulkSelected.has(check.id);
+                        const isShared = (check as any)._shared;
+                        const sourceTenantName = (check as any)._sourceTenantName;
+                        return (
+                          <TableRow
+                            key={check.id}
+                            className={`cursor-pointer transition-colors ${isSelected ? "bg-accent" : ""} ${isBulk ? "bg-primary/5" : ""}`}
+                            onMouseEnter={() => prefetchCheckDetail(check.id)}
+                            onFocus={() => prefetchCheckDetail(check.id)}
+                            onClick={() => setSelectedCheck(isSelected ? null : check.id)}
+                          >
+                            <TableCell className="w-8" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 accent-primary cursor-pointer"
+                                checked={isBulk}
+                                onChange={() => toggleBulk(check.id)}
+                              />
+                            </TableCell>
+                            <TableCell className="font-mono text-sm">
+                              <div className="flex items-center gap-1.5">
+                                #{check.check_number || "—"}
+                                {isShared && <SharedChecksBadge sourceTenantName={sourceTenantName} />}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm md:max-w-[180px]">
+                              <div className="flex flex-col gap-0.5">
+                                <span className="break-words md:truncate leading-tight">{check.carrier_name || "Pending OCR"}</span>
+                                <CheckValidityBadge issueDate={check.issue_date} expirationDays={check.expiration_days} hideWhenSafe />
+                                {check.property_address && (
+                                  <span className="text-[10px] text-muted-foreground break-words md:truncate leading-tight" title={check.property_address}>
+                                    📍 {check.property_address}
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right font-semibold tabular-nums">
+                              {check.amount != null
+                                ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                                : "—"}
+                            </TableCell>
+                            <TableCell>
+                              {check.funds_type ? (
+                                <Badge variant="outline" className="text-[10px] uppercase">
+                                  {check.funds_type === "recoverable_depreciation"
+                                    ? "Rec. Dep."
+                                    : check.funds_type === "overhead_and_profit"
+                                    ? "O&P"
+                                    : check.funds_type}
+                                </Badge>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs">{check.check_payees?.length ?? 0}</span>
+                                {check.is_multi_payee && (
+                                  <Badge variant="outline" className="text-[10px] px-1">Multi</Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={`text-[10px] ${getTabStatusClass(check, activeTab)}`}>
+                                {getTabStatusLabel(check, activeTab)}
+                              </Badge>
+                            </TableCell>
+                            {!hideDepositCol && (
                               <TableCell>
-                                {check.funds_type ? (
-                                  <Badge variant="outline" className="text-[10px] uppercase">
-                                    {check.funds_type === "recoverable_depreciation"
-                                      ? "Rec. Dep."
-                                      : check.funds_type === "overhead_and_profit"
-                                      ? "O&P"
-                                      : check.funds_type}
-                                  </Badge>
-                                ) : (
-                                  <span className="text-[10px] text-muted-foreground">—</span>
+                                {RecIcon && (
+                                  <span
+                                    className="inline-flex items-center gap-1"
+                                    title={rec!.label}
+                                  >
+                                    <RecIcon className={`h-4 w-4 ${rec!.color}`} />
+                                    <span className={`text-[10px] ${rec!.color} hidden md:inline`}>
+                                      {rec!.label}
+                                    </span>
+                                  </span>
                                 )}
                               </TableCell>
-                              <TableCell>
-                                <div className="flex items-center gap-1">
-                                  <span className="text-xs">{check.check_payees?.length ?? 0}</span>
-                                  {check.is_multi_payee && (
-                                    <Badge variant="outline" className="text-[10px] px-1">Multi</Badge>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <Badge className={`text-[10px] ${getTabStatusClass(check, activeTab)}`}>
-                                  {getTabStatusLabel(check, activeTab)}
-                                </Badge>
-                              </TableCell>
-                              {!hideDepositCol && (
-                                <TableCell>
-                                  {RecIcon && (
-                                    <span
-                                      className="inline-flex items-center gap-1"
-                                      title={rec!.label}
-                                    >
-                                      <RecIcon className={`h-4 w-4 ${rec!.color}`} />
-                                      <span className={`text-[10px] ${rec!.color} hidden md:inline`}>
-                                        {rec!.label}
-                                      </span>
-                                    </span>
-                                  )}
-                                </TableCell>
-                              )}
+                            )}
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                {!isShared && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setShareCheckId(check.id);
+                                    }}
+                                    title="Share with partner"
+                                  >
+                                    <Share2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                                {canDelete && !isShared && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (confirm("Delete this check? This cannot be undone.")) {
+                                        deleteCheckMutation.mutate(check.id);
+                                      }
+                                    }}
+                                    disabled={deleteCheckMutation.isPending}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      };
 
-                              <TableCell>
-                                <div className="flex items-center gap-1">
-                                  {!isShared && (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setShareCheckId(check.id);
-                                      }}
-                                      title="Share with partner"
-                                    >
-                                      <Share2 className="h-3.5 w-3.5" />
-                                    </Button>
-                                  )}
-                                  {canDelete && !isShared && (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (confirm("Delete this check? This cannot be undone.")) {
-                                          deleteCheckMutation.mutate(check.id);
-                                        }
-                                      }}
-                                      disabled={deleteCheckMutation.isPending}
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </Fragment>
-                        ))}
-                      </TableBody>
-                    </Table>
+                      const headerRow = (
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-8"></TableHead>
+                            <TableHead>Check</TableHead>
+                            <TableHead>Carrier / Property</TableHead>
+                            <TableHead className="text-right">Amount</TableHead>
+                            <TableHead>Class</TableHead>
+                            <TableHead>Payees</TableHead>
+                            <TableHead>Status</TableHead>
+                            {!hideDepositCol && <TableHead>Deposit</TableHead>}
+                            <TableHead className="w-20"></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                      );
+
+                      if (shouldVirtualizeQueue) {
+                        const virtualItems = queueVirtualizer.getVirtualItems();
+                        const totalSize = queueVirtualizer.getTotalSize();
+                        const paddingTop = virtualItems.length > 0 ? virtualItems[0].start : 0;
+                        const paddingBottom = virtualItems.length > 0 ? totalSize - virtualItems[virtualItems.length - 1].end : 0;
+                        return (
+                          <div ref={queueScrollRef} className="overflow-auto h-[calc(100vh-460px)] min-h-[300px]">
+                            <Table>
+                              {headerRow}
+                              <TableBody>
+                                {paddingTop > 0 && (
+                                  <tr aria-hidden="true"><td colSpan={colCount} style={{ height: paddingTop, padding: 0, border: 0 }} /></tr>
+                                )}
+                                {virtualItems.map((vi) => {
+                                  const item = flatQueueItems[vi.index];
+                                  if (!item) return null;
+                                  const content = item.kind === "header" ? renderHeaderRow(item.group) : renderCheckRow(item.check);
+                                  return (
+                                    <Fragment key={item.key}>
+                                      {content}
+                                    </Fragment>
+                                  );
+                                })}
+                                {paddingBottom > 0 && (
+                                  <tr aria-hidden="true"><td colSpan={colCount} style={{ height: paddingBottom, padding: 0, border: 0 }} /></tr>
+                                )}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <ScrollArea className="h-[calc(100vh-460px)] min-h-[300px]">
+                          <Table>
+                            {headerRow}
+                            <TableBody>
+                              {groupedFilteredChecks.map((group) => (
+                                <Fragment key={group.key}>
+                                  {renderHeaderRow(group)}
+                                  {group.checks.map((check) => renderCheckRow(check))}
+                                </Fragment>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </ScrollArea>
                       );
                     })()
                   )}
-                </ScrollArea>
                 </div>
 
               </CardContent>
             </Card>
+
+
 
 
             {/* Detail panel — hidden on mobile when no check selected */}
