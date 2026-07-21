@@ -2876,7 +2876,11 @@ function CheckDetailPanel({
 
   const { data: endorsementAdjusterImageUrl } = useQuery({
     queryKey: ["check-back-img-original-for-adjuster", check?.id, check?.back_image_path],
-    enabled: showEndorsementAdjuster && !!check?.id && !!check?.back_image_path && !isSharedView,
+    // Prefetch on mount so opening the adjuster is instant — resolving the
+    // original back-image path can cost 1-2 round trips (audit lookup + signed
+    // URL) plus a full image download to read dimensions.
+    enabled: !!check?.id && !!check?.back_image_path && !isSharedView,
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const currentPath = toStorageObjectPath(check!.back_image_path);
       if (!currentPath) return backImageUrl ?? null;
