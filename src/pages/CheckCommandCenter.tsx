@@ -970,6 +970,42 @@ export default function CheckCommandCenter() {
     refetchOnWindowFocus: false, // Prevent page jump/refresh when switching tabs
   });
 
+  // Phase 9: paginated deposited-checks history. Loaded only when the
+  // Deposited tab is active. Uses the partial index on
+  // (tenant_id, deposited_at DESC) WHERE check_stage='deposited'.
+  const { data: depositedRows = [], isFetching: isFetchingDeposited } = useQuery({
+    queryKey: ["check-intake-items-deposited", tenantId, depositedLimit],
+    enabled: !!tenantId && activeTab === "deposited",
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const queueColumns = [
+        "id","claim_id","tenant_id","front_image_path","back_image_path",
+        "carrier_name","check_number","amount","issue_date","expiration_days",
+        "detected_claim_number","payee_line","is_multi_payee","ocr_status",
+        "deposit_recommendation","deposit_recommendation_reasons","status",
+        "check_stage","created_at","updated_at","uploaded_by","reviewed_by",
+        "reviewed_at","review_notes","endorsement_packet_path","endorsement_override",
+        "funds_type","property_address","payment_classification","payee_address",
+        "deposited_at","deposited_by_tenant_id","partner_status","partner_status_label",
+        "partner_status_updated_at","external_origin","check_source","cash_job_id",
+        "cash_job_payment_class",
+      ].join(", ");
+      const { data, error } = await supabase
+        .from("check_intake_items")
+        .select(
+          `${queueColumns}, check_payees(payee_name, payee_type, endorsement_status), checkalt_deposits(id, status, submitted_at, approved_at, updated_at)`,
+        )
+        .eq("tenant_id", tenantId!)
+        .eq("check_stage", "deposited")
+        .order("deposited_at", { ascending: false, nullsFirst: false })
+        .order("updated_at", { ascending: false })
+        .limit(depositedLimit);
+      if (error) throw error;
+      return (data ?? []) as unknown as CheckItem[];
+    },
+  });
+
   // Phase 8 (high-scale aggregates): pull true per-lane counts and totals from
   // an RPC so tab badges stay accurate even when a tenant has more than the
   // 2,000 rows the queue query loads. Falls back gracefully if the RPC errors.
