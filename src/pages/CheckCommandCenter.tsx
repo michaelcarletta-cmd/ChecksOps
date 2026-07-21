@@ -4172,6 +4172,8 @@ function CheckDetailPanel({
                         variant="outline"
                         size="sm"
                         className="w-full"
+                        onPointerEnter={() => { void preloadEndorsementAdjuster(); }}
+                        onFocus={() => { void preloadEndorsementAdjuster(); }}
                         onClick={() => setShowEndorsementAdjuster((v) => !v)}
                       >
                         {showEndorsementAdjuster ? "Hide" : "Adjust"} Endorsement Position
