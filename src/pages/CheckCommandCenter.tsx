@@ -1840,7 +1840,7 @@ export default function CheckCommandCenter() {
                   </span>
                 </div>
                 <div className="overflow-x-auto h-full">
-                <ScrollArea className="h-[calc(100vh-440px)]">
+                <ScrollArea className="h-[calc(100vh-520px)] min-h-[280px]">
 
                   {isLoading ? (
                     <div className="p-8 text-center text-muted-foreground">Loading checks...</div>
