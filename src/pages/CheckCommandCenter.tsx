@@ -758,7 +758,7 @@ export default function CheckCommandCenter() {
           `[perf] check-queue fetched ${data?.length ?? 0} rows in ${(performance.now() - t0).toFixed(0)}ms`,
         );
       }
-      return (data ?? []) as CheckItem[];
+      return (data ?? []) as unknown as CheckItem[];
     },
     enabled: !!tenantId,
     refetchOnWindowFocus: false, // Prevent page jump/refresh when switching tabs
