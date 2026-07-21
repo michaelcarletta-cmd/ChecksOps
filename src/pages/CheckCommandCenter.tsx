@@ -2096,6 +2096,8 @@ export default function CheckCommandCenter() {
                                 <TableRow
                                   key={check.id}
                                   className={`cursor-pointer transition-colors ${isSelected ? "bg-accent" : ""} ${isBulk ? "bg-primary/5" : ""}`}
+                                  onMouseEnter={() => prefetchCheckDetail(check.id)}
+                                  onFocus={() => prefetchCheckDetail(check.id)}
                                   onClick={() => setSelectedCheck(isSelected ? null : check.id)}
                                 >
                               <TableCell className="w-8" onClick={(e) => e.stopPropagation()}>
