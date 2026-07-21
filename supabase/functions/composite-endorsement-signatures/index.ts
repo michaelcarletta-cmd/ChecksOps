@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 
 let render: ((svg: string) => Promise<Uint8Array>) | null = null;
 try {
@@ -122,8 +123,8 @@ const ENDORSEMENT_WIDTH_PCT = 0.22;
 // longest-edge normalization without changing CheckAlt's own sizing pipeline.
 // This avoids edge CPU kills on large phone captures while still producing a
 // raster JPEG/PNG that CheckAlt can decode and compress normally.
-const MAX_RASTER_LONG_EDGE = 1200;
-const MAX_RASTER_PIXELS = 1_200_000;
+const MAX_RASTER_LONG_EDGE = 1000;
+const MAX_RASTER_PIXELS = 800_000;
 const MAX_SIGNATURE_LONG_EDGE = 600;
 const MAX_SIGNATURE_PIXELS = 180_000;
 
@@ -856,12 +857,11 @@ function svgText(x: number, y: number, size: number, fill: string, weight: strin
 }
 
 function uint8ToBase64(bytes: Uint8Array) {
-  const chunkSize = 0x8000;
-  const chunks: string[] = [];
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    chunks.push(String.fromCharCode(...bytes.subarray(i, i + chunkSize)));
-  }
-  return btoa(chunks.join(""));
+  // Use std encodeBase64 (native, C-fast). The previous manual chunked
+  // String.fromCharCode + btoa loop regularly blew past the edge CPU
+  // budget on ~1MP back-of-check base64 embeds and killed the isolate
+  // with "CPU Time exceeded" before the SVG upload could finish.
+  return encodeBase64(bytes);
 }
 
 function detectImageDimensions(bytes: Uint8Array): { width: number; height: number } {
