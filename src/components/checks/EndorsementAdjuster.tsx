@@ -638,8 +638,12 @@ export function EndorsementAdjuster({
     );
   }
 
+  const currentStep: 1 | 2 | 3 =
+    status === "completed" ? 3 : status === "position_saved" || status === "rendering" ? 2 : 1;
+
   return (
     <div className="space-y-4">
+      <StepBadge current={currentStep} />
       {endorsementsLoading ? (
         <div className="text-sm text-muted-foreground">Loading endorsement signatures…</div>
       ) : endorsementsError ? (
