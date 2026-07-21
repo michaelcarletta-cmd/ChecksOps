@@ -67,8 +67,10 @@ import { ClaimLedgerCard } from "@/components/payments/ClaimLedgerCard";
 const LossDraftDashboard = lazy(() =>
   import("@/components/loss-draft/LossDraftDashboard").then(m => ({ default: m.LossDraftDashboard }))
 );
+const preloadEndorsementAdjuster = () =>
+  import("@/components/checks/EndorsementAdjuster");
 const EndorsementAdjuster = lazy(() =>
-  import("@/components/checks/EndorsementAdjuster").then(m => ({ default: m.EndorsementAdjuster }))
+  preloadEndorsementAdjuster().then(m => ({ default: m.EndorsementAdjuster }))
 );
 const EndorsementChecklist = lazy(() =>
   import("@/components/check-review/EndorsementChecklist").then(m => ({ default: m.EndorsementChecklist }))
@@ -2876,7 +2878,11 @@ function CheckDetailPanel({
 
   const { data: endorsementAdjusterImageUrl } = useQuery({
     queryKey: ["check-back-img-original-for-adjuster", check?.id, check?.back_image_path],
-    enabled: showEndorsementAdjuster && !!check?.id && !!check?.back_image_path && !isSharedView,
+    // Prefetch on mount so opening the adjuster is instant — resolving the
+    // original back-image path can cost 1-2 round trips (audit lookup + signed
+    // URL) plus a full image download to read dimensions.
+    enabled: !!check?.id && !!check?.back_image_path && !isSharedView,
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const currentPath = toStorageObjectPath(check!.back_image_path);
       if (!currentPath) return backImageUrl ?? null;
@@ -4166,6 +4172,8 @@ function CheckDetailPanel({
                         variant="outline"
                         size="sm"
                         className="w-full"
+                        onPointerEnter={() => { void preloadEndorsementAdjuster(); }}
+                        onFocus={() => { void preloadEndorsementAdjuster(); }}
                         onClick={() => setShowEndorsementAdjuster((v) => !v)}
                       >
                         {showEndorsementAdjuster ? "Hide" : "Adjust"} Endorsement Position
