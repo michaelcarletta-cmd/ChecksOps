@@ -164,14 +164,13 @@ Deno.serve(async (req) => {
   const jwt = auth.replace(/^Bearer\s+/i, "");
   if (!jwt) return respond({ error: "Missing auth" }, 401);
 
-  const userClient = createClient(sbUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-    global: { headers: { Authorization: auth } },
-  });
-  const { data: userRes } = await userClient.auth.getUser(jwt);
-  const user = userRes?.user;
-  if (!user) return respond({ error: "Not authenticated" }, 401);
-
   const admin = createClient(sbUrl, svcKey);
+  const { data: userRes, error: userErr } = await admin.auth.getUser(jwt);
+  const user = userRes?.user;
+  if (userErr || !user) {
+    console.error("generate-checksops-doc auth failed:", userErr?.message);
+    return respond({ error: "Not authenticated" }, 401);
+  }
   try {
     const payload = (await req.json()) as Payload;
     if (!payload?.claim_id || !payload?.template || !payload?.homeowner_name) {
