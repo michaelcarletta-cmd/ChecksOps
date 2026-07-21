@@ -2856,9 +2856,15 @@ function CheckDetailPanel({
     },
   });
 
-  const { data: backImageUrl } = useQuery({
+  const {
+    data: backImageUrl,
+    error: backImageUrlError,
+    isFetching: backImageUrlFetching,
+    refetch: refetchBackImageUrl,
+  } = useQuery({
     queryKey: ["check-back-img", check?.back_image_path],
     enabled: !!check?.back_image_path,
+    retry: 1,
     queryFn: async () => {
       if (isSharedView && check?.id) {
         const { data, error } = await supabase.functions.invoke("get-check-image-urls", {
@@ -2876,13 +2882,19 @@ function CheckDetailPanel({
     },
   });
 
-  const { data: endorsementAdjusterImageUrl } = useQuery({
+  const {
+    data: endorsementAdjusterImageUrl,
+    error: endorsementAdjusterImageUrlError,
+    isFetching: endorsementAdjusterImageUrlFetching,
+    refetch: refetchEndorsementAdjusterImageUrl,
+  } = useQuery({
     queryKey: ["check-back-img-original-for-adjuster", check?.id, check?.back_image_path],
     // Prefetch on mount so opening the adjuster is instant — resolving the
     // original back-image path can cost 1-2 round trips (audit lookup + signed
     // URL) plus a full image download to read dimensions.
     enabled: !!check?.id && !!check?.back_image_path && !isSharedView,
     staleTime: 5 * 60 * 1000,
+    retry: 1,
     queryFn: async () => {
       const currentPath = toStorageObjectPath(check!.back_image_path);
       if (!currentPath) return backImageUrl ?? null;
@@ -2939,11 +2951,15 @@ function CheckDetailPanel({
       if (!cancelled && !img.complete) {
         setBackImageDimError("Timed out loading check image.");
       }
-    }, 15000);
+    }, 10000);
     img.onload = () => {
       if (cancelled) return;
       window.clearTimeout(timeout);
-      setBackImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+        setBackImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+      } else {
+        setBackImageDimError("Check image reported zero dimensions.");
+      }
     };
     img.onerror = () => {
       if (cancelled) return;
@@ -2953,6 +2969,37 @@ function CheckDetailPanel({
     img.src = endorsementAdjusterSourceUrl;
     return () => { cancelled = true; window.clearTimeout(timeout); };
   }, [endorsementAdjusterSourceUrl, backImageDimReloadKey]);
+
+  // Hard preparation timeout so "Preparing endorsement editor…" can never hang.
+  const [endorsementPrepTimedOut, setEndorsementPrepTimedOut] = useState(false);
+  const endorsementEditorReady = !!endorsementAdjusterSourceUrl && !!backImageDimensions;
+  useEffect(() => {
+    setEndorsementPrepTimedOut(false);
+    if (!showEndorsementAdjuster) return;
+    if (endorsementEditorReady) return;
+    const t = window.setTimeout(() => setEndorsementPrepTimedOut(true), 8000);
+    return () => window.clearTimeout(t);
+  }, [showEndorsementAdjuster, endorsementEditorReady, backImageDimReloadKey, endorsementAdjusterSourceUrl]);
+
+  const endorsementPrepError =
+    backImageDimError ||
+    (endorsementPrepTimedOut && !endorsementEditorReady
+      ? "The endorsement editor could not finish loading. The check image may be temporarily unavailable."
+      : null) ||
+    ((endorsementAdjusterImageUrlError || backImageUrlError) && !endorsementAdjusterSourceUrl
+      ? "We couldn't resolve the back-of-check image URL."
+      : null);
+
+  const retryEndorsementPrep = useCallback(() => {
+    setEndorsementPrepTimedOut(false);
+    setBackImageDimError(null);
+    setBackImageDimensions(null);
+    qc.invalidateQueries({ queryKey: ["check-back-img", check?.back_image_path] });
+    qc.invalidateQueries({ queryKey: ["check-back-img-original-for-adjuster", check?.id, check?.back_image_path] });
+    void refetchBackImageUrl();
+    void refetchEndorsementAdjusterImageUrl();
+    setBackImageDimReloadKey((k) => k + 1);
+  }, [qc, check?.back_image_path, check?.id, refetchBackImageUrl, refetchEndorsementAdjusterImageUrl]);
 
   useEffect(() => {
     setFrontImageDimensions(null);
@@ -4301,11 +4348,13 @@ function CheckDetailPanel({
                         />
                       ) : (
                         <div className="space-y-4 py-2">
-                          <div className="text-sm text-muted-foreground">
-                            {backImageDimError
-                              ? backImageDimError
+                          <div className={`text-sm ${endorsementPrepError ? "text-destructive" : "text-muted-foreground"}`}>
+                            {endorsementPrepError
+                              ? endorsementPrepError
                               : !endorsementAdjusterSourceUrl
-                                ? "Preparing endorsement editor…"
+                                ? (endorsementAdjusterImageUrlFetching || backImageUrlFetching
+                                    ? "Loading check image URL…"
+                                    : "Preparing endorsement editor…")
                                 : "Loading check image…"}
                           </div>
                           <div className="h-64 w-full animate-pulse rounded-md bg-muted" />
@@ -4313,18 +4362,10 @@ function CheckDetailPanel({
                             <div className="h-8 animate-pulse rounded bg-muted" />
                             <div className="h-8 animate-pulse rounded bg-muted" />
                           </div>
-                          {backImageDimError && (
+                          {(endorsementPrepError || endorsementPrepTimedOut) && (
                             <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  qc.invalidateQueries({ queryKey: ["check-back-img", check?.back_image_path] });
-                                  qc.invalidateQueries({ queryKey: ["check-back-img-original-for-adjuster", check?.id, check?.back_image_path] });
-                                  setBackImageDimReloadKey((k) => k + 1);
-                                }}
-                              >
-                                Retry Image
+                              <Button size="sm" variant="outline" onClick={retryEndorsementPrep}>
+                                Retry Loading
                               </Button>
                               <Button size="sm" variant="ghost" onClick={() => setShowEndorsementAdjuster(false)}>
                                 Close
