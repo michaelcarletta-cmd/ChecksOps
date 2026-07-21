@@ -84,7 +84,7 @@ const SharedCheckPaymentDirection = lazy(() =>
 const CheckFilesSection = lazy(() =>
   import("@/components/check-review/CheckFilesSection").then(m => ({ default: m.CheckFilesSection }))
 );
-import { DTPStatusIndicator } from "@/components/check-review/DTPStatusIndicator";
+// DTP status/badge moved into the Files tab — signed DTP PDFs live in check_files.
 const DepositPacketGenerator = lazy(() =>
   import("@/components/check-review/DepositPacketGenerator").then(m => ({ default: m.DepositPacketGenerator }))
 );
@@ -3655,7 +3655,6 @@ function CheckDetailPanel({
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-base">Check #{check.check_number ?? "Pending"}</CardTitle>
           <div className="flex items-center gap-2">
-            <DTPStatusIndicator checkIntakeItemId={checkId} />
             <Badge className={statusColors[check.status] ?? ""}>
               {prettifyStatus(check.status)}
             </Badge>
