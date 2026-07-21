@@ -216,6 +216,53 @@ serve(async (req) => {
       backPath = await repairLegacyUrlIfNeeded(admin, check.id, "back", check.back_image_path);
     }
 
+    // For viewing/downloading, prefer the ORIGINAL back raster whenever the
+    // current back_image_path is a flattened composite or SVG wrapper. This
+    // avoids the "chunky" re-encoded look users see when the endorsement
+    // composite is downloaded. CheckAlt is unaffected — its submit path
+    // resolves the same original raster from the audit trail independently.
+    const isCompositeBack = (p: string | null) =>
+      !!p && (/\.svg(\?|$)/i.test(p) || /_endorsed_\d+\./i.test(p) || /\/composite[-_]/i.test(p));
+
+    let originalBackPath: string | null = null;
+    if (backPath && isCompositeBack(backPath)) {
+      try {
+        const { data: evts } = await admin
+          .from("check_endorsement_events")
+          .select("event_data")
+          .eq("check_id", check.id)
+          .order("created_at", { ascending: false })
+          .limit(20);
+        for (const row of (evts ?? []) as any[]) {
+          const d = row?.event_data ?? {};
+          const orig = d.original_back_image_path ?? d.original_back_path;
+          if (orig && !isCompositeBack(orig)) {
+            const candidate = toStorageObjectPath(orig);
+            if (candidate && (await objectExists(admin, candidate))) {
+              originalBackPath = candidate;
+              break;
+            }
+          }
+        }
+        if (!originalBackPath) {
+          const base = backPath.replace(/_endorsed_\d+\.(svg|jpe?g|png)$/i, "");
+          if (base !== backPath) {
+            for (const ext of [".jpeg", ".jpg", ".png"]) {
+              const candidate = `${base}${ext}`;
+              if (await objectExists(admin, candidate)) {
+                originalBackPath = candidate;
+                break;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("[get-check-image-urls] original back lookup failed:", (e as Error).message);
+      }
+    }
+
+    const viewBackPath = originalBackPath ?? backPath;
+
     const sign = async (path: string | null) => {
       if (!path) return null;
       const { data, error } = await admin.storage.from(CLAIM_FILES_BUCKET).createSignedUrl(path, 3600);
@@ -223,7 +270,11 @@ serve(async (req) => {
       return data?.signedUrl ?? null;
     };
 
-    const [frontUrl, backUrl] = await Promise.all([sign(frontPath), sign(backPath)]);
+    const [frontUrl, backUrl, backFlattenedUrl] = await Promise.all([
+      sign(frontPath),
+      sign(viewBackPath),
+      originalBackPath ? sign(backPath) : Promise.resolve(null),
+    ]);
 
     return new Response(
       JSON.stringify({
@@ -231,8 +282,10 @@ serve(async (req) => {
         checkNumber: check.check_number,
         frontUrl,
         backUrl,
+        backFlattenedUrl,
         frontPath,
-        backPath,
+        backPath: viewBackPath,
+        backFlattenedPath: originalBackPath ? backPath : null,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
