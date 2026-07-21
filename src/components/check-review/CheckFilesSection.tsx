@@ -71,7 +71,10 @@ export function CheckFilesSection({ checkIntakeItemId }: CheckFilesSectionProps)
     if (!fileList?.length) return;
     setUploading(true);
     try {
-      for (const file of Array.from(fileList)) {
+      for (const rawFile of Array.from(fileList)) {
+        // Downsize image attachments so oversized phone photos don't bloat
+        // storage or blow up downstream image processing.
+        const file = await compressCheckImage(rawFile);
         const safe = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
         const path = `check-intake/${checkIntakeItemId}/files/${Date.now()}-${crypto.randomUUID()}-${safe}`;
         const { error: upErr } = await supabase.storage
