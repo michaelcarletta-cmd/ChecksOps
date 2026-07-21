@@ -4336,7 +4336,7 @@ function CheckDetailPanel({
                   <Dialog
                     open={showEndorsementAdjuster}
                     onOpenChange={(open) => {
-                      if (!open) setShowEndorsementAdjuster(false);
+                      if (!open) requestCloseEndorsementAdjuster();
                     }}
                   >
                     <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
@@ -4358,6 +4358,7 @@ function CheckDetailPanel({
                           initialOverride={
                             (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null
                           }
+                          onUnapprovedDepositChange={setHasUnapprovedEndorsementDeposit}
                           onDepositImageApproved={async ({ depositPath }) => {
                             const originalToPersist =
                               ((check as any)?.back_image_original_path as string | null) ??
@@ -4371,11 +4372,12 @@ function CheckDetailPanel({
                               })
                               .eq("id", checkId);
                             if (saveErr) throw saveErr;
+                            setHasUnapprovedEndorsementDeposit(false);
                             setShowEndorsementAdjuster(false);
                             qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
                             qc.invalidateQueries({ queryKey: ["check-back-img"] });
                           }}
-                          onClose={() => setShowEndorsementAdjuster(false)}
+                          onClose={requestCloseEndorsementAdjuster}
                         />
                       ) : (
                         <div className="space-y-4 py-2">
