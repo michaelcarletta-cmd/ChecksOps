@@ -1087,6 +1087,30 @@ export default function CheckCommandCenter() {
 
 
   const groupedFilteredChecks = useMemo<CheckGroup[]>(() => buildCheckGroups(filteredChecks as CheckItem[]), [buildCheckGroups, filteredChecks]);
+
+  // Phase 4: flatten grouped queue into a single item list for virtualization.
+  type FlatQueueItem =
+    | { kind: "header"; group: CheckGroup; key: string }
+    | { kind: "row"; group: CheckGroup; check: CheckItem; key: string };
+  const flatQueueItems = useMemo<FlatQueueItem[]>(() => {
+    const out: FlatQueueItem[] = [];
+    for (const g of groupedFilteredChecks) {
+      out.push({ kind: "header", group: g, key: `${g.key}-h` });
+      for (const c of g.checks) out.push({ kind: "row", group: g, check: c, key: c.id });
+    }
+    return out;
+  }, [groupedFilteredChecks]);
+  const VIRTUALIZE_THRESHOLD = 100;
+  const shouldVirtualizeQueue = flatQueueItems.length > VIRTUALIZE_THRESHOLD;
+  const queueScrollRef = useRef<HTMLDivElement>(null);
+  const queueVirtualizer = useVirtualizer({
+    count: flatQueueItems.length,
+    getScrollElement: () => queueScrollRef.current,
+    estimateSize: (i) => (flatQueueItems[i]?.kind === "header" ? 64 : 68),
+    overscan: 12,
+    measureElement: (el) => el?.getBoundingClientRect().height ?? 68,
+  });
+
   const groupedReissueRequested = useMemo<CheckGroup[]>(() => buildCheckGroups(reissueRequested), [buildCheckGroups, reissueRequested]);
   const groupedBranchDeposit = useMemo<CheckGroup[]>(() => buildCheckGroups(branchDeposit), [buildCheckGroups, branchDeposit]);
 
