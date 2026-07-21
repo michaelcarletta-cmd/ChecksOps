@@ -223,15 +223,27 @@ export async function renderDepositImage(
   ctx.fillRect(0, 0, outW, outH);
   ctx.drawImage(backImg, 0, 0, outW, outH);
 
-  // Layout — pixel sizes measured against output image height (matches the
-  // preview's use of fitEndorsementLayout on image-pixel zone height).
+  // Layout — measure against the NATURAL image size (what the preview uses),
+  // then scale all pixel dimensions by outH/natH so the final render matches
+  // exactly what the user saw in the adjuster preview. Previously the preset
+  // was computed on the downscaled output, causing text/signatures to render
+  // much larger relative to the check than they appeared in the preview.
   const signerCount = Math.max(1, input.clientSignatures.length);
-  const safeZoneHeightPx = (ZONE_BOTTOM_PCT - ZONE_TOP_PCT) * outH;
-  const preset = fitEndorsementLayout({
+  const naturalSafeZoneHeightPx = (ZONE_BOTTOM_PCT - ZONE_TOP_PCT) * natH;
+  const naturalPreset = fitEndorsementLayout({
     signerCount,
-    zoneHeightPx: safeZoneHeightPx,
+    zoneHeightPx: naturalSafeZoneHeightPx,
     requestedScale: override.scale || 1,
   });
+
+  const renderScale = outH / natH;
+  const preset = {
+    ...naturalPreset,
+    fontSize: naturalPreset.fontSize * renderScale,
+    lineGap: naturalPreset.lineGap * renderScale,
+    rowGap: naturalPreset.rowGap * renderScale,
+    signatureHeight: naturalPreset.signatureHeight * renderScale,
+  };
 
   const blockWidth = outW * ENDORSEMENT_WIDTH_PCT * (override.scale || 1);
   const blockHeight = estimateBlockHeight(
@@ -246,6 +258,7 @@ export async function renderDepositImage(
 
   // Convert normalized coords to output pixels — X is full-image, Y is safe-zone-relative.
   const safeZoneTopPx = ZONE_TOP_PCT * outH;
+  const safeZoneHeightPx = (ZONE_BOTTOM_PCT - ZONE_TOP_PCT) * outH;
   const centerX = override.xPct * outW;
   let centerY = safeZoneTopPx + override.yPct * safeZoneHeightPx;
 
