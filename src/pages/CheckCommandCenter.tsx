@@ -4348,11 +4348,13 @@ function CheckDetailPanel({
                         />
                       ) : (
                         <div className="space-y-4 py-2">
-                          <div className="text-sm text-muted-foreground">
-                            {backImageDimError
-                              ? backImageDimError
+                          <div className={`text-sm ${endorsementPrepError ? "text-destructive" : "text-muted-foreground"}`}>
+                            {endorsementPrepError
+                              ? endorsementPrepError
                               : !endorsementAdjusterSourceUrl
-                                ? "Preparing endorsement editor…"
+                                ? (endorsementAdjusterImageUrlFetching || backImageUrlFetching
+                                    ? "Loading check image URL…"
+                                    : "Preparing endorsement editor…")
                                 : "Loading check image…"}
                           </div>
                           <div className="h-64 w-full animate-pulse rounded-md bg-muted" />
@@ -4360,18 +4362,10 @@ function CheckDetailPanel({
                             <div className="h-8 animate-pulse rounded bg-muted" />
                             <div className="h-8 animate-pulse rounded bg-muted" />
                           </div>
-                          {backImageDimError && (
+                          {(endorsementPrepError || endorsementPrepTimedOut) && (
                             <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  qc.invalidateQueries({ queryKey: ["check-back-img", check?.back_image_path] });
-                                  qc.invalidateQueries({ queryKey: ["check-back-img-original-for-adjuster", check?.id, check?.back_image_path] });
-                                  setBackImageDimReloadKey((k) => k + 1);
-                                }}
-                              >
-                                Retry Image
+                              <Button size="sm" variant="outline" onClick={retryEndorsementPrep}>
+                                Retry Loading
                               </Button>
                               <Button size="sm" variant="ghost" onClick={() => setShowEndorsementAdjuster(false)}>
                                 Close
