@@ -51,90 +51,98 @@ export function CheckImagesViewer({
   const currentUrl = side === "front" ? frontUrl : backUrl;
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black text-white flex flex-col">
-      <div className="flex items-center justify-between gap-2 p-4 border-b border-white/10 flex-wrap">
-        <div className="text-sm font-medium">
-          {title} — {side === "front" ? "Front" : "Back"}
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex rounded-md border border-white/20 overflow-hidden">
+    <div
+      className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-neutral-900 text-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-2 p-3 border-b border-white/10 flex-wrap">
+          <div className="text-sm font-medium">
+            {title} — {side === "front" ? "Front" : "Back"}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex rounded-md border border-white/20 overflow-hidden">
+              <button
+                type="button"
+                className={`px-2.5 py-1.5 text-xs transition-colors ${
+                  side === "front" ? "bg-white text-black" : "hover:bg-white/10"
+                } ${!frontUrl ? "opacity-40 cursor-not-allowed" : ""}`}
+                onClick={() => frontUrl && setSide("front")}
+                disabled={!frontUrl}
+              >
+                Front
+              </button>
+              <button
+                type="button"
+                className={`px-2.5 py-1.5 text-xs transition-colors ${
+                  side === "back" ? "bg-white text-black" : "hover:bg-white/10"
+                } ${!backUrl ? "opacity-40 cursor-not-allowed" : ""}`}
+                onClick={() => backUrl && setSide("back")}
+                disabled={!backUrl}
+              >
+                Back
+              </button>
+            </div>
             <button
               type="button"
-              className={`px-3 py-2 text-sm transition-colors ${
-                side === "front" ? "bg-white text-black" : "hover:bg-white/10"
-              } ${!frontUrl ? "opacity-40 cursor-not-allowed" : ""}`}
-              onClick={() => frontUrl && setSide("front")}
-              disabled={!frontUrl}
+              className="rounded-md border border-white/20 px-2.5 py-1.5 text-xs hover:bg-white/10"
+              onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))}
             >
-              Front
+              −
             </button>
             <button
               type="button"
-              className={`px-3 py-2 text-sm transition-colors ${
-                side === "back" ? "bg-white text-black" : "hover:bg-white/10"
-              } ${!backUrl ? "opacity-40 cursor-not-allowed" : ""}`}
-              onClick={() => backUrl && setSide("back")}
-              disabled={!backUrl}
+              className="rounded-md border border-white/20 px-2.5 py-1.5 text-xs hover:bg-white/10"
+              onClick={() => setZoom(1)}
             >
-              Back
+              Reset
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-white/20 px-2.5 py-1.5 text-xs hover:bg-white/10"
+              onClick={() => setZoom((z) => Math.min(3, z + 0.1))}
+            >
+              +
+            </button>
+            {currentUrl && (
+              <a
+                href={currentUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-md border border-white/20 px-2.5 py-1.5 text-xs hover:bg-white/10"
+              >
+                Open
+              </a>
+            )}
+            <button
+              type="button"
+              className="rounded-md border border-white/20 px-2.5 py-1.5 text-xs hover:bg-white/10"
+              onClick={onClose}
+            >
+              Close
             </button>
           </div>
-          <button
-            type="button"
-            className="rounded-md border border-white/20 px-3 py-2 text-sm hover:bg-white/10"
-            onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))}
-          >
-            Zoom Out
-          </button>
-          <button
-            type="button"
-            className="rounded-md border border-white/20 px-3 py-2 text-sm hover:bg-white/10"
-            onClick={() => setZoom(1)}
-          >
-            Reset
-          </button>
-          <button
-            type="button"
-            className="rounded-md border border-white/20 px-3 py-2 text-sm hover:bg-white/10"
-            onClick={() => setZoom((z) => Math.min(3, z + 0.1))}
-          >
-            Zoom In
-          </button>
-          {currentUrl && (
-            <a
-              href={currentUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-md border border-white/20 px-3 py-2 text-sm hover:bg-white/10"
-            >
-              Open in New Tab
-            </a>
+        </div>
+        <div className="flex-1 flex items-center justify-center overflow-auto p-4 bg-black/40">
+          {currentUrl ? (
+            <img
+              src={currentUrl}
+              alt={`${side === "front" ? "Front" : "Back"} of check`}
+              className="max-w-full max-h-[65vh] object-contain select-none"
+              style={{
+                transform: `scale(${zoom})`,
+                transformOrigin: "center center",
+              }}
+            />
+          ) : (
+            <div className="text-sm text-white/70">
+              No {side} image available for this check.
+            </div>
           )}
-          <button
-            type="button"
-            className="rounded-md border border-white/20 px-3 py-2 text-sm hover:bg-white/10"
-            onClick={onClose}
-          >
-            Close
-          </button>
         </div>
-      </div>
-      <div className="flex-1 flex items-center justify-center overflow-auto p-6">
-        {currentUrl ? (
-          <img
-            src={currentUrl}
-            alt={`${side === "front" ? "Front" : "Back"} of check`}
-            className="max-w-full max-h-full object-contain select-none"
-            style={{
-              transform: `scale(${zoom})`,
-              transformOrigin: "center center",
-            }}
-          />
-        ) : (
-          <div className="text-sm text-white/70">
-            No {side} image available for this check.
-          </div>
-        )}
       </div>
     </div>
   );
