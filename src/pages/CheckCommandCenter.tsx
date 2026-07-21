@@ -489,8 +489,83 @@ const endorsementColors: Record<string, string> = {
 };
 
 /* ------------------------------------------------------------------ */
+/*  Class filter + total bar (shared)                                  */
+/* ------------------------------------------------------------------ */
+
+function ClassFilterBar<T>({
+  classFilter,
+  setClassFilter,
+  items,
+  getFundsType,
+  getAmount,
+  itemLabel = "check",
+}: {
+  classFilter: string;
+  setClassFilter: (v: string) => void;
+  items: T[];
+  getFundsType: (item: T) => string | null | undefined;
+  getAmount: (item: T) => number;
+  itemLabel?: string;
+}) {
+  const counts = new Map<string, { count: number; total: number }>();
+  items.forEach((it) => {
+    const key = getFundsType(it) ?? "unclassified";
+    const e = counts.get(key) ?? { count: 0, total: 0 };
+    e.count += 1;
+    e.total += getAmount(it) || 0;
+    counts.set(key, e);
+  });
+  const visible = classFilter === "all"
+    ? items
+    : items.filter((it) => (getFundsType(it) ?? "unclassified") === classFilter);
+  const visibleTotal = visible.reduce((s, it) => s + (getAmount(it) || 0), 0);
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 bg-muted/30">
+      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Class</span>
+      <Select value={classFilter} onValueChange={setClassFilter}>
+        <SelectTrigger className="h-7 w-[220px] text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All classes ({items.length})</SelectItem>
+          {FUNDS_TYPE_OPTIONS.map((o) => {
+            const c = counts.get(o.value);
+            if (!c) return null;
+            return (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label} ({c.count})
+              </SelectItem>
+            );
+          })}
+          {counts.has("unclassified") && (
+            <SelectItem value="unclassified">
+              Unclassified ({counts.get("unclassified")!.count})
+            </SelectItem>
+          )}
+        </SelectContent>
+      </Select>
+      {classFilter !== "all" && (
+        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setClassFilter("all")}>
+          Clear
+        </Button>
+      )}
+      <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+        <span className="text-muted-foreground">
+          {visible.length} {itemLabel}{visible.length === 1 ? "" : "s"}
+        </span>
+        <span className="font-semibold tabular-nums text-foreground">
+          Total: ${visibleTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
+
+
 
 export default function CheckCommandCenter() {
   const qc = useQueryClient();
