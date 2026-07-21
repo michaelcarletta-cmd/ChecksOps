@@ -1835,9 +1835,14 @@ export default function CheckCommandCenter() {
                       Clear
                     </Button>
                   )}
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {filteredChecks.length} check{filteredChecks.length === 1 ? "" : "s"}
-                  </span>
+                  <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                    <span className="text-muted-foreground">
+                      {filteredChecks.length} check{filteredChecks.length === 1 ? "" : "s"}
+                    </span>
+                    <span className="font-semibold tabular-nums text-foreground">
+                      Total: ${filteredCumulativeTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
                 </div>
                 <div className="overflow-x-auto h-full">
                 <ScrollArea className="h-[calc(100vh-520px)] min-h-[280px]">
