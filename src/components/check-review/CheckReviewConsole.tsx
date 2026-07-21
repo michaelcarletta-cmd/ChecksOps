@@ -66,6 +66,7 @@ interface ReviewCheck {
   partner_status_label?: string | null;
   external_origin?: Record<string, unknown> | null;
   check_payees?: CheckPayee[];
+  funds_type?: string | null;
 }
 
 interface ReviewCheckGroup {
