@@ -2043,9 +2043,20 @@ export default function CheckCommandCenter() {
                   )}
                 </ScrollArea>
                 </div>
+                <div className="border-t bg-muted/40 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span className="text-xs text-muted-foreground">
+                    {classFilter === "all"
+                      ? "Cumulative total (all classes)"
+                      : `Cumulative total — ${FUNDS_TYPE_OPTIONS.find((o) => o.value === classFilter)?.label ?? "Unclassified"}`}
+                  </span>
+                  <span className="font-semibold tabular-nums">
+                    ${filteredCumulativeTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
 
               </CardContent>
             </Card>
+
 
             {/* Detail panel — hidden on mobile when no check selected */}
             <div
