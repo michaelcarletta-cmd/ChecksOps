@@ -4255,46 +4255,86 @@ function CheckDetailPanel({
                     </Button>
                   </div>
 
-                  {showEndorsementAdjuster && endorsementAdjusterSourceUrl && backImageDimensions && (
-                    <Suspense fallback={<TabLoader />}>
-                      <EndorsementAdjuster
-                        checkId={checkId}
-                        originalImageUrl={endorsementAdjusterSourceUrl}
-                        originalImagePath={
-                          ((check as any)?.back_image_original_path as string | null) ??
-                          toStorageObjectPath(check?.back_image_path ?? null)
-                        }
-                        imageWidth={backImageDimensions.width}
-                        imageHeight={backImageDimensions.height}
-                        companyName={check?.external_origin?.tenant_name as string || "Freedom Adjustment"}
-                        initialOverride={
-                          (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null
-                        }
-                        onDepositImageApproved={async ({ depositPath }) => {
-                          // Point back_image_path at the newly flattened JPEG so
-                          // the existing CheckAlt submit flow picks it up
-                          // unchanged. Also stash the original path if we haven't
-                          // captured it yet, so future regenerations start clean.
-                          const originalToPersist =
+                  <Dialog
+                    open={showEndorsementAdjuster}
+                    onOpenChange={(open) => {
+                      if (!open) setShowEndorsementAdjuster(false);
+                    }}
+                  >
+                    <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>Adjust Received Endorsement</DialogTitle>
+                      </DialogHeader>
+                      {endorsementAdjusterSourceUrl && backImageDimensions ? (
+                        <EndorsementAdjuster
+                          key={checkId}
+                          checkId={checkId}
+                          originalImageUrl={endorsementAdjusterSourceUrl}
+                          originalImagePath={
                             ((check as any)?.back_image_original_path as string | null) ??
-                            toStorageObjectPath(check?.back_image_path ?? null);
-                          const { error: saveErr } = await supabase
-                            .from("check_intake_items")
-                            .update({
-                              back_image_path: depositPath,
-                              back_image_original_path: originalToPersist,
-                              updated_at: new Date().toISOString(),
-                            })
-                            .eq("id", checkId);
-                          if (saveErr) throw saveErr;
-                          setShowEndorsementAdjuster(false);
-                          qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
-                          qc.invalidateQueries({ queryKey: ["check-back-img"] });
-                        }}
-                        onClose={() => setShowEndorsementAdjuster(false)}
-                      />
-                    </Suspense>
-                  )}
+                            toStorageObjectPath(check?.back_image_path ?? null)
+                          }
+                          imageWidth={backImageDimensions.width}
+                          imageHeight={backImageDimensions.height}
+                          companyName={check?.external_origin?.tenant_name as string || "Freedom Adjustment"}
+                          initialOverride={
+                            (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null
+                          }
+                          onDepositImageApproved={async ({ depositPath }) => {
+                            const originalToPersist =
+                              ((check as any)?.back_image_original_path as string | null) ??
+                              toStorageObjectPath(check?.back_image_path ?? null);
+                            const { error: saveErr } = await supabase
+                              .from("check_intake_items")
+                              .update({
+                                back_image_path: depositPath,
+                                back_image_original_path: originalToPersist,
+                                updated_at: new Date().toISOString(),
+                              })
+                              .eq("id", checkId);
+                            if (saveErr) throw saveErr;
+                            setShowEndorsementAdjuster(false);
+                            qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+                            qc.invalidateQueries({ queryKey: ["check-back-img"] });
+                          }}
+                          onClose={() => setShowEndorsementAdjuster(false)}
+                        />
+                      ) : (
+                        <div className="space-y-4 py-2">
+                          <div className="text-sm text-muted-foreground">
+                            {backImageDimError
+                              ? backImageDimError
+                              : !endorsementAdjusterSourceUrl
+                                ? "Preparing endorsement editor…"
+                                : "Loading check image…"}
+                          </div>
+                          <div className="h-64 w-full animate-pulse rounded-md bg-muted" />
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="h-8 animate-pulse rounded bg-muted" />
+                            <div className="h-8 animate-pulse rounded bg-muted" />
+                          </div>
+                          {backImageDimError && (
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  qc.invalidateQueries({ queryKey: ["check-back-img", check?.back_image_path] });
+                                  qc.invalidateQueries({ queryKey: ["check-back-img-original-for-adjuster", check?.id, check?.back_image_path] });
+                                  setBackImageDimReloadKey((k) => k + 1);
+                                }}
+                              >
+                                Retry Image
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => setShowEndorsementAdjuster(false)}>
+                                Close
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </DialogContent>
+                  </Dialog>
                 </>
               )}
             </TabsContent>
