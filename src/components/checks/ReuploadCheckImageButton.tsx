@@ -44,19 +44,19 @@ export function ReuploadCheckImageButton({
   const [uploading, setUploading] = useState(false);
   const [pendingCrop, setPendingCrop] = useState<File | null>(null);
 
-  // A path is a real storage object only if it exists AND is not a legacy signed URL.
+  // Admins can upload/replace the check image at any status. When an image
+  // already exists we simply change the label to "Replace" so it's obvious
+  // the action overwrites the existing one.
   const pathIsUsable =
     imagePath !== undefined
       ? !!imagePath && !/^https?:\/\//i.test(imagePath)
       : !!hasImage;
 
   if (!isAdmin) return null;
-  if (pathIsUsable) return null;
-
-
 
   const column = side === "front" ? "front_image_path" : "back_image_path";
-  const label = side === "front" ? "Reupload Front" : "Reupload Back";
+  const sideLabel = side === "front" ? "Front" : "Back";
+  const label = pathIsUsable ? `Replace ${sideLabel}` : `Upload ${sideLabel}`;
 
   const handleFile = async (rawFile: File | null) => {
     if (!rawFile) return;

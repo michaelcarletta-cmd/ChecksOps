@@ -47,6 +47,30 @@ export function TenantUsageTracker() {
     enabled: !!tenant?.id,
   });
 
+  // Mortgage-ops usage — completed requests inside the current billing month.
+  // Each row contributes services_cents (default $10) + shipping_cents.
+  const { data: mortgageOpsUsage } = useQuery({
+    queryKey: ["tenant-mortgage-ops-usage", tenant?.id, monthStart, monthEnd],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("mortgage_handling_requests")
+        .select("id, invoice_services_cents, invoice_shipping_cents, completed_at")
+        .eq("tenant_id", tenant!.id)
+        .not("completed_at", "is", null)
+        .gte("completed_at", monthStart)
+        .lte("completed_at", monthEnd);
+      if (error) throw error;
+      const rows = data ?? [];
+      const totalCents = rows.reduce(
+        (sum, r: any) =>
+          sum + (r.invoice_services_cents ?? 1000) + (r.invoice_shipping_cents ?? 0),
+        0,
+      );
+      return { count: rows.length, totalCents };
+    },
+    enabled: !!tenant?.id,
+  });
+
   if (usageLoading || fundsLoading) return <div className="p-8 text-center text-sm text-muted-foreground animate-pulse">Loading usage & funds data...</div>;
 
   const formatCurrency = (amount: number) => 
@@ -58,7 +82,7 @@ export function TenantUsageTracker() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="bg-gradient-to-br from-primary/10 to-blue-500/5 border-primary/20">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -74,6 +98,28 @@ export function TenantUsageTracker() {
             </div>
             <p className="text-xs text-muted-foreground mt-2">
               Estimated fees: <span className="font-semibold text-foreground">{formatCurrency((usage?.amount_cents ?? 0) / 100)}</span>
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-amber-500/10 to-orange-500/5 border-amber-500/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Landmark className="h-4 w-4 text-amber-500" />
+              Mortgage Ops Usage
+            </CardTitle>
+            <CardDescription className="text-[10px]">Handled by ChecksOps this month</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold">{mortgageOpsUsage?.count ?? 0}</span>
+              <span className="text-xs text-muted-foreground">mortgage requests</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Month-end total (services + shipping):{" "}
+              <span className="font-semibold text-foreground">
+                {formatCurrency((mortgageOpsUsage?.totalCents ?? 0) / 100)}
+              </span>
             </p>
           </CardContent>
         </Card>
