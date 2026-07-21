@@ -741,13 +741,24 @@ export default function CheckCommandCenter() {
   const { data: checks = [], isLoading } = useQuery({
     queryKey: ["check-intake-items", tenantId],
     queryFn: async () => {
+      // Phase 1 perf: slimmer projection — the queue only needs payee name /
+      // type / endorsement_status for search + count badges. Full payee rows
+      // (18 cols) are refetched by the detail view.
+      const t0 = performance.now();
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("*, check_payees(*), checkalt_deposits(id, status, submitted_at, approved_at, updated_at)")
+        .select(
+          "*, check_payees(payee_name, payee_type, endorsement_status), checkalt_deposits(id, status, submitted_at, approved_at, updated_at)",
+        )
         .eq("tenant_id", tenantId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as CheckItem[];
+      if (import.meta.env.DEV) {
+        console.log(
+          `[perf] check-queue fetched ${data?.length ?? 0} rows in ${(performance.now() - t0).toFixed(0)}ms`,
+        );
+      }
+      return (data ?? []) as unknown as CheckItem[];
     },
     enabled: !!tenantId,
     refetchOnWindowFocus: false, // Prevent page jump/refresh when switching tabs
@@ -769,7 +780,9 @@ export default function CheckCommandCenter() {
       const checkIds = sharedData.map((s: any) => s.check_id);
       const { data: checkData, error: checkErr } = await supabase
         .from("check_intake_items")
-        .select("*, check_payees(*), checkalt_deposits(id, status, submitted_at, approved_at, updated_at)")
+        .select(
+          "*, check_payees(payee_name, payee_type, endorsement_status), checkalt_deposits(id, status, submitted_at, approved_at, updated_at)",
+        )
         .in("id", checkIds)
         .order("created_at", { ascending: false });
       if (checkErr) throw checkErr;
@@ -779,7 +792,7 @@ export default function CheckCommandCenter() {
         ...c,
         _shared: true,
         _sourceTenantName: shareMap.get(c.id) ?? "Partner",
-      })) as (CheckItem & { _shared: true; _sourceTenantName: string })[];
+      })) as unknown as (CheckItem & { _shared: true; _sourceTenantName: string })[];
     },
     enabled: !!tenantId,
     refetchOnWindowFocus: false, // Prevent page jump when switching tabs
@@ -2805,12 +2818,16 @@ function CheckDetailPanel({
    const { data: check } = useQuery({
     queryKey: ["check-detail", checkId],
     queryFn: async () => {
+      const t0 = performance.now();
       const { data, error } = await supabase
         .from("check_intake_items")
         .select("*, check_payees(*), checkalt_deposits(id, status, submitted_at, approved_at, updated_at, last_status_payload)")
         .eq("id", checkId)
         .single();
       if (error) throw error;
+      if (import.meta.env.DEV) {
+        console.log(`[perf] check-detail ${checkId.slice(0, 8)} in ${(performance.now() - t0).toFixed(0)}ms`);
+      }
       return data as CheckItem;
     },
   });
