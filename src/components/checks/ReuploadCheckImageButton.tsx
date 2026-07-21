@@ -62,11 +62,9 @@ export function ReuploadCheckImageButton({
     if (!rawFile) return;
     setUploading(true);
     try {
-      // Convert iPhone HEIC/HEIF to JPEG before upload so downstream
-      // viewers and the endorsement compositor can decode it.
-      const file = rawFile.type?.startsWith("image/") || /\.(heic|heif)$/i.test(rawFile.name)
-        ? await convertHeicToJpegIfNeeded(rawFile)
-        : rawFile;
+      // Compress + HEIC-convert to keep the check image under CheckAlt/CPU
+      // limits and consistent for the endorsement compositor.
+      const file = await compressCheckImage(rawFile);
       const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
       const path = `checks/reupload/${checkId}/${side}-${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage
