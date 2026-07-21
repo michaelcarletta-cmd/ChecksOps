@@ -2520,6 +2520,28 @@ export default function CheckCommandCenter() {
                       );
                     })()
                   )}
+                  {activeTab === "deposited" && (() => {
+                    const totalDeposited = stageTotals?.get("deposited")?.count ?? depositedRows.length;
+                    const canLoadMore = depositedRows.length >= depositedLimit && depositedRows.length < totalDeposited;
+                    if (!canLoadMore && depositedRows.length === 0) return null;
+                    return (
+                      <div className="flex items-center justify-center gap-3 py-4 text-xs text-muted-foreground border-t">
+                        <span>
+                          Showing {depositedRows.length.toLocaleString()} of {totalDeposited.toLocaleString()} deposited
+                        </span>
+                        {canLoadMore && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={isFetchingDeposited}
+                            onClick={() => setDepositedLimit((n) => n + DEPOSITED_PAGE_SIZE)}
+                          >
+                            {isFetchingDeposited ? "Loading…" : `Load ${DEPOSITED_PAGE_SIZE} more`}
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
               </CardContent>
