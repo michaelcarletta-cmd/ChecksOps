@@ -1009,3 +1009,34 @@ export function EndorsementAdjuster({
     </div>
   );
 }
+
+function StepBadge({ current }: { current: 1 | 2 | 3 }) {
+  const steps: Array<{ n: 1 | 2 | 3; label: string }> = [
+    { n: 1, label: "Save Position" },
+    { n: 2, label: "Generate Deposit Image" },
+    { n: 3, label: "Approve" },
+  ];
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      {steps.map((s, i) => (
+        <div key={s.n} className="flex items-center gap-2">
+          <div
+            className={`flex items-center gap-1.5 rounded-full border px-2 py-0.5 ${
+              current === s.n
+                ? "border-primary bg-primary/10 text-primary font-medium"
+                : current > s.n
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                  : "border-border bg-muted/40 text-muted-foreground"
+            }`}
+          >
+            <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-background text-[10px] font-bold">
+              {current > s.n ? "✓" : s.n}
+            </span>
+            <span>{s.label}</span>
+          </div>
+          {i < steps.length - 1 && <span className="text-muted-foreground">→</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
