@@ -857,12 +857,11 @@ function svgText(x: number, y: number, size: number, fill: string, weight: strin
 }
 
 function uint8ToBase64(bytes: Uint8Array) {
-  const chunkSize = 0x8000;
-  const chunks: string[] = [];
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    chunks.push(String.fromCharCode(...bytes.subarray(i, i + chunkSize)));
-  }
-  return btoa(chunks.join(""));
+  // Use std encodeBase64 (native, C-fast). The previous manual chunked
+  // String.fromCharCode + btoa loop regularly blew past the edge CPU
+  // budget on ~1MP back-of-check base64 embeds and killed the isolate
+  // with "CPU Time exceeded" before the SVG upload could finish.
+  return encodeBase64(bytes);
 }
 
 function detectImageDimensions(bytes: Uint8Array): { width: number; height: number } {
