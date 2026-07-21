@@ -1,65 +1,135 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RotateCcw, Save, AlertCircle, ShieldCheck, Wand2, Loader2 } from "lucide-react";
+import {
+  RotateCcw,
+  Save,
+  AlertCircle,
+  Wand2,
+  Loader2,
+  ImageDown,
+  CheckCircle2,
+  RefreshCw,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   clampEndorsementOverride,
   DEFAULT_ENDORSEMENT_OVERRIDE,
   EndorsementOverride,
-  normalizeRotation,
 } from "@/lib/endorsementLayout";
 import { fitEndorsementLayout } from "@/lib/endorsementFit";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  ENDORSEMENT_RENDERER_VERSION,
+  ENDORSEMENT_WIDTH_PCT,
+  ZONE_BOTTOM_PCT,
+  ZONE_TOP_PCT,
+  isAcceptedDepositMime,
+  renderDepositImage,
+  SignatureAsset,
+} from "@/lib/endorsementDepositRender";
+import { CHECK_IMAGES_BUCKET } from "@/lib/storageBuckets";
+import { logAudit } from "@/hooks/useAuditLog";
 
-interface SignedEndorsementAsset {
-  id: string;
-  payee_name: string;
+interface SignedEndorsementAsset extends SignatureAsset {
   payee_type: string;
   status: string;
   signed_at: string | null;
-  signature_image_url: string | null;
-  signature_method: string | null;
   check_id: string;
 }
 
-type EndorsementAdjusterProps = {
+type RenderStatus =
+  | "idle"
+  | "saving_position"
+  | "position_saved"
+  | "rendering"
+  | "completed"
+  | "failed";
+
+export type EndorsementAdjusterProps = {
   checkId: string;
-  imageUrl: string;
+  /** Original (never-endorsed) back-of-check image URL. */
+  originalImageUrl: string;
+  /** Storage object path of the original back image (bucket-relative). */
+  originalImagePath: string | null;
   imageWidth: number;
   imageHeight: number;
   companyName: string;
   initialOverride?: EndorsementOverride | null;
-  onSave: (override: EndorsementOverride) => Promise<void> | void;
+  /**
+   * Called after the user approves the flattened deposit image.
+   * Parent typically updates `back_image_path` to point at the new deposit
+   * artifact so the existing CheckAlt submit flow picks it up unchanged.
+   */
+  onDepositImageApproved: (payload: {
+    depositPath: string;
+    override: EndorsementOverride;
+    width: number;
+    height: number;
+    mimeType: string;
+    bytes: number;
+  }) => Promise<void> | void;
+  onClose?: () => void;
 };
 
 export function EndorsementAdjuster({
   checkId,
-  imageUrl,
+  originalImageUrl,
+  originalImagePath,
   imageWidth,
   imageHeight,
   companyName,
   initialOverride,
-  onSave,
+  onDepositImageApproved,
+  onClose,
 }: EndorsementAdjusterProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const rafRef = useRef<number | null>(null);
-  const [override, setOverride] = useState<EndorsementOverride>(
+  const overrideRef = useRef<EndorsementOverride>(
+    initialOverride ?? DEFAULT_ENDORSEMENT_OVERRIDE,
+  );
+  const dragOffsetRef = useRef<{ dxPct: number; dyPct: number } | null>(null);
+  const savedOverrideRef = useRef<EndorsementOverride>(
+    initialOverride ?? DEFAULT_ENDORSEMENT_OVERRIDE,
+  );
+
+  const [override, setOverrideState] = useState<EndorsementOverride>(
     initialOverride ?? DEFAULT_ENDORSEMENT_OVERRIDE,
   );
   const [dragging, setDragging] = useState(false);
   const [resizing, setResizing] = useState(false);
   const [activePointerId, setActivePointerId] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [serverError, setServerError] = useState<string | null>(null);
+  const [status, setStatus] = useState<RenderStatus>("idle");
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [detecting, setDetecting] = useState(false);
-  // Load real signed endorsement assets for this check
+  const [depositPreviewUrl, setDepositPreviewUrl] = useState<string | null>(null);
+  const [depositResult, setDepositResult] = useState<{
+    path: string;
+    width: number;
+    height: number;
+    mimeType: string;
+    bytes: number;
+  } | null>(null);
+
   const [signedEndorsements, setSignedEndorsements] = useState<SignedEndorsementAsset[]>([]);
   const [endorsementsLoading, setEndorsementsLoading] = useState(true);
   const [endorsementsError, setEndorsementsError] = useState<string | null>(null);
+
+  // Wrap setOverride so the ref stays in sync — pointer listener reads the ref,
+  // not the closure, so drag stays smooth without re-registering listeners.
+  const setOverride = useCallback(
+    (updater: EndorsementOverride | ((prev: EndorsementOverride) => EndorsementOverride)) => {
+      setOverrideState((prev) => {
+        const next = typeof updater === "function"
+          ? (updater as (p: EndorsementOverride) => EndorsementOverride)(prev)
+          : updater;
+        overrideRef.current = next;
+        return next;
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!checkId) return;
@@ -70,111 +140,94 @@ export function EndorsementAdjuster({
       try {
         const { data, error } = await supabase
           .from("check_endorsements")
-          .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method, check_id")
+          .select(
+            "id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method, check_id",
+          )
           .eq("check_id", checkId)
           .in("status", ["signed", "waived"])
           .order("created_at", { ascending: true });
         if (error) throw error;
-        if (!cancelled) setSignedEndorsements(data ?? []);
+        if (!cancelled) {
+          // Belt-and-suspenders: every asset must belong to this check.
+          const mine = (data ?? []).filter((row: any) => row.check_id === checkId);
+          setSignedEndorsements(mine as SignedEndorsementAsset[]);
+        }
       } catch (e: any) {
         if (!cancelled) setEndorsementsError(e.message || "Failed to load endorsements");
       } finally {
         if (!cancelled) setEndorsementsLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [checkId]);
 
-  const isFreedomOrCarletta = (name: string) => {
+  const isCompanyEndorsement = (name: string) => {
     const lc = name.toLowerCase();
-    return lc.includes("freedom") || lc.includes("carletta") || lc.includes(companyName.toLowerCase());
+    return (
+      lc.includes("freedom") ||
+      lc.includes("carletta") ||
+      lc.includes(companyName.toLowerCase())
+    );
   };
 
-  const hasVisibleSignature = (endorsement: SignedEndorsementAsset) => {
-    const method = (endorsement.signature_method ?? "").toLowerCase();
+  const hasVisibleSignature = (e: SignedEndorsementAsset) => {
+    const method = (e.signature_method ?? "").toLowerCase();
     if (method === "internal" || method === "manual") return false;
-    return Boolean(endorsement.signature_image_url?.trim());
+    return Boolean(e.signature_image_url?.trim());
   };
 
   const visibleEndorsements = signedEndorsements.filter(hasVisibleSignature);
-  const clientEndorsements = visibleEndorsements.filter((e) => !isFreedomOrCarletta(e.payee_name));
-  const companyEndorsements = visibleEndorsements.filter((e) => isFreedomOrCarletta(e.payee_name));
-  const visibleCompanyEndorsement = companyEndorsements[0];
-  const canGenerate = signedEndorsements.length > 0;
+  const clientEndorsements = visibleEndorsements.filter(
+    (e) => !isCompanyEndorsement(e.payee_name),
+  );
+  const companyEndorsement = visibleEndorsements.find((e) =>
+    isCompanyEndorsement(e.payee_name),
+  ) ?? null;
+  const canGenerate = visibleEndorsements.length > 0;
 
   useEffect(() => {
-    setOverride(initialOverride ?? DEFAULT_ENDORSEMENT_OVERRIDE);
-  }, [initialOverride]);
+    const next = initialOverride ?? DEFAULT_ENDORSEMENT_OVERRIDE;
+    setOverride(next);
+    savedOverrideRef.current = next;
+  }, [initialOverride, setOverride]);
 
-  // Shared zone constants — must match edge function exactly
-  const ZONE_TOP_PCT = 0.15;
-  const ZONE_BOTTOM_PCT = 0.92;
-  const ENDORSEMENT_WIDTH_PCT = 0.22;
-  const MAX_RASTER_LONG_EDGE = 1000;
-  const MAX_RASTER_PIXELS = 800_000;
+  const renderableSignerCount = Math.max(1, visibleEndorsements.length);
 
-  // The backend compositor downscales oversized check photos before choosing
-  // endorsement font/signature sizes. Mirror that here so the preview matches
-  // the final saved image instead of using the raw phone-photo dimensions.
-  const effectiveImageDimensions = useMemo(() => {
-    const pixels = imageWidth * imageHeight;
-    const longest = Math.max(imageWidth, imageHeight);
-    if (!imageWidth || !imageHeight || (pixels <= MAX_RASTER_PIXELS && longest <= MAX_RASTER_LONG_EDGE)) {
-      return { width: imageWidth, height: imageHeight };
-    }
-
-    const pixelRatio = Math.sqrt(MAX_RASTER_PIXELS / pixels);
-    const edgeRatio = MAX_RASTER_LONG_EDGE / longest;
-    const ratio = Math.min(1, pixelRatio, edgeRatio);
-    return {
-      width: Math.max(1, Math.floor(imageWidth * ratio)),
-      height: Math.max(1, Math.floor(imageHeight * ratio)),
-    };
-  }, [imageWidth, imageHeight]);
-
-  const renderableSignerCount = visibleEndorsements.length || 1;
-
-  // Use fitEndorsementLayout to size the on-screen preview text/signatures
   const previewLayout = useMemo(() => {
-    // fitEndorsementLayout's font/spacing presets are absolute pixel values
-    // measured against the *actual image* resolution (matching the server
-    // compositor, which operates on imgHeight). The zone height must be in
-    // those same image-pixel units, not container/display pixels, or the
-    // wrong preset gets selected and the block height (and thus the zone
-    // overflow nudge) won't match the final composited result.
-    const safeZoneHeightImgPx = (ZONE_BOTTOM_PCT - ZONE_TOP_PCT) * effectiveImageDimensions.height;
+    const safeZoneHeightImgPx = (ZONE_BOTTOM_PCT - ZONE_TOP_PCT) * imageHeight;
     return fitEndorsementLayout({
       signerCount: renderableSignerCount,
       zoneHeightPx: safeZoneHeightImgPx,
       requestedScale: override.scale || 1,
     });
-  }, [effectiveImageDimensions.height, override.scale, renderableSignerCount]);
+  }, [imageHeight, override.scale, renderableSignerCount]);
 
-  // Separately, replicate the server compositor's preset selection (which
-  // uses image-pixel zone height) purely to compute the same overflow nudge
-  // it would apply, so the preview position matches the saved result.
-  const serverMeasuredLayout = useMemo(() => {
-    const safeZoneHeightImgPx = (ZONE_BOTTOM_PCT - ZONE_TOP_PCT) * effectiveImageDimensions.height;
-    return fitEndorsementLayout({
-      signerCount: renderableSignerCount,
-      zoneHeightPx: safeZoneHeightImgPx,
-      requestedScale: override.scale || 1,
-    });
-  }, [effectiveImageDimensions.height, override.scale, renderableSignerCount]);
-
-  const runNextFrame = (fn: () => void) => {
-    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(() => {
-      fn();
-      rafRef.current = null;
-    });
-  };
-
+  // --- Smooth pointer-offset drag -------------------------------------------
   const beginDrag = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    if (activePointerId !== null) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
+    if (activePointerId !== null || !wrapRef.current) return;
+    const rect = wrapRef.current.getBoundingClientRect();
+    const containerHeightPx = rect.height;
+    const safeZoneTopPx = ZONE_TOP_PCT * containerHeightPx;
+    const safeZoneBottomPx = ZONE_BOTTOM_PCT * containerHeightPx;
+    const safeZoneHeightPx = safeZoneBottomPx - safeZoneTopPx;
+
+    // Pointer offset from block center, expressed in the same normalized
+    // coordinate spaces as the override — so drag doesn't jump on grab.
+    const currentCenterXPx = overrideRef.current.xPct * rect.width;
+    const currentCenterYPx =
+      safeZoneTopPx + overrideRef.current.yPct * safeZoneHeightPx;
+    const pointerXPx = e.clientX - rect.left;
+    const pointerYPx = e.clientY - rect.top;
+    dragOffsetRef.current = {
+      dxPct: (currentCenterXPx - pointerXPx) / rect.width,
+      dyPct: (currentCenterYPx - pointerYPx) / safeZoneHeightPx,
+    };
+
+    (e.currentTarget as any).setPointerCapture?.(e.pointerId);
     setActivePointerId(e.pointerId);
     setDragging(true);
   };
@@ -183,7 +236,7 @@ export function EndorsementAdjuster({
     e.preventDefault();
     e.stopPropagation();
     if (activePointerId !== null) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
+    (e.currentTarget as any).setPointerCapture?.(e.pointerId);
     setActivePointerId(e.pointerId);
     setResizing(true);
   };
@@ -193,29 +246,34 @@ export function EndorsementAdjuster({
       if (!wrapRef.current) return;
       if (activePointerId !== e.pointerId) return;
       if (!dragging && !resizing) return;
-
       const rect = wrapRef.current.getBoundingClientRect();
-
       const containerHeightPx = rect.height;
       const safeZoneTopPx = ZONE_TOP_PCT * containerHeightPx;
       const safeZoneBottomPx = ZONE_BOTTOM_PCT * containerHeightPx;
       const safeZoneHeightPx = safeZoneBottomPx - safeZoneTopPx;
 
-      runNextFrame(() => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
         if (dragging) {
-          const xPct = (e.clientX - rect.left) / rect.width;
-          const yPxWithinZone = (e.clientY - rect.top) - safeZoneTopPx;
-          const yPct = yPxWithinZone / safeZoneHeightPx;
+          const offset = dragOffsetRef.current ?? { dxPct: 0, dyPct: 0 };
+          const pointerXPct = (e.clientX - rect.left) / rect.width;
+          const pointerYPct =
+            (e.clientY - rect.top - safeZoneTopPx) / safeZoneHeightPx;
           setOverride((prev) =>
-            clampEndorsementOverride({ ...prev, xPct, yPct }),
+            clampEndorsementOverride({
+              ...prev,
+              xPct: pointerXPct + offset.dxPct,
+              yPct: pointerYPct + offset.dyPct,
+            }),
           );
         }
-
         if (resizing) {
-          const overlayLeft = rect.left + override.xPct * rect.width;
+          const overlayLeft =
+            rect.left + overrideRef.current.xPct * rect.width;
           const deltaX = e.clientX - overlayLeft;
           const baseWidth = rect.width * ENDORSEMENT_WIDTH_PCT;
-          const nextScale = Math.max(0.4, Math.min(4, deltaX / baseWidth));
+          const nextScale = Math.max(0.5, Math.min(2.5, deltaX / baseWidth));
           setOverride((prev) =>
             clampEndorsementOverride({ ...prev, scale: nextScale }),
           );
@@ -228,6 +286,7 @@ export function EndorsementAdjuster({
       setDragging(false);
       setResizing(false);
       setActivePointerId(null);
+      dragOffsetRef.current = null;
     };
 
     window.addEventListener("pointermove", onMove, { passive: false });
@@ -242,160 +301,288 @@ export function EndorsementAdjuster({
         rafRef.current = null;
       }
     };
-  }, [activePointerId, dragging, resizing, override, imageWidth, imageHeight]);
+    // NB: intentionally does NOT depend on `override` — pointer listener reads
+    // the ref, so we don't tear down/rebind listeners on every drag frame.
+  }, [activePointerId, dragging, resizing, setOverride]);
 
-  const handleReset = () => {
-    setOverride(DEFAULT_ENDORSEMENT_OVERRIDE);
-    setServerError(null);
-  };
+  // --- Actions --------------------------------------------------------------
+  const dirty =
+    override.xPct !== savedOverrideRef.current.xPct ||
+    override.yPct !== savedOverrideRef.current.yPct ||
+    override.scale !== savedOverrideRef.current.scale ||
+    override.rotationDeg !== savedOverrideRef.current.rotationDeg ||
+    override.showPayToOrder !== savedOverrideRef.current.showPayToOrder;
 
-  const handleSave = async () => {
-    setSaving(true);
-    setServerError(null);
-
+  const handleSavePosition = async () => {
+    setStatus("saving_position");
+    setStatusMessage("Saving placement…");
+    const clamped = clampEndorsementOverride(override);
     try {
-      await onSave(clampEndorsementOverride(override));
+      const { error } = await supabase
+        .from("check_intake_items")
+        .update({
+          endorsement_override: clamped as any,
+          endorsement_render_status: "position_saved",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", checkId);
+      if (error) throw error;
+      savedOverrideRef.current = clamped;
+      setOverride(clamped);
+      setStatus("position_saved");
+      setStatusMessage("Placement saved");
+      await logAudit({
+        action: "update",
+        recordType: "check_intake_items",
+        recordId: checkId,
+        metadata: { event: "endorsement_position_saved", override: clamped },
+      });
+      toast.success("Placement saved");
     } catch (err: any) {
-      console.error("[EndorsementAdjuster] save error", err);
-
-      let parsed: any = null;
-      let rawMessage = err?.message || "Could not generate final deposit image.";
-
-      try {
-        if (typeof err?.context?.body === "string") {
-          parsed = JSON.parse(err.context.body);
-        } else if (err?.context?.body) {
-          parsed = err.context.body;
-        }
-      } catch {
-        parsed = null;
-      }
-
-      if (parsed?.error) {
-        rawMessage = parsed.error;
-      }
-
-      if (parsed?.code === "ENDORSEMENT_ZONE_OVERFLOW" && parsed?.details) {
-        const d = parsed.details;
-        setServerError(
-          `Endorsement block extends to y=${d.blockBottom} which exceeds the bank zone limit at y=${d.zoneBottom}. ` +
-          `Layout: columns=${d.columns}, fontSize=${d.fontSize}, signatureHeight=${d.signatureHeight}, compactText=${d.compactText}.`
-        );
-      } else if (parsed?.code === "NO_SIGNED_ENDORSEMENTS") {
-        setServerError("No valid signed endorsement assets were found for this check.");
-      } else if (parsed?.code === "ENDORSEMENT_CHECK_MISMATCH") {
-        setServerError("The loaded endorsement signatures do not belong to this check.");
-      } else if (parsed?.code === "MISSING_SIGNATURE_ASSET") {
-        setServerError(rawMessage);
-      } else if (parsed?.code === "COMPOSITE_FAILURE") {
-        setServerError(rawMessage);
-      } else {
-        setServerError(rawMessage);
-      }
-    } finally {
-      setSaving(false);
+      console.error("[EndorsementAdjuster] save position", err);
+      setStatus("failed");
+      setStatusMessage(err?.message || "Failed to save placement");
+      toast.error(err?.message || "Failed to save placement");
     }
   };
 
-  const handleFitToSafeZone = () => {
-    setOverride((prev) =>
-      clampEndorsementOverride({
-        ...prev,
-        scale: Math.max(0.4, (prev.scale ?? 1) - 0.08),
-        yPct: Math.min(prev.yPct, 0.62),
-      }),
-    );
-    setServerError(null);
+  const handleGenerate = async () => {
+    if (!originalImageUrl || !originalImagePath) {
+      toast.error("Original back-of-check image is not available.");
+      return;
+    }
+    setStatus("rendering");
+    setStatusMessage("Generating deposit image…");
+    setDepositPreviewUrl(null);
+    setDepositResult(null);
+    const requestId = `${checkId}-${Date.now()}`;
+    try {
+      const result = await renderDepositImage({
+        originalImageUrl,
+        override: savedOverrideRef.current,
+        companyName,
+        clientSignatures: clientEndorsements,
+        companySignature: companyEndorsement,
+      });
+      if (!isAcceptedDepositMime(result.mimeType)) {
+        throw new Error(
+          `Renderer produced unsupported mime type ${result.mimeType} — refusing to save.`,
+        );
+      }
+
+      // Derive a deposit path next to the original: <folder>/endorsed_v<n>.jpg
+      const folder = originalImagePath.replace(/\/[^/]+$/, "");
+      const version = (Date.now() % 1_000_000).toString(36);
+      const depositPath = `${folder}/endorsed_deposit_${version}.jpg`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from(CHECK_IMAGES_BUCKET)
+        .upload(depositPath, result.blob, {
+          contentType: result.mimeType,
+          upsert: true,
+          cacheControl: "3600",
+        });
+      if (uploadErr) throw uploadErr;
+
+      const { error: updateErr } = await supabase
+        .from("check_intake_items")
+        .update({
+          back_image_deposit_path: depositPath,
+          endorsement_render_status: "completed",
+          endorsement_render_meta: {
+            request_id: requestId,
+            renderer_version: ENDORSEMENT_RENDERER_VERSION,
+            mime_type: result.mimeType,
+            width: result.width,
+            height: result.height,
+            bytes: result.bytes,
+            override: savedOverrideRef.current,
+          } as any,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", checkId);
+      if (updateErr) throw updateErr;
+
+      // Local preview
+      const previewUrl = URL.createObjectURL(result.blob);
+      setDepositPreviewUrl(previewUrl);
+      setDepositResult({
+        path: depositPath,
+        width: result.width,
+        height: result.height,
+        mimeType: result.mimeType,
+        bytes: result.bytes,
+      });
+      setStatus("completed");
+      setStatusMessage("Deposit image ready — review and approve below.");
+      await logAudit({
+        action: "create",
+        recordType: "check_intake_items",
+        recordId: checkId,
+        metadata: {
+          event: "endorsement_render_completed",
+          deposit_path: depositPath,
+          mime_type: result.mimeType,
+          width: result.width,
+          height: result.height,
+          bytes: result.bytes,
+          renderer_version: ENDORSEMENT_RENDERER_VERSION,
+          request_id: requestId,
+        },
+      });
+    } catch (err: any) {
+      console.error("[EndorsementAdjuster] generate", err);
+      // Placement stays saved — status flips back to position_saved for retry.
+      setStatus("failed");
+      setStatusMessage(err?.message || "Generation failed");
+      await supabase
+        .from("check_intake_items")
+        .update({
+          endorsement_render_status: "failed",
+          endorsement_render_meta: { error: err?.message, request_id: requestId } as any,
+        })
+        .eq("id", checkId);
+      await logAudit({
+        action: "create",
+        recordType: "check_intake_items",
+        recordId: checkId,
+        metadata: {
+          event: "endorsement_render_failed",
+          error: err?.message,
+          request_id: requestId,
+        },
+      });
+      toast.error(err?.message || "Failed to generate deposit image");
+    }
   };
 
-  // Quick placement presets — xPct is full-image, yPct is safe-zone-relative
-  const applyPreset = (xPct: number, yPct: number) => {
-    setOverride((prev) => clampEndorsementOverride({ ...prev, xPct, yPct }));
-    setServerError(null);
+  const handleApprove = async () => {
+    if (!depositResult) return;
+    try {
+      await onDepositImageApproved({
+        depositPath: depositResult.path,
+        override: savedOverrideRef.current,
+        width: depositResult.width,
+        height: depositResult.height,
+        mimeType: depositResult.mimeType,
+        bytes: depositResult.bytes,
+      });
+      await logAudit({
+        action: "update",
+        recordType: "check_intake_items",
+        recordId: checkId,
+        metadata: {
+          event: "endorsement_render_approved",
+          deposit_path: depositResult.path,
+          renderer_version: ENDORSEMENT_RENDERER_VERSION,
+        },
+      });
+      toast.success("Deposit image approved");
+      if (depositPreviewUrl) URL.revokeObjectURL(depositPreviewUrl);
+      onClose?.();
+    } catch (err: any) {
+      console.error("[EndorsementAdjuster] approve", err);
+      toast.error(err?.message || "Failed to approve deposit image");
+    }
   };
 
-  const applySizePreset = (scale: number) => {
-    setOverride((prev) => clampEndorsementOverride({ ...prev, scale }));
-    setServerError(null);
+  const handleAdjustAgain = () => {
+    if (depositPreviewUrl) URL.revokeObjectURL(depositPreviewUrl);
+    setDepositPreviewUrl(null);
+    setDepositResult(null);
+    setStatus("position_saved");
+    setStatusMessage(null);
   };
+
+  const handleReset = () => {
+    setOverride(DEFAULT_ENDORSEMENT_OVERRIDE);
+    setStatus("idle");
+    setStatusMessage(null);
+  };
+
+  const applyPreset = (xPct: number, yPct: number) =>
+    setOverride((p) => clampEndorsementOverride({ ...p, xPct, yPct }));
+
+  const applySizePreset = (scale: number) =>
+    setOverride((p) => clampEndorsementOverride({ ...p, scale }));
 
   const handleAutoDetect = async () => {
-    if (!imageUrl) return;
+    if (!originalImageUrl) return;
     setDetecting(true);
-    setServerError(null);
     try {
-      const { data, error } = await supabase.functions.invoke("detect-endorsement-zone", {
-        body: { imageUrl },
-      });
+      const { data, error } = await supabase.functions.invoke(
+        "detect-endorsement-zone",
+        { body: { imageUrl: originalImageUrl } },
+      );
       if (error) throw error;
       if (!data?.detected || !data?.suggested) {
-        toast.error("Couldn't detect the endorsement box. Use presets or drag manually.");
+        toast.error("Couldn't detect the endorsement box.");
         return;
       }
       const { xPct, yPct, scale } = data.suggested;
-      setOverride((prev) =>
-        clampEndorsementOverride({ ...prev, xPct, yPct, scale, rotationDeg: 0 }),
+      setOverride((p) =>
+        clampEndorsementOverride({ ...p, xPct, yPct, scale, rotationDeg: 0 }),
       );
-      toast.success("Endorsement zone detected — position updated.");
+      toast.success("Endorsement zone detected");
     } catch (err: any) {
-      console.error("[EndorsementAdjuster] auto-detect", err);
-      toast.error(err?.message || "Auto-detect failed.");
+      toast.error(err?.message || "Auto-detect failed");
     } finally {
       setDetecting(false);
     }
   };
 
-
-  // Use actual rendered DOM rect for overlay positioning
+  // --- Preview geometry -----------------------------------------------------
   const domRect = wrapRef.current?.getBoundingClientRect();
   const containerWidthPx = domRect?.width ?? imageWidth;
-  const containerHeightPx = domRect?.height ?? (imageWidth > 0 ? containerWidthPx * imageHeight / imageWidth : imageHeight);
-  const displayScale = containerWidthPx / effectiveImageDimensions.width;
+  const containerHeightPx =
+    domRect?.height ??
+    (imageWidth > 0 ? containerWidthPx * imageHeight / imageWidth : imageHeight);
+  const displayScale = containerWidthPx / imageWidth;
 
-  // Zone-relative positioning — must match edge function exactly
   const safeZoneTopPx = ZONE_TOP_PCT * containerHeightPx;
   const safeZoneBottomPx = ZONE_BOTTOM_PCT * containerHeightPx;
   const safeZoneHeightPx = safeZoneBottomPx - safeZoneTopPx;
 
-  // Derive font/spacing values from fitted layout, scaled to display size
-  // Server uses these pixel values at full image resolution; we scale to container
-  const { fontSize, lineGap, rowGap, signatureHeight, compactText, columns } = previewLayout;
+  const { fontSize, lineGap, rowGap, signatureHeight, columns, compactText } =
+    previewLayout;
   const companyFontPx = Math.max(9, Math.round(fontSize * 1.2)) * displayScale;
   const byLineFontPx = fontSize * displayScale;
   const payToFontPx = fontSize * displayScale;
   const sectionGapPx = Math.max(3, Math.round(lineGap * 2)) * displayScale;
   const lineGapPx = lineGap * displayScale;
   const sigHeightPx = signatureHeight * displayScale;
-  const effectiveBlockWidth = effectiveImageDimensions.width * ENDORSEMENT_WIDTH_PCT;
-  const effectiveClientColumnWidth = columns === 2 ? effectiveBlockWidth / 2 : effectiveBlockWidth;
-  const clientSignatureWidthPx = Math.round(
-    Math.min(effectiveClientColumnWidth - 20, Math.round(effectiveImageDimensions.height * 0.1)) * (override.scale || 1),
-  ) * displayScale;
-  const companySignatureWidthPx = Math.round(
-    Math.min(effectiveBlockWidth - 20, Math.round(effectiveImageDimensions.height * 0.1)) * (override.scale || 1),
-  ) * displayScale;
+  const effectiveBlockWidth = imageWidth * ENDORSEMENT_WIDTH_PCT;
+  const effectiveClientColumnWidth =
+    columns === 2 ? effectiveBlockWidth / 2 : effectiveBlockWidth;
+  const clientSignatureWidthPx =
+    Math.round(
+      Math.min(
+        effectiveClientColumnWidth - 20,
+        Math.round(imageHeight * 0.1),
+      ) * (override.scale || 1),
+    ) * displayScale;
+  const companySignatureWidthPx =
+    Math.round(
+      Math.min(effectiveBlockWidth - 20, Math.round(imageHeight * 0.1)) *
+        (override.scale || 1),
+    ) * displayScale;
 
   const clientRows: SignedEndorsementAsset[][] = [];
   for (let i = 0; i < clientEndorsements.length; i += columns) {
     clientRows.push(clientEndorsements.slice(i, i + columns));
   }
 
-  // Replicate the server's overflow nudge/clamp so the preview shows the
-  // position that will actually be rendered onto the check, not just the
-  // raw requested position.
-  const blockHeightPx = serverMeasuredLayout.estimatedHeight * displayScale;
-  let blockCenterYPx = safeZoneTopPx + override.yPct * safeZoneHeightPx;
-  let blockTopPx = blockCenterYPx - blockHeightPx / 2;
-  let blockBottomPx = blockTopPx + blockHeightPx;
+  const centerXPx = override.xPct * containerWidthPx;
+  const centerYPx = safeZoneTopPx + override.yPct * safeZoneHeightPx;
 
-  if (blockBottomPx > safeZoneBottomPx) {
-    blockCenterYPx -= (blockBottomPx - safeZoneBottomPx);
-  }
-  blockCenterYPx = Math.max(
-    safeZoneTopPx + blockHeightPx / 2,
-    Math.min(safeZoneBottomPx - blockHeightPx / 2, blockCenterYPx),
-  );
-  const wasNudged = Math.abs(blockCenterYPx - (safeZoneTopPx + override.yPct * safeZoneHeightPx)) > 0.5;
+  const statusColor =
+    status === "failed"
+      ? "text-red-700 bg-red-50 border-red-300"
+      : status === "completed"
+        ? "text-emerald-700 bg-emerald-50 border-emerald-300"
+        : status === "position_saved"
+          ? "text-blue-700 bg-blue-50 border-blue-300"
+          : "text-muted-foreground bg-muted/40 border-border";
 
   if (!canGenerate && !endorsementsLoading) {
     return (
@@ -406,83 +593,102 @@ export function EndorsementAdjuster({
     );
   }
 
+  // --- Approved deposit image preview view ---------------------------------
+  if (status === "completed" && depositPreviewUrl && depositResult) {
+    return (
+      <div className="space-y-4">
+        <div className={`rounded-md border px-3 py-2 text-sm ${statusColor}`}>
+          <CheckCircle2 className="inline h-4 w-4 mr-1" />
+          Deposit image ready — {depositResult.width}×{depositResult.height},{" "}
+          {(depositResult.bytes / 1024).toFixed(0)} KB {depositResult.mimeType}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-1">Original</p>
+            <img src={originalImageUrl} alt="Original back of check" className="w-full rounded border" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-1">Final deposit JPEG</p>
+            <img src={depositPreviewUrl} alt="Final deposit image" className="w-full rounded border" />
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={handleAdjustAgain}>
+            <RotateCcw className="h-3 w-3 mr-1" />
+            Adjust Again
+          </Button>
+          <Button onClick={handleApprove}>
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Approve Deposit Image
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      {/* Endorsement source info */}
       {endorsementsLoading ? (
-        <div className="text-sm text-muted-foreground">Loading endorsement signatures...</div>
+        <div className="text-sm text-muted-foreground">Loading endorsement signatures…</div>
       ) : endorsementsError ? (
         <div className="flex items-center gap-2 text-sm text-destructive">
           <AlertCircle className="h-4 w-4" />
-          Error loading endorsements: {endorsementsError}
+          {endorsementsError}
         </div>
       ) : (
-        <div className="space-y-1">
-          <div className="text-sm text-muted-foreground">
-            Loaded signatures: {signedEndorsements.map((s) => s.payee_name).join(", ")}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            Source check: {signedEndorsements[0]?.check_id}
-          </div>
+        <div className="text-xs text-muted-foreground">
+          Loaded signatures:{" "}
+          {signedEndorsements.map((s) => s.payee_name).join(", ") || "none"}
         </div>
       )}
 
-      {/* Server error display */}
-      {serverError && (
-        <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {serverError}
+      {statusMessage && (
+        <div className={`rounded-md border px-3 py-2 text-sm ${statusColor}`}>
+          {status === "saving_position" || status === "rendering" ? (
+            <Loader2 className="inline h-3 w-3 mr-1 animate-spin" />
+          ) : status === "failed" ? (
+            <AlertCircle className="inline h-3 w-3 mr-1" />
+          ) : (
+            <CheckCircle2 className="inline h-3 w-3 mr-1" />
+          )}
+          {statusMessage}
         </div>
       )}
 
-      {/* Image preview with draggable overlay */}
+      {dirty && status !== "saving_position" && status !== "rendering" && (
+        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+          Unsaved changes — click <b>Save Position</b> before generating the deposit image.
+        </div>
+      )}
+
+      {/* Preview */}
       <div
         ref={wrapRef}
         className="relative mx-auto overflow-hidden rounded border bg-white"
         style={{ width: "100%", maxWidth: 900, touchAction: "none" }}
       >
         <img
-          src={imageUrl}
+          src={originalImageUrl}
           alt="Back of check"
           className="block h-auto w-full object-contain"
           draggable={false}
         />
-
-        {/* Bank safe zone indicators — top and bottom */}
         <div
           className="absolute left-0 right-0 border-t-2 border-dashed border-green-500/40 pointer-events-none"
           style={{ top: safeZoneTopPx }}
-        >
-          <span className="absolute right-1 top-1 text-[10px] text-green-600/60 font-medium">
-            Endorsement Zone Top
-          </span>
-        </div>
+        />
         <div
           className="absolute left-0 right-0 border-t-2 border-dashed border-destructive/40 pointer-events-none"
           style={{ top: safeZoneBottomPx }}
-        >
-          <span className="absolute right-1 -top-5 text-[10px] text-destructive/60 font-medium">
-            Endorsement Zone Limit
-          </span>
-        </div>
+        />
 
-        {/* Debug overlay */}
-        <div className="absolute left-2 top-2 z-30 rounded bg-black/70 px-2 py-1 text-[10px] text-white pointer-events-none">
-          xPct: {override.xPct.toFixed(3)} | yPct: {override.yPct.toFixed(3)} | rot: {override.rotationDeg} | scale: {override.scale?.toFixed(2)}
-          {wasNudged && (
-            <span className="ml-2 text-amber-300">
-              ⚠ position auto-adjusted to fit zone
-            </span>
-          )}
-        </div>
-
-        {/* draggable overlay – center-origin positioning, zone-relative Y */}
         <div
           onPointerDown={beginDrag}
-          className="absolute select-none"
+          className="absolute"
           style={{
-            left: override.xPct * containerWidthPx,
-            top: blockCenterYPx,
-            width: containerWidthPx * ENDORSEMENT_WIDTH_PCT,
+            left: centerXPx,
+            top: centerYPx,
+            width: containerWidthPx * ENDORSEMENT_WIDTH_PCT * (override.scale || 1),
             transform: `translate(-50%, -50%) rotate(${override.rotationDeg || 0}deg)`,
             transformOrigin: "center center",
             color: "#111111",
@@ -495,88 +701,92 @@ export function EndorsementAdjuster({
           }}
         >
           {override.showPayToOrder && (
-            compactText ? (
-              <>
-                <div style={{ fontSize: payToFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
-                  Pay to {companyName}
-                </div>
-                <div style={{ fontSize: payToFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
-                  Mobile Deposit Only
-                </div>
-              </>
-            ) : (
-              <>
-                <div style={{ fontSize: payToFontPx, fontWeight: 600, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
-                  Pay to the order of
-                </div>
-                <div style={{ fontSize: companyFontPx, fontWeight: 700, lineHeight: 1.05, marginBottom: lineGapPx, color: "#111111" }}>
-                  {companyName}
-                </div>
-                <div style={{ fontSize: payToFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: sectionGapPx, color: "#111111" }}>
-                  For Mobile Deposit Only
-                </div>
-              </>
-            )
+            <>
+              <div style={{ fontSize: payToFontPx, fontWeight: 600, marginBottom: lineGapPx }}>
+                Pay to the order of
+              </div>
+              <div style={{ fontSize: companyFontPx, fontWeight: 700, marginBottom: lineGapPx }}>
+                {companyName}
+              </div>
+              <div style={{ fontSize: payToFontPx, fontWeight: 700, marginBottom: sectionGapPx }}>
+                For Mobile Deposit Only
+              </div>
+            </>
           )}
 
-          {/* Client endorsement names from actual signed data */}
           {clientRows.map((row, rowIndex) => (
-            <div key={`row-${rowIndex}`} className="flex w-full" style={{ gap: columns === 2 ? lineGapPx : 0 }}>
-              {row.map((endorsement) => {
-                const isInternalOnly = endorsement.signature_method === "internal" || endorsement.signature_method === "manual";
-                return (
-                  <div key={endorsement.id} style={{ width: columns === 2 ? "50%" : "100%" }}>
-                    <div style={{ fontSize: byLineFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: isInternalOnly ? rowGap * displayScale : lineGapPx, color: "#111111" }}>
-                      {endorsement.payee_name}
-                      {isInternalOnly && (
-                        <span style={{ fontSize: byLineFontPx * 0.7, fontWeight: 400, marginLeft: 4 }}>(physical)</span>
-                      )}
-                    </div>
-                    {/* Only render electronic signature for portal-signed endorsements */}
-                    {!isInternalOnly && (
-                      endorsement.signature_image_url && !endorsement.signature_image_url.startsWith("typed:") ? (
-                        <img
-                          src={endorsement.signature_image_url}
-                          alt={`${endorsement.payee_name} signature`}
-                          style={{ height: sigHeightPx, width: clientSignatureWidthPx, margin: `0 auto ${rowGap * displayScale}px`, objectFit: "contain" }}
-                          draggable={false}
-                        />
-                      ) : (
-                        <div style={{ fontSize: byLineFontPx, fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', marginBottom: rowGap * displayScale, color: "#111111" }}>
-                          {endorsement.signature_image_url?.startsWith("typed:")
-                            ? endorsement.signature_image_url.slice(6)
-                            : endorsement.payee_name}
-                        </div>
-                      )
-                    )}
+            <div
+              key={`row-${rowIndex}`}
+              className="flex w-full"
+              style={{ gap: columns === 2 ? lineGapPx : 0 }}
+            >
+              {row.map((e) => (
+                <div key={e.id} style={{ width: columns === 2 ? "50%" : "100%" }}>
+                  <div style={{ fontSize: byLineFontPx, fontWeight: 700, marginBottom: lineGapPx }}>
+                    {e.payee_name}
                   </div>
-                );
-              })}
+                  {e.signature_image_url && !e.signature_image_url.startsWith("typed:") ? (
+                    <img
+                      src={e.signature_image_url}
+                      alt={`${e.payee_name} signature`}
+                      style={{
+                        height: sigHeightPx,
+                        width: clientSignatureWidthPx,
+                        margin: `0 auto ${rowGap * displayScale}px`,
+                        objectFit: "contain",
+                      }}
+                      draggable={false}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        fontSize: byLineFontPx,
+                        fontStyle: "italic",
+                        fontFamily: '"Brush Script MT", cursive',
+                        marginBottom: rowGap * displayScale,
+                      }}
+                    >
+                      {e.signature_image_url?.startsWith("typed:")
+                        ? e.signature_image_url.slice(6)
+                        : e.payee_name}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           ))}
 
-          {visibleCompanyEndorsement && (
+          {companyEndorsement && (
             <>
-              <div style={{ fontSize: companyFontPx, fontWeight: 700, lineHeight: 1.05, marginBottom: lineGapPx, color: "#111111" }}>
+              <div style={{ fontSize: companyFontPx, fontWeight: 700, marginBottom: lineGapPx }}>
                 {companyName}
               </div>
-
-              {visibleCompanyEndorsement.signature_image_url?.startsWith("typed:") ? (
-                <div style={{ fontSize: byLineFontPx, fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>
+              {companyEndorsement.signature_image_url?.startsWith("typed:") ? (
+                <div
+                  style={{
+                    fontSize: byLineFontPx,
+                    fontStyle: "italic",
+                    fontFamily: '"Brush Script MT", cursive',
+                  }}
+                >
                   {companyName}
                 </div>
               ) : (
                 <img
-                  src={visibleCompanyEndorsement.signature_image_url}
+                  src={companyEndorsement.signature_image_url ?? undefined}
                   alt={`${companyName} signature`}
-                  style={{ height: sigHeightPx, width: companySignatureWidthPx, margin: "0 auto", objectFit: "contain" }}
+                  style={{
+                    height: sigHeightPx,
+                    width: companySignatureWidthPx,
+                    margin: "0 auto",
+                    objectFit: "contain",
+                  }}
                   draggable={false}
                 />
               )}
             </>
           )}
 
-          {/* resize handle */}
           <div
             onPointerDown={beginResize}
             className="absolute rounded-full border-2 border-background bg-foreground shadow"
@@ -599,38 +809,31 @@ export function EndorsementAdjuster({
           <CardTitle className="text-sm">Adjust Endorsement</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Auto-detect + Quick placement */}
           <div className="space-y-2 rounded-md border border-border/60 bg-muted/30 p-3">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold text-foreground">Easy Placement</p>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleAutoDetect}
-                disabled={detecting || !imageUrl}
-              >
+              <p className="text-xs font-semibold">Easy Placement</p>
+              <Button size="sm" onClick={handleAutoDetect} disabled={detecting || !originalImageUrl}>
                 {detecting ? (
                   <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                 ) : (
                   <Wand2 className="h-3 w-3 mr-1" />
                 )}
-                {detecting ? "Detecting..." : "Auto-Detect Zone"}
+                {detecting ? "Detecting…" : "Auto-Detect Zone"}
               </Button>
             </div>
 
-            {/* 3x3 position grid */}
             <div>
               <p className="text-[10px] text-muted-foreground mb-1">Position</p>
               <div className="grid grid-cols-3 gap-1 max-w-[220px]">
                 {[
                   { label: "↖", x: 0.22, y: 0.15 },
-                  { label: "↑",  x: 0.50, y: 0.15 },
+                  { label: "↑", x: 0.5, y: 0.15 },
                   { label: "↗", x: 0.78, y: 0.15 },
-                  { label: "←", x: 0.22, y: 0.50 },
-                  { label: "•",  x: 0.50, y: 0.50 },
-                  { label: "→", x: 0.78, y: 0.50 },
+                  { label: "←", x: 0.22, y: 0.5 },
+                  { label: "•", x: 0.5, y: 0.5 },
+                  { label: "→", x: 0.78, y: 0.5 },
                   { label: "↙", x: 0.22, y: 0.85 },
-                  { label: "↓", x: 0.50, y: 0.85 },
+                  { label: "↓", x: 0.5, y: 0.85 },
                   { label: "↘", x: 0.78, y: 0.85 },
                 ].map((p) => (
                   <Button
@@ -639,7 +842,6 @@ export function EndorsementAdjuster({
                     size="sm"
                     className="h-8 text-base"
                     onClick={() => applyPreset(p.x, p.y)}
-                    title={`Move to ${p.label}`}
                   >
                     {p.label}
                   </Button>
@@ -647,7 +849,6 @@ export function EndorsementAdjuster({
               </div>
             </div>
 
-            {/* Size presets */}
             <div>
               <p className="text-[10px] text-muted-foreground mb-1">Size</p>
               <div className="flex flex-wrap gap-1">
@@ -659,7 +860,11 @@ export function EndorsementAdjuster({
                 ].map((s) => (
                   <Button
                     key={s.label}
-                    variant={Math.abs((override.scale ?? 1) - s.scale) < 0.05 ? "default" : "outline"}
+                    variant={
+                      Math.abs((override.scale ?? 1) - s.scale) < 0.05
+                        ? "default"
+                        : "outline"
+                    }
                     size="sm"
                     className="h-7 px-3 text-xs"
                     onClick={() => applySizePreset(s.scale)}
@@ -671,268 +876,117 @@ export function EndorsementAdjuster({
             </div>
           </div>
 
-          {/* D-pad nudge buttons */}
-          <div className="grid grid-cols-3 gap-2">
-
-            <div />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                setOverride((prev) =>
-                  clampEndorsementOverride({ ...prev, yPct: prev.yPct - 0.005 }),
-                )
-              }
-            >
-              Up
-            </Button>
-            <div />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                setOverride((prev) =>
-                  clampEndorsementOverride({ ...prev, xPct: prev.xPct - 0.005 }),
-                )
-              }
-            >
-              Left
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                setOverride((prev) =>
-                  clampEndorsementOverride({ ...prev, yPct: prev.yPct + 0.005 }),
-                )
-              }
-            >
-              Down
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                setOverride((prev) =>
-                  clampEndorsementOverride({ ...prev, xPct: prev.xPct + 0.005 }),
-                )
-              }
-            >
-              Right
-            </Button>
-          </div>
-
-          {/* Precise numeric inputs */}
+          {/* Orientation */}
           <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">Precise Position</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-w-md">
-              <div className="space-y-1">
-                <Label htmlFor="endorse-x" className="text-[10px] text-muted-foreground">X (%)</Label>
-                <Input
-                  id="endorse-x"
-                  type="number"
-                  step={0.1}
-                  value={(override.xPct * 100).toFixed(1)}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value);
-                    if (Number.isNaN(v)) return;
-                    setOverride((prev) => clampEndorsementOverride({ ...prev, xPct: v / 100 }));
-                  }}
-                  className="h-8 text-xs"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="endorse-y" className="text-[10px] text-muted-foreground">Y (%)</Label>
-                <Input
-                  id="endorse-y"
-                  type="number"
-                  step={0.1}
-                  value={(override.yPct * 100).toFixed(1)}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value);
-                    if (Number.isNaN(v)) return;
-                    setOverride((prev) => clampEndorsementOverride({ ...prev, yPct: v / 100 }));
-                  }}
-                  className="h-8 text-xs"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="endorse-scale" className="text-[10px] text-muted-foreground">Scale (%)</Label>
-                <Input
-                  id="endorse-scale"
-                  type="number"
-                  step={1}
-                  value={Math.round(override.scale * 100)}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value);
-                    if (Number.isNaN(v)) return;
-                    setOverride((prev) => clampEndorsementOverride({ ...prev, scale: v / 100 }));
-                  }}
-                  className="h-8 text-xs"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="endorse-rotation" className="text-[10px] text-muted-foreground">Rotation (°)</Label>
-                <Input
-                  id="endorse-rotation"
-                  type="number"
-                  step={1}
-                  value={Math.round(override.rotationDeg)}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value);
-                    if (Number.isNaN(v)) return;
-                    setOverride((prev) => clampEndorsementOverride({ ...prev, rotationDeg: normalizeRotation(v) }));
-                  }}
-                  className="h-8 text-xs"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-1 max-w-[200px]">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">Scale</p>
-              <span className="text-xs font-medium text-foreground">{Math.round(override.scale * 100)}%</span>
-            </div>
-            <div className="overflow-hidden">
-              <Slider
-                min={0.4}
-                max={4}
-                step={0.05}
-                value={[override.scale]}
-                onValueChange={([v]) =>
-                  setOverride((prev) =>
-                    clampEndorsementOverride({ ...prev, scale: v }),
-                  )
-                }
-              />
-            </div>
-          </div>
-
-          {/* Quick rotation buttons */}
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">Quick Rotation</p>
+            <p className="text-xs text-muted-foreground">Orientation</p>
             <div className="flex flex-wrap gap-2">
               {[0, 90, 180, 270].map((deg) => (
                 <Button
                   key={deg}
-                  variant="outline"
+                  variant={override.rotationDeg === deg ? "default" : "outline"}
                   size="sm"
                   onClick={() =>
-                    setOverride((prev) =>
-                      clampEndorsementOverride({ ...prev, rotationDeg: deg }),
+                    setOverride((p) =>
+                      clampEndorsementOverride({ ...p, rotationDeg: deg }),
                     )
                   }
                 >
                   {deg}°
                 </Button>
               ))}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setOverride((p) => clampEndorsementOverride({ ...p, rotationDeg: 0 }))
+                }
+              >
+                Reset Rotation
+              </Button>
             </div>
           </div>
 
-          {/* Fine rotation adjust */}
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">
-              Rotation: {Math.round(override.rotationDeg)}°
-            </p>
+          {/* Scale slider */}
+          <div className="space-y-1 max-w-[240px]">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">Scale</p>
+              <span className="text-xs font-medium">{Math.round(override.scale * 100)}%</span>
+            </div>
             <Slider
-              min={0}
-              max={360}
-              step={1}
-              value={[override.rotationDeg]}
+              min={0.5}
+              max={2.5}
+              step={0.05}
+              value={[override.scale]}
               onValueChange={([v]) =>
-                setOverride((prev) =>
-                  clampEndorsementOverride({ ...prev, rotationDeg: v }),
-                )
+                setOverride((p) => clampEndorsementOverride({ ...p, scale: v }))
               }
             />
-            <div className="flex gap-2 mt-1">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setOverride((prev) =>
-                    clampEndorsementOverride({
-                      ...prev,
-                      rotationDeg: normalizeRotation(prev.rotationDeg - 5),
-                    }),
-                  )
-                }
-              >
-                -5°
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setOverride((prev) =>
-                    clampEndorsementOverride({
-                      ...prev,
-                      rotationDeg: normalizeRotation(prev.rotationDeg + 5),
-                    }),
-                  )
-                }
-              >
-                +5°
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setOverride((prev) =>
-                    clampEndorsementOverride({
-                      ...prev,
-                      rotationDeg: normalizeRotation(prev.rotationDeg + 180),
-                    }),
-                  )
-                }
-              >
-                Rotate 180°
-              </Button>
-            </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {!override.showPayToOrder && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setOverride((prev) =>
-                    clampEndorsementOverride({ ...prev, showPayToOrder: true }),
-                  )
-                }
-                title={`Show 'Pay to the Order of ${companyName}' text`}
-              >
-                Add Pay to Order Text
-              </Button>
-            )}
-            {override.showPayToOrder && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setOverride((prev) =>
-                    clampEndorsementOverride({ ...prev, showPayToOrder: false }),
-                  )
-                }
-                title={`Remove 'Pay to the Order of ${companyName}' text`}
-              >
-                Remove Pay to Order Text
-              </Button>
-            )}
+          {/* Pay to order toggle */}
+          <div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setOverride((p) =>
+                  clampEndorsementOverride({
+                    ...p,
+                    showPayToOrder: !p.showPayToOrder,
+                  }),
+                )
+              }
+            >
+              {override.showPayToOrder ? "Remove Pay to Order Text" : "Add Pay to Order Text"}
+            </Button>
+          </div>
+
+          {/* Action bar */}
+          <div className="flex flex-wrap gap-2 pt-2 border-t">
             <Button variant="outline" size="sm" onClick={handleReset}>
               <RotateCcw className="h-3 w-3 mr-1" />
               Reset
             </Button>
-            <Button variant="outline" size="sm" onClick={handleFitToSafeZone}>
-              <ShieldCheck className="h-3 w-3 mr-1" />
-              Fit to Safe Zone
+            <Button
+              size="sm"
+              onClick={handleSavePosition}
+              disabled={
+                status === "saving_position" || status === "rendering" || !canGenerate
+              }
+            >
+              {status === "saving_position" ? (
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              ) : (
+                <Save className="h-3 w-3 mr-1" />
+              )}
+              Save Position
             </Button>
-            <Button size="sm" onClick={handleSave} disabled={saving || !canGenerate}>
-              <Save className="h-3 w-3 mr-1" />
-              {saving ? "Saving..." : "Save"}
+            <Button
+              size="sm"
+              variant="default"
+              onClick={handleGenerate}
+              disabled={
+                dirty ||
+                status === "rendering" ||
+                status === "saving_position" ||
+                !canGenerate ||
+                !originalImageUrl
+              }
+              title={dirty ? "Save position first" : undefined}
+            >
+              {status === "rendering" ? (
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              ) : (
+                <ImageDown className="h-3 w-3 mr-1" />
+              )}
+              Generate Deposit Image
             </Button>
+            {status === "failed" && (
+              <Button size="sm" variant="secondary" onClick={handleGenerate}>
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Try Again
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
