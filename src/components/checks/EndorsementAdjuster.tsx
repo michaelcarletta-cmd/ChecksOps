@@ -333,14 +333,14 @@ export function EndorsementAdjuster({
       savedOverrideRef.current = clamped;
       setOverride(clamped);
       setStatus("position_saved");
-      setStatusMessage("Placement saved");
+      setStatusMessage("Step 1 of 3 complete — click Generate Deposit Image next.");
       await logAudit({
         action: "update",
         recordType: "check_intake_items",
         recordId: checkId,
         metadata: { event: "endorsement_position_saved", override: clamped },
       });
-      toast.success("Placement saved");
+      toast.success("Position saved — click Generate Deposit Image next");
     } catch (err: any) {
       console.error("[EndorsementAdjuster] save position", err);
       setStatus("failed");
