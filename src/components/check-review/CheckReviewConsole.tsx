@@ -275,6 +275,7 @@ export function CheckReviewQueue({
   selectedCheckId: string | null;
   searchQuery?: string;
 }) {
+  const [classFilter, setClassFilter] = useState<string>("all");
   const { tenantId } = useTenantFilter();
   const { toast } = useToast();
   const qc = useQueryClient();
