@@ -617,7 +617,19 @@ export default function CheckCommandCenter() {
     if (!user?.id || bulkSelected.size === 0) return;
     setBulkRunning(true);
     const ids = Array.from(bulkSelected);
-    let ok = 0; const failed: string[] = [];
+    const idSet = new Set(ids);
+
+    // Phase 3: Optimistic update — move checks to the target stage immediately
+    // in the queue cache, then roll back any rows that fail server-side.
+    const queueKey = ["check-intake-items", tenantId] as const;
+    const previous = qc.getQueryData<any[]>(queueKey);
+    if (previous) {
+      qc.setQueryData<any[]>(queueKey, (curr) =>
+        (curr ?? []).map((c: any) => (idSet.has(c.id) ? { ...c, check_stage: path, status: path } : c)),
+      );
+    }
+
+    let ok = 0; const failed: string[] = []; const failedIds: string[] = [];
     for (const id of ids) {
       const { error } = await supabase.rpc("submit_check_review_decision_safe", {
         p_check_id: id,
@@ -625,19 +637,26 @@ export default function CheckCommandCenter() {
         p_deposit_path: path,
         p_reviewer_notes: `Bulk decision: ${label}`,
       });
-      if (error) failed.push(error.message); else ok++;
+      if (error) { failed.push(error.message); failedIds.push(id); } else ok++;
     }
     setBulkRunning(false);
     if (failed.length === 0) {
       sonnerToast.success(`${ok} check${ok === 1 ? "" : "s"} moved to ${label}`);
     } else {
+      // Roll back failed rows to their prior state
+      if (previous) {
+        const prevById = new Map(previous.map((c: any) => [c.id, c]));
+        qc.setQueryData<any[]>(queueKey, (curr) =>
+          (curr ?? []).map((c: any) => (failedIds.includes(c.id) ? (prevById.get(c.id) ?? c) : c)),
+        );
+      }
       sonnerToast.error(`${ok} succeeded, ${failed.length} failed. ${failed[0] ?? ""}`);
     }
     clearBulk();
     qc.invalidateQueries({ queryKey: ["check-intake-items"] });
     qc.invalidateQueries({ queryKey: ["check-review-queue"] });
     qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
-  }, [bulkSelected, user?.id, clearBulk]);
+  }, [bulkSelected, user?.id, clearBulk, qc, tenantId]);
 
   // On mobile, scroll to top when a check is opened or review check is opened
   useEffect(() => {
