@@ -807,13 +807,8 @@ export default function CheckCommandCenter() {
           );
         }
       )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "check_endorsements" },
-        () => {
-          schedule(["check-intake-items", "check-endorsements-summary", "check-endorsement-signatures"]);
-        }
-      )
+      // NOTE: check_endorsements has no tenant_id, so we don't subscribe here.
+      // The per-check detail view (CheckDetailPanel) subscribes scoped by check_id.
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "check_files", filter: `tenant_id=eq.${tenantId}` },
@@ -1454,15 +1449,15 @@ export default function CheckCommandCenter() {
     if (!tenantId) return;
     const channel = supabase
       .channel(`checkops-realtime-${tenantId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "disbursement_splits" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "disbursement_splits", filter: `tenant_id=eq.${tenantId}` }, () => {
         qc.invalidateQueries({ queryKey: ["funds-released", tenantId] });
-        qc.invalidateQueries({ queryKey: ["check-intake-items"] });
-        qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
-        qc.invalidateQueries({ queryKey: ["funds-tab-disbursements"] });
+        qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] });
+        qc.invalidateQueries({ queryKey: ["check-dashboard-counts", tenantId] });
+        qc.invalidateQueries({ queryKey: ["funds-tab-disbursements", tenantId] });
       })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "check_intake_items" }, () => {
-        qc.invalidateQueries({ queryKey: ["check-intake-items"] });
-        qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "check_intake_items", filter: `tenant_id=eq.${tenantId}` }, () => {
+        qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] });
+        qc.invalidateQueries({ queryKey: ["check-dashboard-counts", tenantId] });
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
