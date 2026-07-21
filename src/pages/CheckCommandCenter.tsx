@@ -1093,13 +1093,21 @@ export default function CheckCommandCenter() {
   // derived from it (every tab, search results, ungrouped fallbacks) renders
   // the most recently uploaded check at the top.
   const allChecks = useMemo(
-    () =>
-      [...checks, ...sharedChecks].sort(
+    () => {
+      const seen = new Set<string>();
+      const merged: CheckItem[] = [];
+      for (const c of [...checks, ...sharedChecks, ...depositedRows]) {
+        if (!c?.id || seen.has(c.id)) continue;
+        seen.add(c.id);
+        merged.push(c);
+      }
+      return merged.sort(
         (a, b) =>
           new Date(b.created_at ?? 0).getTime() -
           new Date(a.created_at ?? 0).getTime(),
-      ),
-    [checks, sharedChecks],
+      );
+    },
+    [checks, sharedChecks, depositedRows],
   );
 
   const { data: linkedClaims = [] } = useQuery({
