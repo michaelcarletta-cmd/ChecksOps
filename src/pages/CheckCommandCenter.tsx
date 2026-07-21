@@ -597,10 +597,22 @@ export default function CheckCommandCenter() {
   }, []);
   const clearBulk = useCallback(() => setBulkSelected(new Set()), []);
 
-  // Phase 3: Prefetch check detail on hover/focus so the panel opens instantly.
+  // Phase 3 + 5: Prefetch check detail on hover/focus so the panel opens
+  // instantly. Phase 5 extends this to warm the endorsement summary, audit
+  // log, and signed image URLs so images and signatures render without a
+  // spinner too.
+  const prefetchedDetailRef = useRef<Map<string, number>>(new Map());
   const prefetchCheckDetail = useCallback((id: string) => {
     if (!id) return;
-    qc.prefetchQuery({
+    // Skip if we've prefetched this check in the last 20s — avoids thrashing
+    // during scroll/hover flurries.
+    const last = prefetchedDetailRef.current.get(id) ?? 0;
+    const now = Date.now();
+    if (now - last < 20_000) return;
+    prefetchedDetailRef.current.set(id, now);
+
+    // 1) Main detail row (payees + deposit status).
+    const detailP = qc.prefetchQuery({
       queryKey: ["check-detail", id],
       queryFn: async () => {
         const { data, error } = await supabase
@@ -613,7 +625,83 @@ export default function CheckCommandCenter() {
       },
       staleTime: 15_000,
     });
-  }, [qc]);
+
+    // 2) Endorsement summary — merged endorsements + payees for the banner.
+    qc.prefetchQuery({
+      queryKey: ["check-endorsements-summary", id],
+      queryFn: async () => {
+        const [{ data: endorsementData, error: endorsementError }, { data: payeeData, error: payeeError }] = await Promise.all([
+          supabase
+            .from("check_endorsements")
+            .select("id, payee_name, payee_type, status, signature_image_url, signature_method, signed_at")
+            .eq("check_id", id),
+          supabase
+            .from("check_payees")
+            .select("id, payee_name, payee_type, endorsement_status, endorsed_at, contact_email, contact_phone, notification_sent_via, notification_sent_at")
+            .eq("check_id", id),
+        ]);
+        if (endorsementError) throw endorsementError;
+        if (payeeError) throw payeeError;
+        return mergeEndorsementSummaryRows(
+          id,
+          (endorsementData ?? []) as CheckEndorsementSummary[],
+          (payeeData ?? []) as CheckPayee[],
+        );
+      },
+      staleTime: 15_000,
+    });
+
+    // 3) Audit history for the timeline.
+    qc.prefetchQuery({
+      queryKey: ["check-audit", id],
+      queryFn: async () => {
+        const { data } = await supabase
+          .from("check_audit_log")
+          .select("*")
+          .eq("check_id", id)
+          .order("created_at", { ascending: false });
+        return (data ?? []) as AuditEntry[];
+      },
+      staleTime: 15_000,
+    });
+
+    // 4) Signed URLs for front/back images — once the detail row lands so we
+    //    know the storage paths. Owner-only path (skip shared checks; those
+    //    go through an edge function on open).
+    detailP.then(() => {
+      const row = qc.getQueryData<any>(["check-detail", id]);
+      if (!row) return;
+      const rowTenant = row.tenant_id as string | null | undefined;
+      const ownerView = !!tenantId && !!rowTenant && rowTenant === tenantId;
+      if (!ownerView) return;
+      const front = row.front_image_path as string | null | undefined;
+      const back = row.back_image_path as string | null | undefined;
+      if (front) {
+        qc.prefetchQuery({
+          queryKey: ["check-front-img", front],
+          queryFn: async () => {
+            const p = toStorageObjectPath(front);
+            if (!p) return null;
+            const { data } = await supabase.storage.from("claim-files").createSignedUrl(p, 3600);
+            return data?.signedUrl ?? null;
+          },
+          staleTime: 5 * 60_000,
+        });
+      }
+      if (back) {
+        qc.prefetchQuery({
+          queryKey: ["check-back-img", back],
+          queryFn: async () => {
+            const p = toStorageObjectPath(back);
+            if (!p) return null;
+            const { data } = await supabase.storage.from("claim-files").createSignedUrl(p, 3600);
+            return data?.signedUrl ?? null;
+          },
+          staleTime: 5 * 60_000,
+        });
+      }
+    }).catch(() => { /* prefetch is best-effort */ });
+  }, [qc, tenantId]);
   const runBulkDecision = useCallback(async (path: string, label: string) => {
     if (!user?.id || bulkSelected.size === 0) return;
     setBulkRunning(true);
