@@ -2926,17 +2926,33 @@ function CheckDetailPanel({
 
   const endorsementAdjusterSourceUrl = endorsementAdjusterImageUrl ?? backImageUrl ?? null;
 
+  const [backImageDimError, setBackImageDimError] = useState<string | null>(null);
+  const [backImageDimReloadKey, setBackImageDimReloadKey] = useState(0);
   useEffect(() => {
     setBackImageDimensions(null);
+    setBackImageDimError(null);
     if (!endorsementAdjusterSourceUrl) return;
     let cancelled = false;
     const img = new Image();
+    img.decoding = "async";
+    const timeout = window.setTimeout(() => {
+      if (!cancelled && !img.complete) {
+        setBackImageDimError("Timed out loading check image.");
+      }
+    }, 15000);
     img.onload = () => {
-      if (!cancelled) setBackImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+      if (cancelled) return;
+      window.clearTimeout(timeout);
+      setBackImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.onerror = () => {
+      if (cancelled) return;
+      window.clearTimeout(timeout);
+      setBackImageDimError("We couldn't load the check image.");
     };
     img.src = endorsementAdjusterSourceUrl;
-    return () => { cancelled = true; };
-  }, [endorsementAdjusterSourceUrl]);
+    return () => { cancelled = true; window.clearTimeout(timeout); };
+  }, [endorsementAdjusterSourceUrl, backImageDimReloadKey]);
 
   useEffect(() => {
     setFrontImageDimensions(null);
