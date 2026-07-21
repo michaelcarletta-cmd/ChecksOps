@@ -1806,8 +1806,42 @@ export default function CheckCommandCenter() {
                     </div>
                   </div>
                 )}
+                <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 bg-muted/30">
+                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Class</span>
+                  <Select value={classFilter} onValueChange={setClassFilter}>
+                    <SelectTrigger className="h-7 w-[220px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All classes ({rawFilteredChecks.length})</SelectItem>
+                      {FUNDS_TYPE_OPTIONS.map((o) => {
+                        const c = classFilterCounts.get(o.value);
+                        if (!c) return null;
+                        return (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label} ({c.count})
+                          </SelectItem>
+                        );
+                      })}
+                      {classFilterCounts.has("unclassified") && (
+                        <SelectItem value="unclassified">
+                          Unclassified ({classFilterCounts.get("unclassified")!.count})
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {classFilter !== "all" && (
+                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setClassFilter("all")}>
+                      Clear
+                    </Button>
+                  )}
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {filteredChecks.length} check{filteredChecks.length === 1 ? "" : "s"}
+                  </span>
+                </div>
                 <div className="overflow-x-auto h-full">
-                <ScrollArea className="h-[calc(100vh-400px)]">
+                <ScrollArea className="h-[calc(100vh-440px)]">
+
                   {isLoading ? (
                     <div className="p-8 text-center text-muted-foreground">Loading checks...</div>
                   ) : filteredChecks.length === 0 ? (
