@@ -67,11 +67,11 @@ import { ClaimLedgerCard } from "@/components/payments/ClaimLedgerCard";
 const LossDraftDashboard = lazy(() =>
   import("@/components/loss-draft/LossDraftDashboard").then(m => ({ default: m.LossDraftDashboard }))
 );
-const preloadEndorsementAdjuster = () =>
-  import("@/components/checks/EndorsementAdjuster");
-const EndorsementAdjuster = lazy(() =>
-  preloadEndorsementAdjuster().then(m => ({ default: m.EndorsementAdjuster }))
-);
+// Endorsement adjuster is a core operational action — load eagerly so the
+// button responds instantly. Keeping it out of a lazy chunk avoids the
+// intermittent "click does nothing" behavior when the chunk was slow to fetch.
+import { EndorsementAdjuster } from "@/components/checks/EndorsementAdjuster";
+const preloadEndorsementAdjuster = () => Promise.resolve();
 const EndorsementChecklist = lazy(() =>
   import("@/components/check-review/EndorsementChecklist").then(m => ({ default: m.EndorsementChecklist }))
 );
