@@ -895,17 +895,62 @@ export default function CheckCommandCenter() {
   const { data: checks = [], isLoading } = useQuery({
     queryKey: ["check-intake-items", tenantId],
     queryFn: async () => {
-      // Phase 1 perf: slimmer projection — the queue only needs payee name /
-      // type / endorsement_status for search + count badges. Full payee rows
-      // (18 cols) are refetched by the detail view.
+      // Phase 7 perf: explicit slim projection. `SELECT *` on check_intake_items
+      // pulls 63 columns per row including large jsonb blobs (raw_ocr_front /
+      // raw_ocr_back can be 20-80KB each, plus endorsement_render_meta and
+      // encrypted routing/account fields). At 100k+ checks per tenant that
+      // payload is what times the queue query out. Enumerate only what the
+      // queue UI actually reads; the detail panel refetches the full row.
       const t0 = performance.now();
+      const queueColumns = [
+        "id",
+        "claim_id",
+        "tenant_id",
+        "front_image_path",
+        "back_image_path",
+        "carrier_name",
+        "check_number",
+        "amount",
+        "issue_date",
+        "expiration_days",
+        "detected_claim_number",
+        "payee_line",
+        "is_multi_payee",
+        "ocr_status",
+        "deposit_recommendation",
+        "deposit_recommendation_reasons",
+        "status",
+        "check_stage",
+        "created_at",
+        "updated_at",
+        "uploaded_by",
+        "reviewed_by",
+        "reviewed_at",
+        "review_notes",
+        "endorsement_packet_path",
+        "endorsement_override",
+        "funds_type",
+        "property_address",
+        "payment_classification",
+        "payee_address",
+        "deposited_at",
+        "deposited_by_tenant_id",
+        "partner_status",
+        "partner_status_label",
+        "partner_status_updated_at",
+        "external_origin",
+        "check_source",
+        "cash_job_id",
+        "cash_job_payment_class",
+      ].join(", ");
       const { data, error } = await supabase
         .from("check_intake_items")
         .select(
-          "*, check_payees(payee_name, payee_type, endorsement_status), checkalt_deposits(id, status, submitted_at, approved_at, updated_at)",
+          `${queueColumns}, check_payees(payee_name, payee_type, endorsement_status), checkalt_deposits(id, status, submitted_at, approved_at, updated_at)`,
         )
         .eq("tenant_id", tenantId!)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(2000);
       if (error) throw error;
       if (import.meta.env.DEV) {
         console.log(
