@@ -84,6 +84,7 @@ export function EndorsementAdjuster({
   companyName,
   initialOverride,
   onDepositImageApproved,
+  onUnapprovedDepositChange,
   onClose,
 }: EndorsementAdjusterProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
