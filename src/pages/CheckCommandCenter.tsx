@@ -1,4 +1,5 @@
-import { Fragment, lazy, Suspense, useState, useMemo, useCallback, useEffect } from "react";
+import { Fragment, lazy, Suspense, useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
