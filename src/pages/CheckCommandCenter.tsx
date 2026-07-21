@@ -595,6 +595,24 @@ export default function CheckCommandCenter() {
     });
   }, []);
   const clearBulk = useCallback(() => setBulkSelected(new Set()), []);
+
+  // Phase 3: Prefetch check detail on hover/focus so the panel opens instantly.
+  const prefetchCheckDetail = useCallback((id: string) => {
+    if (!id) return;
+    qc.prefetchQuery({
+      queryKey: ["check-detail", id],
+      queryFn: async () => {
+        const { data, error } = await supabase
+          .from("check_intake_items")
+          .select("*, check_payees(*), checkalt_deposits(id, status, submitted_at, approved_at, updated_at, last_status_payload)")
+          .eq("id", id)
+          .single();
+        if (error) throw error;
+        return data;
+      },
+      staleTime: 15_000,
+    });
+  }, [qc]);
   const runBulkDecision = useCallback(async (path: string, label: string) => {
     if (!user?.id || bulkSelected.size === 0) return;
     setBulkRunning(true);
