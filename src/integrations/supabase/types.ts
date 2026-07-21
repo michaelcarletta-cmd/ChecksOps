@@ -21425,6 +21425,14 @@ export type Database = {
         Args: { _tenant_id: string }
         Returns: Json
       }
+      get_check_stage_totals: {
+        Args: { p_tenant_id: string }
+        Returns: {
+          count: number
+          stage: string
+          total_amount: number
+        }[]
+      }
       get_check_unread_counts: {
         Args: never
         Returns: {
