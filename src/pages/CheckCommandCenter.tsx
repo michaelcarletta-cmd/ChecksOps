@@ -2818,12 +2818,16 @@ function CheckDetailPanel({
    const { data: check } = useQuery({
     queryKey: ["check-detail", checkId],
     queryFn: async () => {
+      const t0 = performance.now();
       const { data, error } = await supabase
         .from("check_intake_items")
         .select("*, check_payees(*), checkalt_deposits(id, status, submitted_at, approved_at, updated_at, last_status_payload)")
         .eq("id", checkId)
         .single();
       if (error) throw error;
+      if (import.meta.env.DEV) {
+        console.log(`[perf] check-detail ${checkId.slice(0, 8)} in ${(performance.now() - t0).toFixed(0)}ms`);
+      }
       return data as CheckItem;
     },
   });
