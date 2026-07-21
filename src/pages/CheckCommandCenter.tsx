@@ -500,6 +500,7 @@ export default function CheckCommandCenter() {
   const { isAdmin } = usePermissions();
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState("endorsements");
+  const [classFilter, setClassFilter] = useState<string>("all");
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
