@@ -1507,7 +1507,8 @@ export default function CheckCommandCenter() {
                         })()}
                       </TableBody>
                     </Table>
-                  )}
+                    );
+                  })()}
                 </ScrollArea>
               </CardContent>
             </Card>
