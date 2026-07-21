@@ -1778,6 +1778,8 @@ export default function CheckCommandCenter() {
                                   <TableRow
                                     key={split.id}
                                     className={`${checkId ? "cursor-pointer" : ""} ${isSelected ? "bg-accent" : ""}`}
+                                    onMouseEnter={() => checkId && prefetchCheckDetail(checkId)}
+                                    onFocus={() => checkId && prefetchCheckDetail(checkId)}
                                     onClick={() => checkId && setSelectedCheck(isSelected ? null : checkId)}
                                   >
                                     <TableCell className="font-mono text-sm">#{check?.check_number || "—"}</TableCell>
