@@ -22,6 +22,7 @@ const PaymentDirectionPage = lazy(() => import("./pages/PaymentDirectionPage"));
 const WhiteLabelApp = lazy(() => import("./pages/WhiteLabelApp"));
 const CheckOpsLanding = lazy(() => import("./pages/checkops/CheckOpsLanding"));
 const CheckOpsPricing = lazy(() => import("./pages/checkops/CheckOpsPricing"));
+const CheckOpsSecurity = lazy(() => import("./pages/checkops/CheckOpsSecurity"));
 const CheckOpsLogin = lazy(() => import("./pages/checkops/CheckOpsLogin"));
 const CheckOpsForgotPassword = lazy(() => import("./pages/checkops/CheckOpsForgotPassword"));
 const CheckOpsResetPassword = lazy(() => import("./pages/checkops/CheckOpsResetPassword"));
@@ -84,6 +85,7 @@ function CheckOpsRoutes() {
       <Route path="/verify-account/:token" element={<Suspense fallback={<PageLoader />}><VerifyAccountStart /></Suspense>} />
       <Route path="/unsubscribe" element={<Suspense fallback={<PageLoader />}><Unsubscribe /></Suspense>} />
       <Route path="/pricing" element={<Suspense fallback={<PageLoader />}><CheckOpsPricing /></Suspense>} />
+      <Route path="/security" element={<Suspense fallback={<PageLoader />}><CheckOpsSecurity /></Suspense>} />
       <Route path="/privacy-notice" element={<Suspense fallback={<PageLoader />}><PrivacyNotice /></Suspense>} />
       <Route path="/admin/tenants" element={<Suspense fallback={<PageLoader />}><AdminTenants /></Suspense>} />
       <Route path="/admin/mortgage-ops" element={<Suspense fallback={<PageLoader />}><AdminMortgageOps /></Suspense>} />
