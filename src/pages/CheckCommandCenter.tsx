@@ -4183,18 +4183,21 @@ function CheckDetailPanel({
               {check?.back_image_path && !isSharedView && (
                 <>
                   <div className="flex flex-col gap-2 sm:flex-row">
-                    {backImageUrl && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onPointerEnter={() => { void preloadEndorsementAdjuster(); }}
-                        onFocus={() => { void preloadEndorsementAdjuster(); }}
-                        onClick={() => setShowEndorsementAdjuster((v) => !v)}
-                      >
-                        {showEndorsementAdjuster ? "Hide" : "Adjust"} Endorsement Position
-                      </Button>
-                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      disabled={!check?.back_image_path}
+                      onPointerEnter={() => { void preloadEndorsementAdjuster(); }}
+                      onFocus={() => { void preloadEndorsementAdjuster(); }}
+                      onClick={() => {
+                        if (showEndorsementAdjuster) return;
+                        // Open the dialog immediately — assets load inside it.
+                        setShowEndorsementAdjuster(true);
+                      }}
+                    >
+                      Adjust Received Endorsement
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
