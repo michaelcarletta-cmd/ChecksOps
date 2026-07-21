@@ -1,0 +1,1 @@
+DELETE FROM checkalt_deposits WHERE id = '51746bec-ce09-461f-8209-dde26b8cda95' AND checkalt_reference IS NULL AND submitted_at IS NULL;
