@@ -258,6 +258,7 @@ export async function renderDepositImage(
 
   // Convert normalized coords to output pixels — X is full-image, Y is safe-zone-relative.
   const safeZoneTopPx = ZONE_TOP_PCT * outH;
+  const safeZoneHeightPx = (ZONE_BOTTOM_PCT - ZONE_TOP_PCT) * outH;
   const centerX = override.xPct * outW;
   let centerY = safeZoneTopPx + override.yPct * safeZoneHeightPx;
 
