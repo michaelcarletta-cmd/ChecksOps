@@ -607,10 +607,12 @@ export function EndorsementAdjuster({
   if (status === "completed" && depositPreviewUrl && depositResult) {
     return (
       <div className="space-y-4">
+        <StepBadge current={3} />
         <div className={`rounded-md border px-3 py-2 text-sm ${statusColor}`}>
           <CheckCircle2 className="inline h-4 w-4 mr-1" />
           Deposit image ready — {depositResult.width}×{depositResult.height},{" "}
-          {(depositResult.bytes / 1024).toFixed(0)} KB {depositResult.mimeType}
+          {(depositResult.bytes / 1024).toFixed(0)} KB {depositResult.mimeType}. Click{" "}
+          <b>Approve Deposit Image</b> to save.
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
