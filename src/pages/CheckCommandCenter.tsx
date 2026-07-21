@@ -595,11 +595,41 @@ export default function CheckCommandCenter() {
     });
   }, []);
   const clearBulk = useCallback(() => setBulkSelected(new Set()), []);
+
+  // Phase 3: Prefetch check detail on hover/focus so the panel opens instantly.
+  const prefetchCheckDetail = useCallback((id: string) => {
+    if (!id) return;
+    qc.prefetchQuery({
+      queryKey: ["check-detail", id],
+      queryFn: async () => {
+        const { data, error } = await supabase
+          .from("check_intake_items")
+          .select("*, check_payees(*), checkalt_deposits(id, status, submitted_at, approved_at, updated_at, last_status_payload)")
+          .eq("id", id)
+          .single();
+        if (error) throw error;
+        return data;
+      },
+      staleTime: 15_000,
+    });
+  }, [qc]);
   const runBulkDecision = useCallback(async (path: string, label: string) => {
     if (!user?.id || bulkSelected.size === 0) return;
     setBulkRunning(true);
     const ids = Array.from(bulkSelected);
-    let ok = 0; const failed: string[] = [];
+    const idSet = new Set(ids);
+
+    // Phase 3: Optimistic update — move checks to the target stage immediately
+    // in the queue cache, then roll back any rows that fail server-side.
+    const queueKey = ["check-intake-items", tenantId] as const;
+    const previous = qc.getQueryData<any[]>(queueKey);
+    if (previous) {
+      qc.setQueryData<any[]>(queueKey, (curr) =>
+        (curr ?? []).map((c: any) => (idSet.has(c.id) ? { ...c, check_stage: path, status: path } : c)),
+      );
+    }
+
+    let ok = 0; const failed: string[] = []; const failedIds: string[] = [];
     for (const id of ids) {
       const { error } = await supabase.rpc("submit_check_review_decision_safe", {
         p_check_id: id,
@@ -607,19 +637,26 @@ export default function CheckCommandCenter() {
         p_deposit_path: path,
         p_reviewer_notes: `Bulk decision: ${label}`,
       });
-      if (error) failed.push(error.message); else ok++;
+      if (error) { failed.push(error.message); failedIds.push(id); } else ok++;
     }
     setBulkRunning(false);
     if (failed.length === 0) {
       sonnerToast.success(`${ok} check${ok === 1 ? "" : "s"} moved to ${label}`);
     } else {
+      // Roll back failed rows to their prior state
+      if (previous) {
+        const prevById = new Map(previous.map((c: any) => [c.id, c]));
+        qc.setQueryData<any[]>(queueKey, (curr) =>
+          (curr ?? []).map((c: any) => (failedIds.includes(c.id) ? (prevById.get(c.id) ?? c) : c)),
+        );
+      }
       sonnerToast.error(`${ok} succeeded, ${failed.length} failed. ${failed[0] ?? ""}`);
     }
     clearBulk();
     qc.invalidateQueries({ queryKey: ["check-intake-items"] });
     qc.invalidateQueries({ queryKey: ["check-review-queue"] });
     qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
-  }, [bulkSelected, user?.id, clearBulk]);
+  }, [bulkSelected, user?.id, clearBulk, qc, tenantId]);
 
   // On mobile, scroll to top when a check is opened or review check is opened
   useEffect(() => {
@@ -1374,7 +1411,7 @@ export default function CheckCommandCenter() {
                                   </TableCell>
                                 </TableRow>
                                 {group.checks.map((check) => (
-                                  <TableRow key={check.id} className="cursor-pointer" onClick={() => setSelectedCheck(check.id)}>
+                                  <TableRow key={check.id} className="cursor-pointer" onMouseEnter={() => prefetchCheckDetail(check.id)} onFocus={() => prefetchCheckDetail(check.id)} onClick={() => setSelectedCheck(check.id)}>
                                     <TableCell className="font-mono text-sm">#{check.check_number || "—"}</TableCell>
                                     <TableCell className="text-sm">{check.carrier_name || "—"}</TableCell>
                                     <TableCell className="text-right tabular-nums">{check.amount != null ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}</TableCell>
@@ -1451,7 +1488,7 @@ export default function CheckCommandCenter() {
                               </TableCell>
                             </TableRow>
                             {group.checks.map((check) => (
-                              <TableRow key={check.id} className="cursor-pointer" onClick={() => setSelectedCheck(check.id)}>
+                              <TableRow key={check.id} className="cursor-pointer" onMouseEnter={() => prefetchCheckDetail(check.id)} onFocus={() => prefetchCheckDetail(check.id)} onClick={() => setSelectedCheck(check.id)}>
                                 <TableCell className="font-mono text-sm">#{check.check_number || "—"}</TableCell>
                                 <TableCell className="text-sm">{check.carrier_name || "—"}</TableCell>
                                 <TableCell className="text-right tabular-nums">{check.amount != null ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}</TableCell>
@@ -1571,6 +1608,8 @@ export default function CheckCommandCenter() {
                                   <TableRow
                                     key={split.id}
                                     className={`${checkId ? "cursor-pointer" : ""} ${isSelected ? "bg-accent" : ""}`}
+                                    onMouseEnter={() => checkId && prefetchCheckDetail(checkId)}
+                                    onFocus={() => checkId && prefetchCheckDetail(checkId)}
                                     onClick={() => checkId && setSelectedCheck(isSelected ? null : checkId)}
                                   >
                                     <TableCell className="font-mono text-sm">#{check?.check_number || "—"}</TableCell>
@@ -1739,6 +1778,8 @@ export default function CheckCommandCenter() {
                                   <TableRow
                                     key={split.id}
                                     className={`${checkId ? "cursor-pointer" : ""} ${isSelected ? "bg-accent" : ""}`}
+                                    onMouseEnter={() => checkId && prefetchCheckDetail(checkId)}
+                                    onFocus={() => checkId && prefetchCheckDetail(checkId)}
                                     onClick={() => checkId && setSelectedCheck(isSelected ? null : checkId)}
                                   >
                                     <TableCell className="font-mono text-sm">#{check?.check_number || "—"}</TableCell>
@@ -2055,6 +2096,8 @@ export default function CheckCommandCenter() {
                                 <TableRow
                                   key={check.id}
                                   className={`cursor-pointer transition-colors ${isSelected ? "bg-accent" : ""} ${isBulk ? "bg-primary/5" : ""}`}
+                                  onMouseEnter={() => prefetchCheckDetail(check.id)}
+                                  onFocus={() => prefetchCheckDetail(check.id)}
                                   onClick={() => setSelectedCheck(isSelected ? null : check.id)}
                                 >
                               <TableCell className="w-8" onClick={(e) => e.stopPropagation()}>
