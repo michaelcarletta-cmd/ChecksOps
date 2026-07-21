@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { convertHeicToJpegIfNeeded } from "@/lib/convertHeic";
+import { compressCheckImage } from "@/lib/compressCheckImage";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
 import { useToast } from "@/hooks/use-toast";
@@ -87,8 +87,8 @@ export function CashJobCheckUpload({
     try {
       // iPhone HEIC/HEIF photos must be converted to JPEG before upload —
       // browsers and our compositor can't decode HEIC and would render blank.
-      const frontSafe = await convertHeicToJpegIfNeeded(frontFile);
-      const backSafe = backFile ? await convertHeicToJpegIfNeeded(backFile) : null;
+      const frontSafe = await compressCheckImage(frontFile);
+      const backSafe = backFile ? await compressCheckImage(backFile) : null;
 
       const ts = Date.now();
       const frontPath = `${tenant.id}/cash-jobs/${cashJobId}/${ts}_front.${frontSafe.name.split(".").pop()}`;

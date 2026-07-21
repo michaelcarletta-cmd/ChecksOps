@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { compressCheckImage } from "@/lib/compressCheckImage";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -638,15 +639,16 @@ function EndorsementCard({
   const handleBackImageUpload = async (file: File) => {
     setUploading(true);
     try {
-      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const compressed = await compressCheckImage(file);
+      const ext = (compressed.name.split(".").pop() || "jpg").toLowerCase();
       const newPath = `checks/${endorsement.check_id}/back-${Date.now()}.${ext}`;
 
       const { error: uploadErr } = await supabase.storage
         .from("claim-files")
-        .upload(newPath, file, {
+        .upload(newPath, compressed, {
           cacheControl: "31536000",
           upsert: false,
-          contentType: file.type || "image/jpeg",
+          contentType: compressed.type || "image/jpeg",
         });
 
       if (uploadErr) throw uploadErr;
