@@ -1628,11 +1628,24 @@ export default function CheckCommandCenter() {
                   Funds Received ({fundsReceived.length})
                 </CardTitle>
               </CardHeader>
+              <ClassFilterBar
+                classFilter={classFilter}
+                setClassFilter={setClassFilter}
+                items={fundsReceived}
+                getFundsType={(s: any) => s?.disbursement_batches?.check_intake_items?.funds_type}
+                getAmount={(s: any) => Number(s.amount) || 0}
+                itemLabel="receipt"
+              />
               <CardContent className="p-0">
-                <ScrollArea className="h-[calc(100vh-400px)]">
-                  {fundsReceived.length === 0 ? (
-                    <div className="p-8 text-center text-muted-foreground">No funds received yet</div>
-                  ) : (
+                <ScrollArea className="h-[calc(100vh-460px)]">
+                  {(() => {
+                    const visible = classFilter === "all"
+                      ? fundsReceived
+                      : fundsReceived.filter((s: any) => (s?.disbursement_batches?.check_intake_items?.funds_type ?? "unclassified") === classFilter);
+                    if (visible.length === 0) {
+                      return <div className="p-8 text-center text-muted-foreground">No funds received yet</div>;
+                    }
+                    return (
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -1648,7 +1661,7 @@ export default function CheckCommandCenter() {
                       <TableBody>
                         {(() => {
                           const groups = new Map<string, { key: string; claimNumber: string; policyholderName: string; rows: any[]; total: number; latest: string }>();
-                          fundsReceived.forEach((split: any) => {
+                          visible.forEach((split: any) => {
                             const batch = split.disbursement_batches;
                             const check = batch?.check_intake_items;
                             const embeddedClaim = check?.claims ?? null;
