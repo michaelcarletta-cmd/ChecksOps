@@ -1527,7 +1527,8 @@ export default function CheckCommandCenter() {
                 )}
               </button>
             );
-          })}
+          });
+          })()}
         </div>
 
         {/* Loss Draft Tab */}
