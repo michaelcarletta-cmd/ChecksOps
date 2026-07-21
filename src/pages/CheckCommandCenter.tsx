@@ -3623,9 +3623,13 @@ function CheckDetailPanel({
             both mobile and desktop. The back image is intentionally hidden
             here and is only accessible via the "View Check Images" button. */}
         {frontImageUrl && (
-          <div className="mt-2">
-            <div className="relative overflow-hidden rounded border border-border">
-              <img src={frontImageUrl} alt="Check front" className="w-full object-contain" />
+          <div className="mt-2 flex justify-center">
+            <div className="relative overflow-hidden rounded border border-border inline-block max-w-md w-full">
+              <img
+                src={frontImageUrl}
+                alt="Check front"
+                className="w-full max-h-64 object-contain bg-black/5"
+              />
               {showWatermark && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ transform: "rotate(-30deg)" }}>
                   <div className="grid grid-cols-2 gap-x-8 gap-y-6 opacity-[0.07]">
