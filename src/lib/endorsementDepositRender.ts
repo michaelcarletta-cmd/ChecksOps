@@ -1,0 +1,301 @@
+/**
+ * Client-side flattener that turns the original back-of-check image plus the
+ * received signatures into a real raster JPEG that CheckAlt can consume.
+ *
+ * We do the render in the browser (canvas) instead of an edge function so we
+ * never hit the memory ceiling that caused the previous "non-2xx" errors —
+ * the browser has plenty of RAM to decode a 4MB phone photo. The output is a
+ * flat JPEG blob that can be uploaded straight to storage.
+ */
+import {
+  EndorsementOverride,
+  clampEndorsementOverride,
+} from "@/lib/endorsementLayout";
+import { fitEndorsementLayout } from "@/lib/endorsementFit";
+
+export const ENDORSEMENT_RENDERER_VERSION = "canvas-v1";
+
+// Must match constants in EndorsementAdjuster.tsx preview.
+export const ZONE_TOP_PCT = 0.15;
+export const ZONE_BOTTOM_PCT = 0.92;
+export const ENDORSEMENT_WIDTH_PCT = 0.22;
+const MAX_LONG_EDGE = 1200;
+
+export interface SignatureAsset {
+  id: string;
+  payee_name: string;
+  signature_image_url: string | null;
+  signature_method: string | null;
+}
+
+export interface DepositRenderInput {
+  originalImageUrl: string;
+  override: EndorsementOverride;
+  companyName: string;
+  clientSignatures: SignatureAsset[];
+  companySignature: SignatureAsset | null;
+}
+
+export interface DepositRenderResult {
+  blob: Blob;
+  mimeType: "image/jpeg";
+  width: number;
+  height: number;
+  bytes: number;
+  rendererVersion: string;
+}
+
+async function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Failed to load image ${url}`));
+    img.src = url;
+  });
+}
+
+function fitLongEdge(w: number, h: number, target = MAX_LONG_EDGE) {
+  const longest = Math.max(w, h);
+  if (longest <= target) return { width: w, height: h };
+  const r = target / longest;
+  return { width: Math.round(w * r), height: Math.round(h * r) };
+}
+
+/**
+ * Draws the endorsement block (pay-to text + client signatures + company sig)
+ * around (0,0) at natural size, returns the block's bounding box height so
+ * caller can center vertically.
+ */
+async function drawEndorsementBlock(
+  ctx: CanvasRenderingContext2D,
+  input: DepositRenderInput,
+  blockWidth: number,
+  fontSize: number,
+  lineGap: number,
+  rowGap: number,
+  sigHeight: number,
+  columns: 1 | 2,
+  showPayToOrder: boolean,
+): Promise<void> {
+  ctx.fillStyle = "#111111";
+  ctx.textBaseline = "top";
+  ctx.textAlign = "center";
+
+  let cy = 0;
+  const centerX = blockWidth / 2;
+
+  if (showPayToOrder) {
+    ctx.font = `600 ${fontSize}px Arial, sans-serif`;
+    ctx.fillText("Pay to the order of", centerX, cy);
+    cy += fontSize + lineGap;
+    ctx.font = `700 ${Math.round(fontSize * 1.2)}px Arial, sans-serif`;
+    ctx.fillText(input.companyName, centerX, cy);
+    cy += Math.round(fontSize * 1.2) + lineGap;
+    ctx.font = `700 ${fontSize}px Arial, sans-serif`;
+    ctx.fillText("For Mobile Deposit Only", centerX, cy);
+    cy += fontSize + rowGap;
+  }
+
+  // Client signatures
+  const clientSigs = input.clientSignatures;
+  const colWidth = columns === 2 ? blockWidth / 2 : blockWidth;
+  for (let i = 0; i < clientSigs.length; i += columns) {
+    const rowStart = cy;
+    let rowMaxCy = cy;
+    for (let c = 0; c < columns && i + c < clientSigs.length; c++) {
+      const sig = clientSigs[i + c];
+      const colCenterX = columns === 2 ? colWidth / 2 + c * colWidth : centerX;
+      let subCy = rowStart;
+
+      ctx.font = `700 ${fontSize}px Arial, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.fillText(sig.payee_name, colCenterX, subCy);
+      subCy += fontSize + lineGap * 0.5;
+
+      const url = sig.signature_image_url ?? "";
+      if (url && !url.startsWith("typed:")) {
+        try {
+          const img = await loadImage(url);
+          const aspect = img.naturalWidth / img.naturalHeight || 3;
+          const drawW = Math.min(colWidth - 20, sigHeight * aspect);
+          const drawH = drawW / aspect;
+          ctx.drawImage(img, colCenterX - drawW / 2, subCy, drawW, drawH);
+          subCy += drawH + rowGap;
+        } catch {
+          // Fall back to typed name if image fails to load
+          ctx.font = `italic 500 ${fontSize}px "Brush Script MT", cursive`;
+          ctx.fillText(sig.payee_name, colCenterX, subCy);
+          subCy += fontSize + rowGap;
+        }
+      } else {
+        const typed = url.startsWith("typed:") ? url.slice(6) : sig.payee_name;
+        ctx.font = `italic 500 ${fontSize}px "Brush Script MT", cursive`;
+        ctx.fillText(typed, colCenterX, subCy);
+        subCy += fontSize + rowGap;
+      }
+      if (subCy > rowMaxCy) rowMaxCy = subCy;
+    }
+    cy = rowMaxCy;
+  }
+
+  // Company signature at bottom
+  if (input.companySignature) {
+    ctx.font = `700 ${Math.round(fontSize * 1.2)}px Arial, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.fillText(input.companyName, centerX, cy);
+    cy += Math.round(fontSize * 1.2) + lineGap;
+
+    const url = input.companySignature.signature_image_url ?? "";
+    if (url && !url.startsWith("typed:")) {
+      try {
+        const img = await loadImage(url);
+        const aspect = img.naturalWidth / img.naturalHeight || 3;
+        const drawW = Math.min(blockWidth - 20, sigHeight * aspect);
+        const drawH = drawW / aspect;
+        ctx.drawImage(img, centerX - drawW / 2, cy, drawW, drawH);
+      } catch {
+        ctx.font = `italic 500 ${fontSize}px "Brush Script MT", cursive`;
+        ctx.fillText(input.companyName, centerX, cy);
+      }
+    } else {
+      ctx.font = `italic 500 ${fontSize}px "Brush Script MT", cursive`;
+      ctx.fillText(input.companyName, centerX, cy);
+    }
+  }
+}
+
+function estimateBlockHeight(
+  input: DepositRenderInput,
+  fontSize: number,
+  lineGap: number,
+  rowGap: number,
+  sigHeight: number,
+  columns: 1 | 2,
+  showPayToOrder: boolean,
+): number {
+  let h = 0;
+  if (showPayToOrder) {
+    h += fontSize + lineGap;
+    h += Math.round(fontSize * 1.2) + lineGap;
+    h += fontSize + rowGap;
+  }
+  const rows = Math.ceil(input.clientSignatures.length / columns) || 0;
+  h += rows * (fontSize + lineGap * 0.5 + sigHeight + rowGap);
+  if (input.companySignature) {
+    h += Math.round(fontSize * 1.2) + lineGap + sigHeight;
+  }
+  return h;
+}
+
+/**
+ * Flattens the back-of-check + endorsements into a JPEG blob. Caller uploads
+ * the returned blob to storage — this function does no network writes.
+ */
+export async function renderDepositImage(
+  input: DepositRenderInput,
+): Promise<DepositRenderResult> {
+  const override = clampEndorsementOverride({
+    ...input.override,
+    xPct: input.override.xPct,
+    yPct: input.override.yPct,
+    scale: input.override.scale,
+    rotationDeg: input.override.rotationDeg,
+    showPayToOrder: input.override.showPayToOrder,
+  });
+
+  const backImg = await loadImage(input.originalImageUrl);
+  const natW = backImg.naturalWidth || backImg.width;
+  const natH = backImg.naturalHeight || backImg.height;
+
+  // Downscale to a sane output size so upload stays small and CheckAlt is happy.
+  const { width: outW, height: outH } = fitLongEdge(natW, natH);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = outW;
+  canvas.height = outH;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas 2D context unavailable");
+
+  // Solid white base — JPEG has no transparency, avoids black background on
+  // any transparent source PNGs.
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, outW, outH);
+  ctx.drawImage(backImg, 0, 0, outW, outH);
+
+  // Layout — pixel sizes measured against output image height (matches the
+  // preview's use of fitEndorsementLayout on image-pixel zone height).
+  const signerCount = Math.max(1, input.clientSignatures.length);
+  const safeZoneHeightPx = (ZONE_BOTTOM_PCT - ZONE_TOP_PCT) * outH;
+  const preset = fitEndorsementLayout({
+    signerCount,
+    zoneHeightPx: safeZoneHeightPx,
+    requestedScale: override.scale || 1,
+  });
+
+  const blockWidth = outW * ENDORSEMENT_WIDTH_PCT * (override.scale || 1);
+  const blockHeight = estimateBlockHeight(
+    input,
+    preset.fontSize,
+    preset.lineGap,
+    preset.rowGap,
+    preset.signatureHeight,
+    preset.columns,
+    override.showPayToOrder,
+  );
+
+  // Convert normalized coords to output pixels — X is full-image, Y is safe-zone-relative.
+  const safeZoneTopPx = ZONE_TOP_PCT * outH;
+  const centerX = override.xPct * outW;
+  let centerY = safeZoneTopPx + override.yPct * safeZoneHeightPx;
+
+  // Clamp so the rotated block bounding-box stays inside the safe zone.
+  const safeZoneBottomPx = ZONE_BOTTOM_PCT * outH;
+  const halfH = blockHeight / 2;
+  centerY = Math.max(safeZoneTopPx + halfH, Math.min(safeZoneBottomPx - halfH, centerY));
+
+  ctx.save();
+  ctx.translate(centerX, centerY);
+  ctx.rotate(((override.rotationDeg || 0) * Math.PI) / 180);
+  ctx.translate(-blockWidth / 2, -blockHeight / 2);
+
+  await drawEndorsementBlock(
+    ctx,
+    input,
+    blockWidth,
+    preset.fontSize,
+    preset.lineGap,
+    preset.rowGap,
+    preset.signatureHeight,
+    preset.columns,
+    override.showPayToOrder,
+  );
+
+  ctx.restore();
+
+  const blob: Blob = await new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("Canvas toBlob returned null"))),
+      "image/jpeg",
+      0.92,
+    );
+  });
+
+  return {
+    blob,
+    mimeType: "image/jpeg",
+    width: outW,
+    height: outH,
+    bytes: blob.size,
+    rendererVersion: ENDORSEMENT_RENDERER_VERSION,
+  };
+}
+
+/**
+ * Guard called before we persist a deposit image path. Ensures the file we
+ * generated is really a raster JPEG/PNG so CheckAlt won't reject it (SVG
+ * rejection was the root cause of the last outage).
+ */
+export function isAcceptedDepositMime(mime: string): boolean {
+  return mime === "image/jpeg" || mime === "image/png";
+}
