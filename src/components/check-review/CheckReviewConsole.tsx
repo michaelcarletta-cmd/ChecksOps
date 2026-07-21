@@ -649,6 +649,7 @@ export function CheckReviewQueue({
         onOpenChange={(open) => { if (!open) setShareCheckId(null); }}
       />
     </ScrollArea>
+    </>
   );
 }
 
