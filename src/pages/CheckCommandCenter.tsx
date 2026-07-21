@@ -954,6 +954,8 @@ export default function CheckCommandCenter() {
           `${queueColumns}, check_payees(payee_name, payee_type, endorsement_status), checkalt_deposits(id, status, submitted_at, approved_at, updated_at)`,
         )
         .eq("tenant_id", tenantId!)
+        // Phase 9: exclude deposited from active queue; loaded separately below.
+        .or("check_stage.is.null,check_stage.neq.deposited")
         .order("created_at", { ascending: false })
         .limit(2000);
       if (error) throw error;
