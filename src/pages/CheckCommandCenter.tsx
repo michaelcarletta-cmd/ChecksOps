@@ -489,8 +489,83 @@ const endorsementColors: Record<string, string> = {
 };
 
 /* ------------------------------------------------------------------ */
+/*  Class filter + total bar (shared)                                  */
+/* ------------------------------------------------------------------ */
+
+function ClassFilterBar<T>({
+  classFilter,
+  setClassFilter,
+  items,
+  getFundsType,
+  getAmount,
+  itemLabel = "check",
+}: {
+  classFilter: string;
+  setClassFilter: (v: string) => void;
+  items: T[];
+  getFundsType: (item: T) => string | null | undefined;
+  getAmount: (item: T) => number;
+  itemLabel?: string;
+}) {
+  const counts = new Map<string, { count: number; total: number }>();
+  items.forEach((it) => {
+    const key = getFundsType(it) ?? "unclassified";
+    const e = counts.get(key) ?? { count: 0, total: 0 };
+    e.count += 1;
+    e.total += getAmount(it) || 0;
+    counts.set(key, e);
+  });
+  const visible = classFilter === "all"
+    ? items
+    : items.filter((it) => (getFundsType(it) ?? "unclassified") === classFilter);
+  const visibleTotal = visible.reduce((s, it) => s + (getAmount(it) || 0), 0);
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 bg-muted/30">
+      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Class</span>
+      <Select value={classFilter} onValueChange={setClassFilter}>
+        <SelectTrigger className="h-7 w-[220px] text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All classes ({items.length})</SelectItem>
+          {FUNDS_TYPE_OPTIONS.map((o) => {
+            const c = counts.get(o.value);
+            if (!c) return null;
+            return (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label} ({c.count})
+              </SelectItem>
+            );
+          })}
+          {counts.has("unclassified") && (
+            <SelectItem value="unclassified">
+              Unclassified ({counts.get("unclassified")!.count})
+            </SelectItem>
+          )}
+        </SelectContent>
+      </Select>
+      {classFilter !== "all" && (
+        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setClassFilter("all")}>
+          Clear
+        </Button>
+      )}
+      <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+        <span className="text-muted-foreground">
+          {visible.length} {itemLabel}{visible.length === 1 ? "" : "s"}
+        </span>
+        <span className="font-semibold tabular-nums text-foreground">
+          Total: ${visibleTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
+
+
 
 export default function CheckCommandCenter() {
   const qc = useQueryClient();
@@ -1382,11 +1457,24 @@ export default function CheckCommandCenter() {
                   Funds Released ({fundsReleased.length})
                 </CardTitle>
               </CardHeader>
+              <ClassFilterBar
+                classFilter={classFilter}
+                setClassFilter={setClassFilter}
+                items={fundsReleased}
+                getFundsType={(s: any) => s?.disbursement_batches?.check_intake_items?.funds_type}
+                getAmount={(s: any) => Number(s.amount) || 0}
+                itemLabel="disbursement"
+              />
               <CardContent className="p-0">
-                <ScrollArea className="h-[calc(100vh-400px)]">
-                  {fundsReleased.length === 0 ? (
-                    <div className="p-8 text-center text-muted-foreground">No funds released yet</div>
-                  ) : (
+                <ScrollArea className="h-[calc(100vh-460px)]">
+                  {(() => {
+                    const visible = classFilter === "all"
+                      ? fundsReleased
+                      : fundsReleased.filter((s: any) => (s?.disbursement_batches?.check_intake_items?.funds_type ?? "unclassified") === classFilter);
+                    if (visible.length === 0) {
+                      return <div className="p-8 text-center text-muted-foreground">No funds released yet</div>;
+                    }
+                    return (
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -1404,7 +1492,7 @@ export default function CheckCommandCenter() {
                           // Group released splits by claim # so every disbursement
                           // tied to the same claim sits under one darker file band.
                           const groups = new Map<string, { key: string; claimNumber: string; policyholderName: string; rows: any[]; total: number; latest: string }>();
-                          fundsReleased.forEach((split: any) => {
+                          visible.forEach((split: any) => {
                             const batch = split.disbursement_batches;
                             const check = batch?.check_intake_items;
                             const linked = check?.claim_id ? claimLookup.get(check.claim_id) : null;
@@ -1494,7 +1582,8 @@ export default function CheckCommandCenter() {
                         })()}
                       </TableBody>
                     </Table>
-                  )}
+                    );
+                  })()}
                 </ScrollArea>
               </CardContent>
             </Card>
@@ -1539,11 +1628,24 @@ export default function CheckCommandCenter() {
                   Funds Received ({fundsReceived.length})
                 </CardTitle>
               </CardHeader>
+              <ClassFilterBar
+                classFilter={classFilter}
+                setClassFilter={setClassFilter}
+                items={fundsReceived}
+                getFundsType={(s: any) => s?.disbursement_batches?.check_intake_items?.funds_type}
+                getAmount={(s: any) => Number(s.amount) || 0}
+                itemLabel="receipt"
+              />
               <CardContent className="p-0">
-                <ScrollArea className="h-[calc(100vh-400px)]">
-                  {fundsReceived.length === 0 ? (
-                    <div className="p-8 text-center text-muted-foreground">No funds received yet</div>
-                  ) : (
+                <ScrollArea className="h-[calc(100vh-460px)]">
+                  {(() => {
+                    const visible = classFilter === "all"
+                      ? fundsReceived
+                      : fundsReceived.filter((s: any) => (s?.disbursement_batches?.check_intake_items?.funds_type ?? "unclassified") === classFilter);
+                    if (visible.length === 0) {
+                      return <div className="p-8 text-center text-muted-foreground">No funds received yet</div>;
+                    }
+                    return (
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -1559,7 +1661,7 @@ export default function CheckCommandCenter() {
                       <TableBody>
                         {(() => {
                           const groups = new Map<string, { key: string; claimNumber: string; policyholderName: string; rows: any[]; total: number; latest: string }>();
-                          fundsReceived.forEach((split: any) => {
+                          visible.forEach((split: any) => {
                             const batch = split.disbursement_batches;
                             const check = batch?.check_intake_items;
                             const embeddedClaim = check?.claims ?? null;
@@ -1651,7 +1753,8 @@ export default function CheckCommandCenter() {
                         })()}
                       </TableBody>
                     </Table>
-                  )}
+                    );
+                  })()}
                 </ScrollArea>
               </CardContent>
             </Card>
@@ -1835,12 +1938,17 @@ export default function CheckCommandCenter() {
                       Clear
                     </Button>
                   )}
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {filteredChecks.length} check{filteredChecks.length === 1 ? "" : "s"}
-                  </span>
+                  <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                    <span className="text-muted-foreground">
+                      {filteredChecks.length} check{filteredChecks.length === 1 ? "" : "s"}
+                    </span>
+                    <span className="font-semibold tabular-nums text-foreground">
+                      Total: ${filteredCumulativeTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
                 </div>
                 <div className="overflow-x-auto h-full">
-                <ScrollArea className="h-[calc(100vh-520px)] min-h-[280px]">
+                <ScrollArea className="h-[calc(100vh-460px)] min-h-[300px]">
 
                   {isLoading ? (
                     <div className="p-8 text-center text-muted-foreground">Loading checks...</div>
@@ -2042,16 +2150,6 @@ export default function CheckCommandCenter() {
                     })()
                   )}
                 </ScrollArea>
-                </div>
-                <div className="border-t bg-muted/40 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-sm">
-                  <span className="text-xs text-muted-foreground">
-                    {classFilter === "all"
-                      ? "Cumulative total (all classes)"
-                      : `Cumulative total — ${FUNDS_TYPE_OPTIONS.find((o) => o.value === classFilter)?.label ?? "Unclassified"}`}
-                  </span>
-                  <span className="font-semibold tabular-nums">
-                    ${filteredCumulativeTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
                 </div>
 
               </CardContent>

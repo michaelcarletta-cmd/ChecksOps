@@ -42,6 +42,20 @@ interface CheckPayee {
   endorsement_token: string | null;
 }
 
+const REVIEW_FUNDS_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: "acv", label: "ACV" },
+  { value: "rcv", label: "RCV" },
+  { value: "depreciation", label: "Depreciation / Recoverable" },
+  { value: "supplement", label: "Supplement" },
+  { value: "deductible", label: "Deductible" },
+  { value: "ale", label: "ALE" },
+  { value: "contents", label: "Contents" },
+  { value: "emergency", label: "Emergency Services" },
+  { value: "final", label: "Final Payment" },
+  { value: "other", label: "Other" },
+];
+
+
 interface ReviewCheck {
   id: string;
   front_image_path: string | null;
@@ -66,6 +80,7 @@ interface ReviewCheck {
   partner_status_label?: string | null;
   external_origin?: Record<string, unknown> | null;
   check_payees?: CheckPayee[];
+  funds_type?: string | null;
 }
 
 interface ReviewCheckGroup {
@@ -274,6 +289,7 @@ export function CheckReviewQueue({
   selectedCheckId: string | null;
   searchQuery?: string;
 }) {
+  const [classFilter, setClassFilter] = useState<string>("all");
   const { tenantId } = useTenantFilter();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -370,6 +386,10 @@ export function CheckReviewQueue({
     const q = searchQuery.toLowerCase().trim();
 
     reviewChecks.forEach((check) => {
+      if (classFilter !== "all") {
+        const ft = (check.funds_type ?? "unclassified");
+        if (ft !== classFilter) return;
+      }
       const linked = check.claim_id ? claimLookup.get(check.claim_id) : null;
       const claimNumber = linked?.claim_number || check.detected_claim_number || "Unlinked claim";
       const insuredPayee = check.check_payees?.find((payee) => payee.payee_type === "insured")?.payee_name;
@@ -407,7 +427,7 @@ export function CheckReviewQueue({
     });
 
     return Array.from(groups.values()).sort((a, b) => new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime());
-  }, [linkedClaims, reviewChecks, searchQuery]);
+  }, [linkedClaims, reviewChecks, searchQuery, classFilter]);
 
   // Duplicate detection: same check_number + amount + carrier_name (all present).
   // The earliest-created check keeps "original"; later ones are flagged duplicates.
@@ -457,6 +477,48 @@ export function CheckReviewQueue({
     );
   }
 
+  // Class filter counts & total (computed from full reviewChecks list)
+  const classCounts = new Map<string, number>();
+  reviewChecks.forEach((c) => {
+    const k = c.funds_type ?? "unclassified";
+    classCounts.set(k, (classCounts.get(k) ?? 0) + 1);
+  });
+  const visibleChecks = classFilter === "all"
+    ? reviewChecks
+    : reviewChecks.filter((c) => (c.funds_type ?? "unclassified") === classFilter);
+  const visibleTotal = visibleChecks.reduce((s, c) => s + (c.amount ?? 0), 0);
+
+  const filterBar = (
+    <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 bg-muted/30">
+      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Class</span>
+      <Select value={classFilter} onValueChange={setClassFilter}>
+        <SelectTrigger className="h-7 w-[220px] text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All classes ({reviewChecks.length})</SelectItem>
+          {REVIEW_FUNDS_TYPE_OPTIONS.map((o) => {
+            const c = classCounts.get(o.value);
+            if (!c) return null;
+            return <SelectItem key={o.value} value={o.value}>{o.label} ({c})</SelectItem>;
+          })}
+          {classCounts.has("unclassified") && (
+            <SelectItem value="unclassified">Unclassified ({classCounts.get("unclassified")})</SelectItem>
+          )}
+        </SelectContent>
+      </Select>
+      {classFilter !== "all" && (
+        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setClassFilter("all")}>Clear</Button>
+      )}
+      <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+        <span className="text-muted-foreground">{visibleChecks.length} check{visibleChecks.length === 1 ? "" : "s"}</span>
+        <span className="font-semibold tabular-nums text-foreground">
+          Total: ${visibleTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </span>
+      </div>
+    </div>
+  );
+
   if (reviewChecks.length === 0) {
     return (
       <div className="py-12 text-center text-muted-foreground">
@@ -467,7 +529,9 @@ export function CheckReviewQueue({
   }
 
   return (
-    <ScrollArea className="max-h-none lg:h-[calc(100vh-400px)]">
+    <>
+    {filterBar}
+    <ScrollArea className="max-h-none lg:h-[calc(100vh-460px)]">
       <div className="space-y-2 p-2">
         {groupedReviewChecks.map((group) => (
           <Fragment key={group.key}>
@@ -599,6 +663,7 @@ export function CheckReviewQueue({
         onOpenChange={(open) => { if (!open) setShareCheckId(null); }}
       />
     </ScrollArea>
+    </>
   );
 }
 
