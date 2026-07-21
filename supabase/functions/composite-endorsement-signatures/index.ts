@@ -678,20 +678,14 @@ Deno.serve(async (req) => {
     </g>
   </g>
 </svg>`;
-    if (pixelCount > MAX_RASTER_PIXELS || !render) {
-      const reason = !render ? "resvg_unavailable" : `oversized (${pixelCount} px > ${MAX_RASTER_PIXELS})`;
-      console.log(`[COMPOSITE] compositor/export succeeded via svg_fallback (${reason})`);
-      return await uploadAndFinalize(supabase, backImagePath, checkId, resolvedEndorsements, new Blob([compositeSvg], { type: "image/svg+xml" }), "image/svg+xml", "_endorsed.svg", imgWidth, imgHeight, curY, zoneBottom, appliedOverride);
-    }
-
-    try {
-      const pngBytes = await render(compositeSvg);
-      console.log(`[COMPOSITE] compositor/export succeeded via rasterized_png (${pngBytes.length} bytes)`);
-      return await uploadAndFinalize(supabase, backImagePath, checkId, resolvedEndorsements, new Blob([toArrayBuffer(pngBytes)], { type: "image/png" }), "image/png", "_endorsed.png", imgWidth, imgHeight, curY, zoneBottom, appliedOverride);
-    } catch (renderErr) {
-      console.error(`[COMPOSITE] PNG rasterization failed, falling back to SVG: ${renderErr}`);
-      return await uploadAndFinalize(supabase, backImagePath, checkId, resolvedEndorsements, new Blob([compositeSvg], { type: "image/svg+xml" }), "image/svg+xml", "_endorsed.svg", imgWidth, imgHeight, curY, zoneBottom, appliedOverride);
-    }
+    // Always take the SVG fallback path. Rasterizing via resvg-wasm on top of
+    // the imagescript decode/resize we already did for oversized phone captures
+    // regularly blows past the edge CPU budget (~150ms) and returns
+    // "CPU Time exceeded", which leaves the check stuck with no endorsement
+    // image saved. SVG output renders identically in the app and CheckAlt
+    // never consumes this file directly.
+    console.log(`[COMPOSITE] compositor/export succeeded via svg_fallback (forced, pixels=${pixelCount})`);
+    return await uploadAndFinalize(supabase, backImagePath, checkId, resolvedEndorsements, new Blob([compositeSvg], { type: "image/svg+xml" }), "image/svg+xml", "_endorsed.svg", imgWidth, imgHeight, curY, zoneBottom, appliedOverride);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     console.error("[COMPOSITE] ERROR:", msg, error);
