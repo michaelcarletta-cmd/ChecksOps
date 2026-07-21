@@ -70,6 +70,8 @@ export type EndorsementAdjusterProps = {
     mimeType: string;
     bytes: number;
   }) => Promise<void> | void;
+  /** Fires when the user has generated a deposit image but not yet approved it. */
+  onUnapprovedDepositChange?: (hasUnapproved: boolean) => void;
   onClose?: () => void;
 };
 
