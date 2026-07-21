@@ -220,6 +220,43 @@ Deno.serve(async (req) => {
           .update({ status: "pending" })
           .eq("id", depositRow.id);
 
+        // CheckAlt rejects SVGs — the endorsement compositor now stores the
+        // endorsed back as an .svg wrapper around the original raster. Resolve
+        // the underlying JPEG/PNG from the endorsement audit trail (or by
+        // stripping the `_endorsed_<ts>.svg` suffix) before submitting.
+        const resolveRasterBackPath = async (path: string | null): Promise<string | null> => {
+          if (!path) return null;
+          if (!/\.svg(\?|$)/i.test(path)) return path;
+          try {
+            const { data: evt } = await supabase
+              .from("check_endorsement_events")
+              .select("event_data")
+              .eq("check_id", check.id)
+              .order("created_at", { ascending: false })
+              .limit(20);
+            for (const row of (evt ?? []) as any[]) {
+              const d = row?.event_data ?? {};
+              const orig = d.original_back_image_path ?? d.original_back_path;
+              if (orig && !/\.svg(\?|$)/i.test(orig)) return orig as string;
+            }
+          } catch (e) {
+            console.warn("[checkalt-submit-deposit] endorsement audit lookup failed:", (e as Error).message);
+          }
+          // Fallback: strip `_endorsed_<digits>.svg` and try common extensions.
+          const base = path.replace(/_endorsed_\d+\.svg$/i, "");
+          if (base !== path) {
+            for (const ext of [".jpeg", ".jpg", ".png"]) {
+              const candidate = `${base}${ext}`;
+              const { data } = await supabase.storage.from("claim-files").createSignedUrl(candidate, 60);
+              if (data?.signedUrl) return candidate;
+            }
+          }
+          throw new Error(
+            "Back-of-check image is stored as SVG and the original raster could not be located. " +
+            "Reupload the back image as JPEG or PNG before depositing.",
+          );
+        };
+
         const downloadAsB64 = async (path: string | null, label: "front" | "back") => {
           if (!path) return null;
           const { data, error } = await supabase.storage
@@ -231,8 +268,9 @@ Deno.serve(async (req) => {
           return await normalizeImageToBudget(bytes, label);
         };
 
+        const rasterBackPath = await resolveRasterBackPath(check.back_image_path);
         const frontB64 = await downloadAsB64(check.front_image_path, "front");
-        const backB64 = await downloadAsB64(check.back_image_path, "back");
+        const backB64 = await downloadAsB64(rasterBackPath, "back");
 
         if (!frontB64) throw new Error("Front image required for CheckAlt submission");
 
