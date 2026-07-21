@@ -1488,7 +1488,7 @@ export default function CheckCommandCenter() {
                               </TableCell>
                             </TableRow>
                             {group.checks.map((check) => (
-                              <TableRow key={check.id} className="cursor-pointer" onClick={() => setSelectedCheck(check.id)}>
+                              <TableRow key={check.id} className="cursor-pointer" onMouseEnter={() => prefetchCheckDetail(check.id)} onFocus={() => prefetchCheckDetail(check.id)} onClick={() => setSelectedCheck(check.id)}>
                                 <TableCell className="font-mono text-sm">#{check.check_number || "—"}</TableCell>
                                 <TableCell className="text-sm">{check.carrier_name || "—"}</TableCell>
                                 <TableCell className="text-right tabular-nums">{check.amount != null ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}</TableCell>
