@@ -2742,6 +2742,17 @@ function CheckDetailPanel({
   const [reuploadingBack, setReuploadingBack] = useState(false);
   const [preparingDepositPrint, setPreparingDepositPrint] = useState(false);
   const [showEndorsementAdjuster, setShowEndorsementAdjuster] = useState(false);
+  const [hasUnapprovedEndorsementDeposit, setHasUnapprovedEndorsementDeposit] = useState(false);
+  const requestCloseEndorsementAdjuster = useCallback(() => {
+    if (hasUnapprovedEndorsementDeposit) {
+      const ok = window.confirm(
+        "You generated a deposit image but haven't approved it yet. Close anyway? The unapproved image will be discarded.",
+      );
+      if (!ok) return;
+    }
+    setHasUnapprovedEndorsementDeposit(false);
+    setShowEndorsementAdjuster(false);
+  }, [hasUnapprovedEndorsementDeposit]);
   const [depositViewerOpen, setDepositViewerOpen] = useState(false);
   const [depositViewerUrl, setDepositViewerUrl] = useState<string | null>(null);
   const [openingDepositView, setOpeningDepositView] = useState(false);
