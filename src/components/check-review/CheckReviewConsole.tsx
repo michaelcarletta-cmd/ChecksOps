@@ -372,6 +372,10 @@ export function CheckReviewQueue({
     const q = searchQuery.toLowerCase().trim();
 
     reviewChecks.forEach((check) => {
+      if (classFilter !== "all") {
+        const ft = (check.funds_type ?? "unclassified");
+        if (ft !== classFilter) return;
+      }
       const linked = check.claim_id ? claimLookup.get(check.claim_id) : null;
       const claimNumber = linked?.claim_number || check.detected_claim_number || "Unlinked claim";
       const insuredPayee = check.check_payees?.find((payee) => payee.payee_type === "insured")?.payee_name;
