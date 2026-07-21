@@ -2043,6 +2043,8 @@ export type Database = {
         Row: {
           account_number: string | null
           amount: number | null
+          back_image_deposit_path: string | null
+          back_image_original_path: string | null
           back_image_path: string | null
           carrier_name: string | null
           cash_job_id: string | null
@@ -2059,6 +2061,9 @@ export type Database = {
           detected_claim_number: string | null
           endorsement_override: Json | null
           endorsement_packet_path: string | null
+          endorsement_render_meta: Json | null
+          endorsement_render_status: string
+          endorsement_render_version: number
           expiration_days: number | null
           external_origin: Json | null
           freedom_claim_id: string | null
@@ -2103,6 +2108,8 @@ export type Database = {
         Insert: {
           account_number?: string | null
           amount?: number | null
+          back_image_deposit_path?: string | null
+          back_image_original_path?: string | null
           back_image_path?: string | null
           carrier_name?: string | null
           cash_job_id?: string | null
@@ -2119,6 +2126,9 @@ export type Database = {
           detected_claim_number?: string | null
           endorsement_override?: Json | null
           endorsement_packet_path?: string | null
+          endorsement_render_meta?: Json | null
+          endorsement_render_status?: string
+          endorsement_render_version?: number
           expiration_days?: number | null
           external_origin?: Json | null
           freedom_claim_id?: string | null
@@ -2163,6 +2173,8 @@ export type Database = {
         Update: {
           account_number?: string | null
           amount?: number | null
+          back_image_deposit_path?: string | null
+          back_image_original_path?: string | null
           back_image_path?: string | null
           carrier_name?: string | null
           cash_job_id?: string | null
@@ -2179,6 +2191,9 @@ export type Database = {
           detected_claim_number?: string | null
           endorsement_override?: Json | null
           endorsement_packet_path?: string | null
+          endorsement_render_meta?: Json | null
+          endorsement_render_status?: string
+          endorsement_render_version?: number
           expiration_days?: number | null
           external_origin?: Json | null
           freedom_claim_id?: string | null
