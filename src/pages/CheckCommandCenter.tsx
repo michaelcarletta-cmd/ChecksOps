@@ -500,6 +500,7 @@ export default function CheckCommandCenter() {
   const { isAdmin } = usePermissions();
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState("endorsements");
+  const [classFilter, setClassFilter] = useState<string>("all");
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
@@ -874,12 +875,30 @@ export default function CheckCommandCenter() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, needsReview.length, awaitingEndorsement.length, readyForDeposit.length, lossDraftChecks.length, branchDeposit.length, reissueRequested.length, depositedChecks.length]);
 
-  const filteredChecks =
+  const rawFilteredChecks =
     activeTab === "endorsements" ? awaitingEndorsement
     : activeTab === "ready" ? readyForDeposit
     : activeTab === "review" ? needsReview
     : activeTab === "deposited" ? depositedChecks
     : allChecks.filter(matchesSearch);
+
+  const filteredChecks = classFilter === "all"
+    ? rawFilteredChecks
+    : rawFilteredChecks.filter((c) => (c.funds_type ?? "unclassified") === classFilter);
+
+  const classFilterCounts = (() => {
+    const counts = new Map<string, { count: number; total: number }>();
+    for (const c of rawFilteredChecks) {
+      const key = c.funds_type ?? "unclassified";
+      const entry = counts.get(key) ?? { count: 0, total: 0 };
+      entry.count += 1;
+      entry.total += c.amount ?? 0;
+      counts.set(key, entry);
+    }
+    return counts;
+  })();
+
+  const filteredCumulativeTotal = filteredChecks.reduce((s, c) => s + (c.amount ?? 0), 0);
 
   const buildCheckGroups = useCallback((items: CheckItem[]) => {
     const groups = new Map<string, CheckGroup>();
@@ -1787,8 +1806,42 @@ export default function CheckCommandCenter() {
                     </div>
                   </div>
                 )}
+                <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 bg-muted/30">
+                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Class</span>
+                  <Select value={classFilter} onValueChange={setClassFilter}>
+                    <SelectTrigger className="h-7 w-[220px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All classes ({rawFilteredChecks.length})</SelectItem>
+                      {FUNDS_TYPE_OPTIONS.map((o) => {
+                        const c = classFilterCounts.get(o.value);
+                        if (!c) return null;
+                        return (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label} ({c.count})
+                          </SelectItem>
+                        );
+                      })}
+                      {classFilterCounts.has("unclassified") && (
+                        <SelectItem value="unclassified">
+                          Unclassified ({classFilterCounts.get("unclassified")!.count})
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {classFilter !== "all" && (
+                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setClassFilter("all")}>
+                      Clear
+                    </Button>
+                  )}
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {filteredChecks.length} check{filteredChecks.length === 1 ? "" : "s"}
+                  </span>
+                </div>
                 <div className="overflow-x-auto h-full">
-                <ScrollArea className="h-[calc(100vh-400px)]">
+                <ScrollArea className="h-[calc(100vh-440px)]">
+
                   {isLoading ? (
                     <div className="p-8 text-center text-muted-foreground">Loading checks...</div>
                   ) : filteredChecks.length === 0 ? (
@@ -1990,9 +2043,20 @@ export default function CheckCommandCenter() {
                   )}
                 </ScrollArea>
                 </div>
+                <div className="border-t bg-muted/40 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span className="text-xs text-muted-foreground">
+                    {classFilter === "all"
+                      ? "Cumulative total (all classes)"
+                      : `Cumulative total — ${FUNDS_TYPE_OPTIONS.find((o) => o.value === classFilter)?.label ?? "Unclassified"}`}
+                  </span>
+                  <span className="font-semibold tabular-nums">
+                    ${filteredCumulativeTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
 
               </CardContent>
             </Card>
+
 
             {/* Detail panel — hidden on mobile when no check selected */}
             <div
