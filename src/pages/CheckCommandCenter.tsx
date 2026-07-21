@@ -67,8 +67,10 @@ import { ClaimLedgerCard } from "@/components/payments/ClaimLedgerCard";
 const LossDraftDashboard = lazy(() =>
   import("@/components/loss-draft/LossDraftDashboard").then(m => ({ default: m.LossDraftDashboard }))
 );
+const preloadEndorsementAdjuster = () =>
+  import("@/components/checks/EndorsementAdjuster");
 const EndorsementAdjuster = lazy(() =>
-  import("@/components/checks/EndorsementAdjuster").then(m => ({ default: m.EndorsementAdjuster }))
+  preloadEndorsementAdjuster().then(m => ({ default: m.EndorsementAdjuster }))
 );
 const EndorsementChecklist = lazy(() =>
   import("@/components/check-review/EndorsementChecklist").then(m => ({ default: m.EndorsementChecklist }))
