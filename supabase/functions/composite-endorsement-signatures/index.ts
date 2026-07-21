@@ -1,111 +1,43 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 
-let render: ((svg: string) => Promise<Uint8Array>) | null = null;
-try {
-  const resvg = await import("https://deno.land/x/resvg_wasm@0.2.0/mod.ts");
-  render = resvg.render;
-} catch (e) {
-  console.warn("[COMPOSITE] resvg_wasm not available, will use SVG fallback:", e);
-}
-
-// Lazy-load imagescript only when needed (keeps cold-start fast).
-let imageScriptPromise: Promise<any> | null = null;
-async function loadImageScript(): Promise<any> {
-  if (!imageScriptPromise) {
-    imageScriptPromise = import("https://deno.land/x/imagescript@1.2.17/mod.ts")
-      .catch((e) => {
-        console.warn("[COMPOSITE] imagescript not available, downscale disabled:", e);
-        return null;
-      });
-  }
-  return imageScriptPromise;
-}
-
 /**
- * If the source back image exceeds MAX_RASTER_PIXELS, decode it, resize so the
- * pixel count fits under the cap, and re-encode as JPEG. This keeps the
- * compositor on the rasterized-PNG path (clean, flattened endorsement) instead
- * of the SVG fallback (which embeds the full-res JPEG and renders awkwardly
- * when the viewer scales it down).
+ * Keep the generated SVG viewport small without decoding the source image.
+ * Decoding large phone captures in edge runtime has been causing memory/CPU
+ * kills before the endorsed image can be saved. Because this function now
+ * always stores SVG output, we can scale the SVG coordinate system and let the
+ * viewer render the source image into that box without allocating a raster copy.
  */
-async function maybeDownscaleForRaster(
-  bytes: Uint8Array,
+function getCompositeDimensions(
   width: number,
   height: number,
   maxPixels: number,
   maxLongEdge: number,
-): Promise<{ bytes: Uint8Array; width: number; height: number; downscaled: boolean }> {
+): { width: number; height: number; scaled: boolean } {
   const pixels = width * height;
   const longest = Math.max(width, height);
   if (pixels <= maxPixels && longest <= maxLongEdge) {
-    return { bytes, width, height, downscaled: false };
+    return { width, height, scaled: false };
   }
 
-  const lib = await loadImageScript();
-  if (!lib) {
-    return { bytes, width, height, downscaled: false };
-  }
+  const pixelRatio = Math.sqrt(maxPixels / pixels);
+  const edgeRatio = maxLongEdge / longest;
+  const ratio = Math.min(1, pixelRatio, edgeRatio);
+  const targetW = Math.max(1, Math.floor(width * ratio));
+  const targetH = Math.max(1, Math.floor(height * ratio));
 
-  try {
-    const pixelRatio = Math.sqrt(maxPixels / pixels);
-    const edgeRatio = maxLongEdge / longest;
-    const ratio = Math.min(1, pixelRatio, edgeRatio);
-    const targetW = Math.max(1, Math.floor(width * ratio));
-    const targetH = Math.max(1, Math.floor(height * ratio));
+  console.log(
+    `[COMPOSITE] using virtual SVG dimensions ${width}x${height} (${pixels}px) -> ${targetW}x${targetH} (${targetW * targetH}px) without decoding source image`,
+  );
 
-    const decoded = await lib.Image.decode(bytes);
-    decoded.resize(targetW, targetH);
-    const encoded = await decoded.encodeJPEG(85);
-
-    console.log(
-      `[COMPOSITE] downscaled back image ${width}x${height} (${pixels}px) -> ${targetW}x${targetH} (${targetW * targetH}px), ${bytes.length}B -> ${encoded.length}B`,
-    );
-
-    return { bytes: encoded, width: targetW, height: targetH, downscaled: true };
-  } catch (e) {
-    console.warn("[COMPOSITE] downscale failed, falling back to original:", e);
-    return { bytes, width, height, downscaled: false };
-  }
+  return { width: targetW, height: targetH, scaled: true };
 }
 
 async function maybeNormalizeSignatureDataUrl(
   bytes: Uint8Array,
   contentType: string,
 ): Promise<{ dataUrl: string; normalized: boolean }> {
-  const lib = await loadImageScript();
-  if (!lib) {
-    return { dataUrl: `data:${contentType};base64,${uint8ToBase64(bytes)}`, normalized: false };
-  }
-
-  try {
-    const decoded = await lib.Image.decode(bytes);
-    const originalWidth = decoded.width;
-    const originalHeight = decoded.height;
-    const pixels = decoded.width * decoded.height;
-    const longest = Math.max(decoded.width, decoded.height);
-
-    if (pixels <= MAX_SIGNATURE_PIXELS && longest <= MAX_SIGNATURE_LONG_EDGE) {
-      return { dataUrl: `data:${contentType};base64,${uint8ToBase64(bytes)}`, normalized: false };
-    }
-
-    const pixelRatio = Math.sqrt(MAX_SIGNATURE_PIXELS / pixels);
-    const edgeRatio = MAX_SIGNATURE_LONG_EDGE / longest;
-    const ratio = Math.min(1, pixelRatio, edgeRatio);
-    const targetW = Math.max(1, Math.floor(decoded.width * ratio));
-    const targetH = Math.max(1, Math.floor(decoded.height * ratio));
-
-    decoded.resize(targetW, targetH);
-    const encoded = await decoded.encodePNG();
-    console.log(
-      `[COMPOSITE] normalized signature asset ${originalWidth}x${originalHeight} (${pixels}px) -> ${targetW}x${targetH} (${targetW * targetH}px), ${bytes.length}B -> ${encoded.length}B`,
-    );
-
-    return { dataUrl: `data:image/png;base64,${uint8ToBase64(encoded)}`, normalized: true };
-  } catch (e) {
-    console.warn("[COMPOSITE] signature normalization skipped:", e);
-    return { dataUrl: `data:${contentType};base64,${uint8ToBase64(bytes)}`, normalized: false };
-  }
+  return { dataUrl: `data:${contentType};base64,${uint8ToBase64(bytes)}`, normalized: false };
 }
 
 const corsHeaders = {
@@ -365,22 +297,17 @@ Deno.serve(async (req) => {
     const rawDims = detectImageDimensions(rawBytes);
     console.log(`[COMPOSITE] detected source image dimensions: ${rawDims.width}x${rawDims.height}`);
 
-    // Downscale oversized captures so the compositor stays on the rasterized-PNG
-    // path. The original full-res image in storage is left untouched — only the
-    // copy fed into the SVG/PNG composite is resized.
-    const downscaled = await maybeDownscaleForRaster(
-      rawBytes,
+    // Scale the SVG coordinate system without decoding the source image. This
+    // avoids the edge memory/CPU limit on very large check-back captures.
+    const compositeDimensions = getCompositeDimensions(
       rawDims.width,
       rawDims.height,
       MAX_RASTER_PIXELS,
       MAX_RASTER_LONG_EDGE,
     );
-    const originalBytes = downscaled.bytes;
-    const imgWidth = downscaled.width;
-    const imgHeight = downscaled.height;
-    if (downscaled.downscaled) {
-      console.log(`[COMPOSITE] using downscaled dimensions: ${imgWidth}x${imgHeight}`);
-    }
+    const originalBytes = rawBytes;
+    const imgWidth = compositeDimensions.width;
+    const imgHeight = compositeDimensions.height;
 
     // Prefer overrideData from request body (avoids DB replication lag right after save).
     const rawOverride = (overrideData ?? check.endorsement_override ?? null) as Partial<OverrideShape> | null;
@@ -545,10 +472,7 @@ Deno.serve(async (req) => {
     // ── Build SVG using fitted layout (LOCAL coordinates) ──
     const pixelCount = imgWidth * imgHeight;
     const originalBase64 = uint8ToBase64(originalBytes);
-    // If we downscaled, the bytes are always JPEG; otherwise honor the source extension.
-    const mimeType = downscaled.downscaled
-      ? "image/jpeg"
-      : backImagePath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+    const mimeType = backImagePath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
 
     const blockWidth = Math.round(imgWidth * ENDORSEMENT_WIDTH_PCT);
     const { fontSize, lineGap: fitLineGap, rowGap: fitRowGap, signatureHeight: fitSigHeight, compactText } = measured;
@@ -946,9 +870,7 @@ function resolvePreferredSignatureRefs(record: EndorsementRecord) {
 
 async function loadSignatureDataUrl(supabase: any, signatureRef: string): Promise<string | null> {
   if (signatureRef.startsWith("data:image/")) {
-    const parsed = parseImageDataUrl(signatureRef);
-    if (!parsed) return signatureRef;
-    return (await maybeNormalizeSignatureDataUrl(parsed.bytes, parsed.contentType)).dataUrl;
+    return signatureRef;
   }
 
   let blob: Blob | null = null;
@@ -968,19 +890,6 @@ async function loadSignatureDataUrl(supabase: any, signatureRef: string): Promis
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const contentType = blob.type || inferImageContentType(signatureRef);
   return (await maybeNormalizeSignatureDataUrl(bytes, contentType)).dataUrl;
-}
-
-function parseImageDataUrl(value: string): { contentType: string; bytes: Uint8Array } | null {
-  const match = value.match(/^data:(image\/[^;,]+);base64,(.+)$/s);
-  if (!match) return null;
-
-  const binary = atob(match[2]);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-
-  return { contentType: match[1], bytes };
 }
 
 function describeSignatureRef(value: string | null | undefined) {
