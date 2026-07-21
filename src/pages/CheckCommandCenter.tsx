@@ -807,13 +807,8 @@ export default function CheckCommandCenter() {
           );
         }
       )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "check_endorsements" },
-        () => {
-          schedule(["check-intake-items", "check-endorsements-summary", "check-endorsement-signatures"]);
-        }
-      )
+      // NOTE: check_endorsements has no tenant_id, so we don't subscribe here.
+      // The per-check detail view (CheckDetailPanel) subscribes scoped by check_id.
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "check_files", filter: `tenant_id=eq.${tenantId}` },
