@@ -413,7 +413,7 @@ export function CheckReviewQueue({
     });
 
     return Array.from(groups.values()).sort((a, b) => new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime());
-  }, [linkedClaims, reviewChecks, searchQuery]);
+  }, [linkedClaims, reviewChecks, searchQuery, classFilter]);
 
   // Duplicate detection: same check_number + amount + carrier_name (all present).
   // The earliest-created check keeps "original"; later ones are flagged duplicates.
