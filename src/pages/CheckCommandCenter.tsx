@@ -1382,11 +1382,24 @@ export default function CheckCommandCenter() {
                   Funds Released ({fundsReleased.length})
                 </CardTitle>
               </CardHeader>
+              <ClassFilterBar
+                classFilter={classFilter}
+                setClassFilter={setClassFilter}
+                items={fundsReleased}
+                getFundsType={(s: any) => s?.disbursement_batches?.check_intake_items?.funds_type}
+                getAmount={(s: any) => Number(s.amount) || 0}
+                itemLabel="disbursement"
+              />
               <CardContent className="p-0">
-                <ScrollArea className="h-[calc(100vh-400px)]">
-                  {fundsReleased.length === 0 ? (
-                    <div className="p-8 text-center text-muted-foreground">No funds released yet</div>
-                  ) : (
+                <ScrollArea className="h-[calc(100vh-460px)]">
+                  {(() => {
+                    const visible = classFilter === "all"
+                      ? fundsReleased
+                      : fundsReleased.filter((s: any) => (s?.disbursement_batches?.check_intake_items?.funds_type ?? "unclassified") === classFilter);
+                    if (visible.length === 0) {
+                      return <div className="p-8 text-center text-muted-foreground">No funds released yet</div>;
+                    }
+                    return (
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -1404,7 +1417,7 @@ export default function CheckCommandCenter() {
                           // Group released splits by claim # so every disbursement
                           // tied to the same claim sits under one darker file band.
                           const groups = new Map<string, { key: string; claimNumber: string; policyholderName: string; rows: any[]; total: number; latest: string }>();
-                          fundsReleased.forEach((split: any) => {
+                          visible.forEach((split: any) => {
                             const batch = split.disbursement_batches;
                             const check = batch?.check_intake_items;
                             const linked = check?.claim_id ? claimLookup.get(check.claim_id) : null;
