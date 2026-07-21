@@ -196,6 +196,13 @@ export function EndorsementAdjuster({
     savedOverrideRef.current = next;
   }, [initialOverride, setOverride]);
 
+  // Emit unapproved-deposit state so parents (dialog wrappers) can prompt
+  // before closing when the user rendered but never approved an image.
+  useEffect(() => {
+    const hasUnapproved = status === "completed" && !!depositResult;
+    onUnapprovedDepositChange?.(hasUnapproved);
+  }, [status, depositResult, onUnapprovedDepositChange]);
+
   const renderableSignerCount = Math.max(1, visibleEndorsements.length);
 
   const previewLayout = useMemo(() => {
