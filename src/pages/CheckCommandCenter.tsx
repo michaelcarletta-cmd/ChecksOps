@@ -875,12 +875,30 @@ export default function CheckCommandCenter() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, needsReview.length, awaitingEndorsement.length, readyForDeposit.length, lossDraftChecks.length, branchDeposit.length, reissueRequested.length, depositedChecks.length]);
 
-  const filteredChecks =
+  const rawFilteredChecks =
     activeTab === "endorsements" ? awaitingEndorsement
     : activeTab === "ready" ? readyForDeposit
     : activeTab === "review" ? needsReview
     : activeTab === "deposited" ? depositedChecks
     : allChecks.filter(matchesSearch);
+
+  const filteredChecks = classFilter === "all"
+    ? rawFilteredChecks
+    : rawFilteredChecks.filter((c) => (c.funds_type ?? "unclassified") === classFilter);
+
+  const classFilterCounts = (() => {
+    const counts = new Map<string, { count: number; total: number }>();
+    for (const c of rawFilteredChecks) {
+      const key = c.funds_type ?? "unclassified";
+      const entry = counts.get(key) ?? { count: 0, total: 0 };
+      entry.count += 1;
+      entry.total += c.amount ?? 0;
+      counts.set(key, entry);
+    }
+    return counts;
+  })();
+
+  const filteredCumulativeTotal = filteredChecks.reduce((s, c) => s + (c.amount ?? 0), 0);
 
   const buildCheckGroups = useCallback((items: CheckItem[]) => {
     const groups = new Map<string, CheckGroup>();
