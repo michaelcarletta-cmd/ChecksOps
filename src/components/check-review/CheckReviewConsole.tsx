@@ -42,6 +42,20 @@ interface CheckPayee {
   endorsement_token: string | null;
 }
 
+const REVIEW_FUNDS_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: "acv", label: "ACV" },
+  { value: "rcv", label: "RCV" },
+  { value: "depreciation", label: "Depreciation / Recoverable" },
+  { value: "supplement", label: "Supplement" },
+  { value: "deductible", label: "Deductible" },
+  { value: "ale", label: "ALE" },
+  { value: "contents", label: "Contents" },
+  { value: "emergency", label: "Emergency Services" },
+  { value: "final", label: "Final Payment" },
+  { value: "other", label: "Other" },
+];
+
+
 interface ReviewCheck {
   id: string;
   front_image_path: string | null;
