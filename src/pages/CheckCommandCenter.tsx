@@ -963,6 +963,27 @@ export default function CheckCommandCenter() {
     refetchOnWindowFocus: false, // Prevent page jump/refresh when switching tabs
   });
 
+  // Phase 8 (high-scale aggregates): pull true per-lane counts and totals from
+  // an RPC so tab badges stay accurate even when a tenant has more than the
+  // 2,000 rows the queue query loads. Falls back gracefully if the RPC errors.
+  const { data: stageTotals } = useQuery({
+    queryKey: ["check-stage-totals", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_check_stage_totals", {
+        p_tenant_id: tenantId!,
+      });
+      if (error) throw error;
+      const map = new Map<string, { count: number; total: number }>();
+      for (const row of (data ?? []) as Array<{ stage: string; count: number; total_amount: number }>) {
+        map.set(row.stage, { count: Number(row.count) || 0, total: Number(row.total_amount) || 0 });
+      }
+      return map;
+    },
+    enabled: !!tenantId,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+
   // Partner checks — ONLY checks explicitly shared via shared_checks table.
   // Partnerships enable the ability to share, but do NOT auto-share every check.
   const { data: sharedChecks = [] } = useQuery({
