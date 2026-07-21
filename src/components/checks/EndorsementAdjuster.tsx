@@ -1,14 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   RotateCcw,
   Save,
   AlertCircle,
-  ShieldCheck,
   Wand2,
   Loader2,
   ImageDown,
@@ -20,7 +17,6 @@ import {
   clampEndorsementOverride,
   DEFAULT_ENDORSEMENT_OVERRIDE,
   EndorsementOverride,
-  normalizeRotation,
 } from "@/lib/endorsementLayout";
 import { fitEndorsementLayout } from "@/lib/endorsementFit";
 import { supabase } from "@/integrations/supabase/client";
