@@ -2742,6 +2742,17 @@ function CheckDetailPanel({
   const [reuploadingBack, setReuploadingBack] = useState(false);
   const [preparingDepositPrint, setPreparingDepositPrint] = useState(false);
   const [showEndorsementAdjuster, setShowEndorsementAdjuster] = useState(false);
+  const [hasUnapprovedEndorsementDeposit, setHasUnapprovedEndorsementDeposit] = useState(false);
+  const requestCloseEndorsementAdjuster = useCallback(() => {
+    if (hasUnapprovedEndorsementDeposit) {
+      const ok = window.confirm(
+        "You generated a deposit image but haven't approved it yet. Close anyway? The unapproved image will be discarded.",
+      );
+      if (!ok) return;
+    }
+    setHasUnapprovedEndorsementDeposit(false);
+    setShowEndorsementAdjuster(false);
+  }, [hasUnapprovedEndorsementDeposit]);
   const [depositViewerOpen, setDepositViewerOpen] = useState(false);
   const [depositViewerUrl, setDepositViewerUrl] = useState<string | null>(null);
   const [openingDepositView, setOpeningDepositView] = useState(false);
@@ -2896,11 +2907,31 @@ function CheckDetailPanel({
     staleTime: 5 * 60 * 1000,
     retry: 1,
     queryFn: async () => {
+      // Prefer the explicit pristine-original pointer written by the adjuster
+      // on approve. This is the most reliable source and survives any future
+      // renames of the composited deposit artifact.
+      const explicitOriginal = toStorageObjectPath(
+        ((check as any)?.back_image_original_path as string | null) ?? null,
+      );
+      if (explicitOriginal) {
+        const { data } = await supabase.storage
+          .from("claim-files")
+          .createSignedUrl(explicitOriginal, 3600);
+        if (data?.signedUrl) return data.signedUrl;
+      }
+
       const currentPath = toStorageObjectPath(check!.back_image_path);
       if (!currentPath) return backImageUrl ?? null;
 
+      // Detect any known "already-composited" back artifact so we don't feed
+      // the composite back into the editor (which stacks endorsements).
+      const isComposite =
+        /_endorsed(?:_\d+)?\.[^.]+$/i.test(currentPath) ||
+        /endorsed_deposit_[^/]+\.[^.]+$/i.test(currentPath) ||
+        /\.svg(\?|$)/i.test(currentPath);
+
       let sourcePath = currentPath;
-      if (/_endorsed(?:_\d+)?\.[^.]+$/i.test(currentPath)) {
+      if (isComposite) {
         const { data: compositeAudits } = await supabase
           .from("check_audit_log")
           .select("event_data")
@@ -4305,7 +4336,7 @@ function CheckDetailPanel({
                   <Dialog
                     open={showEndorsementAdjuster}
                     onOpenChange={(open) => {
-                      if (!open) setShowEndorsementAdjuster(false);
+                      if (!open) requestCloseEndorsementAdjuster();
                     }}
                   >
                     <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
@@ -4327,6 +4358,7 @@ function CheckDetailPanel({
                           initialOverride={
                             (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null
                           }
+                          onUnapprovedDepositChange={setHasUnapprovedEndorsementDeposit}
                           onDepositImageApproved={async ({ depositPath }) => {
                             const originalToPersist =
                               ((check as any)?.back_image_original_path as string | null) ??
@@ -4340,11 +4372,12 @@ function CheckDetailPanel({
                               })
                               .eq("id", checkId);
                             if (saveErr) throw saveErr;
+                            setHasUnapprovedEndorsementDeposit(false);
                             setShowEndorsementAdjuster(false);
                             qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
                             qc.invalidateQueries({ queryKey: ["check-back-img"] });
                           }}
-                          onClose={() => setShowEndorsementAdjuster(false)}
+                          onClose={requestCloseEndorsementAdjuster}
                         />
                       ) : (
                         <div className="space-y-4 py-2">

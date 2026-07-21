@@ -70,6 +70,8 @@ export type EndorsementAdjusterProps = {
     mimeType: string;
     bytes: number;
   }) => Promise<void> | void;
+  /** Fires when the user has generated a deposit image but not yet approved it. */
+  onUnapprovedDepositChange?: (hasUnapproved: boolean) => void;
   onClose?: () => void;
 };
 
@@ -82,6 +84,7 @@ export function EndorsementAdjuster({
   companyName,
   initialOverride,
   onDepositImageApproved,
+  onUnapprovedDepositChange,
   onClose,
 }: EndorsementAdjusterProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -192,6 +195,13 @@ export function EndorsementAdjuster({
     setOverride(next);
     savedOverrideRef.current = next;
   }, [initialOverride, setOverride]);
+
+  // Emit unapproved-deposit state so parents (dialog wrappers) can prompt
+  // before closing when the user rendered but never approved an image.
+  useEffect(() => {
+    const hasUnapproved = status === "completed" && !!depositResult;
+    onUnapprovedDepositChange?.(hasUnapproved);
+  }, [status, depositResult, onUnapprovedDepositChange]);
 
   const renderableSignerCount = Math.max(1, visibleEndorsements.length);
 
@@ -330,14 +340,14 @@ export function EndorsementAdjuster({
       savedOverrideRef.current = clamped;
       setOverride(clamped);
       setStatus("position_saved");
-      setStatusMessage("Placement saved");
+      setStatusMessage("Step 1 of 3 complete — click Generate Deposit Image next.");
       await logAudit({
         action: "update",
         recordType: "check_intake_items",
         recordId: checkId,
         metadata: { event: "endorsement_position_saved", override: clamped },
       });
-      toast.success("Placement saved");
+      toast.success("Position saved — click Generate Deposit Image next");
     } catch (err: any) {
       console.error("[EndorsementAdjuster] save position", err);
       setStatus("failed");
@@ -597,10 +607,12 @@ export function EndorsementAdjuster({
   if (status === "completed" && depositPreviewUrl && depositResult) {
     return (
       <div className="space-y-4">
+        <StepBadge current={3} />
         <div className={`rounded-md border px-3 py-2 text-sm ${statusColor}`}>
           <CheckCircle2 className="inline h-4 w-4 mr-1" />
           Deposit image ready — {depositResult.width}×{depositResult.height},{" "}
-          {(depositResult.bytes / 1024).toFixed(0)} KB {depositResult.mimeType}
+          {(depositResult.bytes / 1024).toFixed(0)} KB {depositResult.mimeType}. Click{" "}
+          <b>Approve Deposit Image</b> to save.
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
@@ -626,8 +638,12 @@ export function EndorsementAdjuster({
     );
   }
 
+  const currentStep: 1 | 2 | 3 =
+    status === "completed" ? 3 : status === "position_saved" || status === "rendering" ? 2 : 1;
+
   return (
     <div className="space-y-4">
+      <StepBadge current={currentStep} />
       {endorsementsLoading ? (
         <div className="text-sm text-muted-foreground">Loading endorsement signatures…</div>
       ) : endorsementsError ? (
@@ -990,6 +1006,37 @@ export function EndorsementAdjuster({
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function StepBadge({ current }: { current: 1 | 2 | 3 }) {
+  const steps: Array<{ n: 1 | 2 | 3; label: string }> = [
+    { n: 1, label: "Save Position" },
+    { n: 2, label: "Generate Deposit Image" },
+    { n: 3, label: "Approve" },
+  ];
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      {steps.map((s, i) => (
+        <div key={s.n} className="flex items-center gap-2">
+          <div
+            className={`flex items-center gap-1.5 rounded-full border px-2 py-0.5 ${
+              current === s.n
+                ? "border-primary bg-primary/10 text-primary font-medium"
+                : current > s.n
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                  : "border-border bg-muted/40 text-muted-foreground"
+            }`}
+          >
+            <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-background text-[10px] font-bold">
+              {current > s.n ? "✓" : s.n}
+            </span>
+            <span>{s.label}</span>
+          </div>
+          {i < steps.length - 1 && <span className="text-muted-foreground">→</span>}
+        </div>
+      ))}
     </div>
   );
 }
