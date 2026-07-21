@@ -792,7 +792,7 @@ export default function CheckCommandCenter() {
         ...c,
         _shared: true,
         _sourceTenantName: shareMap.get(c.id) ?? "Partner",
-      })) as (CheckItem & { _shared: true; _sourceTenantName: string })[];
+      })) as unknown as (CheckItem & { _shared: true; _sourceTenantName: string })[];
     },
     enabled: !!tenantId,
     refetchOnWindowFocus: false, // Prevent page jump when switching tabs
