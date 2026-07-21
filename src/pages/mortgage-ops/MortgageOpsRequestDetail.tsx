@@ -389,46 +389,28 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     void load();
   };
 
-  const sendInvoice = async (previewOnly: boolean) => {
+  // Mortgage-ops work is billed to the tenant's monthly usage totals (not a
+  // per-request contractor invoice). Ops still records the actual shipping
+  // label cost here so the end-of-month sweep pulls the right amount.
+  const saveShippingCost = async () => {
     if (!req) return;
-    const services = 1000; // Fixed $10 services fee — not editable
     const shipping = invoiceShipping ? Math.round(parseFloat(invoiceShipping) * 100) : 0;
-    if (!services && !shipping) {
-      toast.error("Enter at least one charge");
-      return;
-    }
-    if (!previewOnly && !invoiceRecipient.trim()) {
-      toast.error("Recipient email required");
-      return;
-    }
     setInvoiceBusy(true);
     try {
-      const { data, error } = await supabase.functions.invoke("send-mortgage-ops-invoice", {
-        body: {
-          request_id: req.id,
-          services_cents: services,
-          shipping_cents: shipping,
-          shipping_description: invoiceShippingDesc,
-          recipient_email: invoiceRecipient.trim(),
-          recipient_name: tenant?.name || undefined,
-          notes: invoiceNotes.trim() || undefined,
-          preview_only: previewOnly,
-        },
-      });
+      const { error } = await supabase
+        .from("mortgage_handling_requests")
+        .update({
+          invoice_services_cents: 1000,
+          invoice_shipping_cents: shipping,
+          invoice_shipping_description: invoiceShippingDesc || "2-Day shipping label",
+          invoice_notes: invoiceNotes.trim() || null,
+        } as any)
+        .eq("id", req.id);
       if (error) throw error;
-      if (data?.invoice_url) {
-        window.open(data.invoice_url, "_blank");
-      }
-      if (previewOnly) {
-        toast.success("Invoice preview opened");
-      } else if (data?.email_sent) {
-        toast.success(`Invoice sent to ${invoiceRecipient}`);
-        void load();
-      } else {
-        toast.error(`Invoice generated but email failed: ${data?.email_error || "unknown"}`);
-      }
+      toast.success("Saved — tenant will be billed at month end");
+      void load();
     } catch (e: any) {
-      toast.error(e?.message || "Failed to send invoice");
+      toast.error(e?.message || "Failed to save shipping cost");
     } finally {
       setInvoiceBusy(false);
     }
