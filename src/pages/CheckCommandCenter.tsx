@@ -652,6 +652,15 @@ export default function CheckCommandCenter() {
           qc.invalidateQueries({ queryKey: ["check-endorsement-signatures"] });
         }
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "check_files", filter: `tenant_id=eq.${tenantId}` },
+        () => {
+          qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+          qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+          qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+        }
+      )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
