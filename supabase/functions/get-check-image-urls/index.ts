@@ -261,8 +261,10 @@ serve(async (req) => {
       }
     }
 
-    const viewBackPath = originalBackPath ?? backPath;
-
+    // Default view/download shows the CURRENT back image (composite w/ signatures
+    // when endorsements exist). The clean original raster is exposed separately
+    // as backOriginalUrl for callers that explicitly want the pre-endorsement
+    // scan (e.g. re-opening the endorsement adjuster).
     const sign = async (path: string | null) => {
       if (!path) return null;
       const { data, error } = await admin.storage.from(CLAIM_FILES_BUCKET).createSignedUrl(path, 3600);
@@ -270,10 +272,10 @@ serve(async (req) => {
       return data?.signedUrl ?? null;
     };
 
-    const [frontUrl, backUrl, backFlattenedUrl] = await Promise.all([
+    const [frontUrl, backUrl, backOriginalUrl] = await Promise.all([
       sign(frontPath),
-      sign(viewBackPath),
-      originalBackPath ? sign(backPath) : Promise.resolve(null),
+      sign(backPath),
+      originalBackPath ? sign(originalBackPath) : Promise.resolve(null),
     ]);
 
     return new Response(
@@ -282,10 +284,12 @@ serve(async (req) => {
         checkNumber: check.check_number,
         frontUrl,
         backUrl,
-        backFlattenedUrl,
+        backOriginalUrl,
+        // Legacy alias kept for any callers still reading backFlattenedUrl.
+        backFlattenedUrl: backUrl,
         frontPath,
-        backPath: viewBackPath,
-        backFlattenedPath: originalBackPath ? backPath : null,
+        backPath,
+        backOriginalPath: originalBackPath,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
