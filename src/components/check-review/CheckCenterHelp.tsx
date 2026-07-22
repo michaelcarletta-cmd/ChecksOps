@@ -68,7 +68,7 @@ const tabHelpData: Section[] = [
     summary: "Fully endorsed and verified checks staged for deposit.",
     details: [
       "Generate a closeout/deposit packet (front, back, endorsement images, signatures).",
-      "Batch for electronic (CheckAlt RDC, when available) or branch deposit.",
+      "Batch for electronic (electronic deposit (RDC), when available) or branch deposit.",
       "Once deposited, the check moves to a terminal Deposited state.",
     ],
   },
@@ -79,7 +79,7 @@ const tabHelpData: Section[] = [
     summary: "Fallback rail when electronic deposit isn't available or required.",
     details: [
       "Used for checks the reviewer flags for manual in-branch deposit.",
-      "Remains available even after CheckAlt RDC launches as a guaranteed fallback.",
+      "Remains available even after electronic deposit (RDC) launches as a guaranteed fallback.",
     ],
   },
   {

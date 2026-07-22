@@ -282,7 +282,7 @@ export function SendPaymentPanel({
             </span>
           </div>
           <div className="flex justify-between text-xs text-muted-foreground border-t pt-2">
-            <span>Actum transfer fee (passed through)</span>
+            <span>Transfer fee (passed through)</span>
             <span>$1.00</span>
           </div>
         </div>

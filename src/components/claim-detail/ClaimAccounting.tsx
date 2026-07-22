@@ -473,14 +473,14 @@ function SettlementSection({ claimId, settlement, isAdmin, ...props }: any) {
           <div className="mt-4 border-t pt-4">
             <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
               <Wallet className="h-4 w-4" />
-              Funds Tracking & Actum Controls
+              Funds Tracking & Disbursement Controls
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {settlementChecks?.map((check: any) => (
                 <CheckProcessingCard key={check.id} claimId={claimId} checkId={check.id} isAdmin={isAdmin} />
               ))}
               {(!settlementChecks || settlementChecks.length === 0) && (
-                <p className="text-xs text-muted-foreground italic col-span-2">No checks recorded for this claim to display Actum controls.</p>
+                <p className="text-xs text-muted-foreground italic col-span-2">No checks recorded for this claim to display disbursement controls.</p>
               )}
             </div>
           </div>
@@ -1242,7 +1242,7 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                         <div className="mb-3 px-1">
                           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                             <Wallet className="h-3 w-3" />
-                            Funds Tracking & Actum Controls
+                            Funds Tracking & Disbursement Controls
                           </h4>
                         </div>
                         <CheckProcessingCard claimId={claimId} checkId={check.id} isAdmin={isAdmin} />

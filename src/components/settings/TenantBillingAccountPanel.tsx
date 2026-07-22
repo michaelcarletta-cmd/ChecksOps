@@ -126,7 +126,7 @@ export function TenantBillingAccountPanel() {
           Monthly fee auto-billing
         </CardTitle>
         <CardDescription>
-          Choose which of your verified bank accounts ChecksOps should debit each month for <strong>maintenance fees, check processing fees (CheckAlt), and payment processing fees (Actum)</strong>. All bank accounts are added through Plaid / Authentecheck in the Bank Account section — no manual entry.
+          Choose which of your verified bank accounts ChecksOps should debit each month for <strong>maintenance fees, check processing fees, and payment processing fees</strong>. All bank accounts are added through Plaid / Authentecheck in the Bank Account section — no manual entry.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -204,7 +204,7 @@ export function TenantBillingAccountPanel() {
                   className="mt-0.5"
                 />
                 <Label htmlFor="ach-auth" className="text-xs leading-snug cursor-pointer">
-                  I authorize ChecksOps to initiate monthly ACH debits from the selected account for <strong>maintenance fees, check processing fees (CheckAlt), and payment processing fees (Actum)</strong>, until I revoke this authorization in writing. Amounts may vary based on monthly usage and any referral discounts applied.
+                  I authorize ChecksOps to initiate monthly ACH debits from the selected account for <strong>maintenance fees, check processing fees, and payment processing fees</strong>, until I revoke this authorization in writing. Amounts may vary based on monthly usage and any referral discounts applied.
                 </Label>
               </div>
 

@@ -447,7 +447,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
           </div>
           {!actumEnabled && (
             <p className="text-[10px] text-muted-foreground">
-              Actum becomes available once this check is marked deposited.
+              Disbursement becomes available once this check is marked deposited.
             </p>
           )}
         </div>
@@ -456,7 +456,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
       {disburseMode === "actum" && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Actum Disbursement</p>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Disbursement</p>
             <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setDisburseMode(null)}>
               <X className="h-3 w-3 mr-1" />Cancel
             </Button>

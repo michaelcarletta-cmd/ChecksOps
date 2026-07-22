@@ -153,7 +153,7 @@ export function PaymentLedger() {
   }, [filtered]);
 
   const exportCSV = () => {
-    const headers = ["Date", "Recipient", "Type", "Account (last 4)", "Check #", "Carrier", "Amount", "Status", "Actum Order ID", "Return Code"];
+    const headers = ["Date", "Recipient", "Type", "Account (last 4)", "Check #", "Carrier", "Amount", "Status", "Order ID", "Return Code"];
     const rows = filtered.map((p: any) => {
       const acct = p.stakeholder_accounts;
       const check = p.disbursement_batches?.check_intake_items;
