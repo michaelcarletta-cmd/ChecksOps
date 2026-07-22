@@ -2,6 +2,7 @@
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { z } from 'npm:zod@3.23.8'
+import { normalizeUploadedCheckImage, originalSiblingPath } from '../_shared/normalizeUploadedCheckImage.ts'
 
 const BUCKET = 'claim-files'
 const MAX_BYTES = 15 * 1024 * 1024 // 15 MB
@@ -82,9 +83,22 @@ Deno.serve(async (req) => {
     const ext = (parsed.data.filename?.split('.').pop() ?? '').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin'
     const objectName = `homeowner-uploads/${profile.user_id}/${parsed.data.lead_id ?? 'nolead'}/${crypto.randomUUID()}.${ext}`
 
+    // Mandatory upload-time normalization so no oversized image ever lands in
+    // storage. PDFs / HEIC pass through unchanged. If we compressed, the raw
+    // upload is preserved at the `.original.<ext>` sibling for auditability.
+    const normalized = await normalizeUploadedCheckImage(bytes, parsed.data.file_mime)
+    if (normalized.compressed) {
+      const origPath = originalSiblingPath(objectName)
+      await admin.storage
+        .from(BUCKET)
+        .upload(origPath, bytes, { contentType: parsed.data.file_mime, upsert: false })
+        .catch(() => { /* non-fatal */ })
+      console.log(`[homeowner-upload-check] compressed ${normalized.originalBytes}B → ${normalized.finalBytes}B`)
+    }
+
     const { error: upErr } = await admin.storage
       .from(BUCKET)
-      .upload(objectName, bytes, { contentType: parsed.data.file_mime, upsert: false })
+      .upload(objectName, normalized.bytes, { contentType: normalized.mime, upsert: false })
     if (upErr) return json({ error: 'upload failed', detail: upErr.message }, 500)
 
     const { data: row, error: insErr } = await admin
@@ -96,7 +110,7 @@ Deno.serve(async (req) => {
         homeowner_email: homeownerEmail,
         homeowner_user_id: homeownerUserId,
         file_path: objectName,
-        file_mime: parsed.data.file_mime,
+        file_mime: normalized.mime,
         note: parsed.data.note ?? null,
       })
       .select('id')

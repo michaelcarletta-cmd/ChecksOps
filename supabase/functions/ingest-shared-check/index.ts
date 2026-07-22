@@ -2,6 +2,7 @@
 // Authenticates via shared bridge secret. Mirrors the check into check_intake_items
 // (tagged with external_origin) and creates a shared_checks row.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { normalizeUploadedCheckImage, originalSiblingPath } from "../_shared/normalizeUploadedCheckImage.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -51,17 +52,30 @@ async function copyRemoteImageLocally(
       return (ext || "jpg").toLowerCase();
     })();
     const bytes = new Uint8Array(await resp.arrayBuffer());
-    const objectPath = `checks/shared/${checkLocalId}/${side}-${Date.now()}.${extFromUrl}`;
+    // Mandatory upload-time normalization — keeps oversized partner-shared
+    // images out of storage so the deposit path never has to re-encode them.
+    const normalized = await normalizeUploadedCheckImage(bytes, contentType);
+    const outMime = normalized.mime;
+    const outExt = outMime === "image/jpeg" ? "jpg" : (extFromUrl || "jpg");
+    const objectPath = `checks/shared/${checkLocalId}/${side}-${Date.now()}.${outExt}`;
     const { error: upErr } = await supabase.storage
       .from(CLAIM_FILES_BUCKET)
-      .upload(objectPath, bytes, {
+      .upload(objectPath, normalized.bytes, {
         upsert: true,
-        contentType,
+        contentType: outMime,
         cacheControl: "31536000",
       });
     if (upErr) {
       console.warn(`[ingest-shared-check] ${side} image upload failed: ${upErr.message}`);
       return trimmed;
+    }
+    if (normalized.compressed) {
+      const origPath = originalSiblingPath(objectPath);
+      await supabase.storage
+        .from(CLAIM_FILES_BUCKET)
+        .upload(origPath, bytes, { upsert: true, contentType, cacheControl: "31536000" })
+        .catch(() => { /* non-fatal */ });
+      console.log(`[ingest-shared-check] ${side} compressed ${normalized.originalBytes}B → ${normalized.finalBytes}B`);
     }
     return objectPath;
   } catch (e) {
