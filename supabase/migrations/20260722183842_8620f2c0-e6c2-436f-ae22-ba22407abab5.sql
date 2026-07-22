@@ -1,0 +1,1 @@
+UPDATE checkalt_deposits SET status='error', last_status_payload='{"reaped":true,"reason":"edge_worker_cpu_exceeded_prepare_not_deployed"}'::jsonb, updated_at=now() WHERE id='8661a1f7-283e-45eb-a4ba-389aedb2622d'; UPDATE check_intake_items SET status='approved_for_deposit', check_stage='ready_for_deposit', updated_at=now() WHERE id='1ff0a2e2-8432-4664-b969-44387488acb7';
