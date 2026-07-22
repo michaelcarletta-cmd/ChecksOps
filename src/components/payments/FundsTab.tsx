@@ -437,7 +437,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
           <div className="grid grid-cols-2 gap-2">
             <Button className="w-full" onClick={() => setDisburseMode("actum")} disabled={!actumEnabled}>
               <DollarSign className="h-4 w-4 mr-1.5" />
-              Disburse Via Actum
+              Disburse to Stakeholders
             </Button>
             <Button variant="outline" className="w-full" onClick={() => setDisburseMode("external")}>
               <FileCheck className="h-4 w-4 mr-1.5" />
