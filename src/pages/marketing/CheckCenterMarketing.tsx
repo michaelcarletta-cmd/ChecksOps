@@ -334,11 +334,8 @@ export default function CheckCenterMarketing() {
             <a href="#demo" className="hover:text-foreground transition-colors">Demo</a>
           </nav>
           <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-              <Link to="/login"><LogIn className="h-4 w-4 mr-1.5" />Log in</Link>
-            </Button>
             <Button asChild size="sm">
-              <a href="#demo">Book a demo<ArrowRight className="h-4 w-4 ml-1.5" /></a>
+              <Link to="/login"><LogIn className="h-4 w-4 mr-1.5" />Sign in</Link>
             </Button>
             <button className="md:hidden p-2" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
               {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
