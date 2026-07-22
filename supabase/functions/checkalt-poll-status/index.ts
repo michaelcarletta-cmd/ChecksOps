@@ -1,5 +1,8 @@
 // Polling fallback — reconciles any stale checkalt_deposits whose status is
 // 'submitted' or 'pending_approval' and haven't been polled in >15 minutes.
+// It also self-heals orphaned deposit attempts that stayed queued/pending
+// without ever receiving a reference number, which can happen if the worker
+// is killed while processing large images.
 // Safe to call from cron or manually from the admin UI.
 //
 // Uses POST /fincapture/deposit/item with body { fiKey, referenceNumber }
@@ -57,6 +60,7 @@ Deno.serve(async (req) => {
     }
 
     const cutoff = new Date(Date.now() - 15 * 60_000).toISOString();
+    const orphanCutoff = new Date(Date.now() - 10 * 60_000).toISOString();
 
     const { data: stale, error } = await supabase
       .from("checkalt_deposits")
@@ -67,9 +71,83 @@ Deno.serve(async (req) => {
       .limit(50);
     if (error) throw error;
 
-    let polled = 0,
+    let reaped = 0,
+      polled = 0,
       updated = 0,
       errors = 0;
+
+    // First: clean up deposit attempts that never made it to the deposit rail.
+    // These have no reference number, so there is nothing external to poll.
+    // Marking them errored releases the UI and lets the user resubmit safely.
+    const { data: orphaned, error: orphanErr } = await supabase
+      .from("checkalt_deposits")
+      .select("id, check_intake_item_id, status, updated_at")
+      .in("status", ["queued", "pending"])
+      .is("checkalt_reference", null)
+      .lt("updated_at", orphanCutoff)
+      .limit(50);
+    if (orphanErr) throw orphanErr;
+
+    for (const dep of orphaned ?? []) {
+      try {
+        const nowIso = new Date().toISOString();
+        const { error: depErr } = await supabase
+          .from("checkalt_deposits")
+          .update({
+            status: "error",
+            last_status_payload: {
+              reaped: true,
+              reason: "deposit_worker_timed_out_before_reference",
+              previous_status: dep.status,
+              stale_after_minutes: 10,
+              reaped_at: nowIso,
+            },
+          })
+          .eq("id", dep.id)
+          .in("status", ["queued", "pending"])
+          .is("checkalt_reference", null);
+        if (depErr) throw new Error(`orphan deposit update failed: ${depErr.message}`);
+
+        if (dep.check_intake_item_id) {
+          const { data: validDeposit, error: validErr } = await supabase
+            .from("checkalt_deposits")
+            .select("id")
+            .eq("check_intake_item_id", dep.check_intake_item_id)
+            .not("checkalt_reference", "is", null)
+            .in("status", ["pending_approval", "submitted", "cleared"])
+            .limit(1);
+          if (validErr) throw new Error(`valid deposit lookup failed: ${validErr.message}`);
+
+          if (!validDeposit?.length) {
+            const { error: checkErr } = await supabase
+              .from("check_intake_items")
+              .update({
+                check_stage: "ready_for_deposit",
+                status: "approved_for_deposit",
+                deposit_recommendation: "ready_for_deposit",
+                deposited_at: null,
+                updated_at: nowIso,
+              })
+              .eq("id", dep.check_intake_item_id);
+            if (checkErr) throw new Error(`check reset failed: ${checkErr.message}`);
+
+            const { error: claimCheckErr } = await supabase
+              .from("claim_checks")
+              .update({ deposit_status: null })
+              .eq("check_intake_item_id", dep.check_intake_item_id);
+            if (claimCheckErr) throw new Error(`claim check reset failed: ${claimCheckErr.message}`);
+          }
+        }
+        reaped++;
+      } catch (e) {
+        errors++;
+        console.error(
+          "[checkalt-poll-status:orphan-reap]",
+          dep.id,
+          e instanceof Error ? e.message : e,
+        );
+      }
+    }
 
     for (const dep of stale ?? []) {
       polled++;
@@ -246,7 +324,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ polled, updated, errors }), {
+    return new Response(JSON.stringify({ reaped, polled, updated, errors }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
