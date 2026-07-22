@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DollarSign, ArrowDownCircle, Send, CheckCircle2, AlertCircle, Clock, FileCheck, X, Home } from "lucide-react";
 import { format } from "date-fns";
 import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
+import { InlineErrorBoundary } from "@/components/InlineErrorBoundary";
 import { SendHomeownerBankLinkDialog } from "@/components/disbursement/SendHomeownerBankLinkDialog";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
 import { useState, useMemo, useEffect } from "react";
