@@ -52,7 +52,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
         .from("check_stakeholders")
         .select(`
           id, added_via, partner_tenant_id, stakeholder_account_id,
-          stakeholder_accounts:stakeholder_account_id (id, nickname, account_type, chk_acct, is_active, verification_status),
+          stakeholder_accounts:stakeholder_account_id (id, nickname, account_type, chk_acct, is_active, verification_status, custname, homeowner_name, authentecheck_bank_name),
           partner:partner_tenant_id (id, name)
         `)
         .eq("check_intake_item_id", checkIntakeItemId);
@@ -67,7 +67,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("stakeholder_accounts")
-        .select("id, nickname, account_type, chk_acct")
+        .select("id, nickname, account_type, chk_acct, custname, homeowner_name, authentecheck_bank_name")
         .eq("tenant_id", tenant!.id)
         .eq("is_active", true)
         .order("nickname");
@@ -146,20 +146,26 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
               <p className="text-xs text-muted-foreground p-2">All your accounts are already added.</p>
             ) : (
               <div className="space-y-1 max-h-64 overflow-y-auto">
-                {availableToAdd.map((a: any) => (
-                  <button
-                    key={a.id}
-                    className="w-full text-left p-2 rounded hover:bg-accent text-xs flex items-center justify-between"
-                    onClick={() => addMut.mutate(a.id)}
-                    disabled={addMut.isPending}
-                  >
-                    <span>
-                      <span className="font-medium">{a.nickname}</span>
-                      <span className="text-muted-foreground ml-1 font-mono">••••{a.chk_acct.slice(-4)}</span>
-                    </span>
-                    <Badge variant="outline" className="text-[9px]">{TYPE_LABELS[a.account_type] ?? a.account_type}</Badge>
-                  </button>
-                ))}
+                {availableToAdd.map((a: any) => {
+                  const holder = a.homeowner_name || a.custname || a.nickname;
+                  const bank = a.authentecheck_bank_name || "";
+                  return (
+                    <button
+                      key={a.id}
+                      className="w-full text-left p-2 rounded hover:bg-accent text-xs flex items-center justify-between"
+                      onClick={() => addMut.mutate(a.id)}
+                      disabled={addMut.isPending}
+                    >
+                      <span className="min-w-0">
+                        <span className="font-medium block truncate">{holder}</span>
+                        <span className="text-muted-foreground text-[10px]">
+                          {bank ? `${bank} · ` : ""}••••{a.chk_acct?.slice(-4)}
+                        </span>
+                      </span>
+                      <Badge variant="outline" className="text-[9px] ml-2 shrink-0">{TYPE_LABELS[a.account_type] ?? a.account_type}</Badge>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </PopoverContent>
@@ -187,8 +193,13 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
             return (
               <div key={s.id} className="flex items-center justify-between gap-2 rounded-md border p-2 text-xs">
                 <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                  <span className="font-medium truncate">{acct.nickname}</span>
-                  <span className="text-muted-foreground font-mono">••••{acct.chk_acct.slice(-4)}</span>
+                  <span className="font-medium truncate">
+                    {acct.homeowner_name || acct.custname || acct.nickname}
+                  </span>
+                  <span className="text-muted-foreground text-[10px]">
+                    {acct.authentecheck_bank_name ? `${acct.authentecheck_bank_name} · ` : ""}
+                    ••••{acct.chk_acct?.slice(-4)}
+                  </span>
                   <Badge variant="outline" className={`text-[9px] px-1.5 ${VERIFICATION_BADGE_CLASS[vStatus]}`} title={VERIFICATION_LABEL[vStatus]}>
                     {vStatus === "verified" ? <><ShieldCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Verified</> :
                      vStatus === "pending" ? <><MailCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Awaiting</> :
