@@ -489,7 +489,11 @@ export function EndorsementAdjuster({
       });
       toast.success("Deposit image approved");
       if (depositPreviewUrl) URL.revokeObjectURL(depositPreviewUrl);
-      onClose?.();
+      // Do not call onClose here — the parent's onDepositImageApproved handler
+      // is responsible for closing the adjuster after it clears the
+      // "unapproved" flag. Calling onClose would trigger the parent's
+      // close-guard confirm ("You generated a deposit image but haven't
+      // approved it yet…") because the flag hasn't been flushed yet.
     } catch (err: any) {
       console.error("[EndorsementAdjuster] approve", err);
       toast.error(err?.message || "Failed to approve deposit image");
