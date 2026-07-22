@@ -119,6 +119,20 @@ Deno.serve(async (req) => {
           if (validErr) throw new Error(`valid deposit lookup failed: ${validErr.message}`);
 
           if (!validDeposit?.length) {
+            const { data: intake, error: intakeErr } = await supabase
+              .from("check_intake_items")
+              .select("check_stage")
+              .eq("id", dep.check_intake_item_id)
+              .maybeSingle();
+            if (intakeErr) throw new Error(`check lookup failed: ${intakeErr.message}`);
+
+            // Do not move a check backwards if staff already completed or
+            // manually corrected it after the orphan row was created.
+            if (intake?.check_stage === "deposited") {
+              reaped++;
+              continue;
+            }
+
             const { error: checkErr } = await supabase
               .from("check_intake_items")
               .update({
