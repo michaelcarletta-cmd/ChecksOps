@@ -3785,8 +3785,11 @@ function CheckDetailPanel({
         throw new Error(`This check is already assigned to ${itemProvider ?? "another"} provider in the deposit pipeline.`);
       }
 
+      // Pre-normalize each side in its own edge invocation so oversized
+      // legacy images never trip the deposit worker's CPU limit.
+      const prepared = await prepareCheckAltDeposit(checkId);
       const { data: submitData, error: submitErr } = await supabase.functions.invoke("checkalt-submit-deposit", {
-        body: { check_intake_item_id: checkId },
+        body: { check_intake_item_id: checkId, ...prepared },
       });
       if (submitErr) throw new Error(await getFunctionErrorMessage(submitErr, "Deposit failed"));
 
