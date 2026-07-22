@@ -127,7 +127,12 @@ export async function prepareCheckAltDeposit(checkIntakeItemId: string): Promise
 
       return { deposit_front_path, deposit_back_path };
     } catch (error) {
-      console.warn("[prepareCheckAltDeposit] browser preparation failed, trying backend preparation:", error);
+      console.warn("[prepareCheckAltDeposit] browser preparation failed:", error);
+      if (frontSource) {
+        throw new Error(
+          "Front check image is too large to prepare safely. Reupload a smaller JPEG image and try again.",
+        );
+      }
     }
   }
 
