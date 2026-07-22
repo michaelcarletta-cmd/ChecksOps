@@ -188,7 +188,7 @@ export function DisbursementConsole({
       if (!user || !tenant) throw new Error("Not authenticated");
       if (fundsHoldActive) {
         throw new Error(
-          `Funds are not yet available. Deposited funds clear ~48 hours after the CheckAlt deposit. ${hoursRemaining}h remaining.`
+          `Funds are not yet available. Deposited funds clear ~48 hours after the deposit. ${hoursRemaining}h remaining.`
         );
       }
 
