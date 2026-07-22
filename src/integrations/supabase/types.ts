@@ -1793,6 +1793,50 @@ export type Database = {
         }
         Relationships: []
       }
+      check_deposit_image_backfill_queue: {
+        Row: {
+          attempts: number
+          back_result: string | null
+          check_id: string
+          created_at: string
+          front_result: string | null
+          id: string
+          last_error: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          back_result?: string | null
+          check_id: string
+          created_at?: string
+          front_result?: string | null
+          id?: string
+          last_error?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          back_result?: string | null
+          check_id?: string
+          created_at?: string
+          front_result?: string | null
+          id?: string
+          last_error?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_deposit_image_backfill_queue_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: true
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       check_eligibility_results: {
         Row: {
           check_id: string
