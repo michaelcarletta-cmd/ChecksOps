@@ -392,6 +392,19 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
             <Home className="h-3.5 w-3.5 mr-1.5" />
             Send Homeowner Payment Link
           </Button>
+          {existingHomeownerLink && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              disabled={resending}
+              onClick={handleResendHomeownerLink}
+              title={`Rotates the link and re-emails ${existingHomeownerLink.homeowner_email}`}
+            >
+              <Send className="h-3.5 w-3.5 mr-1.5" />
+              {resending ? "Resending…" : "Resend Payment Link"}
+            </Button>
+          )}
           <SendCheckTrackingLinkButton
             claimId={claimId ?? null}
             tenantId={tenant?.id ?? null}
@@ -401,6 +414,11 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
             label="Send Homeowner Tracking Link"
           />
         </div>
+        {existingHomeownerLink && (
+          <p className="text-[10px] text-muted-foreground">
+            Payment link already sent to {existingHomeownerLink.homeowner_email}. Resending rotates the URL and extends it another 30 days.
+          </p>
+        )}
         <p className="text-[10px] text-muted-foreground">
           Payment link: homeowner verifies their bank via AuthenteCheck. Tracking link: homeowner sees the full timeline for every check on this claim.
         </p>
