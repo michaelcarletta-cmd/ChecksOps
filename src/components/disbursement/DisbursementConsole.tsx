@@ -396,30 +396,38 @@ export function DisbursementConsole({
           <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
             <Clock className="h-3 w-3" /> Delivery Speed
           </p>
-          <RadioGroup 
-            value={deliverySpeed} 
-            onValueChange={(v) => setDeliverySpeed(v as any)}
-            className="grid grid-cols-3 gap-2"
-          >
+          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Delivery speed">
             {([
               { value: "next_day", label: "Next Day", fee: 0.95, Icon: Clock, iconClass: "" },
               { value: "same_day", label: "Same Day", fee: 1.15, Icon: Clock, iconClass: "text-blue-500" },
               { value: "instant", label: "Instant", fee: 1.65, Icon: Zap, iconClass: "text-amber-500" },
-            ] as const).map(({ value, label, fee, Icon, iconClass }) => (
-              <div key={value}>
-                <RadioGroupItem value={value} id={value} className="peer sr-only" />
-                <Label
-                  htmlFor={value}
-                  className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-2 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+            ] as const).map(({ value, label, fee, Icon, iconClass }) => {
+              const checked = deliverySpeed === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={checked}
+                  onClick={(e) => {
+                    // Prevent the default focus-scroll that was jumping the Funds
+                    // panel off-screen on mobile / short containers.
+                    e.preventDefault();
+                    setDeliverySpeed(value as any);
+                  }}
+                  className={`flex flex-col items-center justify-between rounded-md border-2 bg-popover p-2 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors ${
+                    checked ? "border-primary" : "border-muted"
+                  }`}
                 >
                   <Icon className={`mb-1 h-4 w-4 ${iconClass}`} />
                   <span className="text-[11px] font-semibold">{label}</span>
                   <span className="text-[10px] text-muted-foreground">${fee.toFixed(2)}</span>
-                </Label>
-              </div>
-            ))}
-          </RadioGroup>
+                </button>
+              );
+            })}
+          </div>
         </div>
+
 
         {/* Allocation inputs */}
         <div className="space-y-2">
