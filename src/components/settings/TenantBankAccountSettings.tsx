@@ -30,14 +30,16 @@ export function TenantBankAccountSettings() {
     queryKey: ["tenant-primary-accounts", tenant?.id],
     enabled: !!tenant?.id,
     queryFn: async () => {
-      // Show every active bank account this tenant owns (matches what the
-      // Disbursements panel sees). Verified accounts saved via Authentecheck
-      // may not carry is_primary=true, so we don't filter on it.
+      // Tenant-owned bank accounts only. Homeowner-linked accounts belong to
+      // the homeowner on a specific check/claim and must never appear here —
+      // the tenant's company bank account is only changed by the tenant.
       const { data, error } = await supabase
         .from("stakeholder_accounts")
-        .select("id, nickname, chk_acct, acct_type, is_active, custname, verification_status, verified_at, is_primary")
+        .select("id, nickname, chk_acct, acct_type, is_active, custname, verification_status, verified_at, is_primary, origin, account_type")
         .eq("tenant_id", tenant!.id)
         .eq("is_active", true)
+        .neq("account_type", "homeowner")
+        .neq("origin", "homeowner_link")
         .order("verified_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false });
       if (error) throw error;
