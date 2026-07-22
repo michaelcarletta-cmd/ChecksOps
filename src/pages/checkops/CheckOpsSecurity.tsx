@@ -58,7 +58,7 @@ const bankingControls = [
   {
     icon: Landmark,
     title: "Non-custodial by design",
-    body: "ChecksOps never holds, pools, or routes funds through a ChecksOps-owned account. Deposits go straight to your bank via CheckAlt FinCapture. Disbursements originate through Actum Processing directly to the recipient's bank.",
+    body: "ChecksOps never holds, pools, or routes funds through a ChecksOps-owned account. Deposits go straight to your bank through our bank-grade deposit rail. Disbursements originate through our ACH processor directly to the recipient's bank.",
   },
   {
     icon: FileCheck2,
