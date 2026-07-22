@@ -2,6 +2,7 @@
 // Authenticates via shared bridge secret. Mirrors the check into check_intake_items
 // (tagged with external_origin) and creates a shared_checks row.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { normalizeUploadedCheckImage, originalSiblingPath } from "../_shared/normalizeUploadedCheckImage.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
