@@ -167,6 +167,37 @@ serve(async (req) => {
       .update({ homeowner_link_token_id: linkRow.id })
       .eq("id", account.id);
 
+    // 2b. Immediately attach the homeowner as a stakeholder on the target
+    // check(s), so the disbursement console shows them right away with an
+    // "Awaiting verification" badge. Once AuthenteCheck completes, the
+    // account flips to verified and disbursement is unblocked — no need to
+    // wait for the postback to make them visible.
+    if (scope === "check") {
+      await supabase.from("check_stakeholders").insert({
+        check_intake_item_id,
+        stakeholder_account_id: account.id,
+        tenant_id,
+        added_via: "homeowner_link",
+        added_by: userData.user.id,
+      });
+    } else if (scope === "claim") {
+      const { data: claimChecks } = await supabase
+        .from("check_intake_items")
+        .select("id")
+        .eq("claim_id", claim_id);
+      if (claimChecks?.length) {
+        await supabase.from("check_stakeholders").insert(
+          claimChecks.map((c: any) => ({
+            check_intake_item_id: c.id,
+            stakeholder_account_id: account.id,
+            tenant_id,
+            added_via: "homeowner_link",
+            added_by: userData.user.id,
+          })),
+        );
+      }
+    }
+
     // 3. Email the homeowner via the existing verify-account template
     let emailErr: any = null;
     try {
