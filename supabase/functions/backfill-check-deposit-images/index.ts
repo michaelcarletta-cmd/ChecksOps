@@ -94,33 +94,41 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-    const { data: userRes, error: userErr } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", ""),
-    );
-    if (userErr || !userRes.user?.id) {
-      return new Response(JSON.stringify({ error: "unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const { data: roles } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userRes.user.id);
-    const allowed = (roles ?? []).some((r: any) => ["admin", "owner", "staff"].includes(r.role));
-    if (!allowed) {
-      return new Response(JSON.stringify({ error: "forbidden" }), {
-        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+
+    // Admin-token bypass for one-off ops runs from a trusted operator.
+    const adminToken = Deno.env.get("BACKFILL_ADMIN_TOKEN");
+    const providedToken = req.headers.get("x-backfill-token");
+    const tokenOk = !!adminToken && !!providedToken && providedToken === adminToken;
+
+    if (!tokenOk) {
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader?.startsWith("Bearer ")) {
+        return new Response(JSON.stringify({ error: "unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { data: userRes, error: userErr } = await supabase.auth.getUser(
+        authHeader.replace("Bearer ", ""),
+      );
+      if (userErr || !userRes.user?.id) {
+        return new Response(JSON.stringify({ error: "unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userRes.user.id);
+      const allowed = (roles ?? []).some((r: any) => ["admin", "owner", "staff"].includes(r.role));
+      if (!allowed) {
+        return new Response(JSON.stringify({ error: "forbidden" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     let body: any = {};
