@@ -461,7 +461,7 @@ export function StakeholderAccountSettings() {
                   {acct.is_primary && <Star className="h-3 w-3 text-amber-400 flex-shrink-0" />}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <p className="text-sm font-medium truncate">{acct.nickname}</p>
+                      <p className="text-sm font-medium truncate">{acct.homeowner_name || acct.custname || acct.nickname}</p>
                       <Badge variant="outline" className={`text-[10px] px-1.5 ${ACCOUNT_TYPE_COLORS[acct.account_type]}`}>
                         {ACCOUNT_TYPE_LABELS[acct.account_type]}
                       </Badge>
@@ -480,7 +480,7 @@ export function StakeholderAccountSettings() {
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground font-mono">
-                      ••••{acct.chk_acct.slice(-4)} · {acct.acct_type === "C" ? "Checking" : "Savings"}
+                      {acct.nickname ? `${acct.nickname} · ` : ""}••••{acct.chk_acct.slice(-4)} · {acct.acct_type === "C" ? "Checking" : "Savings"}
                     </p>
                   </div>
                 </div>
