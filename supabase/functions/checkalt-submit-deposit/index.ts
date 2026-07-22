@@ -285,6 +285,15 @@ Deno.serve(async (req) => {
           );
         };
 
+        // Fast path: if the client called checkalt-prepare-image first, use
+        // those pre-normalized paths directly and skip the CPU-heavy re-encode.
+        const downloadPreparedAsB64 = async (path: string, label: "front" | "back") => {
+          const { data, error } = await supabase.storage.from("claim-files").download(path);
+          if (error || !data) throw new Error(`${label} prepared image download failed: ${error?.message}`);
+          const bytes = new Uint8Array(await data.arrayBuffer());
+          return bytesToBase64(bytes);
+        };
+
         const downloadAsB64 = async (path: string | null, label: "front" | "back") => {
           if (!path) return null;
           const { data, error } = await supabase.storage
@@ -296,9 +305,21 @@ Deno.serve(async (req) => {
           return await normalizeImageToBudget(bytes, label);
         };
 
-        const rasterBackPath = await resolveRasterBackPath(check.back_image_path);
-        const frontB64 = await downloadAsB64(check.front_image_path, "front");
-        const backB64 = await downloadAsB64(rasterBackPath, "back");
+        let frontB64: string | null;
+        let backB64: string | null;
+        if (deposit_front_path || deposit_back_path) {
+          console.log("[checkalt-submit-deposit] using pre-normalized paths (fast path)");
+          frontB64 = deposit_front_path
+            ? await downloadPreparedAsB64(deposit_front_path, "front")
+            : await downloadAsB64(check.front_image_path, "front");
+          backB64 = deposit_back_path
+            ? await downloadPreparedAsB64(deposit_back_path, "back")
+            : await downloadAsB64(await resolveRasterBackPath(check.back_image_path), "back");
+        } else {
+          const rasterBackPath = await resolveRasterBackPath(check.back_image_path);
+          frontB64 = await downloadAsB64(check.front_image_path, "front");
+          backB64 = await downloadAsB64(rasterBackPath, "back");
+        }
 
         if (!frontB64) throw new Error("Front image required for CheckAlt submission");
 
