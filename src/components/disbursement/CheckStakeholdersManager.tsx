@@ -146,20 +146,26 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
               <p className="text-xs text-muted-foreground p-2">All your accounts are already added.</p>
             ) : (
               <div className="space-y-1 max-h-64 overflow-y-auto">
-                {availableToAdd.map((a: any) => (
-                  <button
-                    key={a.id}
-                    className="w-full text-left p-2 rounded hover:bg-accent text-xs flex items-center justify-between"
-                    onClick={() => addMut.mutate(a.id)}
-                    disabled={addMut.isPending}
-                  >
-                    <span>
-                      <span className="font-medium">{a.nickname}</span>
-                      <span className="text-muted-foreground ml-1 font-mono">••••{a.chk_acct.slice(-4)}</span>
-                    </span>
-                    <Badge variant="outline" className="text-[9px]">{TYPE_LABELS[a.account_type] ?? a.account_type}</Badge>
-                  </button>
-                ))}
+                {availableToAdd.map((a: any) => {
+                  const holder = a.homeowner_name || a.custname || a.nickname;
+                  const bank = a.authentecheck_bank_name || "";
+                  return (
+                    <button
+                      key={a.id}
+                      className="w-full text-left p-2 rounded hover:bg-accent text-xs flex items-center justify-between"
+                      onClick={() => addMut.mutate(a.id)}
+                      disabled={addMut.isPending}
+                    >
+                      <span className="min-w-0">
+                        <span className="font-medium block truncate">{holder}</span>
+                        <span className="text-muted-foreground text-[10px]">
+                          {bank ? `${bank} · ` : ""}••••{a.chk_acct?.slice(-4)}
+                        </span>
+                      </span>
+                      <Badge variant="outline" className="text-[9px] ml-2 shrink-0">{TYPE_LABELS[a.account_type] ?? a.account_type}</Badge>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </PopoverContent>
