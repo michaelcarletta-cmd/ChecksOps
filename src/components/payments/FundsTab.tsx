@@ -464,21 +464,23 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
           <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-700 dark:text-emerald-300">
             Remaining to zero out: <span className="font-semibold">${availableForDisbursement.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
           </div>
-          <DisbursementConsole
-            checkIntakeItemId={checkIntakeItemId}
-            checkAmount={availableForDisbursement}
-            checkNumber={checkNumber}
-            carrierName={carrierName}
-            onComplete={() => {
-              // Refresh disbursement totals then decide whether to keep the console open for the remainder.
-              qc.invalidateQueries({ queryKey: ["funds-tab-disbursements", checkIntakeItemId, tenant?.id] }).then(() => {
-                // Give the query a tick to settle before deciding — if funds remain the console re-renders with the new remainder.
-                setTimeout(() => {
-                  if (availableForDisbursement <= 0.005) setDisburseMode(null);
-                }, 300);
-              });
-            }}
-          />
+          <InlineErrorBoundary label="Disbursement console">
+            <DisbursementConsole
+              checkIntakeItemId={checkIntakeItemId}
+              checkAmount={availableForDisbursement}
+              checkNumber={checkNumber}
+              carrierName={carrierName}
+              onComplete={() => {
+                // Refresh disbursement totals then decide whether to keep the console open for the remainder.
+                qc.invalidateQueries({ queryKey: ["funds-tab-disbursements", checkIntakeItemId, tenant?.id] }).then(() => {
+                  // Give the query a tick to settle before deciding — if funds remain the console re-renders with the new remainder.
+                  setTimeout(() => {
+                    if (availableForDisbursement <= 0.005) setDisburseMode(null);
+                  }, 300);
+                });
+              }}
+            />
+          </InlineErrorBoundary>
         </div>
       )}
 
