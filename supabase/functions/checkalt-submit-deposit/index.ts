@@ -204,6 +204,21 @@ Deno.serve(async (req) => {
     }
 
 
+    // --- reap stuck prior deposits for this check ---
+    // If a previous submission crashed mid-flight (edge worker CPU-exceeded),
+    // its row can sit forever in "queued"/"pending" with no referenceNumber,
+    // blocking the user. Mark any of those as errored before creating a new
+    // attempt so the retry can proceed cleanly.
+    await supabase
+      .from("checkalt_deposits")
+      .update({
+        status: "error",
+        last_status_payload: { reaped: true, reason: "superseded_by_retry" },
+      })
+      .eq("check_intake_item_id", check.id)
+      .in("status", ["queued", "pending"])
+      .is("checkalt_reference", null);
+
     // --- create pending deposit row immediately (audit anchor) ---
     const { data: depositRow, error: depErr } = await supabase
       .from("checkalt_deposits")
