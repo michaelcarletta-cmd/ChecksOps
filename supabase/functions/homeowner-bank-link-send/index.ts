@@ -112,7 +112,11 @@ serve(async (req) => {
     }
 
     const verificationToken = crypto.randomUUID();
-    const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    // Homeowner-facing bank link: give them plenty of time to open it. Actum's
+    // AuthenteCheck session (short-lived) is minted lazily when they click, so
+    // this expiry only gates our wrapper URL. 30 days keeps casual delays from
+    // turning into "expired link" support tickets.
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
 
     // 1. Create shell stakeholder_accounts row

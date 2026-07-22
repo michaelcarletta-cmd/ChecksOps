@@ -45,11 +45,22 @@ serve(async (req) => {
       });
     }
 
+    // Auto-heal expired links. The Actum session itself is minted below and is
+    // still short-lived on Actum's side — this only extends our wrapper URL so
+    // a homeowner who took a couple of weeks to open the email doesn't hit a
+    // dead end. If the account has been locked or already used, the checks
+    // above have already returned; safe to bump.
     const expiresAt = account.verification_token_expires_at ? new Date(account.verification_token_expires_at) : null;
     if (!expiresAt || expiresAt.getTime() < Date.now()) {
-      return new Response(JSON.stringify({ success: false, expired: true, error: "This verification link has expired. Ask the sender to resend it." }), {
-        status: 410, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      const newExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      await supabase
+        .from("stakeholder_accounts")
+        .update({ verification_token_expires_at: newExpiry })
+        .eq("id", account.id);
+      await supabase
+        .from("homeowner_bank_link_tokens")
+        .update({ expires_at: newExpiry })
+        .eq("stakeholder_account_id", account.id);
     }
 
     const result = await initiateAuthentecheckSession(supabase, account, {
