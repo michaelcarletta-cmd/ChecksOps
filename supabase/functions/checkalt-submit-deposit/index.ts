@@ -48,6 +48,15 @@ async function normalizeImageToBudget(
   bytes: Uint8Array,
   label: string,
 ): Promise<string> {
+  // Fast path: if the source is already under budget, skip the CPU-heavy
+  // decode/resize/re-encode cycle entirely. Uploads are pre-compressed to
+  // 1600px by src/lib/compressCheckImage.ts, so most files land here.
+  if (bytes.length <= PER_IMAGE_BYTES_BUDGET) {
+    console.log(
+      `[checkalt-submit-deposit] ${label} already under budget (${Math.round(bytes.length / 1024)}KB) — skipping re-encode`,
+    );
+    return bytesToBase64(bytes);
+  }
   try {
     let img = await Image.decode(bytes);
     let maxDim = TARGET_MAX_DIM;
