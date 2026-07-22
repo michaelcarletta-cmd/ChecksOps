@@ -98,8 +98,8 @@ const compliance = [
 
 const vendors = [
   { name: "Supabase / Lovable Cloud", purpose: "Database, auth, storage, edge compute" },
-  { name: "CheckAlt (FinCapture)", purpose: "Remote check deposit rail" },
-  { name: "Actum Processing", purpose: "ACH disbursement rail" },
+  { name: "Bank-grade deposit processor", purpose: "Remote check deposit rail" },
+  { name: "ACH origination partner", purpose: "ACH disbursement rail" },
   { name: "OpenAI", purpose: "AI inference on redacted claim text" },
   { name: "Tavily", purpose: "Non-PII web search" },
   { name: "Resend / Mailgun", purpose: "Transactional email delivery" },
