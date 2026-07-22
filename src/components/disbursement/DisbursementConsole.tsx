@@ -591,7 +591,7 @@ export function DisbursementConsole({
 
 
         <p className="text-xs text-center text-muted-foreground">
-          One click sends every allocated stakeholder in a single {SPEED_LABELS[deliverySpeed]} ACH batch via Actum.
+          One click sends every allocated stakeholder in a single {SPEED_LABELS[deliverySpeed]} ACH batch.
         </p>
       </CardContent>
     </Card>
