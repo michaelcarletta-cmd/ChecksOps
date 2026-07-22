@@ -67,7 +67,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("stakeholder_accounts")
-        .select("id, nickname, account_type, chk_acct")
+        .select("id, nickname, account_type, chk_acct, custname, homeowner_name, authentecheck_bank_name")
         .eq("tenant_id", tenant!.id)
         .eq("is_active", true)
         .order("nickname");
