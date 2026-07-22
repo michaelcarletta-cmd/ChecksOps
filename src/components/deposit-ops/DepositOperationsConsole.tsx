@@ -27,6 +27,7 @@ import { CheckImagesViewer } from "@/components/checks/CheckImagesViewer";
 import { Eye } from "lucide-react";
 import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
+import { prepareCheckAltDeposit } from "@/lib/prepareCheckAltDeposit";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -244,8 +245,11 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
   // manual record_submission dialog used by other providers.
   const checkaltSubmitMutation = useMutation({
     mutationFn: async (checkId: string) => {
+      // Pre-normalize each side (front + back) so the deposit worker never
+      // has to re-encode oversized images inline (avoids CPU-exceeded).
+      const prepared = await prepareCheckAltDeposit(checkId);
       const { data, error } = await supabase.functions.invoke("checkalt-submit-deposit", {
-        body: { check_intake_item_id: checkId },
+        body: { check_intake_item_id: checkId, ...prepared },
       });
       if (error) throw new Error(await getFunctionErrorMessage(error, "Deposit submission failed"));
       return data as { status: string; checkalt_reference: string | null };

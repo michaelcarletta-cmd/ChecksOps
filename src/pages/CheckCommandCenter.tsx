@@ -72,6 +72,7 @@ const LossDraftDashboard = lazy(() =>
 // button responds instantly. Keeping it out of a lazy chunk avoids the
 // intermittent "click does nothing" behavior when the chunk was slow to fetch.
 import { EndorsementAdjuster } from "@/components/checks/EndorsementAdjuster";
+import { prepareCheckAltDeposit } from "@/lib/prepareCheckAltDeposit";
 const preloadEndorsementAdjuster = () => Promise.resolve();
 const EndorsementChecklist = lazy(() =>
   import("@/components/check-review/EndorsementChecklist").then(m => ({ default: m.EndorsementChecklist }))
@@ -3784,8 +3785,11 @@ function CheckDetailPanel({
         throw new Error(`This check is already assigned to ${itemProvider ?? "another"} provider in the deposit pipeline.`);
       }
 
+      // Pre-normalize each side in its own edge invocation so oversized
+      // legacy images never trip the deposit worker's CPU limit.
+      const prepared = await prepareCheckAltDeposit(checkId);
       const { data: submitData, error: submitErr } = await supabase.functions.invoke("checkalt-submit-deposit", {
-        body: { check_intake_item_id: checkId },
+        body: { check_intake_item_id: checkId, ...prepared },
       });
       if (submitErr) throw new Error(await getFunctionErrorMessage(submitErr, "Deposit failed"));
 
