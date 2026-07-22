@@ -193,8 +193,13 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
             return (
               <div key={s.id} className="flex items-center justify-between gap-2 rounded-md border p-2 text-xs">
                 <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                  <span className="font-medium truncate">{acct.nickname}</span>
-                  <span className="text-muted-foreground font-mono">••••{acct.chk_acct.slice(-4)}</span>
+                  <span className="font-medium truncate">
+                    {acct.homeowner_name || acct.custname || acct.nickname}
+                  </span>
+                  <span className="text-muted-foreground text-[10px]">
+                    {acct.authentecheck_bank_name ? `${acct.authentecheck_bank_name} · ` : ""}
+                    ••••{acct.chk_acct?.slice(-4)}
+                  </span>
                   <Badge variant="outline" className={`text-[9px] px-1.5 ${VERIFICATION_BADGE_CLASS[vStatus]}`} title={VERIFICATION_LABEL[vStatus]}>
                     {vStatus === "verified" ? <><ShieldCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Verified</> :
                      vStatus === "pending" ? <><MailCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Awaiting</> :
