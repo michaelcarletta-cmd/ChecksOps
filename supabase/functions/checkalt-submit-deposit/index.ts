@@ -48,6 +48,15 @@ async function normalizeImageToBudget(
   bytes: Uint8Array,
   label: string,
 ): Promise<string> {
+  // Fast path: if the source is already under budget, skip the CPU-heavy
+  // decode/resize/re-encode cycle entirely. Uploads are pre-compressed to
+  // 1600px by src/lib/compressCheckImage.ts, so most files land here.
+  if (bytes.length <= PER_IMAGE_BYTES_BUDGET) {
+    console.log(
+      `[checkalt-submit-deposit] ${label} already under budget (${Math.round(bytes.length / 1024)}KB) — skipping re-encode`,
+    );
+    return bytesToBase64(bytes);
+  }
   try {
     let img = await Image.decode(bytes);
     let maxDim = TARGET_MAX_DIM;
@@ -194,6 +203,21 @@ Deno.serve(async (req) => {
       );
     }
 
+
+    // --- reap stuck prior deposits for this check ---
+    // If a previous submission crashed mid-flight (edge worker CPU-exceeded),
+    // its row can sit forever in "queued"/"pending" with no referenceNumber,
+    // blocking the user. Mark any of those as errored before creating a new
+    // attempt so the retry can proceed cleanly.
+    await supabase
+      .from("checkalt_deposits")
+      .update({
+        status: "error",
+        last_status_payload: { reaped: true, reason: "superseded_by_retry" },
+      })
+      .eq("check_intake_item_id", check.id)
+      .in("status", ["queued", "pending"])
+      .is("checkalt_reference", null);
 
     // --- create pending deposit row immediately (audit anchor) ---
     const { data: depositRow, error: depErr } = await supabase
