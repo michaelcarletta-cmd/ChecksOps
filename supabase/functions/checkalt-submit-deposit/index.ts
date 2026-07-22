@@ -110,6 +110,10 @@ async function normalizeImageToBudget(
 
 const BodySchema = z.object({
   check_intake_item_id: z.string().uuid(),
+  // Optional pre-normalized paths returned by checkalt-prepare-image.
+  // When provided, submit skips the CPU-heavy normalize entirely (fast path).
+  deposit_front_path: z.string().nullable().optional(),
+  deposit_back_path: z.string().nullable().optional(),
 });
 
 Deno.serve(async (req) => {
