@@ -1532,22 +1532,27 @@ export default function CheckCommandCenter() {
             // active search/class filter, so counts stay accurate past the
             // 2,000-row queue cap. Fall back to in-memory counts otherwise.
             // Partner tenants (e.g. Condition One) receive checks via shared_checks
-            // owned by another tenant, so the per-tenant RPC totals miss them.
-            // Fall back to in-memory counts whenever shared checks are present so
-            // lane badges reflect what actually appears in each lane.
+            // owned by another tenant — the per-tenant RPC misses those, so we
+            // always add in-memory shared-check counts on top of the aggregate.
             const useAggregate =
               !searchQuery.trim() &&
               classFilter === "all" &&
-              !!stageTotals &&
-              sharedChecks.length === 0;
-            const laneCount = (key: string, fallback: number) =>
-              useAggregate ? (stageTotals!.get(key)?.count ?? 0) : fallback;
+              !!stageTotals;
+            const sharedIdSet = new Set(sharedChecks.map((c) => c.id));
+            const sharedInLane = (arr: CheckItem[]) =>
+              arr.reduce((n, c) => (sharedIdSet.has(c.id) ? n + 1 : n), 0);
+            const laneCount = (key: string, inMemory: CheckItem[]) => {
+              if (!useAggregate) return inMemory.length;
+              const own = stageTotals!.get(key)?.count ?? 0;
+              return own + sharedInLane(inMemory);
+            };
             return [
-            { key: "review",       label: "Review",            count: laneCount("review", needsReview.length),         icon: ClipboardCheck, gradient: "from-blue-500/20 to-cyan-500/10",     accent: "text-blue-400",    ring: "ring-blue-500/30" },
-            { key: "endorsements", label: "Endorsing",         count: laneCount("endorsing", awaitingEndorsement.length), icon: Send,           gradient: "from-amber-500/20 to-orange-500/10",  accent: "text-amber-400",   ring: "ring-amber-500/30" },
-            { key: "ready",        label: "Ready for Deposit", count: laneCount("ready", readyForDeposit.length),     icon: CheckCircle2,   gradient: "from-emerald-500/20 to-green-500/10", accent: "text-emerald-400", ring: "ring-emerald-500/30" },
-            { key: "deposited",    label: "Deposited",         count: laneCount("deposited", depositedChecks.length),     icon: Banknote,       gradient: "from-primary/20 to-blue-500/10",      accent: "text-primary",     ring: "ring-primary/30" },
-            { key: "lossdraft",    label: "Loss Draft",        count: (lossDraftCounts as any)?.total_active ?? laneCount("lossdraft", 0), icon: Landmark,       gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400",  ring: "ring-purple-500/30" },
+            { key: "review",       label: "Review",            count: laneCount("review", needsReview),         icon: ClipboardCheck, gradient: "from-blue-500/20 to-cyan-500/10",     accent: "text-blue-400",    ring: "ring-blue-500/30" },
+            { key: "endorsements", label: "Endorsing",         count: laneCount("endorsing", awaitingEndorsement), icon: Send,           gradient: "from-amber-500/20 to-orange-500/10",  accent: "text-amber-400",   ring: "ring-amber-500/30" },
+            { key: "ready",        label: "Ready for Deposit", count: laneCount("ready", readyForDeposit),     icon: CheckCircle2,   gradient: "from-emerald-500/20 to-green-500/10", accent: "text-emerald-400", ring: "ring-emerald-500/30" },
+            { key: "deposited",    label: "Deposited",         count: laneCount("deposited", depositedChecks),     icon: Banknote,       gradient: "from-primary/20 to-blue-500/10",      accent: "text-primary",     ring: "ring-primary/30" },
+            { key: "lossdraft",    label: "Loss Draft",        count: (lossDraftCounts as any)?.total_active ?? laneCount("lossdraft", []), icon: Landmark,       gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400",  ring: "ring-purple-500/30" },
+
             // Bank Deposit card intentionally removed — users are pushed to CheckAlt for RDC.
             // The branch_deposit_required status still exists in the pipeline as a fallback,
             // but is no longer surfaced as a top-level tab in the command center.
