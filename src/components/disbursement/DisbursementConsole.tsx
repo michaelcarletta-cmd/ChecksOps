@@ -554,7 +554,7 @@ export function DisbursementConsole({
             <Clock className="h-3.5 w-3.5 shrink-0" />
             <span>
               Deposit confirmed — funds become available for disbursement in ~{hoursRemaining}h
-              (48h hold after CheckAlt deposit).
+              (48h hold after deposit).
             </span>
           </div>
         )}
