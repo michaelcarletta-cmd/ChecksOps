@@ -27,6 +27,7 @@ import { CheckImagesViewer } from "@/components/checks/CheckImagesViewer";
 import { Eye } from "lucide-react";
 import { DisbursementConsole } from "@/components/disbursement/DisbursementConsole";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
+import { prepareCheckAltDeposit } from "@/lib/prepareCheckAltDeposit";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
