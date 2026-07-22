@@ -24,7 +24,7 @@ const MIN_DIM = 600;
 const MIN_QUALITY = 35;
 const PER_IMAGE_BYTES_BUDGET = 450_000;
 
-const ELIGIBLE_STAGES = ["ready_for_deposit", "endorsing", "needs_review", "deposited"];
+const ELIGIBLE_STAGES = ["ready_for_deposit", "endorsing", "review", "deposited"];
 
 async function normalizeToBudget(bytes: Uint8Array): Promise<Uint8Array> {
   if (bytes.length <= PER_IMAGE_BYTES_BUDGET) return bytes;
@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
       .select("id, tenant_id, front_image_path, back_image_path, check_stage")
       .in("check_stage", ELIGIBLE_STAGES)
       .order("updated_at", { ascending: false })
-      .limit(limit);
+      .range(Number(body?.offset) || 0, (Number(body?.offset) || 0) + limit - 1);
     if (tenantId) q = q.eq("tenant_id", tenantId);
 
     const { data: checks, error: cErr } = await q;
