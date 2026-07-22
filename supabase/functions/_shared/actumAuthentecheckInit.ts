@@ -158,22 +158,49 @@ export async function initiateAuthentecheckSession(
       body: params.toString(),
     });
     const text = await res.text();
-    console.log("[authentecheck-init] Actum response:", text);
+    console.log(
+      "[authentecheck-init] Actum HTTP",
+      res.status,
+      res.statusText,
+      "body:",
+      text,
+    );
 
-    // Parse single key=value
-    let sessionUrl: string | null = null;
-    let actumErr: string | null = null;
+    // Parse every key=value line Actum returns so we can persist ALL of them
+    // for post-mortems (previously we only kept `url` and lost order_id, which
+    // is what the postback matcher relies on).
+    const parsed: Record<string, string> = {};
     for (const line of text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)) {
       const eq = line.indexOf("=");
       if (eq < 0) continue;
-      const k = line.slice(0, eq);
-      const v = line.slice(eq + 1);
-      if (k === "url") sessionUrl = v;
-      if (k === "error") actumErr = v;
+      parsed[line.slice(0, eq)] = line.slice(eq + 1);
     }
+    const sessionUrl = parsed["url"] ?? null;
+    const actumErr = parsed["error"] ?? null;
+    // Actum returns the order id under a couple of possible keys depending on
+    // the endpoint variant; capture whichever shows up.
+    const orderId = parsed["order_id"] ?? parsed["orderid"] ?? parsed["ordernum"] ?? parsed["merordernumber"] ?? null;
 
-    if (!sessionUrl) {
-      throw new Error(actumErr ?? `Actum did not return a session URL: ${text.slice(0, 200)}`);
+    if (!res.ok || !sessionUrl) {
+      // Log the raw response so we can see exactly what Actum said for this
+      // session — this is the missing signal that caused Christopher's dead
+      // session to look "successful" but never mint an order_id.
+      await supabase.from("stakeholder_account_verification_log").insert({
+        stakeholder_account_id: account.id,
+        tenant_id: account.tenant_id,
+        event_type: "authentecheck_init_failed",
+        actor_user_id: options.actorUserId ?? null,
+        details: {
+          http_status: res.status,
+          actum_error: actumErr,
+          raw_response: text.slice(0, 2000),
+          parsed,
+        },
+      });
+      throw new Error(
+        actumErr ??
+          `Actum init failed (HTTP ${res.status}): ${text.slice(0, 300) || "empty response"}`,
+      );
     }
 
     await supabase
@@ -181,6 +208,7 @@ export async function initiateAuthentecheckSession(
       .update({
         verification_status: "pending",
         authentecheck_session_url: sessionUrl,
+        authentecheck_order_id: orderId,
         authentecheck_initiated_at: new Date().toISOString(),
       })
       .eq("id", account.id);
@@ -190,8 +218,9 @@ export async function initiateAuthentecheckSession(
       tenant_id: account.tenant_id,
       event_type: "authentecheck_initiated",
       actor_user_id: options.actorUserId ?? null,
-      details: { session_url: sessionUrl },
+      details: { session_url: sessionUrl, order_id: orderId, raw_response: text.slice(0, 2000) },
     });
+
 
     return { success: true, url: sessionUrl };
   } catch (err: any) {
