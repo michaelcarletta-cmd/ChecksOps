@@ -154,7 +154,7 @@ Deno.serve(async (req) => {
         },
       );
     }
-    const { check_intake_item_id } = parsed.data;
+    const { check_intake_item_id, deposit_front_path, deposit_back_path } = parsed.data;
 
     // --- gate: integration must be enabled + fully configured ---
     const cfg = await loadConfig(supabase);
