@@ -3763,7 +3763,7 @@ function CheckDetailPanel({
           p_action: "prepare_deposit",
           p_actor_id: user.id,
           p_check_id: checkId,
-          p_notes: "Deposited with CheckAlt from Check Command Center",
+          p_notes: "Deposited from Check Command Center",
         });
         if (prepErr) throw prepErr;
         depositItemId = (prepData as any)?.deposit_item_id ?? null;
@@ -3777,7 +3777,7 @@ function CheckDetailPanel({
           p_actor_id: user.id,
           p_deposit_item_id: depositItemId,
           p_provider: "checkalt",
-          p_notes: "Assigned CheckAlt from Check Command Center",
+          p_notes: "Assigned deposit rail from Check Command Center",
         });
         if (assignErr) throw assignErr;
       } else if (itemProvider !== "checkalt") {
@@ -4438,9 +4438,9 @@ function CheckDetailPanel({
                       <>
                         {caRejected && (
                           <div className="rounded-md border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300 mt-1">
-                            <div className="font-medium">CheckAlt {latestCA?.status} {rejCode ? `(code ${rejCode})` : ""}</div>
+                            <div className="font-medium">Deposit {latestCA?.status} {rejCode ? `(code ${rejCode})` : ""}</div>
                             {rejDesc && <div className="text-red-200/80 mt-0.5">{String(rejDesc)}</div>}
-                            <div className="text-red-200/60 mt-1">Click below to resubmit to CheckAlt.</div>
+                            <div className="text-red-200/60 mt-1">Click below to resubmit deposit.</div>
                           </div>
                         )}
                         {allEndorsementsComplete && !isDepositBlocked && (
