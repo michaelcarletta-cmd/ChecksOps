@@ -1,0 +1,2 @@
+UPDATE checkalt_deposits SET status='error', last_status_payload='{"reason":"cpu_time_exceeded_manual_reset"}'::jsonb, updated_at=now() WHERE id='acc891d4-9992-4d37-8da9-dac00c3fe1e1';
+UPDATE check_intake_items SET status='approved_for_deposit', check_stage='ready_for_deposit', updated_at=now() WHERE id='73a324f5-2a17-47cc-9450-43805f788a2d';
