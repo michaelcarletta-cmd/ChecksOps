@@ -72,6 +72,7 @@ const LossDraftDashboard = lazy(() =>
 // button responds instantly. Keeping it out of a lazy chunk avoids the
 // intermittent "click does nothing" behavior when the chunk was slow to fetch.
 import { EndorsementAdjuster } from "@/components/checks/EndorsementAdjuster";
+import { prepareCheckAltDeposit } from "@/lib/prepareCheckAltDeposit";
 const preloadEndorsementAdjuster = () => Promise.resolve();
 const EndorsementChecklist = lazy(() =>
   import("@/components/check-review/EndorsementChecklist").then(m => ({ default: m.EndorsementChecklist }))
