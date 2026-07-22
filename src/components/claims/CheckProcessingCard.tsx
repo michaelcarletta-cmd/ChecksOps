@@ -523,7 +523,7 @@ export function CheckProcessingCard({ claimId, checkId, isAdmin = false }: Props
           <div className="pt-4 border-t space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-semibold flex items-center gap-2">
-                Financial Disbursement (Actum)
+                Financial Disbursement
               </h4>
               <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
                 Deposit Confirmed

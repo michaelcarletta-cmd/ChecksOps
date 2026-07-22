@@ -188,7 +188,7 @@ export function DisbursementConsole({
       if (!user || !tenant) throw new Error("Not authenticated");
       if (fundsHoldActive) {
         throw new Error(
-          `Funds are not yet available. Deposited funds clear ~48 hours after the CheckAlt deposit. ${hoursRemaining}h remaining.`
+          `Funds are not yet available. Deposited funds clear ~48 hours after the deposit. ${hoursRemaining}h remaining.`
         );
       }
 
@@ -554,7 +554,7 @@ export function DisbursementConsole({
             <Clock className="h-3.5 w-3.5 shrink-0" />
             <span>
               Deposit confirmed — funds become available for disbursement in ~{hoursRemaining}h
-              (48h hold after CheckAlt deposit).
+              (48h hold after deposit).
             </span>
           </div>
         )}
@@ -591,7 +591,7 @@ export function DisbursementConsole({
 
 
         <p className="text-xs text-center text-muted-foreground">
-          One click sends every allocated stakeholder in a single {SPEED_LABELS[deliverySpeed]} ACH batch via Actum.
+          One click sends every allocated stakeholder in a single {SPEED_LABELS[deliverySpeed]} ACH batch.
         </p>
       </CardContent>
     </Card>

@@ -133,7 +133,7 @@ export function MaintenancePaymentsTracker() {
               Dry run
             </Button>
             <Button size="sm" variant="default" onClick={() => {
-              if (!confirm("Run auto-debit for all eligible tenants now? This will pull the monthly fee via Actum ACH.")) return;
+              if (!confirm("Run auto-debit for all eligible tenants now? This will pull the monthly fee via ACH.")) return;
               chargeMutation.mutate(false);
             }} disabled={chargeMutation.isPending}>
               <Zap className="h-3.5 w-3.5 mr-1.5" /> Run charges

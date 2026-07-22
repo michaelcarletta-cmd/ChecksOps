@@ -58,7 +58,7 @@ const bankingControls = [
   {
     icon: Landmark,
     title: "Non-custodial by design",
-    body: "ChecksOps never holds, pools, or routes funds through a ChecksOps-owned account. Deposits go straight to your bank via CheckAlt FinCapture. Disbursements originate through Actum Processing directly to the recipient's bank.",
+    body: "ChecksOps never holds, pools, or routes funds through a ChecksOps-owned account. Deposits go straight to your bank through our bank-grade deposit rail. Disbursements originate through our ACH processor directly to the recipient's bank.",
   },
   {
     icon: FileCheck2,
@@ -68,7 +68,7 @@ const bankingControls = [
   {
     icon: ShieldCheck,
     title: "Duplicate & fraud screening",
-    body: "CheckAlt runs duplicate-check detection and image fraud screening on every deposit. Actum performs OFAC screening and return management on every ACH.",
+    body: "Our deposit rail runs duplicate-check detection and image fraud screening on every deposit. Our ACH processor performs OFAC screening and return management on every ACH.",
   },
   {
     icon: AlertTriangle,
@@ -98,8 +98,8 @@ const compliance = [
 
 const vendors = [
   { name: "Supabase / Lovable Cloud", purpose: "Database, auth, storage, edge compute" },
-  { name: "CheckAlt (FinCapture)", purpose: "Remote check deposit rail" },
-  { name: "Actum Processing", purpose: "ACH disbursement rail" },
+  { name: "Bank-grade deposit processor", purpose: "Remote check deposit rail" },
+  { name: "ACH origination partner", purpose: "ACH disbursement rail" },
   { name: "OpenAI", purpose: "AI inference on redacted claim text" },
   { name: "Tavily", purpose: "Non-PII web search" },
   { name: "Resend / Mailgun", purpose: "Transactional email delivery" },

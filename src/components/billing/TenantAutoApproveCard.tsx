@@ -75,17 +75,17 @@ export function TenantAutoApproveCard() {
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-semibold flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-primary" />
-          CheckAlt Auto-Approve
+          Deposit Auto-Approve
         </CardTitle>
         <CardDescription className="text-xs">
-          Automatically approve clean CheckAlt deposits for your organization. Deposits with any
+          Automatically approve clean deposits for your organization. Deposits with any
           flags (duplicate, risk, image quality, mismatch, etc.) always route to manual review.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {!account?.sso_user_id ? (
           <p className="text-xs text-muted-foreground">
-            Your CheckAlt account isn't registered yet. Register in Integration Settings first.
+            Your deposit account isn't registered yet. Register in Integration Settings first.
           </p>
         ) : (
           <>
@@ -93,7 +93,7 @@ export function TenantAutoApproveCard() {
               <div className="space-y-0.5">
                 <Label className="text-sm">Auto-approve clean deposits</Label>
                 <p className="text-[11px] text-muted-foreground">
-                  Skips manual approval when CheckAlt returns no warnings.
+                  Skips manual approval when the processor returns no warnings.
                 </p>
               </div>
               <Switch

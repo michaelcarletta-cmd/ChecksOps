@@ -702,10 +702,10 @@ export default function Settings() {
             <TabsTrigger value="white-label" className="w-full md:w-auto justify-start text-base font-medium px-4">White-Label Tenants</TabsTrigger>
           )}
           {isAdmin && (
-            <TabsTrigger value="checkalt" className="w-full md:w-auto justify-start text-base font-medium px-4">CheckAlt</TabsTrigger>
+            <TabsTrigger value="checkalt" className="w-full md:w-auto justify-start text-base font-medium px-4">Deposits</TabsTrigger>
           )}
           {isAdmin && (
-            <TabsTrigger value="actum" className="w-full md:w-auto justify-start text-base font-medium px-4">Actum</TabsTrigger>
+            <TabsTrigger value="actum" className="w-full md:w-auto justify-start text-base font-medium px-4">Disbursements</TabsTrigger>
           )}
           <TabsTrigger value="referrals" className="w-full md:w-auto justify-start text-base font-medium px-4">Referrals</TabsTrigger>
         </TabsList>

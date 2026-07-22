@@ -247,16 +247,16 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
       const { data, error } = await supabase.functions.invoke("checkalt-submit-deposit", {
         body: { check_intake_item_id: checkId },
       });
-      if (error) throw new Error(await getFunctionErrorMessage(error, "CheckAlt submission failed"));
+      if (error) throw new Error(await getFunctionErrorMessage(error, "Deposit submission failed"));
       return data as { status: string; checkalt_reference: string | null };
     },
     onSuccess: (data) => {
-      toast({ title: "Deposit queued with CheckAlt", description: "Images are being compressed and submitted in the background. Status will update shortly." });
+      toast({ title: "Deposit queued", description: "Images are being compressed and submitted in the background. Status will update shortly." });
       qc.invalidateQueries({ queryKey: ["deposit-items"] });
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
     },
     onError: (e: Error) => {
-      toast({ title: "CheckAlt submission failed", description: e.message, variant: "destructive" });
+      toast({ title: "Deposit submission failed", description: e.message, variant: "destructive" });
     },
   });
 
@@ -482,7 +482,7 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
                               <Button size="sm" variant="outline" className="text-xs h-7"
                                 disabled={checkaltSubmitMutation.isPending}
                                 onClick={(e) => { e.stopPropagation(); checkaltSubmitMutation.mutate(item.check_id); }}>
-                                <Send className="h-3 w-3 mr-1" />Submit to CheckAlt
+                                <Send className="h-3 w-3 mr-1" />Submit Deposit
                               </Button>
                             )}
                             {item.status === "provider_assigned" && item.provider !== "manual_branch" && item.provider !== "internal_ready" && item.provider !== "checkalt" && (
@@ -513,7 +513,7 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
                               <Button size="sm" variant="outline" className="text-xs h-7 border-amber-500/50 text-amber-500"
                                 disabled={checkaltSubmitMutation.isPending}
                                 onClick={(e) => { e.stopPropagation(); checkaltSubmitMutation.mutate(item.check_id); }}>
-                                <RotateCcw className="h-3 w-3 mr-1" />Resubmit to CheckAlt
+                                <RotateCcw className="h-3 w-3 mr-1" />Resubmit Deposit
                               </Button>
                             )}
                             {item.status === "failed" && item.provider !== "checkalt" && (

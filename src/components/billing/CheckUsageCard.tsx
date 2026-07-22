@@ -121,13 +121,13 @@ export function CheckUsageCard() {
             </div>
           </div>
           <div className="rounded-lg bg-muted/30 p-3">
-            <div className="text-xs text-muted-foreground">Actum Same Day</div>
+            <div className="text-xs text-muted-foreground">Same Day</div>
             <div className="text-2xl font-bold">
               {isLoading ? "—" : data?.events?.filter(e => e.event_type === 'actum_same_day').length ?? 0}
             </div>
           </div>
           <div className="rounded-lg bg-muted/30 p-3">
-            <div className="text-xs text-muted-foreground">Actum Instant</div>
+            <div className="text-xs text-muted-foreground">Instant</div>
             <div className="text-2xl font-bold">
               {isLoading ? "—" : data?.events?.filter(e => e.event_type === 'actum_instant').length ?? 0}
             </div>

@@ -149,7 +149,7 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
             {tenantName} — Usage Tracker
           </DialogTitle>
           <DialogDescription>
-            Real-time usage tracking for check processing and Actum disbursements.
+            Real-time usage tracking for check processing and disbursements.
           </DialogDescription>
         </DialogHeader>
 
@@ -175,14 +175,14 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
                 <div className="text-[10px] text-muted-foreground mt-2">Standard endorsement workflow</div>
               </div>
               <div className="rounded-xl border bg-card p-4 shadow-sm">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Actum Same Day</div>
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Same Day</div>
                 <div className="text-3xl font-bold">
                   {data?.events?.filter(e => e.event_type === 'actum_same_day').length ?? 0}
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-2">$1.00 pass-through fee</div>
               </div>
               <div className="rounded-xl border bg-card p-4 shadow-sm">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Actum Instant</div>
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Instant</div>
                 <div className="text-3xl font-bold">
                   {data?.events?.filter(e => e.event_type === 'actum_instant').length ?? 0}
                 </div>
@@ -217,14 +217,14 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
                 </div>
               </div>
               <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">CheckAlt Deposits YTD</div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Check Deposits YTD</div>
                 <div className="text-2xl font-bold mt-1">{rollups?.checkalt.count ?? 0}</div>
                 <div className="text-[10px] text-muted-foreground mt-1">
                   Volume: ${(rollups?.checkalt.amount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </div>
               <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Actum Disbursements YTD</div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">ACH Disbursements YTD</div>
                 <div className="text-2xl font-bold mt-1">{rollups?.actum.count ?? 0}</div>
                 <div className="text-[10px] text-muted-foreground mt-1">
                   Sent: ${(rollups?.actum.amountOut ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

@@ -3142,7 +3142,7 @@ function CheckDetailPanel({
 
   // Whether this tenant has CheckAlt RDC turned on (platform switch +
   // its own registered FinCapture account) — gates the per-check
-  // "Deposit with CheckAlt" button without exposing checkalt_tenant_accounts
+  // "Deposit Check" button without exposing checkalt_tenant_accounts
   // or checkalt_config (both admin-only under RLS) to regular staff.
   const { tenantId: checkAltTenantId } = useTenantFilter();
   const { data: checkAltEnabled = false } = useQuery({
@@ -3763,7 +3763,7 @@ function CheckDetailPanel({
           p_action: "prepare_deposit",
           p_actor_id: user.id,
           p_check_id: checkId,
-          p_notes: "Deposited with CheckAlt from Check Command Center",
+          p_notes: "Deposited from Check Command Center",
         });
         if (prepErr) throw prepErr;
         depositItemId = (prepData as any)?.deposit_item_id ?? null;
@@ -3777,7 +3777,7 @@ function CheckDetailPanel({
           p_actor_id: user.id,
           p_deposit_item_id: depositItemId,
           p_provider: "checkalt",
-          p_notes: "Assigned CheckAlt from Check Command Center",
+          p_notes: "Assigned deposit rail from Check Command Center",
         });
         if (assignErr) throw assignErr;
       } else if (itemProvider !== "checkalt") {
@@ -3787,9 +3787,9 @@ function CheckDetailPanel({
       const { data: submitData, error: submitErr } = await supabase.functions.invoke("checkalt-submit-deposit", {
         body: { check_intake_item_id: checkId },
       });
-      if (submitErr) throw new Error(await getFunctionErrorMessage(submitErr, "CheckAlt deposit failed"));
+      if (submitErr) throw new Error(await getFunctionErrorMessage(submitErr, "Deposit failed"));
 
-      sonnerToast.success("Deposit queued with CheckAlt", {
+      sonnerToast.success("Deposit queued", {
         description: `Check #${check.check_number ?? checkId.slice(0, 8)} — images are being compressed and submitted in the background. Status will update shortly.`,
       });
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
@@ -3798,7 +3798,7 @@ function CheckDetailPanel({
       qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
       onRefresh();
     } catch (e: any) {
-      toast({ title: "CheckAlt deposit failed", description: e.message, variant: "destructive" });
+      toast({ title: "Deposit failed", description: e.message, variant: "destructive" });
     } finally {
       setDepositingWithCheckAlt(false);
     }
@@ -4424,7 +4424,7 @@ function CheckDetailPanel({
                     </div>
                   )}
                   {/* Ready-for-deposit CTA — only visible once all endorsements are complete.
-                      When CheckAlt is enabled this is the one-click "Deposit with CheckAlt"
+                      When CheckAlt is enabled this is the one-click "Deposit Check"
                       button; otherwise it falls back to manual mobile deposit. */}
                   {(() => {
                     const latestCA = (check.checkalt_deposits ?? [])
@@ -4438,9 +4438,9 @@ function CheckDetailPanel({
                       <>
                         {caRejected && (
                           <div className="rounded-md border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300 mt-1">
-                            <div className="font-medium">CheckAlt {latestCA?.status} {rejCode ? `(code ${rejCode})` : ""}</div>
+                            <div className="font-medium">Deposit {latestCA?.status} {rejCode ? `(code ${rejCode})` : ""}</div>
                             {rejDesc && <div className="text-red-200/80 mt-0.5">{String(rejDesc)}</div>}
-                            <div className="text-red-200/60 mt-1">Click below to resubmit to CheckAlt.</div>
+                            <div className="text-red-200/60 mt-1">Click below to resubmit deposit.</div>
                           </div>
                         )}
                         {allEndorsementsComplete && !isDepositBlocked && (
@@ -4452,7 +4452,7 @@ function CheckDetailPanel({
                               onClick={handleDepositWithCheckAlt}
                             >
                               <Banknote className="h-4 w-4 mr-2" />
-                              {depositingWithCheckAlt ? "Depositing..." : caRejected ? "Resubmit to CheckAlt" : "Deposit Check"}
+                              {depositingWithCheckAlt ? "Depositing..." : caRejected ? "Resubmit Deposit" : "Deposit Check"}
                             </Button>
                           ) : (
                       <Button
