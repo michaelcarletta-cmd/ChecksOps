@@ -2,6 +2,7 @@
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { z } from 'npm:zod@3.23.8'
+import { normalizeUploadedCheckImage, originalSiblingPath } from '../_shared/normalizeUploadedCheckImage.ts'
 
 const BUCKET = 'claim-files'
 const MAX_BYTES = 15 * 1024 * 1024 // 15 MB
