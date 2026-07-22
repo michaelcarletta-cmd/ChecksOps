@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
         homeowner_email: homeownerEmail,
         homeowner_user_id: homeownerUserId,
         file_path: objectName,
-        file_mime: parsed.data.file_mime,
+        file_mime: normalized.mime,
         note: parsed.data.note ?? null,
       })
       .select('id')
