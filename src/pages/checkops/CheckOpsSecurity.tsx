@@ -68,7 +68,7 @@ const bankingControls = [
   {
     icon: ShieldCheck,
     title: "Duplicate & fraud screening",
-    body: "CheckAlt runs duplicate-check detection and image fraud screening on every deposit. Actum performs OFAC screening and return management on every ACH.",
+    body: "Our deposit rail runs duplicate-check detection and image fraud screening on every deposit. Our ACH processor performs OFAC screening and return management on every ACH.",
   },
   {
     icon: AlertTriangle,
