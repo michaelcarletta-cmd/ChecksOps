@@ -58,7 +58,7 @@ serve(async (req) => {
 
     // Rotate token + extend expiry
     const token = crypto.randomUUID();
-    const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
     await supabase
       .from("stakeholder_accounts")
