@@ -40,6 +40,49 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
   const qc = useQueryClient();
   const [disburseMode, setDisburseMode] = useState<DisburseMode>(null);
   const [homeownerLinkOpen, setHomeownerLinkOpen] = useState(false);
+  const [resending, setResending] = useState(false);
+
+  // Existing homeowner AuthenteCheck link for this check (if any), so we can
+  // offer a Resend button instead of forcing another Send flow when a link
+  // was already sent but the homeowner hasn't finished verifying.
+  const { data: existingHomeownerLink, refetch: refetchHomeownerLink } = useQuery({
+    queryKey: ["homeowner-bank-link", checkIntakeItemId],
+    enabled: !!checkIntakeItemId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("homeowner_bank_link_tokens")
+        .select("id, homeowner_name, homeowner_email, status, expires_at, stakeholder_account_id, created_at")
+        .eq("check_intake_item_id", checkIntakeItemId)
+        .not("status", "in", "(revoked,completed)")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const handleResendHomeownerLink = async () => {
+    if (!existingHomeownerLink?.stakeholder_account_id) return;
+    setResending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("stakeholder-resend-verification", {
+        body: {
+          stakeholder_account_id: existingHomeownerLink.stakeholder_account_id,
+          recipient_email: existingHomeownerLink.homeowner_email,
+        },
+      });
+      const errMsg = error?.message ?? (data as any)?.error;
+      if (errMsg) {
+        toast({ title: "Couldn't resend link", description: errMsg, variant: "destructive" });
+      } else {
+        toast({ title: "Payment link resent", description: `Sent to ${existingHomeownerLink.homeowner_email}` });
+        refetchHomeownerLink();
+      }
+    } finally {
+      setResending(false);
+    }
+  };
 
   const { data: incomingPayments = [], isLoading } = useQuery({
     queryKey: ["incoming-payments", checkIntakeItemId, tenant?.id],
