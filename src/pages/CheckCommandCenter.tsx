@@ -1531,7 +1531,15 @@ export default function CheckCommandCenter() {
             // Phase 8: prefer RPC totals for tab badges when the user has no
             // active search/class filter, so counts stay accurate past the
             // 2,000-row queue cap. Fall back to in-memory counts otherwise.
-            const useAggregate = !searchQuery.trim() && classFilter === "all" && !!stageTotals;
+            // Partner tenants (e.g. Condition One) receive checks via shared_checks
+            // owned by another tenant, so the per-tenant RPC totals miss them.
+            // Fall back to in-memory counts whenever shared checks are present so
+            // lane badges reflect what actually appears in each lane.
+            const useAggregate =
+              !searchQuery.trim() &&
+              classFilter === "all" &&
+              !!stageTotals &&
+              sharedChecks.length === 0;
             const laneCount = (key: string, fallback: number) =>
               useAggregate ? (stageTotals!.get(key)?.count ?? 0) : fallback;
             return [
