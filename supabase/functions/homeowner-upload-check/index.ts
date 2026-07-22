@@ -83,9 +83,22 @@ Deno.serve(async (req) => {
     const ext = (parsed.data.filename?.split('.').pop() ?? '').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin'
     const objectName = `homeowner-uploads/${profile.user_id}/${parsed.data.lead_id ?? 'nolead'}/${crypto.randomUUID()}.${ext}`
 
+    // Mandatory upload-time normalization so no oversized image ever lands in
+    // storage. PDFs / HEIC pass through unchanged. If we compressed, the raw
+    // upload is preserved at the `.original.<ext>` sibling for auditability.
+    const normalized = await normalizeUploadedCheckImage(bytes, parsed.data.file_mime)
+    if (normalized.compressed) {
+      const origPath = originalSiblingPath(objectName)
+      await admin.storage
+        .from(BUCKET)
+        .upload(origPath, bytes, { contentType: parsed.data.file_mime, upsert: false })
+        .catch(() => { /* non-fatal */ })
+      console.log(`[homeowner-upload-check] compressed ${normalized.originalBytes}B → ${normalized.finalBytes}B`)
+    }
+
     const { error: upErr } = await admin.storage
       .from(BUCKET)
-      .upload(objectName, bytes, { contentType: parsed.data.file_mime, upsert: false })
+      .upload(objectName, normalized.bytes, { contentType: normalized.mime, upsert: false })
     if (upErr) return json({ error: 'upload failed', detail: upErr.message }, 500)
 
     const { data: row, error: insErr } = await admin
