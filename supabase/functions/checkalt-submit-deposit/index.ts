@@ -395,29 +395,60 @@ Deno.serve(async (req) => {
           } else if (maxCents != null && amountCents > maxCents) {
             autoApproveSkipReason = "over_max_amount";
           } else {
-            try {
-              const approveResp = await checkAltFetch(supabase, "/fincapture/deposit/approve", {
-                method: "POST",
-                body: JSON.stringify({
-                  fiKey: cfg.fi_key,
-                  referenceNumber: Number(reference),
-                  action: 1,
-                }),
-              });
-              const approveJson = await approveResp.json().catch(() => ({}));
-              if (approveResp.ok && approveJson?.success === true) {
-                autoApprovePayload = approveJson;
-                isPendingApproval = false;
-                internalStatus = "submitted";
-                statusIso = new Date().toISOString();
-                console.log("[checkalt-submit-deposit] auto-approved", reference);
-              } else {
-                autoApproveSkipReason = `auto_approve_failed:${approveJson?.statusDescription ?? approveResp.status}`;
-                console.warn("[checkalt-submit-deposit] auto-approve failed", approveResp.status, approveJson);
+            // CheckAlt briefly "locks" a transaction right after /process, so
+            // calling /approve immediately returns 404 "We couldn't locate
+            // transaction [...]. This may be due to the transaction being
+            // locked or processed." Retry with backoff until it unlocks.
+            const APPROVE_MAX_ATTEMPTS = 5;
+            const APPROVE_BACKOFF_MS = [1500, 2500, 4000, 6000, 8000];
+            let approveJson: any = null;
+            let approveStatus = 0;
+            let approved = false;
+            for (let attempt = 0; attempt < APPROVE_MAX_ATTEMPTS; attempt++) {
+              if (attempt > 0) {
+                await new Promise((r) => setTimeout(r, APPROVE_BACKOFF_MS[attempt - 1] ?? 8000));
               }
-            } catch (approveErr) {
-              autoApproveSkipReason = `auto_approve_error:${(approveErr as Error).message}`;
-              console.error("[checkalt-submit-deposit] auto-approve error", approveErr);
+              try {
+                const approveResp = await checkAltFetch(supabase, "/fincapture/deposit/approve", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    fiKey: cfg.fi_key,
+                    referenceNumber: Number(reference),
+                    action: 1,
+                  }),
+                });
+                approveStatus = approveResp.status;
+                approveJson = await approveResp.json().catch(() => ({}));
+                if (approveResp.ok && approveJson?.success === true) {
+                  approved = true;
+                  break;
+                }
+                const msg = String(approveJson?.message ?? approveJson?.statusDescription ?? "").toLowerCase();
+                const isLocked = approveStatus === 404 && (msg.includes("locate transaction") || msg.includes("locked"));
+                console.warn(
+                  "[checkalt-submit-deposit] auto-approve attempt",
+                  attempt + 1,
+                  "status",
+                  approveStatus,
+                  "locked?",
+                  isLocked,
+                  approveJson,
+                );
+                if (!isLocked) break; // don't burn retries on non-lock failures
+              } catch (approveErr) {
+                autoApproveSkipReason = `auto_approve_error:${(approveErr as Error).message}`;
+                console.error("[checkalt-submit-deposit] auto-approve error", approveErr);
+                break;
+              }
+            }
+            if (approved) {
+              autoApprovePayload = approveJson;
+              isPendingApproval = false;
+              internalStatus = "submitted";
+              statusIso = new Date().toISOString();
+              console.log("[checkalt-submit-deposit] auto-approved", reference);
+            } else if (!autoApproveSkipReason) {
+              autoApproveSkipReason = `auto_approve_failed:${approveJson?.statusDescription ?? approveJson?.message ?? approveStatus}`;
             }
           }
         }
