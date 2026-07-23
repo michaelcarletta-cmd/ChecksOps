@@ -10,6 +10,8 @@ import { Loader2, ArrowLeft } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { isMasterMerchant, MASTER_MERCHANT_EMAIL } from "@/lib/masterMerchant";
+import { getFriendlyAuthError, hardRefresh } from "@/lib/authErrorMessage";
+import { ToastAction } from "@/components/ui/toast";
 
 /**
  * Generic ChecksOps sign-in page at checkops.com/login.
