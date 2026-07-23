@@ -100,7 +100,7 @@ serve(async (req) => {
     // Find primary account for the debit (source of funds)
     const { data: primaryAccount, error: primaryErr } = await supabase
       .from("stakeholder_accounts")
-      .select("id, custname, chk_aba, chk_acct, acct_type, consumer_unique, account_type")
+      .select("id, custname, chk_aba, chk_acct, acct_type, consumer_unique, account_type, verification_recipient_email, homeowner_email")
       .eq("tenant_id", batch.tenant_id)
       .eq("is_primary", true)
       .eq("is_active", true)
@@ -120,6 +120,20 @@ serve(async (req) => {
       throw new Error("ACH debit authorization not found or inactive for the primary account. Please sign the authorization in Settings.");
     }
 
+    // Fallback email if account has none
+    const tenantFallbackEmail =
+      (tenant as any).email_reply_to ||
+      (tenant as any).email_from_address ||
+      "notify@checksops.com";
+
+    function emailFor(acct: any): string {
+      return (
+        acct?.verification_recipient_email ||
+        acct?.homeowner_email ||
+        tenantFallbackEmail
+      );
+    }
+
     function subIdFor(accountType: string): string {
       const sub = accountType === "insured"
         ? (tenant as any).actum_sub_id_ppd
@@ -130,7 +144,7 @@ serve(async (req) => {
       return sub;
     }
 
-    function baseParams(acct: { custname: string; chk_aba: string; chk_acct: string; acct_type: string; account_type: string }): URLSearchParams {
+    function baseParams(acct: { custname: string; chk_aba: string; chk_acct: string; acct_type: string; account_type: string; verification_recipient_email?: string | null; homeowner_email?: string | null }): URLSearchParams {
       const p = new URLSearchParams();
       p.append("parent_id", parentId);
       p.append("sub_id", subIdFor(acct.account_type));
@@ -139,6 +153,7 @@ serve(async (req) => {
       if (username) p.append("username", username);
       if (password) p.append("password", password);
       p.append("custname", acct.custname);
+      p.append("email", emailFor(acct));
       p.append("chk_acct", acct.chk_acct);
       p.append("chk_aba", acct.chk_aba);
       p.append("acct_type", acct.acct_type || "C");
