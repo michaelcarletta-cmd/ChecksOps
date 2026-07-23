@@ -191,7 +191,7 @@ const lifecycleRank = (s: string | null | undefined): number => {
 
 const getEffectiveStatus = (check: ReviewCheck): string => {
   if (isMirroredCheck(check) && check.partner_status) {
-    return lifecycleRank(check.status) > lifecycleRank(check.partner_status)
+    return lifecycleRank(check.status) >= lifecycleRank(check.partner_status)
       ? check.status
       : check.partner_status;
   }
@@ -220,6 +220,8 @@ const isInReviewQueue = (check: ReviewCheck): boolean => {
   }
   return (
     effectiveStatus === "needs_review" ||
+    effectiveStatus === "in_review" ||
+    effectiveStatus === "ocr_complete" ||
     effectiveStatus === "manual_review_required" ||
     effectiveStatus === "endorsements_complete" ||
     effectiveStatus === "uploaded" ||
