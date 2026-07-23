@@ -8,6 +8,17 @@ const corsHeaders = {
 
 const ACTUM_ENDPOINT = "https://join.actumprocessing.com/cgi-bin/dbs/man_trans.cgi";
 
+const SENSITIVE_ACTUM_KEYS = new Set(["password", "syspass", "chk_acct", "chk_aba"]);
+
+function redactActumRecord(record: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(record).map(([key, value]) => [
+      key,
+      SENSITIVE_ACTUM_KEYS.has(key.toLowerCase()) ? "[redacted]" : value,
+    ]),
+  );
+}
+
 async function callActum(params: URLSearchParams): Promise<Record<string, string>> {
   const res = await fetch(ACTUM_ENDPOINT, {
     method: "POST",
@@ -15,12 +26,12 @@ async function callActum(params: URLSearchParams): Promise<Record<string, string
     body: params.toString(),
   });
   const text = await res.text();
-  console.log("[actum-disburse] Actum raw response:", text);
   const parsed: Record<string, string> = {};
   for (const line of text.split("\n").map((l) => l.trim()).filter(Boolean)) {
     const eq = line.indexOf("=");
     if (eq > -1) parsed[line.slice(0, eq)] = line.slice(eq + 1);
   }
+  console.log("[actum-disburse] Actum response:", JSON.stringify(redactActumRecord(parsed)));
   return parsed;
 }
 
@@ -127,11 +138,15 @@ serve(async (req) => {
       "notify@checksops.com";
 
     function emailFor(acct: any): string {
-      return (
+      const email = (
         acct?.verification_recipient_email ||
         acct?.homeowner_email ||
         tenantFallbackEmail
       );
+      if (!email || !String(email).includes("@")) {
+        throw new Error("A valid email is required for Actum processing.");
+      }
+      return String(email).trim();
     }
 
     function subIdFor(accountType: string): string {
@@ -155,7 +170,7 @@ serve(async (req) => {
       if (username) p.append("username", username);
       if (password) p.append("password", password);
       p.append("custname", acct.custname);
-      p.append("email", emailFor(acct));
+      p.append("custemail", emailFor(acct));
       p.append("chk_acct", acct.chk_acct);
       p.append("chk_aba", acct.chk_aba);
       p.append("acct_type", acct.acct_type || "C");
@@ -192,7 +207,7 @@ serve(async (req) => {
       mer_order_number: `DEBIT-${batch_id.slice(0, 8)}`,
       idempotence_key: debitIdempotence,
       status: isAccepted(debitRes) ? "accepted" : "declined",
-      raw_response: JSON.stringify(debitRes),
+      raw_response: JSON.stringify(redactActumRecord(debitRes)),
     });
 
     if (!isAccepted(debitRes)) {
@@ -264,7 +279,7 @@ serve(async (req) => {
         mer_order_number: merOrder,
         idempotence_key: splitIdempotence,
         status: accepted ? "accepted" : "declined",
-        raw_response: JSON.stringify(creditRes),
+        raw_response: JSON.stringify(redactActumRecord(creditRes)),
       });
 
       results.push({
