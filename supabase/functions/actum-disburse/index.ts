@@ -77,7 +77,7 @@ serve(async (req) => {
     // Load splits with account info
     const { data: splits, error: splitsErr } = await supabase
       .from("disbursement_splits")
-      .select(`*, stakeholder_accounts(id, custname, chk_aba, chk_acct, acct_type, consumer_unique, account_type, is_primary)`)
+      .select(`*, stakeholder_accounts(id, custname, chk_aba, chk_acct, acct_type, consumer_unique, account_type, is_primary, verification_recipient_email, homeowner_email)`)
       .eq("batch_id", batch_id);
     if (splitsErr) throw splitsErr;
 
