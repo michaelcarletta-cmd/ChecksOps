@@ -4369,10 +4369,8 @@ function CheckDetailPanel({
                 readOnly={isSharedView}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
-              <DetailRow label="OCR Status" value={check.ocr_status} />
-              {!isSharedView && (
-                <RerunOcrButton checkId={checkId} onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
-              )}
+              {/* OCR status/re-run intentionally hidden from Overview to
+                  reduce noise. Access via Audit tab or admin tools. */}
               <Separator />
               {/* Inline front/back previews removed — the front of the check
                   is shown at the top of the detail panel, and the back is
