@@ -980,48 +980,8 @@ export function ReviewDecisionPanel({
           </div>
         </div>
 
-        {/* Admin tools — collapsed by default, matches CheckCommandCenter layout */}
-        <details className="group border-t pt-2">
-          <summary className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer list-none flex justify-end select-none">
-            <span className="underline underline-offset-2">Admin tools</span>
-          </summary>
-          <div className="mt-2 flex flex-col sm:flex-row sm:flex-wrap sm:justify-end gap-2 items-stretch sm:items-center">
-            <ReuploadCheckImageButton
-              checkId={checkId}
-              side="front"
-              imagePath={check.front_image_path}
-              onUploaded={() => {
-                qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
-                qc.invalidateQueries({ queryKey: ["review-check-front-img"] });
-              }}
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs"
-            />
-            <ReuploadCheckImageButton
-              checkId={checkId}
-              side="back"
-              imagePath={check.back_image_path}
-              onUploaded={() => {
-                qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
-                qc.invalidateQueries({ queryKey: ["review-check-back-img"] });
-              }}
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs"
-            />
-            <AdminDeleteCheckButton
-              checkId={checkId}
-              checkNumber={check.check_number}
-              onDeleted={() => {
-                qc.invalidateQueries({ queryKey: ["check-review-queue"] });
-              }}
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs"
-            />
-          </div>
-        </details>
+
+
 
         {check.deposit_recommendation_reasons && check.deposit_recommendation_reasons.length > 0 && (
           <Card className="border-orange-500/20 bg-orange-500/5">
