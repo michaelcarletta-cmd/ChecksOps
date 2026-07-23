@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Building2 } from "lucide-react";
 import mortgageOpsLogo from "@/assets/mortgage-ops-logo.png";
+import { getFriendlyAuthError, hardRefresh } from "@/lib/authErrorMessage";
 
 export default function MortgageOpsLogin() {
   const [email, setEmail] = useState("");
@@ -36,7 +37,14 @@ export default function MortgageOpsLogin() {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       setLoading(false);
-      toast.error(error.message);
+      const friendly = getFriendlyAuthError(error);
+      toast.error(friendly.title, {
+        description: friendly.description,
+        ...(friendly.needsHardRefresh && {
+          action: { label: "Refresh now", onClick: () => hardRefresh() },
+          duration: Infinity,
+        }),
+      });
       return;
     }
     // Verify role before allowing access — a ChecksOps-only user must not be
