@@ -161,7 +161,7 @@ serve(async (req) => {
       return sub;
     }
 
-    function baseParams(acct: { custname: string; chk_aba: string; chk_acct: string; acct_type: string; account_type: string; verification_recipient_email?: string | null; homeowner_email?: string | null }): URLSearchParams {
+    function baseParams(acct: { custname: string; chk_aba?: string | null; chk_acct?: string | null; acct_type?: string | null; account_type: string; consumer_unique?: string | null; verification_recipient_email?: string | null; homeowner_email?: string | null }): URLSearchParams {
       const p = new URLSearchParams();
       p.append("parent_id", parentId);
       p.append("sub_id", subIdFor(acct.account_type));
@@ -171,9 +171,19 @@ serve(async (req) => {
       if (password) p.append("password", password);
       p.append("custname", acct.custname);
       p.append("custemail", emailFor(acct));
-      p.append("chk_acct", acct.chk_acct);
-      p.append("chk_aba", acct.chk_aba);
-      p.append("acct_type", acct.acct_type || "C");
+      // Prefer tokenized consumer_code from Authentecheck — Actum's Repeat
+      // User Flow requires it, and re-sending raw chk_acct/chk_aba for a
+      // consumer that was tokenized will not clear.
+      if (acct.consumer_unique) {
+        p.append("consumer_code", acct.consumer_unique);
+      } else {
+        if (!acct.chk_acct || !acct.chk_aba) {
+          throw new Error(`Account for ${acct.custname} has no consumer_code and no bank info — re-run Authentecheck.`);
+        }
+        p.append("chk_acct", acct.chk_acct);
+        p.append("chk_aba", acct.chk_aba);
+        p.append("acct_type", acct.acct_type || "C");
+      }
       p.append("billing_cycle", "-1");
       p.append("currency", "US");
       return p;
