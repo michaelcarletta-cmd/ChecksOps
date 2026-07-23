@@ -1423,6 +1423,49 @@ export function ReviewDecisionPanel({
             </div>
           );
         })()}
+
+        {/* Admin tools — collapsed by default, at bottom of panel */}
+        <details className="group border-t pt-2 mt-4">
+          <summary className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer list-none flex justify-end select-none">
+            <span className="underline underline-offset-2">Admin tools</span>
+          </summary>
+          <div className="mt-2 flex flex-col sm:flex-row sm:flex-wrap sm:justify-end gap-2 items-stretch sm:items-center">
+            <ReuploadCheckImageButton
+              checkId={checkId}
+              side="front"
+              imagePath={check.front_image_path}
+              onUploaded={() => {
+                qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
+                qc.invalidateQueries({ queryKey: ["review-check-front-img"] });
+              }}
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+            />
+            <ReuploadCheckImageButton
+              checkId={checkId}
+              side="back"
+              imagePath={check.back_image_path}
+              onUploaded={() => {
+                qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
+                qc.invalidateQueries({ queryKey: ["review-check-back-img"] });
+              }}
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+            />
+            <AdminDeleteCheckButton
+              checkId={checkId}
+              checkNumber={check.check_number}
+              onDeleted={() => {
+                qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+              }}
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+            />
+          </div>
+        </details>
       </div>
     </ScrollArea>
     <DepositImageViewer
