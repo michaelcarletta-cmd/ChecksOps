@@ -1462,8 +1462,137 @@ Deno.serve(async (req) => {
       }
 
       /* ------------------------------------------------------------ */
+      /*  Sign in person (authenticated staff, captures signature)     */
+      /* ------------------------------------------------------------ */
+      case "sign_in_person": {
+        const authToken = req.headers.get("authorization")?.replace("Bearer ", "");
+        if (!authToken) return json({ error: "Unauthorized" }, 401);
+
+        const anon = createClient(supabaseUrl, anonKey, {
+          global: { headers: { Authorization: `Bearer ${authToken}` } },
+        });
+        const { data: ud, error: ae } = await anon.auth.getUser(authToken);
+        if (ae || !ud?.user) return json({ error: "Unauthorized" }, 401);
+
+        const signatureData = body.signatureData as string | undefined;
+        const consentAccepted = body.eSignConsentAccepted === true;
+        const consentText = typeof body.consentText === "string"
+          ? body.consentText
+          : "In-person electronic signature captured by staff on behalf of the named payee, who consented to sign electronically.";
+        if (!signatureData || !signatureData.startsWith("data:image/")) {
+          return json({ error: "signatureData (data:image/*) required" }, 400);
+        }
+        if (!consentAccepted) return json({ error: "Consent required" }, 400);
+
+        let endorsementId = body.endorsementId as string | undefined;
+        const payeeId = body.payeeId as string | undefined;
+
+        if (!endorsementId && payeeId) {
+          const { data: found } = await supabase
+            .from("check_endorsements")
+            .select("id")
+            .eq("payee_id", payeeId)
+            .limit(1)
+            .maybeSingle();
+          if (found) {
+            endorsementId = found.id;
+          } else {
+            const { data: payee } = await supabase
+              .from("check_payees")
+              .select("*")
+              .eq("id", payeeId)
+              .single();
+            if (payee) {
+              const { data: created } = await supabase
+                .from("check_endorsements")
+                .insert({
+                  check_id: payee.check_id,
+                  payee_id: payee.id,
+                  payee_name: payee.payee_name,
+                  payee_type: payee.payee_type ?? "other",
+                  status: "pending",
+                  signature_method: "in_person",
+                })
+                .select("id")
+                .single();
+              if (created) endorsementId = created.id;
+            }
+          }
+        }
+
+        if (!endorsementId) return json({ error: "endorsementId (or payeeId) required" }, 400);
+
+        const { data: endorsement, error: eErr } = await supabase
+          .from("check_endorsements")
+          .select("*")
+          .eq("id", endorsementId)
+          .single();
+        if (eErr || !endorsement) return json({ error: "Endorsement not found" }, 404);
+
+        const forensics = signerForensics(req, consentText);
+        const newToken = crypto.randomUUID();
+
+        await supabase.from("check_endorsements").update({
+          status: "signed",
+          signed_at: new Date().toISOString(),
+          signature_image_url: signatureData,
+          signature_method: "in_person",
+          ip_address: forensics.ip_address,
+          user_agent: forensics.user_agent,
+          consent_text: forensics.consent_text,
+          token: newToken,
+          token_expires_at: null,
+          notes: (body.notes as string) ?? "Signed in person, captured by staff",
+          updated_at: new Date().toISOString(),
+        }).eq("id", endorsementId);
+
+        if (endorsement.payee_id) {
+          await supabase.from("check_payees").update({
+            endorsement_status: "signed",
+            endorsed_at: new Date().toISOString(),
+            endorsement_image_path: signatureData,
+            endorsement_token: newToken,
+            endorsement_token_expires_at: null,
+          }).eq("id", endorsement.payee_id);
+        } else {
+          await supabase.from("check_payees").update({
+            endorsement_status: "signed",
+            endorsed_at: new Date().toISOString(),
+            endorsement_image_path: signatureData,
+            endorsement_token: newToken,
+            endorsement_token_expires_at: null,
+          })
+          .eq("check_id", endorsement.check_id)
+          .eq("payee_name", endorsement.payee_name);
+        }
+
+        await supabase.from("endorsement_audit_log").insert({
+          endorsement_id: endorsementId,
+          check_id: endorsement.check_id,
+          event_type: "endorsement_in_person",
+          event_description: `${endorsement.payee_name} signed in person (staff-captured)`,
+          event_data: { staff_actor: ud.user.id, ...forensics },
+          actor_id: ud.user.id,
+          ip_address: forensics.ip_address,
+          user_agent: forensics.user_agent,
+        });
+
+        await supabase.from("check_audit_log").insert({
+          check_id: endorsement.check_id,
+          event_type: "endorsement_completed",
+          event_description: `${endorsement.payee_name} signed in person`,
+          event_data: { endorsement_id: endorsementId, method: "in_person", ...forensics },
+          actor_id: ud.user.id,
+        });
+
+        const result = await reEvaluateAfterEndorsement(supabase, endorsement.check_id);
+        return json({ success: true, ...result });
+      }
+
+      /* ------------------------------------------------------------ */
       /*  Mark internal endorsement (authenticated staff action)       */
       /* ------------------------------------------------------------ */
+
       case "mark_internal_signed": {
         const authToken = req.headers.get("authorization")?.replace("Bearer ", "");
         if (!authToken) return json({ error: "Unauthorized" }, 401);
