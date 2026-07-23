@@ -8,6 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Clock } from "lucide-react";
+import { getFriendlyAuthError, hardRefresh } from "@/lib/authErrorMessage";
+import { ToastAction } from "@/components/ui/toast";
 
 export default function Auth() {
   const [email, setEmail] = useState("");
