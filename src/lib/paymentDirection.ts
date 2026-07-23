@@ -51,38 +51,16 @@ export async function createPaymentDirectionRequest({
 }
 
 export async function getPaymentDirectionByToken(token: string) {
-  const { data, error } = await supabase
-    .from("check_payment_directions")
-    .select(`
-      *,
-      claim_checks (
-        id,
-        claim_id,
-        amount,
-        check_number,
-        endorsement_status,
-        payment_direction_status,
-        deposit_status,
-        cleared_status
-      )
-    `)
-    .eq("secure_token", token)
-    .single();
+  const { data, error } = await supabase.rpc("get_payment_direction_by_token", {
+    _token: token,
+  });
 
   if (error) throw error;
-
-  // Expiry check
-  if (data.expires_at && new Date(data.expires_at) < new Date()) {
-    if (data.request_status === "pending") {
-      await supabase
-        .from("check_payment_directions")
-        .update({ request_status: "expired" })
-        .eq("id", data.id);
-    }
+  if (!data) throw new Error("Payment direction request not found.");
+  if ((data as any).request_status === "expired") {
     throw new Error("This payment direction request has expired.");
   }
-
-  return data;
+  return data as any;
 }
 
 type SubmitPaymentDirectionParams = {
@@ -98,51 +76,18 @@ export async function submitPaymentDirection({
   source = "portal",
   notes,
 }: SubmitPaymentDirectionParams) {
-  const { data: request, error: requestError } = await supabase
-    .from("check_payment_directions")
-    .select("*")
-    .eq("secure_token", token)
-    .single();
-
-  if (requestError) throw requestError;
-  if (!request) throw new Error("Payment direction request not found.");
-
-  // Expiry check
-  if (request.expires_at && new Date(request.expires_at) < new Date()) {
-    await supabase
-      .from("check_payment_directions")
-      .update({ request_status: "expired" })
-      .eq("id", request.id);
-    throw new Error("This payment direction request has expired.");
-  }
-
-  if (request.request_status !== "pending") {
-    throw new Error("This payment direction request is no longer active.");
-  }
-
-  const nowIso = new Date().toISOString();
-
-  const { data: updated, error: updateError } = await supabase
-    .from("check_payment_directions")
-    .update({
-      request_status: "answered",
-      decision,
-      answered_at: nowIso,
-      answer_source: source,
-      answer_notes: notes ?? null,
-    })
-    .eq("id", request.id)
-    .select()
-    .single();
+  const { data: updated, error: updateError } = await supabase.rpc(
+    "submit_payment_direction_by_token",
+    {
+      _token: token,
+      _decision: decision,
+      _source: source,
+      _notes: notes ?? null,
+    },
+  );
 
   if (updateError) throw updateError;
-
-  await supabase
-    .from("claim_checks")
-    .update({
-      payment_direction_status: decision === "pay_contractor" ? "pay_contractor" : "pay_insured",
-    })
-    .eq("id", request.check_id);
+  const request = updated as any;
 
   await createDraftDisbursementFromDecision({
     claimId: request.claim_id,
@@ -168,6 +113,7 @@ export async function submitPaymentDirection({
 
   return updated;
 }
+
 
 type DraftDisbursementParams = {
   claimId: string;
