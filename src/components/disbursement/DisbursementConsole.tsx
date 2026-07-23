@@ -118,6 +118,8 @@ export function DisbursementConsole({
   const alreadyDisbursed = useMemo(() => {
     let total = 0;
     for (const b of pastBatches as any[]) {
+      // Skip splits belonging to a failed/cancelled batch — those never left ChecksOps
+      if (["failed", "cancelled"].includes(b.status)) continue;
       for (const s of (b.disbursement_splits ?? [])) {
         if (s.status !== "failed" && s.status !== "cancelled" && s.status !== "returned") {
           total += Number(s.amount) || 0;
@@ -219,10 +221,11 @@ export function DisbursementConsole({
       if (checkIntakeItemId) {
         const { data: freshBatches } = await supabase
           .from("disbursement_batches")
-          .select("disbursement_splits(amount,status)")
+          .select("status,disbursement_splits(amount,status)")
           .eq("check_intake_item_id", checkIntakeItemId)
           .eq("tenant_id", tenant.id);
         const freshDisbursed = (freshBatches ?? []).reduce((sum: number, b: any) => {
+          if (["failed", "cancelled"].includes(b.status)) return sum;
           for (const s of b.disbursement_splits ?? []) {
             if (!["failed", "cancelled", "returned"].includes(s.status)) sum += Number(s.amount) || 0;
           }
