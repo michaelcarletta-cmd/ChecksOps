@@ -1,0 +1,1 @@
+UPDATE public.check_intake_items SET claim_id = freedom_claim_id WHERE id = '8d0bc0e2-47bf-4d21-aebb-9fbca4861910' AND claim_id IS NULL AND freedom_claim_id IS NOT NULL;
