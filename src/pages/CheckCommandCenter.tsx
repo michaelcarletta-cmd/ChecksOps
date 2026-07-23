@@ -4079,28 +4079,6 @@ function CheckDetailPanel({
             className="h-7 text-xs"
           />
           {!isSharedView && (
-            <>
-              <ReuploadCheckImageButton
-                checkId={checkId}
-                side="front"
-                imagePath={check.front_image_path}
-                onUploaded={onRefresh}
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs"
-              />
-              <ReuploadCheckImageButton
-                checkId={checkId}
-                side="back"
-                imagePath={check.back_image_path}
-                onUploaded={onRefresh}
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs"
-              />
-            </>
-          )}
-          {!isSharedView && (
             <Button
               variant="outline"
               size="sm"
@@ -4110,20 +4088,6 @@ function CheckDetailPanel({
             >
               <Share2 className="h-3 w-3" /> Share
             </Button>
-          )}
-          {!isSharedView && (
-            <AdminDeleteCheckButton
-              checkId={checkId}
-              checkNumber={check.check_number}
-              onDeleted={() => {
-                onRefresh();
-                qc.invalidateQueries({ queryKey: ["check-intake-items"] });
-                qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
-              }}
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs"
-            />
           )}
         </div>
 
