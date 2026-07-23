@@ -4441,7 +4441,7 @@ function CheckDetailPanel({
                     const rejDesc = rejPayload?.statusDescription ?? rejPayload?.description ?? null;
                     return (
                       <>
-                        {caRejected && (
+                        {caRejected && check.check_stage !== "deposited" && check.status !== "deposited" && (
                           <div className="rounded-md border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300 mt-1">
                             <div className="font-medium">Deposit {latestCA?.status} {rejCode ? `(code ${rejCode})` : ""}</div>
                             {rejDesc && <div className="text-red-200/80 mt-0.5">{String(rejDesc)}</div>}
