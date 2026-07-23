@@ -1664,55 +1664,8 @@ export default function CheckCommandCenter() {
                   <HomeownerSubmittedChecksInbox />
                 </Suspense>
               </TabsContent>
-              <TabsContent value="reissue" className="mt-3">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <RotateCcw className="h-4 w-4 text-orange-400" />
-                      Reissue Requested ({reissueRequested.length})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                    <ScrollArea className="h-[calc(100vh-400px)]">
-                      {reissueRequested.length === 0 ? (
-                        <div className="p-8 text-center text-muted-foreground">No reissue requests</div>
-                      ) : (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Check #</TableHead>
-                              <TableHead>Carrier</TableHead>
-                              <TableHead className="text-right">Amount</TableHead>
-                              <TableHead>Status</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {groupedReissueRequested.map((group) => (
-                              <Fragment key={group.key}>
-                                <TableRow className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold">
-                                  <TableCell colSpan={4} className="py-3">
-                                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                      <ClaimCheckFileHeader group={group} compact />
-                                    </div>
-                                  </TableCell>
-                                </TableRow>
-                                {group.checks.map((check) => (
-                                  <TableRow key={check.id} className="cursor-pointer" onMouseEnter={() => prefetchCheckDetail(check.id)} onFocus={() => prefetchCheckDetail(check.id)} onClick={() => setSelectedCheck(check.id)}>
-                                    <TableCell className="font-mono text-sm">#{check.check_number || "—"}</TableCell>
-                                    <TableCell className="text-sm">{check.carrier_name || "—"}</TableCell>
-                                    <TableCell className="text-right tabular-nums">{check.amount != null ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}</TableCell>
-                                    <TableCell><Badge className={`text-[10px] ${statusColors[getEffectiveStatus(check)] ?? ""}`}>{getEffectiveStatusLabel(check)}</Badge></TableCell>
-                                  </TableRow>
-                                ))}
-                              </Fragment>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      )}
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
-              </TabsContent>
+              {/* Reissue tab now uses the shared list+detail layout below so
+                  each check opens with full details, images, and notes. */}
 
 
             </Tabs>
