@@ -863,6 +863,15 @@ Deno.serve(async (req) => {
 
         if (eErr || !endorsement) return json({ error: "Endorsement not found" }, 404);
 
+        // Contractors are CC-only: they never receive a signing link. Their email
+        // stays saved on the payee record for CC on insured/mortgage sends.
+        if ((endorsement.payee_type ?? "") === "contractor") {
+          return json({
+            error: "Contractors cannot sign an endorsement. Their email will be CC'd when the insured is notified.",
+            code: "contractor_cc_only",
+          }, 400);
+        }
+
         // Rate-limit: 5 min cooldown
         if (endorsement.request_sent_at) {
           const lastSent = new Date(endorsement.request_sent_at).getTime();
