@@ -863,6 +863,15 @@ Deno.serve(async (req) => {
 
         if (eErr || !endorsement) return json({ error: "Endorsement not found" }, 404);
 
+        // Contractors are CC-only: they never receive a signing link. Their email
+        // stays saved on the payee record for CC on insured/mortgage sends.
+        if ((endorsement.payee_type ?? "") === "contractor") {
+          return json({
+            error: "Contractors cannot sign an endorsement. Their email will be CC'd when the insured is notified.",
+            code: "contractor_cc_only",
+          }, 400);
+        }
+
         // Rate-limit: 5 min cooldown
         if (endorsement.request_sent_at) {
           const lastSent = new Date(endorsement.request_sent_at).getTime();
@@ -995,6 +1004,23 @@ Deno.serve(async (req) => {
             const ccArray: string[] = Array.isArray(ccRaw)
               ? ccRaw.filter((v: any) => typeof v === 'string' && v.trim()).map((v: string) => v.trim())
               : (typeof ccRaw === 'string' && ccRaw.trim() ? [ccRaw.trim()] : []);
+
+            // Auto-CC any contractor payees saved on this check so they see the
+            // endorsement request without being able to sign.
+            try {
+              const { data: contractorPayees } = await supabase
+                .from("check_payees")
+                .select("contact_email")
+                .eq("check_id", endorsement.check_id)
+                .eq("payee_type", "contractor");
+              for (const cp of (contractorPayees ?? [])) {
+                const em = (cp as any).contact_email?.trim();
+                if (em && !ccArray.some(v => v.toLowerCase() === em.toLowerCase())
+                      && em.toLowerCase() !== (endorsement.contact_email ?? "").toLowerCase()) {
+                  ccArray.push(em);
+                }
+              }
+            } catch (_) { /* CC hydration is best-effort */ }
 
             await invokeSendEmail(supabaseUrl, authToken, {
               to: endorsement.contact_email,
