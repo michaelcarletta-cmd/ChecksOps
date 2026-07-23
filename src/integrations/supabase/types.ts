@@ -22713,10 +22713,6 @@ export type Database = {
         }
         Returns: Json
       }
-      sync_claim_payees_to_check: {
-        Args: { p_check_id: string }
-        Returns: undefined
-      }
       system_tenant_id: { Args: never; Returns: string }
       to_standard_caps: { Args: { input: string }; Returns: string }
       unlockrows: { Args: { "": string }; Returns: number }
