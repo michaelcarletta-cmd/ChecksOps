@@ -118,6 +118,8 @@ export function DisbursementConsole({
   const alreadyDisbursed = useMemo(() => {
     let total = 0;
     for (const b of pastBatches as any[]) {
+      // Skip splits belonging to a failed/cancelled batch — those never left ChecksOps
+      if (["failed", "cancelled"].includes(b.status)) continue;
       for (const s of (b.disbursement_splits ?? [])) {
         if (s.status !== "failed" && s.status !== "cancelled" && s.status !== "returned") {
           total += Number(s.amount) || 0;
