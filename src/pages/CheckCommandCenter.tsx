@@ -1198,7 +1198,7 @@ export default function CheckCommandCenter() {
 
   const reissueRequested = allChecks.filter((c) => getEffectiveStatus(c) === "reissue_requested" && matchesSearch(c));
   const branchDeposit = allChecks.filter((c) => getEffectiveStatus(c) === "branch_deposit_required" && matchesSearch(c));
-  const depositedChecks = allChecks.filter((c) => {
+  const depositedFromAll = allChecks.filter((c) => {
     const s = getEffectiveStatus(c);
     const stage = c.check_stage;
     const checkAltStatus = getCheckAltStatus(c);
@@ -1207,6 +1207,16 @@ export default function CheckCommandCenter() {
     if (stage === "funds_released") return false;
     return (s === "deposited" || stage === "deposited" || checkAltStatus === "pending_approval") && matchesSearch(c);
   });
+  // On the Deposited tab, merge the paginated owned deposited rows with any
+  // shared/pending-approval checks so the visible list matches the badge count.
+  const depositedChecks = (() => {
+    if (activeTab !== "deposited") return depositedFromAll;
+    const ownedFiltered = (depositedRows as CheckItem[]).filter(matchesSearch);
+    const ownedIds = new Set(ownedFiltered.map((c) => c.id));
+    const extras = depositedFromAll.filter((c) => !ownedIds.has(c.id));
+    return [...ownedFiltered, ...extras];
+  })();
+
 
   const lossDraftChecks = allChecks.filter((c) => {
     const s = getEffectiveStatus(c);
