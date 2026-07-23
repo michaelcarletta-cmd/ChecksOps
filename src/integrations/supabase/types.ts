@@ -21931,6 +21931,10 @@ export type Database = {
         Args: { _tenant_id: string }
         Returns: string[]
       }
+      get_payment_direction_by_token: {
+        Args: { _token: string }
+        Returns: Json
+      }
       get_portfolio_carrier_analytics: { Args: never; Returns: Json }
       get_portfolio_intelligence: { Args: never; Returns: Json }
       get_stuck_checks: {
@@ -23105,6 +23109,15 @@ export type Database = {
           p_item_count?: number
           p_payload: Json
           p_total_amount?: number
+        }
+        Returns: Json
+      }
+      submit_payment_direction_by_token: {
+        Args: {
+          _decision: string
+          _notes?: string
+          _source?: string
+          _token: string
         }
         Returns: Json
       }
