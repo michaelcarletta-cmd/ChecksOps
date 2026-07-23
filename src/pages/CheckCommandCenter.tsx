@@ -4912,7 +4912,7 @@ function CheckDetailPanel({
               <summary className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer list-none flex justify-end select-none">
                 <span className="underline underline-offset-2">Admin tools</span>
               </summary>
-              <div className="mt-2 flex justify-end">
+              <div className="mt-2 flex flex-col sm:flex-row sm:justify-end gap-2 items-stretch sm:items-center">
                 <div className="w-full sm:w-auto sm:max-w-xs">
                   <StatusOverride
                     checkId={checkId}
@@ -4920,6 +4920,18 @@ function CheckDetailPanel({
                     onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); qc.invalidateQueries({ queryKey: ["check-intake-items"] }); onRefresh(); }}
                   />
                 </div>
+                <AdminDeleteCheckButton
+                  checkId={checkId}
+                  checkNumber={check.check_number}
+                  onDeleted={() => {
+                    onRefresh();
+                    qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                    qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+                  }}
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs"
+                />
               </div>
             </details>
           </div>
