@@ -156,6 +156,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <OfflineIndicator />
+      <AuthHealthWatcher />
       <BrowserRouter>
         <AuthProvider>
           <div className="dark">
