@@ -4448,7 +4448,7 @@ function CheckDetailPanel({
                             <div className="text-red-200/60 mt-1">Click below to resubmit deposit.</div>
                           </div>
                         )}
-                        {allEndorsementsComplete && !isDepositBlocked && (
+                        {allEndorsementsComplete && !isDepositBlocked && check.check_stage !== "deposited" && check.status !== "deposited" && (
                           checkAltEnabled ? (
                             <Button
                               size="sm"
