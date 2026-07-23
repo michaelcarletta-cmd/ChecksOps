@@ -4127,29 +4127,9 @@ function CheckDetailPanel({
           )}
         </div>
 
-        {/* Front of check — always shown at the top of the detail panel on
-            both mobile and desktop. The back image is intentionally hidden
-            here and is only accessible via the "View Check Images" button. */}
-        {frontImageUrl && (
-          <div className="mt-2 flex justify-center">
-            <div className="relative overflow-hidden rounded border border-border inline-block max-w-md w-full">
-              <img
-                src={frontImageUrl}
-                alt="Check front"
-                className="w-full max-h-64 object-contain bg-black/5"
-              />
-              {showWatermark && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ transform: "rotate(-30deg)" }}>
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-6 opacity-[0.07]">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                      <span key={i} className="text-destructive font-bold text-3xl tracking-widest">VOID</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        {/* Inline front-of-check thumbnail removed — the "View Check Images"
+            button at the top of the panel is the single entry point for check
+            imagery. */}
         {check.carrier_name && (
           <p className="text-sm text-muted-foreground">{check.carrier_name}</p>
         )}
@@ -4389,10 +4369,8 @@ function CheckDetailPanel({
                 readOnly={isSharedView}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
-              <DetailRow label="OCR Status" value={check.ocr_status} />
-              {!isSharedView && (
-                <RerunOcrButton checkId={checkId} onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
-              )}
+              {/* OCR status/re-run intentionally hidden from Overview to
+                  reduce noise. Access via Audit tab or admin tools. */}
               <Separator />
               {/* Inline front/back previews removed — the front of the check
                   is shown at the top of the detail panel, and the back is
@@ -4463,14 +4441,14 @@ function CheckDetailPanel({
                     const rejDesc = rejPayload?.statusDescription ?? rejPayload?.description ?? null;
                     return (
                       <>
-                        {caRejected && (
+                        {caRejected && check.check_stage !== "deposited" && check.status !== "deposited" && (
                           <div className="rounded-md border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300 mt-1">
                             <div className="font-medium">Deposit {latestCA?.status} {rejCode ? `(code ${rejCode})` : ""}</div>
                             {rejDesc && <div className="text-red-200/80 mt-0.5">{String(rejDesc)}</div>}
                             <div className="text-red-200/60 mt-1">Click below to resubmit deposit.</div>
                           </div>
                         )}
-                        {allEndorsementsComplete && !isDepositBlocked && (
+                        {allEndorsementsComplete && !isDepositBlocked && check.check_stage !== "deposited" && check.status !== "deposited" && (
                           checkAltEnabled ? (
                             <Button
                               size="sm"
@@ -4658,12 +4636,9 @@ function CheckDetailPanel({
                 </Suspense>
               )}
 
-              <Suspense fallback={<TabLoader />}>
-                <SharedCheckPaymentDirection
-                  checkIntakeItemId={checkId}
-                  checkNumber={check?.check_number}
-                />
-              </Suspense>
+              {/* Direction-to-Pay composer moved to the Files tab. */}
+
+
 
 
               {check?.back_image_path && !isSharedView && (
@@ -4881,9 +4856,15 @@ function CheckDetailPanel({
             </TabsContent>
 
 
-            <TabsContent value="files" className="p-4 mt-0">
+            <TabsContent value="files" className="p-4 mt-0 space-y-4">
               <Suspense fallback={<TabLoader />}>
                 <CheckFilesSection checkIntakeItemId={checkId} />
+              </Suspense>
+              <Suspense fallback={<TabLoader />}>
+                <SharedCheckPaymentDirection
+                  checkIntakeItemId={checkId}
+                  checkNumber={check?.check_number}
+                />
               </Suspense>
             </TabsContent>
 
