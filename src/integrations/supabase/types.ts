@@ -21112,7 +21112,6 @@ export type Database = {
           id: string | null
           is_system_tenant: boolean | null
           logo_url: string | null
-          max_checks_per_month: number | null
           name: string | null
           partner_code: string | null
           plan_tier: Database["public"]["Enums"]["tenant_plan_tier"] | null
@@ -21126,7 +21125,6 @@ export type Database = {
           id?: string | null
           is_system_tenant?: boolean | null
           logo_url?: string | null
-          max_checks_per_month?: number | null
           name?: string | null
           partner_code?: string | null
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null
@@ -21140,7 +21138,6 @@ export type Database = {
           id?: string | null
           is_system_tenant?: boolean | null
           logo_url?: string | null
-          max_checks_per_month?: number | null
           name?: string | null
           partner_code?: string | null
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null
