@@ -488,6 +488,8 @@ function EndorsementCard({
   const [sending, setSending] = useState(false);
   const [markingInternal, setMarkingInternal] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [inPersonOpen, setInPersonOpen] = useState(false);
+
 
 
   const config = statusConfig[endorsement.status] ?? statusConfig.pending;
