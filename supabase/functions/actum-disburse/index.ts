@@ -211,8 +211,13 @@ serve(async (req) => {
     });
 
     if (!isAccepted(debitRes)) {
+      const reason = declineReason(debitRes);
       await supabase.from("disbursement_batches").update({ status: "failed" }).eq("id", batch_id);
-      throw new Error(`Primary account debit failed: ${declineReason(debitRes)}`);
+      await supabase.from("disbursement_splits").update({
+        status: "failed",
+        return_desc: `Debit declined by Actum: ${reason}`,
+      }).eq("batch_id", batch_id);
+      throw new Error(`Primary account debit failed: ${reason}`);
     }
 
     // Store debit order/history IDs on the batch
