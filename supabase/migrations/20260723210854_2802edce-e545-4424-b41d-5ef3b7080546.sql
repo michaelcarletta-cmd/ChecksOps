@@ -1,0 +1,1 @@
+DELETE FROM public.disbursement_splits WHERE batch_id='e6ca433b-0217-4727-ab4f-bc392e79dc99'; DELETE FROM public.disbursement_batches WHERE id='e6ca433b-0217-4727-ab4f-bc392e79dc99';
