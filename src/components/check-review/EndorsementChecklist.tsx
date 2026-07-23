@@ -26,6 +26,8 @@ import {
   Landmark, PenTool, Eye, ShieldCheck, Loader2, Upload, FileImage,
 } from "lucide-react";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
+import { InPersonSignatureDialog } from "./InPersonSignatureDialog";
+
 import { format } from "date-fns";
 import { CheckStatusTimeline } from "./CheckStatusTimeline";
 
