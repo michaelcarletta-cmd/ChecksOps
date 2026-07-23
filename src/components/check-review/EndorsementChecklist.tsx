@@ -797,28 +797,51 @@ function EndorsementCard({
 
       {/* Staff action buttons */}
       {canMarkInternal && (
-        <div className="flex gap-1 pt-1">
-          <Button
-            size="sm"
-            variant="outline"
-            className="flex-1 text-xs h-7 text-emerald-400 hover:text-emerald-300"
-            disabled={markingInternal}
-            onClick={markInternalSigned}
-          >
-            <CheckCircle2 className="h-3 w-3 mr-1" />
-            Mark Signed
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-xs h-7 text-muted-foreground"
-            onClick={waiveEndorsement}
-          >
-            <Eye className="h-3 w-3 mr-1" />
-            Waive
-          </Button>
-        </div>
+        <>
+          {!isMortgage && (
+            <Button
+              size="sm"
+              variant="default"
+              className="w-full text-xs h-7 mt-1"
+              onClick={() => setInPersonOpen(true)}
+            >
+              <PenTool className="h-3 w-3 mr-1" />
+              Sign in Person
+            </Button>
+          )}
+          <div className="flex gap-1 pt-1">
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1 text-xs h-7 text-emerald-400 hover:text-emerald-300"
+              disabled={markingInternal}
+              onClick={markInternalSigned}
+            >
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Mark Signed
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-xs h-7 text-muted-foreground"
+              onClick={waiveEndorsement}
+            >
+              <Eye className="h-3 w-3 mr-1" />
+              Waive
+            </Button>
+          </div>
+        </>
       )}
+
+      <InPersonSignatureDialog
+        open={inPersonOpen}
+        onOpenChange={setInPersonOpen}
+        endorsementId={isSynthetic ? undefined : endorsement.id}
+        payeeId={isSynthetic ? endorsement.id.replace("payee-", "") : undefined}
+        payeeName={endorsement.payee_name}
+        onComplete={onRefresh}
+      />
     </Card>
   );
 }
+
