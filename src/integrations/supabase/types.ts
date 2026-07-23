@@ -21110,8 +21110,11 @@ export type Database = {
         Row: {
           custom_domain: string | null
           id: string | null
+          is_system_tenant: boolean | null
           logo_url: string | null
+          max_checks_per_month: number | null
           name: string | null
+          partner_code: string | null
           plan_tier: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color: string | null
           secondary_color: string | null
@@ -21121,8 +21124,11 @@ export type Database = {
         Insert: {
           custom_domain?: string | null
           id?: string | null
+          is_system_tenant?: boolean | null
           logo_url?: string | null
+          max_checks_per_month?: number | null
           name?: string | null
+          partner_code?: string | null
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color?: string | null
           secondary_color?: string | null
@@ -21132,8 +21138,11 @@ export type Database = {
         Update: {
           custom_domain?: string | null
           id?: string | null
+          is_system_tenant?: boolean | null
           logo_url?: string | null
+          max_checks_per_month?: number | null
           name?: string | null
+          partner_code?: string | null
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color?: string | null
           secondary_color?: string | null
