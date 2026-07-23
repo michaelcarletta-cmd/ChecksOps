@@ -4636,12 +4636,9 @@ function CheckDetailPanel({
                 </Suspense>
               )}
 
-              <Suspense fallback={<TabLoader />}>
-                <SharedCheckPaymentDirection
-                  checkIntakeItemId={checkId}
-                  checkNumber={check?.check_number}
-                />
-              </Suspense>
+              {/* Direction-to-Pay composer moved to the Files tab. */}
+
+
 
 
               {check?.back_image_path && !isSharedView && (
