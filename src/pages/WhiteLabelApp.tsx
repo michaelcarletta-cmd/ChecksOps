@@ -23,8 +23,11 @@ const CashJobs = lazy(() => import("@/pages/CashJobs"));
  * On other hosts (freedomclaims.work, lovable previews): /wl/{slug}
  */
 function useTenantBasePath(slug?: string) {
+  const location = useLocation();
   const hostScoped = isCheckOpsHost();
   if (!slug) return "";
+  if (location.pathname.startsWith(`/wl/${slug}`)) return `/wl/${slug}`;
+  if (location.pathname.startsWith(`/${slug}`)) return `/${slug}`;
   return hostScoped ? `/${slug}` : `/wl/${slug}`;
 }
 
