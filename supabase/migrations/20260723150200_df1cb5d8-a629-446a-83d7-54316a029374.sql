@@ -1,0 +1,1 @@
+GRANT SELECT ON public.tenants_public TO anon, authenticated;
