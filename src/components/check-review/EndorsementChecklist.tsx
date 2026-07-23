@@ -274,8 +274,6 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
     },
   });
 
-  const [frontViewerOpen, setFrontViewerOpen] = useState(false);
-  const [backViewerOpen, setBackViewerOpen] = useState(false);
 
   const [forceCompleting, setForceCompleting] = useState(false);
 
