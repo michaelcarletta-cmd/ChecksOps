@@ -135,11 +135,13 @@ serve(async (req) => {
     }
 
     function subIdFor(accountType: string): string {
-      const sub = accountType === "insured"
+      // Personal (PPD) = insured/homeowner. Everyone else (contractor, vendor, operating, sales rep, etc.) = Business (CCD).
+      const isPersonal = accountType === "insured" || accountType === "homeowner";
+      const sub = isPersonal
         ? (tenant as any).actum_sub_id_ppd
         : (tenant as any).actum_sub_id_ccd;
       if (!sub) {
-        throw new Error(`Actum Sub ID for ${accountType === "insured" ? "PPD (Personal)" : "CCD (Business)"} not configured for this tenant.`);
+        throw new Error(`Actum Sub ID for ${isPersonal ? "PPD (Personal)" : "CCD (Business)"} not configured for this tenant.`);
       }
       return sub;
     }
