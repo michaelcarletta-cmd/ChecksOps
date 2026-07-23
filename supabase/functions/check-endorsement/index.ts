@@ -1005,6 +1005,23 @@ Deno.serve(async (req) => {
               ? ccRaw.filter((v: any) => typeof v === 'string' && v.trim()).map((v: string) => v.trim())
               : (typeof ccRaw === 'string' && ccRaw.trim() ? [ccRaw.trim()] : []);
 
+            // Auto-CC any contractor payees saved on this check so they see the
+            // endorsement request without being able to sign.
+            try {
+              const { data: contractorPayees } = await supabase
+                .from("check_payees")
+                .select("contact_email")
+                .eq("check_id", endorsement.check_id)
+                .eq("payee_type", "contractor");
+              for (const cp of (contractorPayees ?? [])) {
+                const em = (cp as any).contact_email?.trim();
+                if (em && !ccArray.some(v => v.toLowerCase() === em.toLowerCase())
+                      && em.toLowerCase() !== (endorsement.contact_email ?? "").toLowerCase()) {
+                  ccArray.push(em);
+                }
+              }
+            } catch (_) { /* CC hydration is best-effort */ }
+
             await invokeSendEmail(supabaseUrl, authToken, {
               to: endorsement.contact_email,
               subject: finalSubject,
