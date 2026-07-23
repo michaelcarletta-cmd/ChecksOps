@@ -947,44 +947,16 @@ export function ReviewDecisionPanel({
         <div className="flex items-center justify-between">
           <h3 className="text-base font-semibold">Review Check #{check.check_number || "—"}</h3>
           <div className="flex items-center gap-2 flex-wrap">
-            <AdminDeleteCheckButton
-              checkId={checkId}
-              checkNumber={check.check_number}
-              size="sm"
-              variant="outline"
-              onDeleted={() => {
-                qc.invalidateQueries({ queryKey: ["check-review-queue"] });
-              }}
-            />
             {frontImageUrl && (
               <Button size="sm" variant="outline" onClick={() => setFrontViewerOpen(true)}>
                 <FileImage className="h-3 w-3 mr-1" /> Front
               </Button>
             )}
-            <ReuploadCheckImageButton
-              checkId={checkId}
-              side="front"
-              imagePath={check.front_image_path}
-              onUploaded={() => {
-                qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
-                qc.invalidateQueries({ queryKey: ["review-check-front-img"] });
-              }}
-            />
             {backImageUrl && (
               <Button size="sm" variant="outline" onClick={() => setBackViewerOpen(true)}>
                 <FileImage className="h-3 w-3 mr-1" /> Back
               </Button>
             )}
-            <ReuploadCheckImageButton
-              checkId={checkId}
-              side="back"
-              imagePath={check.back_image_path}
-              onUploaded={() => {
-                qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
-                qc.invalidateQueries({ queryKey: ["review-check-back-img"] });
-              }}
-            />
-
             <Button
               size="sm"
               variant={editing ? "default" : "outline"}
@@ -1007,6 +979,49 @@ export function ReviewDecisionPanel({
             </Button>
           </div>
         </div>
+
+        {/* Admin tools — collapsed by default, matches CheckCommandCenter layout */}
+        <details className="group border-t pt-2">
+          <summary className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer list-none flex justify-end select-none">
+            <span className="underline underline-offset-2">Admin tools</span>
+          </summary>
+          <div className="mt-2 flex flex-col sm:flex-row sm:flex-wrap sm:justify-end gap-2 items-stretch sm:items-center">
+            <ReuploadCheckImageButton
+              checkId={checkId}
+              side="front"
+              imagePath={check.front_image_path}
+              onUploaded={() => {
+                qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
+                qc.invalidateQueries({ queryKey: ["review-check-front-img"] });
+              }}
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+            />
+            <ReuploadCheckImageButton
+              checkId={checkId}
+              side="back"
+              imagePath={check.back_image_path}
+              onUploaded={() => {
+                qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
+                qc.invalidateQueries({ queryKey: ["review-check-back-img"] });
+              }}
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+            />
+            <AdminDeleteCheckButton
+              checkId={checkId}
+              checkNumber={check.check_number}
+              onDeleted={() => {
+                qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+              }}
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+            />
+          </div>
+        </details>
 
         {check.deposit_recommendation_reasons && check.deposit_recommendation_reasons.length > 0 && (
           <Card className="border-orange-500/20 bg-orange-500/5">
