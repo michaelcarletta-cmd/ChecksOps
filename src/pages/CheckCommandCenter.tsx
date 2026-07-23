@@ -1256,6 +1256,7 @@ export default function CheckCommandCenter() {
     : activeTab === "ready" ? readyForDeposit
     : activeTab === "review" ? needsReview
     : activeTab === "deposited" ? depositedChecks
+    : activeTab === "reissue" ? reissueRequested
     : allChecks.filter(matchesSearch);
 
   const filteredChecks = classFilter === "all"
