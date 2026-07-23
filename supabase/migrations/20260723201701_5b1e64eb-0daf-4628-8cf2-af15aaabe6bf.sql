@@ -1,0 +1,2 @@
+UPDATE public.check_intake_items SET check_stage='deposited', status='deposited' WHERE id='411e8ba1-c657-436e-b3af-8f15ad58ec42';
+UPDATE public.check_intake_items SET check_stage='deposited', status='deposited' WHERE id='cdbb0484-f0da-4dec-95f7-47adaa8134dc';
