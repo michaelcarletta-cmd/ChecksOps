@@ -37,7 +37,7 @@ export default function PrivacyNotice() {
         .eq("slug", tenantSlug)
         .maybeSingle();
       if (data) {
-        const row = data as { id: string; name: string | null };
+        const row = data as unknown as { id: string; name: string | null };
         setTenantId(row.id);
         if (row.name) setCompanyName(row.name);
       }
