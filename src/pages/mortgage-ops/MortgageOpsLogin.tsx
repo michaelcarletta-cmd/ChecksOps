@@ -37,7 +37,14 @@ export default function MortgageOpsLogin() {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       setLoading(false);
-      toast.error(error.message);
+      const friendly = getFriendlyAuthError(error);
+      toast.error(friendly.title, {
+        description: friendly.description,
+        ...(friendly.needsHardRefresh && {
+          action: { label: "Refresh now", onClick: () => hardRefresh() },
+          duration: Infinity,
+        }),
+      });
       return;
     }
     // Verify role before allowing access — a ChecksOps-only user must not be
