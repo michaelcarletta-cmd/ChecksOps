@@ -559,7 +559,7 @@ export function DisbursementConsole({
           </div>
         )}
         <Button
-          className="w-full"
+          className="w-full h-auto min-h-10 py-2 whitespace-normal text-center text-xs sm:text-sm leading-snug"
           onClick={() => submitBatch.mutate()}
           disabled={
             submitBatch.isPending ||
@@ -572,11 +572,11 @@ export function DisbursementConsole({
           }
         >
           {submitBatch.isPending ? (
-            <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Submitting...</>
+            <><Loader2 className="h-4 w-4 mr-2 animate-spin shrink-0" />Submitting...</>
           ) : fundsHoldActive ? (
-            <><Clock className="h-4 w-4 mr-2" />Funds available in ~{hoursRemaining}h</>
+            <><Clock className="h-4 w-4 mr-2 shrink-0" />Funds available in ~{hoursRemaining}h</>
           ) : hasUnverifiedAllocations && !adminOverride ? (
-            <><ShieldAlert className="h-4 w-4 mr-2" />Verify accounts to send</>
+            <><ShieldAlert className="h-4 w-4 mr-2 shrink-0" />Verify accounts to send</>
           ) : (() => {
               const recipientCount = Object.values(allocations).filter(v => parseFloat(v || "0") > 0).length;
               const fee = SPEED_FEES[deliverySpeed];
@@ -584,7 +584,12 @@ export function DisbursementConsole({
               const amountText = `$${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
               const recipText = recipientCount > 0 ? ` to ${recipientCount} recipient${recipientCount === 1 ? "" : "s"}` : "";
               return (
-                <><Send className="h-4 w-4 mr-2" />Send {amountText}{recipText} — {speedLabel} (${fee.toFixed(2)}/ea){adminOverride && hasUnverifiedAllocations ? " · override" : ""}</>
+                <span className="flex items-center justify-center gap-2 flex-wrap px-1">
+                  <Send className="h-4 w-4 shrink-0" />
+                  <span className="break-words">
+                    Send {amountText}{recipText} — {speedLabel} (${fee.toFixed(2)}/ea){adminOverride && hasUnverifiedAllocations ? " · override" : ""}
+                  </span>
+                </span>
               );
             })()}
         </Button>
