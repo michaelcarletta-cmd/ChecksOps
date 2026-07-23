@@ -99,10 +99,18 @@ export default function CheckOpsLogin() {
       if (!authedId) throw new Error("Unable to start your session");
       await resolveAndRedirect(authedId, data.user?.email ?? email);
     } catch (err: any) {
+      const friendly = getFriendlyAuthError(err);
       toast({
-        title: "Sign in failed",
-        description: err.message || "Invalid credentials",
+        title: friendly.title,
+        description: friendly.needsHardRefresh
+          ? `${friendly.description} Tap "Refresh" below.`
+          : friendly.description,
         variant: "destructive",
+        action: friendly.needsHardRefresh ? (
+          <ToastAction altText="Refresh" onClick={() => hardRefresh()}>
+            Refresh
+          </ToastAction>
+        ) : undefined,
       });
     } finally {
       setLoading(false);
