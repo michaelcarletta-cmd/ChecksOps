@@ -449,18 +449,6 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
 
     </div>
 
-    <DepositImageViewer
-      open={frontViewerOpen}
-      imageUrl={frontImageUrl ?? null}
-      title={`Front of Check #${checkData?.check_number || checkId.slice(0, 8)}`}
-      onClose={() => setFrontViewerOpen(false)}
-    />
-    <DepositImageViewer
-      open={backViewerOpen}
-      imageUrl={backImageUrl ?? null}
-      title={`Back of Check #${checkData?.check_number || checkId.slice(0, 8)}`}
-      onClose={() => setBackViewerOpen(false)}
-    />
     </>
   );
 }
