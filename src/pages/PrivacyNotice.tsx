@@ -32,7 +32,7 @@ export default function PrivacyNotice() {
     (async () => {
       if (!tenantSlug) return;
       const { data } = await supabase
-        .from("tenants")
+        .from("tenants_public" as any)
         .select("id, name")
         .eq("slug", tenantSlug)
         .maybeSingle();
