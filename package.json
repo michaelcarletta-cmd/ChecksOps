@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/check-publish-keys.mjs",
     "build": "vite build",
     "build:dev": "vite build --mode development",
+    "check:publish-keys": "node scripts/check-publish-keys.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "check:contract-version": "node scripts/check-darwin-contract-version.mjs",
