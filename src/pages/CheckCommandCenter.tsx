@@ -4188,8 +4188,10 @@ function CheckDetailPanel({
               <PostHomeownerUpdateCard
                 claimId={check.claim_id ?? null}
                 tenantId={(check as any).tenant_id ?? null}
+                checkId={checkId}
                 compact
               />
+
               <DepositStatusPanel
                 checkId={checkId}
                 depositedAt={check.deposited_at ?? null}
