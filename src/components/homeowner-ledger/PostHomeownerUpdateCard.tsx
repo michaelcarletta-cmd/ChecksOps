@@ -9,6 +9,7 @@ import { toast } from "sonner";
 interface Props {
   claimId: string | null | undefined;
   tenantId: string | null | undefined;
+  checkId?: string | null;
   label?: string;
   compact?: boolean;
 }
@@ -17,24 +18,55 @@ interface Props {
  * Lets tenant staff post an update note to the homeowner's timeline
  * for ANY claim (mortgage or not), as long as a check has been uploaded.
  */
-export function PostHomeownerUpdateCard({ claimId, tenantId, label, compact }: Props) {
+export function PostHomeownerUpdateCard({ claimId, tenantId, checkId, label, compact }: Props) {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
 
   const post = async () => {
-    if (!claimId || !tenantId) {
-      toast.error("Missing claim/tenant");
-      return;
-    }
     if (!note.trim()) {
       toast.error("Add a note first");
       return;
     }
     setSaving(true);
+
+    let resolvedClaimId = claimId ?? null;
+    let resolvedTenantId = tenantId ?? null;
+
+    // Fallback: derive from the check if props are missing
+    if ((!resolvedClaimId || !resolvedTenantId) && checkId) {
+      const { data: chk } = await supabase
+        .from("claim_checks")
+        .select("claim_id, tenant_id")
+        .eq("id", checkId)
+        .maybeSingle();
+      resolvedClaimId = resolvedClaimId ?? (chk as any)?.claim_id ?? null;
+      resolvedTenantId = resolvedTenantId ?? (chk as any)?.tenant_id ?? null;
+    }
+
+    if (!resolvedTenantId) {
+      const { data: userRes } = await supabase.auth.getUser();
+      const uid = userRes.user?.id;
+      if (uid) {
+        const { data: tu } = await supabase
+          .from("tenant_users")
+          .select("tenant_id")
+          .eq("user_id", uid)
+          .limit(1)
+          .maybeSingle();
+        resolvedTenantId = (tu as any)?.tenant_id ?? null;
+      }
+    }
+
+    if (!resolvedTenantId || !resolvedClaimId) {
+      setSaving(false);
+      toast.error("Cannot post: this check isn't linked to a claim yet");
+      return;
+    }
+
     const { data: userRes } = await supabase.auth.getUser();
     const { error } = await supabase.from("homeowner_ledger_events").insert({
-      tenant_id: tenantId,
-      claim_id: claimId,
+      tenant_id: resolvedTenantId,
+      claim_id: resolvedClaimId,
       event_type: "tenant_update",
       occurred_at: new Date().toISOString(),
       actor_label: "Update",
@@ -49,6 +81,7 @@ export function PostHomeownerUpdateCard({ claimId, tenantId, label, compact }: P
     setNote("");
     toast.success("Posted to homeowner timeline");
   };
+
 
   return (
     <Card>
