@@ -10,8 +10,6 @@ import { Loader2, ArrowLeft } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { isMasterMerchant, MASTER_MERCHANT_EMAIL } from "@/lib/masterMerchant";
-import { getFriendlyAuthError, hardRefresh } from "@/lib/authErrorMessage";
-import { ToastAction } from "@/components/ui/toast";
 
 /**
  * Generic ChecksOps sign-in page at checkops.com/login.
@@ -101,18 +99,10 @@ export default function CheckOpsLogin() {
       if (!authedId) throw new Error("Unable to start your session");
       await resolveAndRedirect(authedId, data.user?.email ?? email);
     } catch (err: any) {
-      const friendly = getFriendlyAuthError(err);
       toast({
-        title: friendly.title,
-        description: friendly.needsHardRefresh
-          ? `${friendly.description} Tap "Refresh" below.`
-          : friendly.description,
+        title: "Sign in failed",
+        description: err.message || "Invalid credentials",
         variant: "destructive",
-        action: friendly.needsHardRefresh ? (
-          <ToastAction altText="Refresh" onClick={() => hardRefresh()}>
-            Refresh
-          </ToastAction>
-        ) : undefined,
       });
     } finally {
       setLoading(false);

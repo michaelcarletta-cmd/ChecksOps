@@ -48,7 +48,7 @@ export function TenantProvider({ children, slug }: { children: ReactNode; slug?:
     setError(null);
     try {
       const { data, error: fetchError } = await supabase
-        .from("tenants_public" as any)
+        .from("tenants")
         .select("*")
         .eq("slug", tenantSlug)
         .maybeSingle();
