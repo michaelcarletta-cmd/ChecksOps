@@ -170,10 +170,16 @@ export default function Auth() {
     });
 
     if (error) {
+      const friendly = getFriendlyAuthError(error);
       toast({
-        title: "Error",
-        description: error.message,
+        title: friendly.title,
+        description: friendly.description,
         variant: "destructive",
+        action: friendly.needsHardRefresh ? (
+          <ToastAction altText="Refresh" onClick={() => hardRefresh()}>
+            Refresh
+          </ToastAction>
+        ) : undefined,
       });
     } else if (data.user) {
       // Check approval will happen in the auth state change handler
