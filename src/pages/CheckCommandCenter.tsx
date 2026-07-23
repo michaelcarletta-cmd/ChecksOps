@@ -4777,28 +4777,6 @@ function CheckDetailPanel({
 
 
             <TabsContent value="files" className="p-4 mt-0 space-y-4">
-              {!isSharedView && (
-                <div className="flex flex-wrap gap-2">
-                  <ReuploadCheckImageButton
-                    checkId={checkId}
-                    side="front"
-                    imagePath={check.front_image_path}
-                    onUploaded={onRefresh}
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                  />
-                  <ReuploadCheckImageButton
-                    checkId={checkId}
-                    side="back"
-                    imagePath={check.back_image_path}
-                    onUploaded={onRefresh}
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                  />
-                </div>
-              )}
               <Suspense fallback={<TabLoader />}>
                 <CheckFilesSection checkIntakeItemId={checkId} />
               </Suspense>
@@ -4809,6 +4787,7 @@ function CheckDetailPanel({
                 />
               </Suspense>
             </TabsContent>
+
 
 
 
