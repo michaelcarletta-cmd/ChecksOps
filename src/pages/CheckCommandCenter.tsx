@@ -4856,9 +4856,15 @@ function CheckDetailPanel({
             </TabsContent>
 
 
-            <TabsContent value="files" className="p-4 mt-0">
+            <TabsContent value="files" className="p-4 mt-0 space-y-4">
               <Suspense fallback={<TabLoader />}>
                 <CheckFilesSection checkIntakeItemId={checkId} />
+              </Suspense>
+              <Suspense fallback={<TabLoader />}>
+                <SharedCheckPaymentDirection
+                  checkIntakeItemId={checkId}
+                  checkNumber={check?.check_number}
+                />
               </Suspense>
             </TabsContent>
 
