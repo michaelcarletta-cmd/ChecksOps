@@ -435,9 +435,9 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
       {/* Disburse buttons */}
       {availableForDisbursement > 0 && disburseMode === null && (
         <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Button
-              className="w-full h-auto min-h-10 whitespace-normal break-words text-center text-xs sm:text-sm px-2 py-2 leading-tight"
+              className="w-full h-auto min-h-11 whitespace-normal break-words text-center text-sm px-3 py-2 leading-tight"
               onClick={() => setDisburseMode("actum")}
               disabled={!actumEnabled}
             >
@@ -446,7 +446,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
             </Button>
             <Button
               variant="outline"
-              className="w-full h-auto min-h-10 whitespace-normal break-words text-center text-xs sm:text-sm px-2 py-2 leading-tight"
+              className="w-full h-auto min-h-11 whitespace-normal break-words text-center text-sm px-3 py-2 leading-tight"
               onClick={() => setDisburseMode("external")}
             >
               <FileCheck className="h-4 w-4 mr-1.5 shrink-0" />
