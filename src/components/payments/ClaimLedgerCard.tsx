@@ -281,16 +281,58 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
   const remaining = Math.max(0, totalExpected - totalReceived);
   const pct = totalExpected > 0 ? Math.min(100, (totalReceived / totalExpected) * 100) : 0;
 
-  const breakdown = [
-    { label: "Dwelling ACV", amount: dwellingAcv },
-    { label: "Recoverable Depreciation", amount: totalRecDep },
-    { label: "Other Structures", amount: otherStructuresAcv },
-    { label: "Ordinance & Law", amount: ordLawNet },
-    { label: "Personal Property", amount: ppAcv },
-    { label: "Additional Living Exp.", amount: aleAcv },
-    { label: "Supplements (expected)", amount: Number(s.supplement_expected || 0) },
-    { label: "Deductible (carrier withheld)", amount: -totalDeductible },
-  ].filter((b) => b.amount !== 0);
+  type CatRow = {
+    label: string;
+    rcv: number;
+    recDep: number;
+    nonRecDep: number;
+    deductible: number;
+    acv: number;
+  };
+  const categories: CatRow[] = [
+    {
+      label: "Dwelling",
+      rcv: Number(s.replacement_cost_value || 0),
+      recDep: Number(s.recoverable_depreciation || 0),
+      nonRecDep: Number(s.non_recoverable_depreciation || 0),
+      deductible: Number(s.deductible || 0),
+      acv: dwellingAcv,
+    },
+    {
+      label: "Other Structures",
+      rcv: Number(s.other_structures_rcv || 0),
+      recDep: Number(s.other_structures_recoverable_depreciation || 0),
+      nonRecDep: Number(s.other_structures_non_recoverable_depreciation || 0),
+      deductible: Number(s.other_structures_deductible || 0),
+      acv: otherStructuresAcv,
+    },
+    {
+      label: "Ordinance & Law",
+      rcv: Number(s.pwi_rcv || 0),
+      recDep: Number(s.pwi_recoverable_depreciation || 0),
+      nonRecDep: Number(s.pwi_non_recoverable_depreciation || 0),
+      deductible: 0,
+      acv: ordLawNet,
+    },
+    {
+      label: "Personal Property",
+      rcv: Number(s.personal_property_rcv || 0),
+      recDep: Number(s.personal_property_recoverable_depreciation || 0),
+      nonRecDep: Number(s.personal_property_non_recoverable_depreciation || 0),
+      deductible: 0,
+      acv: ppAcv,
+    },
+    {
+      label: "Additional Living Exp.",
+      rcv: Number(s.ale_rcv || 0),
+      recDep: Number(s.ale_recoverable_depreciation || 0),
+      nonRecDep: Number(s.ale_non_recoverable_depreciation || 0),
+      deductible: 0,
+      acv: aleAcv,
+    },
+  ].filter((c) => c.rcv > 0 || c.recDep > 0 || c.nonRecDep > 0 || c.deductible > 0);
+  const supplementExpected = Number(s.supplement_expected || 0);
+  const hasBreakdown = categories.length > 0 || supplementExpected > 0;
 
   return (
     <Card>
@@ -369,20 +411,34 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
             {!readOnly && (
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditorOpen(true)}>
                 <DollarSign className="h-3 w-3 mr-1" />
-                {breakdown.length > 0 ? "Edit amounts" : "Enter amounts"}
+                {hasBreakdown ? "Edit amounts" : "Enter amounts"}
               </Button>
             )}
           </div>
-          {breakdown.length > 0 ? (
-            <div className="rounded-md border border-border/50 divide-y divide-border/50">
-              {breakdown.map((b) => (
-                <div key={b.label} className="flex justify-between px-2 py-1.5 text-xs">
-                  <span className="text-muted-foreground">{b.label}</span>
-                  <span className={`tabular-nums font-medium ${b.amount < 0 ? "text-amber-600" : ""}`}>
-                    {b.amount < 0 ? "−" : ""}{fmt(Math.abs(b.amount))}
-                  </span>
+          {hasBreakdown ? (
+            <div className="space-y-2">
+              {categories.map((c) => (
+                <div key={c.label} className="rounded-md border border-border/50 overflow-hidden">
+                  <div className="flex items-center justify-between bg-muted/40 px-2 py-1.5">
+                    <span className="text-xs font-semibold">{c.label}</span>
+                    <span className="text-xs font-bold tabular-nums text-primary">
+                      ACV {fmt(c.acv)}
+                    </span>
+                  </div>
+                  <div className="divide-y divide-border/50">
+                    <Row label="Replacement Cost Value" amount={c.rcv} />
+                    {c.recDep > 0 && <Row label="Recoverable Depreciation" amount={-c.recDep} />}
+                    {c.nonRecDep > 0 && <Row label="Non-Recoverable Depreciation" amount={-c.nonRecDep} />}
+                    {c.deductible > 0 && <Row label="Deductible" amount={-c.deductible} />}
+                  </div>
                 </div>
               ))}
+              {supplementExpected > 0 && (
+                <div className="flex justify-between rounded-md border border-border/50 px-2 py-1.5 text-xs">
+                  <span className="text-muted-foreground">Supplements (expected)</span>
+                  <span className="tabular-nums font-medium">{fmt(supplementExpected)}</span>
+                </div>
+              )}
             </div>
           ) : (
             <div className="rounded-md border border-dashed border-border/60 p-3 text-center text-xs text-muted-foreground">
@@ -448,5 +504,17 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function Row({ label, amount }: { label: string; amount: number }) {
+  const negative = amount < 0;
+  return (
+    <div className="flex justify-between px-2 py-1 text-xs">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`tabular-nums font-medium ${negative ? "text-amber-600" : ""}`}>
+        {negative ? "−" : ""}${Math.abs(amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      </span>
+    </div>
   );
 }
