@@ -154,7 +154,22 @@ function mergeEndorsementsWithPayees(checkId: string, endorsements: CheckEndorse
     }
   }
 
-  return merged;
+  // Deduplicate by name+type — prefer signed/waived rows, then real rows over synthetic.
+  const dedupeRank = (e: CheckEndorsement) => {
+    let score = 0;
+    if (e.status === "signed" || e.signed_at) score += 100;
+    else if (e.status === "waived") score += 80;
+    else if (e.status === "sent") score += 40;
+    if (!String(e.id).startsWith("payee-")) score += 10;
+    return score;
+  };
+  const bestByKey = new Map<string, CheckEndorsement>();
+  for (const e of merged) {
+    const key = `${normalizeName(e.payee_name)}::${normalizeType(e.payee_type)}`;
+    const prev = bestByKey.get(key);
+    if (!prev || dedupeRank(e) > dedupeRank(prev)) bestByKey.set(key, e);
+  }
+  return Array.from(bestByKey.values());
 }
 
 interface EndorsementChecklistProps {
