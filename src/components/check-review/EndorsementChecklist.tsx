@@ -810,9 +810,9 @@ function EndorsementCard({
         </div>
       )}
 
-      {/* Sign in Person — available to both host tenant and shared partners so a
-          partner can capture an on-site signature when no email is on file. */}
-      {!readOnly && !isMortgage && endorsement.status !== "signed" && endorsement.status !== "waived" && (
+      {/* Sign in Person — only for insured and contractor payees. Public adjusters
+          and mortgage companies must sign via their own remote workflows. */}
+      {!readOnly && (endorsement.payee_type === "insured" || endorsement.payee_type === "contractor") && endorsement.status !== "signed" && endorsement.status !== "waived" && (
         <Button
           size="sm"
           variant="default"
