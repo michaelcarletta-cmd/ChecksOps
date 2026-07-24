@@ -264,7 +264,7 @@ export async function renderDepositImage(
     showPayToOrder: input.override.showPayToOrder,
   });
 
-  const backImg = await loadImage(input.originalImageUrl);
+  const backImg = await loadImage(input.originalImageUrl, input.refreshOriginalUrl);
   const natW = backImg.naturalWidth || backImg.width;
   const natH = backImg.naturalHeight || backImg.height;
 
