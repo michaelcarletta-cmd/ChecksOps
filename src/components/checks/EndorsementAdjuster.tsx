@@ -429,8 +429,23 @@ export function EndorsementAdjuster({
     setDepositResult(null);
     const requestId = `${checkId}-${Date.now()}`;
     try {
+      // Re-mint a fresh signed URL for the original back image. The
+      // originalImageUrl prop is a signed URL minted when the dialog opened
+      // and can expire (1h TTL) before the user clicks Generate — the render
+      // then fails with "Failed to load image". Always fetch a fresh URL
+      // right before rendering.
+      let freshOriginalUrl = originalImageUrl;
+      try {
+        const { data: signed } = await supabase.storage
+          .from(CHECK_IMAGES_BUCKET)
+          .createSignedUrl(originalImagePath, 600);
+        if (signed?.signedUrl) freshOriginalUrl = signed.signedUrl;
+      } catch (e) {
+        console.warn("[EndorsementAdjuster] failed to re-mint signed URL, using existing", e);
+      }
+
       const result = await renderDepositImage({
-        originalImageUrl,
+        originalImageUrl: freshOriginalUrl,
         override: savedOverrideRef.current,
         companyName,
         clientSignatures: clientEndorsements,
