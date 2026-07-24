@@ -1,0 +1,1 @@
+UPDATE public.stakeholder_accounts SET is_active = false, verification_status = 'failed', verification_failure_reason = 'Superseded by verified JPMorgan Chase account (duplicate pending record)' WHERE id = '35f1340d-0c65-4f90-bc43-8dcca5af8fe7';
