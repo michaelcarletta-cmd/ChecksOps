@@ -109,9 +109,25 @@ export function SignatureStatusPanel({ checkId }: SignatureStatusPanelProps) {
         if (!usedEndorsements.has(row.id)) merged.push(row);
       }
 
-      return merged;
+      // Deduplicate by name+type — prefer signed/waived, then real rows over synthetic.
+      const rank = (e: EndorsementRow) => {
+        let s = 0;
+        if (e.status === "signed" || e.signed_at) s += 100;
+        else if (e.status === "waived") s += 80;
+        else if (e.status === "sent") s += 40;
+        if (!String(e.id).startsWith("payee-")) s += 10;
+        return s;
+      };
+      const best = new Map<string, EndorsementRow>();
+      for (const e of merged) {
+        const key = `${normalizeName(e.payee_name)}::${normalizeType(e.payee_type)}`;
+        const prev = best.get(key);
+        if (!prev || rank(e) > rank(prev)) best.set(key, e);
+      }
+      return Array.from(best.values());
     },
   });
+
 
   return (
     <div className="rounded-md border border-border bg-card/50 px-3 py-2.5">
