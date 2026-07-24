@@ -213,8 +213,26 @@ export function EndorsementAdjuster({
             signature_method: "in_person",
           } as SignedEndorsementAsset));
 
+        // 3) Dedupe by normalized (name, type). Multiple portal submissions
+        // (Duhnoski, others) can leave 2+ signed rows for the same payee — we
+        // must never render or fit-layout for duplicates. Prefer the row that
+        // has an actual signature image; tiebreak on earliest created.
+        const merged = [...enrichedEndorsements, ...synthesized];
+        const byKey = new Map<string, SignedEndorsementAsset>();
+        for (const row of merged) {
+          const key = `${normName(row.payee_name)}::${normType(row.payee_type)}`;
+          const prev = byKey.get(key);
+          if (!prev) {
+            byKey.set(key, row);
+            continue;
+          }
+          const prevHasSig = isDataUrl(prev.signature_image_url);
+          const rowHasSig = isDataUrl(row.signature_image_url);
+          if (rowHasSig && !prevHasSig) byKey.set(key, row);
+          // else keep prev (earlier in load order = earlier created_at)
+        }
         if (!cancelled) {
-          setSignedEndorsements([...enrichedEndorsements, ...synthesized]);
+          setSignedEndorsements(Array.from(byKey.values()));
         }
       } catch (e: any) {
         if (!cancelled) setEndorsementsError(e.message || "Failed to load endorsements");
