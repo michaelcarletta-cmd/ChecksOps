@@ -281,16 +281,58 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
   const remaining = Math.max(0, totalExpected - totalReceived);
   const pct = totalExpected > 0 ? Math.min(100, (totalReceived / totalExpected) * 100) : 0;
 
-  const breakdown = [
-    { label: "Dwelling ACV", amount: dwellingAcv },
-    { label: "Recoverable Depreciation", amount: totalRecDep },
-    { label: "Other Structures", amount: otherStructuresAcv },
-    { label: "Ordinance & Law", amount: ordLawNet },
-    { label: "Personal Property", amount: ppAcv },
-    { label: "Additional Living Exp.", amount: aleAcv },
-    { label: "Supplements (expected)", amount: Number(s.supplement_expected || 0) },
-    { label: "Deductible (carrier withheld)", amount: -totalDeductible },
-  ].filter((b) => b.amount !== 0);
+  type CatRow = {
+    label: string;
+    rcv: number;
+    recDep: number;
+    nonRecDep: number;
+    deductible: number;
+    acv: number;
+  };
+  const categories: CatRow[] = [
+    {
+      label: "Dwelling",
+      rcv: Number(s.replacement_cost_value || 0),
+      recDep: Number(s.recoverable_depreciation || 0),
+      nonRecDep: Number(s.non_recoverable_depreciation || 0),
+      deductible: Number(s.deductible || 0),
+      acv: dwellingAcv,
+    },
+    {
+      label: "Other Structures",
+      rcv: Number(s.other_structures_rcv || 0),
+      recDep: Number(s.other_structures_recoverable_depreciation || 0),
+      nonRecDep: Number(s.other_structures_non_recoverable_depreciation || 0),
+      deductible: Number(s.other_structures_deductible || 0),
+      acv: otherStructuresAcv,
+    },
+    {
+      label: "Ordinance & Law",
+      rcv: Number(s.pwi_rcv || 0),
+      recDep: Number(s.pwi_recoverable_depreciation || 0),
+      nonRecDep: Number(s.pwi_non_recoverable_depreciation || 0),
+      deductible: 0,
+      acv: ordLawNet,
+    },
+    {
+      label: "Personal Property",
+      rcv: Number(s.personal_property_rcv || 0),
+      recDep: Number(s.personal_property_recoverable_depreciation || 0),
+      nonRecDep: Number(s.personal_property_non_recoverable_depreciation || 0),
+      deductible: 0,
+      acv: ppAcv,
+    },
+    {
+      label: "Additional Living Exp.",
+      rcv: Number(s.ale_rcv || 0),
+      recDep: Number(s.ale_recoverable_depreciation || 0),
+      nonRecDep: Number(s.ale_non_recoverable_depreciation || 0),
+      deductible: 0,
+      acv: aleAcv,
+    },
+  ].filter((c) => c.rcv > 0 || c.recDep > 0 || c.nonRecDep > 0 || c.deductible > 0);
+  const supplementExpected = Number(s.supplement_expected || 0);
+  const hasBreakdown = categories.length > 0 || supplementExpected > 0;
 
   return (
     <Card>
