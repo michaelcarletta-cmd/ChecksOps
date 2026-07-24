@@ -2,9 +2,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PaymentLedger } from "@/components/ledger/PaymentLedger";
 import { RecipientReport } from "@/components/ledger/RecipientReport";
 import { TaxSummary } from "@/components/ledger/TaxSummary";
-import { Receipt, FileText, Users } from "lucide-react";
+import { PayrollTab } from "@/pages/payments/PayrollTab";
+import { useAuth } from "@/hooks/useAuth";
+import { Receipt, FileText, Users, Wallet } from "lucide-react";
 
 export default function Payments() {
+  const { userRole } = useAuth();
+  const isAdmin = userRole === "admin";
+
   return (
     <div className="space-y-4">
       <div>
@@ -28,6 +33,12 @@ export default function Payments() {
             <FileText className="h-4 w-4" />
             Tax & 1099
           </TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger value="payroll" className="gap-2">
+              <Wallet className="h-4 w-4" />
+              Payroll
+            </TabsTrigger>
+          )}
         </TabsList>
         <TabsContent value="ledger">
           <PaymentLedger />
@@ -38,6 +49,11 @@ export default function Payments() {
         <TabsContent value="tax">
           <TaxSummary />
         </TabsContent>
+        {isAdmin && (
+          <TabsContent value="payroll">
+            <PayrollTab />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
