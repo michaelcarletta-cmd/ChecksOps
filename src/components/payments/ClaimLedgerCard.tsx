@@ -411,20 +411,34 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
             {!readOnly && (
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditorOpen(true)}>
                 <DollarSign className="h-3 w-3 mr-1" />
-                {breakdown.length > 0 ? "Edit amounts" : "Enter amounts"}
+                {hasBreakdown ? "Edit amounts" : "Enter amounts"}
               </Button>
             )}
           </div>
-          {breakdown.length > 0 ? (
-            <div className="rounded-md border border-border/50 divide-y divide-border/50">
-              {breakdown.map((b) => (
-                <div key={b.label} className="flex justify-between px-2 py-1.5 text-xs">
-                  <span className="text-muted-foreground">{b.label}</span>
-                  <span className={`tabular-nums font-medium ${b.amount < 0 ? "text-amber-600" : ""}`}>
-                    {b.amount < 0 ? "−" : ""}{fmt(Math.abs(b.amount))}
-                  </span>
+          {hasBreakdown ? (
+            <div className="space-y-2">
+              {categories.map((c) => (
+                <div key={c.label} className="rounded-md border border-border/50 overflow-hidden">
+                  <div className="flex items-center justify-between bg-muted/40 px-2 py-1.5">
+                    <span className="text-xs font-semibold">{c.label}</span>
+                    <span className="text-xs font-bold tabular-nums text-primary">
+                      ACV {fmt(c.acv)}
+                    </span>
+                  </div>
+                  <div className="divide-y divide-border/50">
+                    <Row label="Replacement Cost Value" amount={c.rcv} />
+                    {c.recDep > 0 && <Row label="Recoverable Depreciation" amount={-c.recDep} />}
+                    {c.nonRecDep > 0 && <Row label="Non-Recoverable Depreciation" amount={-c.nonRecDep} />}
+                    {c.deductible > 0 && <Row label="Deductible" amount={-c.deductible} />}
+                  </div>
                 </div>
               ))}
+              {supplementExpected > 0 && (
+                <div className="flex justify-between rounded-md border border-border/50 px-2 py-1.5 text-xs">
+                  <span className="text-muted-foreground">Supplements (expected)</span>
+                  <span className="tabular-nums font-medium">{fmt(supplementExpected)}</span>
+                </div>
+              )}
             </div>
           ) : (
             <div className="rounded-md border border-dashed border-border/60 p-3 text-center text-xs text-muted-foreground">
