@@ -506,3 +506,15 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
     </Card>
   );
 }
+
+function Row({ label, amount }: { label: string; amount: number }) {
+  const negative = amount < 0;
+  return (
+    <div className="flex justify-between px-2 py-1 text-xs">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`tabular-nums font-medium ${negative ? "text-amber-600" : ""}`}>
+        {negative ? "−" : ""}${Math.abs(amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      </span>
+    </div>
+  );
+}
