@@ -46,13 +46,45 @@ export interface DepositRenderResult {
 }
 
 async function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`Failed to load image ${url}`));
-    img.src = url;
-  });
+  // Fetch as a Blob first and load via object URL. This sidesteps the
+  // "tainted cache" trap: if the same signed URL was previously loaded
+  // by a plain <img> (e.g. the adjuster preview) without crossOrigin,
+  // the browser will replay that cached non-CORS response for any
+  // subsequent crossOrigin="anonymous" request, and the canvas either
+  // fails to load or throws SecurityError on toBlob. Going through
+  // fetch() forces a fresh CORS-enabled request and gives us bytes we
+  // can safely draw + re-encode.
+  const loadFromObjectUrl = async (): Promise<HTMLImageElement> => {
+    const res = await fetch(url, { cache: "no-store", credentials: "omit" });
+    if (!res.ok) throw new Error(`Failed to fetch image ${url} (${res.status})`);
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+      return await new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error(`Failed to decode image ${url}`));
+        img.src = objectUrl;
+      });
+    } finally {
+      // Revoke on next tick so the caller can still draw the decoded image.
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
+    }
+  };
+
+  try {
+    return await loadFromObjectUrl();
+  } catch (fetchErr) {
+    // Fallback to a direct crossOrigin <img> request in case fetch is
+    // blocked for some exotic reason.
+    return await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`Failed to load image ${url}: ${(fetchErr as Error)?.message ?? "unknown"}`));
+      img.src = url;
+    });
+  }
 }
 
 function fitLongEdge(w: number, h: number, target = MAX_LONG_EDGE) {
