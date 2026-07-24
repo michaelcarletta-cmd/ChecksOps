@@ -3331,7 +3331,8 @@ function CheckDetailPanel({
     },
   });
 
-  const endorsementAdjusterSourceUrl = endorsementAdjusterImageSource?.url ?? backImageUrl ?? null;
+  const endorsementAdjusterSourceUrl =
+    endorsementAdjusterImageSource?.url ?? (endorsementAdjusterImageUrlFetching ? null : backImageUrl ?? null);
   const endorsementAdjusterSourcePath =
     endorsementAdjusterImageSource?.path ?? toStorageObjectPath(check?.back_image_path ?? null);
 
