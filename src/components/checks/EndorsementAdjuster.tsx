@@ -444,8 +444,21 @@ export function EndorsementAdjuster({
         console.warn("[EndorsementAdjuster] failed to re-mint signed URL, using existing", e);
       }
 
+      const mintSignedUrl = async (ttlSeconds = 600) => {
+        try {
+          const { data } = await supabase.storage
+            .from(CHECK_IMAGES_BUCKET)
+            .createSignedUrl(originalImagePath, ttlSeconds);
+          return data?.signedUrl ?? null;
+        } catch (e) {
+          console.warn("[EndorsementAdjuster] createSignedUrl failed", e);
+          return null;
+        }
+      };
+
       const result = await renderDepositImage({
         originalImageUrl: freshOriginalUrl,
+        refreshOriginalUrl: () => mintSignedUrl(600),
         override: savedOverrideRef.current,
         companyName,
         clientSignatures: clientEndorsements,

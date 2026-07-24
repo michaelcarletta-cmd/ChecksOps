@@ -30,6 +30,14 @@ export interface SignatureAsset {
 
 export interface DepositRenderInput {
   originalImageUrl: string;
+  /**
+   * Optional callback that returns a freshly-signed URL for the original back
+   * image. If provided, the renderer will call it whenever the current URL
+   * fails to fetch (e.g. signed-URL token expired) and retry the download.
+   * This makes generation resilient to any TTL — nothing "expires" from the
+   * user's perspective.
+   */
+  refreshOriginalUrl?: () => Promise<string | null>;
   override: EndorsementOverride;
   companyName: string;
   clientSignatures: SignatureAsset[];
@@ -45,43 +53,63 @@ export interface DepositRenderResult {
   rendererVersion: string;
 }
 
-async function loadImage(url: string): Promise<HTMLImageElement> {
-  // Fetch as a Blob first and load via object URL. This sidesteps the
-  // "tainted cache" trap: if the same signed URL was previously loaded
-  // by a plain <img> (e.g. the adjuster preview) without crossOrigin,
-  // the browser will replay that cached non-CORS response for any
-  // subsequent crossOrigin="anonymous" request, and the canvas either
-  // fails to load or throws SecurityError on toBlob. Going through
-  // fetch() forces a fresh CORS-enabled request and gives us bytes we
-  // can safely draw + re-encode.
-  const loadFromObjectUrl = async (): Promise<HTMLImageElement> => {
-    const res = await fetch(url, { cache: "no-store", credentials: "omit" });
-    if (!res.ok) throw new Error(`Failed to fetch image ${url} (${res.status})`);
-    const blob = await res.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    try {
-      return await new Promise<HTMLImageElement>((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error(`Failed to decode image ${url}`));
-        img.src = objectUrl;
-      });
-    } finally {
-      // Revoke on next tick so the caller can still draw the decoded image.
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
-    }
-  };
+async function fetchAsBlob(url: string): Promise<Blob> {
+  const res = await fetch(url, { cache: "no-store", credentials: "omit" });
+  if (!res.ok) throw new Error(`Failed to fetch image ${url} (${res.status})`);
+  return await res.blob();
+}
 
+async function decodeBlobToImage(blob: Blob, label: string): Promise<HTMLImageElement> {
+  const objectUrl = URL.createObjectURL(blob);
   try {
-    return await loadFromObjectUrl();
+    return await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`Failed to decode image ${label}`));
+      img.src = objectUrl;
+    });
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
+  }
+}
+
+async function loadImage(
+  url: string,
+  refresh?: () => Promise<string | null>,
+): Promise<HTMLImageElement> {
+  // Fetch as a Blob first and load via object URL. This sidesteps the
+  // "tainted cache" trap where a prior non-CORS <img> load poisons the
+  // cache for subsequent crossOrigin fetches.
+  try {
+    const blob = await fetchAsBlob(url);
+    return await decodeBlobToImage(blob, url);
   } catch (fetchErr) {
+    // If the caller can re-mint the URL (signed-URL expiry), try once more
+    // with a fresh one before giving up. Nothing should ever "expire" from
+    // the user's perspective — they just click Generate.
+    if (refresh) {
+      try {
+        const fresh = await refresh();
+        if (fresh && fresh !== url) {
+          const blob = await fetchAsBlob(fresh);
+          return await decodeBlobToImage(blob, fresh);
+        }
+      } catch (refreshErr) {
+        console.warn("[endorsementDepositRender] refresh retry failed", refreshErr);
+      }
+    }
     // Fallback to a direct crossOrigin <img> request in case fetch is
     // blocked for some exotic reason.
     return await new Promise<HTMLImageElement>((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = "anonymous";
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error(`Failed to load image ${url}: ${(fetchErr as Error)?.message ?? "unknown"}`));
+      img.onerror = () =>
+        reject(
+          new Error(
+            `Failed to load image ${url}: ${(fetchErr as Error)?.message ?? "unknown"}`,
+          ),
+        );
       img.src = url;
     });
   }
@@ -236,7 +264,7 @@ export async function renderDepositImage(
     showPayToOrder: input.override.showPayToOrder,
   });
 
-  const backImg = await loadImage(input.originalImageUrl);
+  const backImg = await loadImage(input.originalImageUrl, input.refreshOriginalUrl);
   const natW = backImg.naturalWidth || backImg.width;
   const natH = backImg.naturalHeight || backImg.height;
 
