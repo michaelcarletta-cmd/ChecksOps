@@ -3254,7 +3254,7 @@ function CheckDetailPanel({
   });
 
   const {
-    data: endorsementAdjusterImageUrl,
+    data: endorsementAdjusterImageSource,
     error: endorsementAdjusterImageUrlError,
     isFetching: endorsementAdjusterImageUrlFetching,
     refetch: refetchEndorsementAdjusterImageUrl,
@@ -3277,11 +3277,11 @@ function CheckDetailPanel({
         const { data } = await supabase.storage
           .from("claim-files")
           .createSignedUrl(explicitOriginal, 3600);
-        if (data?.signedUrl) return data.signedUrl;
+        if (data?.signedUrl) return { url: data.signedUrl, path: explicitOriginal };
       }
 
       const currentPath = toStorageObjectPath(check!.back_image_path);
-      if (!currentPath) return backImageUrl ?? null;
+      if (!currentPath) return backImageUrl ? { url: backImageUrl, path: null } : null;
 
       // Detect any known "already-composited" back artifact so we don't feed
       // the composite back into the editor (which stacks endorsements).
@@ -3318,16 +3318,22 @@ function CheckDetailPanel({
           currentPath;
       }
 
-      if (sourcePath === currentPath && backImageUrl) return backImageUrl;
+      if (sourcePath === currentPath && backImageUrl) return { url: backImageUrl, path: sourcePath };
 
       const { data } = await supabase.storage
         .from("claim-files")
         .createSignedUrl(sourcePath, 3600);
-      return data?.signedUrl ?? backImageUrl ?? null;
+      return data?.signedUrl
+        ? { url: data.signedUrl, path: sourcePath }
+        : backImageUrl
+          ? { url: backImageUrl, path: currentPath }
+          : null;
     },
   });
 
-  const endorsementAdjusterSourceUrl = endorsementAdjusterImageUrl ?? backImageUrl ?? null;
+  const endorsementAdjusterSourceUrl = endorsementAdjusterImageSource?.url ?? backImageUrl ?? null;
+  const endorsementAdjusterSourcePath =
+    endorsementAdjusterImageSource?.path ?? toStorageObjectPath(check?.back_image_path ?? null);
 
   const [backImageDimError, setBackImageDimError] = useState<string | null>(null);
   const [backImageDimReloadKey, setBackImageDimReloadKey] = useState(0);
@@ -4652,8 +4658,7 @@ function CheckDetailPanel({
                           checkId={checkId}
                           originalImageUrl={endorsementAdjusterSourceUrl}
                           originalImagePath={
-                            ((check as any)?.back_image_original_path as string | null) ??
-                            toStorageObjectPath(check?.back_image_path ?? null)
+                            endorsementAdjusterSourcePath
                           }
                           imageWidth={backImageDimensions.width}
                           imageHeight={backImageDimensions.height}
@@ -4665,7 +4670,7 @@ function CheckDetailPanel({
                           onDepositImageApproved={async ({ depositPath }) => {
                             const originalToPersist =
                               ((check as any)?.back_image_original_path as string | null) ??
-                              toStorageObjectPath(check?.back_image_path ?? null);
+                              endorsementAdjusterSourcePath;
                             const { error: saveErr } = await supabase
                               .from("check_intake_items")
                               .update({
