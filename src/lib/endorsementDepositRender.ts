@@ -13,7 +13,7 @@ import {
 } from "@/lib/endorsementLayout";
 import { fitEndorsementLayout } from "@/lib/endorsementFit";
 
-export const ENDORSEMENT_RENDERER_VERSION = "canvas-v1";
+export const ENDORSEMENT_RENDERER_VERSION = "canvas-v2";
 
 // Must match constants in EndorsementAdjuster.tsx preview.
 export const ZONE_TOP_PCT = 0.15;
@@ -137,6 +137,10 @@ async function drawEndorsementBlock(
   sigHeight: number,
   columns: 1 | 2,
   showPayToOrder: boolean,
+  signatureBoxWidths: {
+    client: number;
+    company: number;
+  },
 ): Promise<void> {
   ctx.fillStyle = "#111111";
   ctx.textBaseline = "top";
@@ -178,10 +182,16 @@ async function drawEndorsementBlock(
         try {
           const img = await loadImage(url);
           const aspect = img.naturalWidth / img.naturalHeight || 3;
-          const drawW = Math.min(colWidth - 20, sigHeight * aspect);
+          const drawW = Math.min(signatureBoxWidths.client, sigHeight * aspect);
           const drawH = drawW / aspect;
-          ctx.drawImage(img, colCenterX - drawW / 2, subCy, drawW, drawH);
-          subCy += drawH + rowGap;
+          ctx.drawImage(
+            img,
+            colCenterX - drawW / 2,
+            subCy + Math.max(0, (sigHeight - drawH) / 2),
+            drawW,
+            drawH,
+          );
+          subCy += sigHeight + rowGap;
         } catch {
           // Fall back to typed name if image fails to load
           ctx.font = `italic 500 ${fontSize}px "Brush Script MT", cursive`;
@@ -211,9 +221,15 @@ async function drawEndorsementBlock(
       try {
         const img = await loadImage(url);
         const aspect = img.naturalWidth / img.naturalHeight || 3;
-        const drawW = Math.min(blockWidth - 20, sigHeight * aspect);
+        const drawW = Math.min(signatureBoxWidths.company, sigHeight * aspect);
         const drawH = drawW / aspect;
-        ctx.drawImage(img, centerX - drawW / 2, cy, drawW, drawH);
+        ctx.drawImage(
+          img,
+          centerX - drawW / 2,
+          cy + Math.max(0, (sigHeight - drawH) / 2),
+          drawW,
+          drawH,
+        );
       } catch {
         ctx.font = `italic 500 ${fontSize}px "Brush Script MT", cursive`;
         ctx.fillText(input.companyName, centerX, cy);
@@ -306,6 +322,26 @@ export async function renderDepositImage(
   };
 
   const blockWidth = outW * ENDORSEMENT_WIDTH_PCT * (override.scale || 1);
+  // Match the DOM preview exactly: signature images live inside a fixed
+  // contain box whose width is capped by 10% of image height, then scaled by
+  // the user control. The old renderer used `sigHeight * aspect`, which made
+  // wide signature PNGs much larger in the generated JPEG than the preview.
+  const unscaledBlockWidth = outW * ENDORSEMENT_WIDTH_PCT;
+  const unscaledColumnWidth = preset.columns === 2 ? unscaledBlockWidth / 2 : unscaledBlockWidth;
+  const naturalToOutputScale = outH / natH;
+  const signatureScale = override.scale || 1;
+  const signatureBoxWidths = {
+    client:
+      Math.min(
+        Math.max(0, unscaledColumnWidth - 20 * naturalToOutputScale),
+        outH * 0.1,
+      ) * signatureScale,
+    company:
+      Math.min(
+        Math.max(0, unscaledBlockWidth - 20 * naturalToOutputScale),
+        outH * 0.1,
+      ) * signatureScale,
+  };
   const blockHeight = estimateBlockHeight(
     input,
     preset.fontSize,
@@ -314,6 +350,7 @@ export async function renderDepositImage(
     preset.signatureHeight,
     preset.columns,
     override.showPayToOrder,
+    signatureBoxWidths,
   );
 
   // Convert normalized coords to output pixels — X is full-image, Y is safe-zone-relative.
