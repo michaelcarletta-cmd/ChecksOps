@@ -16635,6 +16635,80 @@ export type Database = {
         }
         Relationships: []
       }
+      payroll_runs: {
+        Row: {
+          amount: number
+          created_at: string
+          disbursement_batch_id: string | null
+          error: string | null
+          id: string
+          initiated_by: string
+          memo: string | null
+          speed: string
+          stakeholder_account_id: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          disbursement_batch_id?: string | null
+          error?: string | null
+          id?: string
+          initiated_by: string
+          memo?: string | null
+          speed?: string
+          stakeholder_account_id: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          disbursement_batch_id?: string | null
+          error?: string | null
+          id?: string
+          initiated_by?: string
+          memo?: string | null
+          speed?: string
+          stakeholder_account_id?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_runs_disbursement_batch_id_fkey"
+            columns: ["disbursement_batch_id"]
+            isOneToOne: false
+            referencedRelation: "disbursement_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_runs_stakeholder_account_id_fkey"
+            columns: ["stakeholder_account_id"]
+            isOneToOne: false
+            referencedRelation: "stakeholder_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_runs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_runs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       photo_line_item_links: {
         Row: {
           confidence_score: number | null
