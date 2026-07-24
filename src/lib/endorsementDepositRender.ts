@@ -350,7 +350,6 @@ export async function renderDepositImage(
     preset.signatureHeight,
     preset.columns,
     override.showPayToOrder,
-    signatureBoxWidths,
   );
 
   // Convert normalized coords to output pixels — X is full-image, Y is safe-zone-relative.
@@ -379,6 +378,7 @@ export async function renderDepositImage(
     preset.signatureHeight,
     preset.columns,
     override.showPayToOrder,
+    signatureBoxWidths,
   );
 
   ctx.restore();
