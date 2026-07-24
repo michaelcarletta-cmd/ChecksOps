@@ -811,9 +811,7 @@ function EndorsementCard({
 
       {/* Staff action buttons */}
       {canMarkInternal && (
-        <></>
-      )}
-      {canMarkInternal && (
+
         <>
 
           <div className="flex gap-1 pt-1">
