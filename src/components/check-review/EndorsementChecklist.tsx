@@ -223,19 +223,28 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
         const hasResolved = rows.some(
           (r) => r.status === "signed" || r.status === "waived" || !!r.signed_at,
         );
-        if (!hasResolved) continue;
         const rank = (r: CheckEndorsement) => {
           if (r.status === "signed" || r.signed_at) return 3;
           if (r.status === "waived") return 2;
           if (r.status === "sent") return 1;
           return 0;
         };
-        const sorted = [...rows].sort((a, b) => rank(b) - rank(a));
+        const sorted = [...rows].sort((a, b) => {
+          const diff = rank(b) - rank(a);
+          if (diff !== 0) return diff;
+          // Older row wins the "keep" slot so we don't churn IDs on refetch.
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        });
+        // Waive every pending/sent duplicate — whether a sibling is resolved
+        // or not. Keeping the earliest row prevents dupe emails and dupe
+        // signature holds.
         for (const r of sorted.slice(1)) {
           if (r.status === "pending" || r.status === "sent") {
             duplicatePendingIds.push(r.id);
           }
         }
+        // Suppress unused warning if strict.
+        void hasResolved;
       }
       if (duplicatePendingIds.length > 0) {
         const { error: waiveErr } = await supabase
