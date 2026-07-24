@@ -795,20 +795,27 @@ function EndorsementCard({
         </div>
       )}
 
+      {/* Sign in Person — available to both host tenant and shared partners so a
+          partner can capture an on-site signature when no email is on file. */}
+      {!readOnly && !isMortgage && endorsement.status !== "signed" && endorsement.status !== "waived" && (
+        <Button
+          size="sm"
+          variant="default"
+          className="w-full text-xs h-7 mt-1"
+          onClick={() => setInPersonOpen(true)}
+        >
+          <PenTool className="h-3 w-3 mr-1" />
+          Sign in Person
+        </Button>
+      )}
+
       {/* Staff action buttons */}
       {canMarkInternal && (
+        <></>
+      )}
+      {canMarkInternal && (
         <>
-          {!isMortgage && (
-            <Button
-              size="sm"
-              variant="default"
-              className="w-full text-xs h-7 mt-1"
-              onClick={() => setInPersonOpen(true)}
-            >
-              <PenTool className="h-3 w-3 mr-1" />
-              Sign in Person
-            </Button>
-          )}
+
           <div className="flex gap-1 pt-1">
             <Button
               size="sm"
