@@ -283,7 +283,7 @@ export function EndorsementAdjuster({
     onUnapprovedDepositChange?.(hasUnapproved);
   }, [status, depositResult, onUnapprovedDepositChange]);
 
-  const renderableSignerCount = Math.max(1, visibleEndorsements.length);
+  const renderableSignerCount = Math.max(1, clientEndorsements.length);
 
   const previewLayout = useMemo(() => {
     const safeZoneHeightImgPx = (ZONE_BOTTOM_PCT - ZONE_TOP_PCT) * imageHeight;
