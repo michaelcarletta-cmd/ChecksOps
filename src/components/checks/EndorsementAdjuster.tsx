@@ -141,19 +141,80 @@ export function EndorsementAdjuster({
       setEndorsementsLoading(true);
       setEndorsementsError(null);
       try {
-        const { data, error } = await supabase
-          .from("check_endorsements")
-          .select(
-            "id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method, check_id",
-          )
-          .eq("check_id", checkId)
-          .in("status", ["signed", "waived"])
-          .order("created_at", { ascending: true });
-        if (error) throw error;
+        const [endorsementsRes, payeesRes] = await Promise.all([
+          supabase
+            .from("check_endorsements")
+            .select(
+              "id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method, check_id",
+            )
+            .eq("check_id", checkId)
+            .in("status", ["signed", "waived"])
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("check_payees")
+            .select(
+              "id, payee_name, payee_type, endorsement_status, endorsed_at, endorsement_image_path",
+            )
+            .eq("check_id", checkId)
+            .order("created_at", { ascending: true }),
+        ]);
+        if (endorsementsRes.error) throw endorsementsRes.error;
+        if (payeesRes.error) throw payeesRes.error;
+
+        const endorsementRows = ((endorsementsRes.data ?? []) as SignedEndorsementAsset[])
+          .filter((row) => row.check_id === checkId);
+        const payeeRows = payeesRes.data ?? [];
+
+        const normName = (v?: string | null) => (v ?? "").trim().toLowerCase();
+        const normType = (v?: string | null) => (v ?? "other").trim().toLowerCase();
+        const isDataUrl = (v?: string | null) =>
+          !!v && typeof v === "string" && v.startsWith("data:image/");
+
+        // 1) Backfill signature_image_url from check_payees when the endorsement
+        // row itself is missing an image but the linked payee has one (portal /
+        // in-person captures sometimes only land on check_payees).
+        const payeeByKey = new Map<string, any>();
+        for (const p of payeeRows) {
+          payeeByKey.set(`${normName(p.payee_name)}::${normType(p.payee_type)}`, p);
+        }
+        const enrichedEndorsements = endorsementRows.map((e) => {
+          if (isDataUrl(e.signature_image_url)) return e;
+          const p = payeeByKey.get(`${normName(e.payee_name)}::${normType(e.payee_type)}`)
+            ?? payeeByKey.get(`${normName(e.payee_name)}::${normType(null)}`);
+          if (p && isDataUrl(p.endorsement_image_path)) {
+            return { ...e, signature_image_url: p.endorsement_image_path } as SignedEndorsementAsset;
+          }
+          return e;
+        });
+
+        // 2) Add signed payees that have no matching endorsement row at all
+        // (in-person captures where check_endorsements never got seeded).
+        const seenKeys = new Set(
+          enrichedEndorsements.map((e) => `${normName(e.payee_name)}::${normType(e.payee_type)}`),
+        );
+        const synthesized: SignedEndorsementAsset[] = payeeRows
+          .filter((p) => {
+            const key = `${normName(p.payee_name)}::${normType(p.payee_type)}`;
+            if (seenKeys.has(key)) return false;
+            const status = (p.endorsement_status ?? "").toLowerCase();
+            return (
+              (status === "signed" || status === "waived" || !!p.endorsed_at) &&
+              isDataUrl(p.endorsement_image_path)
+            );
+          })
+          .map((p) => ({
+            id: `payee-${p.id}`,
+            check_id: checkId,
+            payee_name: p.payee_name,
+            payee_type: p.payee_type ?? "other",
+            status: "signed",
+            signed_at: p.endorsed_at,
+            signature_image_url: p.endorsement_image_path,
+            signature_method: "in_person",
+          } as SignedEndorsementAsset));
+
         if (!cancelled) {
-          // Belt-and-suspenders: every asset must belong to this check.
-          const mine = (data ?? []).filter((row: any) => row.check_id === checkId);
-          setSignedEndorsements(mine as SignedEndorsementAsset[]);
+          setSignedEndorsements([...enrichedEndorsements, ...synthesized]);
         }
       } catch (e: any) {
         if (!cancelled) setEndorsementsError(e.message || "Failed to load endorsements");
@@ -165,6 +226,7 @@ export function EndorsementAdjuster({
       cancelled = true;
     };
   }, [checkId]);
+
 
   const isCompanyEndorsement = (name: string) => {
     const lc = name.toLowerCase();
