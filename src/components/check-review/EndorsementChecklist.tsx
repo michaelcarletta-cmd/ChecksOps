@@ -205,9 +205,69 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
       if (endorsementError) throw endorsementError;
       if (payeeError) throw payeeError;
 
+      const rawEndorsements = (endorsementData ?? []) as CheckEndorsement[];
+
+      // Auto-waive duplicate endorsement rows in the DB so the backend stage
+      // advance logic (which reads check_endorsements directly) doesn't wait
+      // on a duplicate the user already resolved. A duplicate = same
+      // normalized name+type where at least one sibling is signed/waived and
+      // another is still pending/sent.
+      const groups = new Map<string, CheckEndorsement[]>();
+      for (const e of rawEndorsements) {
+        const key = `${normalizeName(e.payee_name)}::${normalizeType(e.payee_type)}`;
+        groups.set(key, [...(groups.get(key) ?? []), e]);
+      }
+      const duplicatePendingIds: string[] = [];
+      for (const rows of groups.values()) {
+        if (rows.length < 2) continue;
+        const hasResolved = rows.some(
+          (r) => r.status === "signed" || r.status === "waived" || !!r.signed_at,
+        );
+        const rank = (r: CheckEndorsement) => {
+          if (r.status === "signed" || r.signed_at) return 3;
+          if (r.status === "waived") return 2;
+          if (r.status === "sent") return 1;
+          return 0;
+        };
+        const sorted = [...rows].sort((a, b) => {
+          const diff = rank(b) - rank(a);
+          if (diff !== 0) return diff;
+          // Older row wins the "keep" slot so we don't churn IDs on refetch.
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        });
+        // Waive every pending/sent duplicate — whether a sibling is resolved
+        // or not. Keeping the earliest row prevents dupe emails and dupe
+        // signature holds.
+        for (const r of sorted.slice(1)) {
+          if (r.status === "pending" || r.status === "sent") {
+            duplicatePendingIds.push(r.id);
+          }
+        }
+        // Suppress unused warning if strict.
+        void hasResolved;
+      }
+      if (duplicatePendingIds.length > 0) {
+        const { error: waiveErr } = await supabase
+          .from("check_endorsements")
+          .update({
+            status: "waived",
+            notes: "Auto-waived: duplicate of another endorsement on this check",
+            signature_method: "auto_dedupe",
+          })
+          .in("id", duplicatePendingIds);
+        if (!waiveErr) {
+          for (const e of rawEndorsements) {
+            if (duplicatePendingIds.includes(e.id)) {
+              e.status = "waived";
+              e.signature_method = "auto_dedupe";
+            }
+          }
+        }
+      }
+
       return mergeEndorsementsWithPayees(
         checkId,
-        (endorsementData ?? []) as CheckEndorsement[],
+        rawEndorsements,
         (payeeData ?? []) as CheckPayee[],
       );
     },
