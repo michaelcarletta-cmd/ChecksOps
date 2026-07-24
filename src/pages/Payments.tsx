@@ -2,7 +2,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PaymentLedger } from "@/components/ledger/PaymentLedger";
 import { RecipientReport } from "@/components/ledger/RecipientReport";
 import { TaxSummary } from "@/components/ledger/TaxSummary";
-import { Receipt, FileText, Users } from "lucide-react";
+import { PayrollTab } from "@/pages/payments/PayrollTab";
+import { useAuth } from "@/hooks/useAuth";
+import { Receipt, FileText, Users, Wallet } from "lucide-react";
 
 export default function Payments() {
   return (
