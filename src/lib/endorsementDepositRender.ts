@@ -123,10 +123,58 @@ function fitLongEdge(w: number, h: number, target = MAX_LONG_EDGE) {
 }
 
 /**
+ * CheckAlt's "Endorsement Presence" OCR scores ink density on the back image.
+ * Anti-aliased pen strokes from the signature pad often land as light grey,
+ * which scored a 1 against their 750 threshold. This re-inks any non-white
+ * pixel to solid black at full alpha (geometry untouched) so the endorsement
+ * reads as real ink.
+ */
+function inkifySignature(
+  img: HTMLImageElement,
+  drawW: number,
+  drawH: number,
+): CanvasImageSource {
+  try {
+    const w = Math.max(1, Math.round(drawW));
+    const h = Math.max(1, Math.round(drawH));
+    const off = document.createElement("canvas");
+    off.width = w;
+    off.height = h;
+    const octx = off.getContext("2d", { willReadFrequently: true });
+    if (!octx) return img;
+    octx.drawImage(img, 0, 0, w, h);
+    const data = octx.getImageData(0, 0, w, h);
+    const px = data.data;
+    for (let i = 0; i < px.length; i += 4) {
+      const a = px[i + 3];
+      if (a < 24) {
+        px[i + 3] = 0;
+        continue;
+      }
+      const lum = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+      if (lum > 225) {
+        // treat near-white as background
+        px[i + 3] = 0;
+        continue;
+      }
+      px[i] = 0;
+      px[i + 1] = 0;
+      px[i + 2] = 0;
+      px[i + 3] = 255;
+    }
+    octx.putImageData(data, 0, 0);
+    return off;
+  } catch {
+    return img;
+  }
+}
+
+/**
  * Draws the endorsement block (pay-to text + client signatures + company sig)
  * around (0,0) at natural size, returns the block's bounding box height so
  * caller can center vertically.
  */
+
 async function drawEndorsementBlock(
   ctx: CanvasRenderingContext2D,
   input: DepositRenderInput,
@@ -142,7 +190,7 @@ async function drawEndorsementBlock(
     company: number;
   },
 ): Promise<void> {
-  ctx.fillStyle = "#111111";
+  ctx.fillStyle = "#000000";
   ctx.textBaseline = "top";
   ctx.textAlign = "center";
 
@@ -185,12 +233,13 @@ async function drawEndorsementBlock(
           const drawW = Math.min(signatureBoxWidths.client, sigHeight * aspect);
           const drawH = drawW / aspect;
           ctx.drawImage(
-            img,
+            inkifySignature(img, drawW, drawH),
             colCenterX - drawW / 2,
             subCy + Math.max(0, (sigHeight - drawH) / 2),
             drawW,
             drawH,
           );
+
           subCy += sigHeight + rowGap;
         } catch {
           // Fall back to typed name if image fails to load
@@ -224,12 +273,13 @@ async function drawEndorsementBlock(
         const drawW = Math.min(signatureBoxWidths.company, sigHeight * aspect);
         const drawH = drawW / aspect;
         ctx.drawImage(
-          img,
+          inkifySignature(img, drawW, drawH),
           centerX - drawW / 2,
           cy + Math.max(0, (sigHeight - drawH) / 2),
           drawW,
           drawH,
         );
+
       } catch {
         ctx.font = `italic 500 ${fontSize}px "Brush Script MT", cursive`;
         ctx.fillText(input.companyName, centerX, cy);
