@@ -273,12 +273,13 @@ async function drawEndorsementBlock(
         const drawW = Math.min(signatureBoxWidths.company, sigHeight * aspect);
         const drawH = drawW / aspect;
         ctx.drawImage(
-          img,
+          inkifySignature(img, drawW, drawH),
           centerX - drawW / 2,
           cy + Math.max(0, (sigHeight - drawH) / 2),
           drawW,
           drawH,
         );
+
       } catch {
         ctx.font = `italic 500 ${fontSize}px "Brush Script MT", cursive`;
         ctx.fillText(input.companyName, centerX, cy);
