@@ -233,12 +233,13 @@ async function drawEndorsementBlock(
           const drawW = Math.min(signatureBoxWidths.client, sigHeight * aspect);
           const drawH = drawW / aspect;
           ctx.drawImage(
-            img,
+            inkifySignature(img, drawW, drawH),
             colCenterX - drawW / 2,
             subCy + Math.max(0, (sigHeight - drawH) / 2),
             drawW,
             drawH,
           );
+
           subCy += sigHeight + rowGap;
         } catch {
           // Fall back to typed name if image fails to load
