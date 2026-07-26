@@ -190,7 +190,7 @@ async function drawEndorsementBlock(
     company: number;
   },
 ): Promise<void> {
-  ctx.fillStyle = "#111111";
+  ctx.fillStyle = "#000000";
   ctx.textBaseline = "top";
   ctx.textAlign = "center";
 
