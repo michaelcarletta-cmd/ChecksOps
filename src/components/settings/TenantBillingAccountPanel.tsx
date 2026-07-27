@@ -126,7 +126,7 @@ export function TenantBillingAccountPanel() {
           Monthly fee auto-billing
         </CardTitle>
         <CardDescription>
-          Choose which of your verified bank accounts ChecksOps should debit each month for <strong>maintenance fees, check processing fees, and payment processing fees</strong>. All bank accounts are added through Plaid / Authentecheck in the Bank Account section — no manual entry.
+          Choose which of your verified bank accounts ChecksOps should debit each month for <strong>maintenance fees, check processing fees, and payment processing fees</strong>. All bank accounts are added through the secure bank login in the Bank Account section — no manual entry.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

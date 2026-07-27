@@ -17,6 +17,7 @@ import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, typ
 import { AchAuthorizationForm } from "./AchAuthorizationForm";
 import { BankVerification } from "./BankVerification";
 import { usePermissions } from "@/hooks/usePermissions";
+import { usePaymentRail } from "@/hooks/usePaymentRail";
 import { RequestStakeholderLimitDialog } from "./RequestStakeholderLimitDialog";
 
 
@@ -66,6 +67,7 @@ export function StakeholderAccountSettings() {
   const { tenant } = useTenant();
   const { toast } = useToast();
   const { isAdmin } = usePermissions();
+  const { isPlaid } = usePaymentRail();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -169,6 +171,10 @@ export function StakeholderAccountSettings() {
           return { url: null, emailed: true };
         }
 
+        // Plaid rail: no hosted redirect — the inline Plaid Link widget on the
+        // new account card completes verification.
+        if (isPlaid) return { url: null, emailed: false };
+
         const { data: sess, error: initErr } = await supabase.functions.invoke(
           "actum-authentecheck-init",
           { body: { stakeholder_account_id: inserted!.id } },
@@ -193,6 +199,11 @@ export function StakeholderAccountSettings() {
     onSuccess: ({ url, emailed }) => {
       if (emailed) {
         toast({ title: "Verification link sent", description: "The account holder will receive an email to link their bank account." });
+      } else if (!url && isPlaid) {
+        toast({
+          title: "Account added",
+          description: "Click \u201cVerify with bank login\u201d on the new account to link it through Plaid.",
+        });
       } else if (url) {
         // Open as a normal full-size tab, not a constrained popup — OAuth-based
         // bank redirects (Wells Fargo, Chase, etc. via Plaid) can lose session
@@ -395,15 +406,14 @@ export function StakeholderAccountSettings() {
                     onChange={(e) => setForm({ ...form, verification_recipient_email: e.target.value })}
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    They'll get an emailed link to securely sign in to their bank through
-                    Authentecheck (Plaid) and link their own account — no bank details are
-                    entered here.
+                    They'll get an emailed link to securely sign in to their bank and link
+                    their own account — no bank details are entered here.
                   </p>
                 </div>
               ) : (
                 <p className="text-[11px] text-muted-foreground">
-                  Routing & account numbers are captured securely after you sign in to your bank
-                  through Authentecheck (Plaid). Continue to launch the bank login.
+                  Routing & account numbers are captured securely after you sign in to your bank.
+                  Continue to launch the bank login.
                 </p>
               )}
 
@@ -503,7 +513,7 @@ export function StakeholderAccountSettings() {
                       className="h-7 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-50"
                       onClick={() => adminOverride.mutate(acct.id)}
                       disabled={adminOverride.isPending}
-                      title="Admin override: mark as verified without Authentecheck"
+                      title="Admin override: mark as verified without a bank login"
                     >
                       <ShieldAlert className="h-3 w-3 mr-1" /> Override
                     </Button>

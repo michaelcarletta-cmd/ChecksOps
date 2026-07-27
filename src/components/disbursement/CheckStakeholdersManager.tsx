@@ -131,7 +131,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
             variant="outline"
             className="h-7 text-xs"
             onClick={() => setHomeownerDialogOpen(true)}
-            title="Send the homeowner a link to link their bank via AuthenteCheck"
+            title="Send the homeowner a secure link to link their bank account"
           >
             <Home className="h-3 w-3 mr-1" /> Bank link
           </Button>

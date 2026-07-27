@@ -68,7 +68,7 @@ export function SendHomeownerBankLinkDialog({ open, onOpenChange, checkIntakeIte
             <Home className="h-4 w-4" /> Send homeowner bank-link
           </DialogTitle>
           <DialogDescription>
-            The homeowner will receive an email with a secure link to verify their bank via AuthenteCheck. Once verified,
+            The homeowner will receive an email with a secure link to verify their bank account. Once verified,
             their account is auto-added as a disbursable stakeholder.
           </DialogDescription>
         </DialogHeader>
