@@ -704,7 +704,7 @@ export default function Settings() {
           {isAdmin && (
             <TabsTrigger value="checkalt" className="w-full md:w-auto justify-start text-base font-medium px-4">Deposits</TabsTrigger>
           )}
-          {isAdmin && (
+          {isAdmin && isActumRail && (
             <TabsTrigger value="actum" className="w-full md:w-auto justify-start text-base font-medium px-4">Disbursements</TabsTrigger>
           )}
           <TabsTrigger value="referrals" className="w-full md:w-auto justify-start text-base font-medium px-4">Referrals</TabsTrigger>

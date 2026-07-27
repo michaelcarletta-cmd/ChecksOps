@@ -150,6 +150,25 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
     },
   });
 
+  if (!isActum) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Payroll unavailable</DialogTitle>
+            <DialogDescription>
+              Bank payments are being migrated for this organization. Payroll runs will be
+              available again shortly.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => onOpenChange(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) resetForm(); onOpenChange(v); }}>
       <DialogContent className="max-w-md">
