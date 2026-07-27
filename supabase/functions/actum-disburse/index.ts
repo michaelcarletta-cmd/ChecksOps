@@ -107,28 +107,36 @@ serve(async (req) => {
     const username = (tenant as any).actum_username ?? "";
     const password = (tenant as any).actum_password ?? "";
     const deliverySpeed: string = batch.delivery_speed ?? "same_day"; // "same_day" | "instant"
+    // Credits-only merchants (e.g. Freedom Adjustment) are provisioned by Actum
+    // for ACH credits exclusively — any debit leg is declined (DMR201). For
+    // those tenants we skip the funding debit and only push credits out.
+    const creditsOnly: boolean = (tenant as any).actum_credits_only === true;
 
     // Find primary account for the debit (source of funds)
-    const { data: primaryAccount, error: primaryErr } = await supabase
-      .from("stakeholder_accounts")
-      .select("id, custname, chk_aba, chk_acct, acct_type, consumer_unique, account_type, verification_recipient_email, homeowner_email")
-      .eq("tenant_id", batch.tenant_id)
-      .eq("is_primary", true)
-      .eq("is_active", true)
-      .maybeSingle();
-    if (primaryErr) throw primaryErr;
-    if (!primaryAccount) throw new Error("No active primary stakeholder account found to debit funds from.");
+    let primaryAccount: any = null;
+    if (!creditsOnly) {
+      const { data: pa, error: primaryErr } = await supabase
+        .from("stakeholder_accounts")
+        .select("id, custname, chk_aba, chk_acct, acct_type, consumer_unique, account_type, verification_recipient_email, homeowner_email")
+        .eq("tenant_id", batch.tenant_id)
+        .eq("is_primary", true)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (primaryErr) throw primaryErr;
+      if (!pa) throw new Error("No active primary stakeholder account found to debit funds from.");
+      primaryAccount = pa;
 
-    // Verify active ACH authorization for the primary account
-    const { data: achAuth } = await supabase
-      .from("ach_authorizations")
-      .select("id")
-      .eq("stakeholder_account_id", primaryAccount.id)
-      .eq("is_active", true)
-      .limit(1)
-      .maybeSingle();
-    if (!achAuth) {
-      throw new Error("ACH debit authorization not found or inactive for the primary account. Please sign the authorization in Settings.");
+      // Verify active ACH authorization for the primary account
+      const { data: achAuth } = await supabase
+        .from("ach_authorizations")
+        .select("id")
+        .eq("stakeholder_account_id", primaryAccount.id)
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle();
+      if (!achAuth) {
+        throw new Error("ACH debit authorization not found or inactive for the primary account. Please sign the authorization in Settings.");
+      }
     }
 
     // Fallback email if account has none
