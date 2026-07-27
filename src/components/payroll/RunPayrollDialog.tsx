@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Loader2, Zap, Clock, AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { usePaymentRail } from "@/hooks/usePaymentRail";
 
 type Speed = "next_day" | "same_day" | "instant";
 
@@ -29,6 +30,7 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
   const { user } = useAuth();
   const { tenant } = useTenant();
   const { toast } = useToast();
+  const { isActum } = usePaymentRail();
   const qc = useQueryClient();
 
   const [stakeholderId, setStakeholderId] = useState<string>("");
@@ -147,6 +149,25 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
       setStep("form");
     },
   });
+
+  if (!isActum) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Payroll unavailable</DialogTitle>
+            <DialogDescription>
+              Bank payments are being migrated for this organization. Payroll runs will be
+              available again shortly.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => onOpenChange(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) resetForm(); onOpenChange(v); }}>

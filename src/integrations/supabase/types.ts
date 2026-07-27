@@ -19899,6 +19899,7 @@ export type Database = {
           monthly_rate_cents: number
           name: string
           partner_code: string
+          payment_rail: string
           per_check_billing_enabled: boolean | null
           per_check_rate_cents: number | null
           plan_tier: Database["public"]["Enums"]["tenant_plan_tier"] | null
@@ -19967,6 +19968,7 @@ export type Database = {
           monthly_rate_cents?: number
           name: string
           partner_code?: string
+          payment_rail?: string
           per_check_billing_enabled?: boolean | null
           per_check_rate_cents?: number | null
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null
@@ -20035,6 +20037,7 @@ export type Database = {
           monthly_rate_cents?: number
           name?: string
           partner_code?: string
+          payment_rail?: string
           per_check_billing_enabled?: boolean | null
           per_check_rate_cents?: number | null
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null

@@ -13,6 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertTriangle, Send, Building2, CheckCircle2, Loader2, DollarSign, ShieldAlert, ShieldCheck } from "lucide-react";
 import { VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
+import { RailUnavailableNotice } from "@/components/disbursement/RailUnavailableNotice";
+import { usePaymentRail } from "@/hooks/usePaymentRail";
 
 interface Props {
   checkIntakeItemId: string;
@@ -43,6 +45,7 @@ export function SendPaymentPanel({
   const [confirmed, setConfirmed] = useState(false);
   const [adminOverride, setAdminOverride] = useState(false);
   const { isAdmin } = usePermissions();
+  const { isActum } = usePaymentRail();
 
   // Load contractor's primary stakeholder account
   const { data: contractorAccount, isLoading: accountLoading } = useQuery({
@@ -193,6 +196,8 @@ export function SendPaymentPanel({
       </Card>
     );
   }
+
+  if (!isActum) return <RailUnavailableNotice />;
 
   return (
     <Card>

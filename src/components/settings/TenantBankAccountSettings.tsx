@@ -15,6 +15,8 @@ import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, typ
 import { AchAuthorizationForm } from "@/components/disbursement/AchAuthorizationForm";
 import { AuthentecheckVerification } from "@/components/disbursement/AuthentecheckVerification";
 import { usePermissions } from "@/hooks/usePermissions";
+import { usePaymentRail } from "@/hooks/usePaymentRail";
+import { RailUnavailableNotice } from "@/components/disbursement/RailUnavailableNotice";
 
 
 export function TenantBankAccountSettings() {
@@ -22,6 +24,7 @@ export function TenantBankAccountSettings() {
   const { tenant } = useTenant();
   const { toast } = useToast();
   const { isAdmin } = usePermissions();
+  const { isActum } = usePaymentRail();
   const qc = useQueryClient();
   const [isStarting, setIsStarting] = useState(false);
 
@@ -174,6 +177,7 @@ export function TenantBankAccountSettings() {
     onError: (e: any) => toast({ title: "Override failed", description: e.message, variant: "destructive" }),
   });
 
+  if (!isActum) return <RailUnavailableNotice title="Bank account linking unavailable" />;
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading...</div>;
 
   return (

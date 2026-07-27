@@ -15,6 +15,8 @@ import { AlertTriangle, CheckCircle2, Send, Building2, Loader2, RefreshCw, Zap, 
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { CheckStakeholdersManager } from "./CheckStakeholdersManager";
+import { RailUnavailableNotice } from "./RailUnavailableNotice";
+import { usePaymentRail } from "@/hooks/usePaymentRail";
 import { VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 
 interface Props {
@@ -68,6 +70,7 @@ export function DisbursementConsole({
   const SPEED_LABELS: Record<string, string> = { next_day: "Next Day", same_day: "Same Day", instant: "Instant" };
   const [adminOverride, setAdminOverride] = useState(false);
   const { isAdmin } = usePermissions();
+  const { isActum } = usePaymentRail();
 
 
   // Funds-availability hold removed — tenants may disburse immediately after deposit.
@@ -285,6 +288,7 @@ export function DisbursementConsole({
     onError: (e: any) => toast({ title: "Disbursement failed", description: e.message, variant: "destructive" }),
   });
 
+  if (!isActum) return <RailUnavailableNotice />;
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading accounts...</div>;
 
   const totalRemainingOfCheck = Math.max(0, checkAmount - alreadyDisbursed);
