@@ -66,7 +66,6 @@ export function StakeholderAccountSettings() {
   const { tenant } = useTenant();
   const { toast } = useToast();
   const { isAdmin } = usePermissions();
-  const { isActum } = usePaymentRail();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -275,7 +274,6 @@ export function StakeholderAccountSettings() {
   });
 
 
-  if (!isActum) return <RailUnavailableNotice title="Stakeholder bank accounts unavailable" />;
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading accounts...</div>;
 
   return (
