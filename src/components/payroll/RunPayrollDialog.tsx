@@ -30,7 +30,7 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
   const { user } = useAuth();
   const { tenant } = useTenant();
   const { toast } = useToast();
-  const { isActum } = usePaymentRail();
+  const { isActum, isPlaid } = usePaymentRail();
   const qc = useQueryClient();
 
   const [stakeholderId, setStakeholderId] = useState<string>("");
