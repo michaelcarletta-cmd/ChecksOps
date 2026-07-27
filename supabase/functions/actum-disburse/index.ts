@@ -110,7 +110,10 @@ serve(async (req) => {
     // Credits-only merchants (e.g. Freedom Adjustment) are provisioned by Actum
     // for ACH credits exclusively — any debit leg is declined (DMR201). For
     // those tenants we skip the funding debit and only push credits out.
-    const creditsOnly: boolean = (tenant as any).actum_credits_only === true;
+    // Credits-only is the platform default: every tenant merchant is provisioned
+    // for ACH credits only and pre-funds its own balance. A debit leg is only
+    // attempted if a tenant is explicitly flagged as debit-capable (flag = false).
+    const creditsOnly: boolean = (tenant as any).actum_credits_only !== false;
 
     // Find primary account for the debit (source of funds)
     let primaryAccount: any = null;

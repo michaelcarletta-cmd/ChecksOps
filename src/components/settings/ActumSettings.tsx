@@ -41,7 +41,7 @@ export function ActumSettings() {
     actum_test_password: "",
     // shared
     actum_webhook_secret: "",
-    actum_credits_only: false,
+    actum_credits_only: true,
   });
 
   const { data: tenantDetails, isLoading } = useQuery({
@@ -78,7 +78,7 @@ export function ActumSettings() {
         actum_test_username: tenantDetails.actum_test_username ?? "",
         actum_test_password: tenantDetails.actum_test_password ?? "",
         actum_webhook_secret: tenantDetails.actum_webhook_secret ?? "",
-        actum_credits_only: (tenantDetails as any).actum_credits_only === true,
+        actum_credits_only: (tenantDetails as any).actum_credits_only !== false,
       });
     }
   }, [tenantDetails]);
