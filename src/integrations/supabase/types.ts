@@ -19852,6 +19852,7 @@ export type Database = {
           ach_policy_acknowledged_at: string | null
           ach_policy_acknowledged_by: string | null
           ach_policy_version: string | null
+          actum_credits_only: boolean
           actum_environment: string
           actum_parent_id: string | null
           actum_password: string | null
@@ -19919,6 +19920,7 @@ export type Database = {
           ach_policy_acknowledged_at?: string | null
           ach_policy_acknowledged_by?: string | null
           ach_policy_version?: string | null
+          actum_credits_only?: boolean
           actum_environment?: string
           actum_parent_id?: string | null
           actum_password?: string | null
@@ -19986,6 +19988,7 @@ export type Database = {
           ach_policy_acknowledged_at?: string | null
           ach_policy_acknowledged_by?: string | null
           ach_policy_version?: string | null
+          actum_credits_only?: boolean
           actum_environment?: string
           actum_parent_id?: string | null
           actum_password?: string | null

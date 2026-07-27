@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useTenant } from "@/contexts/TenantContext";
@@ -40,6 +41,7 @@ export function ActumSettings() {
     actum_test_password: "",
     // shared
     actum_webhook_secret: "",
+    actum_credits_only: false,
   });
 
   const { data: tenantDetails, isLoading } = useQuery({
@@ -49,7 +51,7 @@ export function ActumSettings() {
       const { data, error } = await supabase
         .from("tenants")
         .select(
-          "actum_environment, actum_parent_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password, actum_test_parent_id, actum_test_sub_id_ppd, actum_test_sub_id_ccd, actum_test_syspass, actum_test_username, actum_test_password, actum_webhook_secret",
+          "actum_credits_only, actum_environment, actum_parent_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password, actum_test_parent_id, actum_test_sub_id_ppd, actum_test_sub_id_ccd, actum_test_syspass, actum_test_username, actum_test_password, actum_webhook_secret",
         )
         .eq("id", tenant.id)
         .single();
@@ -76,6 +78,7 @@ export function ActumSettings() {
         actum_test_username: tenantDetails.actum_test_username ?? "",
         actum_test_password: tenantDetails.actum_test_password ?? "",
         actum_webhook_secret: tenantDetails.actum_webhook_secret ?? "",
+        actum_credits_only: (tenantDetails as any).actum_credits_only === true,
       });
     }
   }, [tenantDetails]);
@@ -101,6 +104,7 @@ export function ActumSettings() {
           actum_test_username: form.actum_test_username.trim() || null,
           actum_test_password: form.actum_test_password.trim() || null,
           actum_webhook_secret: form.actum_webhook_secret.trim() || null,
+          actum_credits_only: form.actum_credits_only,
         } as any)
         .eq("id", tenant.id);
       if (error) throw error;
@@ -315,6 +319,22 @@ export function ActumSettings() {
             <p className="text-xs text-muted-foreground">
               This should match the secret configured in your Actum Dashboard for webhooks.
             </p>
+          </div>
+
+          <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="actum_credits_only">Credits-only merchant account</Label>
+              <p className="text-xs text-muted-foreground">
+                Enable when Actum has provisioned this merchant for ACH credits only. Disbursements
+                will push funds to stakeholders without first debiting the primary funding account
+                (a debit leg would be declined).
+              </p>
+            </div>
+            <Switch
+              id="actum_credits_only"
+              checked={form.actum_credits_only}
+              onCheckedChange={(v) => setForm({ ...form, actum_credits_only: v })}
+            />
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">

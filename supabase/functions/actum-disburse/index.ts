@@ -95,7 +95,7 @@ serve(async (req) => {
     // Load tenant Actum credentials
     const { data: tenant, error: tenantErr } = await supabase
       .from("tenants")
-      .select("actum_parent_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password, email_reply_to, email_from_address")
+      .select("actum_parent_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password, actum_credits_only, email_reply_to, email_from_address")
       .eq("id", batch.tenant_id)
       .single();
     if (tenantErr || !tenant?.actum_parent_id) {
@@ -107,28 +107,36 @@ serve(async (req) => {
     const username = (tenant as any).actum_username ?? "";
     const password = (tenant as any).actum_password ?? "";
     const deliverySpeed: string = batch.delivery_speed ?? "same_day"; // "same_day" | "instant"
+    // Credits-only merchants (e.g. Freedom Adjustment) are provisioned by Actum
+    // for ACH credits exclusively — any debit leg is declined (DMR201). For
+    // those tenants we skip the funding debit and only push credits out.
+    const creditsOnly: boolean = (tenant as any).actum_credits_only === true;
 
     // Find primary account for the debit (source of funds)
-    const { data: primaryAccount, error: primaryErr } = await supabase
-      .from("stakeholder_accounts")
-      .select("id, custname, chk_aba, chk_acct, acct_type, consumer_unique, account_type, verification_recipient_email, homeowner_email")
-      .eq("tenant_id", batch.tenant_id)
-      .eq("is_primary", true)
-      .eq("is_active", true)
-      .maybeSingle();
-    if (primaryErr) throw primaryErr;
-    if (!primaryAccount) throw new Error("No active primary stakeholder account found to debit funds from.");
+    let primaryAccount: any = null;
+    if (!creditsOnly) {
+      const { data: pa, error: primaryErr } = await supabase
+        .from("stakeholder_accounts")
+        .select("id, custname, chk_aba, chk_acct, acct_type, consumer_unique, account_type, verification_recipient_email, homeowner_email")
+        .eq("tenant_id", batch.tenant_id)
+        .eq("is_primary", true)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (primaryErr) throw primaryErr;
+      if (!pa) throw new Error("No active primary stakeholder account found to debit funds from.");
+      primaryAccount = pa;
 
-    // Verify active ACH authorization for the primary account
-    const { data: achAuth } = await supabase
-      .from("ach_authorizations")
-      .select("id")
-      .eq("stakeholder_account_id", primaryAccount.id)
-      .eq("is_active", true)
-      .limit(1)
-      .maybeSingle();
-    if (!achAuth) {
-      throw new Error("ACH debit authorization not found or inactive for the primary account. Please sign the authorization in Settings.");
+      // Verify active ACH authorization for the primary account
+      const { data: achAuth } = await supabase
+        .from("ach_authorizations")
+        .select("id")
+        .eq("stakeholder_account_id", primaryAccount.id)
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle();
+      if (!achAuth) {
+        throw new Error("ACH debit authorization not found or inactive for the primary account. Please sign the authorization in Settings.");
+      }
     }
 
     // Fallback email if account has none
@@ -189,55 +197,64 @@ serve(async (req) => {
       return p;
     }
 
-    // ── Step 1: Debit the primary account ───────────────────────────────────
+    // ── Step 1: Debit the primary account (skipped for credits-only tenants) ──
     // Debit exactly the total being distributed in this batch (may be a partial disbursement)
     const batchTotal = (splits ?? []).reduce((sum, s) => sum + Number(s.amount), 0);
     if (batchTotal <= 0) throw new Error("Batch has no valid split amounts.");
-    console.log(`[actum-disburse] Debiting $${batchTotal.toFixed(2)} from primary account (${primaryAccount.custname}), delivery=${deliverySpeed}`);
 
-    const debitIdempotence = `debit_${batch_id.slice(0, 16)}_${Date.now()}`;
-    const debitParams = baseParams({ ...primaryAccount, account_type: primaryAccount.account_type ?? "operating" });
-    debitParams.append("initial_amount", batchTotal.toFixed(2));
-    debitParams.append("merordernumber", `DEBIT-${batch_id.slice(0, 8)}`);
-    debitParams.append("idempotence", debitIdempotence);
-    // Debit is always same-day so funds are available immediately for credits
-    debitParams.append("trans_modifier", "S");
+    if (creditsOnly) {
+      console.log(`[actum-disburse] Credits-only tenant — skipping funding debit of $${batchTotal.toFixed(2)}, delivery=${deliverySpeed}`);
+      await supabase.from("disbursement_batches").update({
+        debit_status: "skipped_credits_only",
+        submitted_at: new Date().toISOString(),
+      }).eq("id", batch_id);
+    } else {
+      console.log(`[actum-disburse] Debiting $${batchTotal.toFixed(2)} from primary account (${primaryAccount.custname}), delivery=${deliverySpeed}`);
 
-    const debitRes = await callActum(debitParams);
+      const debitIdempotence = `debit_${batch_id.slice(0, 16)}_${Date.now()}`;
+      const debitParams = baseParams({ ...primaryAccount, account_type: primaryAccount.account_type ?? "operating" });
+      debitParams.append("initial_amount", batchTotal.toFixed(2));
+      debitParams.append("merordernumber", `DEBIT-${batch_id.slice(0, 8)}`);
+      debitParams.append("idempotence", debitIdempotence);
+      // Debit is always same-day so funds are available immediately for credits
+      debitParams.append("trans_modifier", "S");
 
-    // Log the debit
-    await supabase.from("actum_transactions").insert({
-      tenant_id: batch.tenant_id,
-      batch_id: batch.id,
-      transaction_type: "debit",
-      amount: batchTotal,
-      actum_order_id: debitRes.order_id ?? null,
-      actum_history_id: debitRes.history_id ?? null,
-      consumer_unique: debitRes.consumer_unique ?? null,
-      mer_order_number: `DEBIT-${batch_id.slice(0, 8)}`,
-      idempotence_key: debitIdempotence,
-      status: isAccepted(debitRes) ? "accepted" : "declined",
-      raw_response: JSON.stringify(redactActumRecord(debitRes)),
-    });
+      const debitRes = await callActum(debitParams);
 
-    if (!isAccepted(debitRes)) {
-      const reason = declineReason(debitRes);
-      await supabase.from("disbursement_batches").update({ status: "failed" }).eq("id", batch_id);
-      await supabase.from("disbursement_splits").update({
-        status: "failed",
-        return_desc: `Debit declined by Actum: ${reason}`,
-      }).eq("batch_id", batch_id);
-      throw new Error(`Primary account debit failed: ${reason}`);
+      // Log the debit
+      await supabase.from("actum_transactions").insert({
+        tenant_id: batch.tenant_id,
+        batch_id: batch.id,
+        transaction_type: "debit",
+        amount: batchTotal,
+        actum_order_id: debitRes.order_id ?? null,
+        actum_history_id: debitRes.history_id ?? null,
+        consumer_unique: debitRes.consumer_unique ?? null,
+        mer_order_number: `DEBIT-${batch_id.slice(0, 8)}`,
+        idempotence_key: debitIdempotence,
+        status: isAccepted(debitRes) ? "accepted" : "declined",
+        raw_response: JSON.stringify(redactActumRecord(debitRes)),
+      });
+
+      if (!isAccepted(debitRes)) {
+        const reason = declineReason(debitRes);
+        await supabase.from("disbursement_batches").update({ status: "failed" }).eq("id", batch_id);
+        await supabase.from("disbursement_splits").update({
+          status: "failed",
+          return_desc: `Debit declined by Actum: ${reason}`,
+        }).eq("batch_id", batch_id);
+        throw new Error(`Primary account debit failed: ${reason}`);
+      }
+
+      // Store debit order/history IDs on the batch
+      await supabase.from("disbursement_batches").update({
+        debit_account_id: primaryAccount.id,
+        debit_actum_order_id: debitRes.order_id ?? null,
+        debit_actum_history_id: debitRes.history_id ?? null,
+        debit_status: "accepted",
+        submitted_at: new Date().toISOString(),
+      }).eq("id", batch_id);
     }
-
-    // Store debit order/history IDs on the batch
-    await supabase.from("disbursement_batches").update({
-      debit_account_id: primaryAccount.id,
-      debit_actum_order_id: debitRes.order_id ?? null,
-      debit_actum_history_id: debitRes.history_id ?? null,
-      debit_status: "accepted",
-      submitted_at: new Date().toISOString(),
-    }).eq("id", batch_id);
 
     // ── Step 2: Credit each split ────────────────────────────────────────────
     const results: Array<{ split_id: string; status: string; order_id?: string; error?: string }> = [];
