@@ -12179,6 +12179,7 @@ export type Database = {
           deposit_item_id: string | null
           id: string
           notes: string | null
+          rail: string
           reserve_held: number
           reserve_released_at: string | null
           status: string
@@ -12201,6 +12202,7 @@ export type Database = {
           deposit_item_id?: string | null
           id?: string
           notes?: string | null
+          rail?: string
           reserve_held?: number
           reserve_released_at?: string | null
           status?: string
@@ -12223,6 +12225,7 @@ export type Database = {
           deposit_item_id?: string | null
           id?: string
           notes?: string | null
+          rail?: string
           reserve_held?: number
           reserve_released_at?: string | null
           status?: string
@@ -12303,6 +12306,12 @@ export type Database = {
           idempotence_key: string | null
           method: string
           pct_of_total: number | null
+          plaid_authorization_id: string | null
+          plaid_failure_reason: string | null
+          plaid_sweep_status: string | null
+          plaid_transfer_id: string | null
+          plaid_transfer_status: string | null
+          rail: string
           recipient_name: string | null
           recipient_type: string | null
           return_code: string | null
@@ -12328,6 +12337,12 @@ export type Database = {
           idempotence_key?: string | null
           method?: string
           pct_of_total?: number | null
+          plaid_authorization_id?: string | null
+          plaid_failure_reason?: string | null
+          plaid_sweep_status?: string | null
+          plaid_transfer_id?: string | null
+          plaid_transfer_status?: string | null
+          rail?: string
           recipient_name?: string | null
           recipient_type?: string | null
           return_code?: string | null
@@ -12353,6 +12368,12 @@ export type Database = {
           idempotence_key?: string | null
           method?: string
           pct_of_total?: number | null
+          plaid_authorization_id?: string | null
+          plaid_failure_reason?: string | null
+          plaid_sweep_status?: string | null
+          plaid_transfer_id?: string | null
+          plaid_transfer_status?: string | null
+          rail?: string
           recipient_name?: string | null
           recipient_type?: string | null
           return_code?: string | null
@@ -16787,6 +16808,83 @@ export type Database = {
           record_id?: string
           record_type?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      plaid_transfer_events: {
+        Row: {
+          amount: number | null
+          created_at: string
+          event_type: string | null
+          failure_reason: string | null
+          id: string
+          plaid_event_id: number | null
+          plaid_transfer_id: string | null
+          raw_payload: Json | null
+          split_id: string | null
+          sweep_status: string | null
+          tenant_id: string | null
+          transfer_status: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          event_type?: string | null
+          failure_reason?: string | null
+          id?: string
+          plaid_event_id?: number | null
+          plaid_transfer_id?: string | null
+          raw_payload?: Json | null
+          split_id?: string | null
+          sweep_status?: string | null
+          tenant_id?: string | null
+          transfer_status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          event_type?: string | null
+          failure_reason?: string | null
+          id?: string
+          plaid_event_id?: number | null
+          plaid_transfer_id?: string | null
+          raw_payload?: Json | null
+          split_id?: string | null
+          sweep_status?: string | null
+          tenant_id?: string | null
+          transfer_status?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plaid_transfer_events_split_id_fkey"
+            columns: ["split_id"]
+            isOneToOne: false
+            referencedRelation: "disbursement_splits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plaid_webhook_cursors: {
+        Row: {
+          created_at: string
+          cursor_value: number
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          cursor_value?: number
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          cursor_value?: number
+          id?: string
+          updated_at?: string
         }
         Relationships: []
       }

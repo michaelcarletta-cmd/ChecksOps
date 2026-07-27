@@ -70,7 +70,7 @@ export function DisbursementConsole({
   const SPEED_LABELS: Record<string, string> = { next_day: "Next Day", same_day: "Same Day", instant: "Instant" };
   const [adminOverride, setAdminOverride] = useState(false);
   const { isAdmin } = usePermissions();
-  const { isActum } = usePaymentRail();
+  const { isActum, isPlaid } = usePaymentRail();
 
 
   // Funds-availability hold removed — tenants may disburse immediately after deposit.
@@ -269,12 +269,17 @@ export function DisbursementConsole({
 
       if (splitsErr) throw splitsErr;
 
-      // Trigger Actum disbursement (admin_override only honored server-side if caller is admin)
-      const { error: invokeErr } = await supabase.functions.invoke("actum-disburse", {
+      // Trigger the disbursement on the tenant's active rail
+      // (admin_override only honored server-side if caller is admin)
+      const railFn = isPlaid ? "plaid-disburse" : "actum-disburse";
+      const { data: railData, error: invokeErr } = await supabase.functions.invoke(railFn, {
         body: { batch_id: batch.id, admin_override: adminOverride && isAdmin },
       });
 
       if (invokeErr) throw invokeErr;
+      if ((railData as any)?.success === false) {
+        throw new Error((railData as any)?.error ?? "Disbursement failed");
+      }
       return batch.id;
     },
     onSuccess: () => {
@@ -288,7 +293,7 @@ export function DisbursementConsole({
     onError: (e: any) => toast({ title: "Disbursement failed", description: e.message, variant: "destructive" }),
   });
 
-  if (!isActum) return <RailUnavailableNotice />;
+  if (!isActum && !isPlaid) return <RailUnavailableNotice />;
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading accounts...</div>;
 
   const totalRemainingOfCheck = Math.max(0, checkAmount - alreadyDisbursed);
