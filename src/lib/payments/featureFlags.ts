@@ -12,6 +12,8 @@ export interface PaymentFeatureFlags {
   USE_PLAID: boolean;
   USE_MOOV: boolean;
   SHOW_PAYMENT_SETTINGS: boolean;
+  /** Internal-only admin tooling for the platform payment provider. */
+  SHOW_PAYMENT_ADMIN: boolean;
 }
 
 function envFlag(name: string, fallback: boolean): boolean {
@@ -26,7 +28,17 @@ export const PAYMENT_FLAGS: PaymentFeatureFlags = {
   // Moov is wired but intentionally dark until the live APIs are connected.
   USE_MOOV: envFlag("USE_MOOV", false),
   SHOW_PAYMENT_SETTINGS: envFlag("SHOW_PAYMENT_SETTINGS", true),
+  SHOW_PAYMENT_ADMIN: envFlag("SHOW_PAYMENT_ADMIN", true),
 };
+
+/**
+ * Moov actions are only allowed when the global flag is on AND the tenant is
+ * on the allowlist. The backend enforces the same two conditions plus the
+ * presence of sandbox credentials — this is purely so the UI stays quiet.
+ */
+export function isMoovAllowedForTenant(tenantAllowlisted: boolean | null | undefined): boolean {
+  return PAYMENT_FLAGS.USE_MOOV && !!tenantAllowlisted;
+}
 
 export function isProviderEnabled(provider: PaymentProviderId): boolean {
   switch (provider) {
@@ -43,7 +55,9 @@ export function isProviderEnabled(provider: PaymentProviderId): boolean {
 
 /** The provider used when a tenant has no explicit (or no enabled) preference. */
 export function defaultProvider(): PaymentProviderId {
-  if (PAYMENT_FLAGS.USE_MOOV) return "moov";
+  // Deliberately never Moov: enabling the Moov flag must not migrate any
+  // existing tenant. A tenant only lands on Moov by setting payment_provider
+  // explicitly on its own row.
   if (PAYMENT_FLAGS.USE_ACTUM) return "actum";
   return "plaid";
 }
