@@ -170,6 +170,8 @@ serve(async (req) => {
           ach_class: achClassFor(acct.account_type),
           user: { legal_name: acct.custname ?? split.recipient_name ?? "Recipient" },
           idempotency_key: idempotencyKey,
+          ...(fundingAccountId ? { funding_account_id: fundingAccountId } : {}),
+
         });
 
         const decision = authorization?.authorization?.decision;
