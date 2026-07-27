@@ -1,0 +1,1 @@
+UPDATE public.tenants SET payment_rail = 'plaid' WHERE id = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
