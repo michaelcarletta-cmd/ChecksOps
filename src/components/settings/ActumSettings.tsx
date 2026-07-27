@@ -41,7 +41,7 @@ export function ActumSettings() {
     actum_test_password: "",
     // shared
     actum_webhook_secret: "",
-    actum_credits_only: false,
+    actum_credits_only: true,
   });
 
   const { data: tenantDetails, isLoading } = useQuery({
