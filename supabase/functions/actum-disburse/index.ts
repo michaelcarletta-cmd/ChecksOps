@@ -95,7 +95,7 @@ serve(async (req) => {
     // Load tenant Actum credentials
     const { data: tenant, error: tenantErr } = await supabase
       .from("tenants")
-      .select("actum_parent_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password, email_reply_to, email_from_address")
+      .select("actum_parent_id, actum_sub_id_ppd, actum_sub_id_ccd, actum_syspass, actum_username, actum_password, actum_credits_only, email_reply_to, email_from_address")
       .eq("id", batch.tenant_id)
       .single();
     if (tenantErr || !tenant?.actum_parent_id) {
