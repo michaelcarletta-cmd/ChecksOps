@@ -85,8 +85,34 @@ serve(async (req) => {
     if (splitsErr) return json({ error: splitsErr.message }, 400);
     if (!splits?.length) return json({ error: "Batch has no splits." }, 400);
 
-    const deliverySpeed: string = batch.delivery_speed ?? "same_day";
+    // Same-day funding: Plaid debits the tenant's own funding bank account per
+    // batch instead of drawing on a pre-funded ledger balance. Bank to bank.
+    const { data: tenantCfg } = await supabase
+      .from("tenants")
+      .select("plaid_funding_account_id, plaid_same_day_funding")
+      .eq("id", batch.tenant_id)
+      .maybeSingle();
+
+    const fundingAccountId: string | null = tenantCfg?.plaid_funding_account_id ?? null;
+    const sameDayFunding = !!tenantCfg?.plaid_same_day_funding;
+
+    const requestedSpeed: string = batch.delivery_speed ?? "same_day";
+    // With same-day funding on, anything slower than instant goes out same-day ACH.
+    const deliverySpeed =
+      sameDayFunding && requestedSpeed !== "instant" ? "same_day" : requestedSpeed;
     const network = networkFor(deliverySpeed);
+
+    if (sameDayFunding && !fundingAccountId) {
+      return json(
+        {
+          success: false,
+          error:
+            "Same-day funding is on for this organization but no Plaid funding account is configured. Add the funding account id first.",
+        },
+        400,
+      );
+    }
+
 
     await supabase
       .from("disbursement_batches")
