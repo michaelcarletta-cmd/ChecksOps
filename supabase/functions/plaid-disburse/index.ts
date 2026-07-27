@@ -174,6 +174,7 @@ serve(async (req) => {
           .from("disbursement_splits")
           .update({
             rail: "plaid",
+            method: "plaid",
             status: "submitted",
             submitted_at: new Date().toISOString(),
             plaid_authorization_id: authorization?.authorization?.id ?? null,
