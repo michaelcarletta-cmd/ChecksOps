@@ -31,6 +31,7 @@ import { AutomationsSettings } from "@/components/settings/AutomationsSettings";
 import { CustomFieldsSettings } from "@/components/settings/CustomFieldsSettings";
 import { SignaturePresetsSettings } from "@/components/settings/SignaturePresetsSettings";
 import { ActumSettings } from "@/components/settings/ActumSettings";
+import { usePaymentRail } from "@/hooks/usePaymentRail";
 import { ReferralSettings } from "@/components/settings/ReferralSettings";
 import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
 
@@ -428,6 +429,7 @@ export default function Settings() {
   const [sigPresetsOpen, setSigPresetsOpen] = useState(false);
   
   const { toast } = useToast();
+  const { isActum: isActumRail } = usePaymentRail();
 
   // Check if current user is admin
   const { data: isAdmin, isLoading: isAdminLoading } = useQuery({
