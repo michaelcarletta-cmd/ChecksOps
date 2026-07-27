@@ -19987,6 +19987,9 @@ export type Database = {
           actum_test_username: string | null
           actum_username: string | null
           actum_webhook_secret: string | null
+          bank_connection_status: string | null
+          bank_last_four: string | null
+          bank_name: string | null
           beneficial_owner_dob: string | null
           beneficial_owner_id_url: string | null
           beneficial_owner_name: string | null
@@ -20009,6 +20012,7 @@ export type Database = {
           kyc_completed_by: string | null
           kyc_notes: string | null
           kyc_status: string
+          last_sync: string | null
           legal_business_name: string | null
           logo_url: string | null
           max_checks_per_month: number | null
@@ -20016,9 +20020,12 @@ export type Database = {
           max_subcontractors: number
           max_vendors: number
           monthly_rate_cents: number
+          moov_account_id: string | null
           name: string
           partner_code: string
+          payment_provider: string | null
           payment_rail: string
+          payment_status: string | null
           per_check_billing_enabled: boolean | null
           per_check_rate_cents: number | null
           plaid_funding_account_id: string | null
@@ -20035,6 +20042,7 @@ export type Database = {
           stripe_customer_id: string | null
           subscription_status: string | null
           updated_at: string
+          verification_status: string | null
           wisp_acknowledged_at: string | null
           wisp_acknowledged_by: string | null
         }
@@ -20058,6 +20066,9 @@ export type Database = {
           actum_test_username?: string | null
           actum_username?: string | null
           actum_webhook_secret?: string | null
+          bank_connection_status?: string | null
+          bank_last_four?: string | null
+          bank_name?: string | null
           beneficial_owner_dob?: string | null
           beneficial_owner_id_url?: string | null
           beneficial_owner_name?: string | null
@@ -20080,6 +20091,7 @@ export type Database = {
           kyc_completed_by?: string | null
           kyc_notes?: string | null
           kyc_status?: string
+          last_sync?: string | null
           legal_business_name?: string | null
           logo_url?: string | null
           max_checks_per_month?: number | null
@@ -20087,9 +20099,12 @@ export type Database = {
           max_subcontractors?: number
           max_vendors?: number
           monthly_rate_cents?: number
+          moov_account_id?: string | null
           name: string
           partner_code?: string
+          payment_provider?: string | null
           payment_rail?: string
+          payment_status?: string | null
           per_check_billing_enabled?: boolean | null
           per_check_rate_cents?: number | null
           plaid_funding_account_id?: string | null
@@ -20106,6 +20121,7 @@ export type Database = {
           stripe_customer_id?: string | null
           subscription_status?: string | null
           updated_at?: string
+          verification_status?: string | null
           wisp_acknowledged_at?: string | null
           wisp_acknowledged_by?: string | null
         }
@@ -20129,6 +20145,9 @@ export type Database = {
           actum_test_username?: string | null
           actum_username?: string | null
           actum_webhook_secret?: string | null
+          bank_connection_status?: string | null
+          bank_last_four?: string | null
+          bank_name?: string | null
           beneficial_owner_dob?: string | null
           beneficial_owner_id_url?: string | null
           beneficial_owner_name?: string | null
@@ -20151,6 +20170,7 @@ export type Database = {
           kyc_completed_by?: string | null
           kyc_notes?: string | null
           kyc_status?: string
+          last_sync?: string | null
           legal_business_name?: string | null
           logo_url?: string | null
           max_checks_per_month?: number | null
@@ -20158,9 +20178,12 @@ export type Database = {
           max_subcontractors?: number
           max_vendors?: number
           monthly_rate_cents?: number
+          moov_account_id?: string | null
           name?: string
           partner_code?: string
+          payment_provider?: string | null
           payment_rail?: string
+          payment_status?: string | null
           per_check_billing_enabled?: boolean | null
           per_check_rate_cents?: number | null
           plaid_funding_account_id?: string | null
@@ -20177,6 +20200,7 @@ export type Database = {
           stripe_customer_id?: string | null
           subscription_status?: string | null
           updated_at?: string
+          verification_status?: string | null
           wisp_acknowledged_at?: string | null
           wisp_acknowledged_by?: string | null
         }
