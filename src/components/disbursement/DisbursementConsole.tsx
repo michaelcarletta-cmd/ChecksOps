@@ -293,7 +293,7 @@ export function DisbursementConsole({
     onError: (e: any) => toast({ title: "Disbursement failed", description: e.message, variant: "destructive" }),
   });
 
-  if (!isActum) return <RailUnavailableNotice />;
+  if (!isActum && !isPlaid) return <RailUnavailableNotice />;
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading accounts...</div>;
 
   const totalRemainingOfCheck = Math.max(0, checkAmount - alreadyDisbursed);
