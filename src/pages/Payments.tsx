@@ -43,6 +43,12 @@ export default function Payments() {
               Payroll
             </TabsTrigger>
           )}
+          {showPaymentSettings && (
+            <TabsTrigger value="settings" className="gap-2">
+              <Settings2 className="h-4 w-4" />
+              Payment Settings
+            </TabsTrigger>
+          )}
         </TabsList>
         <TabsContent value="ledger">
           <PaymentLedger />
@@ -58,7 +64,13 @@ export default function Payments() {
             <PayrollTab />
           </TabsContent>
         )}
+        {showPaymentSettings && (
+          <TabsContent value="settings">
+            <PaymentSettingsTab />
+          </TabsContent>
+        )}
       </Tabs>
+
     </div>
   );
 }
