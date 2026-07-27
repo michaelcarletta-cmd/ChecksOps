@@ -277,6 +277,7 @@ export function StakeholderAccountSettings() {
   });
 
 
+  if (!isActum) return <RailUnavailableNotice title="Stakeholder bank accounts unavailable" />;
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading accounts...</div>;
 
   return (
