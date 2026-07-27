@@ -870,9 +870,9 @@ function EndorsementCard({
         </div>
       )}
 
-      {/* Sign in Person — only for insured and contractor payees. Public adjusters
-          and mortgage companies must sign via their own remote workflows. */}
-      {!readOnly && (endorsement.payee_type === "insured" || endorsement.payee_type === "contractor") && endorsement.status !== "signed" && endorsement.status !== "waived" && (
+      {/* Sign in Person — for insured, contractor, and public adjuster payees.
+          Mortgage companies must sign via their own remote workflow. */}
+      {!readOnly && (endorsement.payee_type === "insured" || endorsement.payee_type === "contractor" || endorsement.payee_type === "public_adjuster") && endorsement.status !== "signed" && endorsement.status !== "waived" && (
         <Button
           size="sm"
           variant="default"
