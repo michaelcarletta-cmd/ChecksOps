@@ -573,7 +573,8 @@ function EndorsementCard({
 
   const isMortgage = endorsement.payee_type === "mortgage_company";
   const isSynthetic = endorsement.id.startsWith("payee-");
-  const canSendRequest = !readOnly && !partnerMode && !isMortgage &&
+  // Any tenant (including shared partners) may send or resend a pending endorsement request.
+  const canSendRequest = !readOnly && !isMortgage &&
     endorsement.status !== "signed" &&
     endorsement.status !== "waived" &&
     endorsement.status !== "rejected";
