@@ -28,6 +28,7 @@ const CheckOpsForgotPassword = lazy(() => import("./pages/checkops/CheckOpsForgo
 const CheckOpsResetPassword = lazy(() => import("./pages/checkops/CheckOpsResetPassword"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
+const RecipientPaymentSetup = lazy(() => import("./pages/RecipientPaymentSetup"));
 const AdminTenants = lazy(() => import("./pages/admin/AdminTenants"));
 const AdminMortgageOps = lazy(() => import("./pages/admin/AdminMortgageOps"));
 const VerifyAccount = lazy(() => import("./pages/VerifyAccount"));
@@ -83,6 +84,7 @@ function CheckOpsRoutes() {
       <Route path="/payment-direction/:token" element={<Suspense fallback={<PageLoader />}><PaymentDirectionPage /></Suspense>} />
       <Route path="/verify-account/complete" element={<Suspense fallback={<PageLoader />}><VerifyAccount /></Suspense>} />
       <Route path="/verify-account/:token" element={<Suspense fallback={<PageLoader />}><VerifyAccountStart /></Suspense>} />
+      <Route path="/pay-setup/:token" element={<Suspense fallback={<PageLoader />}><RecipientPaymentSetup /></Suspense>} />
       <Route path="/unsubscribe" element={<Suspense fallback={<PageLoader />}><Unsubscribe /></Suspense>} />
       <Route path="/pricing" element={<Suspense fallback={<PageLoader />}><CheckOpsPricing /></Suspense>} />
       <Route path="/security" element={<Suspense fallback={<PageLoader />}><CheckOpsSecurity /></Suspense>} />
