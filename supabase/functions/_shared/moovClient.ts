@@ -173,7 +173,7 @@ export function normalizeTransferStatus(moovStatus: string | null | undefined): 
     case "reversed":
       return "returned";
     case "completed":
-ầ      return "completed";
+      return "completed";
     case "failed":
       return "failed";
     case "canceled":
