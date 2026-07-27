@@ -15,6 +15,7 @@ import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, typ
 import { AchAuthorizationForm } from "@/components/disbursement/AchAuthorizationForm";
 import { BankVerification } from "@/components/disbursement/BankVerification";
 import { usePermissions } from "@/hooks/usePermissions";
+import { usePaymentRail } from "@/hooks/usePaymentRail";
 
 
 export function TenantBankAccountSettings() {
@@ -50,7 +51,7 @@ export function TenantBankAccountSettings() {
   const addAccount = useMutation({
     mutationFn: async () => {
       let insertedId: string | null = null;
-      // Create placeholder row; Authentecheck postback (Plaid) fills in all real fields:
+      // Create placeholder row; the bank-verification rail fills in all real fields:
       // routing, account, account type, holder name, and bank name.
       const { data: inserted, error } = await supabase
         .from("stakeholder_accounts")
@@ -71,6 +72,10 @@ export function TenantBankAccountSettings() {
       insertedId = inserted!.id;
 
       try {
+        // Plaid rail: no hosted redirect. The row lands unverified and the
+        // inline Plaid Link widget on the account card finishes the job.
+        if (isPlaid) return null;
+
         const { data: sess, error: initErr } = await supabase.functions.invoke(
           "actum-authentecheck-init",
           { body: { stakeholder_account_id: inserted!.id } },
@@ -95,6 +100,12 @@ export function TenantBankAccountSettings() {
     onMutate: () => setIsStarting(true),
     onSettled: () => setIsStarting(false),
     onSuccess: (url) => {
+      if (!url && isPlaid) {
+        toast({
+          title: "Account added",
+          description: "Click \u201cVerify with bank login\u201d below to link it through Plaid.",
+        });
+      }
       if (url) {
         // Open as a normal full-size tab, not a constrained popup — OAuth-based
         // bank redirects (Wells Fargo, Chase, etc. via Plaid) can lose session
@@ -187,7 +198,7 @@ export function TenantBankAccountSettings() {
                 Bank Account
               </CardTitle>
               <CardDescription className="text-xs mt-1">
-                Your bank account for receiving check deposits. Sign in with your bank — routing & account number, holder name, and account type are captured securely through Authentecheck (Plaid). No manual entry.
+                Your bank account for receiving check deposits. Sign in with your bank — routing & account number, holder name, and account type are captured securely through your bank login. No manual entry.
               </CardDescription>
             </div>
             <Button
