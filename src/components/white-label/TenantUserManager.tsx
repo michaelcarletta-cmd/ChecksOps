@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Trash2, UserPlus } from "lucide-react";
+import { Loader2, Plus, Send, Trash2, UserPlus } from "lucide-react";
 
 interface Props {
   tenantId: string;
@@ -57,6 +57,26 @@ export function TenantUserManager({ tenantId }: Props) {
     },
   });
 
+  const resendMutation = useMutation({
+    mutationFn: async ({ email, role }: { email: string; role: string }) => {
+      const { data, error } = await supabase.functions.invoke("tenant-invite-user", {
+        body: { tenant_id: tenantId, email, role },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      if (data?.invite_sent === false) {
+        throw new Error(data?.invite_error || "Invite email could not be sent");
+      }
+      return data;
+    },
+    onSuccess: () => {
+      toast({ title: "Invite resent", description: "A fresh sign-in link is on its way. It expires in 24 hours." });
+    },
+    onError: (e: any) => {
+      toast({ title: "Failed to resend invite", description: e.message, variant: "destructive" });
+    },
+  });
+
   const removeMutation = useMutation({
     mutationFn: async (userId: string) => {
       const { error } = await supabase
@@ -74,6 +94,7 @@ export function TenantUserManager({ tenantId }: Props) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
     },
   });
+
 
   const roleColor = (r: string) => {
     switch (r) {
@@ -139,12 +160,27 @@ export function TenantUserManager({ tenantId }: Props) {
                 </div>
                 <Button
                   variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 shrink-0 text-xs"
+                  disabled={!u.email || (resendMutation.isPending && resendMutation.variables?.email === u.email)}
+                  onClick={() => u.email && resendMutation.mutate({ email: u.email, role: u.role })}
+                  title="Resend sign-in invite"
+                >
+                  {resendMutation.isPending && resendMutation.variables?.email === u.email ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Send className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
                   size="icon"
                   className="h-7 w-7 shrink-0"
                   onClick={() => removeMutation.mutate(u.user_id)}
                 >
                   <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
                 </Button>
+
               </div>
             );
           })}
