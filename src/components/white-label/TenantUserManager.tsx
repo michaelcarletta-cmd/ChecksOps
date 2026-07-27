@@ -160,12 +160,27 @@ export function TenantUserManager({ tenantId }: Props) {
                 </div>
                 <Button
                   variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 shrink-0 text-xs"
+                  disabled={!u.email || (resendMutation.isPending && resendMutation.variables?.email === u.email)}
+                  onClick={() => u.email && resendMutation.mutate({ email: u.email, role: u.role })}
+                  title="Resend sign-in invite"
+                >
+                  {resendMutation.isPending && resendMutation.variables?.email === u.email ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Send className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
                   size="icon"
                   className="h-7 w-7 shrink-0"
                   onClick={() => removeMutation.mutate(u.user_id)}
                 >
                   <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
                 </Button>
+
               </div>
             );
           })}
