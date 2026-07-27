@@ -20021,6 +20021,8 @@ export type Database = {
           payment_rail: string
           per_check_billing_enabled: boolean | null
           per_check_rate_cents: number | null
+          plaid_funding_account_id: string | null
+          plaid_same_day_funding: boolean
           plan_tier: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color: string | null
           privacy_notice_version: string
@@ -20090,6 +20092,8 @@ export type Database = {
           payment_rail?: string
           per_check_billing_enabled?: boolean | null
           per_check_rate_cents?: number | null
+          plaid_funding_account_id?: string | null
+          plaid_same_day_funding?: boolean
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color?: string | null
           privacy_notice_version?: string
@@ -20159,6 +20163,8 @@ export type Database = {
           payment_rail?: string
           per_check_billing_enabled?: boolean | null
           per_check_rate_cents?: number | null
+          plaid_funding_account_id?: string | null
+          plaid_same_day_funding?: boolean
           plan_tier?: Database["public"]["Enums"]["tenant_plan_tier"] | null
           primary_color?: string | null
           privacy_notice_version?: string
