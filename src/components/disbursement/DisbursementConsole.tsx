@@ -15,6 +15,8 @@ import { AlertTriangle, CheckCircle2, Send, Building2, Loader2, RefreshCw, Zap, 
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { CheckStakeholdersManager } from "./CheckStakeholdersManager";
+import { RailUnavailableNotice } from "./RailUnavailableNotice";
+import { usePaymentRail } from "@/hooks/usePaymentRail";
 import { VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 
 interface Props {
