@@ -276,11 +276,12 @@ export function TenantBankAccountSettings() {
                     </Button>
                   </div>
                 </div>
-                <AuthentecheckVerification
+                <BankVerification
                   accountId={acct.id}
                   accountNickname={acct.nickname}
                   accountLast4={acct.chk_acct.slice(-4)}
                   verificationStatus={acct.verification_status ?? "unverified"}
+                  verificationSource={(acct as any).verification_source ?? null}
                 />
                 <AchAuthorizationForm
                   stakeholderAccountId={acct.id}
