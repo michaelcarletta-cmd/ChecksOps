@@ -57,6 +57,26 @@ export function TenantUserManager({ tenantId }: Props) {
     },
   });
 
+  const resendMutation = useMutation({
+    mutationFn: async ({ email, role }: { email: string; role: string }) => {
+      const { data, error } = await supabase.functions.invoke("tenant-invite-user", {
+        body: { tenant_id: tenantId, email, role },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      if (data?.invite_sent === false) {
+        throw new Error(data?.invite_error || "Invite email could not be sent");
+      }
+      return data;
+    },
+    onSuccess: () => {
+      toast({ title: "Invite resent", description: "A fresh sign-in link is on its way. It expires in 24 hours." });
+    },
+    onError: (e: any) => {
+      toast({ title: "Failed to resend invite", description: e.message, variant: "destructive" });
+    },
+  });
+
   const removeMutation = useMutation({
     mutationFn: async (userId: string) => {
       const { error } = await supabase
@@ -74,6 +94,7 @@ export function TenantUserManager({ tenantId }: Props) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
     },
   });
+
 
   const roleColor = (r: string) => {
     switch (r) {
