@@ -18388,6 +18388,12 @@ export type Database = {
           is_primary: boolean
           nickname: string
           origin: string
+          plaid_access_token: string | null
+          plaid_account_id: string | null
+          plaid_account_mask: string | null
+          plaid_institution_name: string | null
+          plaid_item_id: string | null
+          plaid_linked_at: string | null
           tenant_id: string
           updated_at: string
           verification_amount_1_cents: number | null
@@ -18397,6 +18403,7 @@ export type Database = {
           verification_failure_reason: string | null
           verification_initiated_at: string | null
           verification_recipient_email: string | null
+          verification_source: string
           verification_status: string
           verification_token: string | null
           verification_token_expires_at: string | null
@@ -18427,6 +18434,12 @@ export type Database = {
           is_primary?: boolean
           nickname: string
           origin?: string
+          plaid_access_token?: string | null
+          plaid_account_id?: string | null
+          plaid_account_mask?: string | null
+          plaid_institution_name?: string | null
+          plaid_item_id?: string | null
+          plaid_linked_at?: string | null
           tenant_id: string
           updated_at?: string
           verification_amount_1_cents?: number | null
@@ -18436,6 +18449,7 @@ export type Database = {
           verification_failure_reason?: string | null
           verification_initiated_at?: string | null
           verification_recipient_email?: string | null
+          verification_source?: string
           verification_status?: string
           verification_token?: string | null
           verification_token_expires_at?: string | null
@@ -18466,6 +18480,12 @@ export type Database = {
           is_primary?: boolean
           nickname?: string
           origin?: string
+          plaid_access_token?: string | null
+          plaid_account_id?: string | null
+          plaid_account_mask?: string | null
+          plaid_institution_name?: string | null
+          plaid_item_id?: string | null
+          plaid_linked_at?: string | null
           tenant_id?: string
           updated_at?: string
           verification_amount_1_cents?: number | null
@@ -18475,6 +18495,7 @@ export type Database = {
           verification_failure_reason?: string | null
           verification_initiated_at?: string | null
           verification_recipient_email?: string | null
+          verification_source?: string
           verification_status?: string
           verification_token?: string | null
           verification_token_expires_at?: string | null

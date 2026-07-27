@@ -15,9 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { AlertTriangle, Building2, Plus, Trash2, Star, CreditCard, ShieldCheck, MailCheck, Lock, Loader2, Info, ShieldAlert } from "lucide-react";
 import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 import { AchAuthorizationForm } from "./AchAuthorizationForm";
-import { AuthentecheckVerification } from "./AuthentecheckVerification";
-import { RailUnavailableNotice } from "./RailUnavailableNotice";
-import { usePaymentRail } from "@/hooks/usePaymentRail";
+import { BankVerification } from "./BankVerification";
 import { usePermissions } from "@/hooks/usePermissions";
 import { RequestStakeholderLimitDialog } from "./RequestStakeholderLimitDialog";
 
@@ -68,7 +66,6 @@ export function StakeholderAccountSettings() {
   const { tenant } = useTenant();
   const { toast } = useToast();
   const { isAdmin } = usePermissions();
-  const { isActum } = usePaymentRail();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -277,7 +274,6 @@ export function StakeholderAccountSettings() {
   });
 
 
-  if (!isActum) return <RailUnavailableNotice title="Stakeholder bank accounts unavailable" />;
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading accounts...</div>;
 
   return (
@@ -522,11 +518,12 @@ export function StakeholderAccountSettings() {
                   </Button>
                 </div>
               </div>
-              <AuthentecheckVerification
+              <BankVerification
                 accountId={acct.id}
                 accountNickname={acct.nickname}
                 accountLast4={acct.chk_acct.slice(-4)}
                 verificationStatus={acct.verification_status ?? "unverified"}
+                verificationSource={(acct as any).verification_source ?? null}
               />
               {acct.is_primary && (
                 <AchAuthorizationForm
