@@ -43,7 +43,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
   const [homeownerLinkOpen, setHomeownerLinkOpen] = useState(false);
   const [resending, setResending] = useState(false);
 
-  // Existing homeowner AuthenteCheck link for this check (if any), so we can
+  // Existing homeowner bank link for this check (if any), so we can
   // offer a Resend button instead of forcing another Send flow when a link
   // was already sent but the homeowner hasn't finished verifying.
   const { data: existingHomeownerLink, refetch: refetchHomeownerLink } = useQuery({
@@ -421,7 +421,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
           </p>
         )}
         <p className="text-[10px] text-muted-foreground">
-          Payment link: homeowner verifies their bank via AuthenteCheck. Tracking link: homeowner sees the full timeline for every check on this claim.
+          Payment link: homeowner verifies their bank account. Tracking link: homeowner sees the full timeline for every check on this claim.
         </p>
       </div>
 

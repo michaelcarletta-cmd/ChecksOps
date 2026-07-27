@@ -201,7 +201,7 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
                 <Alert variant="default" className="mt-2">
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription className="text-xs">
-                    No eligible payees. Add a stakeholder in the <strong>Stakeholders</strong> tab and complete the bank-link (Authentecheck) before running payroll.
+                    No eligible payees. Add a stakeholder in the <strong>Stakeholders</strong> tab and complete the bank-link before running payroll.
                   </AlertDescription>
                 </Alert>
               )}
