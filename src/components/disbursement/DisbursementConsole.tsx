@@ -269,12 +269,17 @@ export function DisbursementConsole({
 
       if (splitsErr) throw splitsErr;
 
-      // Trigger Actum disbursement (admin_override only honored server-side if caller is admin)
-      const { error: invokeErr } = await supabase.functions.invoke("actum-disburse", {
+      // Trigger the disbursement on the tenant's active rail
+      // (admin_override only honored server-side if caller is admin)
+      const railFn = isPlaid ? "plaid-disburse" : "actum-disburse";
+      const { data: railData, error: invokeErr } = await supabase.functions.invoke(railFn, {
         body: { batch_id: batch.id, admin_override: adminOverride && isAdmin },
       });
 
       if (invokeErr) throw invokeErr;
+      if ((railData as any)?.success === false) {
+        throw new Error((railData as any)?.error ?? "Disbursement failed");
+      }
       return batch.id;
     },
     onSuccess: () => {
