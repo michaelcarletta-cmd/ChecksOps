@@ -15,9 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { AlertTriangle, Building2, Plus, Trash2, Star, CreditCard, ShieldCheck, MailCheck, Lock, Loader2, Info, ShieldAlert } from "lucide-react";
 import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 import { AchAuthorizationForm } from "./AchAuthorizationForm";
-import { AuthentecheckVerification } from "./AuthentecheckVerification";
-import { RailUnavailableNotice } from "./RailUnavailableNotice";
-import { usePaymentRail } from "@/hooks/usePaymentRail";
+import { BankVerification } from "./BankVerification";
 import { usePermissions } from "@/hooks/usePermissions";
 import { RequestStakeholderLimitDialog } from "./RequestStakeholderLimitDialog";
 
