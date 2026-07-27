@@ -1,0 +1,2 @@
+ALTER TABLE public.disbursement_splits DROP CONSTRAINT IF EXISTS disbursement_splits_method_check;
+ALTER TABLE public.disbursement_splits ADD CONSTRAINT disbursement_splits_method_check CHECK (method = ANY (ARRAY['actum'::text,'plaid'::text,'external_check'::text,'wire'::text,'manual'::text]));
