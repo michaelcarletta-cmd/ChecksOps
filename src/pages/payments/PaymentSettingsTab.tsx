@@ -1,5 +1,7 @@
 import { PaymentAccountPanel } from "@/components/payments/PaymentAccountPanel";
+import { PaymentProviderAdmin } from "@/components/payments/PaymentProviderAdmin";
 import { TenantBankAccountSettings } from "@/components/settings/TenantBankAccountSettings";
+import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 
 /**
  * Provider-neutral payment settings. The bank connection widget underneath
@@ -10,6 +12,7 @@ export function PaymentSettingsTab() {
     <div className="space-y-4 pt-2">
       <PaymentAccountPanel />
       <TenantBankAccountSettings />
+      {PAYMENT_FLAGS.SHOW_PAYMENT_ADMIN && <PaymentProviderAdmin />}
     </div>
   );
 }
