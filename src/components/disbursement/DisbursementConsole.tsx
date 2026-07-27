@@ -70,6 +70,7 @@ export function DisbursementConsole({
   const SPEED_LABELS: Record<string, string> = { next_day: "Next Day", same_day: "Same Day", instant: "Instant" };
   const [adminOverride, setAdminOverride] = useState(false);
   const { isAdmin } = usePermissions();
+  const { isActum } = usePaymentRail();
 
 
   // Funds-availability hold removed — tenants may disburse immediately after deposit.
