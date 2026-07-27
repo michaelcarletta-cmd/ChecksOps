@@ -157,7 +157,7 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
     },
   });
 
-  if (!isActum) {
+  if (!isActum && !isPlaid) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-md">
