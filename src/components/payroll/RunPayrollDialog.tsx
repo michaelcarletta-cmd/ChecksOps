@@ -121,17 +121,24 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
         .single();
       if (runErr) throw runErr;
 
-      // Fire Actum via existing function
-      const { error: invokeErr } = await supabase.functions.invoke("actum-disburse", {
+      // Fire the tenant's active payout rail
+      const railFn = isPlaid ? "plaid-disburse" : "actum-disburse";
+      const { data: railData, error: invokeErr } = await supabase.functions.invoke(railFn, {
         body: { batch_id: batch.id },
       });
 
-      if (invokeErr) {
+      const railError =
+        invokeErr ??
+        ((railData as any)?.success === false
+          ? new Error((railData as any)?.error ?? "Payment failed")
+          : null);
+
+      if (railError) {
         await supabase
           .from("payroll_runs")
-          .update({ status: "failed", error: invokeErr.message })
+          .update({ status: "failed", error: railError.message })
           .eq("id", runRow.id);
-        throw invokeErr;
+        throw railError;
       }
 
       await supabase.from("payroll_runs").update({ status: "submitted" }).eq("id", runRow.id);
