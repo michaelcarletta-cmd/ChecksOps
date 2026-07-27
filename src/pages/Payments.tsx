@@ -3,12 +3,16 @@ import { PaymentLedger } from "@/components/ledger/PaymentLedger";
 import { RecipientReport } from "@/components/ledger/RecipientReport";
 import { TaxSummary } from "@/components/ledger/TaxSummary";
 import { PayrollTab } from "@/pages/payments/PayrollTab";
+import { PaymentSettingsTab } from "@/pages/payments/PaymentSettingsTab";
+import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 import { useAuth } from "@/hooks/useAuth";
-import { Receipt, FileText, Users, Wallet } from "lucide-react";
+import { Receipt, FileText, Users, Wallet, Settings2 } from "lucide-react";
 
 export default function Payments() {
   const { userRole } = useAuth();
   const isAdmin = userRole === "admin";
+  const showPaymentSettings = isAdmin && PAYMENT_FLAGS.SHOW_PAYMENT_SETTINGS;
+
 
   return (
     <div className="space-y-4">
