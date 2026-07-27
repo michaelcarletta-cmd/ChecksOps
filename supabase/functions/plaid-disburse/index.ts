@@ -190,6 +190,8 @@ serve(async (req) => {
           account_id: acct.plaid_account_id,
           authorization_id: authorization?.authorization?.id,
           description: "ChecksOps".slice(0, 15),
+          ...(fundingAccountId ? { funding_account_id: fundingAccountId } : {}),
+
         });
 
         const transfer = transferRes?.transfer;
