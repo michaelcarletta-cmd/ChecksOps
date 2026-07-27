@@ -176,6 +176,7 @@ export function TenantBankAccountSettings() {
     onError: (e: any) => toast({ title: "Override failed", description: e.message, variant: "destructive" }),
   });
 
+  if (!isActum) return <RailUnavailableNotice title="Bank account linking unavailable" />;
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading...</div>;
 
   return (

@@ -197,6 +197,8 @@ export function SendPaymentPanel({
     );
   }
 
+  if (!isActum) return <RailUnavailableNotice />;
+
   return (
     <Card>
       <CardHeader className="pb-2">
