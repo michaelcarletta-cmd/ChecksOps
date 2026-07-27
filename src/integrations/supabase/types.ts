@@ -13636,6 +13636,87 @@ export type Database = {
         }
         Relationships: []
       }
+      external_payment_recipients: {
+        Row: {
+          check_id: string | null
+          claim_id: string | null
+          created_at: string
+          created_by: string | null
+          display_name: string
+          email: string | null
+          environment: string
+          id: string
+          onboarding_status: string
+          phone: string | null
+          provider: string
+          provider_account_id: string | null
+          recipient_type: string
+          relationship: string | null
+          secure_token: string | null
+          tenant_id: string
+          token_expires_at: string | null
+          token_used_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          check_id?: string | null
+          claim_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          display_name: string
+          email?: string | null
+          environment?: string
+          id?: string
+          onboarding_status?: string
+          phone?: string | null
+          provider?: string
+          provider_account_id?: string | null
+          recipient_type?: string
+          relationship?: string | null
+          secure_token?: string | null
+          tenant_id: string
+          token_expires_at?: string | null
+          token_used_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          check_id?: string | null
+          claim_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          display_name?: string
+          email?: string | null
+          environment?: string
+          id?: string
+          onboarding_status?: string
+          phone?: string | null
+          provider?: string
+          provider_account_id?: string | null
+          recipient_type?: string
+          relationship?: string | null
+          secure_token?: string | null
+          tenant_id?: string
+          token_expires_at?: string | null
+          token_used_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_payment_recipients_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_payment_recipients_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       extracted_document_data: {
         Row: {
           acv_total: number | null
@@ -16626,6 +16707,127 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_event_log: {
+        Row: {
+          created_at: string
+          environment: string
+          event_type: string
+          id: string
+          new_status: string | null
+          previous_status: string | null
+          provider: string
+          provider_metadata: Json
+          provider_transfer_id: string | null
+          recipient_id: string | null
+          tenant_id: string | null
+          transfer_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          environment?: string
+          event_type: string
+          id?: string
+          new_status?: string | null
+          previous_status?: string | null
+          provider?: string
+          provider_metadata?: Json
+          provider_transfer_id?: string | null
+          recipient_id?: string | null
+          tenant_id?: string | null
+          transfer_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          environment?: string
+          event_type?: string
+          id?: string
+          new_status?: string | null
+          previous_status?: string | null
+          provider?: string
+          provider_metadata?: Json
+          provider_transfer_id?: string | null
+          recipient_id?: string | null
+          tenant_id?: string | null
+          transfer_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_event_log_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_event_log_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_event_log_transfer_id_fkey"
+            columns: ["transfer_id"]
+            isOneToOne: false
+            referencedRelation: "payment_transfers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_idempotency_keys: {
+        Row: {
+          created_at: string
+          id: string
+          idempotency_key: string
+          provider: string
+          request_fingerprint: string | null
+          response: Json | null
+          scope: string
+          status: string
+          tenant_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          idempotency_key: string
+          provider?: string
+          request_fingerprint?: string | null
+          response?: Json | null
+          scope: string
+          status?: string
+          tenant_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          idempotency_key?: string
+          provider?: string
+          request_fingerprint?: string | null
+          response?: Json | null
+          scope?: string
+          status?: string
+          tenant_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_idempotency_keys_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_idempotency_keys_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_methods: {
         Row: {
           card_last_four: string | null
@@ -16655,6 +16857,408 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      payment_provider_accounts: {
+        Row: {
+          account_type: string
+          can_ach_credit: boolean
+          can_ach_debit: boolean
+          can_receive_payments: boolean
+          can_send_payments: boolean
+          capabilities: Json
+          created_at: string
+          disabled: boolean
+          display_name: string | null
+          environment: string
+          id: string
+          last_synced_at: string | null
+          last_webhook_event_at: string | null
+          last_webhook_event_type: string | null
+          onboarding_status: string
+          onboarding_url: string | null
+          onboarding_url_expires_at: string | null
+          provider: string
+          provider_account_id: string | null
+          provider_metadata: Json
+          requirements: Json
+          restricted: boolean
+          tenant_id: string
+          updated_at: string
+          verification_status: string
+        }
+        Insert: {
+          account_type?: string
+          can_ach_credit?: boolean
+          can_ach_debit?: boolean
+          can_receive_payments?: boolean
+          can_send_payments?: boolean
+          capabilities?: Json
+          created_at?: string
+          disabled?: boolean
+          display_name?: string | null
+          environment?: string
+          id?: string
+          last_synced_at?: string | null
+          last_webhook_event_at?: string | null
+          last_webhook_event_type?: string | null
+          onboarding_status?: string
+          onboarding_url?: string | null
+          onboarding_url_expires_at?: string | null
+          provider?: string
+          provider_account_id?: string | null
+          provider_metadata?: Json
+          requirements?: Json
+          restricted?: boolean
+          tenant_id: string
+          updated_at?: string
+          verification_status?: string
+        }
+        Update: {
+          account_type?: string
+          can_ach_credit?: boolean
+          can_ach_debit?: boolean
+          can_receive_payments?: boolean
+          can_send_payments?: boolean
+          capabilities?: Json
+          created_at?: string
+          disabled?: boolean
+          display_name?: string | null
+          environment?: string
+          id?: string
+          last_synced_at?: string | null
+          last_webhook_event_at?: string | null
+          last_webhook_event_type?: string | null
+          onboarding_status?: string
+          onboarding_url?: string | null
+          onboarding_url_expires_at?: string | null
+          provider?: string
+          provider_account_id?: string | null
+          provider_metadata?: Json
+          requirements?: Json
+          restricted?: boolean
+          tenant_id?: string
+          updated_at?: string
+          verification_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_provider_accounts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_provider_accounts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_provider_methods: {
+        Row: {
+          account_type: string | null
+          bank_name: string | null
+          can_receive: boolean
+          can_send: boolean
+          connected_at: string | null
+          connection_status: string
+          created_at: string
+          disconnected_at: string | null
+          environment: string
+          external_recipient_id: string | null
+          holder_name: string | null
+          id: string
+          is_default: boolean
+          last_four: string | null
+          provider: string
+          provider_account_id: string
+          provider_bank_account_id: string
+          provider_metadata: Json
+          provider_payment_method_id: string | null
+          tenant_id: string | null
+          updated_at: string
+          verification_status: string
+        }
+        Insert: {
+          account_type?: string | null
+          bank_name?: string | null
+          can_receive?: boolean
+          can_send?: boolean
+          connected_at?: string | null
+          connection_status?: string
+          created_at?: string
+          disconnected_at?: string | null
+          environment?: string
+          external_recipient_id?: string | null
+          holder_name?: string | null
+          id?: string
+          is_default?: boolean
+          last_four?: string | null
+          provider?: string
+          provider_account_id: string
+          provider_bank_account_id: string
+          provider_metadata?: Json
+          provider_payment_method_id?: string | null
+          tenant_id?: string | null
+          updated_at?: string
+          verification_status?: string
+        }
+        Update: {
+          account_type?: string | null
+          bank_name?: string | null
+          can_receive?: boolean
+          can_send?: boolean
+          connected_at?: string | null
+          connection_status?: string
+          created_at?: string
+          disconnected_at?: string | null
+          environment?: string
+          external_recipient_id?: string | null
+          holder_name?: string | null
+          id?: string
+          is_default?: boolean
+          last_four?: string | null
+          provider?: string
+          provider_account_id?: string
+          provider_bank_account_id?: string
+          provider_metadata?: Json
+          provider_payment_method_id?: string | null
+          tenant_id?: string | null
+          updated_at?: string
+          verification_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_provider_methods_external_recipient_id_fkey"
+            columns: ["external_recipient_id"]
+            isOneToOne: false
+            referencedRelation: "external_payment_recipients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_provider_methods_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_provider_methods_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_transfers: {
+        Row: {
+          amount_cents: number
+          check_id: string | null
+          claim_id: string | null
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          currency: string
+          description: string | null
+          destination_payment_method_id: string | null
+          destination_recipient_id: string | null
+          destination_tenant_id: string | null
+          environment: string
+          failure_reason: string | null
+          id: string
+          idempotency_key: string
+          net_amount_cents: number | null
+          platform_fee_cents: number
+          provider: string
+          provider_fee_cents: number | null
+          provider_metadata: Json
+          provider_status: string | null
+          provider_transfer_id: string | null
+          source_payment_method_id: string | null
+          source_tenant_account_id: string | null
+          speed: string
+          status: string
+          submitted_at: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents: number
+          check_id?: string | null
+          claim_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          description?: string | null
+          destination_payment_method_id?: string | null
+          destination_recipient_id?: string | null
+          destination_tenant_id?: string | null
+          environment?: string
+          failure_reason?: string | null
+          id?: string
+          idempotency_key: string
+          net_amount_cents?: number | null
+          platform_fee_cents?: number
+          provider?: string
+          provider_fee_cents?: number | null
+          provider_metadata?: Json
+          provider_status?: string | null
+          provider_transfer_id?: string | null
+          source_payment_method_id?: string | null
+          source_tenant_account_id?: string | null
+          speed?: string
+          status?: string
+          submitted_at?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          check_id?: string | null
+          claim_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          description?: string | null
+          destination_payment_method_id?: string | null
+          destination_recipient_id?: string | null
+          destination_tenant_id?: string | null
+          environment?: string
+          failure_reason?: string | null
+          id?: string
+          idempotency_key?: string
+          net_amount_cents?: number | null
+          platform_fee_cents?: number
+          provider?: string
+          provider_fee_cents?: number | null
+          provider_metadata?: Json
+          provider_status?: string | null
+          provider_transfer_id?: string | null
+          source_payment_method_id?: string | null
+          source_tenant_account_id?: string | null
+          speed?: string
+          status?: string
+          submitted_at?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_transfers_destination_payment_method_id_fkey"
+            columns: ["destination_payment_method_id"]
+            isOneToOne: false
+            referencedRelation: "payment_provider_methods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_transfers_destination_recipient_id_fkey"
+            columns: ["destination_recipient_id"]
+            isOneToOne: false
+            referencedRelation: "external_payment_recipients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_transfers_destination_tenant_id_fkey"
+            columns: ["destination_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_transfers_destination_tenant_id_fkey"
+            columns: ["destination_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_transfers_source_payment_method_id_fkey"
+            columns: ["source_payment_method_id"]
+            isOneToOne: false
+            referencedRelation: "payment_provider_methods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_transfers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_transfers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_webhook_events: {
+        Row: {
+          environment: string
+          event_type: string
+          external_event_id: string
+          id: string
+          payload: Json
+          processed_at: string | null
+          processing_error: string | null
+          provider: string
+          provider_account_id: string | null
+          received_at: string
+          resource_id: string | null
+          tenant_id: string | null
+        }
+        Insert: {
+          environment?: string
+          event_type: string
+          external_event_id: string
+          id?: string
+          payload?: Json
+          processed_at?: string | null
+          processing_error?: string | null
+          provider?: string
+          provider_account_id?: string | null
+          received_at?: string
+          resource_id?: string | null
+          tenant_id?: string | null
+        }
+        Update: {
+          environment?: string
+          event_type?: string
+          external_event_id?: string
+          id?: string
+          payload?: Json
+          processed_at?: string | null
+          processing_error?: string | null
+          provider?: string
+          provider_account_id?: string | null
+          received_at?: string
+          resource_id?: string | null
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_webhook_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_webhook_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       payroll_runs: {
         Row: {
@@ -20021,6 +20625,8 @@ export type Database = {
           max_vendors: number
           monthly_rate_cents: number
           moov_account_id: string | null
+          moov_allowlisted: boolean
+          moov_environment: string
           name: string
           partner_code: string
           payment_provider: string | null
@@ -20100,6 +20706,8 @@ export type Database = {
           max_vendors?: number
           monthly_rate_cents?: number
           moov_account_id?: string | null
+          moov_allowlisted?: boolean
+          moov_environment?: string
           name: string
           partner_code?: string
           payment_provider?: string | null
@@ -20179,6 +20787,8 @@ export type Database = {
           max_vendors?: number
           monthly_rate_cents?: number
           moov_account_id?: string | null
+          moov_allowlisted?: boolean
+          moov_environment?: string
           name?: string
           partner_code?: string
           payment_provider?: string | null

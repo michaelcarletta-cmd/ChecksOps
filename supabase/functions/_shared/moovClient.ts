@@ -1,0 +1,228 @@
+// Shared Moov REST client for edge functions.
+//
+// ChecksOps is the Moov *platform*: every tenant gets its own connected Moov
+// account and its own linked bank. Nothing here touches Actum or Plaid — those
+// rails keep their own clients (`_shared/plaidClient.ts`, actum helpers) and
+// keep working exactly as before.
+//
+// Sandbox only. `MOOV_ENVIRONMENT` must be "sandbox"; production is refused.
+
+const MOOV_HOSTS: Record<string, string> = {
+  sandbox: "https://api.sandbox.moov.io",
+  production: "https://api.moov.io",
+};
+
+export function moovEnvironment(): string {
+  const env = (Deno.env.get("MOOV_ENVIRONMENT") ?? "sandbox").toLowerCase();
+  if (!MOOV_HOSTS[env]) {
+    throw new Error(`MOOV_ENVIRONMENT must be "sandbox" or "production", got "${env}"`);
+  }
+  if (env === "production") {
+    // Hard stop: this integration is explicitly sandbox-only for now.
+    throw new Error("Moov production is not enabled for ChecksOps yet.");
+  }
+  return env;
+}
+
+export function moovHost(): string {
+  return MOOV_HOSTS[moovEnvironment()];
+}
+
+export function moovConfigured(): boolean {
+  return !!(Deno.env.get("MOOV_PUBLIC_KEY") && Deno.env.get("MOOV_SECRET_KEY"));
+}
+
+function credentials(): { key: string; secret: string } {
+  const key = Deno.env.get("MOOV_PUBLIC_KEY");
+  const secret = Deno.env.get("MOOV_SECRET_KEY");
+  if (!key || !secret) {
+    throw new Error("Moov is not configured. MOOV_PUBLIC_KEY and MOOV_SECRET_KEY must be set.");
+  }
+  return { key, secret };
+}
+
+export class MoovError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly body: unknown,
+  ) {
+    super(message);
+    this.name = "MoovError";
+  }
+}
+
+/* ---------------- OAuth ---------------- */
+
+type CachedToken = { token: string; expiresAt: number };
+const tokenCache = new Map<string, CachedToken>();
+
+/**
+ * Exchanges the platform credentials for a short-lived access token.
+ * Tokens are cached per scope-set for the life of the isolate.
+ */
+export async function moovToken(scopes: string[]): Promise<string> {
+  const scope = scopes.join(" ");
+  const cached = tokenCache.get(scope);
+  if (cached && cached.expiresAt > Date.now() + 30_000) return cached.token;
+
+  const { key, secret } = credentials();
+  const basic = btoa(`${key}:${secret}`);
+
+  const res = await fetch(`${moovHost()}/oauth2/token`, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${basic}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({ grant_type: "client_credentials", scope }),
+  });
+
+  const text = await res.text();
+  let body: any = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch { /* non-JSON handled below */ }
+
+  if (!res.ok) {
+    console.error("[moov] token error", res.status, body ?? text);
+    throw new MoovError("Could not authenticate with the payment provider", res.status, body ?? text);
+  }
+
+  const token = body?.access_token as string;
+  const ttl = Number(body?.expires_in ?? 300) * 1000;
+  tokenCache.set(scope, { token, expiresAt: Date.now() + ttl });
+  return token;
+}
+
+/** Scope helpers — Moov scopes are per-resource and per-account. */
+export const scopes = {
+  accountsWrite: () => ["/accounts.write"],
+  accountRead: (id: string) => [`/accounts/${id}/profile.read`],
+  accountWrite: (id: string) => [`/accounts/${id}/profile.write`],
+  capabilitiesRead: (id: string) => [`/accounts/${id}/capabilities.read`],
+  capabilitiesWrite: (id: string) => [`/accounts/${id}/capabilities.write`],
+  bankAccountsRead: (id: string) => [`/accounts/${id}/bank-accounts.read`],
+  bankAccountsWrite: (id: string) => [`/accounts/${id}/bank-accounts.write`],
+  paymentMethodsRead: (id: string) => [`/accounts/${id}/payment-methods.read`],
+  transfersWrite: (id: string) => [`/accounts/${id}/transfers.write`],
+  transfersRead: (id: string) => [`/accounts/${id}/transfers.read`],
+  representativesWrite: (id: string) => [`/accounts/${id}/representatives.write`],
+  /** Scopes handed to a browser-side Moov.js session for a recipient. */
+  dropBankLink: (id: string) => [
+    `/accounts/${id}/bank-accounts.write`,
+    `/accounts/${id}/bank-accounts.read`,
+    `/accounts/${id}/profile.read`,
+  ],
+};
+
+/* ---------------- REST ---------------- */
+
+export interface MoovRequestOptions {
+  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+  scopes: string[];
+  body?: unknown;
+  idempotencyKey?: string;
+  /** Act on behalf of a connected account. */
+  onBehalfOf?: string;
+}
+
+export async function moovFetch<T = any>(
+  path: string,
+  opts: MoovRequestOptions,
+): Promise<T> {
+  const token = await moovToken(opts.scopes);
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+  if (opts.idempotencyKey) headers["X-Idempotency-Key"] = opts.idempotencyKey;
+  if (opts.onBehalfOf) headers["X-Account-ID"] = opts.onBehalfOf;
+
+  const res = await fetch(`${moovHost()}${path}`, {
+    method: opts.method ?? "GET",
+    headers,
+    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+  });
+
+  const text = await res.text();
+  let json: any = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch { /* non-JSON */ }
+
+  if (!res.ok) {
+    const msg = json?.error ?? json?.message ?? text ?? `Moov ${path} failed`;
+    console.error("[moov] error", opts.method ?? "GET", path, res.status, msg);
+    throw new MoovError(typeof msg === "string" ? msg : JSON.stringify(msg), res.status, json ?? text);
+  }
+  return json as T;
+}
+
+/* ---------------- Normalizers ---------------- */
+
+/** Moov transfer/account statuses → ChecksOps neutral payment statuses. */
+export function normalizeTransferStatus(moovStatus: string | null | undefined): string {
+  switch ((moovStatus ?? "").toLowerCase()) {
+    case "created":
+    case "queued":
+      return "submitted";
+    case "pending":
+      return "pending";
+    case "reversed":
+      return "returned";
+    case "completed":
+      return "completed";
+    case "failed":
+      return "failed";
+    case "canceled":
+    case "cancelled":
+      return "canceled";
+    default:
+      return "processing";
+  }
+}
+
+/** Moov account/capability state → ChecksOps onboarding status. */
+export function normalizeOnboardingStatus(input: {
+  verificationStatus?: string | null;
+  capabilities?: Array<{ capability: string; status: string }> | null;
+  disabled?: boolean;
+}): string {
+  if (input.disabled) return "suspended";
+  const v = (input.verificationStatus ?? "").toLowerCase();
+  const caps = input.capabilities ?? [];
+  const enabled = caps.filter((c) => c.status === "enabled");
+
+  if (v === "failed" || v === "resubmit") return "restricted";
+  if (caps.some((c) => c.status === "pending")) return "verification_pending";
+  if (caps.some((c) => c.status === "errored")) return "additional_information_required";
+  if (v === "verified" && enabled.length > 0) return "active";
+  if (caps.length === 0) return "onboarding_incomplete";
+  if (v === "pending" || v === "review") return "verification_pending";
+  return "onboarding_incomplete";
+}
+
+/** Reduces the capability list to the booleans ChecksOps stores. */
+export function capabilityFlags(
+  caps: Array<{ capability: string; status: string }> | null | undefined,
+) {
+  const byName = new Map((caps ?? []).map((c) => [c.capability, c.status]));
+  const on = (name: string) => byName.get(name) === "enabled";
+  return {
+    can_receive_payments: on("transfers") || on("collect-funds"),
+    can_send_payments: on("transfers") || on("send-funds"),
+    can_ach_debit: on("collect-funds"),
+    can_ach_credit: on("send-funds"),
+    restricted: (caps ?? []).some((c) => c.status === "disconnected"),
+    disabled: (caps ?? []).length > 0 && (caps ?? []).every((c) => c.status !== "enabled"),
+  };
+}
+
+/** Last four of a Moov bank account without ever handling the full number. */
+export function safeLastFour(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const digits = value.replace(/\D/g, "");
+  return digits.length >= 4 ? digits.slice(-4) : null;
+}

@@ -16,6 +16,32 @@ export type PaymentAccountStatus =
   | "active"
   | "suspended";
 
+/**
+ * Onboarding lifecycle as reported by the provider's live account +
+ * capability response. This is the value the UI renders — never a stale
+ * local field.
+ */
+export type AccountOnboardingStatus =
+  | "not_started"
+  | "onboarding_incomplete"
+  | "verification_pending"
+  | "additional_information_required"
+  | "active"
+  | "restricted"
+  | "suspended";
+
+/** Capability snapshot pulled from the provider. */
+export interface AccountCapabilities {
+  canReceivePayments: boolean;
+  canSendPayments: boolean;
+  canAchDebit: boolean;
+  canAchCredit: boolean;
+  verificationPending: boolean;
+  informationRequired: string[];
+  restricted: boolean;
+  disabled: boolean;
+}
+
 /** Lifecycle of the tenant's connected business bank account. */
 export type BankConnectionStatus =
   | "not_connected"
@@ -35,11 +61,16 @@ export type PaymentSpeed = "standard" | "same_day" | "instant";
 
 export type PaymentStatus =
   | "draft"
+  | "recipient_setup_required"
+  | "ready"
   | "submitted"
   | "pending"
+  | "processing"
+  | "completed"
   | "settled"
   | "failed"
   | "returned"
+  | "canceled"
   | "cancelled";
 
 /** A recipient that is itself an organization on (or known to) the platform. */
@@ -80,6 +111,9 @@ export interface PaymentAccount {
   bankName: string | null;
   bankLastFour: string | null;
   lastSync: string | null;
+  /** Live onboarding status derived from the provider, when available. */
+  onboardingStatus?: AccountOnboardingStatus;
+  capabilities?: AccountCapabilities | null;
 }
 
 export interface SendPaymentInput {
@@ -173,6 +207,31 @@ export const BANK_STATUS_LABEL: Record<BankConnectionStatus, string> = {
   pending: "Connection pending",
   connected: "Bank connected",
   failed: "Connection failed",
+};
+
+export const ONBOARDING_STATUS_LABEL: Record<AccountOnboardingStatus, string> = {
+  not_started: "Payment account not started",
+  onboarding_incomplete: "Onboarding incomplete",
+  verification_pending: "Verification pending",
+  additional_information_required: "Additional information required",
+  active: "Active",
+  restricted: "Restricted",
+  suspended: "Suspended",
+};
+
+export const PAYMENT_TRANSFER_STATUS_LABEL: Record<PaymentStatus, string> = {
+  draft: "Draft",
+  recipient_setup_required: "Recipient setup required",
+  ready: "Ready",
+  submitted: "Submitted",
+  pending: "Pending",
+  processing: "Processing",
+  completed: "Completed",
+  settled: "Completed",
+  failed: "Failed",
+  returned: "Returned",
+  canceled: "Canceled",
+  cancelled: "Canceled",
 };
 
 export const VERIFICATION_STATUS_LABEL: Record<VerificationStatus, string> = {
