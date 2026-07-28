@@ -41,7 +41,17 @@ serve(async (req) => {
       out.accounts.push(entry);
     }
   } catch (e) {
-    out.errors.push(`accounts: ${(e as Error).message}`);
+    const err = e as any;
+    out.errors.push({ step: "accounts", message: err.message, status: err.status ?? null, body: err.body ?? null });
+  }
+
+  // Also try the platform/facilitator account implied by the credentials.
+  try {
+    const me = await moovFetch<any>("/ping", { method: "GET", scopes: scopes.accountsWrite() });
+    out.ping = me ?? "ok";
+  } catch (e) {
+    const err = e as any;
+    out.errors.push({ step: "ping", message: err.message, status: err.status ?? null, body: err.body ?? null });
   }
 
   return new Response(JSON.stringify(out, null, 2), {
