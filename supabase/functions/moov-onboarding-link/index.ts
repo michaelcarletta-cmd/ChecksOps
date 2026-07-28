@@ -92,11 +92,12 @@ serve(async (req) => {
       return json(
         {
           error:
-            "No fee plan is set up on your payment platform yet. Create a fee plan in the provider dashboard (sandbox environment), then send us the plan code so we can pin it.",
+            "Your payment platform has no fee plan assigned yet. Fee plans aren't self-serve — ask your payment provider's support team to attach a fee plan to your sandbox platform account, then send us the plan code so we can pin it.",
         },
         409,
       );
     }
+
 
 
     // Moov hosted onboarding invite for this specific connected account.
