@@ -192,6 +192,9 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const [tenant, setTenant] = useState<TenantRow | null>(null);
   const [images, setImages] = useState<{ front?: string; back?: string }>({});
   const [files, setFiles] = useState<CheckFileRow[]>([]);
+  const [libraryDocs, setLibraryDocs] = useState<
+    { id: string; file_name: string; file_path: string; bucket: string; doc_type: string | null }[]
+  >([]);
   const [lossDocs, setLossDocs] = useState<LossDraftDoc[]>([]);
   const [lossDraftId, setLossDraftId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageRow[]>([]);
