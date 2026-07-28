@@ -966,8 +966,47 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
               </Card>
             )}
 
+            {/* Auto-shared library documents from the tenant */}
+            {libraryDocs.length > 0 && (
+              <Card>
+                <CardContent className="pt-4 space-y-3">
+                  <div className="font-semibold text-sm flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" /> Shared from tenant Document Library
+                    </span>
+                    <span className="text-xs text-muted-foreground">{libraryDocs.length}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Auto-attached when this check was sent to the Mortgage Desk. Ready to forward to the lender.
+                  </p>
+                  <ul className="text-sm divide-y divide-border">
+                    {libraryDocs.map((d) => (
+                      <li key={d.id} className="py-2 flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">{d.file_name}</div>
+                          {d.doc_type && (
+                            <div className="text-[11px] text-muted-foreground truncate">
+                              {d.doc_type.replace(/^library:/, "")}
+                            </div>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => downloadFromBucket(d.bucket, d.file_path, d.file_name)}
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Files */}
             <Card>
+
               <CardContent className="pt-4 space-y-3">
                 <div className="font-semibold text-sm flex items-center justify-between">
                   <span className="flex items-center gap-2"><FileText className="h-4 w-4" /> Attachments</span>
