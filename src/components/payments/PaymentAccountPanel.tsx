@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Banknote, CreditCard, ShieldCheck, RefreshCw, ExternalLink, Loader2 } from "lucide-react";
+import { Banknote, CreditCard, ShieldCheck, RefreshCw, ExternalLink, Loader2, Link2 } from "lucide-react";
 import { usePaymentAccount } from "@/hooks/usePaymentAccount";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 import { useToast } from "@/hooks/use-toast";
@@ -36,7 +36,7 @@ export function PaymentAccountPanel() {
   const { tenantId, enabled } = usePaymentProviderEligibility();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [busy, setBusy] = useState<null | "setup" | "sync">(null);
+  const [busy, setBusy] = useState<null | "setup" | "sync" | "bridge">(null);
 
   if (isLoading) {
     return <div className="p-4 text-sm text-muted-foreground">Loading payment account…</div>;
@@ -84,6 +84,28 @@ export function PaymentAccountPanel() {
       setBusy(null);
     }
   }
+
+  async function handleBridge() {
+    if (!tenantId) return;
+    setBusy("bridge");
+    try {
+      const res = await invoke("moov-plaid-bridge", { tenant_id: tenantId });
+      toast({
+        title: "Bank connected",
+        description: res?.bank_name
+          ? `${res.bank_name}${res.last_four ? ` ••${res.last_four}` : ""} is now attached to your payment account.`
+          : "Your linked bank is now attached to your payment account.",
+      });
+      await invoke("moov-sync", { tenant_id: tenantId });
+      await qc.invalidateQueries({ queryKey: ["payment-account"] });
+      await refetch();
+    } catch (e: any) {
+      toast({ title: "Couldn't connect your bank", description: e.message, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  }
+
 
   async function refresh() {
     if (!tenantId) return;
@@ -182,6 +204,17 @@ export function PaymentAccountPanel() {
               size="sm"
               variant="outline"
               className="h-8 text-xs"
+              onClick={handleBridge}
+              disabled={busy !== null || !account?.externalAccountId}
+            >
+              {busy === "bridge"
+                ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Connecting…</>
+                : <><Link2 className="h-3.5 w-3.5 mr-1.5" /> Use my linked bank</>}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
               onClick={refresh}
               disabled={busy !== null}
             >
@@ -191,6 +224,7 @@ export function PaymentAccountPanel() {
             </Button>
           </div>
         )}
+
       </CardContent>
     </Card>
   );
