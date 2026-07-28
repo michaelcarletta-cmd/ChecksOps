@@ -7,10 +7,12 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, X, Users, Handshake, ShieldCheck, MailCheck, Lock, Home } from "lucide-react";
+import { Plus, X, Users, Handshake, ShieldCheck, MailCheck, Lock, Home, Link2, Loader2 } from "lucide-react";
 import { VERIFICATION_BADGE_CLASS, VERIFICATION_LABEL, type VerificationStatus } from "@/lib/banking";
+import { isMoovAllowedForTenant } from "@/lib/payments/featureFlags";
 import { SendHomeownerBankLinkDialog } from "./SendHomeownerBankLinkDialog";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
+
 
 interface Props {
   checkIntakeItemId: string;
@@ -52,7 +54,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
         .from("check_stakeholders")
         .select(`
           id, added_via, partner_tenant_id, stakeholder_account_id,
-          stakeholder_accounts:stakeholder_account_id (id, nickname, account_type, chk_acct, is_active, verification_status, custname, homeowner_name, authentecheck_bank_name, provider, provider_bank_name, provider_last_four),
+          stakeholder_accounts:stakeholder_account_id (id, nickname, account_type, chk_acct, is_active, verification_status, verification_source, plaid_account_id, custname, homeowner_name, authentecheck_bank_name, provider, provider_account_id, provider_bank_name, provider_last_four),
           partner:partner_tenant_id (id, name)
         `)
         .eq("check_intake_item_id", checkIntakeItemId);
@@ -99,6 +101,37 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
     onError: (e: any) => toast({ title: "Couldn't add stakeholder", description: e.message, variant: "destructive" }),
   });
 
+  const bridgeMut = useMutation({
+    mutationFn: async (stakeholderAccountId: string) => {
+      const { data, error } = await supabase.functions.invoke("moov-plaid-bridge", {
+        body: { tenant_id: tenant!.id, stakeholder_account_id: stakeholderAccountId, mode: "recipient" },
+      });
+      if (error) {
+        let message = error.message ?? "Bridge failed";
+        try {
+          const parsed = await (error as any).context?.json?.();
+          if (parsed?.error) message = parsed.error;
+        } catch { /* keep original */ }
+        throw new Error(message);
+      }
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data as any;
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Payout account ready",
+        description:
+          data?.status === "verified"
+            ? "Their linked bank is now set up to receive payments."
+            : "Their linked bank was attached and is being verified.",
+      });
+      qc.invalidateQueries({ queryKey: ["check-stakeholders", checkIntakeItemId] });
+      qc.invalidateQueries({ queryKey: ["disbursement-accounts", checkIntakeItemId] });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't set up payouts", description: e.message, variant: "destructive" }),
+  });
+
   const removeMut = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("check_stakeholders").delete().eq("id", id);
@@ -110,6 +143,9 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
     },
     onError: (e: any) => toast({ title: "Couldn't remove", description: e.message, variant: "destructive" }),
   });
+
+  const moovAllowed = isMoovAllowedForTenant((tenant as any)?.moov_allowlisted);
+
 
   return (
     <div className="space-y-2">
@@ -189,6 +225,12 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
             const acct = s.stakeholder_accounts;
             if (!acct) return null;
             const vStatus = (acct.verification_status ?? "unverified") as VerificationStatus;
+            const canBridge =
+              moovAllowed &&
+              acct.verification_source === "plaid" &&
+              !!acct.plaid_account_id &&
+              !acct.provider_account_id;
+            const bridging = bridgeMut.isPending && bridgeMut.variables === acct.id;
             return (
               <div key={s.id} className="flex items-center justify-between gap-2 rounded-md border p-2 text-xs">
                 <div className="flex items-center gap-2 min-w-0 flex-wrap">
@@ -212,15 +254,33 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
                     </Badge>
                   )}
                 </div>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-6 w-6"
-                  onClick={() => removeMut.mutate(s.id)}
-                  disabled={removeMut.isPending}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
+                <div className="flex items-center gap-1 shrink-0">
+                  {canBridge && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-[10px] px-2"
+                      onClick={() => bridgeMut.mutate(acct.id)}
+                      disabled={bridgeMut.isPending}
+                      title="Reuse the bank they already linked so they can be paid on this rail"
+                    >
+                      {bridging
+                        ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        : <Link2 className="h-3 w-3 mr-1" />}
+                      Enable payouts
+                    </Button>
+                  )}
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    onClick={() => removeMut.mutate(s.id)}
+                    disabled={removeMut.isPending}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+
               </div>
             );
           })}

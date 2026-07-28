@@ -13638,6 +13638,7 @@ export type Database = {
       }
       external_payment_recipients: {
         Row: {
+          bank_linked_at: string | null
           check_id: string | null
           claim_id: string | null
           created_at: string
@@ -13650,15 +13651,19 @@ export type Database = {
           phone: string | null
           provider: string
           provider_account_id: string | null
+          provider_bank_name: string | null
+          provider_last_four: string | null
           recipient_type: string
           relationship: string | null
           secure_token: string | null
+          stakeholder_account_id: string | null
           tenant_id: string
           token_expires_at: string | null
           token_used_at: string | null
           updated_at: string
         }
         Insert: {
+          bank_linked_at?: string | null
           check_id?: string | null
           claim_id?: string | null
           created_at?: string
@@ -13671,15 +13676,19 @@ export type Database = {
           phone?: string | null
           provider?: string
           provider_account_id?: string | null
+          provider_bank_name?: string | null
+          provider_last_four?: string | null
           recipient_type?: string
           relationship?: string | null
           secure_token?: string | null
+          stakeholder_account_id?: string | null
           tenant_id: string
           token_expires_at?: string | null
           token_used_at?: string | null
           updated_at?: string
         }
         Update: {
+          bank_linked_at?: string | null
           check_id?: string | null
           claim_id?: string | null
           created_at?: string
@@ -13692,15 +13701,25 @@ export type Database = {
           phone?: string | null
           provider?: string
           provider_account_id?: string | null
+          provider_bank_name?: string | null
+          provider_last_four?: string | null
           recipient_type?: string
           relationship?: string | null
           secure_token?: string | null
+          stakeholder_account_id?: string | null
           tenant_id?: string
           token_expires_at?: string | null
           token_used_at?: string | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "external_payment_recipients_stakeholder_account_id_fkey"
+            columns: ["stakeholder_account_id"]
+            isOneToOne: false
+            referencedRelation: "stakeholder_accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "external_payment_recipients_tenant_id_fkey"
             columns: ["tenant_id"]
