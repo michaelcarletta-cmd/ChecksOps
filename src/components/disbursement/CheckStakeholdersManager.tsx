@@ -148,7 +148,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
               <div className="space-y-1 max-h-64 overflow-y-auto">
                 {availableToAdd.map((a: any) => {
                   const holder = a.homeowner_name || a.custname || a.nickname;
-                  const bank = a.authentecheck_bank_name || "";
+                  const bank = "";
                   return (
                     <button
                       key={a.id}
