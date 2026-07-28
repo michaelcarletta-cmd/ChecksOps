@@ -147,8 +147,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
             ) : (
               <div className="space-y-1 max-h-64 overflow-y-auto">
                 {availableToAdd.map((a: any) => {
-                  const holder = a.homeowner_name || a.custname || a.nickname;
-                  const bank = "";
+                  const holder = a.custname || a.homeowner_name || a.nickname;
                   return (
                     <button
                       key={a.id}
@@ -159,7 +158,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
                       <span className="min-w-0">
                         <span className="font-medium block truncate">{holder}</span>
                         <span className="text-muted-foreground text-[10px]">
-                          {bank ? `${bank} · ` : ""}••••{a.chk_acct?.slice(-4)}
+                          Payment account connected
                         </span>
                       </span>
                       <Badge variant="outline" className="text-[9px] ml-2 shrink-0">{TYPE_LABELS[a.account_type] ?? a.account_type}</Badge>
