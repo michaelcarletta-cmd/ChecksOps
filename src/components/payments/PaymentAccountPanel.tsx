@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Banknote, CreditCard, ShieldCheck, RefreshCw, ExternalLink, Loader2 } from "lucide-react";
+import { Banknote, CreditCard, ShieldCheck, RefreshCw, ExternalLink, Loader2, Link2 } from "lucide-react";
 import { usePaymentAccount } from "@/hooks/usePaymentAccount";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 import { useToast } from "@/hooks/use-toast";
