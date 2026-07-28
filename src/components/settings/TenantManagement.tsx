@@ -685,6 +685,14 @@ export function TenantManagement() {
           onClose={() => setProTarget(null)}
         />
       )}
+      {payTarget && (
+        <TenantPaymentAccountPanel
+          tenantId={payTarget.id}
+          tenantName={payTarget.name}
+          isOpen={true}
+          onClose={() => setPayTarget(null)}
+        />
+      )}
     </div>
   );
 }
