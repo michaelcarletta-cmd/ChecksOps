@@ -451,11 +451,8 @@ export function DisbursementConsole({
                       {VERIFICATION_LABEL[vStatus]}
                     </Badge>
                   </div>
-                  <p className="text-[10px] text-muted-foreground font-mono">
-                    {acct.provider_bank_name ? `${acct.provider_bank_name} · ` : ""}
-                    {acct.provider_last_four || acct.chk_acct
-                      ? `••••${acct.provider_last_four ?? String(acct.chk_acct).slice(-4)}`
-                      : "Connected payment account"}
+                  <p className="text-[10px] text-muted-foreground">
+                    {acct.custname || acct.homeowner_name || "Payment account connected"}
                   </p>
                 </div>
                 <div className="flex items-center gap-1 w-28 flex-shrink-0">
