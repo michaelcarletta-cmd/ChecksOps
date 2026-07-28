@@ -92,14 +92,9 @@ serve(async (req) => {
 
     await supabase
       .from("payment_provider_accounts")
-      .update({
-        bank_connection_status: status === "verified" ? "verified" : "pending",
-        bank_name: bankName,
-        bank_last_four: lastFour,
-        provider_bank_account_id: created?.bankAccountID ?? null,
-        last_synced_at: new Date().toISOString(),
-      })
+      .update({ last_synced_at: new Date().toISOString() })
       .eq("id", (acct as any).id);
+
 
     await logPaymentEvent(supabase, {
       tenant_id,
