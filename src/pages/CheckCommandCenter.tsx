@@ -1623,7 +1623,13 @@ export default function CheckCommandCenter() {
                 <TabsTrigger value="mortgage_cos" className="text-xs gap-1"><Building2 className="h-3 w-3" />Mortgage Cos</TabsTrigger>
                 <TabsTrigger value="partners" className="text-xs gap-1"><Users className="h-3 w-3" />Partners</TabsTrigger>
                 <TabsTrigger value="homeowner_uploads" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3 rotate-180" />Homeowner Uploads</TabsTrigger>
-                <TabsTrigger value="reissue" className="text-xs gap-1"><RotateCcw className="h-3 w-3" />Reissue{reissueRequested.length > 0 ? ` (${reissueRequested.length})` : ""}</TabsTrigger>
+                <button
+                  type="button"
+                  onClick={() => { setActiveTab("reissue"); setSelectedCheck(null); }}
+                  className="text-xs gap-1 inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 font-medium ring-offset-background transition-all hover:bg-background/60"
+                >
+                  <RotateCcw className="h-3 w-3" />Reissue{reissueRequested.length > 0 ? ` (${reissueRequested.length})` : ""}
+                </button>
 
               </TabsList>
               <TabsContent value="deposit_ops" className="mt-3">
