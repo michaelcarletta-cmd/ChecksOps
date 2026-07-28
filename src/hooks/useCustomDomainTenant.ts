@@ -48,11 +48,14 @@ export function useCustomDomainTenant() {
     const resolve = async () => {
       try {
         const { data } = await supabase
-          .from("tenants")
+          .from("tenants_public" as any)
           .select("slug")
           .eq("custom_domain", hostname)
           .eq("subscription_status", "active")
           .maybeSingle();
+
+        setTenantSlug((data as any)?.slug ?? null);
+
 
         setTenantSlug(data?.slug ?? null);
       } catch {
