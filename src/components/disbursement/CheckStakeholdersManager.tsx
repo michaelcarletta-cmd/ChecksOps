@@ -225,6 +225,12 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
             const acct = s.stakeholder_accounts;
             if (!acct) return null;
             const vStatus = (acct.verification_status ?? "unverified") as VerificationStatus;
+            const canBridge =
+              moovAllowed &&
+              acct.verification_source === "plaid" &&
+              !!acct.plaid_account_id &&
+              !acct.provider_account_id;
+            const bridging = bridgeMut.isPending && bridgeMut.variables === acct.id;
             return (
               <div key={s.id} className="flex items-center justify-between gap-2 rounded-md border p-2 text-xs">
                 <div className="flex items-center gap-2 min-w-0 flex-wrap">
@@ -248,15 +254,33 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
                     </Badge>
                   )}
                 </div>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-6 w-6"
-                  onClick={() => removeMut.mutate(s.id)}
-                  disabled={removeMut.isPending}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
+                <div className="flex items-center gap-1 shrink-0">
+                  {canBridge && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-[10px] px-2"
+                      onClick={() => bridgeMut.mutate(acct.id)}
+                      disabled={bridgeMut.isPending}
+                      title="Reuse the bank they already linked so they can be paid on this rail"
+                    >
+                      {bridging
+                        ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        : <Link2 className="h-3 w-3 mr-1" />}
+                      Enable payouts
+                    </Button>
+                  )}
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    onClick={() => removeMut.mutate(s.id)}
+                    disabled={removeMut.isPending}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+
               </div>
             );
           })}
