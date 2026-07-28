@@ -101,6 +101,37 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
     onError: (e: any) => toast({ title: "Couldn't add stakeholder", description: e.message, variant: "destructive" }),
   });
 
+  const bridgeMut = useMutation({
+    mutationFn: async (stakeholderAccountId: string) => {
+      const { data, error } = await supabase.functions.invoke("moov-plaid-bridge", {
+        body: { tenant_id: tenant!.id, stakeholder_account_id: stakeholderAccountId, mode: "recipient" },
+      });
+      if (error) {
+        let message = error.message ?? "Bridge failed";
+        try {
+          const parsed = await (error as any).context?.json?.();
+          if (parsed?.error) message = parsed.error;
+        } catch { /* keep original */ }
+        throw new Error(message);
+      }
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data as any;
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Payout account ready",
+        description:
+          data?.status === "verified"
+            ? "Their linked bank is now set up to receive payments."
+            : "Their linked bank was attached and is being verified.",
+      });
+      qc.invalidateQueries({ queryKey: ["check-stakeholders", checkIntakeItemId] });
+      qc.invalidateQueries({ queryKey: ["disbursement-accounts", checkIntakeItemId] });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't set up payouts", description: e.message, variant: "destructive" }),
+  });
+
   const removeMut = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("check_stakeholders").delete().eq("id", id);
@@ -112,6 +143,9 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
     },
     onError: (e: any) => toast({ title: "Couldn't remove", description: e.message, variant: "destructive" }),
   });
+
+  const moovAllowed = isMoovAllowedForTenant((tenant as any)?.moov_allowlisted);
+
 
   return (
     <div className="space-y-2">
