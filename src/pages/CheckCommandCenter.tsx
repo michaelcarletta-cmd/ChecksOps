@@ -3270,15 +3270,35 @@ function CheckDetailPanel({
       // Prefer the explicit pristine-original pointer written by the adjuster
       // on approve. This is the most reliable source and survives any future
       // renames of the composited deposit artifact.
-      const explicitOriginal = toStorageObjectPath(
+      const looksComposited = (p: string | null) =>
+        !!p && (
+          /_endorsed(?:_\d+)?\.[^.]+$/i.test(p) ||
+          /endorsed_deposit_[^/]+\.[^.]+$/i.test(p) ||
+          /\.svg(\?|$)/i.test(p)
+        );
+
+      const currentBackPath = toStorageObjectPath(check!.back_image_path);
+      const explicitOriginalRaw = toStorageObjectPath(
         ((check as any)?.back_image_original_path as string | null) ?? null,
       );
+      // Only trust the pristine pointer when it is not itself a composite and
+      // when the current back is either that same image or a composite derived
+      // from it. If the back was re-uploaded (a brand new, non-composite file),
+      // that upload is the real original — using the stale pointer would drop
+      // whatever was on the new scan (e.g. a mortgage endorsement).
+      const explicitOriginal =
+        explicitOriginalRaw &&
+        !looksComposited(explicitOriginalRaw) &&
+        (looksComposited(currentBackPath) || currentBackPath === explicitOriginalRaw)
+          ? explicitOriginalRaw
+          : null;
       if (explicitOriginal) {
         const { data } = await supabase.storage
           .from("claim-files")
           .createSignedUrl(explicitOriginal, 3600);
         if (data?.signedUrl) return { url: data.signedUrl, path: explicitOriginal };
       }
+
 
       const currentPath = toStorageObjectPath(check!.back_image_path);
       if (!currentPath) return backImageUrl ? { url: backImageUrl, path: null } : null;
