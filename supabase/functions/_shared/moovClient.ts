@@ -158,6 +158,7 @@ export async function moovFetch<T = any>(
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
     Accept: "application/json",
+    Origin: moovOrigin(),
   };
   if (opts.idempotencyKey) headers["X-Idempotency-Key"] = opts.idempotencyKey;
   if (opts.onBehalfOf) headers["X-Account-ID"] = opts.onBehalfOf;
