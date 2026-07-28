@@ -44,6 +44,24 @@ function credentials(): { key: string; secret: string } {
   return { key, secret };
 }
 
+/**
+ * Moov ties every API key to an allowlisted domain list: requests to
+ * /oauth2/token and to the API must carry an `Origin` header (scheme + domain,
+ * no path) that matches one registered domain, or Moov answers 401.
+ * Server-side fetch sends no Origin, so we set it explicitly.
+ */
+export function moovOrigin(): string {
+  const raw = Deno.env.get("MOOV_ALLOWED_ORIGIN")
+    ?? Deno.env.get("CHECKSOPS_APP_URL")
+    ?? "https://checksops.com";
+  try {
+    const u = new URL(raw);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return "https://checksops.com";
+  }
+}
+
 export class MoovError extends Error {
   constructor(
     message: string,
