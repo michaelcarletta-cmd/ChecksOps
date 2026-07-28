@@ -296,6 +296,16 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
           .order("created_at", { ascending: false });
         setFiles((fRows as CheckFileRow[]) || []);
 
+        // Documents auto-shared from the tenant's Document Library
+        const { data: libRows } = await supabase
+          .from("mortgage_request_library_documents" as any)
+          .select("id,file_name,file_path,bucket,doc_type")
+          .eq("request_id", r.id)
+          .order("created_at", { ascending: true });
+        setLibraryDocs((libRows as any[]) || []);
+
+
+
         // Loss draft docs
         const { data: ldt } = await supabase
           .from("loss_draft_tracking")
