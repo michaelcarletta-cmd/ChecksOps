@@ -75,11 +75,24 @@ export function ReuploadCheckImageButton({
         });
       if (upErr) throw upErr;
 
+      // A freshly uploaded image becomes the new pristine original. Any prior
+      // "original" pointer / composited deposit artifact refers to the OLD
+      // image and must be cleared, otherwise the endorsement adjuster keeps
+      // compositing on the stale back (dropping mortgage endorsements, etc.).
+      const updatePayload: Record<string, unknown> = { [column]: path };
+      if (side === "back") {
+        updatePayload.back_image_original_path = path;
+        updatePayload.back_image_deposit_path = null;
+        updatePayload.endorsement_render_status = "idle";
+        updatePayload.endorsement_render_meta = null;
+      }
+
       const { error: updErr } = await supabase
         .from("check_intake_items")
-        .update({ [column]: path } as any)
+        .update(updatePayload as any)
         .eq("id", checkId);
       if (updErr) throw updErr;
+
 
       // Best-effort audit log
       try {
