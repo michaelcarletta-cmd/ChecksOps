@@ -52,7 +52,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
         .from("check_stakeholders")
         .select(`
           id, added_via, partner_tenant_id, stakeholder_account_id,
-          stakeholder_accounts:stakeholder_account_id (id, nickname, account_type, chk_acct, is_active, verification_status, custname, homeowner_name, authentecheck_bank_name),
+          stakeholder_accounts:stakeholder_account_id (id, nickname, account_type, chk_acct, is_active, verification_status, custname, homeowner_name, authentecheck_bank_name, provider, provider_bank_name, provider_last_four),
           partner:partner_tenant_id (id, name)
         `)
         .eq("check_intake_item_id", checkIntakeItemId);
@@ -197,8 +197,12 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
                     {acct.homeowner_name || acct.custname || acct.nickname}
                   </span>
                   <span className="text-muted-foreground text-[10px]">
-                    {acct.authentecheck_bank_name ? `${acct.authentecheck_bank_name} · ` : ""}
-                    ••••{acct.chk_acct?.slice(-4)}
+                    {acct.provider_bank_name || acct.authentecheck_bank_name
+                      ? `${acct.provider_bank_name ?? acct.authentecheck_bank_name} · `
+                      : ""}
+                    {acct.provider_last_four || acct.chk_acct
+                      ? `••••${acct.provider_last_four ?? String(acct.chk_acct).slice(-4)}`
+                      : "Connected payment account"}
                   </span>
                   <Badge variant="outline" className={`text-[9px] px-1.5 ${VERIFICATION_BADGE_CLASS[vStatus]}`} title={VERIFICATION_LABEL[vStatus]}>
                     {vStatus === "verified" ? <><ShieldCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Verified</> :
