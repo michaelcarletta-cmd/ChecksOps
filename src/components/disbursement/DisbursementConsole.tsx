@@ -88,7 +88,8 @@ export function DisbursementConsole({
         .select(`
           added_via,
           stakeholder_accounts:stakeholder_account_id (
-            id, nickname, account_type, chk_acct, is_active, is_primary, created_at, verification_status
+            id, nickname, account_type, chk_acct, is_active, is_primary, created_at, verification_status,
+            provider, provider_bank_name, provider_last_four
           )
         `)
         .eq("check_intake_item_id", checkIntakeItemId!);
@@ -450,7 +451,12 @@ export function DisbursementConsole({
                       {VERIFICATION_LABEL[vStatus]}
                     </Badge>
                   </div>
-                  <p className="text-[10px] text-muted-foreground font-mono">••••{acct.chk_acct.slice(-4)}</p>
+                  <p className="text-[10px] text-muted-foreground font-mono">
+                    {acct.provider_bank_name ? `${acct.provider_bank_name} · ` : ""}
+                    {acct.provider_last_four || acct.chk_acct
+                      ? `••••${acct.provider_last_four ?? String(acct.chk_acct).slice(-4)}`
+                      : "Connected payment account"}
+                  </p>
                 </div>
                 <div className="flex items-center gap-1 w-28 flex-shrink-0">
                   <span className="text-xs text-muted-foreground">{usePercent ? "%" : "$"}</span>
