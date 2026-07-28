@@ -37,25 +37,54 @@ serve(async (req) => {
 
     // Moov requires at least one fee plan code on an onboarding invite.
     // Prefer an explicit configuration, otherwise discover the platform's plans.
-    const platformAccountId = Deno.env.get("MOOV_PLATFORM_ACCOUNT_ID") ?? accountId;
+    const envPlatformId = Deno.env.get("MOOV_PLATFORM_ACCOUNT_ID") ?? null;
+    let platformAccountId = envPlatformId ?? accountId;
     let feePlanCodes = (Deno.env.get("MOOV_FEE_PLAN_CODES") ?? "")
       .split(",")
       .map((c) => c.trim())
       .filter(Boolean);
 
     if (feePlanCodes.length === 0) {
-      try {
-        const plans = await moovFetch<any>(`/accounts/${platformAccountId}/fee-plans`, {
-          method: "GET",
-          scopes: scopes.accountWrite(platformAccountId),
-        });
-        const list = Array.isArray(plans) ? plans : plans?.feePlans ?? [];
-        feePlanCodes = list
-          .map((p: any) => p?.planCode ?? p?.code)
-          .filter((c: unknown): c is string => typeof c === "string" && c.length > 0)
-          .slice(0, 1);
-      } catch (e) {
-        console.error("[moov-onboarding-link] fee plan lookup", (e as Error).message);
+      // Candidate partner accounts to search for fee plans: the configured
+      // platform account, then any account the platform credentials can see.
+      const candidates: string[] = [];
+      if (envPlatformId) candidates.push(envPlatformId);
+
+      if (candidates.length === 0) {
+        try {
+          const accounts = await moovFetch<any>("/accounts", {
+            method: "GET",
+            scopes: scopes.accountsWrite(),
+          });
+          const list = Array.isArray(accounts) ? accounts : accounts?.accounts ?? [];
+          for (const a of list) {
+            const id = a?.accountID ?? a?.accountId;
+            if (typeof id === "string" && id && id !== accountId) candidates.push(id);
+          }
+        } catch (e) {
+          console.error("[moov-onboarding-link] account list", (e as Error).message);
+        }
+      }
+      candidates.push(accountId);
+
+      for (const candidate of candidates) {
+        try {
+          const plans = await moovFetch<any>(`/accounts/${candidate}/fee-plans`, {
+            method: "GET",
+            scopes: scopes.accountWrite(candidate),
+          });
+          const list = Array.isArray(plans) ? plans : plans?.feePlans ?? [];
+          const codes = list
+            .map((p: any) => p?.planCode ?? p?.code)
+            .filter((c: unknown): c is string => typeof c === "string" && c.length > 0);
+          if (codes.length > 0) {
+            feePlanCodes = codes.slice(0, 1);
+            platformAccountId = candidate;
+            break;
+          }
+        } catch (e) {
+          console.error("[moov-onboarding-link] fee plan lookup", candidate, (e as Error).message);
+        }
       }
     }
 
@@ -63,11 +92,12 @@ serve(async (req) => {
       return json(
         {
           error:
-            "No fee plan is configured for your payment platform yet. Add a fee plan in the provider dashboard (or set the fee plan code) and try again.",
+            "No fee plan is set up on your payment platform yet. Create a fee plan in the provider dashboard (sandbox environment), then send us the plan code so we can pin it.",
         },
         409,
       );
     }
+
 
     // Moov hosted onboarding invite for this specific connected account.
     const invite = await moovFetch<any>("/onboarding-invites", {
