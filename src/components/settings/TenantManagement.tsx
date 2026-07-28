@@ -11,11 +11,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Building2, ExternalLink, Loader2, Pencil, Power, Upload, X, Trash2, Users, Receipt, Eye, Crosshair } from "lucide-react";
+import { Plus, Building2, ExternalLink, Loader2, Pencil, Power, Upload, X, Trash2, Users, Receipt, Eye, Crosshair, Landmark } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { TenantUserManagement } from "./TenantUserManagement";
 import { TenantUsageDashboard } from "./TenantUsageDashboard";
 import { TenantProBadgeManagement } from "./TenantProBadgeManagement";
+import { TenantPaymentAccountPanel } from "./TenantPaymentAccountPanel";
+
 
 interface TenantForm {
   name: string;
