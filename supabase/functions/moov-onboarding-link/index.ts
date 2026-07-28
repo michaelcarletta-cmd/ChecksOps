@@ -35,9 +35,11 @@ serve(async (req) => {
       ? return_url
       : `${Deno.env.get("CHECKSOPS_APP_URL") ?? "https://checksops.com"}/payments?tab=settings`;
 
-    // Moov requires at least one fee plan code on an onboarding invite.
-    // Prefer an explicit configuration, otherwise discover the platform's plans.
+    // Moov requires at least one fee plan on an onboarding invite.
+    // Prefer an explicit configuration (plan codes, or a pinned plan ID we
+    // resolve to its code), otherwise discover the platform's plans.
     const envPlatformId = Deno.env.get("MOOV_PLATFORM_ACCOUNT_ID") ?? null;
+    const pinnedPlanId = (Deno.env.get("MOOV_FEE_PLAN_ID") ?? "").trim();
     let platformAccountId = envPlatformId ?? accountId;
     let feePlanCodes = (Deno.env.get("MOOV_FEE_PLAN_CODES") ?? "")
       .split(",")
@@ -74,6 +76,20 @@ serve(async (req) => {
             scopes: scopes.accountWrite(candidate),
           });
           const list = Array.isArray(plans) ? plans : plans?.feePlans ?? [];
+
+          // If a plan ID is pinned, prefer the plan that matches it.
+          if (pinnedPlanId) {
+            const match = list.find(
+              (p: any) => (p?.planID ?? p?.planId ?? p?.id) === pinnedPlanId,
+            );
+            const matchedCode = match?.planCode ?? match?.code;
+            if (typeof matchedCode === "string" && matchedCode.length > 0) {
+              feePlanCodes = [matchedCode];
+              platformAccountId = candidate;
+              break;
+            }
+          }
+
           const codes = list
             .map((p: any) => p?.planCode ?? p?.code)
             .filter((c: unknown): c is string => typeof c === "string" && c.length > 0);
@@ -86,6 +102,11 @@ serve(async (req) => {
           console.error("[moov-onboarding-link] fee plan lookup", candidate, (e as Error).message);
         }
       }
+    }
+
+    // Last resort: send the pinned plan identifier straight through.
+    if (feePlanCodes.length === 0 && pinnedPlanId) {
+      feePlanCodes = [pinnedPlanId];
     }
 
     if (feePlanCodes.length === 0) {
