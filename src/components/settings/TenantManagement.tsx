@@ -11,11 +11,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Building2, ExternalLink, Loader2, Pencil, Power, Upload, X, Trash2, Users, Receipt, Eye, Crosshair } from "lucide-react";
+import { Plus, Building2, ExternalLink, Loader2, Pencil, Power, Upload, X, Trash2, Users, Receipt, Eye, Crosshair, Landmark } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { TenantUserManagement } from "./TenantUserManagement";
 import { TenantUsageDashboard } from "./TenantUsageDashboard";
 import { TenantProBadgeManagement } from "./TenantProBadgeManagement";
+import { TenantPaymentAccountPanel } from "./TenantPaymentAccountPanel";
+
 
 interface TenantForm {
   name: string;
@@ -63,6 +65,7 @@ export function TenantManagement() {
   const [usersTarget, setUsersTarget] = useState<{ id: string; name: string } | null>(null);
   const [usageTarget, setUsageTarget] = useState<{ id: string; name: string } | null>(null);
   const [proTarget, setProTarget] = useState<{ id: string; name: string } | null>(null);
+  const [payTarget, setPayTarget] = useState<{ id: string; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: tenants, isLoading } = useQuery({
@@ -633,6 +636,15 @@ export function TenantManagement() {
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8"
+                    title="Payment Account"
+                    onClick={() => setPayTarget({ id: t.id, name: t.name })}
+                  >
+                    <Landmark className="h-4 w-4 text-emerald-400" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
                     title="Manage OPS Badge"
                     onClick={() => setProTarget({ id: t.id, name: t.name })}
                   >
@@ -671,6 +683,14 @@ export function TenantManagement() {
           tenantName={proTarget.name}
           isOpen={true}
           onClose={() => setProTarget(null)}
+        />
+      )}
+      {payTarget && (
+        <TenantPaymentAccountPanel
+          tenantId={payTarget.id}
+          tenantName={payTarget.name}
+          isOpen={true}
+          onClose={() => setPayTarget(null)}
         />
       )}
     </div>
