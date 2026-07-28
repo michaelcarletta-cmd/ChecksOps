@@ -19075,8 +19075,8 @@ export type Database = {
           authentecheck_order_id: string | null
           authentecheck_postback: Json | null
           authentecheck_session_url: string | null
-          chk_aba: string
-          chk_acct: string
+          chk_aba: string | null
+          chk_acct: string | null
           consumer_unique: string | null
           created_at: string
           created_by: string
@@ -19096,6 +19096,12 @@ export type Database = {
           plaid_institution_name: string | null
           plaid_item_id: string | null
           plaid_linked_at: string | null
+          provider: string | null
+          provider_account_id: string | null
+          provider_bank_account_id: string | null
+          provider_bank_name: string | null
+          provider_environment: string | null
+          provider_last_four: string | null
           tenant_id: string
           updated_at: string
           verification_amount_1_cents: number | null
@@ -19121,8 +19127,8 @@ export type Database = {
           authentecheck_order_id?: string | null
           authentecheck_postback?: Json | null
           authentecheck_session_url?: string | null
-          chk_aba: string
-          chk_acct: string
+          chk_aba?: string | null
+          chk_acct?: string | null
           consumer_unique?: string | null
           created_at?: string
           created_by: string
@@ -19142,6 +19148,12 @@ export type Database = {
           plaid_institution_name?: string | null
           plaid_item_id?: string | null
           plaid_linked_at?: string | null
+          provider?: string | null
+          provider_account_id?: string | null
+          provider_bank_account_id?: string | null
+          provider_bank_name?: string | null
+          provider_environment?: string | null
+          provider_last_four?: string | null
           tenant_id: string
           updated_at?: string
           verification_amount_1_cents?: number | null
@@ -19167,8 +19179,8 @@ export type Database = {
           authentecheck_order_id?: string | null
           authentecheck_postback?: Json | null
           authentecheck_session_url?: string | null
-          chk_aba?: string
-          chk_acct?: string
+          chk_aba?: string | null
+          chk_acct?: string | null
           consumer_unique?: string | null
           created_at?: string
           created_by?: string
@@ -19188,6 +19200,12 @@ export type Database = {
           plaid_institution_name?: string | null
           plaid_item_id?: string | null
           plaid_linked_at?: string | null
+          provider?: string | null
+          provider_account_id?: string | null
+          provider_bank_account_id?: string | null
+          provider_bank_name?: string | null
+          provider_environment?: string | null
+          provider_last_four?: string | null
           tenant_id?: string
           updated_at?: string
           verification_amount_1_cents?: number | null
@@ -23956,6 +23974,10 @@ export type Database = {
           _token: string
         }
         Returns: Json
+      }
+      sync_provider_stakeholder_account: {
+        Args: { _tenant_id: string }
+        Returns: string
       }
       system_tenant_id: { Args: never; Returns: string }
       to_standard_caps: { Args: { input: string }; Returns: string }
