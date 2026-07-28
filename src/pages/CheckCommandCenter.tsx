@@ -2195,6 +2195,17 @@ export default function CheckCommandCenter() {
         )}
 
 
+        {activeTab === "reissue" && (
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-md border border-border bg-muted/40 px-3 py-2">
+            <span className="text-xs font-medium flex items-center gap-2">
+              <RotateCcw className="h-3.5 w-3.5" /> Reissue requested ({reissueRequested.length})
+            </span>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setActiveTab("manager"); setSelectedCheck(null); }}>
+              Back to Manager
+            </Button>
+          </div>
+        )}
+
         {/* All other tabs — only render the active one */}
         {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "manager" && activeTab !== "branch" && activeTab !== "messages" && activeTab !== "partners" && activeTab !== "fundsreleased" && activeTab !== "fundsreceived" && (
           <div className="mt-3 flex flex-col md:flex-row gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
