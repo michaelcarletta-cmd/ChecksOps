@@ -32,14 +32,15 @@ export default function PrivacyNotice() {
     (async () => {
       if (!tenantSlug) return;
       const { data } = await supabase
-        .from("tenants")
+        .from("tenants_public" as any)
         .select("id, name")
         .eq("slug", tenantSlug)
         .maybeSingle();
       if (data) {
-        setTenantId(data.id);
-        if (data.name) setCompanyName(data.name);
+        setTenantId((data as any).id);
+        if ((data as any).name) setCompanyName((data as any).name);
       }
+
     })();
   }, [tenantSlug]);
 
