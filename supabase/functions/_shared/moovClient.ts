@@ -7,8 +7,11 @@
 //
 // Sandbox only. `MOOV_ENVIRONMENT` must be "sandbox"; production is refused.
 
+// Moov serves sandbox and production from the SAME host; the environment is
+// determined by which API credentials are used. There is no api.sandbox.moov.io
+// (it does not resolve in DNS).
 const MOOV_HOSTS: Record<string, string> = {
-  sandbox: "https://api.sandbox.moov.io",
+  sandbox: "https://api.moov.io",
   production: "https://api.moov.io",
 };
 
