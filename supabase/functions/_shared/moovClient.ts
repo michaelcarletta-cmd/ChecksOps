@@ -95,6 +95,7 @@ export async function moovToken(scopes: string[]): Promise<string> {
     headers: {
       Authorization: `Basic ${basic}`,
       "Content-Type": "application/x-www-form-urlencoded",
+      Origin: moovOrigin(),
     },
     body: new URLSearchParams({ grant_type: "client_credentials", scope }),
   });
