@@ -63,6 +63,7 @@ export function TenantManagement() {
   const [usersTarget, setUsersTarget] = useState<{ id: string; name: string } | null>(null);
   const [usageTarget, setUsageTarget] = useState<{ id: string; name: string } | null>(null);
   const [proTarget, setProTarget] = useState<{ id: string; name: string } | null>(null);
+  const [payTarget, setPayTarget] = useState<{ id: string; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: tenants, isLoading } = useQuery({
