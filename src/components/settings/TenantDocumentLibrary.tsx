@@ -63,6 +63,7 @@ interface LibraryRow {
   mime_type: string | null;
   file_size: number | null;
   notes: string | null;
+  auto_share_mortgage_ops: boolean | null;
   created_at: string;
 }
 
