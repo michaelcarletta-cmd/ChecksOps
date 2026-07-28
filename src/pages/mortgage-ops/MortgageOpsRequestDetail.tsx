@@ -579,6 +579,17 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     window.open(data.signedUrl, "_blank", "noopener");
   };
 
+  const downloadFromBucket = async (bucket: string, path: string, name: string) => {
+    const { data, error } = await supabase.storage
+      .from(bucket || "tenant-documents")
+      .createSignedUrl(path, 300, { download: name });
+    if (error || !data?.signedUrl) {
+      toast.error("Could not open file");
+      return;
+    }
+    window.open(data.signedUrl, "_blank", "noopener");
+  };
+
   const updateEndorsementDate = async (field: "check_sent_date" | "check_received_back_date") => {
     if (!req?.id) return;
     setSavingDates(true);
