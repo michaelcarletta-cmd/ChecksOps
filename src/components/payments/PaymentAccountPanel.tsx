@@ -182,6 +182,17 @@ export function PaymentAccountPanel() {
               size="sm"
               variant="outline"
               className="h-8 text-xs"
+              onClick={handleBridge}
+              disabled={busy !== null || !account?.externalAccountId}
+            >
+              {busy === "bridge"
+                ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Connecting…</>
+                : <><Link2 className="h-3.5 w-3.5 mr-1.5" /> Use my linked bank</>}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
               onClick={refresh}
               disabled={busy !== null}
             >
@@ -191,6 +202,7 @@ export function PaymentAccountPanel() {
             </Button>
           </div>
         )}
+
       </CardContent>
     </Card>
   );
