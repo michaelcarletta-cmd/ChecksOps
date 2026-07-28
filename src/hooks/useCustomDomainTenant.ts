@@ -55,9 +55,6 @@ export function useCustomDomainTenant() {
           .maybeSingle();
 
         setTenantSlug((data as any)?.slug ?? null);
-
-
-        setTenantSlug(data?.slug ?? null);
       } catch {
         setTenantSlug(null);
       } finally {
