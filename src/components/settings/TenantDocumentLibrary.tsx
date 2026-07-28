@@ -6,11 +6,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import {
   FileText, Upload, Loader2, Trash2, Download, Palette, Home as HomeIcon,
-  FileSignature, Image as ImageIcon,
+  FileSignature, Image as ImageIcon, Headset,
 } from "lucide-react";
 
 // Categories stored as doc_type = `library:<category>:<slug>`
@@ -63,6 +64,7 @@ interface LibraryRow {
   mime_type: string | null;
   file_size: number | null;
   notes: string | null;
+  auto_share_mortgage_ops: boolean | null;
   created_at: string;
 }
 
@@ -231,6 +233,9 @@ function UploadBar({
 }
 
 function LibraryItem({ row, onChange }: { row: LibraryRow; onChange: () => void }) {
+  const [autoShare, setAutoShare] = useState(!!row.auto_share_mortgage_ops);
+  const [saving, setSaving] = useState(false);
+
   const open = async () => {
     const { data, error } = await supabase.storage
       .from(BUCKET)
@@ -240,6 +245,28 @@ function LibraryItem({ row, onChange }: { row: LibraryRow; onChange: () => void 
       return;
     }
     window.open(data.signedUrl, "_blank");
+  };
+
+  const toggleAutoShare = async (next: boolean) => {
+    setAutoShare(next);
+    setSaving(true);
+    const { error } = await supabase
+      .from("tenant_documents" as any)
+      .update({ auto_share_mortgage_ops: next } as any)
+      .eq("id", row.id);
+    setSaving(false);
+    if (error) {
+      setAutoShare(!next);
+      toast({ title: "Could not update", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({
+      title: next ? "Will auto-share with Mortgage Ops" : "Auto-share turned off",
+      description: next
+        ? "This document is attached automatically when a check is sent to the Mortgage Desk."
+        : undefined,
+    });
+    onChange();
   };
 
   const remove = async () => {
@@ -257,7 +284,7 @@ function LibraryItem({ row, onChange }: { row: LibraryRow; onChange: () => void 
   const slug = row.doc_type.split(":").slice(2).join(":");
 
   return (
-    <li className="flex items-center gap-2 border rounded-md p-2">
+    <li className="flex flex-wrap items-center gap-2 border rounded-md p-2">
       <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
@@ -269,6 +296,18 @@ function LibraryItem({ row, onChange }: { row: LibraryRow; onChange: () => void 
           {row.file_size ? ` · ${(row.file_size / 1024).toFixed(0)} KB` : ""}
         </p>
       </div>
+      <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none mr-1">
+        <Checkbox
+          checked={autoShare}
+          disabled={saving}
+          onCheckedChange={(v) => toggleAutoShare(v === true)}
+          aria-label="Auto-share with Mortgage Ops"
+        />
+        <span className="flex items-center gap-1">
+          <Headset className="h-3 w-3" />
+          Auto-share with Mortgage Ops
+        </span>
+      </label>
       <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={open} title="Open">
         <Download className="h-3.5 w-3.5" />
       </Button>

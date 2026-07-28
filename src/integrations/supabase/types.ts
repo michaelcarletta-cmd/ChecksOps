@@ -16330,6 +16330,66 @@ export type Database = {
           },
         ]
       }
+      mortgage_request_library_documents: {
+        Row: {
+          bucket: string
+          created_at: string
+          doc_type: string | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          mime_type: string | null
+          request_id: string
+          tenant_document_id: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          bucket?: string
+          created_at?: string
+          doc_type?: string | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+          request_id: string
+          tenant_document_id?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          bucket?: string
+          created_at?: string
+          doc_type?: string | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+          request_id?: string
+          tenant_document_id?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mortgage_request_library_documents_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "mortgage_handling_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mortgage_request_library_documents_tenant_document_id_fkey"
+            columns: ["tenant_document_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notification_delivery_logs: {
         Row: {
           channel: string
@@ -20205,6 +20265,7 @@ export type Database = {
       }
       tenant_documents: {
         Row: {
+          auto_share_mortgage_ops: boolean
           created_at: string
           doc_type: string
           expires_at: string | null
@@ -20219,6 +20280,7 @@ export type Database = {
           uploaded_by: string | null
         }
         Insert: {
+          auto_share_mortgage_ops?: boolean
           created_at?: string
           doc_type: string
           expires_at?: string | null
@@ -20233,6 +20295,7 @@ export type Database = {
           uploaded_by?: string | null
         }
         Update: {
+          auto_share_mortgage_ops?: boolean
           created_at?: string
           doc_type?: string
           expires_at?: string | null
