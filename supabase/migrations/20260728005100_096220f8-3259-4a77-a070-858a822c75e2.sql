@@ -1,0 +1,1 @@
+update public.tenants set moov_allowlisted = true where slug = 'freedom';
