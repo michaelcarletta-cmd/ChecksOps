@@ -636,6 +636,15 @@ export function TenantManagement() {
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8"
+                    title="Payment Account"
+                    onClick={() => setPayTarget({ id: t.id, name: t.name })}
+                  >
+                    <Landmark className="h-4 w-4 text-emerald-400" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
                     title="Manage OPS Badge"
                     onClick={() => setProTarget({ id: t.id, name: t.name })}
                   >
