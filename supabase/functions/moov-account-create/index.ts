@@ -37,7 +37,7 @@ serve(async (req) => {
 
     const { data: tenant } = await supabase
       .from("tenants")
-      .select("id, name, contact_email, contact_phone")
+      .select("id, name, email_from_address, email_reply_to, business_phone")
       .eq("id", tenant_id)
       .maybeSingle();
     if (!tenant) return json({ error: "Organization not found" }, 404);
@@ -66,9 +66,9 @@ serve(async (req) => {
         profile: {
           business: {
             legalBusinessName: (tenant as any).name ?? "ChecksOps Organization",
-            email: (tenant as any).contact_email ?? undefined,
-            phone: (tenant as any).contact_phone
-              ? { number: String((tenant as any).contact_phone).replace(/\D/g, "").slice(-10) }
+            email: (tenant as any).email_reply_to ?? (tenant as any).email_from_address ?? undefined,
+            phone: (tenant as any).business_phone
+              ? { number: String((tenant as any).business_phone).replace(/\D/g, "").slice(-10) }
               : undefined,
           },
         },
