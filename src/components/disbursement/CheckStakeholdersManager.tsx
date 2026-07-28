@@ -147,8 +147,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
             ) : (
               <div className="space-y-1 max-h-64 overflow-y-auto">
                 {availableToAdd.map((a: any) => {
-                  const holder = a.homeowner_name || a.custname || a.nickname;
-                  const bank = a.authentecheck_bank_name || "";
+                  const holder = a.custname || a.homeowner_name || a.nickname;
                   return (
                     <button
                       key={a.id}
@@ -159,7 +158,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
                       <span className="min-w-0">
                         <span className="font-medium block truncate">{holder}</span>
                         <span className="text-muted-foreground text-[10px]">
-                          {bank ? `${bank} · ` : ""}••••{a.chk_acct?.slice(-4)}
+                          Payment account connected
                         </span>
                       </span>
                       <Badge variant="outline" className="text-[9px] ml-2 shrink-0">{TYPE_LABELS[a.account_type] ?? a.account_type}</Badge>
@@ -194,15 +193,10 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
               <div key={s.id} className="flex items-center justify-between gap-2 rounded-md border p-2 text-xs">
                 <div className="flex items-center gap-2 min-w-0 flex-wrap">
                   <span className="font-medium truncate">
-                    {acct.homeowner_name || acct.custname || acct.nickname}
+                    {acct.custname || acct.nickname || acct.homeowner_name}
                   </span>
                   <span className="text-muted-foreground text-[10px]">
-                    {acct.provider_bank_name || acct.authentecheck_bank_name
-                      ? `${acct.provider_bank_name ?? acct.authentecheck_bank_name} · `
-                      : ""}
-                    {acct.provider_last_four || acct.chk_acct
-                      ? `••••${acct.provider_last_four ?? String(acct.chk_acct).slice(-4)}`
-                      : "Connected payment account"}
+                    Payment account connected
                   </span>
                   <Badge variant="outline" className={`text-[9px] px-1.5 ${VERIFICATION_BADGE_CLASS[vStatus]}`} title={VERIFICATION_LABEL[vStatus]}>
                     {vStatus === "verified" ? <><ShieldCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Verified</> :
