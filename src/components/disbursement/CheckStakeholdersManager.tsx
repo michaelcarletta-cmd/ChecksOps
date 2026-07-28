@@ -197,12 +197,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
                     {acct.homeowner_name || acct.custname || acct.nickname}
                   </span>
                   <span className="text-muted-foreground text-[10px]">
-                    {acct.provider_bank_name || acct.authentecheck_bank_name
-                      ? `${acct.provider_bank_name ?? acct.authentecheck_bank_name} · `
-                      : ""}
-                    {acct.provider_last_four || acct.chk_acct
-                      ? `••••${acct.provider_last_four ?? String(acct.chk_acct).slice(-4)}`
-                      : "Connected payment account"}
+                    {acct.custname || acct.homeowner_name || "Payment account connected"}
                   </span>
                   <Badge variant="outline" className={`text-[9px] px-1.5 ${VERIFICATION_BADGE_CLASS[vStatus]}`} title={VERIFICATION_LABEL[vStatus]}>
                     {vStatus === "verified" ? <><ShieldCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Verified</> :
