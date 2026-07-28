@@ -85,6 +85,28 @@ export function PaymentAccountPanel() {
     }
   }
 
+  async function handleBridge() {
+    if (!tenantId) return;
+    setBusy("bridge");
+    try {
+      const res = await invoke("moov-plaid-bridge", { tenant_id: tenantId });
+      toast({
+        title: "Bank connected",
+        description: res?.bank_name
+          ? `${res.bank_name}${res.last_four ? ` ••${res.last_four}` : ""} is now attached to your payment account.`
+          : "Your linked bank is now attached to your payment account.",
+      });
+      await invoke("moov-sync", { tenant_id: tenantId });
+      await qc.invalidateQueries({ queryKey: ["payment-account"] });
+      await refetch();
+    } catch (e: any) {
+      toast({ title: "Couldn't connect your bank", description: e.message, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+
   async function refresh() {
     if (!tenantId) return;
     setBusy("sync");
