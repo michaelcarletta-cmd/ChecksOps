@@ -47,8 +47,8 @@ serve(async (req) => {
     if (email) {
       const { data: memberTenant } = await supabase
         .from("tenants")
-        .select("id, name, contact_email")
-        .ilike("contact_email", String(email).trim())
+        .select("id, name, email_reply_to")
+        .ilike("email_reply_to", String(email).trim())
         .maybeSingle();
 
       if (memberTenant) {
