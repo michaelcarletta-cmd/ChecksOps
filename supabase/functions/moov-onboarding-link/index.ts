@@ -35,6 +35,40 @@ serve(async (req) => {
       ? return_url
       : `${Deno.env.get("CHECKSOPS_APP_URL") ?? "https://checksops.com"}/payments?tab=settings`;
 
+    // Moov requires at least one fee plan code on an onboarding invite.
+    // Prefer an explicit configuration, otherwise discover the platform's plans.
+    const platformAccountId = Deno.env.get("MOOV_PLATFORM_ACCOUNT_ID") ?? accountId;
+    let feePlanCodes = (Deno.env.get("MOOV_FEE_PLAN_CODES") ?? "")
+      .split(",")
+      .map((c) => c.trim())
+      .filter(Boolean);
+
+    if (feePlanCodes.length === 0) {
+      try {
+        const plans = await moovFetch<any>(`/accounts/${platformAccountId}/fee-plans`, {
+          method: "GET",
+          scopes: scopes.accountWrite(platformAccountId),
+        });
+        const list = Array.isArray(plans) ? plans : plans?.feePlans ?? [];
+        feePlanCodes = list
+          .map((p: any) => p?.planCode ?? p?.code)
+          .filter((c: unknown): c is string => typeof c === "string" && c.length > 0)
+          .slice(0, 1);
+      } catch (e) {
+        console.error("[moov-onboarding-link] fee plan lookup", (e as Error).message);
+      }
+    }
+
+    if (feePlanCodes.length === 0) {
+      return json(
+        {
+          error:
+            "No fee plan is configured for your payment platform yet. Add a fee plan in the provider dashboard (or set the fee plan code) and try again.",
+        },
+        409,
+      );
+    }
+
     // Moov hosted onboarding invite for this specific connected account.
     const invite = await moovFetch<any>("/onboarding-invites", {
       method: "POST",
@@ -48,8 +82,8 @@ serve(async (req) => {
           `/accounts/${accountId}/capabilities.write`,
         ],
         capabilities: ["transfers", "send-funds", "collect-funds", "wallet"],
-        feePlanCodes: [],
-        partnerAccountID: accountId,
+        feePlanCodes,
+        partnerAccountID: platformAccountId,
         redirectURL: redirect,
       },
     });
