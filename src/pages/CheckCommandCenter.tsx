@@ -2595,8 +2595,11 @@ export default function CheckCommandCenter() {
 /* ------------------------------------------------------------------ */
 
 function ClaimCheckFileHeader({ group, compact = false, hideReadySignal = false }: { group: CheckGroup; compact?: boolean; hideReadySignal?: boolean }) {
-  const signedPayees = group.checks.reduce(
-    (sum, check) => sum + (check.check_payees ?? []).filter((p) => p.endorsement_status === "signed").length,
+  const settledPayees = group.checks.reduce(
+    (sum, check) => sum + (check.check_payees ?? []).filter((p) => {
+      const status = (p.endorsement_status ?? "").toLowerCase();
+      return status === "signed" || status === "waived";
+    }).length,
     0,
   );
   const totalPayees = group.checks.reduce((sum, check) => sum + (check.check_payees?.length ?? 0), 0);
@@ -2623,7 +2626,7 @@ function ClaimCheckFileHeader({ group, compact = false, hideReadySignal = false 
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span>{group.checks.length} {group.checks.length === 1 ? "check" : "checks"}</span>
             <span>•</span>
-            <span>{signedPayees}/{totalPayees || 0} endorsements signed</span>
+            <span>{settledPayees}/{totalPayees || 0} endorsements received</span>
             {hasLossDraft && <span>• Loss draft visibility active</span>}
           </div>
         )}

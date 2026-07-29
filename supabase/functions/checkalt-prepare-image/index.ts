@@ -29,8 +29,15 @@ async function resolveRasterPath(
   supabase: ReturnType<typeof getServiceClient>,
   checkId: string,
   path: string,
+  allowOriginalFallback = false,
 ): Promise<string> {
   if (!/\.svg(\?|$)/i.test(path)) return path;
+
+  if (!allowOriginalFallback) {
+    throw new Error(
+      "Back image needs an approved deposit JPEG before submission. Generate and approve the deposit image before depositing.",
+    );
+  }
 
   try {
     const { data: evt } = await supabase
@@ -124,12 +131,14 @@ Deno.serve(async (req) => {
 
     const { data: check, error: checkErr } = await supabase
       .from("check_intake_items")
-      .select("id, front_image_path, back_image_path")
+      .select("id, front_image_path, back_image_path, back_image_deposit_path")
       .eq("id", check_intake_item_id)
       .maybeSingle();
     if (checkErr || !check) throw new Error(checkErr?.message || "Check not found");
 
-    const rawPath = side === "front" ? check.front_image_path : check.back_image_path;
+    const rawPath = side === "front"
+      ? check.front_image_path
+      : (check.back_image_deposit_path ?? check.back_image_path);
     if (!rawPath) {
       return new Response(
         JSON.stringify({ prepared_path: null, skipped: true, reason: "no_source_image" }),
@@ -137,8 +146,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Resolve SVG wrappers (endorsed back) to the underlying raster
-    const sourcePath = side === "back" ? await resolveRasterPath(supabase, check.id, rawPath) : rawPath;
+    // Prefer the approved endorsed deposit JPEG when present. Do not silently
+    // resolve endorsed SVG wrappers back to the original raster, because that
+    // would submit a clean back image without the received endorsements.
+    const sourcePath = side === "back"
+      ? await resolveRasterPath(supabase, check.id, rawPath, Boolean(check.back_image_deposit_path))
+      : rawPath;
 
     // Skip re-preparing if a prior deposit-ready variant is already present.
     const preparedPath = `${sourcePath.replace(/\.(jpe?g|png|webp|svg)$/i, "")}.deposit.jpg`;

@@ -115,6 +115,12 @@ export async function prepareCheckAltDeposit(checkIntakeItemId: string): Promise
         ? row.back_image_path
         : null;
 
+    if (!backSource && row.back_image_path) {
+      throw new Error(
+        "Back image needs an approved deposit JPEG before submission. Open Adjust Endorsement, generate the deposit image, and approve it before depositing.",
+      );
+    }
+
     try {
       const [deposit_front_path, deposit_back_path] = await Promise.all([
         frontSource ? prepareRasterInBrowser(frontSource, "front") : Promise.resolve(null),

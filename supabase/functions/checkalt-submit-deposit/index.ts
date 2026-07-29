@@ -186,7 +186,7 @@ Deno.serve(async (req) => {
     const { data: check, error: checkErr } = await supabase
       .from("check_intake_items")
       .select(
-        "id, tenant_id, amount, check_number, front_image_path, back_image_path, status",
+        "id, tenant_id, amount, check_number, front_image_path, back_image_path, back_image_deposit_path, status",
       )
       .eq("id", check_intake_item_id)
       .maybeSingle();
@@ -248,40 +248,15 @@ Deno.serve(async (req) => {
           .update({ status: "pending" })
           .eq("id", depositRow.id);
 
-        // CheckAlt rejects SVGs — the endorsement compositor now stores the
-        // endorsed back as an .svg wrapper around the original raster. Resolve
-        // the underlying JPEG/PNG from the endorsement audit trail (or by
-        // stripping the `_endorsed_<ts>.svg` suffix) before submitting.
+        // CheckAlt rejects SVGs. Prefer the approved endorsed deposit JPEG
+        // (back_image_deposit_path) when present. Do not silently resolve an
+        // endorsed SVG wrapper back to the original raster, because that would
+        // submit a clean back image without the received endorsements.
         const resolveRasterBackPath = async (path: string | null): Promise<string | null> => {
           if (!path) return null;
           if (!/\.svg(\?|$)/i.test(path)) return path;
-          try {
-            const { data: evt } = await supabase
-              .from("check_endorsement_events")
-              .select("event_data")
-              .eq("check_id", check.id)
-              .order("created_at", { ascending: false })
-              .limit(20);
-            for (const row of (evt ?? []) as any[]) {
-              const d = row?.event_data ?? {};
-              const orig = d.original_back_image_path ?? d.original_back_path;
-              if (orig && !/\.svg(\?|$)/i.test(orig)) return orig as string;
-            }
-          } catch (e) {
-            console.warn("[checkalt-submit-deposit] endorsement audit lookup failed:", (e as Error).message);
-          }
-          // Fallback: strip `_endorsed_<digits>.svg` and try common extensions.
-          const base = path.replace(/_endorsed_\d+\.svg$/i, "");
-          if (base !== path) {
-            for (const ext of [".jpeg", ".jpg", ".png"]) {
-              const candidate = `${base}${ext}`;
-              const { data } = await supabase.storage.from("claim-files").createSignedUrl(candidate, 60);
-              if (data?.signedUrl) return candidate;
-            }
-          }
           throw new Error(
-            "Back-of-check image is stored as SVG and the original raster could not be located. " +
-            "Reupload the back image as JPEG or PNG before depositing.",
+            "Back image needs an approved deposit JPEG before submission. Generate and approve the deposit image before depositing.",
           );
         };
 
@@ -312,11 +287,12 @@ Deno.serve(async (req) => {
           frontB64 = deposit_front_path
             ? await downloadPreparedAsB64(deposit_front_path, "front")
             : await downloadAsB64(check.front_image_path, "front");
+          const fallbackBackPath = check.back_image_deposit_path ?? await resolveRasterBackPath(check.back_image_path);
           backB64 = deposit_back_path
             ? await downloadPreparedAsB64(deposit_back_path, "back")
-            : await downloadAsB64(await resolveRasterBackPath(check.back_image_path), "back");
+            : await downloadAsB64(fallbackBackPath, "back");
         } else {
-          const rasterBackPath = await resolveRasterBackPath(check.back_image_path);
+          const rasterBackPath = check.back_image_deposit_path ?? await resolveRasterBackPath(check.back_image_path);
           frontB64 = await downloadAsB64(check.front_image_path, "front");
           backB64 = await downloadAsB64(rasterBackPath, "back");
         }

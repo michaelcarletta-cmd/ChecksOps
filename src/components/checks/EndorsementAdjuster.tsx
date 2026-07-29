@@ -256,19 +256,32 @@ export function EndorsementAdjuster({
   };
 
   const hasVisibleSignature = (e: SignedEndorsementAsset) => {
+    const statusValue = (e.status ?? "").toLowerCase();
     const method = (e.signature_method ?? "").toLowerCase();
-    if (method === "internal" || method === "manual") return false;
-    return Boolean(e.signature_image_url?.trim());
+
+    if (statusValue === "waived") return false;
+    if (e.signature_image_url?.trim()) return true;
+
+    // Staff-recorded/physical endorsements do not always have a captured image,
+    // but they are still valid received endorsements. Render the payee name as
+    // a typed endorsement so the deposit image can be generated instead of
+    // blocking ready-for-deposit checks.
+    return Boolean(e.signed_at || statusValue === "signed") &&
+      ["internal", "manual", "physical_check"].includes(method);
   };
 
   const visibleEndorsements = signedEndorsements.filter(hasVisibleSignature);
+  const hasSettledEndorsement = signedEndorsements.some((e) => {
+    const statusValue = (e.status ?? "").toLowerCase();
+    return statusValue === "signed" || statusValue === "waived" || Boolean(e.signed_at);
+  });
   const clientEndorsements = visibleEndorsements.filter(
     (e) => !isCompanyEndorsement(e.payee_name),
   );
   const companyEndorsement = visibleEndorsements.find((e) =>
     isCompanyEndorsement(e.payee_name),
   ) ?? null;
-  const canGenerate = visibleEndorsements.length > 0;
+  const canGenerate = hasSettledEndorsement;
 
   useEffect(() => {
     const next = initialOverride ?? DEFAULT_ENDORSEMENT_OVERRIDE;
@@ -710,7 +723,7 @@ export function EndorsementAdjuster({
     return (
       <div className="flex items-center gap-2 p-4 rounded-lg bg-destructive/10 text-destructive font-medium">
         <AlertCircle className="h-5 w-5 flex-shrink-0" />
-        No signed endorsements found for this check. Cannot generate deposit image.
+        No received or waived endorsements found for this check. Cannot generate deposit image.
       </div>
     );
   }

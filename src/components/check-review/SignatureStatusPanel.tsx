@@ -142,18 +142,20 @@ export function SignatureStatusPanel({ checkId }: SignatureStatusPanelProps) {
       ) : (
         <ul className="space-y-1.5">
           {rows.map((r) => {
-            const signed = r.status === "signed" || r.status === "waived";
+            const status = (r.status ?? "").toLowerCase();
+            const settled = status === "signed" || status === "waived" || Boolean(r.signed_at);
+            const waived = status === "waived";
             return (
               <li
                 key={r.id}
                 className={
                   "flex flex-wrap items-center gap-2 rounded-sm px-2 py-1 text-xs transition-colors hover:brightness-95 " +
-                  (signed
+                  (settled
                     ? "bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400"
                     : "bg-yellow-50 text-yellow-700 dark:bg-yellow-950/20 dark:text-yellow-400")
                 }
               >
-                {signed ? (
+                {settled ? (
                   <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                 ) : (
                   <Hourglass className="h-3.5 w-3.5 shrink-0" />
@@ -163,8 +165,10 @@ export function SignatureStatusPanel({ checkId }: SignatureStatusPanelProps) {
                   {PAYEE_TYPE_LABEL[r.payee_type] ?? r.payee_type}
                 </span>
                 <span className="ml-auto text-[11px] text-slate-500 dark:text-slate-400">
-                  {signed
-                    ? r.signed_at
+                  {settled
+                    ? waived
+                      ? "✓ Waived"
+                      : r.signed_at
                       ? `✓ Signed ${format(new Date(r.signed_at), "MMM d, yyyy h:mm a")}`
                       : "✓ Signed"
                     : "⏳ Pending signature"}
