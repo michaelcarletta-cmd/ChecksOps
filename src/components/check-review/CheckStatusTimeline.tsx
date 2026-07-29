@@ -91,15 +91,28 @@ export function CheckStatusTimeline({ checkId }: CheckStatusTimelineProps) {
     .sort();
   const firstSentAt = sentTimestamps[0] ?? null;
 
+  const isSettled = (e: Endorsement) =>
+    e.status === "signed" || e.status === "waived" || !!e.signed_at;
+
+  const settledCount = endorsements.filter(isSettled).length;
+
   const signedTimestamps = endorsements
-    .filter((e) => e.status === "signed" || e.status === "waived")
+    .filter(isSettled)
     .map((e) => e.signed_at)
     .filter((t): t is string => !!t)
     .sort();
   const allSettled = endorsements.length > 0 && endorsements.every(
-    (e) => e.status === "signed" || e.status === "waived" || e.status === "manual_required",
+    (e) => isSettled(e) || e.status === "manual_required",
   );
-  const lastSignedAt = allSettled ? signedTimestamps[signedTimestamps.length - 1] ?? null : null;
+  // Fall back to the check's own timestamp when a settled endorsement has no
+  // signed_at (e.g. waived or manually recorded).
+  const lastSignedAt = allSettled
+    ? signedTimestamps[signedTimestamps.length - 1] ?? check.updated_at
+    : null;
+
+  // Signatures captured in person never have a request_sent_at — the collection
+  // step is still complete, it just didn't happen over email.
+  const collectedInPerson = !firstSentAt && settledCount > 0;
 
   const isReady = TERMINAL_STATUSES.has(check.status);
   const readyAt = isReady ? check.updated_at : null;
@@ -120,11 +133,15 @@ export function CheckStatusTimeline({ checkId }: CheckStatusTimelineProps) {
     },
     {
       key: "sent",
-      label: "Signatures Sent",
+      label: collectedInPerson ? "Signatures Collected" : "Signatures Sent",
       icon: Send,
-      at: firstSentAt,
-      state: firstSentAt ? "complete" : "current",
-      hint: firstSentAt ? undefined : "Awaiting send",
+      at: firstSentAt ?? (collectedInPerson ? signedTimestamps[0] ?? null : null),
+      state: firstSentAt || collectedInPerson ? "complete" : "current",
+      hint: collectedInPerson
+        ? "Collected in person — no email request needed"
+        : firstSentAt
+          ? undefined
+          : "Awaiting send",
     },
     {
       key: "signed",
@@ -133,14 +150,15 @@ export function CheckStatusTimeline({ checkId }: CheckStatusTimelineProps) {
       at: lastSignedAt,
       state: lastSignedAt
         ? "complete"
-        : firstSentAt
+        : firstSentAt || settledCount > 0
           ? "current"
           : "pending",
       hint:
-        !lastSignedAt && firstSentAt
-          ? `${endorsements.filter((e) => e.status === "signed" || e.status === "waived").length}/${endorsements.length} received`
+        !lastSignedAt && (firstSentAt || settledCount > 0)
+          ? `${settledCount}/${endorsements.length} received`
           : undefined,
     },
+
     {
       key: "ready_for_deposit",
       label:
