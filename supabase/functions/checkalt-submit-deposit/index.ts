@@ -186,7 +186,7 @@ Deno.serve(async (req) => {
     const { data: check, error: checkErr } = await supabase
       .from("check_intake_items")
       .select(
-        "id, tenant_id, amount, check_number, front_image_path, back_image_path, status",
+        "id, tenant_id, amount, check_number, front_image_path, back_image_path, back_image_deposit_path, status",
       )
       .eq("id", check_intake_item_id)
       .maybeSingle();
@@ -248,10 +248,9 @@ Deno.serve(async (req) => {
           .update({ status: "pending" })
           .eq("id", depositRow.id);
 
-        // CheckAlt rejects SVGs — the endorsement compositor now stores the
-        // endorsed back as an .svg wrapper around the original raster. Resolve
-        // the underlying JPEG/PNG from the endorsement audit trail (or by
-        // stripping the `_endorsed_<ts>.svg` suffix) before submitting.
+        // CheckAlt rejects SVGs. Prefer the approved endorsed deposit JPEG
+        // (back_image_deposit_path) when present; only resolve SVG wrappers to
+        // the original raster as a legacy fallback when no approved JPEG exists.
         const resolveRasterBackPath = async (path: string | null): Promise<string | null> => {
           if (!path) return null;
           if (!/\.svg(\?|$)/i.test(path)) return path;
@@ -312,11 +311,12 @@ Deno.serve(async (req) => {
           frontB64 = deposit_front_path
             ? await downloadPreparedAsB64(deposit_front_path, "front")
             : await downloadAsB64(check.front_image_path, "front");
+          const fallbackBackPath = check.back_image_deposit_path ?? await resolveRasterBackPath(check.back_image_path);
           backB64 = deposit_back_path
             ? await downloadPreparedAsB64(deposit_back_path, "back")
-            : await downloadAsB64(await resolveRasterBackPath(check.back_image_path), "back");
+            : await downloadAsB64(fallbackBackPath, "back");
         } else {
-          const rasterBackPath = await resolveRasterBackPath(check.back_image_path);
+          const rasterBackPath = check.back_image_deposit_path ?? await resolveRasterBackPath(check.back_image_path);
           frontB64 = await downloadAsB64(check.front_image_path, "front");
           backB64 = await downloadAsB64(rasterBackPath, "back");
         }
