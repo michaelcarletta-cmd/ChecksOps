@@ -91,8 +91,10 @@ export function CheckStatusTimeline({ checkId }: CheckStatusTimelineProps) {
     .sort();
   const firstSentAt = sentTimestamps[0] ?? null;
 
-  const isSettled = (e: Endorsement) =>
-    e.status === "signed" || e.status === "waived" || !!e.signed_at;
+  const isSettled = (e: Endorsement) => {
+    const status = (e.status ?? "").toLowerCase();
+    return status === "signed" || status === "waived" || !!e.signed_at;
+  };
 
   const settledCount = endorsements.filter(isSettled).length;
 
@@ -102,7 +104,7 @@ export function CheckStatusTimeline({ checkId }: CheckStatusTimelineProps) {
     .filter((t): t is string => !!t)
     .sort();
   const allSettled = endorsements.length > 0 && endorsements.every(
-    (e) => isSettled(e) || e.status === "manual_required",
+    (e) => isSettled(e) || (e.status ?? "").toLowerCase() === "manual_required",
   );
   // Fall back to the check's own timestamp when a settled endorsement has no
   // signed_at (e.g. waived or manually recorded).

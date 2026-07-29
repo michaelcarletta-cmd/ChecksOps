@@ -251,20 +251,16 @@ Deno.serve(async (req) => {
       overrideForAllowText?.showPayToOrder,
     );
 
-    // ── Strict endorsement fetch ──
+    // ── Settled endorsement fetch ──
     const { data: fetchedEndorsements, error: endErr } = await supabase
       .from("check_endorsements")
       .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method, check_id, check_payees!check_endorsements_payee_id_fkey(endorsement_image_path)")
       .eq("check_id", checkId)
-      .eq("status", "signed")
-      .not("signature_image_url", "is", null)
+      .in("status", ["signed", "waived"])
       .order("created_at", { ascending: true });
 
     if (endErr) throw new Error(`Failed to load endorsements: ${endErr.message}`);
-    const endorsements = (fetchedEndorsements ?? []).filter((e: any) => {
-      const method = (e.signature_method ?? "").toLowerCase();
-      return method !== "internal" && method !== "manual";
-    });
+    const endorsements = fetchedEndorsements ?? [];
     if (!endorsements?.length && !allowTextOnly) {
       return await restoreOriginalBackImage(
         supabase,
@@ -278,12 +274,6 @@ Deno.serve(async (req) => {
     const mismatch = endorsements.find((e: any) => e.check_id !== checkId);
     if (mismatch) {
       return jsonResp({ success: false, error: `Signer asset ${mismatch.id} does not belong to check ${checkId}.`, code: "ENDORSEMENT_CHECK_MISMATCH", checkId, badEndorsementId: mismatch.id }, 400);
-    }
-
-    // Validate all have signature assets
-    const missingAsset = endorsements.find((e: any) => !e.signature_image_url);
-    if (missingAsset) {
-      return jsonResp({ success: false, error: `Invalid endorsement: missing signature asset for ${missingAsset.payee_name}.`, code: "MISSING_SIGNATURE_ASSET" }, 400);
     }
 
     console.log("[COMPOSITE] loading back image");
@@ -363,8 +353,8 @@ Deno.serve(async (req) => {
     };
 
     const hasRenderableSignature = (endorsement: EndorsementRecord) => {
-      const method = (endorsement.signature_method ?? "").toLowerCase();
-      if (method === "internal" || method === "manual") return false;
+      const status = (endorsement.status ?? "").toLowerCase();
+      if (status === "waived") return false;
       return Boolean(endorsement.resolvedSignatureImageUrl || endorsement.typedSignatureText);
     };
 
@@ -849,6 +839,8 @@ function extractLegacyPayeeSignaturePath(record: EndorsementRecord) {
 
 function resolvePreferredSignatureRefs(record: EndorsementRecord) {
   const methodClass = classifySignatureMethod(record.signature_method);
+  const method = (record.signature_method ?? "").toLowerCase();
+  const status = (record.status ?? "").toLowerCase();
   const currentSignatureRef = isRealSignatureRef(record.signature_image_url) ? record.signature_image_url : null;
   const legacyStoredSignatureRef = extractLegacyPayeeSignaturePath(record);
 
@@ -860,10 +852,13 @@ function resolvePreferredSignatureRefs(record: EndorsementRecord) {
     savedDrawnSignatureUrl ? null
     : methodClass === "uploaded" && currentSignatureRef ? currentSignatureRef : null;
 
-  const typedSignatureText =
-    !savedDrawnSignatureUrl && !savedUploadedSignatureUrl && isTypedSignatureRef(record.signature_image_url)
+  const typedSignatureText = !savedDrawnSignatureUrl && !savedUploadedSignatureUrl
+    ? isTypedSignatureRef(record.signature_image_url)
       ? record.signature_image_url.slice(6)
-      : null;
+      : (status === "signed" || Boolean(record.signed_at)) && ["internal", "manual", "physical_check"].includes(method)
+        ? record.payee_name
+        : null
+    : null;
 
   return { savedDrawnSignatureUrl, savedUploadedSignatureUrl, typedSignatureText };
 }
