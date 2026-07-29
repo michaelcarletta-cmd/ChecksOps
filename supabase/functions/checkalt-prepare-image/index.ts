@@ -124,12 +124,14 @@ Deno.serve(async (req) => {
 
     const { data: check, error: checkErr } = await supabase
       .from("check_intake_items")
-      .select("id, front_image_path, back_image_path")
+      .select("id, front_image_path, back_image_path, back_image_deposit_path")
       .eq("id", check_intake_item_id)
       .maybeSingle();
     if (checkErr || !check) throw new Error(checkErr?.message || "Check not found");
 
-    const rawPath = side === "front" ? check.front_image_path : check.back_image_path;
+    const rawPath = side === "front"
+      ? check.front_image_path
+      : (check.back_image_deposit_path ?? check.back_image_path);
     if (!rawPath) {
       return new Response(
         JSON.stringify({ prepared_path: null, skipped: true, reason: "no_source_image" }),
@@ -137,7 +139,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Resolve SVG wrappers (endorsed back) to the underlying raster
+    // Prefer the approved endorsed deposit JPEG when present. Only resolve SVG
+    // wrappers as a legacy fallback; submitting the underlying original would
+    // drop received/manual/waived endorsement handling from the deposit image.
     const sourcePath = side === "back" ? await resolveRasterPath(supabase, check.id, rawPath) : rawPath;
 
     // Skip re-preparing if a prior deposit-ready variant is already present.
