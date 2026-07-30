@@ -66,9 +66,9 @@ export function DisbursementConsole({
 
   const [allocations, setAllocations] = useState<Record<string, string>>({});
   const [usePercent, setUsePercent] = useState(false);
-  const [deliverySpeed, setDeliverySpeed] = useState<"next_day" | "same_day" | "instant">("next_day");
-  const SPEED_FEES: Record<string, number> = { next_day: 0.95, same_day: 1.15, instant: 1.65 };
-  const SPEED_LABELS: Record<string, string> = { next_day: "Next Day", same_day: "Same Day", instant: "Instant" };
+  const [deliverySpeed, setDeliverySpeed] = useState<"next_day" | "same_day">("next_day");
+  const SPEED_FEES: Record<string, number> = { next_day: 0.65, same_day: 0.90 };
+  const SPEED_LABELS: Record<string, string> = { next_day: "Next Day", same_day: "Same Day" };
   const [adminOverride, setAdminOverride] = useState(false);
   const { isAdmin } = usePermissions();
   const { isActum, isPlaid } = usePaymentRail();
@@ -440,11 +440,10 @@ export function DisbursementConsole({
           <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
             <Clock className="h-3 w-3" /> Delivery Speed
           </p>
-          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Delivery speed">
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Delivery speed">
             {([
-              { value: "next_day", label: "Next Day", fee: 0.95, Icon: Clock, iconClass: "" },
-              { value: "same_day", label: "Same Day", fee: 1.15, Icon: Clock, iconClass: "text-blue-500" },
-              { value: "instant", label: "Instant", fee: 1.65, Icon: Zap, iconClass: "text-amber-500" },
+              { value: "next_day", label: "Next Day", fee: 0.65, Icon: Clock, iconClass: "" },
+              { value: "same_day", label: "Same Day", fee: 0.90, Icon: Zap, iconClass: "text-blue-500" },
             ] as const).map(({ value, label, fee, Icon, iconClass }) => {
               const checked = deliverySpeed === value;
               return (
