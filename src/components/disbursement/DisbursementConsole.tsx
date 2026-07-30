@@ -479,8 +479,9 @@ export function DisbursementConsole({
                 {allocations[acct.id] && parseFloat(allocations[acct.id]) > 0 && (
                   <span className="text-xs text-muted-foreground w-20 text-right flex-shrink-0">
                     {usePercent
-                      ? `$${((parseFloat(allocations[acct.id]) / 100) * availableAmount).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                      ? `$${toCents((parseFloat(allocations[acct.id]) / 100) * availableAmount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                       : `${((parseFloat(allocations[acct.id]) / availableAmount) * 100).toFixed(1)}%`
+
                     }
                   </span>
                 )}
