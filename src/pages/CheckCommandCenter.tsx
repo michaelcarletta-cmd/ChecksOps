@@ -3161,7 +3161,7 @@ function CheckDetailPanel({
   // "Deposit Check" button without exposing checkalt_tenant_accounts
   // or checkalt_config (both admin-only under RLS) to regular staff.
   const { tenantId: checkAltTenantId } = useTenantFilter();
-  const { data: checkAltEnabled = false } = useQuery({
+  const { data: checkAltEnabledRaw = false } = useQuery({
     queryKey: ["checkalt-enabled", checkAltTenantId],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("is_checkalt_enabled_for_tenant", {
