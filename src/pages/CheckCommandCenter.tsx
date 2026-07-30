@@ -1211,7 +1211,12 @@ export default function CheckCommandCenter() {
   // shared/pending-approval checks so the visible list matches the badge count.
   const depositedChecks = (() => {
     if (activeTab !== "deposited") return depositedFromAll;
-    const ownedFiltered = (depositedRows as CheckItem[]).filter(matchesSearch);
+    // Re-check the stage when consuming the cached page. A realtime release can
+    // arrive before this paginated query refetches; never let a stale deposited
+    // row keep a funds-released check visible in this lane.
+    const ownedFiltered = (depositedRows as CheckItem[]).filter(
+      (c) => c.check_stage !== "funds_released" && matchesSearch(c),
+    );
     const ownedIds = new Set(ownedFiltered.map((c) => c.id));
     const extras = depositedFromAll.filter((c) => !ownedIds.has(c.id));
     return [...ownedFiltered, ...extras];
@@ -1463,13 +1468,17 @@ export default function CheckCommandCenter() {
       .channel(`checkops-realtime-${tenantId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "disbursement_splits", filter: `tenant_id=eq.${tenantId}` }, () => {
         qc.invalidateQueries({ queryKey: ["funds-released", tenantId] });
-        qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] });
-        qc.invalidateQueries({ queryKey: ["check-dashboard-counts", tenantId] });
+        qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+        qc.invalidateQueries({ queryKey: ["check-intake-items-deposited"] });
+        qc.invalidateQueries({ queryKey: ["check-stage-totals"] });
+        qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
         qc.invalidateQueries({ queryKey: ["funds-tab-disbursements", tenantId] });
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "check_intake_items", filter: `tenant_id=eq.${tenantId}` }, () => {
-        qc.invalidateQueries({ queryKey: ["check-intake-items", tenantId] });
-        qc.invalidateQueries({ queryKey: ["check-dashboard-counts", tenantId] });
+        qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+        qc.invalidateQueries({ queryKey: ["check-intake-items-deposited"] });
+        qc.invalidateQueries({ queryKey: ["check-stage-totals"] });
+        qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
