@@ -4834,7 +4834,7 @@ function CheckDetailPanel({
                         carrierName={check.carrier_name ?? undefined}
                         claimId={check.claim_id ?? null}
                         detectedClaimNumber={check.detected_claim_number ?? null}
-                        actumEnabled={isDeposited}
+                        payoutEnabled={isDeposited}
                       />
                   </>
                 );
