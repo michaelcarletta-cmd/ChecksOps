@@ -16907,6 +16907,80 @@ export type Database = {
           },
         ]
       }
+      payment_method_verifications: {
+        Row: {
+          attempts: number
+          created_at: string
+          environment: string
+          external_recipient_id: string | null
+          failure_reason: string | null
+          id: string
+          initiated_at: string
+          initiated_by: string | null
+          max_attempts: number
+          method: string
+          payment_method_id: string | null
+          provider: string
+          provider_account_id: string | null
+          provider_bank_account_id: string | null
+          provider_metadata: Json
+          status: string
+          tenant_id: string
+          updated_at: string
+          verified_at: string | null
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          environment?: string
+          external_recipient_id?: string | null
+          failure_reason?: string | null
+          id?: string
+          initiated_at?: string
+          initiated_by?: string | null
+          max_attempts?: number
+          method?: string
+          payment_method_id?: string | null
+          provider?: string
+          provider_account_id?: string | null
+          provider_bank_account_id?: string | null
+          provider_metadata?: Json
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          verified_at?: string | null
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          environment?: string
+          external_recipient_id?: string | null
+          failure_reason?: string | null
+          id?: string
+          initiated_at?: string
+          initiated_by?: string | null
+          max_attempts?: number
+          method?: string
+          payment_method_id?: string | null
+          provider?: string
+          provider_account_id?: string | null
+          provider_bank_account_id?: string | null
+          provider_metadata?: Json
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_method_verifications_payment_method_id_fkey"
+            columns: ["payment_method_id"]
+            isOneToOne: false
+            referencedRelation: "payment_provider_methods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_methods: {
         Row: {
           card_last_four: string | null
@@ -17133,6 +17207,87 @@ export type Database = {
           },
         ]
       }
+      payment_transfer_groups: {
+        Row: {
+          check_id: string | null
+          claim_id: string | null
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          environment: string
+          facilitator_fee_cents: number
+          failure_reason: string | null
+          id: string
+          idempotency_key: string | null
+          leg_count: number
+          net_amount_cents: number
+          provider: string
+          provider_group_id: string | null
+          provider_metadata: Json
+          source_kind: string
+          source_payment_method_id: string | null
+          source_wallet_id: string | null
+          status: string
+          submitted_at: string | null
+          tenant_id: string
+          total_amount_cents: number
+          updated_at: string
+        }
+        Insert: {
+          check_id?: string | null
+          claim_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          environment?: string
+          facilitator_fee_cents?: number
+          failure_reason?: string | null
+          id?: string
+          idempotency_key?: string | null
+          leg_count?: number
+          net_amount_cents?: number
+          provider?: string
+          provider_group_id?: string | null
+          provider_metadata?: Json
+          source_kind?: string
+          source_payment_method_id?: string | null
+          source_wallet_id?: string | null
+          status?: string
+          submitted_at?: string | null
+          tenant_id: string
+          total_amount_cents?: number
+          updated_at?: string
+        }
+        Update: {
+          check_id?: string | null
+          claim_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          environment?: string
+          facilitator_fee_cents?: number
+          failure_reason?: string | null
+          id?: string
+          idempotency_key?: string | null
+          leg_count?: number
+          net_amount_cents?: number
+          provider?: string
+          provider_group_id?: string | null
+          provider_metadata?: Json
+          source_kind?: string
+          source_payment_method_id?: string | null
+          source_wallet_id?: string | null
+          status?: string
+          submitted_at?: string | null
+          tenant_id?: string
+          total_amount_cents?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       payment_transfers: {
         Row: {
           amount_cents: number
@@ -17150,6 +17305,8 @@ export type Database = {
           failure_reason: string | null
           id: string
           idempotency_key: string
+          is_facilitator_fee: boolean
+          leg_role: string | null
           net_amount_cents: number | null
           platform_fee_cents: number
           provider: string
@@ -17163,7 +17320,9 @@ export type Database = {
           status: string
           submitted_at: string | null
           tenant_id: string
+          transfer_group_id: string | null
           updated_at: string
+          wallet_id: string | null
         }
         Insert: {
           amount_cents: number
@@ -17181,6 +17340,8 @@ export type Database = {
           failure_reason?: string | null
           id?: string
           idempotency_key: string
+          is_facilitator_fee?: boolean
+          leg_role?: string | null
           net_amount_cents?: number | null
           platform_fee_cents?: number
           provider?: string
@@ -17194,7 +17355,9 @@ export type Database = {
           status?: string
           submitted_at?: string | null
           tenant_id: string
+          transfer_group_id?: string | null
           updated_at?: string
+          wallet_id?: string | null
         }
         Update: {
           amount_cents?: number
@@ -17212,6 +17375,8 @@ export type Database = {
           failure_reason?: string | null
           id?: string
           idempotency_key?: string
+          is_facilitator_fee?: boolean
+          leg_role?: string | null
           net_amount_cents?: number | null
           platform_fee_cents?: number
           provider?: string
@@ -17225,7 +17390,9 @@ export type Database = {
           status?: string
           submitted_at?: string | null
           tenant_id?: string
+          transfer_group_id?: string | null
           updated_at?: string
+          wallet_id?: string | null
         }
         Relationships: [
           {
@@ -17277,7 +17444,205 @@ export type Database = {
             referencedRelation: "tenants_public"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "payment_transfers_transfer_group_id_fkey"
+            columns: ["transfer_group_id"]
+            isOneToOne: false
+            referencedRelation: "payment_transfer_groups"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      payment_wallet_ledger: {
+        Row: {
+          amount_cents: number
+          balance_after_cents: number
+          check_id: string | null
+          claim_id: string | null
+          created_at: string
+          created_by: string | null
+          currency: string
+          direction: string
+          entry_type: string
+          id: string
+          memo: string | null
+          provider_transfer_id: string | null
+          reference: string | null
+          sub_ledger_id: string | null
+          tenant_id: string
+          transfer_group_id: string | null
+          transfer_id: string | null
+          wallet_id: string
+        }
+        Insert: {
+          amount_cents: number
+          balance_after_cents?: number
+          check_id?: string | null
+          claim_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          direction: string
+          entry_type: string
+          id?: string
+          memo?: string | null
+          provider_transfer_id?: string | null
+          reference?: string | null
+          sub_ledger_id?: string | null
+          tenant_id: string
+          transfer_group_id?: string | null
+          transfer_id?: string | null
+          wallet_id: string
+        }
+        Update: {
+          amount_cents?: number
+          balance_after_cents?: number
+          check_id?: string | null
+          claim_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          direction?: string
+          entry_type?: string
+          id?: string
+          memo?: string | null
+          provider_transfer_id?: string | null
+          reference?: string | null
+          sub_ledger_id?: string | null
+          tenant_id?: string
+          transfer_group_id?: string | null
+          transfer_id?: string | null
+          wallet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_wallet_ledger_sub_ledger_id_fkey"
+            columns: ["sub_ledger_id"]
+            isOneToOne: false
+            referencedRelation: "payment_wallet_sub_ledgers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_wallet_ledger_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "payment_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_wallet_sub_ledgers: {
+        Row: {
+          balance_cents: number
+          claim_id: string | null
+          client_name: string
+          created_at: string
+          created_by: string | null
+          id: string
+          matter_reference: string | null
+          notes: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+          wallet_id: string
+        }
+        Insert: {
+          balance_cents?: number
+          claim_id?: string | null
+          client_name: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          matter_reference?: string | null
+          notes?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          wallet_id: string
+        }
+        Update: {
+          balance_cents?: number
+          claim_id?: string | null
+          client_name?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          matter_reference?: string | null
+          notes?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          wallet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_wallet_sub_ledgers_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "payment_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_wallets: {
+        Row: {
+          available_cents: number
+          created_at: string
+          currency: string
+          environment: string
+          id: string
+          last_synced_at: string | null
+          name: string
+          pending_cents: number
+          provider: string
+          provider_account_id: string | null
+          provider_metadata: Json
+          provider_payment_method_id: string | null
+          provider_wallet_id: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+          wallet_type: string
+        }
+        Insert: {
+          available_cents?: number
+          created_at?: string
+          currency?: string
+          environment?: string
+          id?: string
+          last_synced_at?: string | null
+          name?: string
+          pending_cents?: number
+          provider?: string
+          provider_account_id?: string | null
+          provider_metadata?: Json
+          provider_payment_method_id?: string | null
+          provider_wallet_id?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          wallet_type?: string
+        }
+        Update: {
+          available_cents?: number
+          created_at?: string
+          currency?: string
+          environment?: string
+          id?: string
+          last_synced_at?: string | null
+          name?: string
+          pending_cents?: number
+          provider?: string
+          provider_account_id?: string | null
+          provider_metadata?: Json
+          provider_payment_method_id?: string | null
+          provider_wallet_id?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          wallet_type?: string
+        }
+        Relationships: []
       }
       payment_webhook_events: {
         Row: {

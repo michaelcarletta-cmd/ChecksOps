@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { normalizeTransferStatus } from "../_shared/moovClient.ts";
 import { corsHeaders, json, sanitize, serviceClient } from "../_shared/moovGuard.ts";
+import { writeLedgerEntry } from "../_shared/moovWallet.ts";
 
 // Secure provider webhook endpoint.
 //
@@ -193,7 +194,9 @@ async function handleEvent(
 
   const { data: transfer } = await supabase
     .from("payment_transfers")
-    .select("id, tenant_id, status, destination_recipient_id")
+    .select(
+      "id, tenant_id, status, destination_recipient_id, amount_cents, wallet_id, leg_role, transfer_group_id, claim_id, check_id",
+    )
     .eq("provider_transfer_id", transferId)
     .eq("environment", environment)
     .maybeSingle();
@@ -227,6 +230,57 @@ async function handleEvent(
 
   await supabase.from("payment_transfers").update(patch).eq("id", (transfer as any).id);
 
+  // Wallet balances only move on a completed transfer, and each transfer can
+  // only ever post once (unique `reference`).
+  const t = transfer as any;
+  if (newStatus === "completed" && t.wallet_id) {
+    const incoming = t.leg_role === "wallet_funding" || t.leg_role === "parent";
+    await writeLedgerEntry(supabase, {
+      wallet_id: t.wallet_id,
+      tenant_id: t.tenant_id,
+      direction: incoming ? "credit" : "debit",
+      entry_type: incoming
+        ? (t.leg_role === "parent" ? "settlement_received" : "funding")
+        : "payout",
+      amount_cents: Number(t.amount_cents),
+      transfer_id: t.id,
+      transfer_group_id: t.transfer_group_id,
+      claim_id: t.claim_id,
+      check_id: t.check_id,
+      provider_transfer_id: transferId,
+      reference: `transfer:${t.id}`,
+    });
+  }
+
+  // Roll the split's overall state up from its legs.
+  if (t.transfer_group_id) {
+    const { data: legs } = await supabase
+      .from("payment_transfers")
+      .select("status, leg_role")
+      .eq("transfer_group_id", t.transfer_group_id);
+    const children = (legs ?? []).filter((l: any) => l.leg_role !== "parent");
+    const failed = children.filter((l: any) =>
+      ["failed", "returned", "canceled", "cancelled"].includes(l.status)
+    ).length;
+    const done = children.filter((l: any) => l.status === "completed").length;
+    const groupStatus = children.length === 0
+      ? "submitted"
+      : done === children.length
+      ? "completed"
+      : failed === children.length
+      ? "failed"
+      : failed > 0
+      ? "partially_failed"
+      : "processing";
+    await supabase
+      .from("payment_transfer_groups")
+      .update({
+        status: groupStatus,
+        completed_at: groupStatus === "completed" ? new Date().toISOString() : null,
+      })
+      .eq("id", t.transfer_group_id);
+  }
+
   await supabase.from("payment_event_log").insert({
     provider: "moov",
     environment,
@@ -240,6 +294,7 @@ async function handleEvent(
     provider_metadata: sanitize({ provider_status: providerStatus }),
   });
 }
+
 
 /** Falls back to the event name when the payload carries no status. */
 function eventTypeToStatus(eventType: string): string {
