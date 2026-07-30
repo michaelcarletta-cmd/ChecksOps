@@ -66,9 +66,9 @@ export function DisbursementConsole({
 
   const [allocations, setAllocations] = useState<Record<string, string>>({});
   const [usePercent, setUsePercent] = useState(false);
-  const [deliverySpeed, setDeliverySpeed] = useState<"next_day" | "same_day" | "instant">("next_day");
-  const SPEED_FEES: Record<string, number> = { next_day: 0.95, same_day: 1.15, instant: 1.65 };
-  const SPEED_LABELS: Record<string, string> = { next_day: "Next Day", same_day: "Same Day", instant: "Instant" };
+  const [deliverySpeed, setDeliverySpeed] = useState<"next_day" | "same_day">("next_day");
+  const SPEED_FEES: Record<string, number> = { next_day: 0.65, same_day: 0.90 };
+  const SPEED_LABELS: Record<string, string> = { next_day: "Next Day", same_day: "Same Day" };
   const [adminOverride, setAdminOverride] = useState(false);
   const { isAdmin } = usePermissions();
   const { isActum, isPlaid } = usePaymentRail();
