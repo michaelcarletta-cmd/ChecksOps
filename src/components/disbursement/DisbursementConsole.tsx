@@ -225,9 +225,9 @@ export function DisbursementConsole({
       if (isOverAllocated) {
         const over = Math.abs(remaining);
         throw new Error(
-          `Allocation exceeds available by $${over.toLocaleString("en-US", { minimumFractionDigits: 2 })}. ` +
-          `Available to disburse: $${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} ` +
-          `(check $${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} − already disbursed $${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })}).`
+          `Allocation exceeds available by $${over.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. ` +
+          `Available to disburse: $${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ` +
+          `(check $${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} − already disbursed $${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}).`
         );
       }
       // Race-condition guard: re-check server-side totals before insert
@@ -248,7 +248,7 @@ export function DisbursementConsole({
         const allocSum = splits.reduce((s, x) => s + x.amount, 0);
         if (allocSum > freshAvailable + 0.01) {
           throw new Error(
-            `Another disbursement was just sent. Only $${freshAvailable.toLocaleString("en-US", { minimumFractionDigits: 2 })} is available now (you tried $${allocSum.toLocaleString("en-US", { minimumFractionDigits: 2 })}).`
+            `Another disbursement was just sent. Only $${freshAvailable.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} is available now (you tried $${allocSum.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}).`
           );
         }
       }
@@ -333,17 +333,17 @@ export function DisbursementConsole({
         <div className="rounded-md bg-muted/50 p-3 space-y-2">
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Check amount</span>
-            <span className="font-medium">${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+            <span className="font-medium">${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
           {alreadyDisbursed > 0 && (
             <div className="flex justify-between text-xs">
               <span className="text-muted-foreground">Already disbursed</span>
-              <span className="text-blue-600 font-medium">− ${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+              <span className="text-blue-600 font-medium">− ${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           )}
           <div className="border-t pt-2 flex justify-between text-sm">
             <span className="font-medium">Available to disburse</span>
-            <span className="font-semibold text-emerald-600">${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+            <span className="font-semibold text-emerald-600">${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
           {availableAmount > 0 && (
             <Progress value={((totalAllocatedDollars / availableAmount) * 100)} className="h-1.5" />
@@ -362,7 +362,7 @@ export function DisbursementConsole({
                   <span className="truncate">{split.stakeholder_accounts?.nickname ?? "—"}</span>
                   <div className="flex flex-col items-end gap-1 flex-shrink-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium">${Number(split.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+                      <span className="font-medium">${Number(split.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       <Badge variant="outline" className={`text-[9px] ${
                         split.status === "settled" ? "text-emerald-600 border-emerald-500/30 bg-emerald-500/10" :
                         split.status === "returned" || split.status === "failed" ? "text-red-600 border-red-500/30 bg-red-500/10" :
@@ -534,10 +534,10 @@ export function DisbursementConsole({
           "bg-muted border border-border"
         }`}>
           <span className={isBalanced ? "text-emerald-700 dark:text-emerald-300" : isOverAllocated ? "text-red-700 dark:text-red-300" : "text-muted-foreground"}>
-            {isBalanced ? "✓ Balanced" : isOverAllocated ? `⚠ Over by $${Math.abs(remaining).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : `Remaining: $${remaining.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+            {isBalanced ? "✓ Balanced" : isOverAllocated ? `⚠ Over by $${Math.abs(remaining).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `Remaining: $${remaining.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </span>
           <span className="font-medium">
-            ${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })} of ${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+            ${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} of ${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </div>
 
@@ -547,10 +547,10 @@ export function DisbursementConsole({
             <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
             <div className="space-y-0.5">
               <p className="font-medium">
-                You're trying to send ${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })}, but only ${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} is available on this check.
+                You're trying to send ${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}, but only ${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} is available on this check.
               </p>
               <p className="text-[11px] opacity-90">
-                Check ${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} − already disbursed ${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })} = ${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} remaining.
+                Check ${checkAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} − already disbursed ${alreadyDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} = ${availableAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} remaining.
               </p>
             </div>
           </div>
@@ -588,7 +588,7 @@ export function DisbursementConsole({
               const recipientCount = Object.values(allocations).filter(v => parseFloat(v || "0") > 0).length;
               const fee = SPEED_FEES[deliverySpeed];
               const speedLabel = SPEED_LABELS[deliverySpeed];
-              const amountText = `$${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+              const amountText = `$${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
               const recipText = recipientCount > 0 ? ` to ${recipientCount} recipient${recipientCount === 1 ? "" : "s"}` : "";
               return (
                 <span className="flex items-center justify-center gap-2 flex-wrap px-1">
