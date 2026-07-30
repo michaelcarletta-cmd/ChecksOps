@@ -50,6 +50,11 @@ const ACCOUNT_TYPE_COLORS: Record<string, string> = {
   supplier: "bg-cyan-500/10 text-cyan-700 border-cyan-500/20",
   other: "bg-muted text-muted-foreground border-border",
 };
+// A recipient can be paid on the primary (Moov) rail only once they have a
+// Moov-linked bank account. Otherwise the whole batch falls back to the legacy rail.
+const isMoovReady = (acct: any) =>
+  acct?.provider === "moov" && !!(acct?.provider_bank_account_id || acct?.provider_account_id);
+
 
 export function DisbursementConsole({
   checkIntakeItemId,
