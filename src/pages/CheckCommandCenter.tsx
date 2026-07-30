@@ -73,6 +73,7 @@ const LossDraftDashboard = lazy(() =>
 // intermittent "click does nothing" behavior when the chunk was slow to fetch.
 import { EndorsementAdjuster } from "@/components/checks/EndorsementAdjuster";
 import { prepareCheckAltDeposit } from "@/lib/prepareCheckAltDeposit";
+import { SHOW_CHECKALT } from "@/lib/depositRails";
 const preloadEndorsementAdjuster = () => Promise.resolve();
 const EndorsementChecklist = lazy(() =>
   import("@/components/check-review/EndorsementChecklist").then(m => ({ default: m.EndorsementChecklist }))
