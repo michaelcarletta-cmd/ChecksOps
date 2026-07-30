@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { CheckStakeholdersManager } from "./CheckStakeholdersManager";
 import { RailUnavailableNotice } from "./RailUnavailableNotice";
 import { usePaymentRail } from "@/hooks/usePaymentRail";
+import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 import { VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 
 interface Props {
@@ -71,6 +72,9 @@ export function DisbursementConsole({
   const [adminOverride, setAdminOverride] = useState(false);
   const { isAdmin } = usePermissions();
   const { isActum, isPlaid } = usePaymentRail();
+  // Moov is the primary disbursement rail. Actum/Plaid remain as the fallback
+  // whenever a recipient has not connected a bank on the Moov rail yet.
+  const { enabled: moovEnabled } = usePaymentProviderEligibility();
 
 
   // Funds-availability hold removed — tenants may disburse immediately after deposit.
@@ -282,8 +286,38 @@ export function DisbursementConsole({
 
       if (splitsErr) throw splitsErr;
 
-      // Trigger the disbursement on the tenant's active rail
-      // (admin_override only honored server-side if caller is admin)
+      // Primary rail: Moov. Nothing is paid there unless EVERY recipient is
+      // Moov-ready, so a 409 leaves the batch untouched and we fall back to the
+      // legacy rail for the whole batch.
+      let moovFallbackNote: string | null = null;
+
+      if (moovEnabled) {
+        const { data: moovData, error: moovErr } = await supabase.functions.invoke("moov-disburse", {
+          body: { batch_id: batch.id },
+        });
+
+        if (!moovErr && (moovData as any)?.success) {
+          return { batchId: batch.id, rail: "moov" as const, note: null };
+        }
+
+        // Read the structured reason so we only fall back for setup gaps.
+        let reason: any = (moovData as any) ?? null;
+        if (moovErr) {
+          try {
+            reason = await (moovErr as any).context?.json?.();
+          } catch {
+            reason = null;
+          }
+        }
+        const code = reason?.error ?? "";
+        const recoverable = ["recipient_setup_required", "payer_setup_required", "insufficient_balance"].includes(code);
+        if (!recoverable) {
+          throw new Error(reason?.message ?? reason?.error ?? moovErr?.message ?? "Disbursement failed");
+        }
+        moovFallbackNote = reason?.message ?? "Sent on the legacy rail — finish payment setup to use the new rail.";
+      }
+
+      // Fallback rail (admin_override only honored server-side if caller is admin)
       const railFn = isPlaid ? "plaid-disburse" : "actum-disburse";
       const { data: railData, error: invokeErr } = await supabase.functions.invoke(railFn, {
         body: { batch_id: batch.id, admin_override: adminOverride && isAdmin },
@@ -293,10 +327,13 @@ export function DisbursementConsole({
       if ((railData as any)?.success === false) {
         throw new Error((railData as any)?.error ?? "Disbursement failed");
       }
-      return batch.id;
+      return { batchId: batch.id, rail: isPlaid ? ("plaid" as const) : ("actum" as const), note: moovFallbackNote };
     },
-    onSuccess: () => {
-      toast({ title: "Disbursements submitted", description: "Credits are on their way to each account." });
+    onSuccess: (result: any) => {
+      toast({
+        title: result?.rail === "moov" ? "Disbursements submitted" : "Disbursements submitted (legacy rail)",
+        description: result?.note ?? "Credits are on their way to each account.",
+      });
       qc.invalidateQueries({ queryKey: ["disbursement-batch-history", checkIntakeItemId ?? depositItemId] });
       qc.invalidateQueries({ queryKey: ["disbursement-batch"] });
       setAllocations({});
@@ -306,7 +343,7 @@ export function DisbursementConsole({
     onError: (e: any) => toast({ title: "Disbursement failed", description: e.message, variant: "destructive" }),
   });
 
-  if (!isActum && !isPlaid) return <RailUnavailableNotice />;
+  if (!isActum && !isPlaid && !moovEnabled) return <RailUnavailableNotice />;
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading accounts...</div>;
 
   const totalRemainingOfCheck = Math.max(0, checkAmount - alreadyDisbursed);
