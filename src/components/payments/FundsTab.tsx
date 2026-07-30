@@ -23,7 +23,7 @@ interface Props {
   carrierName?: string;
   claimId?: string | null;
   detectedClaimNumber?: string | null;
-  actumEnabled?: boolean;
+  payoutEnabled?: boolean;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; icon: any; className: string }> = {
@@ -34,11 +34,11 @@ const STATUS_CONFIG: Record<string, { label: string; icon: any; className: strin
   failed: { label: "Failed", icon: AlertCircle, className: "text-red-600 border-red-500/30 bg-red-500/10" },
 };
 
-type DisburseMode = null | "actum" | "external";
+type DisburseMode = null | "platform" | "external";
 
 const toCents = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
 
-export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId, detectedClaimNumber, actumEnabled = true }: Props) {
+export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId, detectedClaimNumber, payoutEnabled = true }: Props) {
   const { tenant } = useTenant();
   const qc = useQueryClient();
   const [disburseMode, setDisburseMode] = useState<DisburseMode>(null);
@@ -199,10 +199,10 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
   }, [intakeItem?.id]);
 
   useEffect(() => {
-    if (!actumEnabled && disburseMode === "actum") {
+    if (!payoutEnabled && disburseMode === "platform") {
       setDisburseMode(null);
     }
-  }, [actumEnabled, disburseMode]);
+  }, [payoutEnabled, disburseMode]);
 
   const paFeeComputed = useMemo(() => {
     if (paFeeMode === "pct") {
@@ -440,8 +440,8 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Button
               className="w-full h-auto min-h-11 whitespace-normal break-words text-center text-sm px-3 py-2 leading-tight"
-              onClick={() => setDisburseMode("actum")}
-              disabled={!actumEnabled}
+              onClick={() => setDisburseMode("platform")}
+              disabled={!payoutEnabled}
             >
               <DollarSign className="h-4 w-4 mr-1.5 shrink-0" />
               <span className="min-w-0">Disburse to Stakeholders</span>
@@ -455,7 +455,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
               <span className="min-w-0">Disburse Outside ChecksOps</span>
             </Button>
           </div>
-          {!actumEnabled && (
+          {!payoutEnabled && (
             <p className="text-[10px] text-muted-foreground">
               Disbursement becomes available once this check is marked deposited.
             </p>
@@ -463,7 +463,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
         </div>
       )}
 
-      {disburseMode === "actum" && (
+      {disburseMode === "platform" && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Disbursement</p>

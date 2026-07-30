@@ -50,6 +50,11 @@ const ACCOUNT_TYPE_COLORS: Record<string, string> = {
   supplier: "bg-cyan-500/10 text-cyan-700 border-cyan-500/20",
   other: "bg-muted text-muted-foreground border-border",
 };
+// A recipient can be paid on the primary (Moov) rail only once they have a
+// Moov-linked bank account. Otherwise the whole batch falls back to the legacy rail.
+const isMoovReady = (acct: any) =>
+  acct?.provider === "moov" && !!(acct?.provider_bank_account_id || acct?.provider_account_id);
+
 
 export function DisbursementConsole({
   checkIntakeItemId,
@@ -93,7 +98,7 @@ export function DisbursementConsole({
           added_via,
           stakeholder_accounts:stakeholder_account_id (
             id, nickname, account_type, chk_acct, is_active, is_primary, created_at, verification_status,
-            provider, provider_bank_name, provider_last_four
+            provider, provider_bank_name, provider_last_four, provider_account_id, provider_bank_account_id
           )
         `)
         .eq("check_intake_item_id", checkIntakeItemId!);
@@ -498,6 +503,24 @@ export function DisbursementConsole({
                       {isVerified ? <ShieldCheck className="h-2.5 w-2.5" /> : <ShieldAlert className="h-2.5 w-2.5" />}
                       {VERIFICATION_LABEL[vStatus]}
                     </Badge>
+                    {moovEnabled && (
+                      <Badge
+                        variant="outline"
+                        className={`text-[9px] px-1 flex items-center gap-0.5 ${
+                          isMoovReady(acct)
+                            ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/20"
+                            : "bg-amber-500/10 text-amber-700 border-amber-500/20"
+                        }`}
+                        title={
+                          isMoovReady(acct)
+                            ? "This recipient can be paid on the primary rail"
+                            : "Recipient has not connected a bank on the primary rail — batch will fall back to the legacy rail"
+                        }
+                      >
+                        {isMoovReady(acct) ? <CheckCircle2 className="h-2.5 w-2.5" /> : <AlertTriangle className="h-2.5 w-2.5" />}
+                        {isMoovReady(acct) ? "Moov ready" : "Needs setup"}
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-[10px] text-muted-foreground">
                     {acct.custname || acct.homeowner_name || "Payment account connected"}
