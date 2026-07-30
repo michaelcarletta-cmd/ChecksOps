@@ -498,6 +498,24 @@ export function DisbursementConsole({
                       {isVerified ? <ShieldCheck className="h-2.5 w-2.5" /> : <ShieldAlert className="h-2.5 w-2.5" />}
                       {VERIFICATION_LABEL[vStatus]}
                     </Badge>
+                    {moovEnabled && (
+                      <Badge
+                        variant="outline"
+                        className={`text-[9px] px-1 flex items-center gap-0.5 ${
+                          isMoovReady(acct)
+                            ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/20"
+                            : "bg-amber-500/10 text-amber-700 border-amber-500/20"
+                        }`}
+                        title={
+                          isMoovReady(acct)
+                            ? "This recipient can be paid on the primary rail"
+                            : "Recipient has not connected a bank on the primary rail — batch will fall back to the legacy rail"
+                        }
+                      >
+                        {isMoovReady(acct) ? <CheckCircle2 className="h-2.5 w-2.5" /> : <AlertTriangle className="h-2.5 w-2.5" />}
+                        {isMoovReady(acct) ? "Moov ready" : "Needs setup"}
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-[10px] text-muted-foreground">
                     {acct.custname || acct.homeowner_name || "Payment account connected"}
