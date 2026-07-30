@@ -51,7 +51,7 @@ serve(async (req) => {
     // Branding for the recipient page — safe, public tenant fields only.
     const { data: tenant } = await supabase
       .from("tenants")
-      .select("name, logo_url")
+      .select("name, logo_url, primary_color, secondary_color")
       .eq("id", recipient.tenant_id)
       .maybeSingle();
 
@@ -65,7 +65,12 @@ serve(async (req) => {
         name: recipient.display_name,
         status: recipient.onboarding_status,
       },
-      payer: { name: (tenant as any)?.name ?? "ChecksOps", logo_url: (tenant as any)?.logo_url ?? null },
+      payer: {
+        name: (tenant as any)?.name ?? "ChecksOps",
+        logo_url: (tenant as any)?.logo_url ?? null,
+        primary_color: (tenant as any)?.primary_color ?? null,
+        secondary_color: (tenant as any)?.secondary_color ?? null,
+      },
       account_id: accountId,
       token: providerToken,
       environment,
