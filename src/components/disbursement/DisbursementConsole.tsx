@@ -93,7 +93,7 @@ export function DisbursementConsole({
           added_via,
           stakeholder_accounts:stakeholder_account_id (
             id, nickname, account_type, chk_acct, is_active, is_primary, created_at, verification_status,
-            provider, provider_bank_name, provider_last_four
+            provider, provider_bank_name, provider_last_four, provider_account_id, provider_bank_account_id
           )
         `)
         .eq("check_intake_item_id", checkIntakeItemId!);
