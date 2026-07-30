@@ -73,6 +73,7 @@ const LossDraftDashboard = lazy(() =>
 // intermittent "click does nothing" behavior when the chunk was slow to fetch.
 import { EndorsementAdjuster } from "@/components/checks/EndorsementAdjuster";
 import { prepareCheckAltDeposit } from "@/lib/prepareCheckAltDeposit";
+import { SHOW_CHECKALT } from "@/lib/depositRails";
 const preloadEndorsementAdjuster = () => Promise.resolve();
 const EndorsementChecklist = lazy(() =>
   import("@/components/check-review/EndorsementChecklist").then(m => ({ default: m.EndorsementChecklist }))
@@ -1626,8 +1627,12 @@ export default function CheckCommandCenter() {
             <Tabs defaultValue="deposit_ops">
               <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
                 <TabsTrigger value="deposit_ops" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3" />Deposit Ops</TabsTrigger>
-                <TabsTrigger value="pending_approvals" className="text-xs gap-1"><ShieldAlert className="h-3 w-3" />Pending Approvals</TabsTrigger>
-                <TabsTrigger value="deposit_history" className="text-xs gap-1"><Banknote className="h-3 w-3" />Deposit History</TabsTrigger>
+                {SHOW_CHECKALT && (
+                  <>
+                    <TabsTrigger value="pending_approvals" className="text-xs gap-1"><ShieldAlert className="h-3 w-3" />Pending Approvals</TabsTrigger>
+                    <TabsTrigger value="deposit_history" className="text-xs gap-1"><Banknote className="h-3 w-3" />Deposit History</TabsTrigger>
+                  </>
+                )}
                 <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
                 <TabsTrigger value="mortgage_cos" className="text-xs gap-1"><Building2 className="h-3 w-3" />Mortgage Cos</TabsTrigger>
                 <TabsTrigger value="partners" className="text-xs gap-1"><Users className="h-3 w-3" />Partners</TabsTrigger>
@@ -1646,16 +1651,20 @@ export default function CheckCommandCenter() {
                   <DepositOperationsConsole searchQuery={searchQuery} />
                 </Suspense>
               </TabsContent>
-              <TabsContent value="pending_approvals" className="mt-3">
-                <Suspense fallback={<TabLoader />}>
-                  <PendingApprovalDeposits />
-                </Suspense>
-              </TabsContent>
-              <TabsContent value="deposit_history" className="mt-3">
-                <Suspense fallback={<TabLoader />}>
-                  <CheckAltDepositHistory />
-                </Suspense>
-              </TabsContent>
+              {SHOW_CHECKALT && (
+                <>
+                  <TabsContent value="pending_approvals" className="mt-3">
+                    <Suspense fallback={<TabLoader />}>
+                      <PendingApprovalDeposits />
+                    </Suspense>
+                  </TabsContent>
+                  <TabsContent value="deposit_history" className="mt-3">
+                    <Suspense fallback={<TabLoader />}>
+                      <CheckAltDepositHistory />
+                    </Suspense>
+                  </TabsContent>
+                </>
+              )}
               <TabsContent value="reports" className="mt-3">
                 <Suspense fallback={<TabLoader />}>
                   <DepositReports />
@@ -3152,7 +3161,7 @@ function CheckDetailPanel({
   // "Deposit Check" button without exposing checkalt_tenant_accounts
   // or checkalt_config (both admin-only under RLS) to regular staff.
   const { tenantId: checkAltTenantId } = useTenantFilter();
-  const { data: checkAltEnabled = false } = useQuery({
+  const { data: checkAltEnabledRaw = false } = useQuery({
     queryKey: ["checkalt-enabled", checkAltTenantId],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("is_checkalt_enabled_for_tenant", {
@@ -3163,6 +3172,8 @@ function CheckDetailPanel({
     },
     enabled: !!checkAltTenantId,
   });
+  // CheckAlt is hidden platform-wide for now (see src/lib/depositRails.ts).
+  const checkAltEnabled = SHOW_CHECKALT && checkAltEnabledRaw;
 
   // Count of explicit payees on this check — used to decide whether to show
   // the fallback email-based endorsement composer.

@@ -12178,6 +12178,7 @@ export type Database = {
           delivery_speed: string | null
           deposit_item_id: string | null
           id: string
+          moov_transfer_group_id: string | null
           notes: string | null
           rail: string
           reserve_held: number
@@ -12201,6 +12202,7 @@ export type Database = {
           delivery_speed?: string | null
           deposit_item_id?: string | null
           id?: string
+          moov_transfer_group_id?: string | null
           notes?: string | null
           rail?: string
           reserve_held?: number
@@ -12224,6 +12226,7 @@ export type Database = {
           delivery_speed?: string | null
           deposit_item_id?: string | null
           id?: string
+          moov_transfer_group_id?: string | null
           notes?: string | null
           rail?: string
           reserve_held?: number
@@ -12305,6 +12308,9 @@ export type Database = {
           id: string
           idempotence_key: string | null
           method: string
+          moov_failure_reason: string | null
+          moov_status: string | null
+          moov_transfer_id: string | null
           pct_of_total: number | null
           plaid_authorization_id: string | null
           plaid_failure_reason: string | null
@@ -12336,6 +12342,9 @@ export type Database = {
           id?: string
           idempotence_key?: string | null
           method?: string
+          moov_failure_reason?: string | null
+          moov_status?: string | null
+          moov_transfer_id?: string | null
           pct_of_total?: number | null
           plaid_authorization_id?: string | null
           plaid_failure_reason?: string | null
@@ -12367,6 +12376,9 @@ export type Database = {
           id?: string
           idempotence_key?: string | null
           method?: string
+          moov_failure_reason?: string | null
+          moov_status?: string | null
+          moov_transfer_id?: string | null
           pct_of_total?: number | null
           plaid_authorization_id?: string | null
           plaid_failure_reason?: string | null
