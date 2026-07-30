@@ -440,11 +440,10 @@ export function DisbursementConsole({
           <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
             <Clock className="h-3 w-3" /> Delivery Speed
           </p>
-          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Delivery speed">
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Delivery speed">
             {([
-              { value: "next_day", label: "Next Day", fee: 0.95, Icon: Clock, iconClass: "" },
-              { value: "same_day", label: "Same Day", fee: 1.15, Icon: Clock, iconClass: "text-blue-500" },
-              { value: "instant", label: "Instant", fee: 1.65, Icon: Zap, iconClass: "text-amber-500" },
+              { value: "next_day", label: "Next Day", fee: 0.65, Icon: Clock, iconClass: "" },
+              { value: "same_day", label: "Same Day", fee: 0.90, Icon: Zap, iconClass: "text-blue-500" },
             ] as const).map(({ value, label, fee, Icon, iconClass }) => {
               const checked = deliverySpeed === value;
               return (
