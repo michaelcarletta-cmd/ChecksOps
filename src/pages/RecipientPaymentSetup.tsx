@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { applyMoovTheme } from "@/lib/payments/moovTheme";
 import { Loader2, ShieldCheck, Landmark, AlertCircle, CheckCircle2 } from "lucide-react";
+
 
 /**
  * Branded, login-free recipient payment setup page.
@@ -15,7 +17,12 @@ import { Loader2, ShieldCheck, Landmark, AlertCircle, CheckCircle2 } from "lucid
 
 interface SessionData {
   recipient: { id: string; name: string; status: string };
-  payer: { name: string; logo_url: string | null };
+  payer: {
+    name: string;
+    logo_url: string | null;
+    primary_color?: string | null;
+    secondary_color?: string | null;
+  };
   account_id: string;
   token: string;
   environment: string;
@@ -50,6 +57,17 @@ export default function RecipientPaymentSetup() {
   const [done, setDone] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
   const scriptReady = useMoovScript(!!session);
+
+  // Brand the hosted Moov component so it matches the payer's look.
+  useEffect(
+    () =>
+      applyMoovTheme({
+        primary: session?.payer.primary_color ?? null,
+        secondary: session?.payer.secondary_color ?? null,
+      }),
+    [session?.payer.primary_color, session?.payer.secondary_color],
+  );
+
 
   useEffect(() => {
     let cancelled = false;
