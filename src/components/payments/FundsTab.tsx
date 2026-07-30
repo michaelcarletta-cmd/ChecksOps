@@ -36,6 +36,8 @@ const STATUS_CONFIG: Record<string, { label: string; icon: any; className: strin
 
 type DisburseMode = null | "actum" | "external";
 
+const toCents = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
+
 export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId, detectedClaimNumber, actumEnabled = true }: Props) {
   const { tenant } = useTenant();
   const qc = useQueryClient();
@@ -163,9 +165,9 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
   const outgoingSplits = outgoingBatches.flatMap((b: any) =>
     (b.disbursement_splits ?? []).map((s: any) => ({ ...s, batch_id: b.id }))
   );
-  const totalDisbursed = outgoingSplits
+  const totalDisbursed = toCents(outgoingSplits
     .filter((s: any) => s.status !== "failed" && s.status !== "cancelled" && s.status !== "returned")
-    .reduce((sum: number, s: any) => sum + Number(s.amount || 0), 0);
+    .reduce((sum: number, s: any) => sum + toCents(Number(s.amount || 0)), 0));
 
   const receivedFromPayments = incomingPayments
     .filter((p: any) => p.status === "settled")
@@ -206,13 +208,13 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
     if (paFeeMode === "pct") {
       const pct = parseFloat(paFeePct);
       if (isNaN(pct) || pct <= 0) return 0;
-      return (totalReceived * pct) / 100;
+      return toCents((totalReceived * pct) / 100);
     }
     const amt = parseFloat(paFeeAmt);
-    return isNaN(amt) ? 0 : amt;
+    return isNaN(amt) ? 0 : toCents(amt);
   }, [paFeeMode, paFeePct, paFeeAmt, totalReceived]);
 
-  const availableForDisbursement = Math.max(0, totalReceived - paFeeComputed - totalDisbursed);
+  const availableForDisbursement = Math.max(0, toCents(toCents(totalReceived) - paFeeComputed - totalDisbursed));
 
   const savePaFee = async () => {
     const payload: any = { pa_fee_pct: null, pa_fee_amount: null };
@@ -234,7 +236,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
   const [extSaving, setExtSaving] = useState(false);
 
   const recordExternal = async () => {
-    const amt = parseFloat(extAmount);
+    const amt = toCents(parseFloat(extAmount));
     if (!extRecipient.trim() || !extCheckNum.trim() || !amt || amt <= 0) {
       return toast({ title: "Fill recipient, check #, and amount", variant: "destructive" });
     }
@@ -276,7 +278,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
           settled_at: new Date().toISOString(),
         });
       if (sErr) throw sErr;
-      const remaining = Math.max(0, availableForDisbursement - amt);
+      const remaining = Math.max(0, toCents(availableForDisbursement - amt));
       toast({
         title: "External disbursement recorded",
         description: remaining > 0
