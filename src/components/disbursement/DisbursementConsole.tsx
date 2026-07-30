@@ -145,6 +145,9 @@ export function DisbursementConsole({
     return rows;
   }, [pastBatches]);
 
+  // Round to the nearest cent (2 decimals) — no fractional cents anywhere
+  const toCents = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
+
   const totalAllocated = useMemo(() => {
     return Object.values(allocations).reduce((sum, v) => {
       const n = parseFloat(v || "0");
@@ -152,9 +155,15 @@ export function DisbursementConsole({
     }, 0);
   }, [allocations]);
 
-  const totalAllocatedDollars = usePercent
-    ? (totalAllocated / 100) * availableAmount
-    : totalAllocated;
+  // Sum the per-recipient rounded dollar amounts so the total matches what is actually sent
+  const totalAllocatedDollars = useMemo(() => {
+    return Object.values(allocations).reduce((sum, v) => {
+      const n = parseFloat(v || "0");
+      if (isNaN(n) || n <= 0) return sum;
+      return sum + toCents(usePercent ? (n / 100) * availableAmount : n);
+    }, 0);
+  }, [allocations, usePercent, availableAmount]);
+
 
   const remaining = availableAmount - totalAllocatedDollars;
   const isBalanced = Math.abs(remaining) < 0.01;
