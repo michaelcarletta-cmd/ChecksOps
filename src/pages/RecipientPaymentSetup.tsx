@@ -58,6 +58,17 @@ export default function RecipientPaymentSetup() {
   const dropRef = useRef<HTMLDivElement>(null);
   const scriptReady = useMoovScript(!!session);
 
+  // Brand the hosted Moov component so it matches the payer's look.
+  useEffect(
+    () =>
+      applyMoovTheme({
+        primary: session?.payer.primary_color ?? null,
+        secondary: session?.payer.secondary_color ?? null,
+      }),
+    [session?.payer.primary_color, session?.payer.secondary_color],
+  );
+
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
