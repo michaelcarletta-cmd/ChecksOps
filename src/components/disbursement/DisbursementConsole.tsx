@@ -133,7 +133,10 @@ export function DisbursementConsole({
     return total;
   }, [pastBatches]);
 
-  const availableAmount = Math.max(0, checkAmount - alreadyDisbursed);
+  // Round to the nearest cent (2 decimals) — no fractional cents anywhere
+  const toCents = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
+
+  const availableAmount = Math.max(0, toCents(toCents(checkAmount) - toCents(alreadyDisbursed)));
 
   const allSplits = useMemo(() => {
     const rows: any[] = [];
@@ -145,9 +148,6 @@ export function DisbursementConsole({
     return rows;
   }, [pastBatches]);
 
-  // Round to the nearest cent (2 decimals) — no fractional cents anywhere
-  const toCents = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
-
   const totalAllocated = useMemo(() => {
     return Object.values(allocations).reduce((sum, v) => {
       const n = parseFloat(v || "0");
@@ -157,17 +157,20 @@ export function DisbursementConsole({
 
   // Sum the per-recipient rounded dollar amounts so the total matches what is actually sent
   const totalAllocatedDollars = useMemo(() => {
-    return Object.values(allocations).reduce((sum, v) => {
-      const n = parseFloat(v || "0");
-      if (isNaN(n) || n <= 0) return sum;
-      return sum + toCents(usePercent ? (n / 100) * availableAmount : n);
-    }, 0);
+    return toCents(
+      Object.values(allocations).reduce((sum, v) => {
+        const n = parseFloat(v || "0");
+        if (isNaN(n) || n <= 0) return sum;
+        return sum + toCents(usePercent ? (n / 100) * availableAmount : n);
+      }, 0)
+    );
   }, [allocations, usePercent, availableAmount]);
 
 
-  const remaining = availableAmount - totalAllocatedDollars;
+  const remaining = toCents(availableAmount - totalAllocatedDollars);
   const isBalanced = Math.abs(remaining) < 0.01;
-  const isOverAllocated = remaining < -0.01;
+  const isOverAllocated = remaining < -0.005;
+
 
   // Unverified accounts that the user has actually allocated money to
   const unverifiedAllocated = useMemo(() => {
