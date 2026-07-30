@@ -3172,6 +3172,8 @@ function CheckDetailPanel({
     },
     enabled: !!checkAltTenantId,
   });
+  // CheckAlt is hidden platform-wide for now (see src/lib/depositRails.ts).
+  const checkAltEnabled = SHOW_CHECKALT && checkAltEnabledRaw;
 
   // Count of explicit payees on this check — used to decide whether to show
   // the fallback email-based endorsement composer.
