@@ -1650,16 +1650,20 @@ export default function CheckCommandCenter() {
                   <DepositOperationsConsole searchQuery={searchQuery} />
                 </Suspense>
               </TabsContent>
-              <TabsContent value="pending_approvals" className="mt-3">
-                <Suspense fallback={<TabLoader />}>
-                  <PendingApprovalDeposits />
-                </Suspense>
-              </TabsContent>
-              <TabsContent value="deposit_history" className="mt-3">
-                <Suspense fallback={<TabLoader />}>
-                  <CheckAltDepositHistory />
-                </Suspense>
-              </TabsContent>
+              {SHOW_CHECKALT && (
+                <>
+                  <TabsContent value="pending_approvals" className="mt-3">
+                    <Suspense fallback={<TabLoader />}>
+                      <PendingApprovalDeposits />
+                    </Suspense>
+                  </TabsContent>
+                  <TabsContent value="deposit_history" className="mt-3">
+                    <Suspense fallback={<TabLoader />}>
+                      <CheckAltDepositHistory />
+                    </Suspense>
+                  </TabsContent>
+                </>
+              )}
               <TabsContent value="reports" className="mt-3">
                 <Suspense fallback={<TabLoader />}>
                   <DepositReports />
