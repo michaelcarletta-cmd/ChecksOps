@@ -17,7 +17,12 @@ import { Loader2, ShieldCheck, Landmark, AlertCircle, CheckCircle2 } from "lucid
 
 interface SessionData {
   recipient: { id: string; name: string; status: string };
-  payer: { name: string; logo_url: string | null };
+  payer: {
+    name: string;
+    logo_url: string | null;
+    primary_color?: string | null;
+    secondary_color?: string | null;
+  };
   account_id: string;
   token: string;
   environment: string;
