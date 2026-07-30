@@ -23286,6 +23286,10 @@ export type Database = {
         Args: { p_actor_id: string; p_max_per_owner?: number }
         Returns: Json
       }
+      recompute_check_release_stage: {
+        Args: { _check_id: string }
+        Returns: undefined
+      }
       recompute_contractor_tier: {
         Args: { p_contractor_id: string }
         Returns: undefined
