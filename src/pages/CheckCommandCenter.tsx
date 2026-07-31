@@ -489,8 +489,16 @@ const endorsementColors: Record<string, string> = {
   pending: "bg-muted text-muted-foreground",
   viewed: "bg-blue-500/20 text-blue-400",
   signed: "bg-emerald-500/20 text-emerald-400",
+  waived: "bg-emerald-500/20 text-emerald-400",
   rejected: "bg-red-500/20 text-red-400",
   expired: "bg-muted text-muted-foreground line-through",
+};
+
+// "Waived" means the signature is physically on the check — show it as Endorsed.
+const endorsementStatusLabel = (status?: string | null): string => {
+  const v = (status ?? "").toLowerCase();
+  if (v === "waived" || v === "signed") return "Endorsed";
+  return status ?? "pending";
 };
 
 /* ------------------------------------------------------------------ */
