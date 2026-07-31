@@ -17948,6 +17948,254 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_fee_line_items: {
+        Row: {
+          amount_cents: number
+          check_id: string | null
+          claim_id: string | null
+          created_at: string
+          description: string | null
+          fee_code: string
+          id: string
+          metadata: Json
+          occurred_at: string
+          occurrence_id: string | null
+          period_end: string | null
+          period_start: string | null
+          quantity: number
+          source_reference: string | null
+          status: string
+          tenant_id: string
+          unit_cents: number
+          updated_at: string
+        }
+        Insert: {
+          amount_cents?: number
+          check_id?: string | null
+          claim_id?: string | null
+          created_at?: string
+          description?: string | null
+          fee_code: string
+          id?: string
+          metadata?: Json
+          occurred_at?: string
+          occurrence_id?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          quantity?: number
+          source_reference?: string | null
+          status?: string
+          tenant_id: string
+          unit_cents?: number
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          check_id?: string | null
+          claim_id?: string | null
+          created_at?: string
+          description?: string | null
+          fee_code?: string
+          id?: string
+          metadata?: Json
+          occurred_at?: string
+          occurrence_id?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          quantity?: number
+          source_reference?: string | null
+          status?: string
+          tenant_id?: string
+          unit_cents?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_fee_line_items_occurrence_id_fkey"
+            columns: ["occurrence_id"]
+            isOneToOne: false
+            referencedRelation: "platform_fee_occurrences"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_fee_line_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_fee_line_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_fee_occurrences: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          failure_reason: string | null
+          id: string
+          metadata: Json
+          period_end: string | null
+          period_start: string | null
+          provider_occurrence_id: string | null
+          provider_transfer_id: string | null
+          run_at: string
+          schedule_id: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents?: number
+          created_at?: string
+          failure_reason?: string | null
+          id?: string
+          metadata?: Json
+          period_end?: string | null
+          period_start?: string | null
+          provider_occurrence_id?: string | null
+          provider_transfer_id?: string | null
+          run_at: string
+          schedule_id: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          failure_reason?: string | null
+          id?: string
+          metadata?: Json
+          period_end?: string | null
+          period_start?: string | null
+          provider_occurrence_id?: string | null
+          provider_transfer_id?: string | null
+          run_at?: string
+          schedule_id?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_fee_occurrences_schedule_id_fkey"
+            columns: ["schedule_id"]
+            isOneToOne: false
+            referencedRelation: "platform_fee_schedules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_fee_occurrences_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_fee_occurrences_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_fee_schedules: {
+        Row: {
+          amount_cents: number
+          amount_mode: string
+          cadence: string
+          created_at: string
+          created_by: string | null
+          currency: string
+          day_of_month: number
+          description: string | null
+          environment: string
+          fee_code: string
+          id: string
+          last_run_at: string | null
+          metadata: Json
+          name: string
+          next_run_at: string | null
+          provider: string
+          provider_destination_payment_method_id: string | null
+          provider_schedule_id: string | null
+          provider_source_payment_method_id: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents?: number
+          amount_mode?: string
+          cadence?: string
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          day_of_month?: number
+          description?: string | null
+          environment?: string
+          fee_code?: string
+          id?: string
+          last_run_at?: string | null
+          metadata?: Json
+          name: string
+          next_run_at?: string | null
+          provider?: string
+          provider_destination_payment_method_id?: string | null
+          provider_schedule_id?: string | null
+          provider_source_payment_method_id?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          amount_mode?: string
+          cadence?: string
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          day_of_month?: number
+          description?: string | null
+          environment?: string
+          fee_code?: string
+          id?: string
+          last_run_at?: string | null
+          metadata?: Json
+          name?: string
+          next_run_at?: string | null
+          provider?: string
+          provider_destination_payment_method_id?: string | null
+          provider_schedule_id?: string | null
+          provider_source_payment_method_id?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_fee_schedules_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_fee_schedules_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       prediction_accuracy_metrics: {
         Row: {
           actual_move: string | null
