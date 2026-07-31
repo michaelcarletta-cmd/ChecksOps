@@ -1457,6 +1457,39 @@ export default function CheckCommandCenter() {
     refetchInterval: 60_000,
   });
 
+  // Search inside the Funds Released / Funds Received lanes so a searched claim
+  // check also surfaces here (and the lane badge reflects the match count).
+  const matchesSplitSearch = useCallback((s: any) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    const item = s?.disbursement_batches?.check_intake_items;
+    const haystacks: (string | null | undefined)[] = [
+      item?.check_number,
+      item?.carrier_name,
+      item?.payee_line,
+      item?.property_address,
+      item?.detected_claim_number,
+      item?.claims?.claim_number,
+      item?.claims?.policyholder_name,
+      s?.recipient_name,
+      s?.external_check_number,
+      s?.sender?.name,
+      s?.stakeholder_accounts?.nickname,
+      s?.stakeholder_accounts?.custname,
+    ];
+    return haystacks.some((v) => v && v.toString().toLowerCase().includes(q));
+  }, [searchQuery]);
+
+  const filteredFundsReleased = useMemo(
+    () => (fundsReleased as any[]).filter(matchesSplitSearch),
+    [fundsReleased, matchesSplitSearch],
+  );
+  const filteredFundsReceived = useMemo(
+    () => (fundsReceived as any[]).filter(matchesSplitSearch),
+    [fundsReceived, matchesSplitSearch],
+  );
+
+
 
   // Total unread internal messages across all check threads (for tab badge)
   const { data: totalUnreadMessages = 0 } = useQuery({
