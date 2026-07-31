@@ -20,10 +20,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Send, CheckCircle2, Clock, AlertTriangle, XCircle,
   Users, Building2, Shield, FileCheck, Ban, RefreshCw,
   Landmark, PenTool, Eye, ShieldCheck, Loader2, Upload, FileImage,
+  Plus, Trash2,
 } from "lucide-react";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { InPersonSignatureDialog } from "./InPersonSignatureDialog";
