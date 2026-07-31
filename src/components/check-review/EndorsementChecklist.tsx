@@ -389,6 +389,67 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
     onRefresh?.();
   };
 
+  // ---- Payee management (merged in from the old separate "Payees" tab) ----
+  const [addingPayee, setAddingPayee] = useState(false);
+  const [newPayeeName, setNewPayeeName] = useState("");
+  const [newPayeeType, setNewPayeeType] = useState("insured");
+  const [newPayeeEmail, setNewPayeeEmail] = useState("");
+  const [savingPayee, setSavingPayee] = useState(false);
+
+  const addPayee = async () => {
+    const name = newPayeeName.trim();
+    if (!name) return;
+    setSavingPayee(true);
+    try {
+      const { error } = await supabase.from("check_payees").insert({
+        check_id: checkId,
+        payee_name: name,
+        payee_type: newPayeeType,
+        contact_email: newPayeeEmail.trim() || null,
+        endorsement_token: crypto.randomUUID(),
+        endorsement_token_expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
+      } as any);
+      if (error) throw error;
+      toast({ title: "Payee added" });
+      setNewPayeeName("");
+      setNewPayeeEmail("");
+      setNewPayeeType("insured");
+      setAddingPayee(false);
+      refresh();
+    } catch (e: unknown) {
+      toast({
+        title: "Failed to add payee",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingPayee(false);
+    }
+  };
+
+  const removePayee = async (row: CheckEndorsement) => {
+    try {
+      if (row.payee_id) {
+        await supabase.from("check_endorsement_events").delete().eq("payee_id", row.payee_id);
+        await supabase.from("check_endorsements").delete().eq("payee_id", row.payee_id);
+        const { error } = await supabase.from("check_payees").delete().eq("id", row.payee_id);
+        if (error) throw error;
+      }
+      if (!String(row.id).startsWith("payee-")) {
+        await supabase.from("check_endorsement_events").delete().eq("endorsement_id", row.id);
+        await supabase.from("check_endorsements").delete().eq("id", row.id);
+      }
+      toast({ title: `${row.payee_name} removed` });
+      refresh();
+    } catch (e: unknown) {
+      toast({
+        title: "Failed to remove payee",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
   const forceCompleteAll = async () => {
     setForceCompleting(true);
     try {
