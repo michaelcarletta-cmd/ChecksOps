@@ -80,6 +80,12 @@ export function DisbursementConsole({
   // Moov is the primary disbursement rail. Actum/Plaid remain as the fallback
   // whenever a recipient has not connected a bank on the Moov rail yet.
   const { enabled: moovEnabled } = usePaymentProviderEligibility();
+  // Funding source: pay out of the tenant's held balance (wallet) or pull from
+  // the bank on each transfer.
+  const [sourceKind, setSourceKind] = useState<"auto" | "wallet">("auto");
+  const { wallet } = useWallet("operating");
+  const walletAvailable = wallet ? Number(wallet.available_cents) / 100 : null;
+
 
 
   // Funds-availability hold removed — tenants may disburse immediately after deposit.
