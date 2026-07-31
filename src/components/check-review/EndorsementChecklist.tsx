@@ -96,7 +96,7 @@ const normalizeEndorsementStatus = (status?: string | null, signedAt?: string | 
 };
 
 function mergeEndorsementsWithPayees(checkId: string, endorsements: CheckEndorsement[], payees: CheckPayee[]): CheckEndorsement[] {
-  if (payees.length === 0) return endorsements;
+  if (payees.length === 0) return dedupeByName(endorsements);
 
   const usedEndorsementIds = new Set<string>();
   const byExactKey = new Map<string, CheckEndorsement[]>();
@@ -109,28 +109,32 @@ function mergeEndorsementsWithPayees(checkId: string, endorsements: CheckEndorse
     byName.set(nameKey, [...(byName.get(nameKey) ?? []), endorsement]);
   }
 
-  // First, map existing real endorsements.
-  // Then, only add synthetic ones for payees that DON'T have a matching real endorsement.
-  const realEndorsementsMapped = new Set<string>();
-  
+  // The payee list is the source of truth for who appears on the check —
+  // one row per payee, enriched with its matching endorsement record.
   const merged: CheckEndorsement[] = [];
 
   payees.forEach((payee) => {
     const exactKey = `${normalizeName(payee.payee_name)}::${normalizeType(payee.payee_type)}`;
     const nameKey = normalizeName(payee.payee_name);
-    
+
     const match =
       byExactKey.get(exactKey)?.find((row) => !usedEndorsementIds.has(row.id)) ??
       byName.get(nameKey)?.find((row) => !usedEndorsementIds.has(row.id));
 
     if (match) {
       usedEndorsementIds.add(match.id);
-      realEndorsementsMapped.add(match.id);
-      merged.push(match);
+      merged.push({
+        ...match,
+        payee_id: payee.id,
+        payee_name: payee.payee_name,
+        payee_type: match.payee_type ?? payee.payee_type ?? "other",
+        contact_email: match.contact_email ?? payee.contact_email,
+      });
     } else {
       merged.push({
         id: `payee-${payee.id}`,
         check_id: checkId,
+        payee_id: payee.id,
         payee_name: payee.payee_name,
         payee_type: payee.payee_type ?? "other",
         status: normalizeEndorsementStatus(payee.endorsement_status, payee.endorsed_at),
@@ -148,27 +152,39 @@ function mergeEndorsementsWithPayees(checkId: string, endorsements: CheckEndorse
     }
   });
 
-  // Finally, add any real endorsements that weren't linked to a payee record
+  // Orphan endorsements (no payee row) still need to show, but never as a
+  // second copy of somebody already listed above.
   for (const endorsement of endorsements) {
     if (!usedEndorsementIds.has(endorsement.id)) {
       merged.push(endorsement);
     }
   }
 
-  // Deduplicate by name+type — prefer signed/waived rows, then real rows over synthetic.
-  const dedupeRank = (e: CheckEndorsement) => {
+  return dedupeByName(merged);
+}
+
+/** One row per person: dedupe on the normalized name only (ignoring payee
+ *  type), preferring resolved rows and real endorsement records. */
+function dedupeByName(rows: CheckEndorsement[]): CheckEndorsement[] {
+  const rank = (e: CheckEndorsement) => {
     let score = 0;
     if (e.status === "signed" || e.signed_at) score += 100;
     else if (e.status === "waived") score += 80;
     else if (e.status === "sent") score += 40;
     if (!String(e.id).startsWith("payee-")) score += 10;
+    if (e.payee_id) score += 5;
+    if (e.contact_email) score += 2;
     return score;
   };
   const bestByKey = new Map<string, CheckEndorsement>();
-  for (const e of merged) {
-    const key = `${normalizeName(e.payee_name)}::${normalizeType(e.payee_type)}`;
+  for (const e of rows) {
+    const key = normalizeName(e.payee_name);
     const prev = bestByKey.get(key);
-    if (!prev || dedupeRank(e) > dedupeRank(prev)) bestByKey.set(key, e);
+    if (!prev || rank(e) > rank(prev)) {
+      bestByKey.set(key, prev ? { ...e, payee_id: e.payee_id ?? prev.payee_id } : e);
+    } else if (!prev.payee_id && e.payee_id) {
+      bestByKey.set(key, { ...prev, payee_id: e.payee_id });
+    }
   }
   return Array.from(bestByKey.values());
 }
