@@ -11,13 +11,14 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
-import { AlertTriangle, CheckCircle2, Send, Building2, Loader2, RefreshCw, Zap, Clock, History, ShieldAlert, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Send, Building2, Loader2, RefreshCw, Zap, Clock, History, ShieldAlert, ShieldCheck, Wallet } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { CheckStakeholdersManager } from "./CheckStakeholdersManager";
 import { RailUnavailableNotice } from "./RailUnavailableNotice";
 import { usePaymentRail } from "@/hooks/usePaymentRail";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
+import { useWallet } from "@/hooks/useWallet";
 import { VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 
 interface Props {
@@ -80,6 +81,12 @@ export function DisbursementConsole({
   // Moov is the primary disbursement rail. Actum/Plaid remain as the fallback
   // whenever a recipient has not connected a bank on the Moov rail yet.
   const { enabled: moovEnabled } = usePaymentProviderEligibility();
+  // Funding source: pay out of the tenant's held balance (wallet) or pull from
+  // the bank on each transfer.
+  const [sourceKind, setSourceKind] = useState<"auto" | "wallet">("auto");
+  const { wallet } = useWallet("operating");
+  const walletAvailable = wallet ? Number(wallet.available_cents) / 100 : null;
+
 
 
   // Funds-availability hold removed — tenants may disburse immediately after deposit.
@@ -298,7 +305,7 @@ export function DisbursementConsole({
 
       if (moovEnabled) {
         const { data: moovData, error: moovErr } = await supabase.functions.invoke("moov-disburse", {
-          body: { batch_id: batch.id },
+          body: { batch_id: batch.id, source_kind: sourceKind },
         });
 
         if (!moovErr && (moovData as any)?.success) {
@@ -315,7 +322,13 @@ export function DisbursementConsole({
           }
         }
         const code = reason?.error ?? "";
+        // When the user explicitly chose to pay from balance, an insufficient
+        // balance is a hard stop — don't silently pull from the bank instead.
+        if (code === "insufficient_balance" && sourceKind === "wallet") {
+          throw new Error(reason?.message ?? "Your balance does not cover this disbursement. Fund your balance first.");
+        }
         const recoverable = ["recipient_setup_required", "payer_setup_required", "insufficient_balance"].includes(code);
+
         if (!recoverable) {
           throw new Error(reason?.message ?? reason?.error ?? moovErr?.message ?? "Disbursement failed");
         }
@@ -440,7 +453,45 @@ export function DisbursementConsole({
           </div>
         )}
 
+        {/* Funding source: pay from balance (wallet) or pull from bank */}
+        {moovEnabled && (
+          <div className="space-y-2 pt-2 border-t">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+              <Wallet className="h-3 w-3" /> Funding source
+            </p>
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Funding source">
+              {([
+                { value: "auto", label: "Bank / auto", hint: "Pull per transfer" },
+                { value: "wallet", label: "Balance", hint: walletAvailable != null ? `$${walletAvailable.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} available` : "—" },
+              ] as const).map(({ value, label, hint }) => {
+                const checked = sourceKind === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={checked}
+                    onClick={(e) => { e.preventDefault(); setSourceKind(value as any); }}
+                    className={`flex flex-col items-center rounded-md border-2 bg-popover p-2 hover:bg-accent hover:text-accent-foreground transition-colors ${
+                      checked ? "border-primary" : "border-muted"
+                    }`}
+                  >
+                    <span className="text-[11px] font-semibold">{label}</span>
+                    <span className="text-[10px] text-muted-foreground">{hint}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {sourceKind === "wallet" && walletAvailable != null && totalAllocatedDollars > walletAvailable && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                Balance doesn't cover ${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Fund your balance in Payment Settings first.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Delivery Speed Selector */}
+
         <div className="space-y-3 pt-2 border-t">
           <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
             <Clock className="h-3 w-3" /> Delivery Speed
@@ -637,7 +688,9 @@ export function DisbursementConsole({
             accounts.length === 0 ||
             availableAmount <= 0 ||
             fundsHoldActive ||
-            (hasUnverifiedAllocations && !(isAdmin && adminOverride))
+            (hasUnverifiedAllocations && !(isAdmin && adminOverride)) ||
+            (sourceKind === "wallet" && walletAvailable != null && totalAllocatedDollars > walletAvailable)
+
           }
         >
           {submitBatch.isPending ? (
