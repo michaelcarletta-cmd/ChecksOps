@@ -489,8 +489,16 @@ const endorsementColors: Record<string, string> = {
   pending: "bg-muted text-muted-foreground",
   viewed: "bg-blue-500/20 text-blue-400",
   signed: "bg-emerald-500/20 text-emerald-400",
+  waived: "bg-emerald-500/20 text-emerald-400",
   rejected: "bg-red-500/20 text-red-400",
   expired: "bg-muted text-muted-foreground line-through",
+};
+
+// "Waived" means the signature is physically on the check — show it as Endorsed.
+const endorsementStatusLabel = (status?: string | null): string => {
+  const v = (status ?? "").toLowerCase();
+  if (v === "waived" || v === "signed") return "Endorsed";
+  return status ?? "pending";
 };
 
 /* ------------------------------------------------------------------ */
@@ -4221,16 +4229,14 @@ function CheckDetailPanel({
             <TabsList className="w-max min-w-full rounded-none flex-nowrap justify-start">
               <TabsTrigger value="overview" className="text-xs whitespace-nowrap px-2 sm:px-3">Overview</TabsTrigger>
               <TabsTrigger value="endorsements" className="text-xs whitespace-nowrap px-2 sm:px-3">
-                Endorsements
+                Payee Endorsements
                 {pendingEndorsements.length > 0 && (
                   <span className="ml-1 bg-amber-500/30 text-amber-400 rounded-full text-[9px] px-1.5">
                     {pendingEndorsements.length}
                   </span>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="payees" className="text-xs whitespace-nowrap px-2 sm:px-3">
-                Payees ({check.check_payees?.length ?? 0})
-              </TabsTrigger>
+
               
               <TabsTrigger value="funds" className="text-xs whitespace-nowrap px-2 sm:px-3 gap-1">
                 Funds
@@ -4780,11 +4786,16 @@ function CheckDetailPanel({
                   </Dialog>
                 </>
               )}
+
+              {/* Payees — merged into this tab (previously a separate "Payees" tab) */}
+              <div className="pt-2 border-t border-border space-y-3">
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Payees ({check.check_payees?.length ?? 0})
+                </div>
+                <PayeeManager checkId={checkId} payees={check.check_payees ?? []} readOnly={isSharedView} onRefresh={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
+              </div>
             </TabsContent>
 
-            <TabsContent value="payees" className="p-4 space-y-3 mt-0">
-              <PayeeManager checkId={checkId} payees={check.check_payees ?? []} readOnly={isSharedView} onRefresh={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
-            </TabsContent>
 
             <TabsContent value="funds" className="p-4 mt-0 space-y-4">
               {/* Claim Ledger — always visible so funds can be tracked accurately */}
@@ -5475,7 +5486,6 @@ function EditablePayeeCard({
   const [editName, setEditName] = useState(payee.payee_name);
   const [editType, setEditType] = useState(payee.payee_type);
   const [email, setEmail] = useState(payee.contact_email ?? "");
-  const [phone, setPhone] = useState(payee.contact_phone ?? "");
   const [sending, setSending] = useState(false);
   const [saving, setSaving] = useState(false);
   const PayeeIcon = payeeTypeIcons[payee.payee_type] ?? AlertTriangle;
@@ -5499,22 +5509,18 @@ function EditablePayeeCard({
     }
   };
 
-  const sendEndorsementRequest = async (method: "email" | "sms" | "both") => {
+  const sendEndorsementRequest = async (method: "email") => {
     setSending(true);
     try {
       const normalizedEmail = email.trim();
-      const normalizedPhone = phone.trim();
 
-      if ((method === "email" || method === "both") && !normalizedEmail) {
+      if (!normalizedEmail) {
         throw new Error("Please enter an email address for this payee");
-      }
-      if ((method === "sms" || method === "both") && !normalizedPhone) {
-        throw new Error("Please enter a phone number for this payee");
       }
 
       const { error: updateError } = await supabase
         .from("check_payees")
-        .update({ contact_email: normalizedEmail || null, contact_phone: normalizedPhone || null })
+        .update({ contact_email: normalizedEmail || null })
         .eq("id", payee.id);
       if (updateError) throw updateError;
 
@@ -5522,9 +5528,10 @@ function EditablePayeeCard({
       if (!session.session?.access_token) throw new Error("Not authenticated");
 
       const { error } = await supabase.functions.invoke("check-endorsement", {
-        body: { action: "send_endorsement_request", payeeId: payee.id, method, email: normalizedEmail || undefined, phone: normalizedPhone || undefined },
+        body: { action: "send_endorsement_request", payeeId: payee.id, method, email: normalizedEmail },
         headers: { Authorization: `Bearer ${session.session.access_token}` },
       });
+
       if (error) throw new Error(await getFunctionErrorMessage(error, "Failed to send endorsement request"));
       toast({ title: `Endorsement request sent via ${method}` });
       onRefresh();
@@ -5569,8 +5576,9 @@ function EditablePayeeCard({
         )}
         <div className="flex items-center gap-1">
           <Badge className={`text-[10px] ${endorsementColors[payee.endorsement_status] ?? ""}`}>
-            {payee.endorsement_status}
+            {endorsementStatusLabel(payee.endorsement_status)}
           </Badge>
+
           {!editing && !readOnly && (
             <>
               <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditing(true)}>
@@ -5589,20 +5597,15 @@ function EditablePayeeCard({
         </p>
       )}
 
-      {payee.endorsement_status !== "signed" && payee.endorsement_status !== "rejected" && !editing && !readOnly && (
+      {payee.endorsement_status !== "signed" && payee.endorsement_status !== "waived" && payee.endorsement_status !== "rejected" && !editing && !readOnly && (
         <div className="space-y-2 pt-1">
           <Input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-8 text-xs" />
-          <Input placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} className="h-8 text-xs" />
-          <div className="flex gap-1">
-            <Button size="sm" variant="outline" className="flex-1 text-xs h-7" disabled={sending || !email} onClick={() => sendEndorsementRequest("email")}>
-              <Send className="h-3 w-3 mr-1" />Email
-            </Button>
-            <Button size="sm" variant="outline" className="flex-1 text-xs h-7" disabled={sending || !phone} onClick={() => sendEndorsementRequest("sms")}>
-              <Send className="h-3 w-3 mr-1" />SMS
-            </Button>
-          </div>
+          <Button size="sm" variant="outline" className="w-full text-xs h-7" disabled={sending || !email} onClick={() => sendEndorsementRequest("email")}>
+            <Send className="h-3 w-3 mr-1" />Email Endorsement Request
+          </Button>
         </div>
       )}
+
 
       {payee.endorsed_at && (
         <p className="text-[10px] text-muted-foreground">
@@ -5624,30 +5627,21 @@ function PayeeCard({
 }) {
   const { toast } = useToast();
   const [email, setEmail] = useState(payee.contact_email ?? "");
-  const [phone, setPhone] = useState(payee.contact_phone ?? "");
   const [sending, setSending] = useState(false);
   const PayeeIcon = payeeTypeIcons[payee.payee_type] ?? AlertTriangle;
 
-  const sendEndorsementRequest = async (method: "email" | "sms" | "both") => {
+  const sendEndorsementRequest = async (method: "email") => {
     setSending(true);
     try {
       const normalizedEmail = email.trim();
-      const normalizedPhone = phone.trim();
 
-      if ((method === "email" || method === "both") && !normalizedEmail) {
+      if (!normalizedEmail) {
         throw new Error("Please enter an email address for this payee");
-      }
-
-      if ((method === "sms" || method === "both") && !normalizedPhone) {
-        throw new Error("Please enter a phone number for this payee");
       }
 
       const { error: updateError } = await supabase
         .from("check_payees")
-        .update({
-          contact_email: normalizedEmail || null,
-          contact_phone: normalizedPhone || null,
-        })
+        .update({ contact_email: normalizedEmail || null })
         .eq("id", payee.id);
 
       if (updateError) throw updateError;
@@ -5660,8 +5654,7 @@ function PayeeCard({
           action: "send_endorsement_request",
           payeeId: payee.id,
           method,
-          email: normalizedEmail || undefined,
-          phone: normalizedPhone || undefined,
+          email: normalizedEmail,
         },
         headers: { Authorization: `Bearer ${session.session.access_token}` },
       });
@@ -5685,14 +5678,14 @@ function PayeeCard({
           <span className="font-medium text-sm">{payee.payee_name}</span>
         </div>
         <Badge className={`text-[10px] ${endorsementColors[payee.endorsement_status] ?? ""}`}>
-          {payee.endorsement_status}
+          {endorsementStatusLabel(payee.endorsement_status)}
         </Badge>
       </div>
       <p className="text-xs text-muted-foreground capitalize">
         {payee.payee_type.replace(/_/g, " ")}
       </p>
 
-      {payee.endorsement_status !== "signed" && payee.endorsement_status !== "rejected" && (
+      {payee.endorsement_status !== "signed" && payee.endorsement_status !== "waived" && payee.endorsement_status !== "rejected" && (
         <div className="space-y-2 pt-1">
           <Input
             placeholder="Email"
@@ -5700,34 +5693,18 @@ function PayeeCard({
             onChange={(e) => setEmail(e.target.value)}
             className="h-8 text-xs"
           />
-          <Input
-            placeholder="Phone"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="h-8 text-xs"
-          />
-          <div className="flex gap-1">
-            <Button
-              size="sm"
-              variant="outline"
-              className="flex-1 text-xs h-7"
-              disabled={sending || !email}
-              onClick={() => sendEndorsementRequest("email")}
-            >
-              <Send className="h-3 w-3 mr-1" />Email
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="flex-1 text-xs h-7"
-              disabled={sending || !phone}
-              onClick={() => sendEndorsementRequest("sms")}
-            >
-              <Send className="h-3 w-3 mr-1" />SMS
-            </Button>
-          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full text-xs h-7"
+            disabled={sending || !email}
+            onClick={() => sendEndorsementRequest("email")}
+          >
+            <Send className="h-3 w-3 mr-1" />Email Endorsement Request
+          </Button>
         </div>
       )}
+
 
       {payee.endorsed_at && (
         <p className="text-[10px] text-muted-foreground">

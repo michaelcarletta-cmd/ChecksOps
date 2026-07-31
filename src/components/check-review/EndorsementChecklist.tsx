@@ -64,7 +64,7 @@ const statusConfig: Record<string, { label: string; color: string; icon: typeof 
   pending: { label: "Pending", color: "bg-muted text-muted-foreground", icon: Clock },
   sent: { label: "Sent", color: "bg-blue-500/20 text-blue-400", icon: Send },
   signed: { label: "Signed", color: "bg-emerald-500/20 text-emerald-400", icon: CheckCircle2 },
-  waived: { label: "Waived", color: "bg-amber-500/20 text-amber-400", icon: ShieldCheck },
+  waived: { label: "Endorsed", color: "bg-emerald-500/20 text-emerald-400", icon: ShieldCheck },
   manual_required: { label: "Manual Required", color: "bg-orange-500/20 text-orange-400", icon: AlertTriangle },
   rejected: { label: "Rejected", color: "bg-destructive/20 text-destructive", icon: XCircle },
   expired: { label: "Expired", color: "bg-muted text-muted-foreground line-through", icon: Ban },
@@ -668,7 +668,7 @@ function EndorsementCard({
         });
         if (error) throw new Error(error.message);
       }
-      toast({ title: `${endorsement.payee_name} endorsement waived` });
+      toast({ title: `${endorsement.payee_name} marked endorsed on the check` });
       onRefresh();
     } catch (e: unknown) {
       toast({
@@ -908,7 +908,7 @@ function EndorsementCard({
               onClick={waiveEndorsement}
             >
               <Eye className="h-3 w-3 mr-1" />
-              Waive
+              Endorsed on Check
             </Button>
           </div>
         </>

@@ -197,8 +197,11 @@ export function EndorsementAdjuster({
             const key = `${normName(p.payee_name)}::${normType(p.payee_type)}`;
             if (seenKeys.has(key)) return false;
             const status = (p.endorsement_status ?? "").toLowerCase();
+            // Waived = signature is physically on the check. Never stamp an
+            // electronic signature for those payees.
+            if (status === "waived") return false;
             return (
-              (status === "signed" || status === "waived" || !!p.endorsed_at) &&
+              (status === "signed" || !!p.endorsed_at) &&
               isDataUrl(p.endorsement_image_path)
             );
           })
@@ -723,7 +726,7 @@ export function EndorsementAdjuster({
     return (
       <div className="flex items-center gap-2 p-4 rounded-lg bg-destructive/10 text-destructive font-medium">
         <AlertCircle className="h-5 w-5 flex-shrink-0" />
-        No received or waived endorsements found for this check. Cannot generate deposit image.
+        No received endorsements found for this check. Cannot generate deposit image.
       </div>
     );
   }
