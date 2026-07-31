@@ -688,7 +688,9 @@ export function DisbursementConsole({
             accounts.length === 0 ||
             availableAmount <= 0 ||
             fundsHoldActive ||
-            (hasUnverifiedAllocations && !(isAdmin && adminOverride))
+            (hasUnverifiedAllocations && !(isAdmin && adminOverride)) ||
+            (sourceKind === "wallet" && walletAvailable != null && totalAllocatedDollars > walletAvailable)
+
           }
         >
           {submitBatch.isPending ? (
