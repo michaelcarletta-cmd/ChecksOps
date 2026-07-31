@@ -4229,16 +4229,14 @@ function CheckDetailPanel({
             <TabsList className="w-max min-w-full rounded-none flex-nowrap justify-start">
               <TabsTrigger value="overview" className="text-xs whitespace-nowrap px-2 sm:px-3">Overview</TabsTrigger>
               <TabsTrigger value="endorsements" className="text-xs whitespace-nowrap px-2 sm:px-3">
-                Endorsements
+                Payee Endorsements
                 {pendingEndorsements.length > 0 && (
                   <span className="ml-1 bg-amber-500/30 text-amber-400 rounded-full text-[9px] px-1.5">
                     {pendingEndorsements.length}
                   </span>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="payees" className="text-xs whitespace-nowrap px-2 sm:px-3">
-                Payees ({check.check_payees?.length ?? 0})
-              </TabsTrigger>
+
               
               <TabsTrigger value="funds" className="text-xs whitespace-nowrap px-2 sm:px-3 gap-1">
                 Funds
