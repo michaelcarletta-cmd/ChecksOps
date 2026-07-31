@@ -436,8 +436,8 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
         if (error) throw error;
       }
       if (!String(row.id).startsWith("payee-")) {
-        await supabase.from("check_endorsement_events").delete().eq("endorsement_id", row.id);
-        await supabase.from("check_endorsements").delete().eq("id", row.id);
+        await (supabase.from("check_endorsement_events") as any).delete().eq("endorsement_id", row.id);
+        await (supabase.from("check_endorsements") as any).delete().eq("id", row.id);
       }
       toast({ title: `${row.payee_name} removed` });
       refresh();
