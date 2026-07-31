@@ -662,6 +662,7 @@ function EndorsementCard({
   partnerMode = false,
   defaultContractorCc = "",
   claimId = null,
+  onRemove,
 }: {
   endorsement: CheckEndorsement;
   onRefresh: () => void;
@@ -669,6 +670,7 @@ function EndorsementCard({
   partnerMode?: boolean;
   defaultContractorCc?: string;
   claimId?: string | null;
+  onRemove?: () => void;
 }) {
 
   const { toast } = useToast();
