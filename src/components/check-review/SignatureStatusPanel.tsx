@@ -167,7 +167,7 @@ export function SignatureStatusPanel({ checkId }: SignatureStatusPanelProps) {
                 <span className="ml-auto text-[11px] text-slate-500 dark:text-slate-400">
                   {settled
                     ? waived
-                      ? "✓ Waived"
+                      ? "✓ Endorsed"
                       : r.signed_at
                       ? `✓ Signed ${format(new Date(r.signed_at), "MMM d, yyyy h:mm a")}`
                       : "✓ Signed"
