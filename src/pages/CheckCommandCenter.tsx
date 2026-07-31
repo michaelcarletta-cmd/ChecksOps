@@ -5597,20 +5597,15 @@ function EditablePayeeCard({
         </p>
       )}
 
-      {payee.endorsement_status !== "signed" && payee.endorsement_status !== "rejected" && !editing && !readOnly && (
+      {payee.endorsement_status !== "signed" && payee.endorsement_status !== "waived" && payee.endorsement_status !== "rejected" && !editing && !readOnly && (
         <div className="space-y-2 pt-1">
           <Input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-8 text-xs" />
-          <Input placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} className="h-8 text-xs" />
-          <div className="flex gap-1">
-            <Button size="sm" variant="outline" className="flex-1 text-xs h-7" disabled={sending || !email} onClick={() => sendEndorsementRequest("email")}>
-              <Send className="h-3 w-3 mr-1" />Email
-            </Button>
-            <Button size="sm" variant="outline" className="flex-1 text-xs h-7" disabled={sending || !phone} onClick={() => sendEndorsementRequest("sms")}>
-              <Send className="h-3 w-3 mr-1" />SMS
-            </Button>
-          </div>
+          <Button size="sm" variant="outline" className="w-full text-xs h-7" disabled={sending || !email} onClick={() => sendEndorsementRequest("email")}>
+            <Send className="h-3 w-3 mr-1" />Email Endorsement Request
+          </Button>
         </div>
       )}
+
 
       {payee.endorsed_at && (
         <p className="text-[10px] text-muted-foreground">
