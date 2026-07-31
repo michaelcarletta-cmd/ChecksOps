@@ -886,7 +886,7 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
             <div>
               <div className="text-sm font-medium">{bank.nickname}</div>
               <div className="text-xs text-muted-foreground">
-                {bank.custname} · {bank.acct_type === "C" ? "Checking" : "Savings"} · ••••{bank.chk_acct.slice(-4)}
+                {bank.custname} · {bank.acct_type === "C" ? "Checking" : "Savings"} · {bank.chk_acct ? `••••${bank.chk_acct.slice(-4)}` : "Account pending"}
               </div>
             </div>
             <div className="flex flex-col items-end gap-1">

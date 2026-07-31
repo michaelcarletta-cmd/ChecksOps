@@ -247,7 +247,7 @@ export function TenantBankAccountSettings() {
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground font-mono">
-                      ••••{acct.chk_acct.slice(-4)} · {acct.acct_type === "C" ? "Checking" : "Savings"} · {acct.custname}
+                      {acct.chk_acct ? `••••${acct.chk_acct.slice(-4)}` : "Account pending"} · {acct.acct_type === "C" ? "Checking" : "Savings"} · {acct.custname}
                     </p>
                   </div>
                   <div className="flex items-center gap-1">
@@ -287,14 +287,14 @@ export function TenantBankAccountSettings() {
                 <BankVerification
                   accountId={acct.id}
                   accountNickname={acct.nickname}
-                  accountLast4={acct.chk_acct.slice(-4)}
+                  accountLast4={acct.chk_acct?.slice(-4) ?? ""}
                   verificationStatus={acct.verification_status ?? "unverified"}
                   verificationSource={(acct as any).verification_source ?? null}
                 />
                 <AchAuthorizationForm
                   stakeholderAccountId={acct.id}
                   accountNickname={acct.nickname}
-                  accountLast4={acct.chk_acct.slice(-4)}
+                  accountLast4={acct.chk_acct?.slice(-4) ?? ""}
                   custname={acct.custname}
                 />
               </React.Fragment>

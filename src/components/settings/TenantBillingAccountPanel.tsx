@@ -146,7 +146,7 @@ export function TenantBillingAccountPanel() {
                 <div>
                   <div className="text-sm font-medium">{linkedAccount.nickname}</div>
                   <div className="text-xs text-muted-foreground">
-                    {linkedAccount.custname} · {linkedAccount.acct_type === "C" ? "Checking" : "Savings"} · ••••{linkedAccount.chk_acct.slice(-4)}
+                    {linkedAccount.custname} · {linkedAccount.acct_type === "C" ? "Checking" : "Savings"} · {linkedAccount.chk_acct ? `••••${linkedAccount.chk_acct.slice(-4)}` : "Account pending"}
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-1">
@@ -189,7 +189,7 @@ export function TenantBillingAccountPanel() {
                   <SelectContent>
                     {accounts.map((a: any) => (
                       <SelectItem key={a.id} value={a.id}>
-                        {a.nickname} · ••••{a.chk_acct.slice(-4)} · {a.custname}
+                        {a.nickname} · {a.chk_acct ? `••••${a.chk_acct.slice(-4)}` : "Account pending"} · {a.custname}
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -219,7 +219,7 @@ export function SendPaymentPanel({
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium">{contractorName}</p>
                 <p className="text-xs text-muted-foreground font-mono">
-                  {contractorAccount.nickname} · ••••{contractorAccount.chk_acct.slice(-4)}
+                  {contractorAccount.nickname} · {contractorAccount.chk_acct ? `••••${contractorAccount.chk_acct.slice(-4)}` : "Account pending"}
                 </p>
               </div>
               <Badge
