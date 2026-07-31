@@ -4786,11 +4786,16 @@ function CheckDetailPanel({
                   </Dialog>
                 </>
               )}
+
+              {/* Payees — merged into this tab (previously a separate "Payees" tab) */}
+              <div className="pt-2 border-t border-border space-y-3">
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Payees ({check.check_payees?.length ?? 0})
+                </div>
+                <PayeeManager checkId={checkId} payees={check.check_payees ?? []} readOnly={isSharedView} onRefresh={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
+              </div>
             </TabsContent>
 
-            <TabsContent value="payees" className="p-4 space-y-3 mt-0">
-              <PayeeManager checkId={checkId} payees={check.check_payees ?? []} readOnly={isSharedView} onRefresh={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
-            </TabsContent>
 
             <TabsContent value="funds" className="p-4 mt-0 space-y-4">
               {/* Claim Ledger — always visible so funds can be tracked accurately */}
