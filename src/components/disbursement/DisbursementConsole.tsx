@@ -322,7 +322,13 @@ export function DisbursementConsole({
           }
         }
         const code = reason?.error ?? "";
+        // When the user explicitly chose to pay from balance, an insufficient
+        // balance is a hard stop — don't silently pull from the bank instead.
+        if (code === "insufficient_balance" && sourceKind === "wallet") {
+          throw new Error(reason?.message ?? "Your balance does not cover this disbursement. Fund your balance first.");
+        }
         const recoverable = ["recipient_setup_required", "payer_setup_required", "insufficient_balance"].includes(code);
+
         if (!recoverable) {
           throw new Error(reason?.message ?? reason?.error ?? moovErr?.message ?? "Disbursement failed");
         }
