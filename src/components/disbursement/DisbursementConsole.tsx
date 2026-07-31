@@ -18,6 +18,7 @@ import { CheckStakeholdersManager } from "./CheckStakeholdersManager";
 import { RailUnavailableNotice } from "./RailUnavailableNotice";
 import { usePaymentRail } from "@/hooks/usePaymentRail";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
+import { useWallet } from "@/hooks/useWallet";
 import { VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 
 interface Props {
