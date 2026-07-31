@@ -5577,8 +5577,9 @@ function EditablePayeeCard({
         )}
         <div className="flex items-center gap-1">
           <Badge className={`text-[10px] ${endorsementColors[payee.endorsement_status] ?? ""}`}>
-            {payee.endorsement_status}
+            {endorsementStatusLabel(payee.endorsement_status)}
           </Badge>
+
           {!editing && !readOnly && (
             <>
               <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditing(true)}>
