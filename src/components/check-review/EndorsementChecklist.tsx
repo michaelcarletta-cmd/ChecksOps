@@ -510,11 +510,54 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
     return <div className="p-4 text-sm text-muted-foreground">Loading endorsements...</div>;
   }
 
+  const addPayeeBlock = readOnly ? null : (
+    addingPayee ? (
+      <Card className="p-3 space-y-2 border-dashed border-primary/50">
+        <Input
+          placeholder="Payee name"
+          value={newPayeeName}
+          onChange={(e) => setNewPayeeName(e.target.value)}
+          className="h-8 text-sm"
+          autoFocus
+        />
+        <Input
+          placeholder="Email (optional)"
+          value={newPayeeEmail}
+          onChange={(e) => setNewPayeeEmail(e.target.value)}
+          className="h-8 text-xs"
+        />
+        <Select value={newPayeeType} onValueChange={setNewPayeeType}>
+          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="insured">Insured</SelectItem>
+            <SelectItem value="mortgage_company">Mortgage Company</SelectItem>
+            <SelectItem value="contractor">Contractor</SelectItem>
+            <SelectItem value="public_adjuster">Public Adjuster</SelectItem>
+            <SelectItem value="other">Other</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="flex gap-1">
+          <Button size="sm" className="flex-1 text-xs h-7" onClick={addPayee} disabled={savingPayee || !newPayeeName.trim()}>
+            <Plus className="h-3 w-3 mr-1" />Add
+          </Button>
+          <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => setAddingPayee(false)}>Cancel</Button>
+        </div>
+      </Card>
+    ) : (
+      <Button size="sm" variant="outline" className="w-full text-xs" onClick={() => setAddingPayee(true)}>
+        <Plus className="h-3 w-3 mr-1" />Add Payee
+      </Button>
+    )
+  );
+
   if (endorsements.length === 0) {
     return (
-      <div className="p-4 text-center text-sm text-muted-foreground">
-        <PenTool className="h-8 w-8 mx-auto mb-2 opacity-30" />
-        No endorsements required
+      <div className="space-y-3">
+        <div className="p-4 text-center text-sm text-muted-foreground">
+          <PenTool className="h-8 w-8 mx-auto mb-2 opacity-30" />
+          No payees on this check yet
+        </div>
+        {addPayeeBlock}
       </div>
     );
   }
@@ -530,7 +573,7 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-2">
           <PenTool className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold">Endorsements</span>
+          <span className="text-sm font-semibold">Payees on this Check ({endorsements.length})</span>
         </div>
         {allComplete ? (
           <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px]">
@@ -596,9 +639,11 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
           partnerMode={partnerMode}
           defaultContractorCc={contractorEmail?.email ?? ""}
           claimId={contractorEmail?.claimId ?? null}
-
+          onRemove={() => removePayee(endorsement)}
         />
       ))}
+
+      {addPayeeBlock}
 
     </div>
 
