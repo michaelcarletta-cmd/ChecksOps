@@ -20,10 +20,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Send, CheckCircle2, Clock, AlertTriangle, XCircle,
   Users, Building2, Shield, FileCheck, Ban, RefreshCw,
   Landmark, PenTool, Eye, ShieldCheck, Loader2, Upload, FileImage,
+  Plus, Trash2,
 } from "lucide-react";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { InPersonSignatureDialog } from "./InPersonSignatureDialog";
@@ -34,6 +36,7 @@ import { CheckStatusTimeline } from "./CheckStatusTimeline";
 interface CheckEndorsement {
   id: string;
   check_id: string;
+  payee_id?: string | null;
   payee_name: string;
   payee_type: string;
   status: string;
@@ -95,7 +98,7 @@ const normalizeEndorsementStatus = (status?: string | null, signedAt?: string | 
 };
 
 function mergeEndorsementsWithPayees(checkId: string, endorsements: CheckEndorsement[], payees: CheckPayee[]): CheckEndorsement[] {
-  if (payees.length === 0) return endorsements;
+  if (payees.length === 0) return dedupeByName(endorsements);
 
   const usedEndorsementIds = new Set<string>();
   const byExactKey = new Map<string, CheckEndorsement[]>();
@@ -108,28 +111,32 @@ function mergeEndorsementsWithPayees(checkId: string, endorsements: CheckEndorse
     byName.set(nameKey, [...(byName.get(nameKey) ?? []), endorsement]);
   }
 
-  // First, map existing real endorsements.
-  // Then, only add synthetic ones for payees that DON'T have a matching real endorsement.
-  const realEndorsementsMapped = new Set<string>();
-  
+  // The payee list is the source of truth for who appears on the check —
+  // one row per payee, enriched with its matching endorsement record.
   const merged: CheckEndorsement[] = [];
 
   payees.forEach((payee) => {
     const exactKey = `${normalizeName(payee.payee_name)}::${normalizeType(payee.payee_type)}`;
     const nameKey = normalizeName(payee.payee_name);
-    
+
     const match =
       byExactKey.get(exactKey)?.find((row) => !usedEndorsementIds.has(row.id)) ??
       byName.get(nameKey)?.find((row) => !usedEndorsementIds.has(row.id));
 
     if (match) {
       usedEndorsementIds.add(match.id);
-      realEndorsementsMapped.add(match.id);
-      merged.push(match);
+      merged.push({
+        ...match,
+        payee_id: payee.id,
+        payee_name: payee.payee_name,
+        payee_type: match.payee_type ?? payee.payee_type ?? "other",
+        contact_email: match.contact_email ?? payee.contact_email,
+      });
     } else {
       merged.push({
         id: `payee-${payee.id}`,
         check_id: checkId,
+        payee_id: payee.id,
         payee_name: payee.payee_name,
         payee_type: payee.payee_type ?? "other",
         status: normalizeEndorsementStatus(payee.endorsement_status, payee.endorsed_at),
@@ -147,27 +154,39 @@ function mergeEndorsementsWithPayees(checkId: string, endorsements: CheckEndorse
     }
   });
 
-  // Finally, add any real endorsements that weren't linked to a payee record
+  // Orphan endorsements (no payee row) still need to show, but never as a
+  // second copy of somebody already listed above.
   for (const endorsement of endorsements) {
     if (!usedEndorsementIds.has(endorsement.id)) {
       merged.push(endorsement);
     }
   }
 
-  // Deduplicate by name+type — prefer signed/waived rows, then real rows over synthetic.
-  const dedupeRank = (e: CheckEndorsement) => {
+  return dedupeByName(merged);
+}
+
+/** One row per person: dedupe on the normalized name only (ignoring payee
+ *  type), preferring resolved rows and real endorsement records. */
+function dedupeByName(rows: CheckEndorsement[]): CheckEndorsement[] {
+  const rank = (e: CheckEndorsement) => {
     let score = 0;
     if (e.status === "signed" || e.signed_at) score += 100;
     else if (e.status === "waived") score += 80;
     else if (e.status === "sent") score += 40;
     if (!String(e.id).startsWith("payee-")) score += 10;
+    if (e.payee_id) score += 5;
+    if (e.contact_email) score += 2;
     return score;
   };
   const bestByKey = new Map<string, CheckEndorsement>();
-  for (const e of merged) {
-    const key = `${normalizeName(e.payee_name)}::${normalizeType(e.payee_type)}`;
+  for (const e of rows) {
+    const key = normalizeName(e.payee_name);
     const prev = bestByKey.get(key);
-    if (!prev || dedupeRank(e) > dedupeRank(prev)) bestByKey.set(key, e);
+    if (!prev || rank(e) > rank(prev)) {
+      bestByKey.set(key, prev ? { ...e, payee_id: e.payee_id ?? prev.payee_id } : e);
+    } else if (!prev.payee_id && e.payee_id) {
+      bestByKey.set(key, { ...prev, payee_id: e.payee_id });
+    }
   }
   return Array.from(bestByKey.values());
 }
@@ -210,11 +229,11 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
       // Auto-waive duplicate endorsement rows in the DB so the backend stage
       // advance logic (which reads check_endorsements directly) doesn't wait
       // on a duplicate the user already resolved. A duplicate = same
-      // normalized name+type where at least one sibling is signed/waived and
-      // another is still pending/sent.
+      // normalized payee name (type is ignored — the same person listed as
+      // "insured" and "unknown" is still one signer).
       const groups = new Map<string, CheckEndorsement[]>();
       for (const e of rawEndorsements) {
-        const key = `${normalizeName(e.payee_name)}::${normalizeType(e.payee_type)}`;
+        const key = normalizeName(e.payee_name);
         groups.set(key, [...(groups.get(key) ?? []), e]);
       }
       const duplicatePendingIds: string[] = [];
@@ -372,6 +391,67 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
     onRefresh?.();
   };
 
+  // ---- Payee management (merged in from the old separate "Payees" tab) ----
+  const [addingPayee, setAddingPayee] = useState(false);
+  const [newPayeeName, setNewPayeeName] = useState("");
+  const [newPayeeType, setNewPayeeType] = useState("insured");
+  const [newPayeeEmail, setNewPayeeEmail] = useState("");
+  const [savingPayee, setSavingPayee] = useState(false);
+
+  const addPayee = async () => {
+    const name = newPayeeName.trim();
+    if (!name) return;
+    setSavingPayee(true);
+    try {
+      const { error } = await supabase.from("check_payees").insert({
+        check_id: checkId,
+        payee_name: name,
+        payee_type: newPayeeType,
+        contact_email: newPayeeEmail.trim() || null,
+        endorsement_token: crypto.randomUUID(),
+        endorsement_token_expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
+      } as any);
+      if (error) throw error;
+      toast({ title: "Payee added" });
+      setNewPayeeName("");
+      setNewPayeeEmail("");
+      setNewPayeeType("insured");
+      setAddingPayee(false);
+      refresh();
+    } catch (e: unknown) {
+      toast({
+        title: "Failed to add payee",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingPayee(false);
+    }
+  };
+
+  const removePayee = async (row: CheckEndorsement) => {
+    try {
+      if (row.payee_id) {
+        await supabase.from("check_endorsement_events").delete().eq("payee_id", row.payee_id);
+        await supabase.from("check_endorsements").delete().eq("payee_id", row.payee_id);
+        const { error } = await supabase.from("check_payees").delete().eq("id", row.payee_id);
+        if (error) throw error;
+      }
+      if (!String(row.id).startsWith("payee-")) {
+        await (supabase.from("check_endorsement_events") as any).delete().eq("endorsement_id", row.id);
+        await (supabase.from("check_endorsements") as any).delete().eq("id", row.id);
+      }
+      toast({ title: `${row.payee_name} removed` });
+      refresh();
+    } catch (e: unknown) {
+      toast({
+        title: "Failed to remove payee",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
   const forceCompleteAll = async () => {
     setForceCompleting(true);
     try {
@@ -432,11 +512,54 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
     return <div className="p-4 text-sm text-muted-foreground">Loading endorsements...</div>;
   }
 
+  const addPayeeBlock = readOnly ? null : (
+    addingPayee ? (
+      <Card className="p-3 space-y-2 border-dashed border-primary/50">
+        <Input
+          placeholder="Payee name"
+          value={newPayeeName}
+          onChange={(e) => setNewPayeeName(e.target.value)}
+          className="h-8 text-sm"
+          autoFocus
+        />
+        <Input
+          placeholder="Email (optional)"
+          value={newPayeeEmail}
+          onChange={(e) => setNewPayeeEmail(e.target.value)}
+          className="h-8 text-xs"
+        />
+        <Select value={newPayeeType} onValueChange={setNewPayeeType}>
+          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="insured">Insured</SelectItem>
+            <SelectItem value="mortgage_company">Mortgage Company</SelectItem>
+            <SelectItem value="contractor">Contractor</SelectItem>
+            <SelectItem value="public_adjuster">Public Adjuster</SelectItem>
+            <SelectItem value="other">Other</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="flex gap-1">
+          <Button size="sm" className="flex-1 text-xs h-7" onClick={addPayee} disabled={savingPayee || !newPayeeName.trim()}>
+            <Plus className="h-3 w-3 mr-1" />Add
+          </Button>
+          <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => setAddingPayee(false)}>Cancel</Button>
+        </div>
+      </Card>
+    ) : (
+      <Button size="sm" variant="outline" className="w-full text-xs" onClick={() => setAddingPayee(true)}>
+        <Plus className="h-3 w-3 mr-1" />Add Payee
+      </Button>
+    )
+  );
+
   if (endorsements.length === 0) {
     return (
-      <div className="p-4 text-center text-sm text-muted-foreground">
-        <PenTool className="h-8 w-8 mx-auto mb-2 opacity-30" />
-        No endorsements required
+      <div className="space-y-3">
+        <div className="p-4 text-center text-sm text-muted-foreground">
+          <PenTool className="h-8 w-8 mx-auto mb-2 opacity-30" />
+          No payees on this check yet
+        </div>
+        {addPayeeBlock}
       </div>
     );
   }
@@ -452,7 +575,7 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-2">
           <PenTool className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold">Endorsements</span>
+          <span className="text-sm font-semibold">Payees on this Check ({endorsements.length})</span>
         </div>
         {allComplete ? (
           <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px]">
@@ -518,9 +641,11 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
           partnerMode={partnerMode}
           defaultContractorCc={contractorEmail?.email ?? ""}
           claimId={contractorEmail?.claimId ?? null}
-
+          onRemove={() => removePayee(endorsement)}
         />
       ))}
+
+      {addPayeeBlock}
 
     </div>
 
@@ -537,6 +662,7 @@ function EndorsementCard({
   partnerMode = false,
   defaultContractorCc = "",
   claimId = null,
+  onRemove,
 }: {
   endorsement: CheckEndorsement;
   onRefresh: () => void;
@@ -544,6 +670,7 @@ function EndorsementCard({
   partnerMode?: boolean;
   defaultContractorCc?: string;
   claimId?: string | null;
+  onRemove?: () => void;
 }) {
 
   const { toast } = useToast();
@@ -732,25 +859,58 @@ function EndorsementCard({
 
   return (
     <Card className="p-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <PayeeIcon className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-sm">{endorsement.payee_name}</span>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <PayeeIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="font-medium text-sm truncate">{endorsement.payee_name}</span>
         </div>
-        <Badge className={`text-[10px] ${config.color}`}>
-          <StatusIcon className="h-3 w-3 mr-1" />
-          {config.label}
-        </Badge>
+        <div className="flex items-center gap-1 shrink-0">
+          <Badge className={`text-[10px] ${config.color}`}>
+            <StatusIcon className="h-3 w-3 mr-1" />
+            {config.label}
+          </Badge>
+          {!readOnly && onRemove && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                  aria-label={`Remove ${endorsement.payee_name}`}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Remove {endorsement.payee_name}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This removes the payee from this check along with any endorsement record for them. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={onRemove}>Remove Payee</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
       </div>
 
       <p className="text-xs text-muted-foreground capitalize">
         {endorsement.payee_type.replace(/_/g, " ")}
-        {endorsement.signature_method !== "portal" && (
+        {endorsement.signature_method && endorsement.signature_method !== "portal" && (
           <span className="ml-1 text-[10px]">
             · {endorsement.signature_method}
           </span>
         )}
       </p>
+
+      {/* Email on file (read-only summary; editable in the send box below) */}
+      {endorsement.contact_email && (
+        <p className="text-[11px] text-muted-foreground truncate">{endorsement.contact_email}</p>
+      )}
 
       {/* Mortgage payee → loss draft routing */}
       {isMortgage && (

@@ -4787,13 +4787,8 @@ function CheckDetailPanel({
                 </>
               )}
 
-              {/* Payees — merged into this tab (previously a separate "Payees" tab) */}
-              <div className="pt-2 border-t border-border space-y-3">
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Payees ({check.check_payees?.length ?? 0})
-                </div>
-                <PayeeManager checkId={checkId} payees={check.check_payees ?? []} readOnly={isSharedView} onRefresh={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
-              </div>
+              {/* Payees are managed inline in the endorsement list above —
+                  one row per payee with email, CC contractor, add and remove. */}
             </TabsContent>
 
 
