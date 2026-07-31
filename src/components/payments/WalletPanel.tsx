@@ -29,7 +29,9 @@ const ENTRY_LABEL: Record<string, string> = {
  * pulling from the bank on every payout.
  */
 export function WalletPanel() {
-  const { enabled, wallet, ledger, isLoading, error, refetch, fund } = useWallet("operating");
+  const { enabled, wallet, ledger, isLoading, error, refetch, fund, setupRequired } =
+    useWallet("operating");
+
   const { toast } = useToast();
   const [amount, setAmount] = useState("");
 
@@ -73,7 +75,15 @@ export function WalletPanel() {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {error && <p className="text-sm text-destructive">{error.message}</p>}
+        {error && !setupRequired && (
+          <p className="text-sm text-destructive">{error.message}</p>
+        )}
+        {setupRequired && (
+          <p className="text-sm text-muted-foreground">
+            Your balance activates once your payment account finishes setup and approval. You can
+            keep paying directly from your bank in the meantime.
+          </p>
+        )}
 
         <div className="flex flex-wrap items-end gap-6">
           <div>
@@ -86,7 +96,14 @@ export function WalletPanel() {
               <p className="text-lg">{money(wallet.pending_cents)}</p>
             </div>
           )}
-          <Badge variant="outline" className="border-emerald-500/40 text-emerald-500">
+          <Badge
+            variant="outline"
+            className={
+              wallet?.status === "active"
+                ? "border-emerald-500/40 text-emerald-500"
+                : "border-muted-foreground/30 text-muted-foreground"
+            }
+          >
             {wallet?.status === "active" ? "Active" : wallet?.status ?? "Not set up"}
           </Badge>
         </div>
@@ -103,9 +120,11 @@ export function WalletPanel() {
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             className="w-44"
+            disabled={setupRequired}
           />
-          <Button onClick={handleFund} disabled={fund.isPending}>
+          <Button onClick={handleFund} disabled={fund.isPending || setupRequired}>
             {fund.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+
             Add funds from bank
           </Button>
         </div>
