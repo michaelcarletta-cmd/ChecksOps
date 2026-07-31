@@ -440,7 +440,45 @@ export function DisbursementConsole({
           </div>
         )}
 
+        {/* Funding source: pay from balance (wallet) or pull from bank */}
+        {moovEnabled && (
+          <div className="space-y-2 pt-2 border-t">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+              <Wallet className="h-3 w-3" /> Funding source
+            </p>
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Funding source">
+              {([
+                { value: "auto", label: "Bank / auto", hint: "Pull per transfer" },
+                { value: "wallet", label: "Balance", hint: walletAvailable != null ? `$${walletAvailable.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} available` : "—" },
+              ] as const).map(({ value, label, hint }) => {
+                const checked = sourceKind === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={checked}
+                    onClick={(e) => { e.preventDefault(); setSourceKind(value as any); }}
+                    className={`flex flex-col items-center rounded-md border-2 bg-popover p-2 hover:bg-accent hover:text-accent-foreground transition-colors ${
+                      checked ? "border-primary" : "border-muted"
+                    }`}
+                  >
+                    <span className="text-[11px] font-semibold">{label}</span>
+                    <span className="text-[10px] text-muted-foreground">{hint}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {sourceKind === "wallet" && walletShort && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                Balance doesn't cover ${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Fund your balance in Payment Settings first.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Delivery Speed Selector */}
+
         <div className="space-y-3 pt-2 border-t">
           <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
             <Clock className="h-3 w-3" /> Delivery Speed
