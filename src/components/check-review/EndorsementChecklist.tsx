@@ -895,22 +895,13 @@ function EndorsementCard({
               size="sm"
               variant="outline"
               className="flex-1 text-xs h-7 text-emerald-400 hover:text-emerald-300"
-              disabled={markingInternal}
-              onClick={markInternalSigned}
-            >
-              <CheckCircle2 className="h-3 w-3 mr-1" />
-              Mark Signed
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-xs h-7 text-muted-foreground"
               onClick={waiveEndorsement}
             >
-              <Eye className="h-3 w-3 mr-1" />
+              <CheckCircle2 className="h-3 w-3 mr-1" />
               Endorsed on Check
             </Button>
           </div>
+
         </>
       )}
 
