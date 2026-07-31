@@ -5510,22 +5510,18 @@ function EditablePayeeCard({
     }
   };
 
-  const sendEndorsementRequest = async (method: "email" | "sms" | "both") => {
+  const sendEndorsementRequest = async (method: "email") => {
     setSending(true);
     try {
       const normalizedEmail = email.trim();
-      const normalizedPhone = phone.trim();
 
-      if ((method === "email" || method === "both") && !normalizedEmail) {
+      if (!normalizedEmail) {
         throw new Error("Please enter an email address for this payee");
-      }
-      if ((method === "sms" || method === "both") && !normalizedPhone) {
-        throw new Error("Please enter a phone number for this payee");
       }
 
       const { error: updateError } = await supabase
         .from("check_payees")
-        .update({ contact_email: normalizedEmail || null, contact_phone: normalizedPhone || null })
+        .update({ contact_email: normalizedEmail || null })
         .eq("id", payee.id);
       if (updateError) throw updateError;
 
@@ -5533,9 +5529,10 @@ function EditablePayeeCard({
       if (!session.session?.access_token) throw new Error("Not authenticated");
 
       const { error } = await supabase.functions.invoke("check-endorsement", {
-        body: { action: "send_endorsement_request", payeeId: payee.id, method, email: normalizedEmail || undefined, phone: normalizedPhone || undefined },
+        body: { action: "send_endorsement_request", payeeId: payee.id, method, email: normalizedEmail },
         headers: { Authorization: `Bearer ${session.session.access_token}` },
       });
+
       if (error) throw new Error(await getFunctionErrorMessage(error, "Failed to send endorsement request"));
       toast({ title: `Endorsement request sent via ${method}` });
       onRefresh();
