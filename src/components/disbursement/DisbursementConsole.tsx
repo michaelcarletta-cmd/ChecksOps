@@ -476,7 +476,7 @@ export function DisbursementConsole({
                 );
               })}
             </div>
-            {sourceKind === "wallet" && walletShort && (
+            {sourceKind === "wallet" && walletAvailable != null && totalAllocatedDollars > walletAvailable && (
               <p className="text-[11px] text-amber-600 dark:text-amber-400">
                 Balance doesn't cover ${totalAllocatedDollars.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Fund your balance in Payment Settings first.
               </p>
