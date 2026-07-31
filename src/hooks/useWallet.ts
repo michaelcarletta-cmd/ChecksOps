@@ -16,11 +16,28 @@ export function useWallet(walletType: WalletType = "operating") {
   const qc = useQueryClient();
   const key = ["payment-wallet", tenantId, walletType];
 
-  const query = useQuery<WalletSnapshot>({
+  const query = useQuery<WalletSnapshot & { setup_required?: boolean }>({
     queryKey: key,
     enabled: !!tenantId && enabled,
     staleTime: 30_000,
-    queryFn: () => syncWallet(tenantId!, walletType),
+    retry: false,
+    queryFn: async () => {
+      try {
+        return await syncWallet(tenantId!, walletType);
+      } catch (e) {
+        // A balance that simply isn't provisioned yet is an empty state, not
+        // an error — the organization just hasn't finished payment setup.
+        if (isSetupError(e as Error)) {
+          return {
+            wallet: null as any,
+            ledger: [],
+            sub_ledgers: [],
+            setup_required: true,
+          } as WalletSnapshot & { setup_required: boolean };
+        }
+        throw e;
+      }
+    },
   });
 
   const fund = useMutation({
@@ -43,9 +60,27 @@ export function useWallet(walletType: WalletType = "operating") {
     wallet: query.data?.wallet ?? null,
     ledger: query.data?.ledger ?? [],
     subLedgers: query.data?.sub_ledgers ?? [],
+    /** Payment account isn't approved/provisioned yet — show a calm empty state. */
+    setupRequired: !!query.data?.setup_required,
     isLoading: query.isLoading,
     error: query.error as Error | null,
     refetch: query.refetch,
     fund,
   };
 }
+
+const SETUP_HINTS = [
+  "set up your payment account",
+  "not active yet",
+  "not ready to receive funds",
+  "not enabled for this payment provider",
+  "payment provider is not enabled",
+  "credentials are not configured",
+  "balance account",
+];
+
+function isSetupError(e: Error): boolean {
+  const msg = (e?.message ?? "").toLowerCase();
+  return SETUP_HINTS.some((hint) => msg.includes(hint));
+}
+
