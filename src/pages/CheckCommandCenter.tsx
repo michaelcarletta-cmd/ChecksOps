@@ -1238,32 +1238,6 @@ export default function CheckCommandCenter() {
     return (stage === "loss_draft" || s === "loss_draft_required") && matchesSearch(c);
   });
 
-  // Auto-jump to the tab that contains matches when the user searches and
-  // the current tab is empty. Prevents the "where did my check go?" issue
-  // when the check sits in a different status (e.g. Loss Draft) than the
-  // currently-viewed tab.
-  useEffect(() => {
-    const q = searchQuery.trim();
-    if (!q) return;
-    const buckets: { tab: string; count: number }[] = [
-      { tab: "review", count: needsReview.length },
-      { tab: "endorsements", count: awaitingEndorsement.length },
-      { tab: "ready", count: readyForDeposit.length },
-      { tab: "lossdraft", count: lossDraftChecks.length },
-      { tab: "branch", count: branchDeposit.length },
-      { tab: "reissue", count: reissueRequested.length },
-      { tab: "deposited", count: depositedChecks.length },
-    ];
-    const currentCount = buckets.find((b) => b.tab === activeTab)?.count ?? 0;
-    if (currentCount > 0) return;
-    const next = buckets.find((b) => b.count > 0);
-    if (next && next.tab !== activeTab) {
-      setActiveTab(next.tab);
-      setSelectedCheck(null);
-      setReviewCheckId(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, needsReview.length, awaitingEndorsement.length, readyForDeposit.length, lossDraftChecks.length, branchDeposit.length, reissueRequested.length, depositedChecks.length]);
 
   const rawFilteredChecks =
     activeTab === "endorsements" ? awaitingEndorsement
@@ -1457,6 +1431,68 @@ export default function CheckCommandCenter() {
     refetchInterval: 60_000,
   });
 
+  // Search inside the Funds Released / Funds Received lanes so a searched claim
+  // check also surfaces here (and the lane badge reflects the match count).
+  const matchesSplitSearch = useCallback((s: any) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    const item = s?.disbursement_batches?.check_intake_items;
+    const haystacks: (string | null | undefined)[] = [
+      item?.check_number,
+      item?.carrier_name,
+      item?.payee_line,
+      item?.property_address,
+      item?.detected_claim_number,
+      item?.claims?.claim_number,
+      item?.claims?.policyholder_name,
+      s?.recipient_name,
+      s?.external_check_number,
+      s?.sender?.name,
+      s?.stakeholder_accounts?.nickname,
+      s?.stakeholder_accounts?.custname,
+    ];
+    return haystacks.some((v) => v && v.toString().toLowerCase().includes(q));
+  }, [searchQuery]);
+
+  const filteredFundsReleased = useMemo(
+    () => (fundsReleased as any[]).filter(matchesSplitSearch),
+    [fundsReleased, matchesSplitSearch],
+  );
+  const filteredFundsReceived = useMemo(
+    () => (fundsReceived as any[]).filter(matchesSplitSearch),
+    [fundsReceived, matchesSplitSearch],
+  );
+
+  // Auto-jump to the tab that contains matches when the user searches and
+  // the current tab is empty. Prevents the "where did my check go?" issue
+  // when the check sits in a different status (e.g. Loss Draft) than the
+  // currently-viewed tab.
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) return;
+    const buckets: { tab: string; count: number }[] = [
+      { tab: "review", count: needsReview.length },
+      { tab: "endorsements", count: awaitingEndorsement.length },
+      { tab: "ready", count: readyForDeposit.length },
+      { tab: "lossdraft", count: lossDraftChecks.length },
+      { tab: "branch", count: branchDeposit.length },
+      { tab: "reissue", count: reissueRequested.length },
+      { tab: "deposited", count: depositedChecks.length },
+      { tab: "fundsreleased", count: filteredFundsReleased.length },
+      { tab: "fundsreceived", count: filteredFundsReceived.length },
+    ];
+    const currentCount = buckets.find((b) => b.tab === activeTab)?.count ?? 0;
+    if (currentCount > 0) return;
+    const next = buckets.find((b) => b.count > 0);
+    if (next && next.tab !== activeTab) {
+      setActiveTab(next.tab);
+      setSelectedCheck(null);
+      setReviewCheckId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, needsReview.length, awaitingEndorsement.length, readyForDeposit.length, lossDraftChecks.length, branchDeposit.length, reissueRequested.length, depositedChecks.length, filteredFundsReleased.length, filteredFundsReceived.length]);
+
+
 
   // Total unread internal messages across all check threads (for tab badge)
   const { data: totalUnreadMessages = 0 } = useQuery({
@@ -1580,15 +1616,15 @@ export default function CheckCommandCenter() {
             { key: "endorsements", label: "Endorsing",         count: laneCount("endorsing", awaitingEndorsement), icon: Send,           gradient: "from-amber-500/20 to-orange-500/10",  accent: "text-amber-400",   ring: "ring-amber-500/30" },
             { key: "ready",        label: "Ready for Deposit", count: laneCount("ready", readyForDeposit),     icon: CheckCircle2,   gradient: "from-emerald-500/20 to-green-500/10", accent: "text-emerald-400", ring: "ring-emerald-500/30" },
             { key: "deposited",    label: "Deposited",         count: laneCount("deposited", depositedChecks),     icon: Banknote,       gradient: "from-primary/20 to-blue-500/10",      accent: "text-primary",     ring: "ring-primary/30" },
-            { key: "lossdraft",    label: "Loss Draft",        count: (lossDraftCounts as any)?.total_active ?? laneCount("lossdraft", []), icon: Landmark,       gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400",  ring: "ring-purple-500/30" },
+            { key: "lossdraft",    label: "Loss Draft",        count: useAggregate ? ((lossDraftCounts as any)?.total_active ?? lossDraftChecks.length) : lossDraftChecks.length, icon: Landmark,       gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400",  ring: "ring-purple-500/30" },
 
             // Bank Deposit card intentionally removed — users are pushed to CheckAlt for RDC.
             // The branch_deposit_required status still exists in the pipeline as a fallback,
             // but is no longer surfaced as a top-level tab in the command center.
 
             // Reissue moved into Manager → Reissue sub-tab.
-            { key: "fundsreleased", label: "Funds Released",   count: fundsReleased.length,       icon: Banknote,       gradient: "from-emerald-500/20 to-teal-500/10",  accent: "text-emerald-400", ring: "ring-emerald-500/30" },
-            { key: "fundsreceived", label: "Funds Received",   count: fundsReceived.length,       icon: Banknote,       gradient: "from-sky-500/20 to-blue-500/10",      accent: "text-sky-400",     ring: "ring-sky-500/30" },
+            { key: "fundsreleased", label: "Funds Released",   count: filteredFundsReleased.length,       icon: Banknote,       gradient: "from-emerald-500/20 to-teal-500/10",  accent: "text-emerald-400", ring: "ring-emerald-500/30" },
+            { key: "fundsreceived", label: "Funds Received",   count: filteredFundsReceived.length,       icon: Banknote,       gradient: "from-sky-500/20 to-blue-500/10",      accent: "text-sky-400",     ring: "ring-sky-500/30" },
             // Partners moved into Manager → Partners sub-tab (2026-07-07).
             ...(canAccessManager ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield, gradient: "from-indigo-500/20 to-blue-500/10", accent: "text-indigo-400", ring: "ring-indigo-500/30" }] : []),
             { key: "messages",     label: "Messages",          count: totalUnreadMessages || null, icon: MessageSquare, gradient: "from-rose-500/20 to-pink-500/10",     accent: "text-rose-400",    ring: "ring-rose-500/30" },
@@ -1786,13 +1822,13 @@ export default function CheckCommandCenter() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Banknote className="h-4 w-4 text-emerald-400" />
-                  Funds Released ({fundsReleased.length})
+                  Funds Released ({filteredFundsReleased.length})
                 </CardTitle>
               </CardHeader>
               <ClassFilterBar
                 classFilter={classFilter}
                 setClassFilter={setClassFilter}
-                items={fundsReleased}
+                items={filteredFundsReleased}
                 getFundsType={(s: any) => s?.disbursement_batches?.check_intake_items?.funds_type}
                 getAmount={(s: any) => Number(s.amount) || 0}
                 itemLabel="disbursement"
@@ -1801,8 +1837,8 @@ export default function CheckCommandCenter() {
                 <ScrollArea className="h-[calc(100vh-460px)]">
                   {(() => {
                     const visible = classFilter === "all"
-                      ? fundsReleased
-                      : fundsReleased.filter((s: any) => (s?.disbursement_batches?.check_intake_items?.funds_type ?? "unclassified") === classFilter);
+                      ? filteredFundsReleased
+                      : filteredFundsReleased.filter((s: any) => (s?.disbursement_batches?.check_intake_items?.funds_type ?? "unclassified") === classFilter);
                     if (visible.length === 0) {
                       return <div className="p-8 text-center text-muted-foreground">No funds released yet</div>;
                     }
@@ -1959,13 +1995,13 @@ export default function CheckCommandCenter() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Banknote className="h-4 w-4 text-sky-400" />
-                  Funds Received ({fundsReceived.length})
+                  Funds Received ({filteredFundsReceived.length})
                 </CardTitle>
               </CardHeader>
               <ClassFilterBar
                 classFilter={classFilter}
                 setClassFilter={setClassFilter}
-                items={fundsReceived}
+                items={filteredFundsReceived}
                 getFundsType={(s: any) => s?.disbursement_batches?.check_intake_items?.funds_type}
                 getAmount={(s: any) => Number(s.amount) || 0}
                 itemLabel="receipt"
@@ -1974,8 +2010,8 @@ export default function CheckCommandCenter() {
                 <ScrollArea className="h-[calc(100vh-460px)]">
                   {(() => {
                     const visible = classFilter === "all"
-                      ? fundsReceived
-                      : fundsReceived.filter((s: any) => (s?.disbursement_batches?.check_intake_items?.funds_type ?? "unclassified") === classFilter);
+                      ? filteredFundsReceived
+                      : filteredFundsReceived.filter((s: any) => (s?.disbursement_batches?.check_intake_items?.funds_type ?? "unclassified") === classFilter);
                     if (visible.length === 0) {
                       return <div className="p-8 text-center text-muted-foreground">No funds received yet</div>;
                     }
