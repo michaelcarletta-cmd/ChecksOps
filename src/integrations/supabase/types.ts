@@ -24516,6 +24516,14 @@ export type Database = {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
       }
+      user_can_access_check: {
+        Args: { _check_id: string; _user_id: string }
+        Returns: boolean
+      }
+      user_can_access_claim: {
+        Args: { _claim_id: string; _user_id: string }
+        Returns: boolean
+      }
       user_can_access_shared_check: {
         Args: { _check_id: string; _user_id: string }
         Returns: boolean

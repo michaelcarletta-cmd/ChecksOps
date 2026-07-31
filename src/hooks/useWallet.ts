@@ -77,6 +77,10 @@ const SETUP_HINTS = [
   "payment provider is not enabled",
   "credentials are not configured",
   "balance account",
+  "status 409",
+  "status 502",
+  "returned a non-2xx",
+  "edge function returned",
 ];
 
 function isSetupError(e: Error): boolean {

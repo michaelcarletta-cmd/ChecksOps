@@ -490,7 +490,7 @@ export function StakeholderAccountSettings() {
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground font-mono">
-                      {acct.nickname ? `${acct.nickname} · ` : ""}••••{acct.chk_acct.slice(-4)} · {acct.acct_type === "C" ? "Checking" : "Savings"}
+                      {acct.nickname ? `${acct.nickname} · ` : ""}{acct.chk_acct ? `••••${acct.chk_acct.slice(-4)}` : "Account pending"} · {acct.acct_type === "C" ? "Checking" : "Savings"}
                     </p>
                   </div>
                 </div>
@@ -531,7 +531,7 @@ export function StakeholderAccountSettings() {
               <BankVerification
                 accountId={acct.id}
                 accountNickname={acct.nickname}
-                accountLast4={acct.chk_acct.slice(-4)}
+                accountLast4={acct.chk_acct?.slice(-4) ?? ""}
                 verificationStatus={acct.verification_status ?? "unverified"}
                 verificationSource={(acct as any).verification_source ?? null}
               />
@@ -539,7 +539,7 @@ export function StakeholderAccountSettings() {
                 <AchAuthorizationForm
                   stakeholderAccountId={acct.id}
                   accountNickname={acct.nickname}
-                  accountLast4={acct.chk_acct.slice(-4)}
+                  accountLast4={acct.chk_acct?.slice(-4) ?? ""}
                   custname={acct.custname}
                 />
               )}
