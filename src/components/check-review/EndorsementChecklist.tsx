@@ -34,6 +34,7 @@ import { CheckStatusTimeline } from "./CheckStatusTimeline";
 interface CheckEndorsement {
   id: string;
   check_id: string;
+  payee_id?: string | null;
   payee_name: string;
   payee_type: string;
   status: string;
