@@ -35,7 +35,7 @@ const MONITORING_OPTIONS = [
 const ENDORSEMENT_OPTIONS = [
   { value: "pending", label: "Pending" },
   { value: "signed", label: "Signed" },
-  { value: "waived", label: "Waived" },
+  { value: "waived", label: "Endorsed" },
   { value: "rejected", label: "Rejected" },
 ] as const;
 
