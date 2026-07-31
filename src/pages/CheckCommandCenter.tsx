@@ -5486,7 +5486,6 @@ function EditablePayeeCard({
   const [editName, setEditName] = useState(payee.payee_name);
   const [editType, setEditType] = useState(payee.payee_type);
   const [email, setEmail] = useState(payee.contact_email ?? "");
-  const [phone, setPhone] = useState(payee.contact_phone ?? "");
   const [sending, setSending] = useState(false);
   const [saving, setSaving] = useState(false);
   const PayeeIcon = payeeTypeIcons[payee.payee_type] ?? AlertTriangle;
