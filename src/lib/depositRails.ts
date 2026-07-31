@@ -7,4 +7,4 @@
  * running exactly as before — this flag only controls whether CheckAlt
  * surfaces are rendered. Flip it back to `true` to restore the UI.
  */
-export const SHOW_CHECKALT = false;
+export const SHOW_CHECKALT = true;
