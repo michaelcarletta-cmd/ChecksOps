@@ -305,7 +305,7 @@ export function DisbursementConsole({
 
       if (moovEnabled) {
         const { data: moovData, error: moovErr } = await supabase.functions.invoke("moov-disburse", {
-          body: { batch_id: batch.id },
+          body: { batch_id: batch.id, source_kind: sourceKind },
         });
 
         if (!moovErr && (moovData as any)?.success) {
