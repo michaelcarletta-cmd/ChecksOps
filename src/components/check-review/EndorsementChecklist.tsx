@@ -859,25 +859,58 @@ function EndorsementCard({
 
   return (
     <Card className="p-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <PayeeIcon className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-sm">{endorsement.payee_name}</span>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <PayeeIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="font-medium text-sm truncate">{endorsement.payee_name}</span>
         </div>
-        <Badge className={`text-[10px] ${config.color}`}>
-          <StatusIcon className="h-3 w-3 mr-1" />
-          {config.label}
-        </Badge>
+        <div className="flex items-center gap-1 shrink-0">
+          <Badge className={`text-[10px] ${config.color}`}>
+            <StatusIcon className="h-3 w-3 mr-1" />
+            {config.label}
+          </Badge>
+          {!readOnly && onRemove && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                  aria-label={`Remove ${endorsement.payee_name}`}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Remove {endorsement.payee_name}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This removes the payee from this check along with any endorsement record for them. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={onRemove}>Remove Payee</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
       </div>
 
       <p className="text-xs text-muted-foreground capitalize">
         {endorsement.payee_type.replace(/_/g, " ")}
-        {endorsement.signature_method !== "portal" && (
+        {endorsement.signature_method && endorsement.signature_method !== "portal" && (
           <span className="ml-1 text-[10px]">
             · {endorsement.signature_method}
           </span>
         )}
       </p>
+
+      {/* Email on file (read-only summary; editable in the send box below) */}
+      {endorsement.contact_email && (
+        <p className="text-[11px] text-muted-foreground truncate">{endorsement.contact_email}</p>
+      )}
 
       {/* Mortgage payee → loss draft routing */}
       {isMortgage && (
