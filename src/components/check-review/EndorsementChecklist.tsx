@@ -227,11 +227,11 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
       // Auto-waive duplicate endorsement rows in the DB so the backend stage
       // advance logic (which reads check_endorsements directly) doesn't wait
       // on a duplicate the user already resolved. A duplicate = same
-      // normalized name+type where at least one sibling is signed/waived and
-      // another is still pending/sent.
+      // normalized payee name (type is ignored — the same person listed as
+      // "insured" and "unknown" is still one signer).
       const groups = new Map<string, CheckEndorsement[]>();
       for (const e of rawEndorsements) {
-        const key = `${normalizeName(e.payee_name)}::${normalizeType(e.payee_type)}`;
+        const key = normalizeName(e.payee_name);
         groups.set(key, [...(groups.get(key) ?? []), e]);
       }
       const duplicatePendingIds: string[] = [];
