@@ -14,11 +14,13 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Loader2, Zap, Clock, AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { usePaymentRail } from "@/hooks/usePaymentRail";
+import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 
-type Speed = "next_day" | "same_day" | "instant";
+type Speed = "next_day" | "same_day";
 
-const SPEED_FEES: Record<Speed, number> = { next_day: 0.95, same_day: 1.15, instant: 1.65 };
-const SPEED_LABELS: Record<Speed, string> = { next_day: "Next Day", same_day: "Same Day", instant: "Instant" };
+// Moov pricing — same schedule used by the claim-check disbursement console.
+const SPEED_FEES: Record<Speed, number> = { next_day: 0.65, same_day: 0.90 };
+const SPEED_LABELS: Record<Speed, string> = { next_day: "Next Day", same_day: "Same Day" };
 
 interface Props {
   open: boolean;
@@ -31,6 +33,7 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
   const { tenant } = useTenant();
   const { toast } = useToast();
   const { isActum, isPlaid } = usePaymentRail();
+  const { enabled: moovEnabled } = usePaymentProviderEligibility();
   const qc = useQueryClient();
 
   const [stakeholderId, setStakeholderId] = useState<string>("");
@@ -121,7 +124,37 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
         .single();
       if (runErr) throw runErr;
 
-      // Fire the tenant's active payout rail
+      // Primary rail: Moov. Falls back to the legacy rail only when the
+      // recipient/payer still needs payment setup.
+      if (moovEnabled) {
+        const { data: moovData, error: moovErr } = await supabase.functions.invoke("moov-disburse", {
+          body: { batch_id: batch.id, source_kind: "bank" },
+        });
+
+        if (!moovErr && (moovData as any)?.success) {
+          await supabase.from("payroll_runs").update({ status: "submitted" }).eq("id", runRow.id);
+          return runRow.id;
+        }
+
+        let reason: any = (moovData as any) ?? null;
+        if (moovErr) {
+          try {
+            reason = await (moovErr as any).context?.json?.();
+          } catch {
+            reason = null;
+          }
+        }
+        const code = reason?.error ?? "";
+        const recoverable = ["recipient_setup_required", "payer_setup_required", "insufficient_balance"].includes(code);
+
+        if (!recoverable || (!isActum && !isPlaid)) {
+          const msg = reason?.message ?? reason?.error ?? moovErr?.message ?? "Payment failed";
+          await supabase.from("payroll_runs").update({ status: "failed", error: msg }).eq("id", runRow.id);
+          throw new Error(msg);
+        }
+      }
+
+      // Fallback: the tenant's legacy payout rail
       const railFn = isPlaid ? "plaid-disburse" : "actum-disburse";
       const { data: railData, error: invokeErr } = await supabase.functions.invoke(railFn, {
         body: { batch_id: batch.id },
@@ -157,7 +190,7 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
     },
   });
 
-  if (!isActum && !isPlaid) {
+  if (!isActum && !isPlaid && !moovEnabled) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-md">
@@ -232,8 +265,7 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
               <RadioGroup value={speed} onValueChange={(v) => setSpeed(v as Speed)}>
                 {([
                   { v: "next_day" as Speed, Icon: Clock, cls: "" },
-                  { v: "same_day" as Speed, Icon: Clock, cls: "text-blue-500" },
-                  { v: "instant" as Speed, Icon: Zap, cls: "text-amber-500" },
+                  { v: "same_day" as Speed, Icon: Zap, cls: "text-blue-500" },
                 ]).map(({ v, Icon, cls }) => (
                   <label
                     key={v}
