@@ -95,13 +95,18 @@ export function PlaidVerification({
     onSuccess: (data) => {
       invalidate();
       onVerified?.();
+      const bridged = (data as any)?.moov_bridge;
+      const base = data?.institution
+        ? `${data.institution} ••${data.mask} is ready for payments.`
+        : "This account is ready for payments.";
       toast({
         title: "Bank account verified",
-        description: data?.institution
-          ? `${data.institution} ••${data.mask} is ready for payments.`
-          : "This account is ready for payments.",
+        description: bridged
+          ? `${base} Instant payouts are enabled — no micro-deposits needed.`
+          : base,
       });
     },
+
     onError: (e: any) => {
       invalidate();
       toast({ title: "Verification failed", description: e.message, variant: "destructive" });
