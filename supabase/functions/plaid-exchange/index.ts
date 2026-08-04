@@ -173,13 +173,36 @@ serve(async (req) => {
       },
     });
 
+    // ---- Auto-bridge the freshly linked bank onto Moov -------------------
+    // Moov accepts Plaid processor tokens, so the same Link session that just
+    // verified this bank can make the payee payable on the Moov rail with no
+    // second setup step and no micro-deposits. Best effort only: a failure here
+    // never invalidates a successful Plaid verification.
+    let moovBridge: { status: string; last_four: string | null } | null = null;
+    try {
+      if (await moovBridgeAvailable(supabase, account.tenant_id)) {
+        const bridged = await bridgePlaidBankToMoov({
+          supabase,
+          tenantId: account.tenant_id,
+          environment: moovEnvironment(),
+          mode: "recipient",
+          stakeholderAccountId: account.id,
+        });
+        moovBridge = { status: bridged.status, last_four: bridged.last_four };
+      }
+    } catch (e) {
+      console.warn("[plaid-exchange] moov bridge skipped:", (e as Error).message);
+    }
+
     return json({
       success: true,
       verified: true,
       institution: institutionName,
       mask: last4,
       account_holder: update.custname ?? account.custname,
+      moov_bridge: moovBridge,
     });
+
   } catch (err: any) {
     console.error("[plaid-exchange]", err);
     if (accountId) {
