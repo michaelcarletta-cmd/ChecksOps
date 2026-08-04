@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callPlaid, acctTypeFromPlaid } from "../_shared/plaidClient.ts";
+import { bridgePlaidBankToMoov, moovBridgeAvailable } from "../_shared/moovPlaidBridge.ts";
+import { moovEnvironment } from "../_shared/moovClient.ts";
 
 // Finalizes a Plaid Link session: exchanges the public_token, pulls real
 // routing/account numbers via /auth/get and the holder name via /identity/get,
