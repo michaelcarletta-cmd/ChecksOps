@@ -90,6 +90,8 @@ function CheckOpsRoutes() {
       <Route path="/pricing" element={<Suspense fallback={<PageLoader />}><CheckOpsPricing /></Suspense>} />
       <Route path="/security" element={<Suspense fallback={<PageLoader />}><CheckOpsSecurity /></Suspense>} />
       <Route path="/privacy-notice" element={<Suspense fallback={<PageLoader />}><PrivacyNotice /></Suspense>} />
+      <Route path="/terms" element={<Suspense fallback={<PageLoader />}><Terms /></Suspense>} />
+      <Route path="/terms-of-service" element={<Navigate to="/terms" replace />} />
       <Route path="/admin/tenants" element={<Suspense fallback={<PageLoader />}><AdminTenants /></Suspense>} />
       <Route path="/admin/mortgage-ops" element={<Suspense fallback={<PageLoader />}><AdminMortgageOps /></Suspense>} />
       <Route path="/find-a-pro" element={<Suspense fallback={<PageLoader />}><FindAPro /></Suspense>} />
