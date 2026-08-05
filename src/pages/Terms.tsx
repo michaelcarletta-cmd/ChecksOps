@@ -108,7 +108,25 @@ export default function Terms() {
             will be securely retained and destroyed in accordance with applicable law and your
             financial institution's requirements.
           </p>
+          <p>
+            <strong className="text-foreground">Role clarification.</strong> ChecksOps is a software
+            platform used by restoration contractors and public adjusters to manage their own claim
+            proceeds. ChecksOps is not a payment facilitator, payfac, or aggregator: we do not
+            underwrite, sponsor, or onboard sub-merchants, and we do not settle funds on behalf of
+            unaffiliated merchants. Each customer contracts directly with the applicable financial
+            partner and is onboarded and underwritten by that partner. Funds move from a customer's
+            own verified account to that customer's own payees — contractors, subcontractors,
+            vendors, sales representatives, and policyholders they work with.
+          </p>
+          <p>
+            <strong className="text-foreground">No carrier or lender relationship.</strong> ChecksOps
+            has no contractual, agency, or referral relationship with any insurance carrier or
+            mortgage lender, and does not onboard, sponsor, or process payments for carriers or
+            lenders. Carriers and mortgage servicers appear in the Service only as third parties
+            named on a customer's check or correspondence.
+          </p>
         </Section>
+
 
         <Section id="fees" title="5. Fees and billing">
           <p>
