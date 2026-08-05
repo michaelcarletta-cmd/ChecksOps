@@ -125,6 +125,7 @@ export default function Terms() {
             lenders. Carriers and mortgage servicers appear in the Service only as third parties
             named on a customer's check or correspondence.
           </p>
+        </Section>
 
 
         <Section id="fees" title="5. Fees and billing">
