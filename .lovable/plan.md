@@ -1,56 +1,40 @@
-# Payroll Tab — Off-Claim ACH Payments
+# Plan - Test Moov Process with Sandbox Credentials
 
-Adds a **Payroll** tab next to **Tax & 1099** in `src/pages/Payments.tsx` so admins can send ACH payments to people who aren't tied to a specific claim check. Reuses the existing Actum debit→credit rail, `consumer_code` tokenization, and the **Stakeholders** tab flow for bank linking.
+The user wants to test the Moov process using sandbox credentials, specifically moving money to the Moov wallet. The system is already built for this but is gated behind several conditions. I will enable the necessary flags for testing and ensure the Wallet UI is visible for the target tenant.
 
-## Confirmed scope
-- Additive only — claim-check stakeholder flow untouched.
-- One shared **recipient directory per tenant**, **admin-only** access.
-- No second-admin approval, but sending requires a **confirm dialog** ("Are you sure? $X to Y via ACH") before the API call fires.
-- **Bank linking reuses the existing Stakeholders tab.** No new "send bank link" UI in Payroll. Payroll only picks from stakeholders that already exist for the tenant.
-- **No payee is tracked until they're selected and paid.** Stakeholders that are never chosen in a payroll run stay invisible to payroll history/reporting.
+## Proposed Changes
 
-## Data model
+### 1. Database Configuration
+- Ensure the `freedom` tenant (and any other test tenant) is allowlisted for Moov.
+- Ensure the `freedom` tenant has `payment_provider` set to `moov` to use the new rail.
+- Ensure the user being used for testing has the `admin` role in `user_roles` or a high-privilege role in `tenant_users` to see the Payments > Settings tab.
 
-One new table only:
+### 2. Secrets & Environment
+- The user provided Moov production details in a previous message, but the codebase (specifically `_shared/moovClient.ts`) explicitly refuses production for now.
+- I will verify if `MOOV_PUBLIC_KEY` and `MOOV_SECRET_KEY` (sandbox) are set.
+- I will keep the environment as `sandbox` as requested for "testing".
 
-**`payroll_runs`** — one row per send attempt
-- `tenant_id`, `stakeholder_account_id` FK → existing `stakeholder_accounts`
-- `amount`, `speed` (next_day / same_day / instant), `memo`
-- `initiated_by`, `status`, `actum_batch_id`, `error`
-- created_at / updated_at
+### 3. UI Adjustments
+- The `WalletPanel` is currently only visible if `enabled` is true from `usePaymentProviderEligibility`.
+- `enabled` requires `moov_allowlisted` to be true on the tenant.
+- I will verify the current user's role and ensure they can see the "Payment Settings" tab where the `WalletPanel` lives.
 
-RLS: admin-only, tenant-scoped via `has_role(auth.uid(), 'admin')` and `tenant_users`. GRANTs + `updated_at` trigger included.
+### 4. Verification
+- Use a Playwright script to:
+  1. Log in as a test user.
+  2. Navigate to `/{slug}/payments`.
+  3. Click on the "Payment Settings" tab.
+  4. Verify the "Organization balance" (WalletPanel) is visible.
+  5. Check the status of the Moov account.
 
-No `payroll_recipients` table — the stakeholder record IS the recipient. First payment to a stakeholder implicitly onboards them into payroll history.
+## Implementation Steps
 
-## Backend
+1. **SQL Migration**:
+   - Update `public.tenants` for the test tenant to set `moov_allowlisted = true`, `moov_environment = 'sandbox'`, and `payment_provider = 'moov'`.
+   - Ensure the current user has the `admin` role.
 
-**`run-payroll`** edge function:
-1. Verify caller is admin for the tenant.
-2. Look up the chosen `stakeholder_account` — must belong to tenant, be `verified`, and have a `consumer_code`.
-3. Create a `disbursement_batch` + single `disbursement_split` pointing at that stakeholder account.
-4. Call the same debit → credit path `actum-disburse` already uses (sends `consumer_code`).
-5. Write result to `payroll_runs`.
+2. **Wait for UI Refresh**:
+   - The frontend should pick up the changes via `usePaymentProviderEligibility`.
 
-No changes to `homeowner-bank-link-send`, `actum-disburse`, or the Stakeholders tab.
-
-## UI
-
-New files:
-- `src/pages/payments/PayrollTab.tsx` — hosts Run Payroll + History (admin-only gate)
-- `src/components/payroll/RunPayrollDialog.tsx`
-  - **Payee dropdown** = all `stakeholder_accounts` for the tenant that are verified + have a `consumer_code` (searchable by name/email)
-  - Amount, speed (Next Day $0.95 / Same Day $1.15 / Instant $1.65), memo
-  - **Confirm step** showing payee, amount, fee, total → final "Send Payment" button
-  - Empty-state hint: "No eligible payees? Add them in the Stakeholders tab and send them a bank-link."
-- `src/components/payroll/PayrollHistoryTable.tsx` — shows only stakeholders that have at least one `payroll_run` (status, amount, speed, Actum order, date)
-
-Edit `src/pages/Payments.tsx` — add tab, gated by `useUserRole() === 'admin'`.
-
-## Out of scope
-- Tax withholding / W-2 payroll
-- Recurring/scheduled runs
-- Bulk multi-payee runs
-- Any new bank-link entry point (Stakeholders tab remains the single source)
-
-Say go and I'll build it.
+3. **Manual/Automated Test**:
+   - Provide the user with the path to the wallet funding UI (Payments > Payment Settings).
