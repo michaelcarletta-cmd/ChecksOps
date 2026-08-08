@@ -109,7 +109,7 @@ export function HomeownerSubmittedChecksInbox({ tenantId, onCheckCreated }: { te
                 )}
                 <div className="flex gap-2">
                   <Button size="sm" variant="default" onClick={() => setAttachTarget(it)}>
-                    <CheckCircle2 className="h-3 w-3 mr-1" /> {it.claim_id ? "Approve & Process" : "Attach to Claim"}
+                    <CheckCircle2 className="h-3 w-3 mr-1" /> Process to Review
                   </Button>
                   <Button size="sm" variant="ghost" className="text-destructive" onClick={() => reject(it.id)}>
                     <XCircle className="h-3 w-3 mr-1" /> Reject

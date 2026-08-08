@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
 
   try {
     const { upload_id, claim_id, amount } = await req.json()
-    if (!upload_id || !claim_id) return json({ error: 'missing_params' }, 400)
+    if (!upload_id) return json({ error: 'missing_params' }, 400)
 
     // Load upload
     const { data: up, error: upErr } = await svc
@@ -49,13 +49,17 @@ Deno.serve(async (req) => {
     if (up.status === 'attached') return json({ error: 'already_attached', check_id: up.attached_check_id }, 409)
 
     // Load claim + verify tenant match
-    const { data: claim } = await svc
-      .from('claims')
-      .select('id, tenant_id, claim_number')
-      .eq('id', claim_id)
-      .maybeSingle()
-    if (!claim) return json({ error: 'claim_not_found' }, 404)
-    if (claim.tenant_id !== up.tenant_id) return json({ error: 'tenant_mismatch' }, 403)
+    let claimNumber: string | null = null;
+    if (claim_id) {
+      const { data: claim } = await svc
+        .from('claims')
+        .select('id, tenant_id, claim_number')
+        .eq('id', claim_id)
+        .maybeSingle()
+      if (!claim) return json({ error: 'claim_not_found' }, 404)
+      if (claim.tenant_id !== up.tenant_id) return json({ error: 'tenant_mismatch' }, 403)
+      claimNumber = claim.claim_number;
+    }
 
     // Verify staff belongs to tenant
     const { data: membership } = await svc.from('tenant_users')
@@ -63,14 +67,14 @@ Deno.serve(async (req) => {
     if (!membership) return json({ error: 'forbidden' }, 403)
 
     // Copy files from homeowner-uploads -> claim-files
-    const copied = await copyToClaimFiles(svc, up.tenant_id, claim.id, up.front_path)
-    const backCopied = up.back_path ? await copyToClaimFiles(svc, up.tenant_id, claim.id, up.back_path) : null
+    const copied = await copyToClaimFiles(svc, up.tenant_id, claim_id ?? 'unlinked', up.front_path)
+    const backCopied = up.back_path ? await copyToClaimFiles(svc, up.tenant_id, claim_id ?? 'unlinked', up.back_path) : null
 
     // Insert check_intake_items row
     const { data: check, error: chErr } = await svc
       .from('check_intake_items')
       .insert({
-        claim_id: claim.id,
+        claim_id: claim_id ?? null,
         tenant_id: up.tenant_id,
         uploaded_by: userId,
         front_image_path: copied,
@@ -88,7 +92,7 @@ Deno.serve(async (req) => {
     await svc.from('homeowner_ledger_check_uploads').update({
       status: 'attached',
       attached_check_id: check.id,
-      claim_id: claim.id,
+      claim_id: claim_id ?? null,
       reviewed_by: userId,
       reviewed_at: new Date().toISOString(),
     }).eq('id', upload_id)
@@ -107,14 +111,14 @@ Deno.serve(async (req) => {
     // Log ledger event
     await svc.from('homeowner_ledger_events').insert({
       tenant_id: up.tenant_id,
-      claim_id: claim.id,
+      claim_id: claim_id ?? null,
       event_type: 'homeowner_upload_attached',
       amount: amount ?? up.amount_estimate ?? null,
       actor_label: 'Staff',
-      payload_json: { upload_id, check_id: check.id, claim_number: claim.claim_number },
+      payload_json: { upload_id, check_id: check.id, claim_number: claimNumber },
     })
 
-    return json({ ok: true, check_id: check.id, claim_id: claim.id })
+    return json({ ok: true, check_id: check.id, claim_id: claim_id ?? null })
   } catch (e) {
     console.error('homeowner-ledger-attach-upload error', e)
     return json({ error: 'server_error', message: String((e as Error).message) }, 500)

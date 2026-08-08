@@ -72,12 +72,12 @@ export function AttachUploadToClaimDialog({
   }, [q, open, tenantId]);
 
   const submit = async () => {
-    if (!uploadId || !pickedId) return;
+    if (!uploadId) return;
     setSubmitting(true);
     try {
       const parsedAmount = amount.trim() ? Number(amount) : null;
       const { data, error } = await supabase.functions.invoke("homeowner-ledger-attach-upload", {
-        body: { upload_id: uploadId, claim_id: pickedId, amount: parsedAmount },
+        body: { upload_id: uploadId, claim_id: pickedId ?? null, amount: parsedAmount },
       });
       if (error) throw new Error(error.message);
       if ((data as any)?.error) throw new Error((data as any).error);
@@ -164,7 +164,7 @@ export function AttachUploadToClaimDialog({
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button onClick={submit} disabled={!pickedId || submitting}>
+            <Button onClick={submit} disabled={submitting}>
               {submitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
