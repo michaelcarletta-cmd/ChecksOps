@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Loader2, Search, CheckCircle2 } from "lucide-react";
+import { Loader2, Search, CheckCircle2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 type Claim = {
@@ -158,8 +158,17 @@ export function AttachUploadToClaimDialog({
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button onClick={submit} disabled={!pickedId || submitting}>
-              {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Attach to claim
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload
+                </>
+              )}
             </Button>
           </div>
         </div>

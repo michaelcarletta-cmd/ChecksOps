@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
         front_image_path: copied,
         back_image_path: backCopied,
         amount: amount ?? up.amount_estimate ?? null,
-        status: 'uploaded',
+        status: 'pending',
         check_stage: 'review',
         check_source: 'insurance',
       })
