@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ImageIcon, CheckCircle2, XCircle, Send, Check } from "lucide-react";
+import { Loader2, ImageIcon, CheckCircle2, XCircle, Send, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { AttachUploadToClaimDialog } from "./AttachUploadToClaimDialog";
 import { supabase as client } from "@/integrations/supabase/client";
@@ -137,15 +137,25 @@ export function HomeownerSubmittedChecksInbox({ tenantId, onCheckCreated }: { te
 
 function Thumb({ path, url, label }: { path: string; url?: string; label: string }) {
   return (
-    <a href={url} target="_blank" rel="noreferrer" className="block border border-border rounded overflow-hidden hover:border-primary">
+    <div className="block border border-border rounded overflow-hidden">
       {url ? (
-        <img src={url} alt={label} className="w-full h-32 object-cover" />
+        <div className="relative group">
+          <img src={url} alt={label} className="w-full h-32 object-cover" />
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <Eye className="h-6 w-6 text-white" />
+          </a>
+        </div>
       ) : (
         <div className="w-full h-32 flex items-center justify-center bg-muted text-muted-foreground">
           <ImageIcon className="h-5 w-5" />
         </div>
       )}
-      <div className="text-[10px] text-center py-1 bg-muted/50">{label}</div>
-    </a>
+      <div className="text-[10px] text-center py-1 bg-muted/50 font-medium">{label}</div>
+    </div>
   );
 }
