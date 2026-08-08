@@ -1729,7 +1729,17 @@ export default function CheckCommandCenter() {
                   <SendHomeownerUploadLink />
                 </Suspense>
                 <Suspense fallback={<TabLoader />}>
-                  <HomeownerSubmittedChecksInbox />
+                  <HomeownerSubmittedChecksInbox 
+                    tenantId={tenantId} 
+                    onCheckCreated={(id) => {
+                      setActiveTab("review");
+                      setReviewCheckId(id);
+                      // Trigger OCR for the new check
+                      supabase.functions.invoke("ingest-shared-check", {
+                        body: { check_id: id, action: "ocr_only" }
+                      }).catch(console.error);
+                    }} 
+                  />
                 </Suspense>
               </TabsContent>
               {/* Reissue tab now uses the shared list+detail layout below so
