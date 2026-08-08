@@ -305,11 +305,12 @@ function PreClaimView({ token, homeowner, pending, onRefresh }: {
         <CardContent className="text-sm text-muted-foreground space-y-2">
           <p>
             Hi {homeowner.name || "there"} — upload the front and back of your insurance check
-            below. Our team will attach it to your claim within one business day.
+            below. Our team will review and process it.
           </p>
           {pending > 0 && (
-            <div className="text-xs bg-muted rounded p-2">
-              {pending} upload{pending === 1 ? "" : "s"} pending review.
+            <div className="text-xs bg-muted rounded p-2 flex items-center gap-2">
+              <Loader2 className="h-3 w-3 animate-spin text-primary" />
+              {pending} upload{pending === 1 ? "" : "s"} waiting for review.
             </div>
           )}
         </CardContent>

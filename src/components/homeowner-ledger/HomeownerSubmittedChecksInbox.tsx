@@ -108,8 +108,8 @@ export function HomeownerSubmittedChecksInbox({ tenantId, onCheckCreated }: { te
                   <div className="text-xs bg-muted p-2 rounded"><strong>Note:</strong> {it.homeowner_note}</div>
                 )}
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => setAttachTarget(it)}>
-                    <CheckCircle2 className="h-3 w-3 mr-1" /> Attach to claim
+                  <Button size="sm" variant="default" onClick={() => setAttachTarget(it)}>
+                    <CheckCircle2 className="h-3 w-3 mr-1" /> {it.claim_id ? "Approve & Process" : "Attach to Claim"}
                   </Button>
                   <Button size="sm" variant="ghost" className="text-destructive" onClick={() => reject(it.id)}>
                     <XCircle className="h-3 w-3 mr-1" /> Reject
@@ -126,6 +126,7 @@ export function HomeownerSubmittedChecksInbox({ tenantId, onCheckCreated }: { te
         uploadId={attachTarget?.id ?? null}
         tenantId={attachTarget?.tenant_id ?? tenantId}
         defaultAmount={attachTarget?.amount_estimate ?? null}
+        claimIdFromUpload={attachTarget?.claim_id ?? null}
         onAttached={(checkId) => {
           load();
           if (onCheckCreated && checkId) onCheckCreated(checkId);

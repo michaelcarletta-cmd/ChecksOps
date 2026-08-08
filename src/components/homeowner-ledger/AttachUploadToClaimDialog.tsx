@@ -20,6 +20,7 @@ export function AttachUploadToClaimDialog({
   uploadId,
   tenantId,
   defaultAmount,
+  claimIdFromUpload,
   onAttached,
 }: {
   open: boolean;
@@ -27,12 +28,13 @@ export function AttachUploadToClaimDialog({
   uploadId: string | null;
   tenantId?: string;
   defaultAmount?: number | null;
+  claimIdFromUpload?: string | null;
   onAttached: (checkId?: string) => void;
 }) {
   const [q, setQ] = useState("");
   const [claims, setClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(false);
-  const [pickedId, setPickedId] = useState<string | null>(null);
+  const [pickedId, setPickedId] = useState<string | null>(claimIdFromUpload ?? null);
   const [amount, setAmount] = useState<string>(defaultAmount != null ? String(defaultAmount) : "");
   const [submitting, setSubmitting] = useState(false);
 
@@ -40,7 +42,7 @@ export function AttachUploadToClaimDialog({
     if (!open) {
       setQ("");
       setClaims([]);
-      setPickedId(null);
+      setPickedId(claimIdFromUpload ?? null);
       setAmount(defaultAmount != null ? String(defaultAmount) : "");
     }
   }, [open, defaultAmount]);
@@ -93,10 +95,11 @@ export function AttachUploadToClaimDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Attach to claim</DialogTitle>
+          <DialogTitle>{claimIdFromUpload ? "Confirm & Process" : "Attach to claim"}</DialogTitle>
           <DialogDescription>
-            Link this homeowner-submitted check to a claim. The claim's ledger link will auto-track every future
-            check the homeowner uploads through the same link.
+            {claimIdFromUpload 
+              ? "This check is already linked to a claim. Confirm the amount and process it for OCR and review." 
+              : "Link this homeowner-submitted check to a claim. Future uploads from this link will auto-track to this claim."}
           </DialogDescription>
         </DialogHeader>
 
@@ -112,48 +115,52 @@ export function AttachUploadToClaimDialog({
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Find claim</Label>
-            <div className="relative">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Claim number, homeowner name, or address"
-                className="pl-8"
-              />
-            </div>
-          </div>
-
-          <div className="border border-border rounded-md max-h-64 overflow-auto">
-            {loading ? (
-              <div className="flex justify-center py-6">
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          {!claimIdFromUpload && (
+            <div className="space-y-1.5">
+              <Label>Find claim</Label>
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Claim number, homeowner name, or address"
+                  className="pl-8"
+                />
               </div>
-            ) : claims.length === 0 ? (
-              <div className="text-sm text-muted-foreground text-center py-6">No claims match.</div>
-            ) : (
-              <ul>
-                {claims.map((c) => (
-                  <li key={c.id}>
-                    <button
-                      type="button"
-                      className={`w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between ${pickedId === c.id ? "bg-muted" : ""}`}
-                      onClick={() => setPickedId(c.id)}
-                    >
-                      <div>
-                        <div className="font-medium">{c.claim_number || "(no #)"}</div>
-                        <div className="text-xs text-muted-foreground truncate">
-                          {c.policyholder_name || "—"}{c.policyholder_address ? ` • ${c.policyholder_address}` : ""}
+            </div>
+          )}
+
+          {!claimIdFromUpload && (
+            <div className="border border-border rounded-md max-h-64 overflow-auto">
+              {loading ? (
+                <div className="flex justify-center py-6">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+              ) : claims.length === 0 ? (
+                <div className="text-sm text-muted-foreground text-center py-6">No claims match.</div>
+              ) : (
+                <ul>
+                  {claims.map((c) => (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between ${pickedId === c.id ? "bg-muted" : ""}`}
+                        onClick={() => setPickedId(c.id)}
+                      >
+                        <div>
+                          <div className="font-medium">{c.claim_number || "(no #)"}</div>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {c.policyholder_name || "—"}{c.policyholder_address ? ` • ${c.policyholder_address}` : ""}
+                          </div>
                         </div>
-                      </div>
-                      {pickedId === c.id && <CheckCircle2 className="h-4 w-4 text-primary" />}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+                        {pickedId === c.id && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -166,7 +173,7 @@ export function AttachUploadToClaimDialog({
               ) : (
                 <>
                   <Upload className="h-4 w-4 mr-2" />
-                  Upload
+                  {claimIdFromUpload ? "Process Check" : "Upload"}
                 </>
               )}
             </Button>
