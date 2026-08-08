@@ -27,7 +27,7 @@ export function AttachUploadToClaimDialog({
   uploadId: string | null;
   tenantId?: string;
   defaultAmount?: number | null;
-  onAttached: () => void;
+  onAttached: (checkId?: string) => void;
 }) {
   const [q, setQ] = useState("");
   const [claims, setClaims] = useState<Claim[]>([]);
@@ -80,7 +80,7 @@ export function AttachUploadToClaimDialog({
       if (error) throw new Error(error.message);
       if ((data as any)?.error) throw new Error((data as any).error);
       toast.success("Check attached to claim");
-      onAttached();
+      onAttached((data as any)?.check_id);
       onOpenChange(false);
     } catch (e: any) {
       toast.error(e.message ?? "Attach failed");
