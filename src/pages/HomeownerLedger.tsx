@@ -459,12 +459,35 @@ function TotalTile({ label, value, tone, highlight }: { label: string; value: nu
 function UploadPanel({ token, onDone, preClaim, hideHeader }: { token: string; onDone: () => void; preClaim?: boolean; hideHeader?: boolean }) {
   const [front, setFront] = useState<File | null>(null);
   const [back, setBack] = useState<File | null>(null);
+  const [pendingCrop, setPendingCrop] = useState<{ file: File; target: "front" | "back" } | null>(null);
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [kind, setKind] = useState<"check" | "production_doc">("check");
   const fInput = useRef<HTMLInputElement>(null);
   const bInput = useRef<HTMLInputElement>(null);
+
+  const onPick = (f: File | null, target: "front" | "back") => {
+    if (!f) {
+      if (target === "front") setFront(null);
+      else setBack(null);
+      return;
+    }
+    // Route images through the cropper first; PDFs skip it.
+    if (f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name)) {
+      setPendingCrop({ file: f, target });
+      return;
+    }
+    if (target === "front") setFront(f);
+    else setBack(f);
+  };
+
+  const applyCrop = (cropped: File) => {
+    if (!pendingCrop) return;
+    if (pendingCrop.target === "front") setFront(cropped);
+    else setBack(cropped);
+    setPendingCrop(null);
+  };
 
   const submit = async () => {
     if (!front) { toast.error("Add the front image"); return; }
@@ -506,15 +529,22 @@ function UploadPanel({ token, onDone, preClaim, hideHeader }: { token: string; o
         </CardHeader>
       )}
       <CardContent className="space-y-3">
+        <CheckImageCropper
+          open={!!pendingCrop}
+          file={pendingCrop?.file ?? null}
+          title={`Crop the ${pendingCrop?.target || "check"}`}
+          onCancel={() => setPendingCrop(null)}
+          onConfirm={applyCrop}
+        />
         {!preClaim && (
           <div className="flex gap-2 text-xs">
             <Button size="sm" variant={kind === "check" ? "default" : "outline"} onClick={() => setKind("check")}>New check</Button>
             <Button size="sm" variant={kind === "production_doc" ? "default" : "outline"} onClick={() => setKind("production_doc")}>Production doc</Button>
           </div>
         )}
-        <FilePicker label={kind === "check" ? "Front of check" : "Document"} file={front} onPick={setFront} inputRef={fInput} />
+        <FilePicker label={kind === "check" ? "Front of check" : "Document"} file={front} onPick={(f) => onPick(f, "front")} inputRef={fInput} />
         {kind === "check" && (
-          <FilePicker label="Back of check (optional)" file={back} onPick={setBack} inputRef={bInput} />
+          <FilePicker label="Back of check (optional)" file={back} onPick={(f) => onPick(f, "back")} inputRef={bInput} />
         )}
         {kind === "check" && (
           <div className="grid grid-cols-2 gap-2">

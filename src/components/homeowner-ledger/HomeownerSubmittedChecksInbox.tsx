@@ -3,9 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ImageIcon, CheckCircle2, XCircle, Send } from "lucide-react";
+import { Loader2, ImageIcon, CheckCircle2, XCircle, Send, Check } from "lucide-react";
 import { toast } from "sonner";
 import { AttachUploadToClaimDialog } from "./AttachUploadToClaimDialog";
+import { supabase as client } from "@/integrations/supabase/client";
 
 type PendingUpload = {
   id: string;
@@ -23,7 +24,7 @@ type PendingUpload = {
 };
 
 
-export function HomeownerSubmittedChecksInbox({ tenantId }: { tenantId?: string }) {
+export function HomeownerSubmittedChecksInbox({ tenantId, onCheckCreated }: { tenantId?: string, onCheckCreated?: (checkId: string) => void }) {
   const [items, setItems] = useState<PendingUpload[]>([]);
   const [loading, setLoading] = useState(true);
   const [signed, setSigned] = useState<Record<string, string>>({});
@@ -125,7 +126,10 @@ export function HomeownerSubmittedChecksInbox({ tenantId }: { tenantId?: string 
         uploadId={attachTarget?.id ?? null}
         tenantId={attachTarget?.tenant_id ?? tenantId}
         defaultAmount={attachTarget?.amount_estimate ?? null}
-        onAttached={load}
+        onAttached={(checkId) => {
+          load();
+          if (onCheckCreated && checkId) onCheckCreated(checkId);
+        }}
       />
     </Card>
   );
