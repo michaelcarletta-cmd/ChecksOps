@@ -2352,7 +2352,7 @@ export default function CheckCommandCenter() {
                       const colCount = (hideDepositCol ? 7 : 8) + 1;
 
                       const renderHeaderRow = (group: CheckGroup) => (
-                        <TableRow key={`${group.key}-header`} className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold">
+                        <TableRow key={`${group.key}-header`} className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold rounded-t-xl overflow-hidden">
                           <TableCell className="py-3 w-8">
                             {group.checks.length > 1 && (() => {
                               const groupIds = group.checks.map((c) => c.id);
@@ -2567,13 +2567,27 @@ export default function CheckCommandCenter() {
 
                       return (
                         <ScrollArea className="h-[calc(100vh-460px)] min-h-[300px]">
-                          <Table>
+                          <Table className="border-separate border-spacing-y-4">
                             {headerRow}
                             <TableBody>
                               {groupedFilteredChecks.map((group) => (
                                 <Fragment key={group.key}>
                                   {renderHeaderRow(group)}
-                                  {group.checks.map((check) => renderCheckRow(check))}
+                                  {group.checks.map((check, idx) => {
+                                    const isLast = idx === group.checks.length - 1;
+                                    return (
+                                      <TableRow
+                                        key={check.id}
+                                        className={`cursor-pointer transition-colors ${isSelected ? "bg-accent" : ""} ${isBulk ? "bg-primary/5" : ""} ${isLast ? "rounded-b-xl overflow-hidden" : ""}`}
+                                        onMouseEnter={() => prefetchCheckDetail(check.id)}
+                                        onFocus={() => prefetchCheckDetail(check.id)}
+                                        onClick={() => setSelectedCheck(isSelected ? null : check.id)}
+                                      >
+                                        {/* Row content is the same, but TableRow needs the rounding classes */}
+                                        {renderCheckRow(check)}
+                                      </TableRow>
+                                    );
+                                  })}
                                 </Fragment>
                               ))}
                             </TableBody>
