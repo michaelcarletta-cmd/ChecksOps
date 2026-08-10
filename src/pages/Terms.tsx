@@ -123,7 +123,17 @@ export default function Terms() {
             has no contractual, agency, or referral relationship with any insurance carrier or
             mortgage lender, and does not onboard, sponsor, or process payments for carriers or
             lenders. Carriers and mortgage servicers appear in the Service only as third parties
-            named on a customer's check or correspondence.
+            named on a customer's check or correspondence. ChecksOps does not source funds from
+            mortgage or insurance companies; funds are sourced directly from our customers'
+            business accounts to pay their own stakeholders. Verification of funds origin is
+            conducted by the third-party financial partner at the time of account funding and
+            deposit.
+          </p>
+          <p>
+            <strong className="text-foreground">Customer Sourcing.</strong> ChecksOps sources
+            customers through direct sales, industry partnerships, and marketing within the
+            insurance restoration and public adjusting sectors. We do not rely on relationships
+            with insurance carriers or mortgage companies for customer acquisition.
           </p>
         </Section>
 
