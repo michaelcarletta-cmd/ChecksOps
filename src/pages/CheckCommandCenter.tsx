@@ -2352,7 +2352,7 @@ export default function CheckCommandCenter() {
                       const colCount = (hideDepositCol ? 7 : 8) + 1;
 
                       const renderHeaderRow = (group: CheckGroup) => (
-                        <TableRow key={`${group.key}-header`} className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold">
+                        <TableRow key={`${group.key}-header`} className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold rounded-t-xl overflow-hidden [&>td:first-child]:rounded-tl-xl [&>td:last-child]:rounded-tr-xl">
                           <TableCell className="py-3 w-8">
                             {group.checks.length > 1 && (() => {
                               const groupIds = group.checks.map((c) => c.id);
@@ -2567,17 +2567,37 @@ export default function CheckCommandCenter() {
 
                       return (
                         <ScrollArea className="h-[calc(100vh-460px)] min-h-[300px]">
-                          <Table>
+                        <ScrollArea className="h-[calc(100vh-460px)] min-h-[300px]">
+                          <Table className="border-separate border-spacing-y-0 border-spacing-x-0">
                             {headerRow}
                             <TableBody>
                               {groupedFilteredChecks.map((group) => (
                                 <Fragment key={group.key}>
                                   {renderHeaderRow(group)}
-                                  {group.checks.map((check) => renderCheckRow(check))}
+                                  {group.checks.map((check, idx) => {
+                                    const isLast = idx === group.checks.length - 1;
+                                    const row = renderCheckRow(check);
+                                    // Clone and apply the bottom rounding if it's the last row in the file
+                                    return (
+                                      <Fragment key={check.id}>
+                                        {isLast ? (
+                                          <TableRow 
+                                            {...row.props} 
+                                            className={`${row.props.className} rounded-b-xl overflow-hidden [&>td:first-child]:rounded-bl-xl [&>td:last-child]:rounded-br-xl`}
+                                          />
+                                        ) : row}
+                                      </Fragment>
+                                    );
+                                  })}
+                                  {/* Spacer row between files */}
+                                  <TableRow className="h-4 bg-transparent hover:bg-transparent">
+                                    <TableCell colSpan={colCount} className="p-0 border-0" />
+                                  </TableRow>
                                 </Fragment>
                               ))}
                             </TableBody>
                           </Table>
+                        </ScrollArea>
                         </ScrollArea>
                       );
                     })()
