@@ -1853,7 +1853,7 @@ export default function CheckCommandCenter() {
                       return <div className="p-8 text-center text-muted-foreground">No funds released yet</div>;
                     }
                     return (
-                    <Table>
+                    <Table className="border-separate border-spacing-y-0 border-spacing-x-0">
                       <TableHeader>
                         <TableRow>
                           <TableHead>Check</TableHead>
@@ -1897,7 +1897,7 @@ export default function CheckCommandCenter() {
                           );
                           return sortedGroups.map((group) => (
                             <Fragment key={group.key}>
-                              <TableRow className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold">
+                              <TableRow className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold rounded-t-xl overflow-hidden [&>td:first-child]:rounded-tl-xl [&>td:last-child]:rounded-tr-xl">
                                 <TableCell colSpan={7} className="py-3">
                                   <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div className="flex flex-wrap items-center gap-2">
@@ -1914,7 +1914,7 @@ export default function CheckCommandCenter() {
                                   </div>
                                 </TableCell>
                               </TableRow>
-                              {group.rows.map((split: any) => {
+                              {group.rows.map((split: any, idx: number) => {
                                 const acct = split.stakeholder_accounts;
                                 const batch = split.disbursement_batches;
                                 const check = batch?.check_intake_items;
@@ -1924,7 +1924,7 @@ export default function CheckCommandCenter() {
                                 return (
                                   <TableRow
                                     key={split.id}
-                                    className={`${checkId ? "cursor-pointer" : ""} ${isSelected ? "bg-accent" : ""}`}
+                                    className={`${checkId ? "cursor-pointer" : ""} ${isSelected ? "bg-accent" : ""} ${idx === group.rows.length - 1 ? "[&>td:first-child]:rounded-bl-xl [&>td:last-child]:rounded-br-xl" : ""}`}
                                     onMouseEnter={() => checkId && prefetchCheckDetail(checkId)}
                                     onFocus={() => checkId && prefetchCheckDetail(checkId)}
                                     onClick={() => checkId && setSelectedCheck(isSelected ? null : checkId)}
@@ -1957,6 +1957,9 @@ export default function CheckCommandCenter() {
                                   </TableRow>
                                 );
                               })}
+                              <TableRow className="h-2 bg-transparent border-none pointer-events-none">
+                                <TableCell colSpan={7} />
+                              </TableRow>
                             </Fragment>
                           ));
                         })()}
@@ -2084,7 +2087,7 @@ export default function CheckCommandCenter() {
                                   </div>
                                 </TableCell>
                               </TableRow>
-                              {group.rows.map((split: any) => {
+                              {group.rows.map((split: any, idx: number) => {
                                 const batch = split.disbursement_batches;
                                 const check = batch?.check_intake_items;
                                 const fundsType = check?.funds_type;
@@ -2094,7 +2097,7 @@ export default function CheckCommandCenter() {
                                 return (
                                   <TableRow
                                     key={split.id}
-                                    className={`${checkId ? "cursor-pointer" : ""} ${isSelected ? "bg-accent" : ""}`}
+                                    className={`${checkId ? "cursor-pointer" : ""} ${isSelected ? "bg-accent" : ""} ${idx === group.rows.length - 1 ? "[&>td:first-child]:rounded-bl-xl [&>td:last-child]:rounded-br-xl" : ""}`}
                                     onMouseEnter={() => checkId && prefetchCheckDetail(checkId)}
                                     onFocus={() => checkId && prefetchCheckDetail(checkId)}
                                     onClick={() => checkId && setSelectedCheck(isSelected ? null : checkId)}
@@ -2130,6 +2133,9 @@ export default function CheckCommandCenter() {
                                   </TableRow>
                                 );
                               })}
+                              <TableRow className="h-2 bg-transparent border-none pointer-events-none">
+                                <TableCell colSpan={7} />
+                              </TableRow>
                             </Fragment>
                           ));
                         })()}
