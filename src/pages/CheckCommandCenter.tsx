@@ -1914,7 +1914,7 @@ export default function CheckCommandCenter() {
                                   </div>
                                 </TableCell>
                               </TableRow>
-                              {group.rows.map((split: any) => {
+                              {group.rows.map((split: any, idx: number) => {
                                 const acct = split.stakeholder_accounts;
                                 const batch = split.disbursement_batches;
                                 const check = batch?.check_intake_items;
@@ -1957,6 +1957,9 @@ export default function CheckCommandCenter() {
                                   </TableRow>
                                 );
                               })}
+                              <TableRow className="h-2 bg-transparent border-none pointer-events-none">
+                                <TableCell colSpan={7} />
+                              </TableRow>
                             </Fragment>
                           ));
                         })()}
@@ -2084,7 +2087,7 @@ export default function CheckCommandCenter() {
                                   </div>
                                 </TableCell>
                               </TableRow>
-                              {group.rows.map((split: any) => {
+                              {group.rows.map((split: any, idx: number) => {
                                 const batch = split.disbursement_batches;
                                 const check = batch?.check_intake_items;
                                 const fundsType = check?.funds_type;
@@ -2094,7 +2097,7 @@ export default function CheckCommandCenter() {
                                 return (
                                   <TableRow
                                     key={split.id}
-                                    className={`${checkId ? "cursor-pointer" : ""} ${isSelected ? "bg-accent" : ""}`}
+                                    className={`${checkId ? "cursor-pointer" : ""} ${isSelected ? "bg-accent" : ""} ${idx === group.rows.length - 1 ? "[&>td:first-child]:rounded-bl-xl [&>td:last-child]:rounded-br-xl" : ""}`}
                                     onMouseEnter={() => checkId && prefetchCheckDetail(checkId)}
                                     onFocus={() => checkId && prefetchCheckDetail(checkId)}
                                     onClick={() => checkId && setSelectedCheck(isSelected ? null : checkId)}
@@ -2130,6 +2133,9 @@ export default function CheckCommandCenter() {
                                   </TableRow>
                                 );
                               })}
+                              <TableRow className="h-2 bg-transparent border-none pointer-events-none">
+                                <TableCell colSpan={7} />
+                              </TableRow>
                             </Fragment>
                           ));
                         })()}
