@@ -2352,7 +2352,7 @@ export default function CheckCommandCenter() {
                       const colCount = (hideDepositCol ? 7 : 8) + 1;
 
                       const renderHeaderRow = (group: CheckGroup) => (
-                        <TableRow key={`${group.key}-header`} className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold rounded-t-xl overflow-hidden">
+                        <TableRow key={`${group.key}-header`} className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold rounded-t-xl overflow-hidden [&>td:first-child]:rounded-tl-xl [&>td:last-child]:rounded-tr-xl">
                           <TableCell className="py-3 w-8">
                             {group.checks.length > 1 && (() => {
                               const groupIds = group.checks.map((c) => c.id);
