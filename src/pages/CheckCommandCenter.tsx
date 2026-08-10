@@ -2567,7 +2567,8 @@ export default function CheckCommandCenter() {
 
                       return (
                         <ScrollArea className="h-[calc(100vh-460px)] min-h-[300px]">
-                          <Table className="border-separate border-spacing-y-4">
+                        <ScrollArea className="h-[calc(100vh-460px)] min-h-[300px]">
+                          <Table className="border-separate border-spacing-y-0 border-spacing-x-0">
                             {headerRow}
                             <TableBody>
                               {groupedFilteredChecks.map((group) => (
@@ -2575,23 +2576,28 @@ export default function CheckCommandCenter() {
                                   {renderHeaderRow(group)}
                                   {group.checks.map((check, idx) => {
                                     const isLast = idx === group.checks.length - 1;
+                                    const row = renderCheckRow(check);
+                                    // Clone and apply the bottom rounding if it's the last row in the file
                                     return (
-                                      <TableRow
-                                        key={check.id}
-                                        className={`cursor-pointer transition-colors ${isSelected ? "bg-accent" : ""} ${isBulk ? "bg-primary/5" : ""} ${isLast ? "rounded-b-xl overflow-hidden" : ""}`}
-                                        onMouseEnter={() => prefetchCheckDetail(check.id)}
-                                        onFocus={() => prefetchCheckDetail(check.id)}
-                                        onClick={() => setSelectedCheck(isSelected ? null : check.id)}
-                                      >
-                                        {/* Row content is the same, but TableRow needs the rounding classes */}
-                                        {renderCheckRow(check)}
-                                      </TableRow>
+                                      <Fragment key={check.id}>
+                                        {isLast ? (
+                                          <TableRow 
+                                            {...row.props} 
+                                            className={`${row.props.className} rounded-b-xl overflow-hidden [&>td:first-child]:rounded-bl-xl [&>td:last-child]:rounded-br-xl`}
+                                          />
+                                        ) : row}
+                                      </Fragment>
                                     );
                                   })}
+                                  {/* Spacer row between files */}
+                                  <TableRow className="h-4 bg-transparent hover:bg-transparent">
+                                    <TableCell colSpan={colCount} className="p-0 border-0" />
+                                  </TableRow>
                                 </Fragment>
                               ))}
                             </TableBody>
                           </Table>
+                        </ScrollArea>
                         </ScrollArea>
                       );
                     })()
