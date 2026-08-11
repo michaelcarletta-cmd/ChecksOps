@@ -21,7 +21,7 @@ export interface CheckValidityAssessment {
 
 const DEFAULT_STALE_DAYS = 180;
 const DEFAULT_WARNING_WINDOW = 30;
-const DEFAULT_EXPIRED_DAYS = 365;
+const DEFAULT_EXPIRED_DAYS = 180; // Reverted from 365 per user instruction "we had it fine as the 180 day mark"
 
 const MS_PER_DAY = 86_400_000;
 
@@ -94,7 +94,7 @@ export function assessCheckValidity(
       staleThresholdDays,
       warningWindowDays,
       label: `Likely expired · ${days}d old`,
-      detail: `Check is ${days} days old (over 1 year). Most banks will return it. Request a reissue.`,
+      detail: `Check is ${days} days old (over ${expirationThresholdDays} days). Most banks will return it. Request a reissue.`,
     };
   }
 
