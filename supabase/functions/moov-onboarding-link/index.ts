@@ -122,6 +122,7 @@ serve(async (req) => {
 
 
     // Moov hosted onboarding invite for this specific connected account.
+    // We request full write scopes so the hosted UI can collect and save all merchant data.
     const invite = await moovFetch<any>("/onboarding-invites", {
       method: "POST",
       scopes: [...scopes.accountsWrite(), ...scopes.accountWrite(accountId)],

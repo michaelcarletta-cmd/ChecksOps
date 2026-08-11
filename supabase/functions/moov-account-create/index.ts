@@ -37,7 +37,7 @@ serve(async (req) => {
 
     const { data: tenant } = await supabase
       .from("tenants")
-      .select("id, name, email_from_address, email_reply_to, business_phone")
+      .select("id, name, email_from_address, email_reply_to, business_phone, business_address, business_city, business_state, business_zip")
       .eq("id", tenant_id)
       .maybeSingle();
     if (!tenant) return json({ error: "Organization not found" }, 404);
@@ -70,6 +70,13 @@ serve(async (req) => {
             phone: (tenant as any).business_phone
               ? { number: String((tenant as any).business_phone).replace(/\D/g, "").slice(-10) }
               : undefined,
+            address: (tenant as any).business_address ? {
+              addressLine1: (tenant as any).business_address,
+              city: (tenant as any).business_city,
+              stateOrProvince: (tenant as any).business_state,
+              postalCode: (tenant as any).business_zip,
+              country: "US"
+            } : undefined,
           },
         },
         capabilities: ["transfers", "send-funds", "collect-funds", "wallet"],

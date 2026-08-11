@@ -118,13 +118,20 @@ export function TenantPaymentAccountPanel({ tenantId, tenantName, isOpen, onClos
   });
 
   const genLink = useMutation({
-    mutationFn: () => invoke("moov-onboarding-link", { tenant_id: tenantId }),
+    mutationFn: () => invoke("moov-onboarding-link", { 
+      tenant_id: tenantId,
+      return_url: window.location.origin + "/payments?tab=settings"
+    }),
     onSuccess: (r: any) => {
       const url = r?.url ?? r?.link ?? null;
       setLink(url);
       if (url) {
-        navigator.clipboard?.writeText(url).catch(() => {});
-        toast({ title: "Onboarding link copied", description: "Send it to the organization's admin." });
+        // Open in new tab automatically for a smoother "hosted" experience
+        window.open(url, '_blank', 'noopener,noreferrer');
+        toast({ 
+          title: "Onboarding started", 
+          description: "The onboarding form has opened in a new tab." 
+        });
       }
       refresh();
     },
