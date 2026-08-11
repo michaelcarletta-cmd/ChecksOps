@@ -5139,7 +5139,15 @@ function DetailRow({ label, value }: { label: string; value: string | null | und
   return (
     <div className="flex justify-between gap-3 text-sm">
       <span className="text-muted-foreground shrink-0">{label}</span>
-      <span className="font-medium text-right break-words min-w-0 flex-1">{value ?? "—"}</span>
+      <span className="font-medium text-right break-words min-w-0 flex-1">
+        {label === "Issue Date" && value && /^\d{4}-\d{2}-\d{2}$/.test(value)
+          ? (() => {
+              const [y, m, d] = value.split("-").map(Number);
+              return format(new Date(y, m - 1, d), "MMM d, yyyy");
+            })()
+          : (value ?? "—")}
+      </span>
+
     </div>
   );
 }
