@@ -1397,7 +1397,10 @@ export function ReviewDecisionPanel({
                     return;
                   }
                   /* Stale-date soft warning */
-                  const v = assessCheckValidity(effectiveCheck.issue_date, { staleThresholdDays: (effectiveCheck as any).expiration_days });
+                  const v = assessCheckValidity(effectiveCheck.issue_date, { 
+                    staleThresholdDays: (effectiveCheck as any).expiration_days,
+                    expirationThresholdDays: (effectiveCheck as any).expiration_days 
+                  });
                   if (
                     isAtRisk(v.risk) &&
                     depositPath !== "reissue_requested" &&

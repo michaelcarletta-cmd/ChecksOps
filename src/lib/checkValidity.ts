@@ -40,7 +40,7 @@ export function assessCheckValidity(
     warningWindowDays?: number;
     expirationThresholdDays?: number | null;
   } = {},
-) {
+): CheckValidityAssessment {
   const staleThresholdDays = options.staleThresholdDays ?? DEFAULT_STALE_DAYS;
   const expirationThresholdDays = options.expirationThresholdDays ?? DEFAULT_EXPIRED_DAYS;
   const warningWindowDays = options.warningWindowDays ?? DEFAULT_WARNING_WINDOW;
