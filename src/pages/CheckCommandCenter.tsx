@@ -4208,7 +4208,10 @@ function CheckDetailPanel({
 
         {/* Validity assessment — issue date age vs 180-day stale threshold */}
         {(() => {
-          const v = assessCheckValidity(check.issue_date, { staleThresholdDays: check.expiration_days });
+          const v = assessCheckValidity(check.issue_date, { 
+            staleThresholdDays: check.expiration_days,
+            expirationThresholdDays: check.expiration_days 
+          });
           if (v.risk === "ok" || v.risk === "unknown") return null;
           const tone =
             v.risk === "expired"

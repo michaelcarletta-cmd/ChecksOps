@@ -21,7 +21,7 @@ export interface CheckValidityAssessment {
 
 const DEFAULT_STALE_DAYS = 180;
 const DEFAULT_WARNING_WINDOW = 30;
-const EXPIRED_DAYS = 365;
+const DEFAULT_EXPIRED_DAYS = 365;
 
 const MS_PER_DAY = 86_400_000;
 
@@ -38,9 +38,11 @@ export function assessCheckValidity(
     referenceDate?: Date;
     staleThresholdDays?: number | null;
     warningWindowDays?: number;
+    expirationThresholdDays?: number | null;
   } = {},
 ): CheckValidityAssessment {
   const staleThresholdDays = options.staleThresholdDays ?? DEFAULT_STALE_DAYS;
+  const expirationThresholdDays = options.expirationThresholdDays ?? DEFAULT_EXPIRED_DAYS;
   const warningWindowDays = options.warningWindowDays ?? DEFAULT_WARNING_WINDOW;
   const reference = options.referenceDate ?? new Date();
 
@@ -84,7 +86,7 @@ export function assessCheckValidity(
     };
   }
 
-  if (days >= EXPIRED_DAYS) {
+  if (days >= expirationThresholdDays) {
     return {
       risk: "expired",
       daysSinceIssue: days,

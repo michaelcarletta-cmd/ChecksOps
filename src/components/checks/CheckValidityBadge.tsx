@@ -31,7 +31,10 @@ export function CheckValidityBadge({
   className = "",
   size = "xs",
 }: CheckValidityBadgeProps) {
-  const assessment = assessCheckValidity(issueDate, { staleThresholdDays: expirationDays });
+  const assessment = assessCheckValidity(issueDate, { 
+    staleThresholdDays: expirationDays,
+    expirationThresholdDays: expirationDays 
+  });
 
   if (hideWhenSafe && (assessment.risk === "ok" || assessment.risk === "unknown")) {
     return null;
