@@ -3467,11 +3467,11 @@ function CheckDetailPanel({
         .from("claim-files")
         .createSignedUrl(sourcePath, 3600);
       
-      const version = new Date(check?.updated_at || Date.now()).getTime();
+      const version2 = new Date(check?.updated_at || Date.now()).getTime();
       return data?.signedUrl
-        ? { url: `${data.signedUrl}&v=${version}`, path: sourcePath }
+        ? { url: `${data.signedUrl}&v=${version2}`, path: sourcePath }
         : backImageUrl
-          ? { url: `${backImageUrl}&v=${version}`, path: currentPath }
+          ? { url: `${backImageUrl}&v=${version2}`, path: currentPath }
           : null;
     },
   });
