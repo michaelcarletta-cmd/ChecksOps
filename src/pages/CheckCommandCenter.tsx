@@ -3037,6 +3037,7 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "needs_review", label: "Review" },
   { value: "endorsements_in_progress", label: "Endorsing" },
+  { value: "approved_for_deposit", label: "Ready for Deposit" },
   { value: "loss_draft_required", label: "Loss Draft" },
   { value: "reissue_requested", label: "Reissue" },
   { value: "voided", label: "Void" },
