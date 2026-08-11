@@ -18,7 +18,7 @@ export function RevenueSummary() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("id, amount, status, deposited_at, check_number, carrier_name, claim_id, claim_number")
+        .select("id, amount, status, deposited_at, check_number, carrier_name, claim_id, freedom_claim_number")
         .eq("tenant_id", tenant!.id)
         .in("status", ["deposited", "funds_released"])
         .order("deposited_at", { ascending: false });
@@ -148,7 +148,7 @@ export function RevenueSummary() {
                         {check.deposited_at ? format(new Date(check.deposited_at), "MMM d, yyyy") : "—"}
                       </td>
                       <td className="p-3">
-                        <p className="font-medium text-xs">{check.claim_number || check.carrier_name || "—"}</p>
+                        <p className="font-medium text-xs">{check.freedom_claim_number || check.carrier_name || "—"}</p>
                         {check.carrier_name && <p className="text-[10px] text-muted-foreground">{check.carrier_name}</p>}
                       </td>
                       <td className="p-3 text-xs font-mono">{check.check_number || "—"}</td>
