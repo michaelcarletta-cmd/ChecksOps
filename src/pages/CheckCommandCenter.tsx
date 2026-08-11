@@ -3402,22 +3402,24 @@ function CheckDetailPanel({
       const explicitOriginalRaw = toStorageObjectPath(
         ((check as any)?.back_image_original_path as string | null) ?? null,
       );
-      // Only trust the pristine pointer when it is not itself a composite and
-      // when the current back is either that same image or a composite derived
-      // from it. If the back was re-uploaded (a brand new, non-composite file),
-      // that upload is the real original — using the stale pointer would drop
-      // whatever was on the new scan (e.g. a mortgage endorsement).
+
+      // Cache-busting for re-uploads
+      const version = new Date(check?.updated_at || Date.now()).getTime();
+
+      // Priority: use explicit original path if it's not a composite.
+      // If back_image_path was re-uploaded (non-composite), that's our new base.
       const explicitOriginal =
         explicitOriginalRaw &&
         !looksComposited(explicitOriginalRaw) &&
         (looksComposited(currentBackPath) || currentBackPath === explicitOriginalRaw)
           ? explicitOriginalRaw
           : null;
+
       if (explicitOriginal) {
         const { data } = await supabase.storage
           .from("claim-files")
           .createSignedUrl(explicitOriginal, 3600);
-        if (data?.signedUrl) return { url: data.signedUrl, path: explicitOriginal };
+        if (data?.signedUrl) return { url: `${data.signedUrl}&v=${version}`, path: explicitOriginal };
       }
 
 
@@ -3464,10 +3466,12 @@ function CheckDetailPanel({
       const { data } = await supabase.storage
         .from("claim-files")
         .createSignedUrl(sourcePath, 3600);
+      
+      const version2 = new Date(check?.updated_at || Date.now()).getTime();
       return data?.signedUrl
-        ? { url: data.signedUrl, path: sourcePath }
+        ? { url: `${data.signedUrl}&v=${version2}`, path: sourcePath }
         : backImageUrl
-          ? { url: backImageUrl, path: currentPath }
+          ? { url: `${backImageUrl}&v=${version2}`, path: currentPath }
           : null;
     },
   });
