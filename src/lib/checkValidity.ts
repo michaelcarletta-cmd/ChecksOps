@@ -58,7 +58,22 @@ export function assessCheckValidity(
     };
   }
 
-  const issued = typeof issueDate === "string" ? new Date(issueDate) : issueDate;
+  // Fix for off-by-one date display issues: when a date string like "2026-03-25" 
+  // is passed, new Date() treats it as midnight UTC. In local timezones (like EST),
+  // this becomes the previous day (e.g., 2026-03-24 19:00:00).
+  // We force the parsed date to be treated as local midnight to match user input.
+  let issued: Date;
+  if (typeof issueDate === "string") {
+    const [year, month, day] = issueDate.split("-").map(Number);
+    if (year && month && day) {
+      issued = new Date(year, month - 1, day);
+    } else {
+      issued = new Date(issueDate);
+    }
+  } else {
+    issued = issueDate;
+  }
+
   if (Number.isNaN(issued.getTime())) {
     return {
       risk: "unknown",

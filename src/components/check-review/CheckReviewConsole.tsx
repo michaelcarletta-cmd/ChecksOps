@@ -1,4 +1,6 @@
 import { Fragment, useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { format } from "date-fns";
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -998,7 +1000,10 @@ export function ReviewDecisionPanel({
         )}
 
         {(() => {
-          const v = assessCheckValidity(check.issue_date);
+          const v = assessCheckValidity(check.issue_date, {
+            expirationThresholdDays: (check as any).expiration_days
+          });
+
           if (v.risk === "ok" || v.risk === "unknown") return null;
           const tone =
             v.risk === "expired"
@@ -1107,7 +1112,19 @@ export function ReviewDecisionPanel({
                 <p className="text-xs text-muted-foreground">Payee Line</p>
                 <p className="text-xs break-words">{check.payee_line || "—"}</p>
               </div>
+              {check.issue_date && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Issue Date</p>
+                  <p className="font-medium">
+                    {(() => {
+                      const [y, m, d] = check.issue_date.split("-").map(Number);
+                      return format(new Date(y, m - 1, d), "MMM d, yyyy");
+                    })()}
+                  </p>
+                </div>
+              )}
             </div>
+
           )}
 
           <div className="pt-1 space-y-2">
