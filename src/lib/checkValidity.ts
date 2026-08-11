@@ -21,7 +21,7 @@ export interface CheckValidityAssessment {
 
 const DEFAULT_STALE_DAYS = 180;
 const DEFAULT_WARNING_WINDOW = 30;
-const EXPIRED_DAYS = 1095; // 3 years - increasing to avoid false positives for recently updated dates
+const EXPIRED_DAYS = 365;
 
 const MS_PER_DAY = 86_400_000;
 
@@ -88,11 +88,11 @@ export function assessCheckValidity(
     return {
       risk: "expired",
       daysSinceIssue: days,
-      daysUntilStale: daysUntilStale,
+      daysUntilStale,
       staleThresholdDays,
       warningWindowDays,
       label: `Likely expired · ${days}d old`,
-      detail: `Check is ${days} days old (over 3 years). Most banks will return it. Request a reissue.`,
+      detail: `Check is ${days} days old (over 1 year). Most banks will return it. Request a reissue.`,
     };
   }
 
