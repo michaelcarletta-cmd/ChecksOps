@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths } from "date-fns";
-import { Download, Search } from "lucide-react";
+import { Download, Search, TrendingUp, TrendingDown, DollarSign } from "lucide-react";
 
 const STATUS_COLORS: Record<string, string> = {
   submitted: "text-blue-600 border-blue-500/30 bg-blue-500/10",
@@ -183,6 +183,44 @@ export function PaymentLedger() {
 
   return (
     <div className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="bg-emerald-500/5 border-emerald-500/10">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider font-semibold text-emerald-600/80">Disbursements (Settled)</p>
+              <p className="text-xl font-bold mt-0.5">${stats.totalOut.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
+            </div>
+            <div className="h-8 w-8 rounded-full bg-emerald-500/10 flex items-center justify-center">
+              <TrendingDown className="h-4 w-4 text-emerald-600" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-blue-500/5 border-blue-500/10">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider font-semibold text-blue-600/80">Recipients</p>
+              <p className="text-xl font-bold mt-0.5">{stats.uniqueRecipients}</p>
+            </div>
+            <div className="h-8 w-8 rounded-full bg-blue-500/10 flex items-center justify-center">
+              <Search className="h-4 w-4 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-purple-500/5 border-purple-500/10">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider font-semibold text-purple-600/80">Total Payments</p>
+              <p className="text-xl font-bold mt-0.5">{stats.count}</p>
+            </div>
+            <div className="h-8 w-8 rounded-full bg-purple-500/10 flex items-center justify-center">
+              <DollarSign className="h-4 w-4 text-purple-600" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
 
       <Card>
         <CardContent className="pt-3 pb-3">

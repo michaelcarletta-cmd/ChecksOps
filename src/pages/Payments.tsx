@@ -2,11 +2,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PaymentLedger } from "@/components/ledger/PaymentLedger";
 import { RecipientReport } from "@/components/ledger/RecipientReport";
 import { TaxSummary } from "@/components/ledger/TaxSummary";
+import { RevenueSummary } from "@/components/ledger/RevenueSummary";
 import { PayrollTab } from "@/pages/payments/PayrollTab";
 import { PaymentSettingsTab } from "@/pages/payments/PaymentSettingsTab";
 import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 import { useAuth } from "@/hooks/useAuth";
-import { Receipt, FileText, Users, Wallet, Settings2 } from "lucide-react";
+import { Receipt, FileText, Users, Wallet, Settings2, Landmark } from "lucide-react";
 
 export default function Payments() {
   const { userRole } = useAuth();
@@ -19,7 +20,7 @@ export default function Payments() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Payments</h1>
         <p className="text-sm text-muted-foreground">
-          Track all outbound payments to vendors, insureds, contractors, subcontractors, and suppliers
+          Track all incoming revenue and outbound payments to vendors, insureds, and partners
         </p>
       </div>
 
@@ -28,6 +29,10 @@ export default function Payments() {
           <TabsTrigger value="ledger" className="gap-2">
             <Receipt className="h-4 w-4" />
             Payment History
+          </TabsTrigger>
+          <TabsTrigger value="revenue" className="gap-2">
+            <Landmark className="h-4 w-4" />
+            Revenue & Profit
           </TabsTrigger>
           <TabsTrigger value="recipients" className="gap-2">
             <Users className="h-4 w-4" />
@@ -52,6 +57,9 @@ export default function Payments() {
         </TabsList>
         <TabsContent value="ledger">
           <PaymentLedger />
+        </TabsContent>
+        <TabsContent value="revenue">
+          <RevenueSummary />
         </TabsContent>
         <TabsContent value="recipients">
           <RecipientReport />
