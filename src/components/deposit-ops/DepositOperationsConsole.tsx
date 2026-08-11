@@ -794,7 +794,18 @@ function DepositItemDetail({
                   <Badge variant="outline" className="ml-2 text-[9px] border-amber-500/40 text-amber-500">CASH JOB</Badge>
                 )}
               </div>
-              <div><span className="text-muted-foreground">Issue Date</span><span className="ml-2">{checkData.issue_date ? format(new Date(checkData.issue_date), "MMM d, yyyy") : "—"}</span></div>
+              <div>
+                <span className="text-muted-foreground">Issue Date</span>
+                <span className="ml-2">
+                  {checkData.issue_date 
+                    ? (() => {
+                        const [y, m, d] = checkData.issue_date.split("-").map(Number);
+                        return format(new Date(y, m - 1, d), "MMM d, yyyy");
+                      })() 
+                    : "—"}
+                </span>
+              </div>
+
               <div className="col-span-2"><span className="text-muted-foreground">Payee Line</span><span className="ml-2">{checkData.payee_line ?? "—"}</span></div>
               {checkData.routing_number && (
                 <div><span className="text-muted-foreground">Routing</span><span className="ml-2 font-mono">{checkData.routing_number}</span></div>
