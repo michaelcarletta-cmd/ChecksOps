@@ -94,7 +94,7 @@ export function assessCheckValidity(
       staleThresholdDays,
       warningWindowDays,
       label: `Likely expired · ${days}d old`,
-      detail: `Check is ${days} days old (over 1 year). Most banks will return it. Request a reissue.`,
+      detail: `Check is ${days} days old (over ${expirationThresholdDays} days). Most banks will return it. Request a reissue.`,
     };
   }
 
