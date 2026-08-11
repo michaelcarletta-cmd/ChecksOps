@@ -1000,7 +1000,10 @@ export function ReviewDecisionPanel({
         )}
 
         {(() => {
-          const v = assessCheckValidity(check.issue_date);
+          const v = assessCheckValidity(check.issue_date, {
+            expirationThresholdDays: (check as any).expiration_days
+          });
+
           if (v.risk === "ok" || v.risk === "unknown") return null;
           const tone =
             v.risk === "expired"
