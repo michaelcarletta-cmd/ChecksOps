@@ -1107,7 +1107,19 @@ export function ReviewDecisionPanel({
                 <p className="text-xs text-muted-foreground">Payee Line</p>
                 <p className="text-xs break-words">{check.payee_line || "—"}</p>
               </div>
+              {check.issue_date && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Issue Date</p>
+                  <p className="font-medium">
+                    {(() => {
+                      const [y, m, d] = check.issue_date.split("-").map(Number);
+                      return format(new Date(y, m - 1, d), "MMM d, yyyy");
+                    })()}
+                  </p>
+                </div>
+              )}
             </div>
+
           )}
 
           <div className="pt-1 space-y-2">
