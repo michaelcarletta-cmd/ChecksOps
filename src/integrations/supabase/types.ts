@@ -21754,6 +21754,74 @@ export type Database = {
         }
         Relationships: []
       }
+      wallet_funding_queue: {
+        Row: {
+          amount_cents: number
+          attempts: number
+          check_intake_item_id: string | null
+          checkalt_deposit_id: string | null
+          created_at: string
+          fund_cents: number
+          funded_at: string | null
+          holdback_cents: number
+          id: string
+          last_error: string | null
+          scheduled_for: string
+          status: string
+          tenant_id: string
+          transfer_id: string | null
+          trigger_source: string
+          updated_at: string
+          wallet_type: string
+        }
+        Insert: {
+          amount_cents: number
+          attempts?: number
+          check_intake_item_id?: string | null
+          checkalt_deposit_id?: string | null
+          created_at?: string
+          fund_cents: number
+          funded_at?: string | null
+          holdback_cents?: number
+          id?: string
+          last_error?: string | null
+          scheduled_for?: string
+          status?: string
+          tenant_id: string
+          transfer_id?: string | null
+          trigger_source?: string
+          updated_at?: string
+          wallet_type?: string
+        }
+        Update: {
+          amount_cents?: number
+          attempts?: number
+          check_intake_item_id?: string | null
+          checkalt_deposit_id?: string | null
+          created_at?: string
+          fund_cents?: number
+          funded_at?: string | null
+          holdback_cents?: number
+          id?: string
+          last_error?: string | null
+          scheduled_for?: string
+          status?: string
+          tenant_id?: string
+          transfer_id?: string | null
+          trigger_source?: string
+          updated_at?: string
+          wallet_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_funding_queue_checkalt_deposit_id_fkey"
+            columns: ["checkalt_deposit_id"]
+            isOneToOne: false
+            referencedRelation: "checkalt_deposits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workflow_automation_rules: {
         Row: {
           action_config: Json | null
