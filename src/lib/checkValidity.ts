@@ -88,11 +88,11 @@ export function assessCheckValidity(
     return {
       risk: "expired",
       daysSinceIssue: days,
-      daysUntilStale,
+      daysUntilStale: daysUntilStale,
       staleThresholdDays,
       warningWindowDays,
       label: `Likely expired · ${days}d old`,
-      detail: `Check is ${days} days old (over 1 year). Most banks will return it. Request a reissue.`,
+      detail: `Check is ${days} days old (over 3 years). Most banks will return it. Request a reissue.`,
     };
   }
 
