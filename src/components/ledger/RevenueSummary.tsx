@@ -1,11 +1,13 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, DollarSign, Wallet } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, Wallet, ArrowRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { format } from "date-fns";
+import { Button } from "@/components/ui/button";
 
 export function RevenueSummary() {
   const { tenant } = useTenant();
@@ -16,9 +18,10 @@ export function RevenueSummary() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("amount, status, deposited_at")
+        .select("id, amount, status, deposited_at, check_number, carrier_name, claim_id, claim_number")
         .eq("tenant_id", tenant!.id)
-        .in("status", ["deposited", "funds_released"]);
+        .in("status", ["deposited", "funds_released"])
+        .order("deposited_at", { ascending: false });
 
       if (error) throw error;
       return data ?? [];
@@ -116,17 +119,52 @@ export function RevenueSummary() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
-            <Wallet className="h-4 w-4" /> Revenue & Profit Analysis
+            <Wallet className="h-4 w-4" /> Revenue Sources
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="h-[200px] flex items-center justify-center border-2 border-dashed rounded-lg bg-muted/30">
-            <div className="text-center">
-              <p className="text-sm text-muted-foreground">Detailed chart view coming soon</p>
-              <p className="text-[10px] text-muted-foreground mt-1">Comparing monthly inflow vs outflow</p>
-            </div>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-xs text-muted-foreground">
+                  <th className="text-left p-3 font-medium">Date Deposited</th>
+                  <th className="text-left p-3 font-medium">Claim / Carrier</th>
+                  <th className="text-left p-3 font-medium">Check #</th>
+                  <th className="text-right p-3 font-medium">Amount</th>
+                  <th className="text-right p-3 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {revenueData?.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-muted-foreground italic">No deposited checks found.</td>
+                  </tr>
+                ) : (
+                  revenueData?.map((check) => (
+                    <tr key={check.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
+                        {check.deposited_at ? format(new Date(check.deposited_at), "MMM d, yyyy") : "—"}
+                      </td>
+                      <td className="p-3">
+                        <p className="font-medium text-xs">{check.claim_number || check.carrier_name || "—"}</p>
+                        {check.carrier_name && <p className="text-[10px] text-muted-foreground">{check.carrier_name}</p>}
+                      </td>
+                      <td className="p-3 text-xs font-mono">{check.check_number || "—"}</td>
+                      <td className="p-3 text-right font-medium text-sm text-emerald-600">
+                        +${Number(check.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-3 text-right">
+                        <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                          {check.status === "deposited" ? "Deposited" : "Released"}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </CardContent>
       </Card>
