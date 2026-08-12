@@ -26,6 +26,7 @@ const buttonVariants = cva(
       variant: {
         default: defaultButtonStyles,
         destructive: destructiveButtonStyles,
+        success: successButtonStyles,
         outline: darkButtonStyles,
         secondary: darkButtonStyles,
         ghost: ghostButtonStyles,
