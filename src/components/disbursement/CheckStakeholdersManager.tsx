@@ -40,7 +40,14 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("id, claim_id")
+        .select(`
+          id, 
+          claim_id,
+          claims:claim_id (
+            id,
+            policyholder_name
+          )
+        `)
         .eq("id", checkIntakeItemId)
         .maybeSingle();
       if (error) throw error;
