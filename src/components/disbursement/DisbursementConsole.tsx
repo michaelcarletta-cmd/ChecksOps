@@ -681,6 +681,7 @@ export function DisbursementConsole({
           </div>
         )}
         <Button
+          variant="success"
           className="w-full h-auto min-h-10 py-2 whitespace-normal text-center text-xs sm:text-sm leading-snug"
           onClick={() => submitBatch.mutate()}
           disabled={
