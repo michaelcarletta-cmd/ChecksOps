@@ -162,6 +162,11 @@ All colors MUST be HSL.
 }
 
 @layer utilities {
+  /* Green/white gradient for deposit and payment CTAs */
+  .bg-gradient-success {
+    background: var(--gradient-success);
+  }
+
   /* Hide scrollbar for Chrome, Safari and Opera */
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
