@@ -322,12 +322,12 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
           {step === "form" ? (
             <>
               <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button disabled={!canContinue} onClick={() => setStep("confirm")}>Continue</Button>
+              <Button variant="success" disabled={!canContinue} onClick={() => setStep("confirm")}>Continue</Button>
             </>
           ) : (
             <>
               <Button variant="ghost" onClick={() => setStep("form")} disabled={runMutation.isPending}>Back</Button>
-              <Button onClick={() => runMutation.mutate()} disabled={runMutation.isPending}>
+              <Button variant="success" onClick={() => runMutation.mutate()} disabled={runMutation.isPending}>
                 {runMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Yes, send ${total.toFixed(2)}
               </Button>
