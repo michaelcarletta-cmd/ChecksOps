@@ -19,7 +19,7 @@ import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibi
 type Speed = "next_day" | "same_day";
 
 // Moov pricing — same schedule used by the claim-check disbursement console.
-const SPEED_FEES: Record<Speed, number> = { next_day: 0.65, same_day: 0.90 };
+const SPEED_FEES: Record<Speed, number> = { next_day: 0.75, same_day: 1.00 };
 const SPEED_LABELS: Record<Speed, string> = { next_day: "Next Day", same_day: "Same Day" };
 
 interface Props {
