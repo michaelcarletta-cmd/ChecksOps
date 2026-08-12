@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -6,8 +6,9 @@ import { useTenant } from "@/contexts/TenantContext";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, X, Users, Handshake, ShieldCheck, MailCheck, Lock, Home, Link2, Loader2 } from "lucide-react";
+import { Plus, X, Users, Handshake, ShieldCheck, MailCheck, Lock, Home, Link2, Loader2, Search } from "lucide-react";
 import { VERIFICATION_BADGE_CLASS, VERIFICATION_LABEL, type VerificationStatus } from "@/lib/banking";
 import { isMoovAllowedForTenant } from "@/lib/payments/featureFlags";
 import { SendHomeownerBankLinkDialog } from "./SendHomeownerBankLinkDialog";
@@ -31,6 +32,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
   const qc = useQueryClient();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [homeownerDialogOpen, setHomeownerDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: checkMeta } = useQuery({
     queryKey: ["check-meta-for-stakeholders", checkIntakeItemId],
@@ -38,7 +40,14 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("id, claim_id")
+        .select(`
+          id, 
+          claim_id,
+          claims:claim_id (
+            id,
+            policyholder_name
+          )
+        `)
         .eq("id", checkIntakeItemId)
         .maybeSingle();
       if (error) throw error;
@@ -80,7 +89,29 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
 
   const activeCheckStakeholders = checkStakeholders.filter((s: any) => s.stakeholder_accounts?.is_active !== false);
   const selectedIds = new Set(activeCheckStakeholders.map((s: any) => s.stakeholder_account_id));
-  const availableToAdd = allAccounts.filter((a: any) => !selectedIds.has(a.id));
+  
+  const currentClaimHomeowner = (checkMeta?.claims as any)?.policyholder_name;
+
+  const availableToAdd = useMemo(() => {
+    const query = searchQuery.toLowerCase().trim();
+    
+    return allAccounts.filter((a: any) => {
+      if (selectedIds.has(a.id)) return false;
+
+      const holderName = (a.custname || a.homeowner_name || a.nickname || "").toLowerCase();
+      const matchesSearch = !query || holderName.includes(query);
+      
+      // If it's a homeowner account, it MUST match the current claim's homeowner
+      if (a.homeowner_name) {
+        const isCurrentOwner = currentClaimHomeowner && 
+          a.homeowner_name.toLowerCase().trim() === currentClaimHomeowner.toLowerCase().trim();
+        return matchesSearch && isCurrentOwner;
+      }
+      
+      // Otherwise it's a regular stakeholder (vendor, contractor, etc.) from settings
+      return matchesSearch;
+    });
+  }, [allAccounts, selectedIds, searchQuery, currentClaimHomeowner]);
 
   const addMut = useMutation({
     mutationFn: async (accountId: string) => {
@@ -171,38 +202,56 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
           >
             <Home className="h-3 w-3 mr-1" /> Bank link
           </Button>
-          <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+          <Popover open={pickerOpen} onOpenChange={(open) => {
+            setPickerOpen(open);
+            if (!open) setSearchQuery("");
+          }}>
             <PopoverTrigger asChild>
-              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={availableToAdd.length === 0}>
+              <Button size="sm" variant="outline" className="h-7 text-xs">
                 <Plus className="h-3 w-3 mr-1" /> Add
               </Button>
             </PopoverTrigger>
           <PopoverContent className="w-72 p-2" align="end">
-            {availableToAdd.length === 0 ? (
-              <p className="text-xs text-muted-foreground p-2">All your accounts are already added.</p>
-            ) : (
-              <div className="space-y-1 max-h-64 overflow-y-auto">
-                {availableToAdd.map((a: any) => {
-                  const holder = a.custname || a.homeowner_name || a.nickname;
-                  return (
-                    <button
-                      key={a.id}
-                      className="w-full text-left p-2 rounded hover:bg-accent text-xs flex items-center justify-between"
-                      onClick={() => addMut.mutate(a.id)}
-                      disabled={addMut.isPending}
-                    >
-                      <span className="min-w-0">
-                        <span className="font-medium block truncate">{holder}</span>
-                        <span className="text-muted-foreground text-[10px]">
-                          Payment account connected
-                        </span>
-                      </span>
-                      <Badge variant="outline" className="text-[9px] ml-2 shrink-0">{TYPE_LABELS[a.account_type] ?? a.account_type}</Badge>
-                    </button>
-                  );
-                })}
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Search stakeholders..."
+                  className="h-8 pl-8 text-xs"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  autoFocus
+                />
               </div>
-            )}
+
+              {availableToAdd.length === 0 ? (
+                <p className="text-xs text-muted-foreground p-2 text-center">
+                  {searchQuery ? "No matching stakeholders found." : "All your accounts are already added."}
+                </p>
+              ) : (
+                <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
+                  {availableToAdd.map((a: any) => {
+                    const holder = a.custname || a.homeowner_name || a.nickname;
+                    return (
+                      <button
+                        key={a.id}
+                        className="w-full text-left p-2 rounded hover:bg-accent text-xs flex items-center justify-between group transition-colors"
+                        onClick={() => addMut.mutate(a.id)}
+                        disabled={addMut.isPending}
+                      >
+                        <span className="min-w-0">
+                          <span className="font-medium block truncate group-hover:text-accent-foreground">{holder}</span>
+                          <span className="text-muted-foreground text-[10px]">
+                            Payment account connected
+                          </span>
+                        </span>
+                        <Badge variant="outline" className="text-[9px] ml-2 shrink-0">{TYPE_LABELS[a.account_type] ?? a.account_type}</Badge>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </PopoverContent>
         </Popover>
         </div>
