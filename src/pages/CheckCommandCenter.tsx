@@ -4525,7 +4525,8 @@ function CheckDetailPanel({
                           checkAltEnabled ? (
                             <Button
                               size="sm"
-                              className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                              variant="success"
+                              className="w-full mt-1"
                               disabled={depositingWithCheckAlt}
                               onClick={handleDepositWithCheckAlt}
                             >
@@ -4533,10 +4534,11 @@ function CheckDetailPanel({
                               {depositingWithCheckAlt ? "Depositing..." : caRejected ? "Resubmit Deposit" : "Deposit Check"}
                             </Button>
                           ) : (
-                      <Button
-                        size="sm"
-                        className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                        disabled={openingDepositView}
+                       <Button
+                         size="sm"
+                         variant="success"
+                         className="w-full mt-1"
+                         disabled={openingDepositView}
                         onClick={async () => {
                           setOpeningDepositView(true);
                           try {
