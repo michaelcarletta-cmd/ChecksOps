@@ -16,6 +16,9 @@ const ghostButtonStyles =
 const destructiveButtonStyles =
   "!border !border-[hsl(var(--destructive))] !bg-[hsl(var(--destructive))] !text-[hsl(var(--destructive-foreground))] hover:opacity-90";
 
+const successButtonStyles =
+  "!border !border-[hsl(var(--success))] !bg-[var(--gradient-success)] !text-[hsl(var(--success-foreground))] hover:opacity-90 shadow-[0_4px_14px_-4px_hsl(var(--success)/0.4)]";
+
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
@@ -23,6 +26,7 @@ const buttonVariants = cva(
       variant: {
         default: defaultButtonStyles,
         destructive: destructiveButtonStyles,
+        success: successButtonStyles,
         outline: darkButtonStyles,
         secondary: darkButtonStyles,
         ghost: ghostButtonStyles,

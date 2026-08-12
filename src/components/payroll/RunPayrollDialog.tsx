@@ -266,17 +266,24 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
                 {([
                   { v: "next_day" as Speed, Icon: Clock, cls: "" },
                   { v: "same_day" as Speed, Icon: Zap, cls: "text-blue-500" },
-                ]).map(({ v, Icon, cls }) => (
-                  <label
-                    key={v}
-                    className="flex items-center gap-2 rounded-md border border-border p-2 cursor-pointer hover:bg-accent"
-                  >
-                    <RadioGroupItem value={v} id={`speed-${v}`} />
-                    <Icon className={`h-4 w-4 ${cls}`} />
-                    <span className="text-sm font-medium">{SPEED_LABELS[v]}</span>
-                    <span className="ml-auto text-xs text-muted-foreground">Fee ${SPEED_FEES[v].toFixed(2)}</span>
-                  </label>
-                ))}
+                ]).map(({ v, Icon, cls }) => {
+                  const checked = speed === v;
+                  return (
+                    <label
+                      key={v}
+                      className={`flex items-center gap-2 rounded-md border p-2 cursor-pointer transition-colors ${
+                        checked
+                          ? "bg-gradient-success border-[hsl(var(--success))] text-[hsl(var(--success-foreground))] shadow-[0_4px_14px_-4px_hsl(var(--success)/0.4)]"
+                          : "border-border hover:bg-accent"
+                      }`}
+                    >
+                      <RadioGroupItem value={v} id={`speed-${v}`} />
+                      <Icon className={`h-4 w-4 ${checked ? "" : cls}`} />
+                      <span className="text-sm font-medium">{SPEED_LABELS[v]}</span>
+                      <span className={`ml-auto text-xs ${checked ? "text-[hsl(var(--success-foreground)/0.9)]" : "text-muted-foreground"}`}>Fee ${SPEED_FEES[v].toFixed(2)}</span>
+                    </label>
+                  );
+                })}
               </RadioGroup>
             </div>
 
@@ -315,12 +322,12 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
           {step === "form" ? (
             <>
               <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button disabled={!canContinue} onClick={() => setStep("confirm")}>Continue</Button>
+              <Button variant="success" disabled={!canContinue} onClick={() => setStep("confirm")}>Continue</Button>
             </>
           ) : (
             <>
               <Button variant="ghost" onClick={() => setStep("form")} disabled={runMutation.isPending}>Back</Button>
-              <Button onClick={() => runMutation.mutate()} disabled={runMutation.isPending}>
+              <Button variant="success" onClick={() => runMutation.mutate()} disabled={runMutation.isPending}>
                 {runMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Yes, send ${total.toFixed(2)}
               </Button>

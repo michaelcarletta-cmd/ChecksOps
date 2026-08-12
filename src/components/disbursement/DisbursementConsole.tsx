@@ -514,13 +514,15 @@ export function DisbursementConsole({
                     e.preventDefault();
                     setDeliverySpeed(value as any);
                   }}
-                  className={`flex flex-col items-center justify-between rounded-md border-2 bg-popover p-2 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors ${
-                    checked ? "border-primary" : "border-muted"
+                  className={`flex flex-col items-center justify-between rounded-md border-2 p-2 cursor-pointer transition-colors ${
+                    checked
+                      ? "bg-gradient-success border-[hsl(var(--success))] text-[hsl(var(--success-foreground))] shadow-[0_4px_14px_-4px_hsl(var(--success)/0.4)]"
+                      : "bg-popover border-muted hover:bg-accent hover:text-accent-foreground"
                   }`}
                 >
-                  <Icon className={`mb-1 h-4 w-4 ${iconClass}`} />
+                  <Icon className={`mb-1 h-4 w-4 ${checked ? "" : iconClass}`} />
                   <span className="text-[11px] font-semibold">{label}</span>
-                  <span className="text-[10px] text-muted-foreground">${fee.toFixed(2)}</span>
+                  <span className={`text-[10px] ${checked ? "text-[hsl(var(--success-foreground)/0.9)]" : "text-muted-foreground"}`}>${fee.toFixed(2)}</span>
                 </button>
               );
             })}
@@ -679,6 +681,7 @@ export function DisbursementConsole({
           </div>
         )}
         <Button
+          variant="success"
           className="w-full h-auto min-h-10 py-2 whitespace-normal text-center text-xs sm:text-sm leading-snug"
           onClick={() => submitBatch.mutate()}
           disabled={

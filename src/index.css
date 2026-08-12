@@ -60,6 +60,9 @@ All colors MUST be HSL.
     --chart-4: 38 92% 58%;
     --chart-5: 0 72% 51%;
 
+    /* Green/white gradient for primary deposit & payment CTAs */
+    --gradient-success: linear-gradient(135deg, hsl(var(--success)) 0%, hsl(var(--success)) 55%, hsl(var(--primary-foreground)) 100%);
+
     /* Shared button tokens */
     --button-light-bg: 220 19% 95%;
     --button-light-hover: 220 20% 90%;
@@ -159,6 +162,11 @@ All colors MUST be HSL.
 }
 
 @layer utilities {
+  /* Green/white gradient for deposit and payment CTAs */
+  .bg-gradient-success {
+    background: var(--gradient-success);
+  }
+
   /* Hide scrollbar for Chrome, Safari and Opera */
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
