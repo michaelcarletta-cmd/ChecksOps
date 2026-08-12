@@ -89,7 +89,29 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
 
   const activeCheckStakeholders = checkStakeholders.filter((s: any) => s.stakeholder_accounts?.is_active !== false);
   const selectedIds = new Set(activeCheckStakeholders.map((s: any) => s.stakeholder_account_id));
-  const availableToAdd = allAccounts.filter((a: any) => !selectedIds.has(a.id));
+  
+  const currentClaimHomeowner = (checkMeta?.claims as any)?.policyholder_name;
+
+  const availableToAdd = useMemo(() => {
+    const query = searchQuery.toLowerCase().trim();
+    
+    return allAccounts.filter((a: any) => {
+      if (selectedIds.has(a.id)) return false;
+
+      const holderName = (a.custname || a.homeowner_name || a.nickname || "").toLowerCase();
+      const matchesSearch = !query || holderName.includes(query);
+      
+      // If it's a homeowner account, it MUST match the current claim's homeowner
+      if (a.homeowner_name) {
+        const isCurrentOwner = currentClaimHomeowner && 
+          a.homeowner_name.toLowerCase().trim() === currentClaimHomeowner.toLowerCase().trim();
+        return matchesSearch && isCurrentOwner;
+      }
+      
+      // Otherwise it's a regular stakeholder (vendor, contractor, etc.) from settings
+      return matchesSearch;
+    });
+  }, [allAccounts, selectedIds, searchQuery, currentClaimHomeowner]);
 
   const addMut = useMutation({
     mutationFn: async (accountId: string) => {
