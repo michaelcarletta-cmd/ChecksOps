@@ -4168,10 +4168,7 @@ function CheckDetailPanel({
     ((endorsements.length > 0 && !allEndorsementsComplete) || check.status === "loss_draft_required");
 
 
-  const isFinalDepositImage =
-    check.status === "approved_for_deposit" ||
-    check.status === "deposit_ready" ||
-    check.status === "endorsements_complete";
+  const isFinalDepositImage = manuallyReadyForDeposit;
 
   const showWatermark = !isFinalDepositImage;
 
