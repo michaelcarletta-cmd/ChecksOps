@@ -4163,7 +4163,10 @@ function CheckDetailPanel({
       `${mortgageEndorsements.length} mortgage payee(s) routed to loss draft workflow`,
     );
   }
-  const isDepositBlocked = (endorsements.length > 0 && !allEndorsementsComplete) || check.status === "loss_draft_required";
+  const isDepositBlocked =
+    !manuallyReadyForDeposit &&
+    ((endorsements.length > 0 && !allEndorsementsComplete) || check.status === "loss_draft_required");
+
 
   const isFinalDepositImage =
     check.status === "approved_for_deposit" ||
