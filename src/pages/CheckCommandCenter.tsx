@@ -4130,10 +4130,19 @@ function CheckDetailPanel({
   const mortgageEndorsements = endorsements.filter(
     (e) => e.payee_type === "mortgage_company" && e.status === "manual_required",
   );
-  const allEndorsementsComplete = endorsements.length > 0 && endorsements.every(
+  // A check that has been manually advanced (admin override) to ready-for-deposit
+  // is treated as endorsement-complete: the operator has confirmed the physical
+  // check is good to deposit, so all deposit functions must stay available.
+  const manuallyReadyForDeposit =
+    check.status === "approved_for_deposit" ||
+    check.status === "deposit_ready" ||
+    check.status === "endorsements_complete" ||
+    check.check_stage === "ready_for_deposit";
+  const allEndorsementsComplete = manuallyReadyForDeposit || (endorsements.length > 0 && endorsements.every(
     (e) => e.status === "signed" || e.status === "waived" ||
       (e.payee_type === "mortgage_company" && e.status === "manual_required"),
-  );
+  ));
+
 
   // Build blocking reasons
   const blockingReasons: string[] = [];
@@ -4154,12 +4163,12 @@ function CheckDetailPanel({
       `${mortgageEndorsements.length} mortgage payee(s) routed to loss draft workflow`,
     );
   }
-  const isDepositBlocked = (endorsements.length > 0 && !allEndorsementsComplete) || check.status === "loss_draft_required";
+  const isDepositBlocked =
+    !manuallyReadyForDeposit &&
+    ((endorsements.length > 0 && !allEndorsementsComplete) || check.status === "loss_draft_required");
 
-  const isFinalDepositImage =
-    check.status === "approved_for_deposit" ||
-    check.status === "deposit_ready" ||
-    check.status === "endorsements_complete";
+
+  const isFinalDepositImage = manuallyReadyForDeposit;
 
   const showWatermark = !isFinalDepositImage;
 
