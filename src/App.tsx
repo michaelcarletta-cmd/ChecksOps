@@ -156,18 +156,20 @@ function isPublicTokenRoute(pathname: string): boolean {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <OfflineIndicator />
-      <BrowserRouter>
-        <AuthProvider>
-          <ThemeScope>
-            <AppRoutes />
-          </ThemeScope>
-        </AuthProvider>
-      </BrowserRouter>
-
+    <ThemeProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <OfflineIndicator />
+        <BrowserRouter>
+          <AuthProvider>
+            <ThemeScope>
+              <AppRoutes />
+            </ThemeScope>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 
