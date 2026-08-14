@@ -373,3 +373,9 @@ All colors MUST be HSL.
 .restoration-report pre > * {
   line-height: 1.6;
 }
+
+/* Light mode page backdrop */
+.light body,
+html.light body {
+  background-image: radial-gradient(circle at top center, hsl(69 32% 60% / 0.18) 0%, transparent 42%);
+}
