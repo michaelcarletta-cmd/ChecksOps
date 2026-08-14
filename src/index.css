@@ -74,7 +74,64 @@ All colors MUST be HSL.
     --button-dark-border: 220 15% 24%;
     --button-dark-foreground: 220 15% 90%;
   }
+
+  /* Light mode overrides — applied when `.light` is on <html> or a subtree */
+  .light {
+    --background: 220 30% 98%;
+    --foreground: 224 30% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 224 30% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 30% 12%;
+
+    --primary: 69 32% 29%;
+    --primary-foreground: 220 25% 98%;
+
+    --secondary: 220 18% 94%;
+    --secondary-foreground: 224 25% 18%;
+
+    --muted: 220 18% 95%;
+    --muted-foreground: 220 10% 40%;
+
+    --accent: 220 18% 92%;
+    --accent-foreground: 224 25% 18%;
+
+    --destructive: 0 72% 46%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 145 60% 34%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 44%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 220 16% 86%;
+    --input: 220 16% 88%;
+    --ring: 69 32% 29%;
+
+    --sidebar-background: 220 26% 96%;
+    --sidebar-foreground: 224 15% 30%;
+    --sidebar-primary: 69 32% 29%;
+    --sidebar-primary-foreground: 220 20% 98%;
+    --sidebar-accent: 220 18% 90%;
+    --sidebar-accent-foreground: 224 30% 12%;
+    --sidebar-border: 220 16% 86%;
+    --sidebar-ring: 69 32% 29%;
+
+    --button-light-bg: 0 0% 100%;
+    --button-light-hover: 220 20% 95%;
+    --button-light-border: 220 14% 84%;
+    --button-light-foreground: 224 30% 12%;
+
+    --button-dark-bg: 224 30% 14%;
+    --button-dark-hover: 224 30% 20%;
+    --button-dark-border: 220 15% 30%;
+    --button-dark-foreground: 220 20% 96%;
+  }
 }
+
 
 @layer base {
   * {
