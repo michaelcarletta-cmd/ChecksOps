@@ -4,6 +4,7 @@ import { ArrowLeft, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { TenantThemeProvider } from "@/components/white-label/TenantThemeProvider";
+import { ThemeScope } from "@/hooks/useTheme";
 import { WhiteLabelLogin } from "@/components/white-label/WhiteLabelLogin";
 import { WhiteLabelCheckCenter } from "@/components/white-label/WhiteLabelCheckCenter";
 import { WhiteLabelSettings } from "@/components/white-label/WhiteLabelSettings";
@@ -200,9 +201,9 @@ export default function WhiteLabelApp() {
   return (
     <TenantProvider slug={slug}>
       <TenantThemeProvider>
-        <div className="dark">
+        <ThemeScope>
           <WhiteLabelRoutes />
-        </div>
+        </ThemeScope>
       </TenantThemeProvider>
     </TenantProvider>
   );

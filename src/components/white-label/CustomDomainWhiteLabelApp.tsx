@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { TenantThemeProvider } from "@/components/white-label/TenantThemeProvider";
+import { ThemeScope } from "@/hooks/useTheme";
 import { WhiteLabelLogin } from "@/components/white-label/WhiteLabelLogin";
 import { WhiteLabelCheckCenter } from "@/components/white-label/WhiteLabelCheckCenter";
 import { WhiteLabelSettings } from "@/components/white-label/WhiteLabelSettings";
@@ -151,9 +152,9 @@ export function CustomDomainWhiteLabelApp({ slug }: { slug: string }) {
   return (
     <TenantProvider slug={slug}>
       <TenantThemeProvider>
-        <div className="dark">
+        <ThemeScope>
           <CustomDomainRoutes />
-        </div>
+        </ThemeScope>
       </TenantThemeProvider>
     </TenantProvider>
   );

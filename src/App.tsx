@@ -8,6 +8,8 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useCustomDomainTenant } from "./hooks/useCustomDomainTenant";
 import { CustomDomainWhiteLabelApp } from "./components/white-label/CustomDomainWhiteLabelApp";
 import { AuthProvider } from "./hooks/useAuth";
+import { ThemeProvider, ThemeScope } from "./hooks/useTheme";
+
 
 import { bootstrapEmbedContext } from "./lib/embedContext";
 
@@ -156,18 +158,20 @@ function isPublicTokenRoute(pathname: string): boolean {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <OfflineIndicator />
-      <BrowserRouter>
-        <AuthProvider>
-          <div className="dark">
-            <AppRoutes />
-          </div>
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
+    <ThemeProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <OfflineIndicator />
+        <BrowserRouter>
+          <AuthProvider>
+            <ThemeScope>
+              <AppRoutes />
+            </ThemeScope>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 
