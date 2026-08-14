@@ -162,12 +162,12 @@ const App = () => (
       <OfflineIndicator />
       <BrowserRouter>
         <AuthProvider>
-          <div className="dark">
+          <ThemeScope>
             <AppRoutes />
-          </div>
+          </ThemeScope>
         </AuthProvider>
       </BrowserRouter>
-    </TooltipProvider>
+
   </QueryClientProvider>
 );
 
