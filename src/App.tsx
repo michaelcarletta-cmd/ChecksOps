@@ -8,6 +8,8 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useCustomDomainTenant } from "./hooks/useCustomDomainTenant";
 import { CustomDomainWhiteLabelApp } from "./components/white-label/CustomDomainWhiteLabelApp";
 import { AuthProvider } from "./hooks/useAuth";
+import { ThemeProvider, ThemeScope } from "./hooks/useTheme";
+
 
 import { bootstrapEmbedContext } from "./lib/embedContext";
 
