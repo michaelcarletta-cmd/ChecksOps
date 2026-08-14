@@ -5,6 +5,7 @@ import { lazy, Suspense, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { LogOut, Settings, BadgeCheck, Banknote, Receipt, Hammer } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 
@@ -93,6 +94,7 @@ export function WhiteLabelCheckCenter() {
               </Link>
             </Button>
           )}
+          <ThemeToggle />
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleSignOut} title="Sign Out">
             <LogOut className="h-4 w-4" />
           </Button>
