@@ -235,7 +235,7 @@ const normalizeEndorsementStatus = (status?: string | null, signedAt?: string | 
 
 function mergeEndorsementSummaryRows(
   checkId: string,
-  endorsements: CheckEndorsementSummary[],
+  endorsements: (CheckEndorsementSummary & { created_at?: string })[],
   payees: CheckPayee[],
 ): CheckEndorsementSummary[] {
   if (payees.length === 0) return endorsements;
@@ -281,8 +281,8 @@ function mergeEndorsementSummaryRows(
   }
 
   // Final deduplication by name to ensure no duplicate rows appear in the UI
-  const best = new Map<string, CheckEndorsementSummary>();
-  const rank = (e: CheckEndorsementSummary) => {
+  const best = new Map<string, CheckEndorsementSummary & { created_at?: string }>();
+  const rank = (e: CheckEndorsementSummary & { created_at?: string }) => {
     const s = (e.status ?? "").toLowerCase();
     if (s === "signed" || !!e.signed_at) return 3;
     if (s === "waived") return 2;
@@ -292,7 +292,14 @@ function mergeEndorsementSummaryRows(
   for (const e of merged) {
     const key = normalizeEndorsementName(e.payee_name);
     const prev = best.get(key);
-    if (!prev || rank(e) > rank(prev)) best.set(key, e);
+    // Prefer higher rank, or earlier creation date for stability
+    if (!prev || rank(e) > rank(prev)) {
+      best.set(key, e);
+    } else if (rank(e) === rank(prev) && e.created_at && prev.created_at) {
+      if (new Date(e.created_at).getTime() < new Date(prev.created_at).getTime()) {
+        best.set(key, e);
+      }
+    }
   }
 
   return Array.from(best.values());
@@ -663,7 +670,7 @@ export default function CheckCommandCenter() {
         const [{ data: endorsementData, error: endorsementError }, { data: payeeData, error: payeeError }] = await Promise.all([
           supabase
             .from("check_endorsements")
-            .select("id, payee_name, payee_type, status, signature_image_url, signature_method, signed_at")
+            .select("id, payee_name, payee_type, status, signature_image_url, signature_method, signed_at, created_at")
             .eq("check_id", id),
           supabase
             .from("check_payees")
@@ -3606,7 +3613,7 @@ function CheckDetailPanel({
       const [{ data: endorsementData, error: endorsementError }, { data: payeeData, error: payeeError }] = await Promise.all([
         supabase
           .from("check_endorsements")
-          .select("id, payee_name, payee_type, status, signature_image_url, signature_method, signed_at")
+          .select("id, payee_name, payee_type, status, signature_image_url, signature_method, signed_at, created_at")
           .eq("check_id", checkId),
         supabase
           .from("check_payees")
