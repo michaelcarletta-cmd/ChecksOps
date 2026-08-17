@@ -437,28 +437,46 @@ export function CheckReviewQueue({
   // The earliest-created check keeps "original"; later ones are flagged duplicates.
   const duplicateInfo = useMemo(() => {
     const groups = new Map<string, ReviewCheck[]>();
+    const claimLookup = new Map(linkedClaims.map((claim: any) => [claim.id, claim]));
+
     reviewChecks.forEach((c) => {
-      const num = (c.check_number ?? "").trim().toLowerCase();
+      const linked = c.claim_id ? claimLookup.get(c.claim_id) : null;
+      const claimNumber = (linked?.claim_number || c.detected_claim_number || "").trim().toLowerCase();
       const amt = c.amount != null ? String(c.amount) : "";
-      const carrier = (c.carrier_name ?? "").trim().toLowerCase();
-      if (!num || !amt || !carrier) return;
-      const key = `${num}|${amt}|${carrier}`;
+      const carrier = (c.carrier_name || "").trim().toLowerCase();
+      const payee = (c.payee_line || "").trim().toLowerCase();
+      
+      // Expanded criteria: Claim #, Amount, and Names (Carrier or Payee Line)
+      if (!claimNumber || !amt || (!carrier && !payee)) return;
+      
+      const key = `${claimNumber}|${amt}|${carrier}|${payee}`;
       const arr = groups.get(key) ?? [];
       arr.push(c);
       groups.set(key, arr);
     });
+
     const duplicateIds = new Set<string>();
     const originalIds = new Set<string>();
     groups.forEach((arr) => {
       if (arr.length < 2) return;
+      // Sort by creation date: oldest is "original", others are "duplicates"
       const sorted = [...arr].sort(
         (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       );
-      originalIds.add(sorted[0].id);
-      sorted.slice(1).forEach((c) => duplicateIds.add(c.id));
+      
+      // Check for overrides in metadata
+      const originals = sorted.filter(c => !(c.external_origin as any)?.duplicate_override);
+      if (originals.length > 0) {
+        originalIds.add(originals[0].id);
+        sorted.forEach(c => {
+          if (c.id !== originals[0].id && !(c.external_origin as any)?.duplicate_override) {
+            duplicateIds.add(c.id);
+          }
+        });
+      }
     });
     return { duplicateIds, originalIds };
-  }, [reviewChecks]);
+  }, [reviewChecks, linkedClaims]);
 
   function getReviewReason(check: ReviewCheck): string {
     const reasons: string[] = [];
