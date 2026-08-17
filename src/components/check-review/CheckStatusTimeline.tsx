@@ -83,7 +83,25 @@ export function CheckStatusTimeline({ checkId }: CheckStatusTimelineProps) {
     );
   }
 
-  const { check, endorsements } = data;
+  const { check, endorsements: rawEndorsements } = data;
+  
+  // Deduplicate by name to handle orphaned or duplicate endorsement rows
+  const endorsements = (() => {
+    const best = new Map<string, Endorsement>();
+    const rank = (e: Endorsement) => {
+      const s = (e.status ?? "").toLowerCase();
+      if (s === "signed" || !!e.signed_at) return 3;
+      if (s === "waived") return 2;
+      if (s === "sent") return 1;
+      return 0;
+    };
+    for (const e of rawEndorsements) {
+      const key = (e as any).payee_name?.trim().toLowerCase() || "unknown";
+      const prev = best.get(key);
+      if (!prev || rank(e) > rank(prev)) best.set(key, e);
+    }
+    return best.size > 0 ? Array.from(best.values()) : rawEndorsements;
+  })();
 
   const sentTimestamps = endorsements
     .map((e) => e.request_sent_at)
