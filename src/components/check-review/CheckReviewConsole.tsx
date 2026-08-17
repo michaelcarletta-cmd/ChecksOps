@@ -1007,8 +1007,8 @@ export function ReviewDecisionPanel({
 
         {/* Duplicate Warning */}
         {(() => {
-          const isDuplicate = Array.from(duplicateInfo?.duplicateIds || []).includes(checkId);
-          const hasDuplicates = Array.from(duplicateInfo?.originalIds || []).includes(checkId);
+          const isDuplicate = duplicateInfo ? Array.from(duplicateInfo.duplicateIds).includes(checkId) : false;
+          const hasDuplicates = duplicateInfo ? Array.from(duplicateInfo.originalIds).includes(checkId) : false;
           const isOverridden = !!(check.external_origin as any)?.duplicate_override;
           
           if ((!isDuplicate && !hasDuplicates) || isOverridden) return null;
