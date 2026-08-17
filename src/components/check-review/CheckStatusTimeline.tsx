@@ -22,6 +22,8 @@ interface Endorsement {
   status: string;
   request_sent_at: string | null;
   signed_at: string | null;
+  payee_name?: string;
+  created_at?: string;
 }
 
 interface CheckRow {
