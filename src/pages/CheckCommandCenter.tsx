@@ -2265,6 +2265,7 @@ export default function CheckCommandCenter() {
                       <TabsContent value="review" className="mt-0">
                         <ReviewDecisionPanel
                           checkId={reviewCheckId}
+                          duplicateInfo={undefined} // ReviewQueue is rendered in the same tab, so CheckReviewConsole logic applies
                           onComplete={() => {
                             qc.invalidateQueries({ queryKey: ["check-intake-items"] });
                             qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });

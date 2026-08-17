@@ -437,28 +437,46 @@ export function CheckReviewQueue({
   // The earliest-created check keeps "original"; later ones are flagged duplicates.
   const duplicateInfo = useMemo(() => {
     const groups = new Map<string, ReviewCheck[]>();
+    const claimLookup = new Map(linkedClaims.map((claim: any) => [claim.id, claim]));
+
     reviewChecks.forEach((c) => {
-      const num = (c.check_number ?? "").trim().toLowerCase();
+      const linked = c.claim_id ? claimLookup.get(c.claim_id) : null;
+      const claimNumber = (linked?.claim_number || c.detected_claim_number || "").trim().toLowerCase();
       const amt = c.amount != null ? String(c.amount) : "";
-      const carrier = (c.carrier_name ?? "").trim().toLowerCase();
-      if (!num || !amt || !carrier) return;
-      const key = `${num}|${amt}|${carrier}`;
+      const carrier = (c.carrier_name || "").trim().toLowerCase();
+      const payee = (c.payee_line || "").trim().toLowerCase();
+      
+      // Expanded criteria: Claim #, Amount, and Names (Carrier or Payee Line)
+      if (!claimNumber || !amt || (!carrier && !payee)) return;
+      
+      const key = `${claimNumber}|${amt}|${carrier}|${payee}`;
       const arr = groups.get(key) ?? [];
       arr.push(c);
       groups.set(key, arr);
     });
+
     const duplicateIds = new Set<string>();
     const originalIds = new Set<string>();
     groups.forEach((arr) => {
       if (arr.length < 2) return;
+      // Sort by creation date: oldest is "original", others are "duplicates"
       const sorted = [...arr].sort(
         (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       );
-      originalIds.add(sorted[0].id);
-      sorted.slice(1).forEach((c) => duplicateIds.add(c.id));
+      
+      // Check for overrides in metadata
+      const originals = sorted.filter(c => !(c.external_origin as any)?.duplicate_override);
+      if (originals.length > 0) {
+        originalIds.add(originals[0].id);
+        sorted.forEach(c => {
+          if (c.id !== originals[0].id && !(c.external_origin as any)?.duplicate_override) {
+            duplicateIds.add(c.id);
+          }
+        });
+      }
     });
     return { duplicateIds, originalIds };
-  }, [reviewChecks]);
+  }, [reviewChecks, linkedClaims]);
 
   function getReviewReason(check: ReviewCheck): string {
     const reasons: string[] = [];
@@ -699,9 +717,11 @@ function getMissingFieldsForLossDraft(check: ReviewCheck): string[] {
 export function ReviewDecisionPanel({
   checkId,
   onComplete,
+  duplicateInfo,
 }: {
   checkId: string;
   onComplete: () => void;
+  duplicateInfo?: { duplicateIds: Set<string>; originalIds: Set<string> };
 }) {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -984,6 +1004,78 @@ export function ReviewDecisionPanel({
 
 
 
+
+        {/* Duplicate Warning */}
+        {(() => {
+          const isDuplicate = duplicateInfo ? Array.from(duplicateInfo.duplicateIds).includes(checkId) : false;
+          const hasDuplicates = duplicateInfo ? Array.from(duplicateInfo.originalIds).includes(checkId) : false;
+          const isOverridden = !!(check.external_origin as any)?.duplicate_override;
+          
+          if ((!isDuplicate && !hasDuplicates) || isOverridden) return null;
+
+          return (
+            <Card className="border-red-500/40 bg-red-500/10 text-red-400">
+              <CardContent className="p-3 space-y-2">
+                <div className="flex items-center gap-2 text-xs font-semibold">
+                  <ShieldAlert className="h-4 w-4 shrink-0" />
+                  {isDuplicate ? "Potential Duplicate Check Detected" : "Original Check (has duplicates)"}
+                </div>
+                <p className="text-[11px] opacity-80 pl-6">
+                  {isDuplicate 
+                    ? "This check matches another one in the system (Claim #, Amount, and Names match). Please verify if this is a duplicate before proceeding." 
+                    : "There are other checks in the system that match this one's details."}
+                </p>
+                <div className="flex gap-2 pl-6">
+                  {isDuplicate && (
+                    <Button 
+                      size="sm" 
+                      variant="destructive" 
+                      className="h-7 text-[10px]"
+                      onClick={async () => {
+                        const { error } = await supabase
+                          .from("check_intake_items")
+                          .update({ status: "voided", updated_at: new Date().toISOString() })
+                          .eq("id", checkId);
+                        if (error) {
+                          toast({ title: "Failed to void duplicate", description: error.message, variant: "destructive" });
+                        } else {
+                          toast({ title: "Check voided as duplicate" });
+                          qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
+                          qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+                          qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                        }
+                      }}
+                    >
+                      Confirm Duplicate (Void)
+                    </Button>
+                  )}
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="h-7 text-[10px] border-red-500/30 hover:bg-red-500/20"
+                    onClick={async () => {
+                      const newOrigin = { ...(check.external_origin || {}), duplicate_override: true };
+                      const { error } = await supabase
+                        .from("check_intake_items")
+                        .update({ external_origin: newOrigin, updated_at: new Date().toISOString() })
+                        .eq("id", checkId);
+                      if (error) {
+                        toast({ title: "Failed to override", description: error.message, variant: "destructive" });
+                      } else {
+                        toast({ title: "Duplicate warning overridden" });
+                        qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
+                        qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+                        qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                      }
+                    }}
+                  >
+                    Override / Not a Duplicate
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })()}
 
         {check.deposit_recommendation_reasons && check.deposit_recommendation_reasons.length > 0 && (
           <Card className="border-orange-500/20 bg-orange-500/5">
