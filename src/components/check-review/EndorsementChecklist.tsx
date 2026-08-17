@@ -268,19 +268,15 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
       if (duplicatePendingIds.length > 0) {
         const { error: waiveErr } = await supabase
           .from("check_endorsements")
-          .update({
-            status: "waived",
-            notes: "Auto-waived: duplicate of another endorsement on this check",
-            signature_method: "auto_dedupe",
-          })
+          .delete()
           .in("id", duplicatePendingIds);
         if (!waiveErr) {
-          for (const e of rawEndorsements) {
-            if (duplicatePendingIds.includes(e.id)) {
-              e.status = "waived";
-              e.signature_method = "auto_dedupe";
-            }
-          }
+          // Filter them out of the local state immediately
+          return mergeEndorsementsWithPayees(
+            checkId,
+            rawEndorsements.filter(e => !duplicatePendingIds.includes(e.id)),
+            (payeeData ?? []) as CheckPayee[],
+          );
         }
       }
 

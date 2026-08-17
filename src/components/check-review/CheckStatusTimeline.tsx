@@ -22,6 +22,8 @@ interface Endorsement {
   status: string;
   request_sent_at: string | null;
   signed_at: string | null;
+  payee_name?: string;
+  created_at?: string;
 }
 
 interface CheckRow {
@@ -60,7 +62,7 @@ export function CheckStatusTimeline({ checkId }: CheckStatusTimelineProps) {
           .maybeSingle(),
         supabase
           .from("check_endorsements")
-          .select("status, request_sent_at, signed_at")
+          .select("status, request_sent_at, signed_at, payee_name, created_at")
           .eq("check_id", checkId),
       ]);
       if (checkRes.error) throw checkRes.error;
@@ -83,7 +85,31 @@ export function CheckStatusTimeline({ checkId }: CheckStatusTimelineProps) {
     );
   }
 
-  const { check, endorsements } = data;
+  const { check, endorsements: rawEndorsements } = data;
+  
+  // Deduplicate by name to handle orphaned or duplicate endorsement rows
+  const endorsements = (() => {
+    const best = new Map<string, Endorsement>();
+    const rank = (e: Endorsement) => {
+      const s = (e.status ?? "").toLowerCase();
+      if (s === "signed" || !!e.signed_at) return 3;
+      if (s === "waived") return 2;
+      if (s === "sent") return 1;
+      return 0;
+    };
+    for (const e of rawEndorsements) {
+      const key = e.payee_name?.trim().toLowerCase() || "unknown";
+      const prev = best.get(key);
+      if (!prev || rank(e) > rank(prev)) {
+        best.set(key, e);
+      } else if (rank(e) === rank(prev) && e.created_at && prev.created_at) {
+        if (new Date(e.created_at).getTime() < new Date(prev.created_at).getTime()) {
+          best.set(key, e);
+        }
+      }
+    }
+    return best.size > 0 ? Array.from(best.values()) : rawEndorsements;
+  })();
 
   const sentTimestamps = endorsements
     .map((e) => e.request_sent_at)
@@ -157,7 +183,7 @@ export function CheckStatusTimeline({ checkId }: CheckStatusTimelineProps) {
           : "pending",
       hint:
         !lastSignedAt && (firstSentAt || settledCount > 0)
-          ? `${settledCount}/${endorsements.length} received`
+          ? `${settledCount}/${Math.max(settledCount, endorsements.length)} received`
           : undefined,
     },
 
