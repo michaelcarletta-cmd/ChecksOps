@@ -98,9 +98,15 @@ export function CheckStatusTimeline({ checkId }: CheckStatusTimelineProps) {
       return 0;
     };
     for (const e of rawEndorsements) {
-      const key = (e as any).payee_name?.trim().toLowerCase() || "unknown";
+      const key = e.payee_name?.trim().toLowerCase() || "unknown";
       const prev = best.get(key);
-      if (!prev || rank(e) > rank(prev)) best.set(key, e);
+      if (!prev || rank(e) > rank(prev)) {
+        best.set(key, e);
+      } else if (rank(e) === rank(prev) && e.created_at && prev.created_at) {
+        if (new Date(e.created_at).getTime() < new Date(prev.created_at).getTime()) {
+          best.set(key, e);
+        }
+      }
     }
     return best.size > 0 ? Array.from(best.values()) : rawEndorsements;
   })();
