@@ -60,7 +60,7 @@ export function CheckStatusTimeline({ checkId }: CheckStatusTimelineProps) {
           .maybeSingle(),
         supabase
           .from("check_endorsements")
-          .select("status, request_sent_at, signed_at")
+          .select("status, request_sent_at, signed_at, payee_name")
           .eq("check_id", checkId),
       ]);
       if (checkRes.error) throw checkRes.error;

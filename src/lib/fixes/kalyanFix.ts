@@ -6,7 +6,9 @@ import { supabase } from "@/integrations/supabase/client";
  */
 export async function fixKalyanCheck() {
   const checkId = "b66e9a78-87ce-4911-8358-2a68243ff954";
-  const reviewerId = (await supabase.auth.getUser()).data.user?.id;
+  
+  const { data: userData } = await supabase.auth.getUser();
+  const reviewerId = userData.user?.id;
 
   if (!reviewerId) {
     console.error("No user found for fix");
@@ -32,6 +34,7 @@ export async function fixKalyanCheck() {
   }
 
   // 2. Advance the check to approved_for_deposit since 3/3 signatures are actually signed
+  // Use the standard review decision RPC
   const { error: rpcError } = await supabase.rpc("submit_check_review_decision_safe", {
     p_check_id: checkId,
     p_reviewer_id: reviewerId,
