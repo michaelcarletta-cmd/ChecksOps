@@ -271,7 +271,7 @@ export function CheckStatusTimeline({ checkId }: CheckStatusTimelineProps) {
                   )}
                   {stage.key === "ready_for_deposit" && isStalled && (
                     <p className="text-xs text-destructive mt-1">
-                      Stalled for {stalledHours}h after final signature. The auto-transition did not run — please contact support.
+                      Status Update Pending — Contact Support
                     </p>
                   )}
                 </div>
