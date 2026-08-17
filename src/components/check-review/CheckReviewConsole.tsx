@@ -1003,6 +1003,76 @@ export function ReviewDecisionPanel({
 
 
 
+        {/* Duplicate Warning */}
+        {(() => {
+          const isDuplicate = Array.from(duplicateInfo?.duplicateIds || []).includes(checkId);
+          const hasDuplicates = Array.from(duplicateInfo?.originalIds || []).includes(checkId);
+          const isOverridden = !!(check.external_origin as any)?.duplicate_override;
+          
+          if ((!isDuplicate && !hasDuplicates) || isOverridden) return null;
+
+          return (
+            <Card className="border-red-500/40 bg-red-500/10 text-red-400">
+              <CardContent className="p-3 space-y-2">
+                <div className="flex items-center gap-2 text-xs font-semibold">
+                  <ShieldAlert className="h-4 w-4 shrink-0" />
+                  {isDuplicate ? "Potential Duplicate Check Detected" : "Original Check (has duplicates)"}
+                </div>
+                <p className="text-[11px] opacity-80 pl-6">
+                  {isDuplicate 
+                    ? "This check matches another one in the system (Claim #, Amount, and Names match). Please verify if this is a duplicate before proceeding." 
+                    : "There are other checks in the system that match this one's details."}
+                </p>
+                <div className="flex gap-2 pl-6">
+                  {isDuplicate && (
+                    <Button 
+                      size="sm" 
+                      variant="destructive" 
+                      className="h-7 text-[10px]"
+                      onClick={async () => {
+                        const { error } = await supabase
+                          .from("check_intake_items")
+                          .update({ status: "voided", updated_at: new Date().toISOString() })
+                          .eq("id", checkId);
+                        if (error) {
+                          toast({ title: "Failed to void duplicate", description: error.message, variant: "destructive" });
+                        } else {
+                          toast({ title: "Check voided as duplicate" });
+                          qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
+                          qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+                        }
+                      }}
+                    >
+                      Confirm Duplicate (Void)
+                    </Button>
+                  )}
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="h-7 text-[10px] border-red-500/30 hover:bg-red-500/20"
+                    onClick={async () => {
+                      const newOrigin = { ...(check.external_origin || {}), duplicate_override: true };
+                      const { error } = await supabase
+                        .from("check_intake_items")
+                        .update({ external_origin: newOrigin, updated_at: new Date().toISOString() })
+                        .eq("id", checkId);
+                      if (error) {
+                        toast({ title: "Failed to override", description: error.message, variant: "destructive" });
+                      } else {
+                        toast({ title: "Duplicate warning overridden" });
+                        qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
+                        qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+                      }
+                    }}
+                  >
+                    Override / Not a Duplicate
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })()}
+
         {check.deposit_recommendation_reasons && check.deposit_recommendation_reasons.length > 0 && (
           <Card className="border-orange-500/20 bg-orange-500/5">
             <CardContent className="p-3">
