@@ -215,6 +215,7 @@ interface CheckEndorsementSummary {
   signature_image_url?: string | null;
   signature_method?: string | null;
   signed_at: string | null;
+  created_at?: string;
 }
 
 const normalizeEndorsementName = (value?: string | null) => (value ?? "").trim().toLowerCase();
