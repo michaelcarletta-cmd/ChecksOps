@@ -1042,6 +1042,7 @@ export function ReviewDecisionPanel({
                           toast({ title: "Check voided as duplicate" });
                           qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
                           qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+                          qc.invalidateQueries({ queryKey: ["check-intake-items"] });
                         }
                       }}
                     >
