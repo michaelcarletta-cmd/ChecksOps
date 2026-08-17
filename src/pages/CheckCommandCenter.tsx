@@ -280,7 +280,22 @@ function mergeEndorsementSummaryRows(
     if (!usedEndorsementIds.has(endorsement.id)) merged.push(endorsement);
   }
 
-  return merged;
+  // Final deduplication by name to ensure no duplicate rows appear in the UI
+  const best = new Map<string, CheckEndorsementSummary>();
+  const rank = (e: CheckEndorsementSummary) => {
+    const s = (e.status ?? "").toLowerCase();
+    if (s === "signed" || !!e.signed_at) return 3;
+    if (s === "waived") return 2;
+    if (s === "sent") return 1;
+    return 0;
+  };
+  for (const e of merged) {
+    const key = normalizeEndorsementName(e.payee_name);
+    const prev = best.get(key);
+    if (!prev || rank(e) > rank(prev)) best.set(key, e);
+  }
+
+  return Array.from(best.values());
 }
 
 /**
