@@ -157,7 +157,7 @@ export function CheckStatusTimeline({ checkId }: CheckStatusTimelineProps) {
           : "pending",
       hint:
         !lastSignedAt && (firstSentAt || settledCount > 0)
-          ? `${settledCount}/${endorsements.length} received`
+          ? `${settledCount}/${Math.max(settledCount, endorsements.length)} received`
           : undefined,
     },
 
