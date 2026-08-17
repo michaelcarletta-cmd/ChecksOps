@@ -1,4 +1,4 @@
-import { supabase } from "../integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Fix for Kalyan check b66e9a78-87ce-4911-8358-2a68243ff954
