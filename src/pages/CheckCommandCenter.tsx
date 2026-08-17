@@ -236,7 +236,7 @@ const normalizeEndorsementStatus = (status?: string | null, signedAt?: string | 
 
 function mergeEndorsementSummaryRows(
   checkId: string,
-  endorsements: (CheckEndorsementSummary & { created_at?: string })[],
+  endorsements: CheckEndorsementSummary[],
   payees: CheckPayee[],
 ): CheckEndorsementSummary[] {
   if (payees.length === 0) return endorsements;
