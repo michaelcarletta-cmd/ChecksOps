@@ -1065,6 +1065,7 @@ export function ReviewDecisionPanel({
                         toast({ title: "Duplicate warning overridden" });
                         qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
                         qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+                        qc.invalidateQueries({ queryKey: ["check-intake-items"] });
                       }
                     }}
                   >
