@@ -282,8 +282,8 @@ function mergeEndorsementSummaryRows(
   }
 
   // Final deduplication by name to ensure no duplicate rows appear in the UI
-  const best = new Map<string, CheckEndorsementSummary & { created_at?: string }>();
-  const rank = (e: CheckEndorsementSummary & { created_at?: string }) => {
+  const best = new Map<string, CheckEndorsementSummary>();
+  const rank = (e: CheckEndorsementSummary) => {
     const s = (e.status ?? "").toLowerCase();
     if (s === "signed" || !!e.signed_at) return 3;
     if (s === "waived") return 2;
