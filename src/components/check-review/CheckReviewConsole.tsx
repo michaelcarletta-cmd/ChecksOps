@@ -717,9 +717,11 @@ function getMissingFieldsForLossDraft(check: ReviewCheck): string[] {
 export function ReviewDecisionPanel({
   checkId,
   onComplete,
+  duplicateInfo,
 }: {
   checkId: string;
   onComplete: () => void;
+  duplicateInfo?: { duplicateIds: Set<string>; originalIds: Set<string> };
 }) {
   const { toast } = useToast();
   const { user } = useAuth();
