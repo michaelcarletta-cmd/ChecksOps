@@ -150,8 +150,9 @@ export interface MoovRequestOptions {
   body?: unknown;
   idempotencyKey?: string;
   /**
-   * Explicit Moov API version (`x-moov-version`). Defaults to the project-wide
-   * v2024.01.00 standard.
+   * ChecksOps pinned Moov API version: v2024.01.00
+   * Moov current stable API: v2026.07.00
+   * ChecksOps intentionally remains pinned pending a controlled API migration.
    */
   apiVersion?: string;
   /** Act on behalf of a connected account. */

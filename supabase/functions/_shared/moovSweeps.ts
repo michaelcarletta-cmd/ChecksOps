@@ -16,8 +16,9 @@ import { moovFetch } from "./moovClient.ts";
 import { centsToDecimalString, minimumBalanceToCents, type SweepStatus } from "./sweepRules.ts";
 
 /**
- * Pinned Moov API version for sweep endpoints. Overridable per-environment so
- * we can move forward deliberately instead of inheriting Moov's old default.
+ * ChecksOps pinned Moov API version: v2024.01.00
+ * Moov current stable API: v2026.07.00
+ * ChecksOps intentionally remains pinned pending a controlled API migration.
  */
 export function moovApiVersion(): string {
   return Deno.env.get("MOOV_API_VERSION") ?? "v2024.01.00";
