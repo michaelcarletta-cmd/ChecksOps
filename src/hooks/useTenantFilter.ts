@@ -35,7 +35,7 @@ export function useTenantFilter() {
   const isCustomTenantDomain = hostname !== "" && !isKnownAppDomain(hostname) && !isCheckOpsHost(hostname);
   const onCheckOpsHost = isCheckOpsHost(hostname);
   // On checkops.com, any /{slug}/... route is a tenant route (not the system tenant)
-  const isCheckOpsTenantRoute = onCheckOpsHost && /^\/[^/]+\/(checks|settings|login|payments|cash-jobs)/.test(location.pathname);
+  const isCheckOpsTenantRoute = onCheckOpsHost && /^\/[^/]+\/(checks|settings|login|payments|cash-jobs|wallet-ops)/.test(location.pathname);
   const isResolvingWhiteLabelTenant =
     (isWhiteLabelRoute || isCustomTenantDomain || isCheckOpsTenantRoute) && !tenant;
   const shouldResolveSystemTenant = !tenant && !loading && !isResolvingWhiteLabelTenant && !onCheckOpsHost;
