@@ -23,15 +23,17 @@ interface Props {
  * follow the tenant's rail.
  */
 export function BankVerification({ verificationSource, ...props }: Props) {
-  const { isPlaid } = usePaymentRail();
-
+  // Plaid is hidden/disabled
+  const isPlaid = false;
+  
   const alreadyVerified =
     props.verificationStatus === "verified" || props.verificationStatus === "admin_override";
 
   // Don't re-route an account that a rail already verified.
-  if (alreadyVerified && verificationSource === "authentecheck") {
+  if (alreadyVerified && (verificationSource === "authentecheck" || verificationSource === "moov")) {
     return <AuthentecheckVerification {...props} />;
   }
 
-  return isPlaid ? <PlaidVerification {...props} /> : <AuthentecheckVerification {...props} />;
+  // Always fall back to Authentecheck (or Moov in future) instead of Plaid Link
+  return <AuthentecheckVerification {...props} />;
 }

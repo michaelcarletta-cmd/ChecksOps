@@ -91,8 +91,8 @@ export function PaymentAccountPanel() {
     }
   }
 
-  async function handleBridge() {
-    // Plaid bridge is now deprecated in favor of native Moov bank link
+  async function handleBankLink() {
+    // native Moov bank link
     setShowBankLink(true);
   }
 

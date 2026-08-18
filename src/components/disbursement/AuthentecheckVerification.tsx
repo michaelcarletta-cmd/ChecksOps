@@ -127,7 +127,7 @@ export function AuthentecheckVerification({
           <Clock className="h-3.5 w-3.5 text-blue-500" />
           <div className="text-[11px]">
             <p className="font-medium text-blue-700">Awaiting bank login</p>
-            <p className="text-blue-600/70">Complete the Plaid sign-in to finish verifying.</p>
+            <p className="text-blue-600/70">Complete the bank sign-in to finish verifying.</p>
           </div>
         </div>
         <Button
