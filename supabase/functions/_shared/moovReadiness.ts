@@ -162,7 +162,7 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
   checks.push({
     id: "identity_verification",
     label: "Identity & business verification",
-    state: due.length > 0 && verificationState !== "ready" ? "action_required" : verificationState,
+    state: due.length > 0 && verificationState !== "ready" ? "action_required" : verificationState === "ready" ? "ready" : "pending",
     detail: input.disabled ? "The provider disabled this account." : verification === "verified" ? "Identity confirmed." : "Standard KYC/KYB identity check.",
     requirements: due,
   });
@@ -230,9 +230,9 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
   const blocking = checks.filter((c) => c.id !== "fee_plan");
   const canMoveMoney =
     blocking.every((c) => c.state === "ready") ||
-    // Wallet balance is auto-granted post-approval; don't block ACH sends on it.
+    // Wallet balance and same-day ACH are additive; don't block basic ACH sends on them.
     (blocking
-      .filter((c) => c.id !== "wallet_balance")
+      .filter((c) => c.id !== "wallet_balance" && c.id !== "send_funds_ach_sameday")
       .every((c) => c.state === "ready"));
 
   const overall: ReadinessState = canMoveMoney
