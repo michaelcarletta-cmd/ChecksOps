@@ -53,7 +53,7 @@ export default function Endorse() {
       const resp = await fetch(fnUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: anonKey },
-        body: JSON.stringify({ action: "get_endorsement_data", token, bypassTokenCheck: true }),
+        body: JSON.stringify({ action: "get_endorsement_data", token }),
       });
       const json = await resp.json();
       if (!resp.ok) throw new Error(json.error || "Failed to load endorsement");

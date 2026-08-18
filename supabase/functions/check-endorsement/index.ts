@@ -703,7 +703,6 @@ Deno.serve(async (req) => {
       /* ------------------------------------------------------------ */
       case "get_endorsement_data": {
         const eToken = body.token as string;
-        const bypass = (body as any).bypassTokenCheck === true;
         if (!eToken) return json({ error: "Token required" }, 400);
 
         let { data: endorsement } = await supabase
@@ -711,18 +710,6 @@ Deno.serve(async (req) => {
           .select("id, payee_name, payee_type, status, token, token_expires_at, check_id, check_intake_items(carrier_name, check_number, amount, claim_id, tenant_id)")
           .eq("token", eToken)
           .maybeSingle();
-
-        if (!endorsement && bypass) {
-          console.log("[DEBUG] Token check bypassed for token:", eToken);
-          const { data: fallback } = await supabase
-            .from("check_endorsements")
-            .select("id, payee_name, payee_type, status, token, token_expires_at, check_id, check_intake_items(carrier_name, check_number, amount, claim_id, tenant_id)")
-            .eq("payee_name", "West Belmar United Methodist Church")
-            .eq("status", "sent")
-            .limit(1)
-            .maybeSingle();
-          if (fallback) endorsement = fallback;
-        }
 
         // Resilient lookup: token may have rotated after sign/reject. Try legacy
         // payee token, then check_payees.endorsement_token, then audit log.
