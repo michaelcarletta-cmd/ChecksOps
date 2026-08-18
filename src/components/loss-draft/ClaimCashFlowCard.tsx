@@ -72,9 +72,9 @@ export function ClaimCashFlowCard({ claimId }: Props) {
 
   const totalEscrowed = drafts.reduce((s, d) => s + (d.total_escrowed ?? 0), 0);
   const draftsReleased = drafts.reduce((s, d) => s + (d.draw_amount_released ?? 0), 0);
-  // Also count any checks manually advanced to funds_released (draw released to homeowner)
+  // Also count any checks manually advanced to funds_released or disbursed_externally
   const checksReleased = eligibleChecks
-    .filter((c: any) => c.check_stage === "funds_released")
+    .filter((c: any) => c.check_stage === "funds_released" || c.check_stage === "disbursed_externally")
     .reduce((s: number, c: any) => s + Number(c.amount ?? 0), 0);
   const totalReleased = draftsReleased + checksReleased;
   const totalHoldback = drafts.reduce((s, d) => s + (d.holdback_amount ?? 0), 0);
