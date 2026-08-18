@@ -153,6 +153,29 @@ serve(async (req) => {
       return json({ error: "recipient_setup_required", message: "The recipient has not connected a bank account yet." }, 409);
     }
 
+    /* ---------- Rail selection (speed -> actual Moov rail) ---------- */
+
+    const legacyDestinationMethodId =
+      destinationMethod.provider_payment_method_id ?? destinationMethod.provider_bank_account_id;
+
+    const destinationRails = await resolveRails({
+      cached: destinationMethod.rail_payment_method_ids,
+      syncedAt: destinationMethod.rails_synced_at,
+      accountId: destinationAccountId,
+      bankAccountId: destinationMethod.provider_bank_account_id ?? null,
+      persist: (rails) => saveMethodRails(supabase, destinationMethod.id, rails),
+    });
+
+    const railDecision = selectRail({
+      requestedSpeed: speed,
+      amountCents: amount,
+      railPaymentMethodIds: destinationRails,
+      fallbackPaymentMethodId: legacyDestinationMethodId,
+    });
+    const railMeta = railDecisionMetadata(railDecision);
+
+
+
     /* ---------- Idempotency / duplicate protection ---------- */
 
     const key = idempotency_key ??
