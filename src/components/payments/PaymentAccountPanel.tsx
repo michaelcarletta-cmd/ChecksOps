@@ -4,11 +4,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Banknote, CreditCard, ShieldCheck, RefreshCw, ExternalLink, Loader2, Link2 } from "lucide-react";
+import { 
+  Banknote, CreditCard, ShieldCheck, RefreshCw, ExternalLink, 
+  Loader2, Link2, Landmark, X 
+} from "lucide-react";
 import { usePaymentAccount } from "@/hooks/usePaymentAccount";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { MoovBankLink } from "./MoovBankLink";
+import { MicroDepositVerification } from "./MicroDepositVerification";
 import {
   BANK_STATUS_LABEL,
   ONBOARDING_STATUS_LABEL,
