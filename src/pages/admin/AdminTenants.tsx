@@ -1132,6 +1132,11 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                 <div className="text-[10px] text-muted-foreground mt-1">${(moov?.amountOut ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
               </div>
               <div className="rounded-lg border bg-card p-3">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">MortgageOps Requests</div>
+                <div className="text-2xl font-bold mt-1">{mortgageCount}</div>
+                <div className="text-[10px] text-muted-foreground mt-1">Fees: {fmt(data?.mortgage_amount_cents ?? 0)}</div>
+              </div>
+              <div className="rounded-lg border bg-card p-3">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Paid to ChecksOps</div>
                 <div className="text-2xl font-bold mt-1">{fmt(maintenancePaidCents)}</div>
                 <div className="text-[10px] text-muted-foreground mt-1">Same Day {sameDay} · Instant {instant}</div>
