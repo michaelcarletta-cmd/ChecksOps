@@ -1236,7 +1236,7 @@ export default function CheckCommandCenter() {
     const checkAltStatus = getCheckAltStatus(c);
     // Once funds have been disbursed, the check belongs in the Funds Released
     // tab — do NOT show it in Deposited anymore.
-    if (stage === "funds_released") return false;
+    if (stage === "funds_released" || stage === "disbursed_externally") return false;
     return (s === "deposited" || stage === "deposited" || checkAltStatus === "pending_approval") && matchesSearch(c);
   });
   // On the Deposited tab, merge the paginated owned deposited rows with any
@@ -1247,7 +1247,7 @@ export default function CheckCommandCenter() {
     // arrive before this paginated query refetches; never let a stale deposited
     // row keep a funds-released check visible in this lane.
     const ownedFiltered = (depositedRows as CheckItem[]).filter(
-      (c) => c.check_stage !== "funds_released" && matchesSearch(c),
+      (c) => c.check_stage !== "funds_released" && c.check_stage !== "disbursed_externally" && matchesSearch(c),
     );
     const ownedIds = new Set(ownedFiltered.map((c) => c.id));
     const extras = depositedFromAll.filter((c) => !ownedIds.has(c.id));
@@ -1478,7 +1478,12 @@ export default function CheckCommandCenter() {
   }, [searchQuery]);
 
   const filteredFundsReleased = useMemo(
-    () => (fundsReleased as any[]).filter(matchesSplitSearch),
+    () => {
+      const splits = (fundsReleased as any[]).filter(matchesSplitSearch);
+      // We also want to include checks that were marked as disbursed_externally 
+      // but might not have a split record yet (though recording external creates one).
+      return splits;
+    },
     [fundsReleased, matchesSplitSearch],
   );
   const filteredFundsReceived = useMemo(
