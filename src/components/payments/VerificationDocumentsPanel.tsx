@@ -110,9 +110,9 @@ export function VerificationDocumentsPanel({
               Verification Documents
             </CardTitle>
             <CardDescription className="text-xs mt-1">
-              Submit business and identity verification documents for your payment account. Files are
-              sent straight to the verification provider — we keep only the status, never a copy of
-              the document.
+              Submit identity and business documents to verify your account. Documents are
+              streamed directly to the payment provider — we do not store sensitive identity data
+              locally.
             </CardDescription>
           </div>
           <Button size="sm" variant="outline" className="h-8 text-xs shrink-0" onClick={handleRefresh} disabled={refreshing}>

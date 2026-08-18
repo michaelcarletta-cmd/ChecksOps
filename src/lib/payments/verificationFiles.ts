@@ -9,8 +9,8 @@ import { supabase } from "@/integrations/supabase/client";
  */
 
 export const FILE_PURPOSE_OPTIONS = [
-  { value: "business_verification", label: "Business verification (KYB)" },
-  { value: "identity_verification", label: "Identity verification (KYC)" },
+  { value: "business_verification", label: "Business verification" },
+  { value: "identity_verification", label: "Identity verification" },
   { value: "individual_verification", label: "Individual verification" },
   { value: "representative_verification", label: "Representative verification" },
 ] as const;
