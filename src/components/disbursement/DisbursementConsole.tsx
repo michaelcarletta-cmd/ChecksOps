@@ -336,7 +336,8 @@ export function DisbursementConsole({
       }
 
       // Fallback rail (admin_override only honored server-side if caller is admin)
-      const railFn = isPlaid ? "plaid-disburse" : "actum-disburse";
+      // Plaid is disabled; always use Actum if falling back from Moov.
+      const railFn = "actum-disburse";
       const { data: railData, error: invokeErr } = await supabase.functions.invoke(railFn, {
         body: { batch_id: batch.id, admin_override: adminOverride && isAdmin },
       });
@@ -345,7 +346,7 @@ export function DisbursementConsole({
       if ((railData as any)?.success === false) {
         throw new Error((railData as any)?.error ?? "Disbursement failed");
       }
-      return { batchId: batch.id, rail: isPlaid ? ("plaid" as const) : ("actum" as const), note: moovFallbackNote };
+      return { batchId: batch.id, rail: "actum" as const, note: moovFallbackNote };
     },
     onSuccess: (result: any) => {
       toast({

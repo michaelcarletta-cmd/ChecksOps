@@ -31,7 +31,8 @@ export function usePaymentRail() {
         .eq("id", tenantId!)
         .maybeSingle();
       if (error) throw error;
-      return ((data as any)?.payment_rail ?? "actum") as PaymentRail;
+      const rail = (data as any)?.payment_rail ?? "actum";
+      return (rail === "plaid" ? "actum" : rail) as PaymentRail;
     },
   });
 
