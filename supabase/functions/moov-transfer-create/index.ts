@@ -300,7 +300,7 @@ serve(async (req) => {
       previous_status: "ready",
       new_status: status,
       environment,
-      provider_metadata: { provider_status: providerStatus },
+      provider_metadata: { provider_status: providerStatus, ...railMeta },
     });
 
     return json({ success: true, duplicate: false, transfer: finalTransfer });
