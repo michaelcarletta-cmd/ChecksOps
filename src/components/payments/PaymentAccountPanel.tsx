@@ -41,7 +41,8 @@ export function PaymentAccountPanel() {
   const { tenantId, enabled } = usePaymentProviderEligibility();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [busy, setBusy] = useState<null | "setup" | "sync" | "bridge">(null);
+  const [busy, setBusy] = useState<null | "setup" | "sync" | "bridge" | "bank_link">(null);
+  const [showBankLink, setShowBankLink] = useState(false);
 
   if (isLoading) {
     return <div className="p-4 text-sm text-muted-foreground">Loading payment account…</div>;
