@@ -1015,15 +1015,15 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
 
   // Consolidated billing: check processing fees ($4/check), Moov disbursement fees ($1 transfer),
   // maintenance for the month (monthly_rate - referral discount). Applies only when scope=month.
-  const CHECK_FEE_CENTS = 400;
-  const MOOV_FEE_CENTS = 100;
-  const checkaltFeeCents = (checkalt?.count ?? 0) * CHECK_FEE_CENTS;
-    const moovFeeCents = (moov?.count ?? 0) * MOOV_FEE_CENTS;
-    const mortgageFeeCents = data?.mortgage_amount_cents ?? 0;
-    const grossMaintenance = tenantMeta?.monthly_rate_cents ?? 0;
-    const discount = tenantMeta?.referral_discount_cents ?? 0;
-    const netMaintenance = Math.max(0, grossMaintenance - discount);
-    const consolidatedTotalCents = checkaltFeeCents + moovFeeCents + mortgageFeeCents + netMaintenance;
+  const usageEvents: any[] = data?.events || [];
+  const checkProcessingCents = usageEvents.filter(e => e.event_type === 'check_processing').reduce((s, e) => s + (e.unit_price_cents ?? 0), 0);
+  const mortgageOpsCents = usageEvents.filter(e => e.event_type === 'mortgage_handling').reduce((s, e) => s + (e.unit_price_cents ?? 0), 0);
+  const disbursementCents = usageEvents.filter(e => e.event_type?.startsWith('moov_')).reduce((s, e) => s + (e.unit_price_cents ?? 0), 0);
+  
+  const grossMaintenance = tenantMeta?.monthly_rate_cents ?? 0;
+  const discount = tenantMeta?.referral_discount_cents ?? 0;
+  const netMaintenance = Math.max(0, grossMaintenance - discount);
+  const consolidatedTotalCents = checkProcessingCents + mortgageOpsCents + disbursementCents + netMaintenance;
 
   const pullConsolidated = async () => {
     if (scope !== "month") {
