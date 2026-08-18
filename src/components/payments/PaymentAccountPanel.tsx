@@ -239,7 +239,7 @@ export function PaymentAccountPanel() {
               variant="outline"
               className="h-8 text-xs"
               onClick={handleBankLink}
-              disabled={busy !== null || (!account?.externalAccountId && status !== "onboarding_incomplete")}
+              disabled={busy !== null || !account?.externalAccountId}
             >
               <Landmark className="h-3.5 w-3.5 mr-1.5" />
               Connect Bank
