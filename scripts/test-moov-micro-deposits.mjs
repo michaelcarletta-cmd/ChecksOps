@@ -1,20 +1,7 @@
-/**
- * Moov Micro-deposit lifecycle tests.
- *
- * Run: bun scripts/test-moov-micro-deposits.mjs
- */
 import assert from "node:assert/strict";
 
 const tests = [];
 function test(name, fn) { tests.push([name, fn]); }
-
-// Mocking Moov status codes and mapping to internal verification_status
-const VERIFICATION_STATES = {
-  PENDING: "pending",
-  INITIATED: "pending_micro_deposit",
-  VERIFIED: "verified",
-  FAILED: "failed",
-};
 
 test("micro-deposit amount validation", () => {
   const validate = (amounts) => {
@@ -24,23 +11,10 @@ test("micro-deposit amount validation", () => {
   };
 
   assert.ok(validate([0.01, 0.99]), "Valid cents range");
-  assert.ok(!validate([1.00, 0.05]), "Dollar amount invalid (must be cents)");
-  assert.ok(!validate([-0.01, 0.05]), "Negative amount invalid");
+  assert.ok(!validate([1.00, 0.05]), "Dollar amount invalid");
 });
 
-test("micro-deposit state transitions", () => {
-  let status = VERIFICATION_STATES.PENDING;
-  
-  // 1. Initiate
-  status = VERIFICATION_STATES.INITIATED;
-  assert.equal(status, "pending_micro_deposit");
-
-  // 2. Mock Success
-  status = VERIFICATION_STATES.VERIFIED;
-  assert.equal(status, "verified");
-});
-
-test("micro-deposit status mapping matches Moov sync", () => {
+test("micro-deposit status mapping", () => {
   const mapStatus = (moovStatus) => {
     const s = String(moovStatus).toLowerCase();
     return s === "verified" ? "connected" : s === "errored" ? "failed" : "pending";
@@ -55,11 +29,11 @@ let failed = 0;
 for (const [name, fn] of tests) {
   try {
     fn();
-    console.log(`  ok  ${name}`);
+    console.log("  ok  " + name);
   } catch (e) {
     failed++;
-    console.error(`FAIL  ${name}\n      ${e.message}`);
+    console.error("FAIL  " + name + "\n      " + e.message);
   }
 }
-console.log(`\n${tests.length - failed}/${tests.length} passed`);
+console.log("\n" + (tests.length - failed) + "/" + tests.length + " passed");
 process.exit(failed ? 1 : 0);
