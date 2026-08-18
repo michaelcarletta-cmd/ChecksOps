@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertTriangle, Send, Building2, CheckCircle2, Loader2, DollarSign, ShieldAlert, ShieldCheck } from "lucide-react";
 import { VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
-import { RailUnavailableNotice } from "@/components/disbursement/RailUnavailableNotice";
+
 import { usePaymentRail } from "@/hooks/usePaymentRail";
 
 interface Props {
@@ -197,7 +197,7 @@ export function SendPaymentPanel({
     );
   }
 
-  if (!isActum) return <RailUnavailableNotice />;
+  if (!isActum) return <div className="p-6 text-center text-sm text-muted-foreground border rounded-lg">Bank payments are currently unavailable for this organization.</div>;
 
   return (
     <Card>

@@ -1,5 +1,4 @@
 import { AuthentecheckVerification } from "./AuthentecheckVerification";
-import { PlaidVerification } from "./PlaidVerification";
 import { usePaymentRail } from "@/hooks/usePaymentRail";
 
 interface Props {
