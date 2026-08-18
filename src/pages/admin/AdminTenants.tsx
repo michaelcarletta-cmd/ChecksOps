@@ -1176,10 +1176,10 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                       <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(data?.events?.filter((e: any) => e.event_type === 'mortgage_handling').reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0)}</td>
                     </tr>
                     <tr>
-                      <td className="px-4 py-2">Moov disbursements</td>
+                      <td className="px-4 py-2">Disbursement Usage</td>
                       <td className="text-right px-4 py-2 tabular-nums">{moov?.count ?? 0} txns</td>
                       <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$1.00</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(moovFeeCents)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(data?.events?.filter((e: any) => e.event_type?.startsWith('moov_')).reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0)}</td>
                     </tr>
                     <tr>
                       <td className="px-4 py-2">
