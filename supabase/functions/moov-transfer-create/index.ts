@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { moovFetch, normalizeTransferStatus, scopes } from "../_shared/moovClient.ts";
+import { railDecisionMetadata, selectRail } from "../_shared/railRouter.ts";
+import { resolveRails, saveMethodRails } from "../_shared/moovRails.ts";
 import { corsHeaders, json, isResponse, logPaymentEvent, requireMoovCaller, sanitize } from "../_shared/moovGuard.ts";
 
 // Creates a sandbox transfer on behalf of the INITIATING tenant.
@@ -153,6 +155,29 @@ serve(async (req) => {
       return json({ error: "recipient_setup_required", message: "The recipient has not connected a bank account yet." }, 409);
     }
 
+    /* ---------- Rail selection (speed -> actual Moov rail) ---------- */
+
+    const legacyDestinationMethodId =
+      destinationMethod.provider_payment_method_id ?? destinationMethod.provider_bank_account_id;
+
+    const destinationRails = await resolveRails({
+      cached: destinationMethod.rail_payment_method_ids,
+      syncedAt: destinationMethod.rails_synced_at,
+      accountId: destinationAccountId,
+      bankAccountId: destinationMethod.provider_bank_account_id ?? null,
+      persist: (rails) => saveMethodRails(supabase, destinationMethod.id, rails),
+    });
+
+    const railDecision = selectRail({
+      requestedSpeed: speed,
+      amountCents: amount,
+      railPaymentMethodIds: destinationRails,
+      fallbackPaymentMethodId: legacyDestinationMethodId,
+    });
+    const railMeta = railDecisionMetadata(railDecision);
+
+
+
     /* ---------- Idempotency / duplicate protection ---------- */
 
     const key = idempotency_key ??
@@ -181,7 +206,10 @@ serve(async (req) => {
         amount_cents: amount,
         platform_fee_cents: platformFee,
         net_amount_cents: amount - platformFee,
-        speed,
+        speed: railDecision.selectedSpeed,
+        requested_speed: railDecision.requestedSpeed,
+        selected_rail: railDecision.railType,
+        rail_downgrade_reason: railDecision.downgraded ? railDecision.reason : null,
         description: description ?? null,
         source_tenant_account_id: payer.provider_account_id,
         source_payment_method_id: source.id,
@@ -216,8 +244,7 @@ serve(async (req) => {
             paymentMethodID: source.provider_payment_method_id ?? source.provider_bank_account_id,
           },
           destination: {
-            paymentMethodID:
-              destinationMethod.provider_payment_method_id ?? destinationMethod.provider_bank_account_id,
+            paymentMethodID: railDecision.paymentMethodId ?? legacyDestinationMethodId,
           },
           amount: { currency: "USD", value: amount },
           description: (description ?? `ChecksOps payment to ${destinationLabel}`).slice(0, 128),
@@ -225,6 +252,8 @@ serve(async (req) => {
             checksops_transfer_id: draft.id,
             checksops_tenant_id: tenant_id,
             claim_id: claim_id ?? "",
+            requested_speed: railDecision.requestedSpeed,
+            selected_rail: railDecision.railType ?? "ach-credit-standard",
           },
         },
       });
@@ -258,7 +287,7 @@ serve(async (req) => {
         status,
         provider_fee_cents: providerFee,
         submitted_at: new Date().toISOString(),
-        provider_metadata: sanitize(created ?? {}),
+        provider_metadata: sanitize({ ...(created ?? {}), rail_decision: railMeta }),
       })
       .eq("id", draft.id)
       .select()
@@ -273,7 +302,7 @@ serve(async (req) => {
       previous_status: "ready",
       new_status: status,
       environment,
-      provider_metadata: { provider_status: providerStatus },
+      provider_metadata: { provider_status: providerStatus, ...railMeta },
     });
 
     return json({ success: true, duplicate: false, transfer: finalTransfer });

@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { moovFetch, normalizeTransferStatus, scopes } from "../_shared/moovClient.ts";
+import { railDecisionMetadata, selectRail } from "../_shared/railRouter.ts";
+import { resolveRails, saveStakeholderRails } from "../_shared/moovRails.ts";
 import {
   corsHeaders,
   isResponse,
@@ -65,7 +67,8 @@ serve(async (req) => {
       .from("disbursement_splits")
       .select(
         "id, amount, status, moov_transfer_id, stakeholder_account_id, recipient_name, " +
-          "stakeholder_accounts(id, nickname, custname, provider, provider_environment, provider_account_id, provider_bank_account_id)",
+          "stakeholder_accounts(id, nickname, custname, provider, provider_environment, provider_account_id, " +
+          "provider_bank_account_id, moov_rail_payment_method_ids, moov_rails_synced_at)",
       )
       .eq("batch_id", batchId);
 
@@ -95,7 +98,14 @@ serve(async (req) => {
 
     /* ---------- Resolve every destination BEFORE moving money ---------- */
 
-    const resolved: Array<{ split: any; methodId: string; label: string; cents: number }> = [];
+    const requestedSpeed = batch.delivery_speed ?? "standard";
+    const resolved: Array<{
+      split: any;
+      methodId: string;
+      label: string;
+      cents: number;
+      decision: ReturnType<typeof selectRail>;
+    }> = [];
     const unready: string[] = [];
 
     for (const split of payable) {
@@ -113,11 +123,29 @@ serve(async (req) => {
       if (!Number.isFinite(cents) || cents <= 0) {
         return json({ error: `Invalid payout amount for ${label}.` }, 400);
       }
+      // Rail eligibility for THIS recipient, cached on the stakeholder row.
+      const legacyMethodId = acct.provider_bank_account_id ?? acct.provider_account_id;
+      const rails = await resolveRails({
+        cached: acct.moov_rail_payment_method_ids,
+        syncedAt: acct.moov_rails_synced_at,
+        accountId: acct.provider_account_id ?? null,
+        bankAccountId: acct.provider_bank_account_id ?? null,
+        persist: (r) => saveStakeholderRails(supabase, acct.id, r),
+      });
+
+      const decision = selectRail({
+        requestedSpeed,
+        amountCents: cents,
+        railPaymentMethodIds: rails,
+        fallbackPaymentMethodId: legacyMethodId,
+      });
+
       resolved.push({
         split,
-        methodId: acct.provider_bank_account_id ?? acct.provider_account_id,
+        methodId: decision.paymentMethodId ?? legacyMethodId,
         label,
         cents,
+        decision,
       });
     }
 
@@ -181,7 +209,15 @@ serve(async (req) => {
 
     let sent = 0;
     let failed = 0;
-    const results: Array<{ split_id: string; ok: boolean; status?: string; error?: string }> = [];
+    const results: Array<{
+      split_id: string;
+      ok: boolean;
+      status?: string;
+      error?: string;
+      requested_speed?: string;
+      selected_rail?: string | null;
+      downgrade_reason?: string | null;
+    }> = [];
 
     for (const leg of resolved) {
       try {
@@ -199,6 +235,8 @@ serve(async (req) => {
               checksops_batch_id: batchId,
               checksops_split_id: leg.split.id,
               checksops_tenant_id: tenantId,
+              requested_speed: leg.decision.requestedSpeed,
+              selected_rail: leg.decision.railType ?? "ach-credit-standard",
             },
           },
         });
@@ -210,6 +248,9 @@ serve(async (req) => {
           .from("disbursement_splits")
           .update({
             rail: "moov",
+            requested_speed: leg.decision.requestedSpeed,
+            selected_rail: leg.decision.railType,
+            rail_downgrade_reason: leg.decision.downgraded ? leg.decision.reason : null,
             moov_transfer_id: transferId,
             moov_status: status,
             status: status === "failed" ? "failed" : "submitted",
@@ -218,12 +259,27 @@ serve(async (req) => {
           .eq("id", leg.split.id);
 
         sent += 1;
-        results.push({ split_id: leg.split.id, ok: true, status });
+        results.push({
+          split_id: leg.split.id,
+          ok: true,
+          status,
+          requested_speed: leg.decision.requestedSpeed,
+          selected_rail: leg.decision.railType,
+          downgrade_reason: leg.decision.downgraded ? leg.decision.reason : null,
+        });
       } catch (e) {
         const message = (e as Error).message;
         await supabase
           .from("disbursement_splits")
-          .update({ rail: "moov", status: "failed", moov_status: "failed", moov_failure_reason: message })
+          .update({
+            rail: "moov",
+            status: "failed",
+            moov_status: "failed",
+            moov_failure_reason: message,
+            requested_speed: leg.decision.requestedSpeed,
+            selected_rail: leg.decision.railType,
+            rail_downgrade_reason: leg.decision.downgraded ? leg.decision.reason : null,
+          })
           .eq("id", leg.split.id);
         failed += 1;
         results.push({ split_id: leg.split.id, ok: false, error: message });
@@ -239,7 +295,14 @@ serve(async (req) => {
       event_type: "disbursement.submitted",
       new_status: sent === 0 ? "failed" : "submitted",
       environment,
-      provider_metadata: sanitize({ batch_id: batchId, sent, failed, total_cents: total }),
+      provider_metadata: sanitize({
+        batch_id: batchId,
+        sent,
+        failed,
+        total_cents: total,
+        requested_speed: requestedSpeed,
+        rails: resolved.map((r) => ({ split_id: r.split.id, ...railDecisionMetadata(r.decision) })),
+      }),
     });
 
     if (sent === 0) {

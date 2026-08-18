@@ -6,6 +6,7 @@ import {
   safeLastFour,
   scopes,
 } from "../_shared/moovClient.ts";
+import { fetchRailMethodIds, saveMethodRails } from "../_shared/moovRails.ts";
 import { corsHeaders, json, isResponse, logPaymentEvent, requireMoovCaller, sanitize } from "../_shared/moovGuard.ts";
 
 // Server-side capability + account + bank synchronization.
@@ -108,6 +109,24 @@ serve(async (req) => {
         },
         { onConflict: "provider,environment,provider_account_id,provider_bank_account_id" },
       );
+
+      // Rail eligibility (standard ACH / same-day ACH / RTP / card) for this bank.
+      try {
+        const rails = await fetchRailMethodIds(accountId, bankAccountId);
+        if (Object.keys(rails).length > 0) {
+          const { data: methodRow } = await supabase
+            .from("payment_provider_methods")
+            .select("id")
+            .eq("provider", "moov")
+            .eq("environment", environment)
+            .eq("provider_account_id", accountId)
+            .eq("provider_bank_account_id", bankAccountId)
+            .maybeSingle();
+          if (methodRow?.id) await saveMethodRails(supabase, methodRow.id, rails);
+        }
+      } catch (e) {
+        console.warn("[moov-sync] rail sync skipped", bankAccountId, (e as Error).message);
+      }
 
       if (status === "verified" || bankConnectionStatus === "not_connected") {
         bankName = b.bankName ?? bankName;
