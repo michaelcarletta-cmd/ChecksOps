@@ -960,8 +960,8 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
           .gte("created_at", range.start.toISOString())
           .lt("created_at", range.end.toISOString()),
         supabase
-          .from("moov_transfers")
-          .select("id, amount, transaction_type, status, created_at")
+          .from("moov_transfers" as any)
+          .select("id, amount, status, created_at")
           .eq("tenant_id", tenantId)
           .gte("created_at", range.start.toISOString())
           .lt("created_at", range.end.toISOString()),
@@ -1002,8 +1002,8 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
 
   const events: any[] = data?.events || [];
   const checkCount = events.filter((e) => e.event_type === "check_processing").length;
-  const sameDay = events.filter((e) => e.event_type === "actum_same_day").length;
-  const instant = events.filter((e) => e.event_type === "actum_instant").length;
+  const sameDay = events.filter((e) => e.event_type === "moov_same_day").length;
+  const instant = events.filter((e) => e.event_type === "moov_instant").length;
   const fmt = (cents: number) =>
     new Intl.NumberFormat("en-US", { style: "currency", currency: (data?.currency || "usd").toUpperCase() }).format((cents || 0) / 100);
   const maintenancePaidCents = maintenance
@@ -1015,13 +1015,13 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   // Consolidated billing: check processing fees ($4/check), Moov disbursement fees ($1 transfer),
   // maintenance for the month (monthly_rate - referral discount). Applies only when scope=month.
   const CHECK_FEE_CENTS = 400;
-  const ACTUM_FEE_CENTS = 100;
+  const MOOV_FEE_CENTS = 100;
   const checkaltFeeCents = (checkalt?.count ?? 0) * CHECK_FEE_CENTS;
-  const actumFeeCents = (actum?.count ?? 0) * ACTUM_FEE_CENTS;
+  const moovFeeCents = (moov?.count ?? 0) * MOOV_FEE_CENTS;
   const grossMaintenance = tenantMeta?.monthly_rate_cents ?? 0;
   const discount = tenantMeta?.referral_discount_cents ?? 0;
   const netMaintenance = Math.max(0, grossMaintenance - discount);
-  const consolidatedTotalCents = checkaltFeeCents + actumFeeCents + netMaintenance;
+  const consolidatedTotalCents = checkaltFeeCents + moovFeeCents + netMaintenance;
 
   const pullConsolidated = async () => {
     if (scope !== "month") {
@@ -1168,9 +1168,9 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                     </tr>
                     <tr>
                       <td className="px-4 py-2">Moov disbursements</td>
-                      <td className="text-right px-4 py-2 tabular-nums">{actum?.count ?? 0} txns</td>
+                      <td className="text-right px-4 py-2 tabular-nums">{moov?.count ?? 0} txns</td>
                       <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$1.00</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(actumFeeCents)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(moovFeeCents)}</td>
                     </tr>
                     <tr>
                       <td className="px-4 py-2">
