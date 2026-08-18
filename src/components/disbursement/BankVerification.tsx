@@ -1,5 +1,5 @@
 import { AuthentecheckVerification } from "./AuthentecheckVerification";
-import { usePaymentRail } from "@/hooks/usePaymentRail";
+import { AlertCircle } from "lucide-react";
 
 interface Props {
   accountId: string;
@@ -14,25 +14,25 @@ interface Props {
 }
 
 /**
- * Picks the bank-verification widget for the tenant's active payment rail.
- *
- * Accounts already verified through Authentecheck keep working untouched —
- * they render the Authentecheck widget (which just shows a "Verified" badge)
- * regardless of the tenant's current rail. Only new or failed verifications
- * follow the tenant's rail.
+ * Picks the bank-verification widget.
+ * 
+ * Actum/Authentecheck is legacy. Moov is the primary rail.
  */
 export function BankVerification({ verificationSource, ...props }: Props) {
-  // Plaid is hidden/disabled
-  const isPlaid = false;
-  
   const alreadyVerified =
     props.verificationStatus === "verified" || props.verificationStatus === "admin_override";
 
-  // Don't re-route an account that a rail already verified.
-  if (alreadyVerified && (verificationSource === "authentecheck" || verificationSource === "moov")) {
+  if (alreadyVerified) {
+    // Keep showing verification status for historical accounts
     return <AuthentecheckVerification {...props} />;
   }
 
-  // Always fall back to Authentecheck (or Moov in future) instead of Plaid Link
-  return <AuthentecheckVerification {...props} />;
+  // If not verified, and it's not a Moov-supported verification (which happens 
+  // via MoovBankLink/MicroDepositVerification elsewhere), show a placeholder.
+  return (
+    <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50 border border-dashed text-xs text-muted-foreground">
+      <AlertCircle className="h-4 w-4" />
+      Verification currently unavailable. Please contact support to link this account.
+    </div>
+  );
 }
