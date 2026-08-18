@@ -152,7 +152,9 @@ export function MoovTreasuryPanel() {
             <div className="flex flex-wrap items-end gap-6">
               <div>
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">Available balance</p>
-                <p className="text-2xl font-semibold">{money(wallet?.available_cents ?? 0)}</p>
+                <p className="text-2xl font-semibold">
+                  {wallet?.status === "sync_failed" ? "Unavailable" : money(wallet?.available_cents ?? 0)}
+                </p>
               </div>
               <div>
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">Settlement bank</p>
