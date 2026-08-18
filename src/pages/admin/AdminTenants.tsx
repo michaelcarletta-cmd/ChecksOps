@@ -1015,15 +1015,15 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
 
   // Consolidated billing: check processing fees ($4/check), Moov disbursement fees ($1 transfer),
   // maintenance for the month (monthly_rate - referral discount). Applies only when scope=month.
-  const CHECK_FEE_CENTS = 400;
-  const MOOV_FEE_CENTS = 100;
-  const checkaltFeeCents = (checkalt?.count ?? 0) * CHECK_FEE_CENTS;
-    const moovFeeCents = (moov?.count ?? 0) * MOOV_FEE_CENTS;
-    const mortgageFeeCents = data?.mortgage_amount_cents ?? 0;
-    const grossMaintenance = tenantMeta?.monthly_rate_cents ?? 0;
-    const discount = tenantMeta?.referral_discount_cents ?? 0;
-    const netMaintenance = Math.max(0, grossMaintenance - discount);
-    const consolidatedTotalCents = checkaltFeeCents + moovFeeCents + mortgageFeeCents + netMaintenance;
+  const usageEvents: any[] = data?.events || [];
+  const checkProcessingCents = usageEvents.filter(e => e.event_type === 'check_processing').reduce((s, e) => s + (e.unit_price_cents ?? 0), 0);
+  const mortgageOpsCents = usageEvents.filter(e => e.event_type === 'mortgage_handling').reduce((s, e) => s + (e.unit_price_cents ?? 0), 0);
+  const disbursementCents = usageEvents.filter(e => e.event_type?.startsWith('moov_')).reduce((s, e) => s + (e.unit_price_cents ?? 0), 0);
+  
+  const grossMaintenance = tenantMeta?.monthly_rate_cents ?? 0;
+  const discount = tenantMeta?.referral_discount_cents ?? 0;
+  const netMaintenance = Math.max(0, grossMaintenance - discount);
+  const consolidatedTotalCents = checkProcessingCents + mortgageOpsCents + disbursementCents + netMaintenance;
 
   const pullConsolidated = async () => {
     if (scope !== "month") {
@@ -1040,9 +1040,9 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
     if (!confirmed) return;
     setPulling(true);
     const line_items = [
-      checkaltFeeCents > 0 && { label: "Check processing", detail: `${checkalt?.count ?? 0} checks × $4.00`, amount_cents: checkaltFeeCents },
-      moovFeeCents > 0 && { label: "Moov disbursements", detail: `${moov?.count ?? 0} × $1.00`, amount_cents: moovFeeCents },
-      mortgageFeeCents > 0 && { label: "MortgageOps handling", detail: `${mortgageCount} requests`, amount_cents: mortgageFeeCents },
+      checkProcessingCents > 0 && { label: "Check processing", detail: `${usageEvents.filter(e => e.event_type === 'check_processing').length} checks`, amount_cents: checkProcessingCents },
+      disbursementCents > 0 && { label: "Moov disbursements", detail: `${usageEvents.filter(e => e.event_type?.startsWith('moov_')).length} txns`, amount_cents: disbursementCents },
+      mortgageOpsCents > 0 && { label: "MortgageOps handling", detail: `${mortgageCount} requests`, amount_cents: mortgageOpsCents },
       grossMaintenance > 0 && { label: "Monthly maintenance", detail: range.label, amount_cents: grossMaintenance },
       discount > 0 && { label: "Referral discount", detail: "applied to maintenance", amount_cents: -discount },
     ].filter(Boolean);
@@ -1164,22 +1164,22 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                   </thead>
                   <tbody className="divide-y">
                     <tr>
-                      <td className="px-4 py-2">CheckAlt check processing</td>
-                      <td className="text-right px-4 py-2 tabular-nums">{checkalt?.count ?? 0} checks</td>
+                      <td className="px-4 py-2">Check Processing Usage</td>
+                      <td className="text-right px-4 py-2 tabular-nums">{checkCount} checks</td>
                       <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$4.00</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(checkaltFeeCents)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(data?.events?.filter((e: any) => e.event_type === 'check_processing').reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0)}</td>
                     </tr>
                     <tr>
-                      <td className="px-4 py-2">MortgageOps request handling</td>
+                      <td className="px-4 py-2">MortgageOps Usage</td>
                       <td className="text-right px-4 py-2 tabular-nums">{mortgageCount} requests</td>
                       <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$10.00 / $5.00</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(mortgageFeeCents)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(data?.events?.filter((e: any) => e.event_type === 'mortgage_handling').reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0)}</td>
                     </tr>
                     <tr>
-                      <td className="px-4 py-2">Moov disbursements</td>
+                      <td className="px-4 py-2">Disbursement Usage</td>
                       <td className="text-right px-4 py-2 tabular-nums">{moov?.count ?? 0} txns</td>
                       <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$1.00</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(moovFeeCents)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(data?.events?.filter((e: any) => e.event_type?.startsWith('moov_')).reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0)}</td>
                     </tr>
                     <tr>
                       <td className="px-4 py-2">
