@@ -18,8 +18,16 @@ export const CREDIT_RAIL_TYPES = [
   "ach-credit-standard",
   "ach-credit-same-day",
   "rtp-credit",
+  "instant-bank-credit",
   "push-to-card",
 ];
+
+/**
+ * Additional non-payout method types worth caching. `ach-debit-fund` is the
+ * only method Moov accepts for negative-balance remediation on a sweep config.
+ * The Phase 1 rail router ignores these — it only reads its own three rails.
+ */
+export const FUNDING_RAIL_TYPES = ["ach-debit-fund"];
 
 export type RailMethodIds = Record<string, string>;
 
@@ -50,7 +58,7 @@ export async function fetchRailMethodIds(
   const out: RailMethodIds = {};
   for (const m of methods ?? []) {
     const type = String(m?.paymentMethodType ?? "");
-    if (!CREDIT_RAIL_TYPES.includes(type)) continue;
+    if (!CREDIT_RAIL_TYPES.includes(type) && !FUNDING_RAIL_TYPES.includes(type)) continue;
     const id = m?.paymentMethodID ?? m?.paymentMethodId;
     if (!id) continue;
     const owner = m?.bankAccount?.bankAccountID ?? m?.bankAccount?.bankAccountId ?? null;
