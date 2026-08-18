@@ -75,19 +75,8 @@ export function TenantBankAccountSettings() {
       try {
         // Plaid rail: no hosted redirect. The row lands unverified and the
         // inline Plaid Link widget on the account card finishes the job.
-        if (isPlaid) return null;
-
-        const { data: sess, error: initErr } = await supabase.functions.invoke(
-          "actum-authentecheck-init",
-          { body: { stakeholder_account_id: inserted!.id } },
-        );
-        if (initErr) {
-          let msg = initErr.message ?? "Failed to start verification";
-          try { const b = await (initErr as any).context?.json?.(); if (b?.error) msg = b.error; } catch {}
-          throw new Error(msg);
-        }
-        if ((sess as any)?.error) throw new Error((sess as any).error);
-        return (sess as any)?.url as string;
+        // Actum rail is disabled globally.
+        return null;
       } catch (e: any) {
         if (insertedId) {
           await supabase
@@ -101,10 +90,10 @@ export function TenantBankAccountSettings() {
     onMutate: () => setIsStarting(true),
     onSettled: () => setIsStarting(false),
     onSuccess: (url) => {
-      if (!url && isPlaid) {
+      if (!url) {
         toast({
           title: "Account added",
-          description: "Click \u201cVerify with bank login\u201d below to link it through Plaid.",
+          description: "Click \u201cVerify with bank login\u201d below to link it.",
         });
       }
       if (url) {
