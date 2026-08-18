@@ -23,7 +23,7 @@ export function TenantBankAccountSettings() {
   const { tenant } = useTenant();
   const { toast } = useToast();
   const { isAdmin } = usePermissions();
-  const { isMoov } = usePaymentRail();
+  const { isPlaid } = usePaymentRail();
   const qc = useQueryClient();
   const [isStarting, setIsStarting] = useState(false);
 
