@@ -90,10 +90,14 @@ export function MoovBankLink({ tenantId, onConnected, onExit }: Props) {
       {loading && (
         <div className="flex flex-col items-center gap-2 text-muted-foreground">
           <Loader2 className="h-8 w-8 animate-spin" />
-          <p className="text-sm">Preparing secure connection...</p>
+          <p className="text-sm">Connecting to secure banking partner...</p>
         </div>
       )}
       <div ref={mountRef} className="w-full max-w-md" />
+      <p className="text-[10px] text-muted-foreground mt-4 text-center max-w-[300px]">
+        Your bank details are encrypted and sent directly to Moov. 
+        ChecksOps never sees or stores your login or account numbers.
+      </p>
     </div>
   );
 }

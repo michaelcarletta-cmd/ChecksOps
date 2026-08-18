@@ -1,4 +1,3 @@
-import { AuthentecheckVerification } from "./AuthentecheckVerification";
 import { AlertCircle } from "lucide-react";
 
 interface Props {
@@ -16,15 +15,19 @@ interface Props {
 /**
  * Picks the bank-verification widget.
  * 
- * Actum/Authentecheck is legacy. Moov is the primary rail.
+ * Moov is the primary rail.
  */
 export function BankVerification({ verificationSource, ...props }: Props) {
   const alreadyVerified =
     props.verificationStatus === "verified" || props.verificationStatus === "admin_override";
 
   if (alreadyVerified) {
-    // Keep showing verification status for historical accounts
-    return <AuthentecheckVerification {...props} />;
+    return (
+      <div className="flex items-center gap-2 p-3 rounded-md bg-emerald-500/5 border border-emerald-500/20 text-xs text-emerald-600">
+        <AlertCircle className="h-4 w-4" />
+        Account verified.
+      </div>
+    );
   }
 
   // If not verified, and it's not a Moov-supported verification (which happens 

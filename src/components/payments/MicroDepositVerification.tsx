@@ -144,7 +144,7 @@ export function MicroDepositVerification({
           <span className="text-xs font-medium">Verification Pending</span>
         </div>
         <p className="text-[11px] text-muted-foreground">
-          Enter the two micro-deposit amounts shown on your statement.
+          Enter the two micro-deposit amounts shown on your statement (usually listed as "MOOV" or "CHECKS OPS").
         </p>
         <div className="flex gap-2 max-w-[200px]">
           <Input 
