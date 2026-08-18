@@ -1164,16 +1164,16 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                   </thead>
                   <tbody className="divide-y">
                     <tr>
-                      <td className="px-4 py-2">CheckAlt check processing</td>
-                      <td className="text-right px-4 py-2 tabular-nums">{checkalt?.count ?? 0} checks</td>
+                      <td className="px-4 py-2">Check Processing Usage</td>
+                      <td className="text-right px-4 py-2 tabular-nums">{checkCount} checks</td>
                       <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$4.00</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(checkaltFeeCents)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(data?.events?.filter((e: any) => e.event_type === 'check_processing').reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0)}</td>
                     </tr>
                     <tr>
-                      <td className="px-4 py-2">MortgageOps request handling</td>
+                      <td className="px-4 py-2">MortgageOps Usage</td>
                       <td className="text-right px-4 py-2 tabular-nums">{mortgageCount} requests</td>
                       <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$10.00 / $5.00</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(mortgageFeeCents)}</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(data?.events?.filter((e: any) => e.event_type === 'mortgage_handling').reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0)}</td>
                     </tr>
                     <tr>
                       <td className="px-4 py-2">Moov disbursements</td>
