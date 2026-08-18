@@ -152,8 +152,8 @@ serve(async (req) => {
     // 4. Proactive Capability Requests.
     // If the account is being verified but doesn't have all standard capabilities,
     // we request them now to avoid manual retries later.
-    const requiredCaps = ["transfers", "send-funds", "collect-funds", "wallet", "send-funds.ach", "collect-funds.ach"];
-    const missing = requiredCaps.filter(req => !capList.some(c => c.capability === req));
+    const requiredCaps = ["send-funds.ach", "collect-funds.ach", "wallet.balance"];
+    const missing = requiredCaps.filter(req => !capList.some(c => c.capability === req || c.capability === req.split(".")[0]));
     
     if (missing.length > 0 && verificationStatus !== "failed") {
       try {
@@ -162,7 +162,6 @@ serve(async (req) => {
           scopes: scopes.capabilitiesWrite(accountId),
           body: { capabilities: missing }
         });
-        // We don't re-fetch immediately; the next sync or webhook will pick it up.
         console.log(`[moov-sync] Requested missing capabilities: ${missing.join(", ")}`);
       } catch (e) {
         console.warn(`[moov-sync] Failed to request capabilities: ${(e as Error).message}`);

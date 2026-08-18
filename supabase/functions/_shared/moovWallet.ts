@@ -34,9 +34,16 @@ async function ensureProviderWallet(
   walletType: WalletType,
   name: string,
 ): Promise<{ walletID: string; availableCents: number; pendingCents: number }> {
-  const list = await moovFetch<any[]>(`/accounts/${accountId}/wallets`, {
-    scopes: walletScopes.read(accountId),
-  });
+  let list: any[] = [];
+  try {
+    list = await moovFetch<any[]>(`/accounts/${accountId}/wallets`, {
+      scopes: walletScopes.read(accountId),
+    });
+  } catch (e) {
+    console.warn("[ensureProviderWallet] Could not list wallets", (e as Error).message);
+    // If we can't list, we assume we might need to create or we return empty if it's a 403
+    if ((e as any).status !== 403) throw e;
+  }
 
   const wanted = (list ?? []).find((w: any) =>
     walletType === "trust"
@@ -46,11 +53,16 @@ async function ensureProviderWallet(
 
   let wallet = wanted;
   if (!wallet) {
-    wallet = await moovFetch<any>(`/accounts/${accountId}/wallets`, {
-      method: "POST",
-      scopes: walletScopes.write(accountId),
-      body: { name, description: `ChecksOps ${walletType} wallet` },
-    });
+    try {
+      wallet = await moovFetch<any>(`/accounts/${accountId}/wallets`, {
+        method: "POST",
+        scopes: walletScopes.write(accountId),
+        body: { name, description: `ChecksOps ${walletType} wallet` },
+      });
+    } catch (e) {
+      console.warn("[ensureProviderWallet] Could not create wallet", (e as Error).message);
+      throw e;
+    }
   }
 
   const available = wallet?.availableBalance?.valueDecimal

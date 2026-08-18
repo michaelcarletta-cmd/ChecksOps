@@ -113,7 +113,8 @@ export function PaymentReadinessPanel() {
       });
       await invoke("moov-tos-accept", { tenant_id: tenantId, terms_of_service_token: token });
       tosMountRef.current?.replaceChildren();
-      toast({ title: "Terms accepted", description: "Your acceptance was recorded with the payment provider." });
+      toast({ title: "Terms accepted", description: "Your acceptance was recorded. Syncing account status..." });
+      await invoke("moov-sync", { tenant_id: tenantId });
       await load();
     } catch (e: any) {
       toast({ title: "Couldn't record terms acceptance", description: e.message, variant: "destructive" });
