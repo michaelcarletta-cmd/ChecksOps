@@ -175,17 +175,8 @@ export function StakeholderAccountSettings() {
         // new account card completes verification.
         if (isPlaid) return { url: null, emailed: false };
 
-        const { data: sess, error: initErr } = await supabase.functions.invoke(
-          "actum-authentecheck-init",
-          { body: { stakeholder_account_id: inserted!.id } },
-        );
-        if (initErr) {
-          let msg = initErr.message ?? "Failed to start verification";
-          try { const b = await (initErr as any).context?.json?.(); if (b?.error) msg = b.error; } catch {}
-          throw new Error(msg);
-        }
-        if ((sess as any)?.error) throw new Error((sess as any).error);
-        return { url: (sess as any)?.url as string, emailed: false };
+        // Actum rail is hidden/disabled globally.
+        return { url: null, emailed: false };
       } catch (e: any) {
         if (insertedId) {
           await supabase
@@ -199,10 +190,10 @@ export function StakeholderAccountSettings() {
     onSuccess: ({ url, emailed }) => {
       if (emailed) {
         toast({ title: "Verification link sent", description: "The account holder will receive an email to link their bank account." });
-      } else if (!url && isPlaid) {
+      } else if (!url) {
         toast({
           title: "Account added",
-          description: "Click \u201cVerify with bank login\u201d on the new account to link it through Plaid.",
+          description: "Click \u201cVerify with bank login\u201d on the new account to link it.",
         });
       } else if (url) {
         // Open as a normal full-size tab, not a constrained popup — OAuth-based
