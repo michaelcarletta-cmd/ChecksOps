@@ -38,6 +38,8 @@ interface UsagePayload {
   month_start: string;
   month_end: string;
   events: UsageEvent[];
+  mortgage_count?: number;
+  mortgage_amount_cents?: number;
 }
 
 const formatCents = (cents: number, currency = "usd") =>
