@@ -189,10 +189,28 @@ export async function moovFetch<T = any>(
   } catch { /* non-JSON */ }
 
   if (!res.ok) {
-    const msg = json?.error ?? json?.message ?? text ?? `Moov ${path} failed`;
+    let msg = json?.error ?? json?.message ?? text ?? `Moov ${path} failed`;
+    
+    // Map Moov-specific error responses to user-friendly strings if possible.
+    if (json?.errors) {
+      const details = Object.entries(json.errors)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(", ");
+      msg = `${msg} (${details})`;
+    }
+
     console.error("[moov] error", opts.method ?? "GET", path, res.status, msg);
-    throw new MoovError(typeof msg === "string" ? msg : JSON.stringify(msg), res.status, json ?? text);
+
+    // Provide helpful hints for common status codes.
+    let userMessage = typeof msg === "string" ? msg : JSON.stringify(msg);
+    if (res.status === 401) userMessage = "Authentication failed with the payment provider. Please check credentials or origin white-listing.";
+    if (res.status === 403) userMessage = "Action forbidden. This account may lack the required permissions or capabilities.";
+    if (res.status === 404) userMessage = "Resource not found on the payment provider.";
+    if (res.status === 429) userMessage = "Rate limit exceeded. Please try again in a moment.";
+
+    throw new MoovError(userMessage, res.status, json ?? text);
   }
+
   return json as T;
 }
 
