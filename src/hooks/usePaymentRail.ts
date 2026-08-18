@@ -37,13 +37,14 @@ export function usePaymentRail() {
   });
 
   const rail: PaymentRail = data ?? "actum";
+  const isActum = rail === "actum";
 
   return {
     rail,
     /** Actum disbursement + Authentecheck verification are active for this tenant. */
-    isActum: rail === "actum",
-    /** Plaid Transfer + Plaid Link are active for this tenant. */
-    isPlaid: rail === "plaid",
+    isActum,
+    /** Plaid is hidden/disabled. */
+    isPlaid: false,
     isLoading,
   };
 }

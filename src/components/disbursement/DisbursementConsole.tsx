@@ -15,7 +15,7 @@ import { AlertTriangle, CheckCircle2, Send, Building2, Loader2, RefreshCw, Zap, 
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { CheckStakeholdersManager } from "./CheckStakeholdersManager";
-import { RailUnavailableNotice } from "./RailUnavailableNotice";
+
 import { usePaymentRail } from "@/hooks/usePaymentRail";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 import { useWallet } from "@/hooks/useWallet";
@@ -362,7 +362,7 @@ export function DisbursementConsole({
     onError: (e: any) => toast({ title: "Disbursement failed", description: e.message, variant: "destructive" }),
   });
 
-  if (!isActum && !isPlaid && !moovEnabled) return <RailUnavailableNotice />;
+  if (!isActum && !moovEnabled) return <div className="p-6 text-center text-sm text-muted-foreground border rounded-lg">Bank payments are currently unavailable for this organization.</div>;
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading accounts...</div>;
 
   const totalRemainingOfCheck = Math.max(0, checkAmount - alreadyDisbursed);
