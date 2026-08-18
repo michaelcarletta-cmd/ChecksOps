@@ -335,32 +335,51 @@ export function DisbursementConsole({
       }
 
       if (deliverySpeed === "external") {
+        console.log("Recording external manual disbursement batch for check:", checkIntakeItemId);
+        
         // Mark the batch and splits as settled since it was recorded as manual payment
+        // Note: The 'status' check constraint on disbursement_batches doesn't include 'settled',
+        // but the 'advance_check_stage_on_batch_complete' trigger checks for it.
+        // We'll use 'completed' for the batch status to satisfy the constraint while triggering the logic.
         const { error: updateBatchErr } = await supabase
           .from("disbursement_batches")
-          .update({ status: "settled" })
+          .update({ 
+            status: "completed",
+            notes: "Recorded as external manual payment."
+          })
           .eq("id", batch.id);
         
-        if (updateBatchErr) throw updateBatchErr;
+        if (updateBatchErr) {
+          console.error("Error updating batch to completed:", updateBatchErr);
+          throw updateBatchErr;
+        }
 
         const { error: updateSplitsErr } = await supabase
           .from("disbursement_splits")
           .update({ status: "settled" })
           .eq("batch_id", batch.id);
         
-        if (updateSplitsErr) throw updateSplitsErr;
+        if (updateSplitsErr) {
+          console.error("Error updating splits to settled:", updateSplitsErr);
+          throw updateSplitsErr;
+        }
 
         // Advance check stage to disbursed_externally if fully balanced
         if (isBalanced && checkIntakeItemId) {
-          await supabase
+          console.log("Advancing check stage to disbursed_externally");
+          const { error: stageUpdateErr1 } = await supabase
             .from("check_intake_items")
             .update({ check_stage: "disbursed_externally" as any })
             .eq("id", checkIntakeItemId);
           
-          await supabase
+          if (stageUpdateErr1) console.error("Error updating intake check_stage:", stageUpdateErr1);
+
+          const { error: stageUpdateErr2 } = await supabase
             .from("claim_checks")
             .update({ check_stage: "disbursed_externally" as any })
             .eq("check_intake_item_id", checkIntakeItemId);
+            
+          if (stageUpdateErr2) console.error("Error updating claim_checks check_stage:", stageUpdateErr2);
         }
 
         return { batchId: batch.id, rail: "external" as const, note: "External payment recorded" };
