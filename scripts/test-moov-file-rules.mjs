@@ -143,7 +143,7 @@ test("raw document bytes are not persisted", () => {
 });
 
 test("audit event carries no document contents", () => {
-  const idx = upload.indexOf("logPaymentEvent");
+  const idx = upload.lastIndexOf("logPaymentEvent");
   const block = upload.slice(idx, idx + 600);
   assert.ok(block.includes("provider_file_id"));
   assert.ok(!block.includes("bytes,"));
