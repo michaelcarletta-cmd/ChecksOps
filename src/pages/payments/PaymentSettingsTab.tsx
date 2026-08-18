@@ -15,6 +15,7 @@ export function PaymentSettingsTab() {
   return (
     <div className="space-y-4 pt-2">
       <PaymentAccountPanel />
+      <VerificationDocumentsPanel />
       <WalletPanel />
       <MoovTreasuryPanel />
       <PlatformFeeSchedulePanel />
