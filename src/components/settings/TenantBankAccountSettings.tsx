@@ -278,7 +278,7 @@ export function TenantBankAccountSettings() {
                   accountNickname={acct.nickname}
                   accountLast4={acct.chk_acct?.slice(-4) ?? ""}
                   verificationStatus={acct.verification_status ?? "unverified"}
-                  verificationSource={(acct as any).verification_source ?? null}
+                  verificationSource={(acct as any).verification_source ?? "moov"}
                 />
                 <AchAuthorizationForm
                   stakeholderAccountId={acct.id}

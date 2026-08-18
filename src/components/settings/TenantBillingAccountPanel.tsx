@@ -14,7 +14,7 @@ import { useTenantFilter } from "@/hooks/useTenantFilter";
 
 /**
  * Maintenance-fee billing: pick which of your already-verified bank accounts
- * (added via Moov / Plaid in the Bank Account panel) should be
+ * (added via Moov in the Bank Account panel) should be
  * debited monthly. No manual routing/account entry — ever.
  */
 export function TenantBillingAccountPanel() {
