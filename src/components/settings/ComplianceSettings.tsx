@@ -134,7 +134,7 @@ export function ComplianceSettings() {
           <CardTitle className="flex items-center gap-2 text-base">
             <ShieldCheck className="h-4 w-4 text-primary" /> Compliance status
           </CardTitle>
-          <CardDescription>KYC and vetting document posture for this tenant. All documents sync with Moov for compliance.</CardDescription>
+          <CardDescription>KYC and vetting document posture for this tenant. All documents and identity records sync directly with Moov for compliance and identity verification.</CardDescription>
         </CardHeader>
         <CardContent>
           <StatusPill label="KYC" done={kycDone} />
