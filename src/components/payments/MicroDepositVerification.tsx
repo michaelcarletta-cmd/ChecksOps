@@ -64,13 +64,12 @@ export function MicroDepositVerification({
   const confirm = useMutation({
     mutationFn: async () => {
       const cents = amounts.map(a => Math.round(parseFloat(a) * 100));
+      const verificationId = await getVerificationId();
+
       const { data, error } = await supabase.functions.invoke("moov-micro-deposit-confirm", {
         body: { 
           tenant_id: tenantId, 
-          // We need a verification_id here, but the legacy API might use payment_method_id
-          // moov-micro-deposit-confirm expects verification_id from the DB record
-          // For now, let's look up the pending verification
-          verification_id: await getVerificationId(),
+          verification_id: verificationId,
           amounts: cents 
         }
       });
@@ -95,10 +94,28 @@ export function MicroDepositVerification({
   });
 
   async function getVerificationId() {
+    let pmId = paymentMethodId;
+    
+    // If we don't have a paymentMethodId (e.g. from state), look for a pending Moov one
+    if (!pmId) {
+      const { data: method } = await supabase
+        .from("payment_provider_methods")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .eq("provider", "moov")
+        .eq("connection_status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      pmId = method?.id;
+    }
+
+    if (!pmId) throw new Error("No pending payment method found.");
+
     const { data } = await supabase
       .from("payment_method_verifications")
       .select("id")
-      .eq("payment_method_id", paymentMethodId)
+      .eq("payment_method_id", pmId)
       .eq("status", "pending")
       .order("created_at", { ascending: false })
       .limit(1)

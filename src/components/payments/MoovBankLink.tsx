@@ -66,7 +66,9 @@ export function MoovBankLink({ tenantId, onConnected, onExit }: Props) {
         title: "Bank account linked",
         description: "Your bank account has been securely attached. Verification may be required."
       });
-      if (id) onConnected?.(id);
+      if (id) {
+        onConnected?.(id);
+      }
     };
 
     el.onError = (err: any) => {
