@@ -32,7 +32,7 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
   const { user } = useAuth();
   const { tenant } = useTenant();
   const { toast } = useToast();
-  const { isActum, isPlaid } = usePaymentRail();
+  const { isPlaid } = usePaymentRail();
   const { enabled: moovEnabled } = usePaymentProviderEligibility();
   const qc = useQueryClient();
 
@@ -147,31 +147,16 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
         const code = reason?.error ?? "";
         const recoverable = ["recipient_setup_required", "payer_setup_required", "insufficient_balance"].includes(code);
 
-        if (!recoverable || (!isActum && !isPlaid)) {
+        if (!recoverable) {
           const msg = reason?.message ?? reason?.error ?? moovErr?.message ?? "Payment failed";
           await supabase.from("payroll_runs").update({ status: "failed", error: msg }).eq("id", runRow.id);
           throw new Error(msg);
         }
-      }
-
-      // Fallback: the tenant's legacy payout rail
-      const railFn = isPlaid ? "plaid-disburse" : "actum-disburse";
-      const { data: railData, error: invokeErr } = await supabase.functions.invoke(railFn, {
-        body: { batch_id: batch.id },
-      });
-
-      const railError =
-        invokeErr ??
-        ((railData as any)?.success === false
-          ? new Error((railData as any)?.error ?? "Payment failed")
-          : null);
-
-      if (railError) {
-        await supabase
-          .from("payroll_runs")
-          .update({ status: "failed", error: railError.message })
-          .eq("id", runRow.id);
-        throw railError;
+        
+        // Fallback rail logic removed — Actum is disabled globally.
+        const msg = reason?.message ?? "Recipient not ready for Moov payroll. Please connect their bank account via Moov first.";
+        await supabase.from("payroll_runs").update({ status: "failed", error: msg }).eq("id", runRow.id);
+        throw new Error(msg);
       }
 
       await supabase.from("payroll_runs").update({ status: "submitted" }).eq("id", runRow.id);
@@ -190,7 +175,7 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
     },
   });
 
-  if (!isActum && !isPlaid && !moovEnabled) {
+  if (!moovEnabled) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-md">

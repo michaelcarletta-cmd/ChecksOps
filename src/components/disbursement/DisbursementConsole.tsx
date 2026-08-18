@@ -51,8 +51,7 @@ const ACCOUNT_TYPE_COLORS: Record<string, string> = {
   supplier: "bg-cyan-500/10 text-cyan-700 border-cyan-500/20",
   other: "bg-muted text-muted-foreground border-border",
 };
-// A recipient can be paid on the primary (Moov) rail only once they have a
-// Moov-linked bank account. Otherwise the whole batch falls back to the legacy rail.
+// Recipient readiness on Moov.
 const isMoovReady = (acct: any) =>
   acct?.provider === "moov" && !!(acct?.provider_bank_account_id || acct?.provider_account_id);
 
@@ -77,7 +76,7 @@ export function DisbursementConsole({
   const SPEED_LABELS: Record<string, string> = { next_day: "Next Day", same_day: "Same Day" };
   const [adminOverride, setAdminOverride] = useState(false);
   const { isAdmin } = usePermissions();
-  const { isActum, isPlaid } = usePaymentRail();
+  const { isPlaid } = usePaymentRail();
   // Moov is the primary disbursement rail. Actum/Plaid remain as the fallback
   // whenever a recipient has not connected a bank on the Moov rail yet.
   const { enabled: moovEnabled } = usePaymentProviderEligibility();
@@ -335,23 +334,13 @@ export function DisbursementConsole({
         moovFallbackNote = reason?.message ?? "Sent on the legacy rail — finish payment setup to use the new rail.";
       }
 
-      // Fallback rail (admin_override only honored server-side if caller is admin)
-      // Plaid is disabled; always use Actum if falling back from Moov.
-      const railFn = "actum-disburse";
-      const { data: railData, error: invokeErr } = await supabase.functions.invoke(railFn, {
-        body: { batch_id: batch.id, admin_override: adminOverride && isAdmin },
-      });
-
-      if (invokeErr) throw invokeErr;
-      if ((railData as any)?.success === false) {
-        throw new Error((railData as any)?.error ?? "Disbursement failed");
-      }
-      return { batchId: batch.id, rail: "actum" as const, note: moovFallbackNote };
+      // Fallback rail logic removed — Actum is disabled globally.
+      throw new Error(moovFallbackNote ?? "Recipient not ready for Moov disbursement. Please connect their bank account via Moov first.");
     },
     onSuccess: (result: any) => {
       toast({
-        title: result?.rail === "moov" ? "Disbursements submitted" : "Disbursements submitted (legacy rail)",
-        description: result?.note ?? "Credits are on their way to each account.",
+        title: "Disbursements submitted",
+        description: "Credits are on their way to each account.",
       });
       qc.invalidateQueries({ queryKey: ["disbursement-batch-history", checkIntakeItemId ?? depositItemId] });
       qc.invalidateQueries({ queryKey: ["disbursement-batch"] });
@@ -362,7 +351,7 @@ export function DisbursementConsole({
     onError: (e: any) => toast({ title: "Disbursement failed", description: e.message, variant: "destructive" }),
   });
 
-  if (!isActum && !moovEnabled) return <div className="p-6 text-center text-sm text-muted-foreground border rounded-lg">Bank payments are currently unavailable for this organization.</div>;
+  if (!moovEnabled) return <div className="p-6 text-center text-sm text-muted-foreground border rounded-lg">Bank payments are currently unavailable for this organization.</div>;
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading accounts...</div>;
 
   const totalRemainingOfCheck = Math.max(0, checkAmount - alreadyDisbursed);
