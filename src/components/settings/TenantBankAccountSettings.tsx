@@ -136,7 +136,7 @@ export function TenantBankAccountSettings() {
     onError: (e: any) => toast({ title: "Couldn't resend", description: e.message, variant: "destructive" }),
   });
 
-  /** Placeholder for legacy removal. */
+  const deleteAccount = useMutation({
     mutationFn: async (id: string) => {
       const { error: linkError } = await supabase
         .from("check_stakeholders")
