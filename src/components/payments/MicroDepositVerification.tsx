@@ -64,26 +64,12 @@ export function MicroDepositVerification({
   const confirm = useMutation({
     mutationFn: async () => {
       const cents = amounts.map(a => Math.round(parseFloat(a) * 100));
-      
-      // First, find the payment method ID if we don't have it (fallback)
-      let pmId = paymentMethodId;
-      if (!pmId) {
-        const { data: method } = await supabase
-          .from("payment_provider_methods")
-          .select("id")
-          .eq("tenant_id", tenantId)
-          .eq("provider", "moov")
-          .eq("connection_status", "pending")
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        pmId = method?.id;
-      }
+      const verificationId = await getVerificationId();
 
       const { data, error } = await supabase.functions.invoke("moov-micro-deposit-confirm", {
         body: { 
           tenant_id: tenantId, 
-          payment_method_id: pmId,
+          verification_id: verificationId,
           amounts: cents 
         }
       });
