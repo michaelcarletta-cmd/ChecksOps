@@ -764,8 +764,8 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
         <Separator />
 
         <div className="space-y-4">
-          <h3 className="text-sm font-medium">Actum Credit Usage Fees</h3>
-          <p className="text-xs text-muted-foreground">These fees are tracked for visibility. Tenants pay these directly to Actum.</p>
+          <h3 className="text-sm font-medium">Moov Credit Usage Fees</h3>
+          <p className="text-xs text-muted-foreground">These fees are tracked for visibility. Tenants pay these directly to Moov.</p>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <Label className="text-xs">Same Day Credit</Label>
@@ -867,7 +867,7 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
           <div>
             <CardTitle>Billing Bank Account</CardTitle>
             <CardDescription>
-              Plaid/Authentecheck-verified account we pull maintenance fees from for {tenantName}.
+              Plaid/Moov-verified account we pull maintenance fees from for {tenantName}.
             </CardDescription>
           </div>
           <Button size="sm" onClick={pullNow} disabled={charging || !bank || !billing?.auto_debit_enabled}>
@@ -894,7 +894,7 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
             <div className="flex flex-col items-end gap-1">
               <Badge variant="default" className="text-[10px]">
                 <ShieldCheck className="w-3 h-3 mr-1" />
-                {bank.verification_status === "admin_override" ? "Verified (override)" : "Verified via Plaid"}
+                {bank.verification_status === "admin_override" ? "Verified (override)" : "Verified via Moov"}
               </Badge>
               {billing?.stakeholder_account_id ? (
                 <span className="text-[10px] text-muted-foreground">

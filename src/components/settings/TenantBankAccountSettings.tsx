@@ -73,9 +73,9 @@ export function TenantBankAccountSettings() {
       insertedId = inserted!.id;
 
       try {
-        // Plaid rail: no hosted redirect. The row lands unverified and the
-        // inline Plaid Link widget on the account card finishes the job.
-        // Actum rail is disabled globally.
+        // Moov rail: the row lands unverified and the
+        // inline Moov Link widget on the account card finishes the job.
+        // Legacy rails (Actum/Plaid) are disabled globally.
         return null;
       } catch (e: any) {
         if (insertedId) {
@@ -136,7 +136,7 @@ export function TenantBankAccountSettings() {
     onError: (e: any) => toast({ title: "Couldn't resend", description: e.message, variant: "destructive" }),
   });
 
-  const deleteAccount = useMutation({
+  /** Placeholder for legacy removal. */
     mutationFn: async (id: string) => {
       const { error: linkError } = await supabase
         .from("check_stakeholders")

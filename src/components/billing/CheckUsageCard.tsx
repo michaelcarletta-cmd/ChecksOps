@@ -140,7 +140,7 @@ export function CheckUsageCard() {
             {isLoading ? "—" : showBillingAmounts ? formatCents(data?.amount_cents ?? 0, data?.currency) : "$—"}
           </div>
           <p className="text-[10px] text-muted-foreground mt-1">
-            * Actum fees ($1.00 same day, $1.50 instant) are paid directly to Actum.
+            * Moov fees ($1.00 same day, $1.50 instant) are paid directly to Moov.
             {!showBillingAmounts && " Processing fees are managed by Freedom Adjustment."}
           </p>
         </div>

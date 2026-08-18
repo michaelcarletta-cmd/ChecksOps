@@ -203,7 +203,7 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground mt-3 italic">
-                * Note: Actum fees are paid directly to Actum. Billing amounts reflect the internal per-check rate configured for this tenant.
+                * Note: Moov fees are paid directly to Moov. Billing amounts reflect the internal per-check rate configured for this tenant.
               </p>
             </div>
 
