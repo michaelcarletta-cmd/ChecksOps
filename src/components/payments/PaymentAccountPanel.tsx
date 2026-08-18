@@ -203,7 +203,24 @@ export function PaymentAccountPanel() {
           </div>
         ) : null}
 
-        {enabled && (
+        {showBankLink && tenantId ? (
+          <div className="pt-2">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-medium">Connect Bank Account</h4>
+              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setShowBankLink(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <MoovBankLink 
+              tenantId={tenantId}
+              onConnected={() => {
+                setShowBankLink(false);
+                refresh();
+              }}
+              onExit={() => setShowBankLink(false)}
+            />
+          </div>
+        ) : enabled && (
           <div className="flex flex-col sm:flex-row gap-2 pt-1">
             <Button
               size="sm"
@@ -219,12 +236,11 @@ export function PaymentAccountPanel() {
               size="sm"
               variant="outline"
               className="h-8 text-xs"
-              onClick={handleBridge}
+              onClick={() => setShowBankLink(true)}
               disabled={busy !== null || !account?.externalAccountId}
             >
-              {busy === "bridge"
-                ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Connecting…</>
-                : <><Link2 className="h-3.5 w-3.5 mr-1.5" /> Use my linked bank</>}
+              <Landmark className="h-3.5 w-3.5 mr-1.5" />
+              Connect Bank
             </Button>
             <Button
               size="sm"
