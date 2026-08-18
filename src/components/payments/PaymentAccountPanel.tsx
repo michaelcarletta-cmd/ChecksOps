@@ -4,11 +4,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Banknote, CreditCard, ShieldCheck, RefreshCw, ExternalLink, Loader2, Link2 } from "lucide-react";
+import { 
+  Banknote, CreditCard, ShieldCheck, RefreshCw, ExternalLink, 
+  Loader2, Link2, Landmark, X 
+} from "lucide-react";
 import { usePaymentAccount } from "@/hooks/usePaymentAccount";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { MoovBankLink } from "./MoovBankLink";
+import { MicroDepositVerification } from "./MicroDepositVerification";
 import {
   BANK_STATUS_LABEL,
   ONBOARDING_STATUS_LABEL,
@@ -36,7 +41,8 @@ export function PaymentAccountPanel() {
   const { tenantId, enabled } = usePaymentProviderEligibility();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [busy, setBusy] = useState<null | "setup" | "sync" | "bridge">(null);
+  const [busy, setBusy] = useState<null | "setup" | "sync" | "bridge" | "bank_link">(null);
+  const [showBankLink, setShowBankLink] = useState(false);
 
   if (isLoading) {
     return <div className="p-4 text-sm text-muted-foreground">Loading payment account…</div>;
@@ -161,11 +167,20 @@ export function PaymentAccountPanel() {
           <span className="text-xs text-muted-foreground flex items-center gap-1.5">
             <Banknote className="h-3.5 w-3.5" /> Connected Bank
           </span>
-          <span className="text-xs">
-            {account?.bankName
-              ? `${account.bankName}${account.bankLastFour ? ` ••${account.bankLastFour}` : ""}`
-              : BANK_STATUS_LABEL[account?.bankConnectionStatus ?? "not_connected"]}
-          </span>
+          <div className="flex flex-col items-end">
+            <span className="text-xs">
+              {account?.bankName
+                ? `${account.bankName}${account.bankLastFour ? ` ••${account.bankLastFour}` : ""}`
+                : BANK_STATUS_LABEL[account?.bankConnectionStatus ?? "not_connected"]}
+            </span>
+            {tenantId && account?.bankConnectionStatus !== "connected" && (
+              <MicroDepositVerification 
+                tenantId={tenantId}
+                verificationStatus={account?.bankConnectionStatus === "pending" ? "pending_micro_deposit" : "not_started"}
+                onVerified={() => refresh()}
+              />
+            )}
+          </div>
         </div>
 
         <div className="flex items-center justify-between">
@@ -188,7 +203,24 @@ export function PaymentAccountPanel() {
           </div>
         ) : null}
 
-        {enabled && (
+        {showBankLink && tenantId ? (
+          <div className="pt-2">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-medium">Connect Bank Account</h4>
+              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setShowBankLink(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <MoovBankLink 
+              tenantId={tenantId}
+              onConnected={() => {
+                setShowBankLink(false);
+                refresh();
+              }}
+              onExit={() => setShowBankLink(false)}
+            />
+          </div>
+        ) : enabled && (
           <div className="flex flex-col sm:flex-row gap-2 pt-1">
             <Button
               size="sm"
@@ -204,12 +236,11 @@ export function PaymentAccountPanel() {
               size="sm"
               variant="outline"
               className="h-8 text-xs"
-              onClick={handleBridge}
+              onClick={() => setShowBankLink(true)}
               disabled={busy !== null || !account?.externalAccountId}
             >
-              {busy === "bridge"
-                ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Connecting…</>
-                : <><Link2 className="h-3.5 w-3.5 mr-1.5" /> Use my linked bank</>}
+              <Landmark className="h-3.5 w-3.5 mr-1.5" />
+              Connect Bank
             </Button>
             <Button
               size="sm"
