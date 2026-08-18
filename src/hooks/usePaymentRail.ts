@@ -36,14 +36,14 @@ export function usePaymentRail() {
     },
   });
 
-  const rail: PaymentRail = data ?? "actum";
-  const isActum = rail === "actum";
+  const rail: PaymentRail = "actum"; // Keep internal type but it's effectively legacy
+  const isActum = false;
 
   return {
     rail,
-    /** Actum disbursement + Authentecheck verification are active for this tenant. */
+    /** Actum is hidden globally. */
     isActum,
-    /** Plaid is hidden/disabled. */
+    /** Plaid is hidden globally. */
     isPlaid: false,
     isLoading,
   };

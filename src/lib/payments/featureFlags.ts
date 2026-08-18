@@ -23,7 +23,7 @@ function envFlag(name: string, fallback: boolean): boolean {
 }
 
 export const PAYMENT_FLAGS: PaymentFeatureFlags = {
-  USE_ACTUM: envFlag("USE_ACTUM", true),
+  USE_ACTUM: false,
   USE_PLAID: envFlag("USE_PLAID", false),
   // Moov is on, but still gated per-organization by the `moov_allowlisted`
   // flag (enforced again on the backend), so only allowlisted orgs see it.
