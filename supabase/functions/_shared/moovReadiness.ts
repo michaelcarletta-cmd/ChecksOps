@@ -172,8 +172,27 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
     id: "send_funds_ach",
     label: "Send funds via ACH",
     state: capabilityState(sendFunds),
-    detail: sendFunds ? null : "Capability not requested or not yet returned by the provider.",
+    detail: sendFunds ? null : "Standard ACH capability not requested or not yet returned.",
     requirements: sendFunds?.requirements?.currentlyDue ?? [],
+  });
+
+  const sameDaySend = findCapability(caps, "send-funds.ach.same-day");
+  if (sameDaySend) {
+    checks.push({
+      id: "send_funds_ach_sameday",
+      label: "Same-day ACH Sending",
+      state: capabilityState(sameDaySend),
+      detail: sameDaySend.status === "enabled" ? "Active" : "Same-day ACH requires additional review.",
+    });
+  }
+
+  const collectFunds = findCapability(caps, "collect-funds.ach");
+  checks.push({
+    id: "collect_funds_ach",
+    label: "Collect funds via ACH",
+    state: capabilityState(collectFunds),
+    detail: collectFunds ? null : "ACH collection not requested or not yet returned.",
+    requirements: collectFunds?.requirements?.currentlyDue ?? [],
   });
 
   const wallet = findCapability(caps, "wallet.balance");
