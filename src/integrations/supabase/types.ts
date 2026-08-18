@@ -17044,6 +17044,8 @@ export type Database = {
           disabled: boolean
           display_name: string | null
           environment: string
+          fee_plan_code: string | null
+          fee_plan_status: string
           id: string
           last_synced_at: string | null
           last_webhook_event_at: string | null
@@ -17054,9 +17056,14 @@ export type Database = {
           provider: string
           provider_account_id: string | null
           provider_metadata: Json
+          readiness: Json
+          readiness_checked_at: string | null
           requirements: Json
           restricted: boolean
           tenant_id: string
+          tos_accepted_at: string | null
+          tos_accepted_by: string | null
+          tos_source: string | null
           updated_at: string
           verification_status: string
         }
@@ -17071,6 +17078,8 @@ export type Database = {
           disabled?: boolean
           display_name?: string | null
           environment?: string
+          fee_plan_code?: string | null
+          fee_plan_status?: string
           id?: string
           last_synced_at?: string | null
           last_webhook_event_at?: string | null
@@ -17081,9 +17090,14 @@ export type Database = {
           provider?: string
           provider_account_id?: string | null
           provider_metadata?: Json
+          readiness?: Json
+          readiness_checked_at?: string | null
           requirements?: Json
           restricted?: boolean
           tenant_id: string
+          tos_accepted_at?: string | null
+          tos_accepted_by?: string | null
+          tos_source?: string | null
           updated_at?: string
           verification_status?: string
         }
@@ -17098,6 +17112,8 @@ export type Database = {
           disabled?: boolean
           display_name?: string | null
           environment?: string
+          fee_plan_code?: string | null
+          fee_plan_status?: string
           id?: string
           last_synced_at?: string | null
           last_webhook_event_at?: string | null
@@ -17108,9 +17124,14 @@ export type Database = {
           provider?: string
           provider_account_id?: string | null
           provider_metadata?: Json
+          readiness?: Json
+          readiness_checked_at?: string | null
           requirements?: Json
           restricted?: boolean
           tenant_id?: string
+          tos_accepted_at?: string | null
+          tos_accepted_by?: string | null
+          tos_source?: string | null
           updated_at?: string
           verification_status?: string
         }
