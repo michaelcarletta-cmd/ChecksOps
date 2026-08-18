@@ -333,23 +333,26 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
       {totalReceived > 0 && (
         <Card>
           <CardContent className="pt-3 pb-3 space-y-3">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-medium">Public adjuster fee</Label>
-                <div className="flex gap-1">
-                  <Button size="sm" variant={paFeeMode === "pct" ? "default" : "outline"} className="h-6 px-2 text-[10px]" onClick={() => setPaFeeMode("pct")}>%</Button>
-                  <Button size="sm" variant={paFeeMode === "amount" ? "default" : "outline"} className="h-6 px-2 text-[10px]" onClick={() => setPaFeeMode("amount")}>$</Button>
+            {disburseMode === "platform" && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium">Public adjuster fee (optional)</Label>
+                  <div className="flex gap-1">
+                    <Button size="sm" variant={paFeeMode === "pct" ? "default" : "outline"} className="h-6 px-2 text-[10px]" onClick={() => setPaFeeMode("pct")}>%</Button>
+                    <Button size="sm" variant={paFeeMode === "amount" ? "default" : "outline"} className="h-6 px-2 text-[10px]" onClick={() => setPaFeeMode("amount")}>$</Button>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {paFeeMode === "pct" ? (
+                    <Input type="number" inputMode="decimal" step="0.01" placeholder="e.g. 10" className="h-8 text-sm" value={paFeePct} onChange={(e) => setPaFeePct(e.target.value)} />
+                  ) : (
+                    <Input type="number" inputMode="decimal" step="0.01" placeholder="$ amount" className="h-8 text-sm" value={paFeeAmt} onChange={(e) => setPaFeeAmt(e.target.value)} />
+                  )}
+                  <Button size="sm" className="h-8 text-xs" onClick={savePaFee}>Save</Button>
                 </div>
               </div>
-              <div className="flex gap-2">
-                {paFeeMode === "pct" ? (
-                  <Input type="number" inputMode="decimal" step="0.01" placeholder="e.g. 10" className="h-8 text-sm" value={paFeePct} onChange={(e) => setPaFeePct(e.target.value)} />
-                ) : (
-                  <Input type="number" inputMode="decimal" step="0.01" placeholder="$ amount" className="h-8 text-sm" value={paFeeAmt} onChange={(e) => setPaFeeAmt(e.target.value)} />
-                )}
-                <Button size="sm" className="h-8 text-xs" onClick={savePaFee}>Save</Button>
-              </div>
-            </div>
+            )}
+
 
             <div className="border-t pt-2 space-y-1 text-xs">
               <div className="flex justify-between"><span className="text-muted-foreground">Funds received</span><span>${totalReceived.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span></div>
