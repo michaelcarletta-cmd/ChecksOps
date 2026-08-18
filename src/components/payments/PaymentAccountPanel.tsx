@@ -43,6 +43,20 @@ export function PaymentAccountPanel() {
   const qc = useQueryClient();
   const [busy, setBusy] = useState<null | "setup" | "sync" | "bridge" | "bank_link">(null);
   const [showBankLink, setShowBankLink] = useState(false);
+  const [setupWindow, setSetupWindow] = useState<Window | null>(null);
+
+  useEffect(() => {
+    // Monitor the setup window. If it closes, automatically refresh.
+    if (!setupWindow) return;
+    const interval = setInterval(() => {
+      if (setupWindow.closed) {
+        setSetupWindow(null);
+        refresh();
+        clearInterval(interval);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [setupWindow]);
 
   if (isLoading) {
     return <div className="p-4 text-sm text-muted-foreground">Loading payment account…</div>;
@@ -77,10 +91,11 @@ export function PaymentAccountPanel() {
         return_url: `${window.location.origin}/payments?tab=settings`,
       });
       if (res?.url) {
-        window.open(res.url, "_blank", "noopener,noreferrer");
+        const win = window.open(res.url, "_blank", "noopener,noreferrer");
+        setSetupWindow(win);
         toast({
-          title: "Payment setup opened",
-          description: "Finish setup in the new tab, then return here and refresh your status.",
+          title: "Setup opened",
+          description: "Finish setup in the new tab. This page will refresh once you close it.",
         });
       }
       await refresh();
@@ -215,6 +230,8 @@ export function PaymentAccountPanel() {
             >
               {busy === "setup"
                 ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Opening…</>
+                : status === "additional_information_required" || status === "restricted"
+                ? <><ExternalLink className="h-3.5 w-3.5 mr-1.5" /> Provide Missing Info</>
                 : <><ExternalLink className="h-3.5 w-3.5 mr-1.5" /> Set Up Payment Account</>}
             </Button>
             <Button
