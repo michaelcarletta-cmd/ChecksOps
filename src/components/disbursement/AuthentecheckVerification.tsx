@@ -29,56 +29,8 @@ export function AuthentecheckVerification({
 
   const startSession = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke(
-        "actum-authentecheck-init",
-        { body: { stakeholder_account_id: accountId } },
-      );
-      if (error) {
-        let msg = error.message ?? "Failed to start verification";
-        try {
-          const body = await (error as any).context?.json?.();
-          if (body?.error) msg = body.error;
-        } catch {}
-        throw new Error(msg);
-      }
-      if ((data as any)?.error) throw new Error((data as any).error);
-      const url = (data as any)?.url as string | undefined;
-      if (!url) throw new Error("No session URL returned");
-      return url;
-    },
-    onSuccess: (url) => {
-      // On mobile, popups often render as a half-screen constrained window and
-      // Plaid's OAuth bank redirects lose session state. Navigate the current
-      // tab instead. On desktop, open a full-size new tab.
-      const isMobile = typeof window !== "undefined" &&
-        (window.matchMedia?.("(max-width: 768px)").matches ||
-          /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent));
-
-      qc.invalidateQueries({ queryKey: ["stakeholder-accounts"] });
-      qc.invalidateQueries({ queryKey: ["tenant-primary-accounts"] });
-
-      if (isMobile) {
-        toast({
-          title: "Opening bank login",
-          description: "You'll return here automatically after verifying.",
-        });
-        window.location.href = url;
-        return;
-      }
-
-      const win = window.open(url, "_blank", "noopener,noreferrer");
-      if (!win) {
-        toast({
-          title: "Popup blocked",
-          description: "Allow popups for this site, or open the verification page manually.",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Bank login opened",
-          description: "Complete sign-in to verify the account. Status updates automatically.",
-        });
-      }
+      // Actum is disabled globally.
+      throw new Error("Actum verification is no longer available. Please use the Moov connection flow.");
     },
     onError: (e: any) =>
       toast({ title: "Couldn't start verification", description: e.message, variant: "destructive" }),
@@ -157,13 +109,9 @@ export function AuthentecheckVerification({
         variant="outline"
         size="sm"
         className="h-7 text-[10px] border-amber-200 text-amber-700 hover:bg-amber-100"
-        onClick={() => startSession.mutate()}
-        disabled={startSession.isPending}
+        disabled
       >
-        {startSession.isPending
-          ? <Loader2 className="h-3 w-3 animate-spin mr-1" />
-          : <Banknote className="h-3 w-3 mr-1" />}
-        Verify with bank login
+        Unavailable
       </Button>
     </div>
   );
