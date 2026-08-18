@@ -12318,11 +12318,14 @@ export type Database = {
           plaid_transfer_id: string | null
           plaid_transfer_status: string | null
           rail: string
+          rail_downgrade_reason: string | null
           recipient_name: string | null
           recipient_type: string | null
+          requested_speed: string | null
           return_code: string | null
           return_desc: string | null
           returned_at: string | null
+          selected_rail: string | null
           settled_at: string | null
           stakeholder_account_id: string | null
           status: string
@@ -12352,11 +12355,14 @@ export type Database = {
           plaid_transfer_id?: string | null
           plaid_transfer_status?: string | null
           rail?: string
+          rail_downgrade_reason?: string | null
           recipient_name?: string | null
           recipient_type?: string | null
+          requested_speed?: string | null
           return_code?: string | null
           return_desc?: string | null
           returned_at?: string | null
+          selected_rail?: string | null
           settled_at?: string | null
           stakeholder_account_id?: string | null
           status?: string
@@ -12386,11 +12392,14 @@ export type Database = {
           plaid_transfer_id?: string | null
           plaid_transfer_status?: string | null
           rail?: string
+          rail_downgrade_reason?: string | null
           recipient_name?: string | null
           recipient_type?: string | null
+          requested_speed?: string | null
           return_code?: string | null
           return_desc?: string | null
           returned_at?: string | null
+          selected_rail?: string | null
           settled_at?: string | null
           stakeholder_account_id?: string | null
           status?: string
@@ -17143,6 +17152,10 @@ export type Database = {
           provider_bank_account_id: string
           provider_metadata: Json
           provider_payment_method_id: string | null
+          rail_payment_method_ids: Json
+          rails_synced_at: string | null
+          rtp_eligible: boolean
+          supported_rails: Json
           tenant_id: string | null
           updated_at: string
           verification_status: string
@@ -17167,6 +17180,10 @@ export type Database = {
           provider_bank_account_id: string
           provider_metadata?: Json
           provider_payment_method_id?: string | null
+          rail_payment_method_ids?: Json
+          rails_synced_at?: string | null
+          rtp_eligible?: boolean
+          supported_rails?: Json
           tenant_id?: string | null
           updated_at?: string
           verification_status?: string
@@ -17191,6 +17208,10 @@ export type Database = {
           provider_bank_account_id?: string
           provider_metadata?: Json
           provider_payment_method_id?: string | null
+          rail_payment_method_ids?: Json
+          rails_synced_at?: string | null
+          rtp_eligible?: boolean
+          supported_rails?: Json
           tenant_id?: string | null
           updated_at?: string
           verification_status?: string
@@ -17326,6 +17347,9 @@ export type Database = {
           provider_metadata: Json
           provider_status: string | null
           provider_transfer_id: string | null
+          rail_downgrade_reason: string | null
+          requested_speed: string | null
+          selected_rail: string | null
           source_payment_method_id: string | null
           source_tenant_account_id: string | null
           speed: string
@@ -17361,6 +17385,9 @@ export type Database = {
           provider_metadata?: Json
           provider_status?: string | null
           provider_transfer_id?: string | null
+          rail_downgrade_reason?: string | null
+          requested_speed?: string | null
+          selected_rail?: string | null
           source_payment_method_id?: string | null
           source_tenant_account_id?: string | null
           speed?: string
@@ -17396,6 +17423,9 @@ export type Database = {
           provider_metadata?: Json
           provider_status?: string | null
           provider_transfer_id?: string | null
+          rail_downgrade_reason?: string | null
+          requested_speed?: string | null
+          selected_rail?: string | null
           source_payment_method_id?: string | null
           source_tenant_account_id?: string | null
           speed?: string
@@ -19792,6 +19822,10 @@ export type Database = {
           is_active: boolean
           is_partner_payout: boolean
           is_primary: boolean
+          moov_rail_payment_method_ids: Json
+          moov_rails_synced_at: string | null
+          moov_rtp_eligible: boolean
+          moov_supported_rails: Json
           nickname: string
           origin: string
           plaid_access_token: string | null
@@ -19844,6 +19878,10 @@ export type Database = {
           is_active?: boolean
           is_partner_payout?: boolean
           is_primary?: boolean
+          moov_rail_payment_method_ids?: Json
+          moov_rails_synced_at?: string | null
+          moov_rtp_eligible?: boolean
+          moov_supported_rails?: Json
           nickname: string
           origin?: string
           plaid_access_token?: string | null
@@ -19896,6 +19934,10 @@ export type Database = {
           is_active?: boolean
           is_partner_payout?: boolean
           is_primary?: boolean
+          moov_rail_payment_method_ids?: Json
+          moov_rails_synced_at?: string | null
+          moov_rtp_eligible?: boolean
+          moov_supported_rails?: Json
           nickname?: string
           origin?: string
           plaid_access_token?: string | null
