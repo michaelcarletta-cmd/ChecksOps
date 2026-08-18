@@ -9,7 +9,7 @@ import {
 } from "../_shared/moovGuard.ts";
 
 /**
- * Confirms the two micro-deposit amounts and marks the bank account verified.
+ * Confirms the 4-digit verification code and marks the bank account verified.
  * Attempts are counted and capped so a wrong guess cannot be brute forced.
  */
 
@@ -18,16 +18,12 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { tenant_id, verification_id, amounts } = body ?? {};
-
+    const { tenant_id, verification_id, code } = body ?? {};
+    
     if (!tenant_id) return json({ error: "tenant_id is required" }, 400);
     if (!verification_id) return json({ error: "verification_id is required" }, 400);
-    if (!Array.isArray(amounts) || amounts.length !== 2) {
-      return json({ error: "Enter both deposit amounts." }, 400);
-    }
-    const cents = amounts.map((a: unknown) => Math.round(Number(a)));
-    if (cents.some((c) => !Number.isFinite(c) || c < 0 || c > 99)) {
-      return json({ error: "Each amount must be between $0.00 and $0.99." }, 400);
+    if (!code || typeof code !== "string" || code.length !== 4) {
+      return json({ error: "Enter the 4-digit verification code." }, 400);
     }
 
     const caller = await requireMoovCaller(req, tenant_id);
@@ -57,27 +53,18 @@ serve(async (req) => {
     const attempts = verification.attempts + 1;
 
     try {
-      // Completion endpoint (current contract), falling back to the legacy path.
+      // Completion endpoint (Instant Micro-deposit)
       try {
         await moovFetch<any>(
           `/accounts/${verification.provider_account_id}/bank-accounts/${verification.provider_bank_account_id}/verify`,
           {
             method: "PUT",
             scopes: scopes.bankAccountsWrite(verification.provider_account_id),
-            body: { code: `MV${cents.map((c) => String(c).padStart(2, "0")).join("")}`, amounts: cents },
+            body: { code },
           },
         );
       } catch (inner) {
-        const status = (inner as any)?.status;
-        if (status !== 404 && status !== 405) throw inner;
-        await moovFetch<any>(
-          `/accounts/${verification.provider_account_id}/bank-accounts/${verification.provider_bank_account_id}/micro-deposits`,
-          {
-            method: "PUT",
-            scopes: scopes.bankAccountsWrite(verification.provider_account_id),
-            body: { amounts: cents },
-          },
-        );
+        throw inner;
       }
     } catch (e) {
       const exhausted = attempts >= verification.max_attempts;
@@ -91,7 +78,7 @@ serve(async (req) => {
         error: exhausted ? "max_attempts_exceeded" : "verification_failed",
         message: exhausted
           ? "Too many incorrect attempts. Connect the bank account again."
-          : "Those amounts did not match. Please check your statement and try again.",
+          : "That code did not match. Please check your statement and try again.",
         attempts_remaining: Math.max(0, verification.max_attempts - attempts),
       }, 409);
     }

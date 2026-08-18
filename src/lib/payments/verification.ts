@@ -47,16 +47,16 @@ export async function startBankVerification(input: {
   });
 }
 
-/** Amounts are whole cents, e.g. 0.32 and 0.14 => [32, 14]. */
+/** code is a 4-digit string, e.g. "1234" */
 export async function confirmBankVerification(input: {
   tenantId: string;
   verificationId: string;
-  amountsCents: [number, number];
+  code: string;
 }): Promise<{ verification: BankVerification; already_verified?: boolean }> {
   return invoke("moov-micro-deposit-confirm", {
     tenant_id: input.tenantId,
     verification_id: input.verificationId,
-    amounts: input.amountsCents,
+    code: input.code,
   });
 }
 

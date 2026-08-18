@@ -11,8 +11,8 @@ import {
 
 /**
  * Starts bank-account ownership verification for a recipient who will not use
- * an instant bank login. Two small credits land in the account and the
- * recipient confirms the amounts.
+ * an instant bank login. A $0.01 credit lands in the account containing a 
+ * 4-digit verification code (MV####).
  *
  * Nothing here ever touches a full account or routing number: the bank account
  * is already stored at the provider and referenced only by its provider id.
@@ -71,24 +71,20 @@ serve(async (req) => {
       }, 409);
     }
 
-    // Current API: POST .../verify. Older accounts still answer on the legacy
-    // micro-deposits path, so fall back rather than fail the tenant.
+    // Current API: POST .../verify (Instant Micro-deposit)
     try {
       await moovFetch<any>(
         `/accounts/${accountId}/bank-accounts/${bankAccountId}/verify`,
-        { method: "POST", scopes: scopes.bankAccountsWrite(accountId) },
+        { 
+          method: "POST", 
+          scopes: scopes.bankAccountsWrite(accountId),
+          // x-moov-version is handled by moovFetch if pinned, but standard
+          // POST /verify is supported in current versions.
+        },
       );
     } catch (e) {
-      const status = (e as any)?.status;
-      if (status !== 404 && status !== 405) return json({ error: (e as Error).message }, 502);
-      try {
-        await moovFetch<any>(
-          `/accounts/${accountId}/bank-accounts/${bankAccountId}/micro-deposits`,
-          { method: "POST", scopes: scopes.bankAccountsWrite(accountId) },
-        );
-      } catch (e2) {
-        return json({ error: (e2 as Error).message }, 502);
-      }
+      console.error("[moov-micro-deposit-initiate] error", (e as Error).message);
+      return json({ error: (e as Error).message }, 502);
     }
 
     const { data: verification, error: vErr } = await supabase

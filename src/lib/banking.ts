@@ -22,7 +22,7 @@ export type VerificationStatus =
 
 export const VERIFICATION_LABEL: Record<VerificationStatus, string> = {
   unverified: "Not verified",
-  pending: "Awaiting micro-deposit confirmation",
+  pending: "Awaiting verification code",
   verified: "Verified",
   failed: "Verification failed",
   locked: "Locked — too many wrong attempts",

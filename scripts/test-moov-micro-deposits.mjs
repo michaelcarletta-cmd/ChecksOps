@@ -3,26 +3,32 @@ import assert from "node:assert/strict";
 const tests = [];
 function test(name, fn) { tests.push([name, fn]); }
 
-test("micro-deposit amount validation", () => {
-  const validate = (amounts) => {
-    if (!Array.isArray(amounts) || amounts.length !== 2) return false;
-    const cents = amounts.map(a => Math.round(Number(a) * 100));
-    return cents.every(c => Number.isFinite(c) && c >= 1 && c <= 99);
+test("micro-deposit code validation", () => {
+  const validate = (code) => {
+    return typeof code === "string" && /^\d{4}$/.test(code);
   };
 
-  assert.ok(validate([0.01, 0.99]), "Valid cents range");
-  assert.ok(!validate([1.00, 0.05]), "Dollar amount invalid");
+  assert.ok(validate("1234"), "Valid 4-digit code");
+  assert.ok(!validate("123"), "Too short");
+  assert.ok(!validate("12345"), "Too long");
+  assert.ok(!validate("abcd"), "Non-numeric");
 });
 
 test("micro-deposit status mapping", () => {
   const mapStatus = (moovStatus) => {
     const s = String(moovStatus).toLowerCase();
-    return s === "verified" ? "connected" : s === "errored" ? "failed" : "pending";
+    if (s === "verified") return "connected";
+    if (s === "errored" || s === "failed") return "failed";
+    if (s === "expired") return "expired";
+    if (s === "awaiting-code" || s === "initiated") return "pending";
+    return "pending";
   };
   
   assert.equal(mapStatus("verified"), "connected");
-  assert.equal(mapStatus("pending"), "pending");
-  assert.equal(mapStatus("errored"), "failed");
+  assert.equal(mapStatus("initiated"), "pending");
+  assert.equal(mapStatus("awaiting-code"), "pending");
+  assert.equal(mapStatus("failed"), "failed");
+  assert.equal(mapStatus("expired"), "expired");
 });
 
 let failed = 0;
