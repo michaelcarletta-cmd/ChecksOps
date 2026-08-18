@@ -130,6 +130,9 @@ export const scopes = {
   transfersWrite: (id: string) => [`/accounts/${id}/transfers.write`],
   transfersRead: (id: string) => [`/accounts/${id}/transfers.read`],
   representativesWrite: (id: string) => [`/accounts/${id}/representatives.write`],
+  representativesRead: (id: string) => [`/accounts/${id}/representatives.read`],
+  filesRead: (id: string) => [`/accounts/${id}/files.read`],
+  filesWrite: (id: string) => [`/accounts/${id}/files.write`],
   /** Scopes handed to a browser-side Moov.js session for a recipient. */
   dropBankLink: (id: string) => [
     `/accounts/${id}/bank-accounts.write`,
