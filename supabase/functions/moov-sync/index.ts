@@ -6,6 +6,7 @@ import {
   safeLastFour,
   scopes,
 } from "../_shared/moovClient.ts";
+import { fetchRailMethodIds, saveMethodRails } from "../_shared/moovRails.ts";
 import { corsHeaders, json, isResponse, logPaymentEvent, requireMoovCaller, sanitize } from "../_shared/moovGuard.ts";
 
 // Server-side capability + account + bank synchronization.
