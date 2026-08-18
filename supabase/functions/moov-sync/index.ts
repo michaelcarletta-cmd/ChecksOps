@@ -84,7 +84,21 @@ serve(async (req) => {
     for (const b of banks ?? []) {
       const bankAccountId = b.bankAccountID ?? b.bankAccountId;
       if (!bankAccountId) continue;
-      const status = String(b.status ?? "pending").toLowerCase();
+
+      // Pull the verification object if it exists to see micro-deposit status.
+      let verification = b.verification ?? null;
+      if (!verification) {
+        try {
+          verification = await moovFetch<any>(
+            `/accounts/${accountId}/bank-accounts/${bankAccountId}/verification`,
+            { scopes: scopes.bankAccountsRead(accountId) },
+          );
+        } catch {
+          /* no verification yet */
+        }
+      }
+
+      const status = (verification?.status ?? b.status ?? "pending").toLowerCase();
       const lastFour = b.lastFourAccountNumber ?? safeLastFour(b.accountNumber);
       const connection = status === "verified" ? "connected" : status === "errored" ? "failed" : "pending";
 
