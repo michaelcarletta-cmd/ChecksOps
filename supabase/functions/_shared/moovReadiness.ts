@@ -161,9 +161,9 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
   const due = currentlyDue(caps);
   checks.push({
     id: "identity_verification",
-    label: "Business & ownership verification (KYB/KYC)",
+    label: "Identity & business verification",
     state: due.length > 0 && verificationState !== "ready" ? "action_required" : verificationState,
-    detail: input.disabled ? "The provider disabled this account." : null,
+    detail: input.disabled ? "The provider disabled this account." : verification === "verified" ? "Identity confirmed." : "Standard KYC/KYB identity check.",
     requirements: due,
   });
 
