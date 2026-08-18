@@ -17131,6 +17131,90 @@ export type Database = {
           },
         ]
       }
+      payment_provider_files: {
+        Row: {
+          created_at: string
+          environment: string
+          file_name: string
+          file_purpose: string
+          file_size_bytes: number | null
+          id: string
+          last_synced_at: string | null
+          mime_type: string | null
+          provider: string
+          provider_account_id: string
+          provider_file_id: string
+          provider_metadata: Json
+          provider_representative_id: string | null
+          provider_status_code: string | null
+          requirement_id: string | null
+          review_reason: string | null
+          review_status: string
+          tenant_id: string
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          environment?: string
+          file_name: string
+          file_purpose: string
+          file_size_bytes?: number | null
+          id?: string
+          last_synced_at?: string | null
+          mime_type?: string | null
+          provider?: string
+          provider_account_id: string
+          provider_file_id: string
+          provider_metadata?: Json
+          provider_representative_id?: string | null
+          provider_status_code?: string | null
+          requirement_id?: string | null
+          review_reason?: string | null
+          review_status?: string
+          tenant_id: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          environment?: string
+          file_name?: string
+          file_purpose?: string
+          file_size_bytes?: number | null
+          id?: string
+          last_synced_at?: string | null
+          mime_type?: string | null
+          provider?: string
+          provider_account_id?: string
+          provider_file_id?: string
+          provider_metadata?: Json
+          provider_representative_id?: string | null
+          provider_status_code?: string | null
+          requirement_id?: string | null
+          review_reason?: string | null
+          review_status?: string
+          tenant_id?: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_provider_files_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_provider_files_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_provider_methods: {
         Row: {
           account_type: string | null

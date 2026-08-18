@@ -18,6 +18,7 @@ import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { useRef } from "react";
 import { TenantDocumentsManager } from "@/components/white-label/TenantDocumentsManager";
+import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
 import { ActumSettings } from "@/components/settings/ActumSettings";
 import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
 import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
@@ -327,6 +328,9 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
                 <FileText className="w-4 h-4" /> Tenant Documents
               </h3>
               <TenantDocumentsManager tenantId={tenant.id} />
+            </div>
+            <div className="pt-6 border-t border-border/60">
+              <VerificationDocumentsPanel tenantId={tenant.id} readOnly />
             </div>
           </TabsContent>
           <TabsContent value="integrations" className="mt-6 space-y-6">

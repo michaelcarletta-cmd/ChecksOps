@@ -1,4 +1,5 @@
 import { PaymentAccountPanel } from "@/components/payments/PaymentAccountPanel";
+import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
 import { PaymentProviderAdmin } from "@/components/payments/PaymentProviderAdmin";
 import { PlatformFeeSchedulePanel } from "@/components/payments/PlatformFeeSchedulePanel";
 import { WalletPanel } from "@/components/payments/WalletPanel";
@@ -14,6 +15,7 @@ export function PaymentSettingsTab() {
   return (
     <div className="space-y-4 pt-2">
       <PaymentAccountPanel />
+      <VerificationDocumentsPanel />
       <WalletPanel />
       <MoovTreasuryPanel />
       <PlatformFeeSchedulePanel />
