@@ -145,8 +145,15 @@ export interface MoovRequestOptions {
   scopes: string[];
   body?: unknown;
   idempotencyKey?: string;
+  /**
+   * Explicit Moov API version (`x-moov-version`). Endpoints that depend on a
+   * dated contract — sweeps, for example — pin this instead of relying on
+   * Moov's legacy default version.
+   */
+  apiVersion?: string;
   /** Act on behalf of a connected account. */
   onBehalfOf?: string;
+
 }
 
 export async function moovFetch<T = any>(
@@ -161,7 +168,9 @@ export async function moovFetch<T = any>(
     Origin: moovOrigin(),
   };
   if (opts.idempotencyKey) headers["X-Idempotency-Key"] = opts.idempotencyKey;
+  if (opts.apiVersion) headers["x-moov-version"] = opts.apiVersion;
   if (opts.onBehalfOf) headers["X-Account-ID"] = opts.onBehalfOf;
+
 
   const res = await fetch(`${moovHost()}${path}`, {
     method: opts.method ?? "GET",

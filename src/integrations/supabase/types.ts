@@ -17240,6 +17240,106 @@ export type Database = {
           },
         ]
       }
+      payment_sweep_configs: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          environment: string
+          id: string
+          last_error: string | null
+          last_synced_at: string | null
+          minimum_balance_cents: number
+          provider: string
+          provider_account_id: string | null
+          provider_created_at: string | null
+          provider_metadata: Json
+          provider_sweep_config_id: string | null
+          provider_updated_at: string | null
+          provider_wallet_id: string | null
+          pull_payment_method_id: string | null
+          pull_rail: string | null
+          push_payment_method_id: string | null
+          push_rail: string | null
+          statement_descriptor: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+          wallet_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          environment?: string
+          id?: string
+          last_error?: string | null
+          last_synced_at?: string | null
+          minimum_balance_cents?: number
+          provider?: string
+          provider_account_id?: string | null
+          provider_created_at?: string | null
+          provider_metadata?: Json
+          provider_sweep_config_id?: string | null
+          provider_updated_at?: string | null
+          provider_wallet_id?: string | null
+          pull_payment_method_id?: string | null
+          pull_rail?: string | null
+          push_payment_method_id?: string | null
+          push_rail?: string | null
+          statement_descriptor?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          wallet_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          environment?: string
+          id?: string
+          last_error?: string | null
+          last_synced_at?: string | null
+          minimum_balance_cents?: number
+          provider?: string
+          provider_account_id?: string | null
+          provider_created_at?: string | null
+          provider_metadata?: Json
+          provider_sweep_config_id?: string | null
+          provider_updated_at?: string | null
+          provider_wallet_id?: string | null
+          pull_payment_method_id?: string | null
+          pull_rail?: string | null
+          push_payment_method_id?: string | null
+          push_rail?: string | null
+          statement_descriptor?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          wallet_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_sweep_configs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_sweep_configs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_sweep_configs_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "payment_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_transfer_groups: {
         Row: {
           check_id: string | null

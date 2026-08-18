@@ -14,7 +14,10 @@
     "check:contract-version": "node scripts/check-darwin-contract-version.mjs",
     "validate:darwin-fixtures": "node scripts/validate-darwin-fixtures.mjs",
     "test:darwin-merge": "node scripts/test-merge-missing-doc-requests.mjs",
-    "test:darwin-duplicate-doc": "node scripts/test-duplicate-doc-name.mjs"
+    "test:darwin-duplicate-doc": "node scripts/test-duplicate-doc-name.mjs",
+    "test:rail-router": "bun scripts/test-rail-router.mjs",
+    "test:sweep-rules": "bun scripts/test-sweep-rules.mjs"
+
   },
   "dependencies": {
     "@dnd-kit/core": "6.3.1",
