@@ -22,8 +22,8 @@ serve(async (req) => {
     
     if (!tenant_id) return json({ error: "tenant_id is required" }, 400);
     if (!verification_id) return json({ error: "verification_id is required" }, 400);
-    if (!code || typeof code !== "string" || code.length !== 4) {
-      return json({ error: "Enter the 4-digit verification code." }, 400);
+    if (!code || typeof code !== "string" || !/^\d{4}$/.test(code)) {
+      return json({ error: "Enter the 4-digit verification code (e.g., 1234)." }, 400);
     }
 
     const caller = await requireMoovCaller(req, tenant_id);
