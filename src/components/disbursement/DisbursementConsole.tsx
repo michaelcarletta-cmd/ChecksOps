@@ -345,7 +345,7 @@ export function DisbursementConsole({
           .from("disbursement_batches")
           .update({ 
             status: "completed",
-            notes: (notes || "") + (notes ? "\n" : "") + "Recorded as external manual payment."
+            notes: "Recorded as external manual payment."
           })
           .eq("id", batch.id);
         
