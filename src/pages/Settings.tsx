@@ -30,7 +30,7 @@ import { LossTypesSettings } from "@/components/settings/LossTypesSettings";
 import { AutomationsSettings } from "@/components/settings/AutomationsSettings";
 import { CustomFieldsSettings } from "@/components/settings/CustomFieldsSettings";
 import { SignaturePresetsSettings } from "@/components/settings/SignaturePresetsSettings";
-// ActumSettings hidden
+// Moov settings hidden
 import { usePaymentRail } from "@/hooks/usePaymentRail";
 import { ReferralSettings } from "@/components/settings/ReferralSettings";
 import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";

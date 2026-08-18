@@ -73,9 +73,9 @@ export function TenantBankAccountSettings() {
       insertedId = inserted!.id;
 
       try {
-        // Plaid rail: no hosted redirect. The row lands unverified and the
-        // inline Plaid Link widget on the account card finishes the job.
-        // Actum rail is disabled globally.
+        // Moov rail: the row lands unverified and the
+        // inline Moov Link widget on the account card finishes the job.
+        // Legacy rails are disabled globally.
         return null;
       } catch (e: any) {
         if (insertedId) {
@@ -98,7 +98,7 @@ export function TenantBankAccountSettings() {
       }
       if (url) {
         // Open as a normal full-size tab, not a constrained popup — OAuth-based
-        // bank redirects (Wells Fargo, Chase, etc. via Plaid) can lose session
+        // bank redirects (Wells Fargo, Chase, etc. via Moov) can lose session
         // state inside small fixed-size popup windows, especially on mobile.
         const win = window.open(url, "_blank", "noopener,noreferrer");
         if (!win) {
@@ -188,7 +188,7 @@ export function TenantBankAccountSettings() {
                 Bank Account
               </CardTitle>
               <CardDescription className="text-xs mt-1">
-                Your bank account for receiving check deposits. Sign in with your bank — routing & account number, holder name, and account type are captured securely through your bank login. No manual entry.
+                Your bank account for receiving check deposits. Sign in with your bank via Moov — routing & account number, holder name, and account type are captured securely through your bank login. No manual entry.
               </CardDescription>
             </div>
             <Button
@@ -278,7 +278,7 @@ export function TenantBankAccountSettings() {
                   accountNickname={acct.nickname}
                   accountLast4={acct.chk_acct?.slice(-4) ?? ""}
                   verificationStatus={acct.verification_status ?? "unverified"}
-                  verificationSource={(acct as any).verification_source ?? null}
+                  verificationSource={(acct as any).verification_source ?? "moov"}
                 />
                 <AchAuthorizationForm
                   stakeholderAccountId={acct.id}

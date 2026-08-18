@@ -14,7 +14,7 @@ import { useTenantFilter } from "@/hooks/useTenantFilter";
 
 /**
  * Maintenance-fee billing: pick which of your already-verified bank accounts
- * (added via Plaid / Authentecheck in the Bank Account panel) should be
+ * (added via Moov in the Bank Account panel) should be
  * debited monthly. No manual routing/account entry — ever.
  */
 export function TenantBillingAccountPanel() {
@@ -136,7 +136,7 @@ export function TenantBillingAccountPanel() {
           <Alert>
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription className="text-xs">
-              You don't have any verified bank accounts yet. Add one in the <strong>Bank Account</strong> section using bank sign-in (Plaid), then return here to enable auto-billing.
+              You don't have any verified bank accounts yet. Add one in the <strong>Bank Account</strong> section using bank sign-in (Moov), then return here to enable auto-billing.
             </AlertDescription>
           </Alert>
         ) : (
@@ -152,7 +152,7 @@ export function TenantBillingAccountPanel() {
                 <div className="flex flex-col items-end gap-1">
                   <Badge variant="default" className="text-[10px]">
                     <ShieldCheck className="h-3 w-3 mr-1" />
-                    Verified via Plaid
+                    Verified via Moov
                   </Badge>
                   {billing?.ach_authorized_at && (
                     <span className="text-[10px] text-muted-foreground">
