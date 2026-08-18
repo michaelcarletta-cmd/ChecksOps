@@ -707,9 +707,7 @@ export default function Settings() {
           {isAdmin && SHOW_CHECKALT && (
             <TabsTrigger value="checkalt" className="w-full md:w-auto justify-start text-base font-medium px-4">Deposits</TabsTrigger>
           )}
-          {isAdmin && isActumRail && (
-            <TabsTrigger value="actum" className="w-full md:w-auto justify-start text-base font-medium px-4">Disbursements</TabsTrigger>
-          )}
+          {/* Actum Disbursements hidden */}
           <TabsTrigger value="referrals" className="w-full md:w-auto justify-start text-base font-medium px-4">Referrals</TabsTrigger>
         </TabsList>
 
@@ -720,9 +718,7 @@ export default function Settings() {
           </TabsContent>
         )}
 
-        <TabsContent value="actum" className="w-full">
-          {isActumRail && <ActumSettings />}
-        </TabsContent>
+        {/* ActumSettings hidden */}
 
         <TabsContent value="profile" className="w-full">
           <ProfileSettings />
@@ -899,14 +895,7 @@ export default function Settings() {
                   <OutlookConnectionSettings embedded />
                   <ZapierIntegrationSettings embedded />
                   <QuickBooksSettings embedded />
-                  {isActumRail && (
-                    <div className="pt-6 border-t">
-                      <h3 className="text-lg font-medium mb-4">Payment Processing</h3>
-                      <div className="space-y-6">
-                        <ActumSettings />
-                      </div>
-                    </div>
-                  )}
+                  {/* ActumSettings integration hidden */}
                   
                 </CardContent>
               </CollapsibleContent>
