@@ -5,6 +5,9 @@
  */
 import assert from "node:assert/strict";
 
+const tests = [];
+function test(name, fn) { tests.push([name, fn]); }
+
 // Mocking Moov status codes and mapping to internal verification_status
 const VERIFICATION_STATES = {
   PENDING: "pending",
@@ -17,7 +20,7 @@ test("micro-deposit amount validation", () => {
   const validate = (amounts) => {
     if (!Array.isArray(amounts) || amounts.length !== 2) return false;
     const cents = amounts.map(a => Math.round(Number(a) * 100));
-    return cents.every(c => Number.isFinite(c) && c >= 0 && c <= 99);
+    return cents.every(c => Number.isFinite(c) && c >= 1 && c <= 99);
   };
 
   assert.ok(validate([0.01, 0.99]), "Valid cents range");
@@ -35,20 +38,6 @@ test("micro-deposit state transitions", () => {
   // 2. Mock Success
   status = VERIFICATION_STATES.VERIFIED;
   assert.equal(status, "verified");
-});
-
-const tests = [];
-function test(name, fn) { tests.push([name, fn]); }
-
-// Re-register tests to the runner
-test("micro-deposit amount validation", () => {
-  const validate = (amounts) => {
-    if (!Array.isArray(amounts) || amounts.length !== 2) return false;
-    const cents = amounts.map(a => Math.round(Number(a) * 100));
-    return cents.every(c => Number.isFinite(c) && c >= 0 && c <= 99);
-  };
-  assert.ok(validate([0.01, 0.99]));
-  assert.ok(!validate([1.00, 0.05]));
 });
 
 test("micro-deposit status mapping matches Moov sync", () => {
