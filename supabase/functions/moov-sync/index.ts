@@ -150,9 +150,17 @@ serve(async (req) => {
     }
 
     // 4. Proactive Capability Requests.
-    // If the account is being verified but doesn't have all standard capabilities,
-    // we request them now to avoid manual retries later.
-    const requiredCaps = ["send-funds.ach", "collect-funds.ach", "wallet.balance"];
+    // ChecksOps only requests capabilities required for the specific product configuration.
+    // We always need send-funds (for ACH disbursement) and wallet.balance (for treasury).
+    // We only request collect-funds.ach if the tenant has explicitly started a collection workflow.
+    const requiredCaps = ["send-funds.ach", "wallet.balance"];
+    
+    // Check if we actually need collection capabilities (e.g. for fee collection or fund pulls)
+    // For now, we keep it explicit: unless the platform configuration demands it, we don't request it.
+    if (account.provider_metadata?.checksops_requires_collection) {
+      requiredCaps.push("collect-funds.ach");
+    }
+
     const missing = requiredCaps.filter(req => !capList.some(c => c.capability === req || c.capability === req.split(".")[0]));
     
     if (missing.length > 0 && verificationStatus !== "failed") {
@@ -162,7 +170,7 @@ serve(async (req) => {
           scopes: scopes.capabilitiesWrite(accountId),
           body: { capabilities: missing }
         });
-        console.log(`[moov-sync] Requested missing capabilities: ${missing.join(", ")}`);
+        console.log(`[moov-sync] Requested required capabilities: ${missing.join(", ")}`);
       } catch (e) {
         console.warn(`[moov-sync] Failed to request capabilities: ${(e as Error).message}`);
       }

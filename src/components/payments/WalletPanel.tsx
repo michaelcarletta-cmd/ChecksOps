@@ -88,9 +88,11 @@ export function WalletPanel() {
         <div className="flex flex-wrap items-end gap-6">
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Available</p>
-            <p className="text-2xl font-semibold">{money(wallet?.available_cents ?? 0)}</p>
+            <p className="text-2xl font-semibold">
+              {wallet?.status === "sync_failed" ? "Balance unavailable" : money(wallet?.available_cents ?? 0)}
+            </p>
           </div>
-          {!!wallet?.pending_cents && (
+          {!!wallet?.pending_cents && wallet?.status !== "sync_failed" && (
             <div>
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Pending</p>
               <p className="text-lg">{money(wallet.pending_cents)}</p>
@@ -101,10 +103,16 @@ export function WalletPanel() {
             className={
               wallet?.status === "active"
                 ? "border-emerald-500/40 text-emerald-500"
+                : wallet?.status === "sync_failed"
+                ? "border-amber-500/40 text-amber-500"
                 : "border-muted-foreground/30 text-muted-foreground"
             }
           >
-            {wallet?.status === "active" ? "Active" : wallet?.status ?? "Not set up"}
+            {wallet?.status === "active" 
+              ? "Active" 
+              : wallet?.status === "sync_failed" 
+              ? "Pending Sync" 
+              : wallet?.status ?? "Not set up"}
           </Badge>
         </div>
 

@@ -56,7 +56,8 @@ serve(async (req) => {
         console.error("[moov-wallet-sync] Sync failed and no local record", (e as Error).message);
         return json({ error: (e as Error).message }, 502);
       }
-      wallet = local;
+      // If sync failed, we mark the local wallet as 'sync_failed' so UI can show "unavailable/pending"
+      wallet = { ...local, status: "sync_failed" };
     }
 
     const { data: ledger } = await supabase
