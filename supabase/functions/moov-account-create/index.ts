@@ -15,8 +15,11 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { tenant_id } = await req.json();
+    const { tenant_id, terms_of_service_token } = await req.json();
     if (!tenant_id) return json({ error: "tenant_id is required" }, 400);
+    const tosToken = typeof terms_of_service_token === "string" && terms_of_service_token.length >= 8
+      ? terms_of_service_token
+      : null;
 
     const caller = await requireMoovCaller(req, tenant_id, { requireAdmin: true });
     if (isResponse(caller)) return caller;
