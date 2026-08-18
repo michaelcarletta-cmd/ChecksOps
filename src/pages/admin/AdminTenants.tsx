@@ -1117,29 +1117,24 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
           <>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Checks Processed</div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Check Processing Usage</div>
                 <div className="text-2xl font-bold mt-1">{checkCount}</div>
                 <div className="text-[10px] text-muted-foreground mt-1">Fees: {fmt(data?.amount_cents ?? 0)}</div>
               </div>
               <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">CheckAlt Deposits</div>
-                <div className="text-2xl font-bold mt-1">{checkalt?.count ?? 0}</div>
-                <div className="text-[10px] text-muted-foreground mt-1">${(checkalt?.amount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-              </div>
-              <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Moov Out</div>
-                <div className="text-2xl font-bold mt-1">{moov?.count ?? 0}</div>
-                <div className="text-[10px] text-muted-foreground mt-1">${(moov?.amountOut ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-              </div>
-              <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">MortgageOps Requests</div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">MortgageOps Usage</div>
                 <div className="text-2xl font-bold mt-1">{mortgageCount}</div>
                 <div className="text-[10px] text-muted-foreground mt-1">Fees: {fmt(data?.mortgage_amount_cents ?? 0)}</div>
               </div>
               <div className="rounded-lg border bg-card p-3">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Disbursement Usage</div>
+                <div className="text-2xl font-bold mt-1">{moov?.count ?? 0}</div>
+                <div className="text-[10px] text-muted-foreground mt-1">Same Day {sameDay} · Instant {instant}</div>
+              </div>
+              <div className="rounded-lg border bg-card p-3">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Paid to ChecksOps</div>
                 <div className="text-2xl font-bold mt-1">{fmt(maintenancePaidCents)}</div>
-                <div className="text-[10px] text-muted-foreground mt-1">Same Day {sameDay} · Instant {instant}</div>
+                <div className="text-[10px] text-muted-foreground mt-1">Maintenance fees</div>
               </div>
             </div>
 
