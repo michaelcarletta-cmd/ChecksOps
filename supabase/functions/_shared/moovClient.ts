@@ -138,6 +138,7 @@ export const scopes = {
     `/accounts/${id}/bank-accounts.write`,
     `/accounts/${id}/bank-accounts.read`,
     `/accounts/${id}/profile.read`,
+    `/accounts/${id}/bank-accounts.verify`,
   ],
 };
 
