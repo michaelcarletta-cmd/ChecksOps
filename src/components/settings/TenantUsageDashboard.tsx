@@ -25,10 +25,13 @@ interface UsageEvent {
   unit_price_cents: number;
   currency: string;
   status: string;
-  event_type?: "check_processing" | "moov_same_day" | "moov_instant";
+  event_type?: string;
   check_number?: string;
   payee_name?: string;
   processed_by?: string;
+  source?: string;
+  mortgage_company?: string;
+  loan_number?: string;
 }
 
 interface UsagePayload {
@@ -38,6 +41,8 @@ interface UsagePayload {
   month_start: string;
   month_end: string;
   events: UsageEvent[];
+  mortgage_count?: number;
+  mortgage_amount_cents?: number;
 }
 
 const formatCents = (cents: number, currency = "usd") =>
@@ -166,27 +171,34 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
           </div>
         ) : (
           <div className="space-y-6 overflow-y-auto pr-2">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="rounded-xl border bg-card p-4 shadow-sm">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Checks Processed</div>
-                <div className="text-3xl font-bold">
-                  {data?.events?.filter(e => e.event_type === 'check_processing').length ?? 0}
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Checks</div>
+                <div className="text-2xl font-bold">
+                  {data?.events?.filter(e => e.source === 'check').length ?? 0}
                 </div>
-                <div className="text-[10px] text-muted-foreground mt-2">Standard endorsement workflow</div>
+                <div className="text-[10px] text-muted-foreground mt-2">Standard processing</div>
+              </div>
+              <div className="rounded-xl border bg-card p-4 shadow-sm">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">MortgageOps</div>
+                <div className="text-2xl font-bold">
+                  {data?.mortgage_count ?? data?.events?.filter(e => e.event_type === 'mortgage_handling').length ?? 0}
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-2">Mortgage handling requests</div>
               </div>
               <div className="rounded-xl border bg-card p-4 shadow-sm">
                 <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Same Day</div>
-                <div className="text-3xl font-bold">
+                <div className="text-2xl font-bold">
                   {data?.events?.filter(e => e.event_type === 'moov_same_day').length ?? 0}
                 </div>
-                <div className="text-[10px] text-muted-foreground mt-2">Moov $1.00 pass-through fee</div>
+                <div className="text-[10px] text-muted-foreground mt-2">Moov Same-day ACH</div>
               </div>
               <div className="rounded-xl border bg-card p-4 shadow-sm">
                 <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Instant</div>
-                <div className="text-3xl font-bold">
+                <div className="text-2xl font-bold">
                   {data?.events?.filter(e => e.event_type === 'moov_instant').length ?? 0}
                 </div>
-                <div className="text-[10px] text-muted-foreground mt-2">Moov $1.50 pass-through fee</div>
+                <div className="text-[10px] text-muted-foreground mt-2">Moov Instant payout</div>
               </div>
             </div>
 

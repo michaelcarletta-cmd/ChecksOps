@@ -1002,6 +1002,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
 
   const events: any[] = data?.events || [];
   const checkCount = events.filter((e) => e.event_type === "check_processing").length;
+  const mortgageCount = data?.mortgage_count || events.filter((e) => e.event_type === "mortgage_handling").length;
   const sameDay = events.filter((e) => e.event_type === "moov_same_day").length;
   const instant = events.filter((e) => e.event_type === "moov_instant").length;
   const fmt = (cents: number) =>
@@ -1017,11 +1018,12 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const CHECK_FEE_CENTS = 400;
   const MOOV_FEE_CENTS = 100;
   const checkaltFeeCents = (checkalt?.count ?? 0) * CHECK_FEE_CENTS;
-  const moovFeeCents = (moov?.count ?? 0) * MOOV_FEE_CENTS;
-  const grossMaintenance = tenantMeta?.monthly_rate_cents ?? 0;
-  const discount = tenantMeta?.referral_discount_cents ?? 0;
-  const netMaintenance = Math.max(0, grossMaintenance - discount);
-  const consolidatedTotalCents = checkaltFeeCents + moovFeeCents + netMaintenance;
+    const moovFeeCents = (moov?.count ?? 0) * MOOV_FEE_CENTS;
+    const mortgageFeeCents = data?.mortgage_amount_cents ?? 0;
+    const grossMaintenance = tenantMeta?.monthly_rate_cents ?? 0;
+    const discount = tenantMeta?.referral_discount_cents ?? 0;
+    const netMaintenance = Math.max(0, grossMaintenance - discount);
+    const consolidatedTotalCents = checkaltFeeCents + moovFeeCents + mortgageFeeCents + netMaintenance;
 
   const pullConsolidated = async () => {
     if (scope !== "month") {
@@ -1040,6 +1042,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
     const line_items = [
       checkaltFeeCents > 0 && { label: "Check processing", detail: `${checkalt?.count ?? 0} checks × $4.00`, amount_cents: checkaltFeeCents },
       moovFeeCents > 0 && { label: "Moov disbursements", detail: `${moov?.count ?? 0} × $1.00`, amount_cents: moovFeeCents },
+      mortgageFeeCents > 0 && { label: "MortgageOps handling", detail: `${mortgageCount} requests`, amount_cents: mortgageFeeCents },
       grossMaintenance > 0 && { label: "Monthly maintenance", detail: range.label, amount_cents: grossMaintenance },
       discount > 0 && { label: "Referral discount", detail: "applied to maintenance", amount_cents: -discount },
     ].filter(Boolean);
@@ -1129,6 +1132,11 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                 <div className="text-[10px] text-muted-foreground mt-1">${(moov?.amountOut ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
               </div>
               <div className="rounded-lg border bg-card p-3">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">MortgageOps Requests</div>
+                <div className="text-2xl font-bold mt-1">{mortgageCount}</div>
+                <div className="text-[10px] text-muted-foreground mt-1">Fees: {fmt(data?.mortgage_amount_cents ?? 0)}</div>
+              </div>
+              <div className="rounded-lg border bg-card p-3">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Paid to ChecksOps</div>
                 <div className="text-2xl font-bold mt-1">{fmt(maintenancePaidCents)}</div>
                 <div className="text-[10px] text-muted-foreground mt-1">Same Day {sameDay} · Instant {instant}</div>
@@ -1165,6 +1173,12 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                       <td className="text-right px-4 py-2 tabular-nums">{checkalt?.count ?? 0} checks</td>
                       <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$4.00</td>
                       <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(checkaltFeeCents)}</td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-2">MortgageOps request handling</td>
+                      <td className="text-right px-4 py-2 tabular-nums">{mortgageCount} requests</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$15.00</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(mortgageFeeCents)}</td>
                     </tr>
                     <tr>
                       <td className="px-4 py-2">Moov disbursements</td>
