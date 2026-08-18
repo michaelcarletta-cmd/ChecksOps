@@ -413,7 +413,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
       const { error } = await supabase
         .from("mortgage_handling_requests")
         .update({
-          invoice_services_cents: 1000,
+          invoice_services_cents: Math.round(parseFloat(invoiceServices) * 100),
           invoice_shipping_cents: shipping,
           invoice_shipping_description: invoiceShippingDesc || "2-Day shipping label",
           invoice_notes: invoiceNotes.trim() || null,
