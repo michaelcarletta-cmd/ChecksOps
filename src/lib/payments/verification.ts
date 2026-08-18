@@ -2,7 +2,8 @@ import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Bank ownership verification for recipients who will not use an instant bank
- * login: two small deposits land in their account and they confirm the amounts.
+ * login: a $0.01 micro-deposit lands in their account containing a 4-digit
+ * verification code (MV####).
  */
 
 export interface BankVerification {
