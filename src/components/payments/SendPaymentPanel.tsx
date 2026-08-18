@@ -118,13 +118,8 @@ export function SendPaymentPanel({
 
       if (payErr) throw payErr;
 
-      // Invoke Actum disburse edge function (admin_override only honored server-side if caller is admin)
-      const { error: invokeErr } = await supabase.functions.invoke("actum-send-payment", {
-        body: { payment_id: payment.id, admin_override: adminOverride && isAdmin },
-      });
-
-      if (invokeErr) throw invokeErr;
-      return payment.id;
+      // Actum is disabled globally.
+      throw new Error("Actum payment rail is no longer available. Please use the Moov payout hub.");
     },
     onSuccess: () => {
       toast({ title: "Payment sent", description: `$${paymentAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} sent to ${contractorName}` });
@@ -197,7 +192,8 @@ export function SendPaymentPanel({
     );
   }
 
-  if (!isActum) return <div className="p-6 text-center text-sm text-muted-foreground border rounded-lg">Bank payments are currently unavailable for this organization.</div>;
+  // Actum disabled globally. Check Moov eligibility if this were to be updated to Moov.
+  return <div className="p-6 text-center text-sm text-muted-foreground border rounded-lg">Contractor payments are currently moving to Moov. Please use the Disbursement Console for all payments.</div>;
 
   return (
     <Card>
