@@ -518,6 +518,17 @@ export function DisbursementConsole({
         {/* Stakeholder manager (per-check) */}
         {checkIntakeItemId && <CheckStakeholdersManager checkIntakeItemId={checkIntakeItemId} />}
 
+        {partnersNeedingSetup.length > 0 && (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
+            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+            <span>
+              This check is shared with {partnersNeedingSetup.map((p: any) => p.partner_name).join(", ")}.
+              They'll be added as a recipient automatically once their bank account is verified.
+            </span>
+          </div>
+        )}
+
+
         {accounts.length === 0 && (
           <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
             <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
