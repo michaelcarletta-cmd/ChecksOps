@@ -1002,6 +1002,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
 
   const events: any[] = data?.events || [];
   const checkCount = events.filter((e) => e.event_type === "check_processing").length;
+  const mortgageCount = data?.mortgage_count || events.filter((e) => e.event_type === "mortgage_handling").length;
   const sameDay = events.filter((e) => e.event_type === "moov_same_day").length;
   const instant = events.filter((e) => e.event_type === "moov_instant").length;
   const fmt = (cents: number) =>
