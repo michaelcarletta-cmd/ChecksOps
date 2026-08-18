@@ -57,14 +57,28 @@ serve(async (req) => {
     const attempts = verification.attempts + 1;
 
     try {
-      await moovFetch<any>(
-        `/accounts/${verification.provider_account_id}/bank-accounts/${verification.provider_bank_account_id}/micro-deposits`,
-        {
-          method: "PUT",
-          scopes: scopes.bankAccountsWrite(verification.provider_account_id),
-          body: { amounts: cents },
-        },
-      );
+      // Completion endpoint (current contract), falling back to the legacy path.
+      try {
+        await moovFetch<any>(
+          `/accounts/${verification.provider_account_id}/bank-accounts/${verification.provider_bank_account_id}/verify`,
+          {
+            method: "PUT",
+            scopes: scopes.bankAccountsWrite(verification.provider_account_id),
+            body: { code: `MV${cents.map((c) => String(c).padStart(2, "0")).join("")}`, amounts: cents },
+          },
+        );
+      } catch (inner) {
+        const status = (inner as any)?.status;
+        if (status !== 404 && status !== 405) throw inner;
+        await moovFetch<any>(
+          `/accounts/${verification.provider_account_id}/bank-accounts/${verification.provider_bank_account_id}/micro-deposits`,
+          {
+            method: "PUT",
+            scopes: scopes.bankAccountsWrite(verification.provider_account_id),
+            body: { amounts: cents },
+          },
+        );
+      }
     } catch (e) {
       const exhausted = attempts >= verification.max_attempts;
       await supabase.from("payment_method_verifications").update({

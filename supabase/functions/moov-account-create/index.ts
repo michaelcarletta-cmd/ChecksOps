@@ -15,8 +15,11 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { tenant_id } = await req.json();
+    const { tenant_id, terms_of_service_token } = await req.json();
     if (!tenant_id) return json({ error: "tenant_id is required" }, 400);
+    const tosToken = typeof terms_of_service_token === "string" && terms_of_service_token.length >= 8
+      ? terms_of_service_token
+      : null;
 
     const caller = await requireMoovCaller(req, tenant_id, { requireAdmin: true });
     if (isResponse(caller)) return caller;
@@ -80,6 +83,9 @@ serve(async (req) => {
           },
         },
         capabilities: ["transfers", "send-funds", "collect-funds", "wallet"],
+        // Provider-issued ToS acceptance token from the hosted ToS component.
+        // Absent when the tenant will finish in hosted onboarding instead.
+        ...(tosToken ? { termsOfService: { token: tosToken } } : {}),
         foreignID: tenant_id,
         metadata: { checksops_tenant_id: tenant_id },
       },
@@ -102,6 +108,9 @@ serve(async (req) => {
           onboarding_status: "onboarding_incomplete",
           verification_status: "not_started",
           provider_metadata: sanitize(created ?? {}),
+          ...(tosToken
+            ? { tos_accepted_at: new Date().toISOString(), tos_accepted_by: userId, tos_source: "tos_drop" }
+            : {}),
           last_synced_at: new Date().toISOString(),
         },
         { onConflict: "tenant_id,provider,environment" },
