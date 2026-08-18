@@ -104,14 +104,28 @@ export async function syncWallet(
     accountId: string;
     environment: string;
     walletType?: WalletType;
+    skipProviderFetch?: boolean;
   },
 ): Promise<WalletRow> {
   const walletType: WalletType = args.walletType ?? "operating";
   const name = walletType === "trust" ? "Trust wallet" : "Operating wallet";
 
-  const provider = await ensureProviderWallet(args.accountId, walletType, name);
-  const pmId = provider.walletID
-    ? await walletPaymentMethodId(args.accountId, provider.walletID)
+  // Check if we already have a wallet record with a provider ID
+  const existing = await readWallet(supabase, args.tenantId, args.environment, walletType);
+  
+  let providerWalletId = existing?.provider_wallet_id;
+  let availableCents = existing?.available_cents ?? 0;
+  let pendingCents = existing?.pending_cents ?? 0;
+
+  if (!args.skipProviderFetch || !providerWalletId) {
+    const provider = await ensureProviderWallet(args.accountId, walletType, name);
+    providerWalletId = provider.walletID;
+    availableCents = provider.availableCents;
+    pendingCents = provider.pendingCents;
+  }
+
+  const pmId = providerWalletId
+    ? await walletPaymentMethodId(args.accountId, providerWalletId)
     : null;
 
   const { data, error } = await supabase
@@ -123,11 +137,11 @@ export async function syncWallet(
         environment: args.environment,
         wallet_type: walletType,
         name,
-        provider_wallet_id: provider.walletID ?? null,
+        provider_wallet_id: providerWalletId ?? null,
         provider_account_id: args.accountId,
         provider_payment_method_id: pmId,
-        available_cents: provider.availableCents,
-        pending_cents: provider.pendingCents,
+        available_cents: availableCents,
+        pending_cents: pendingCents,
         status: "active",
         last_synced_at: new Date().toISOString(),
       },
