@@ -1018,11 +1018,12 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const CHECK_FEE_CENTS = 400;
   const MOOV_FEE_CENTS = 100;
   const checkaltFeeCents = (checkalt?.count ?? 0) * CHECK_FEE_CENTS;
-  const moovFeeCents = (moov?.count ?? 0) * MOOV_FEE_CENTS;
-  const grossMaintenance = tenantMeta?.monthly_rate_cents ?? 0;
-  const discount = tenantMeta?.referral_discount_cents ?? 0;
-  const netMaintenance = Math.max(0, grossMaintenance - discount);
-  const consolidatedTotalCents = checkaltFeeCents + moovFeeCents + netMaintenance;
+    const moovFeeCents = (moov?.count ?? 0) * MOOV_FEE_CENTS;
+    const mortgageFeeCents = data?.mortgage_amount_cents ?? 0;
+    const grossMaintenance = tenantMeta?.monthly_rate_cents ?? 0;
+    const discount = tenantMeta?.referral_discount_cents ?? 0;
+    const netMaintenance = Math.max(0, grossMaintenance - discount);
+    const consolidatedTotalCents = checkaltFeeCents + moovFeeCents + mortgageFeeCents + netMaintenance;
 
   const pullConsolidated = async () => {
     if (scope !== "month") {
