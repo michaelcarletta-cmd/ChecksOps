@@ -261,3 +261,44 @@ export function safeLastFour(value: string | null | undefined): string | null {
   const digits = value.replace(/\D/g, "");
   return digits.length >= 4 ? digits.slice(-4) : null;
 }
+
+/* ---------------- Multipart upload ---------------- */
+
+export interface MoovUploadOptions {
+  scopes: string[];
+  form: FormData;
+  idempotencyKey?: string;
+  apiVersion?: string;
+  onBehalfOf?: string;
+}
+
+/**
+ * Multipart POST (Moov account Files API). The body is a FormData, so we must
+ * NOT set Content-Type ourselves — fetch adds the boundary.
+ */
+export async function moovUpload<T = any>(path: string, opts: MoovUploadOptions): Promise<T> {
+  const token = await moovToken(opts.scopes);
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/json",
+    Origin: moovOrigin(),
+  };
+  if (opts.idempotencyKey) headers["X-Idempotency-Key"] = opts.idempotencyKey;
+  if (opts.apiVersion) headers["x-moov-version"] = opts.apiVersion;
+  if (opts.onBehalfOf) headers["X-Account-ID"] = opts.onBehalfOf;
+
+  const res = await fetch(`${moovHost()}${path}`, { method: "POST", headers, body: opts.form });
+
+  const text = await res.text();
+  let json: any = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch { /* non-JSON */ }
+
+  if (!res.ok) {
+    const msg = json?.error ?? json?.message ?? text ?? `Moov ${path} failed`;
+    console.error("[moov] upload error", path, res.status, typeof msg === "string" ? msg : "");
+    throw new MoovError(typeof msg === "string" ? msg : JSON.stringify(msg), res.status, json ?? text);
+  }
+  return json as T;
+}
