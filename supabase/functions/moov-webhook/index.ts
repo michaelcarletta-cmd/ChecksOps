@@ -188,9 +188,48 @@ async function handleEvent(
     return;
   }
 
-  /* ---- Transfers ---- */
+  /* ---- Transfers / Disputes ---- */
   const transferId = data?.transferID ?? data?.transferId ?? null;
-  if (!transferId) return;
+  const disputeId = data?.disputeID ?? data?.disputeId ?? null;
+
+  if (!transferId && !disputeId) return;
+
+  if (disputeId) {
+    // Handle dispute event
+    await supabase.from("payment_event_log").insert({
+      provider: "moov",
+      environment,
+      tenant_id: tenantId,
+      event_type: eventType,
+      provider_metadata: sanitize({ 
+        dispute_id: disputeId, 
+        transfer_id: transferId,
+        amount: data?.amount,
+        phase: data?.phase,
+        status: data?.status 
+      }),
+    });
+    // If it's a dispute, we might want to flag the transfer if we have it
+    if (transferId) {
+      const { data: transfer } = await supabase
+        .from("payment_transfers")
+        .select("id")
+        .eq("provider_transfer_id", transferId)
+        .eq("environment", environment)
+        .maybeSingle();
+      
+      if (transfer) {
+        await supabase
+          .from("payment_transfers")
+          .update({ 
+            failure_reason: `Dispute ${disputeId}: ${data?.phase || eventType}` 
+          })
+          .eq("id", transfer.id);
+      }
+    }
+    return;
+  }
+
 
   const { data: transfer } = await supabase
     .from("payment_transfers")
