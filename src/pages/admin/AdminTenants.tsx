@@ -1042,6 +1042,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
     const line_items = [
       checkaltFeeCents > 0 && { label: "Check processing", detail: `${checkalt?.count ?? 0} checks × $4.00`, amount_cents: checkaltFeeCents },
       moovFeeCents > 0 && { label: "Moov disbursements", detail: `${moov?.count ?? 0} × $1.00`, amount_cents: moovFeeCents },
+      mortgageFeeCents > 0 && { label: "MortgageOps handling", detail: `${mortgageCount} requests`, amount_cents: mortgageFeeCents },
       grossMaintenance > 0 && { label: "Monthly maintenance", detail: range.label, amount_cents: grossMaintenance },
       discount > 0 && { label: "Referral discount", detail: "applied to maintenance", amount_cents: -discount },
     ].filter(Boolean);
