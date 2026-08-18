@@ -313,7 +313,7 @@ export function SendPaymentPanel({
                     <div className="space-y-1">
                       <p className="font-medium">{contractorName}'s bank account hasn't been verified yet.</p>
                       <p className="text-[11px] opacity-90">
-                        Status: <span className="font-medium">{VERIFICATION_LABEL[vStatus]}</span>. Have them confirm the two micro-deposits before sending, or an admin can override below.
+                        Status: <span className="font-medium">{VERIFICATION_LABEL[vStatus]}</span>. Have them confirm the verification code before sending, or an admin can override below.
                       </p>
                     </div>
                   </div>

@@ -71,24 +71,20 @@ serve(async (req) => {
       }, 409);
     }
 
-    // Current API: POST .../verify. Older accounts still answer on the legacy
-    // micro-deposits path, so fall back rather than fail the tenant.
+    // Current API: POST .../verify (Instant Micro-deposit)
     try {
       await moovFetch<any>(
         `/accounts/${accountId}/bank-accounts/${bankAccountId}/verify`,
-        { method: "POST", scopes: scopes.bankAccountsWrite(accountId) },
+        { 
+          method: "POST", 
+          scopes: scopes.bankAccountsWrite(accountId),
+          // x-moov-version is handled by moovFetch if pinned, but standard
+          // POST /verify is supported in current versions.
+        },
       );
     } catch (e) {
-      const status = (e as any)?.status;
-      if (status !== 404 && status !== 405) return json({ error: (e as Error).message }, 502);
-      try {
-        await moovFetch<any>(
-          `/accounts/${accountId}/bank-accounts/${bankAccountId}/micro-deposits`,
-          { method: "POST", scopes: scopes.bankAccountsWrite(accountId) },
-        );
-      } catch (e2) {
-        return json({ error: (e2 as Error).message }, 502);
-      }
+      console.error("[moov-micro-deposit-initiate] error", (e as Error).message);
+      return json({ error: (e as Error).message }, 502);
     }
 
     const { data: verification, error: vErr } = await supabase
