@@ -152,7 +152,7 @@ serve(async (req) => {
     // 4. Proactive Capability Requests.
     // If the account is being verified but doesn't have all standard capabilities,
     // we request them now to avoid manual retries later.
-    const requiredCaps = ["transfers", "send-funds", "collect-funds", "wallet"];
+    const requiredCaps = ["transfers", "send-funds", "collect-funds", "wallet", "send-funds.ach", "collect-funds.ach"];
     const missing = requiredCaps.filter(req => !capList.some(c => c.capability === req));
     
     if (missing.length > 0 && verificationStatus !== "failed") {
