@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
-import { expandHomeDir } from 'os';
 
 const session = JSON.parse(readFileSync('/root/.cache/lovable-auth/session.json', 'utf8'));
 const accessToken = session.session.access_token;
@@ -39,7 +38,7 @@ async function runTest() {
     });
   }
 
-  console.log("2. Checking Connected Bank...");
+  console.log("2. Checking Database Record...");
   const { data: account } = await supabase
     .from('payment_provider_accounts')
     .select('*')
@@ -47,15 +46,16 @@ async function runTest() {
     .single();
   
   console.log(" - Bank connection status:", account?.bank_connection_status);
+  console.log(" - Moov environment:", account?.environment);
 
-  console.log("3. Attempting Wallet Sync...");
+  console.log("3. Syncing Wallet...");
   const { data: wallet, error: walletErr } = await supabase.functions.invoke('moov-wallet-sync', {
     body: { tenant_id: TENANT_ID }
   });
   if (walletErr) {
     console.error("Wallet error:", walletErr);
   } else {
-    console.log("Wallet sync:", wallet?.success ? "OK" : "Failed", wallet?.balance);
+    console.log("Wallet sync:", wallet?.success ? "OK" : "Failed", JSON.stringify(wallet?.balance));
   }
 
   console.log(`--- Test Finished ---`);
