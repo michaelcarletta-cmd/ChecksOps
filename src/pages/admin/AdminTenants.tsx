@@ -1175,6 +1175,11 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                       <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(checkaltFeeCents)}</td>
                     </tr>
                     <tr>
+                      <td className="px-4 py-2">MortgageOps request handling</td>
+                      <td className="text-right px-4 py-2 tabular-nums">{mortgageCount} requests</td>
+                      <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$15.00</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(mortgageFeeCents)}</td>
+                    <tr>
                       <td className="px-4 py-2">Moov disbursements</td>
                       <td className="text-right px-4 py-2 tabular-nums">{moov?.count ?? 0} txns</td>
                       <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$1.00</td>
