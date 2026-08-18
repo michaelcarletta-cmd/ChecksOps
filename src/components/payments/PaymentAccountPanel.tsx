@@ -167,11 +167,20 @@ export function PaymentAccountPanel() {
           <span className="text-xs text-muted-foreground flex items-center gap-1.5">
             <Banknote className="h-3.5 w-3.5" /> Connected Bank
           </span>
-          <span className="text-xs">
-            {account?.bankName
-              ? `${account.bankName}${account.bankLastFour ? ` ••${account.bankLastFour}` : ""}`
-              : BANK_STATUS_LABEL[account?.bankConnectionStatus ?? "not_connected"]}
-          </span>
+          <div className="flex flex-col items-end">
+            <span className="text-xs">
+              {account?.bankName
+                ? `${account.bankName}${account.bankLastFour ? ` ••${account.bankLastFour}` : ""}`
+                : BANK_STATUS_LABEL[account?.bankConnectionStatus ?? "not_connected"]}
+            </span>
+            {tenantId && account?.bankConnectionStatus !== "connected" && (
+              <MicroDepositVerification 
+                tenantId={tenantId}
+                verificationStatus={account?.bankConnectionStatus === "pending" ? "pending_micro_deposit" : "not_started"}
+                onVerified={() => refresh()}
+              />
+            )}
+          </div>
         </div>
 
         <div className="flex items-center justify-between">
