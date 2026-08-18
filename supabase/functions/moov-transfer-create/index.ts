@@ -285,7 +285,7 @@ serve(async (req) => {
         status,
         provider_fee_cents: providerFee,
         submitted_at: new Date().toISOString(),
-        provider_metadata: sanitize(created ?? {}),
+        provider_metadata: sanitize({ ...(created ?? {}), rail_decision: railMeta }),
       })
       .eq("id", draft.id)
       .select()
