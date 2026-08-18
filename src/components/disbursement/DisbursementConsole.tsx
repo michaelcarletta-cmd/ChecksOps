@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
-import { AlertTriangle, CheckCircle2, Send, Building2, Loader2, RefreshCw, Zap, Clock, History, ShieldAlert, ShieldCheck, Wallet } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Send, Building2, Loader2, RefreshCw, Zap, Clock, History, ShieldAlert, ShieldCheck, Wallet, Banknote } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { CheckStakeholdersManager } from "./CheckStakeholdersManager";
@@ -71,9 +71,9 @@ export function DisbursementConsole({
 
   const [allocations, setAllocations] = useState<Record<string, string>>({});
   const [usePercent, setUsePercent] = useState(false);
-  const [deliverySpeed, setDeliverySpeed] = useState<"next_day" | "same_day">("next_day");
-  const SPEED_FEES: Record<string, number> = { next_day: 0.75, same_day: 1.00 };
-  const SPEED_LABELS: Record<string, string> = { next_day: "Next Day", same_day: "Same Day" };
+  const [deliverySpeed, setDeliverySpeed] = useState<"next_day" | "same_day" | "external">("next_day");
+  const SPEED_FEES: Record<string, number> = { next_day: 0.75, same_day: 1.00, external: 0.00 };
+  const SPEED_LABELS: Record<string, string> = { next_day: "Next Day", same_day: "Same Day", external: "External / Manual" };
   const [adminOverride, setAdminOverride] = useState(false);
   const { isAdmin } = usePermissions();
   const { isPlaid } = usePaymentRail();
@@ -302,7 +302,7 @@ export function DisbursementConsole({
       // legacy rail for the whole batch.
       let moovFallbackNote: string | null = null;
 
-      if (moovEnabled) {
+      if (moovEnabled && deliverySpeed !== "external") {
         const { data: moovData, error: moovErr } = await supabase.functions.invoke("moov-disburse", {
           body: { batch_id: batch.id, source_kind: sourceKind },
         });
@@ -332,6 +332,38 @@ export function DisbursementConsole({
           throw new Error(reason?.message ?? reason?.error ?? moovErr?.message ?? "Disbursement failed");
         }
         moovFallbackNote = reason?.message ?? "Sent on the legacy rail — finish payment setup to use the new rail.";
+      }
+
+      if (deliverySpeed === "external") {
+        // Mark the batch and splits as settled since it was recorded as manual payment
+        const { error: updateBatchErr } = await supabase
+          .from("disbursement_batches")
+          .update({ status: "settled" })
+          .eq("id", batch.id);
+        
+        if (updateBatchErr) throw updateBatchErr;
+
+        const { error: updateSplitsErr } = await supabase
+          .from("disbursement_splits")
+          .update({ status: "settled" })
+          .eq("batch_id", batch.id);
+        
+        if (updateSplitsErr) throw updateSplitsErr;
+
+        // Advance check stage to disbursed_externally if fully balanced
+        if (isBalanced && checkIntakeItemId) {
+          await supabase
+            .from("check_intake_items")
+            .update({ check_stage: "disbursed_externally" as any })
+            .eq("id", checkIntakeItemId);
+          
+          await supabase
+            .from("claim_checks")
+            .update({ check_stage: "disbursed_externally" as any })
+            .eq("check_intake_item_id", checkIntakeItemId);
+        }
+
+        return { batchId: batch.id, rail: "external" as const, note: "External payment recorded" };
       }
 
       // Fallback rail logic removed — Actum is disabled globally.
@@ -486,10 +518,11 @@ export function DisbursementConsole({
           <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
             <Clock className="h-3 w-3" /> Delivery Speed
           </p>
-          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Delivery speed">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" role="radiogroup" aria-label="Delivery speed">
             {([
               { value: "next_day", label: "Next Day", fee: 0.75, Icon: Clock, iconClass: "" },
               { value: "same_day", label: "Same Day", fee: 1.00, Icon: Zap, iconClass: "text-blue-500" },
+              { value: "external", label: "External / Manual", fee: 0, Icon: Banknote, iconClass: "text-emerald-500" },
             ] as const).map(({ value, label, fee, Icon, iconClass }) => {
               const checked = deliverySpeed === value;
               return (

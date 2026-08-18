@@ -1236,7 +1236,7 @@ export default function CheckCommandCenter() {
     const checkAltStatus = getCheckAltStatus(c);
     // Once funds have been disbursed, the check belongs in the Funds Released
     // tab — do NOT show it in Deposited anymore.
-    if (stage === "funds_released") return false;
+    if (stage === "funds_released" || stage === "disbursed_externally") return false;
     return (s === "deposited" || stage === "deposited" || checkAltStatus === "pending_approval") && matchesSearch(c);
   });
   // On the Deposited tab, merge the paginated owned deposited rows with any
@@ -1247,7 +1247,7 @@ export default function CheckCommandCenter() {
     // arrive before this paginated query refetches; never let a stale deposited
     // row keep a funds-released check visible in this lane.
     const ownedFiltered = (depositedRows as CheckItem[]).filter(
-      (c) => c.check_stage !== "funds_released" && matchesSearch(c),
+      (c) => c.check_stage !== "funds_released" && c.check_stage !== "disbursed_externally" && matchesSearch(c),
     );
     const ownedIds = new Set(ownedFiltered.map((c) => c.id));
     const extras = depositedFromAll.filter((c) => !ownedIds.has(c.id));
@@ -1478,7 +1478,12 @@ export default function CheckCommandCenter() {
   }, [searchQuery]);
 
   const filteredFundsReleased = useMemo(
-    () => (fundsReleased as any[]).filter(matchesSplitSearch),
+    () => {
+      const splits = (fundsReleased as any[]).filter(matchesSplitSearch);
+      // We also want to include checks that were marked as disbursed_externally 
+      // but might not have a split record yet (though recording external creates one).
+      return splits;
+    },
     [fundsReleased, matchesSplitSearch],
   );
   const filteredFundsReceived = useMemo(
@@ -1502,6 +1507,7 @@ export default function CheckCommandCenter() {
       { tab: "reissue", count: reissueRequested.length },
       { tab: "deposited", count: depositedChecks.length },
       { tab: "fundsreleased", count: filteredFundsReleased.length },
+      { tab: "external_disbursements", count: stageTotals?.get('disbursed_externally')?.count ?? 0 },
       { tab: "fundsreceived", count: filteredFundsReceived.length },
     ];
     const currentCount = buckets.find((b) => b.tab === activeTab)?.count ?? 0;
@@ -1647,6 +1653,7 @@ export default function CheckCommandCenter() {
 
             // Reissue moved into Manager → Reissue sub-tab.
             { key: "fundsreleased", label: "Funds Released",   count: filteredFundsReleased.length,       icon: Banknote,       gradient: "from-emerald-500/20 to-teal-500/10",  accent: "text-emerald-400", ring: "ring-emerald-500/30" },
+            { key: "external_disbursements", label: "External Payments", count: stageTotals?.get('disbursed_externally')?.count ?? 0, icon: Banknote, gradient: "from-slate-500/20 to-gray-500/10", accent: "text-slate-400", ring: "ring-slate-500/30" },
             { key: "fundsreceived", label: "Funds Received",   count: filteredFundsReceived.length,       icon: Banknote,       gradient: "from-sky-500/20 to-blue-500/10",      accent: "text-sky-400",     ring: "ring-sky-500/30" },
             // Partners moved into Manager → Partners sub-tab (2026-07-07).
             ...(canAccessManager ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield, gradient: "from-indigo-500/20 to-blue-500/10", accent: "text-indigo-400", ring: "ring-indigo-500/30" }] : []),
@@ -2198,6 +2205,94 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
+        {activeTab === "external_disbursements" && (
+          <div className="mt-3 flex flex-col md:flex-row gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
+            <Card
+              className={`overflow-hidden transition-all duration-300 ease-in-out md:flex-shrink-0 w-full ${isMobile && selectedCheck ? "hidden" : ""}`}
+              style={!isMobile ? { width: selectedCheck ? "40%" : "100%" } : undefined}
+            >
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Banknote className="h-4 w-4 text-slate-400" />
+                  External Payments ({stageTotals?.get('disbursed_externally')?.count ?? 0})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[calc(100vh-460px)]">
+                  {(() => {
+                    const checks = allChecks.filter(c => c.check_stage === 'disbursed_externally' && matchesSearch(c));
+                    if (checks.length === 0) {
+                      return <div className="p-8 text-center text-muted-foreground">No external payments recorded</div>;
+                    }
+                    const groups = buildCheckGroups(checks as CheckItem[]);
+                    return (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Check #</TableHead>
+                            <TableHead>Carrier</TableHead>
+                            <TableHead className="text-right">Amount</TableHead>
+                            <TableHead>Recipient/Note</TableHead>
+                            <TableHead>Date</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {groups.map((group) => (
+                            <Fragment key={group.key}>
+                              <TableRow className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold">
+                                <TableCell colSpan={5} className="py-3">
+                                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                    <ClaimCheckFileHeader group={group} compact />
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                              {group.checks.map((check) => (
+                                <TableRow key={check.id} className="cursor-pointer" onClick={() => setSelectedCheck(check.id)}>
+                                  <TableCell className="font-mono text-sm">#{check.check_number || "—"}</TableCell>
+                                  <TableCell className="text-sm">{check.carrier_name || "—"}</TableCell>
+                                  <TableCell className="text-right tabular-nums">${(check.amount ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}</TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">{check.payee_line || "—"}</TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">{check.updated_at ? format(new Date(check.updated_at), "MMM d, yyyy") : "—"}</TableCell>
+                                </TableRow>
+                              ))}
+                            </Fragment>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    );
+                  })()}
+                </ScrollArea>
+              </CardContent>
+            </Card>
+
+            {selectedCheck && (
+              <div
+                className={`transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${isMobile && !selectedCheck ? "hidden" : ""}`}
+                style={!isMobile ? { width: "60%" } : undefined}
+              >
+                <div className="space-y-2">
+                  {isMobile && (
+                    <div className="sticky top-0 z-10 bg-background border-b pb-2 mb-2 -mx-4 px-4">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1 -ml-2 h-8 text-xs"
+                        onClick={() => setSelectedCheck(null)}
+                      >
+                        <ArrowLeft className="h-4 w-4" /> Back to list
+                      </Button>
+                    </div>
+                  )}
+                  <CheckDetailPanel
+                    checkId={selectedCheck}
+                    onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
 
 
 
@@ -2309,7 +2404,7 @@ export default function CheckCommandCenter() {
         )}
 
         {/* All other tabs — only render the active one */}
-        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "manager" && activeTab !== "branch" && activeTab !== "messages" && activeTab !== "partners" && activeTab !== "fundsreleased" && activeTab !== "fundsreceived" && (
+        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "manager" && activeTab !== "branch" && activeTab !== "messages" && activeTab !== "partners" && activeTab !== "fundsreleased" && activeTab !== "fundsreceived" && activeTab !== "external_disbursements" && (
           <div className="mt-3 flex flex-col md:flex-row gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
             {/* Check list — hidden on mobile when a check is selected */}
             <Card
