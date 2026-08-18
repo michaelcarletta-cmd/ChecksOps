@@ -221,7 +221,7 @@ export function PaymentAccountPanel() {
               size="sm"
               variant="outline"
               className="h-8 text-xs"
-              onClick={() => setShowBankLink(true)}
+              onClick={handleBankLink}
               disabled={busy !== null || !account?.externalAccountId}
             >
               <Landmark className="h-3.5 w-3.5 mr-1.5" />
