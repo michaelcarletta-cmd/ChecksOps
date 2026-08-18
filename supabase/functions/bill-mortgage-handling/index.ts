@@ -79,19 +79,22 @@ serve(async (req) => {
     });
   }
 
-  // Resolve fee
-  const { data: config } = await admin
-    .from("mortgage_desk_config")
-    .select("default_flat_fee_cents")
-    .maybeSingle();
+  // Resolve fee: $10 for first check, $5 for additional checks
+  const { data: siblingCountRes } = await admin
+    .from("mortgage_handling_requests")
+    .select("id", { count: "exact" })
+    .eq("claim_id", request.claim_id)
+    .eq("billing_status", "billed");
+  
+  const isAdditional = (siblingCountRes?.length ?? 0) > 0;
+  const defaultFee = isAdditional ? 500 : 1000;
 
   const feeCents =
     (typeof payload.flat_fee_cents === "number" && payload.flat_fee_cents > 0
       ? payload.flat_fee_cents
       : null) ??
     request.flat_fee_cents ??
-    config?.default_flat_fee_cents ??
-    1500;
+    defaultFee;
 
   // Resolve tenant Stripe customer
   const { data: balance } = await admin
