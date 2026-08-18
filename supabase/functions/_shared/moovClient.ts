@@ -145,8 +145,15 @@ export interface MoovRequestOptions {
   scopes: string[];
   body?: unknown;
   idempotencyKey?: string;
+  /**
+   * Explicit Moov API version (`x-moov-version`). Endpoints that depend on a
+   * dated contract — sweeps, for example — pin this instead of relying on
+   * Moov's legacy default version.
+   */
+  apiVersion?: string;
   /** Act on behalf of a connected account. */
   onBehalfOf?: string;
+
 }
 
 export async function moovFetch<T = any>(
