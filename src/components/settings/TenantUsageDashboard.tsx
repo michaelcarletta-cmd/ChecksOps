@@ -171,34 +171,27 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
           </div>
         ) : (
           <div className="space-y-6 overflow-y-auto pr-2">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="rounded-xl border bg-card p-4 shadow-sm">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Checks</div>
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Check Processing</div>
                 <div className="text-2xl font-bold">
-                  {data?.events?.filter(e => e.source === 'check').length ?? 0}
+                  {data?.events?.filter(e => e.event_type === 'check_processing').length ?? 0}
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-2">Standard processing</div>
               </div>
               <div className="rounded-xl border bg-card p-4 shadow-sm">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">MortgageOps</div>
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">MortgageOps Usage</div>
                 <div className="text-2xl font-bold">
                   {data?.mortgage_count ?? data?.events?.filter(e => e.event_type === 'mortgage_handling').length ?? 0}
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-2">Mortgage handling requests</div>
               </div>
               <div className="rounded-xl border bg-card p-4 shadow-sm">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Same Day</div>
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Disbursement Usage</div>
                 <div className="text-2xl font-bold">
-                  {data?.events?.filter(e => e.event_type === 'moov_same_day').length ?? 0}
+                  {data?.events?.filter(e => e.event_type?.startsWith('moov_')).length ?? 0}
                 </div>
-                <div className="text-[10px] text-muted-foreground mt-2">Moov Same-day ACH</div>
-              </div>
-              <div className="rounded-xl border bg-card p-4 shadow-sm">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Instant</div>
-                <div className="text-2xl font-bold">
-                  {data?.events?.filter(e => e.event_type === 'moov_instant').length ?? 0}
-                </div>
-                <div className="text-[10px] text-muted-foreground mt-2">Moov Instant payout</div>
+                <div className="text-[10px] text-muted-foreground mt-2">ACH disbursements (Same Day/Instant)</div>
               </div>
             </div>
 
