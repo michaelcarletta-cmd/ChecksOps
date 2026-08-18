@@ -188,7 +188,7 @@ export function TenantBankAccountSettings() {
                 Bank Account
               </CardTitle>
               <CardDescription className="text-xs mt-1">
-                Your bank account for receiving check deposits. Sign in with your bank — routing & account number, holder name, and account type are captured securely through your bank login. No manual entry.
+                Your bank account for receiving check deposits. Sign in with your bank via Moov — routing & account number, holder name, and account type are captured securely through your bank login. No manual entry.
               </CardDescription>
             </div>
             <Button
