@@ -1,7 +1,9 @@
 // Moov account Files API client (KYB/KYC verification documents).
 //
-// Every call is server-side only and pinned to the project's explicit Moov API
-// version strategy (MOOV_API_VERSION, same default as the sweeps client).
+// Every call is server-side only and follows the project's version strategy:
+// ChecksOps pinned Moov API version: v2024.01.00
+// Moov current stable API: v2026.07.00
+// ChecksOps intentionally remains pinned pending a controlled API migration.
 
 import { moovFetch, moovUpload, scopes } from "./moovClient.ts";
 import { normalizeReviewStatus, type FilePurpose } from "./moovFileRules.ts";
