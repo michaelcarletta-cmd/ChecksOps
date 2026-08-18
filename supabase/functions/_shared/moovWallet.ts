@@ -34,9 +34,16 @@ async function ensureProviderWallet(
   walletType: WalletType,
   name: string,
 ): Promise<{ walletID: string; availableCents: number; pendingCents: number }> {
-  const list = await moovFetch<any[]>(`/accounts/${accountId}/wallets`, {
-    scopes: walletScopes.read(accountId),
-  });
+  let list: any[] = [];
+  try {
+    list = await moovFetch<any[]>(`/accounts/${accountId}/wallets`, {
+      scopes: walletScopes.read(accountId),
+    });
+  } catch (e) {
+    console.warn("[ensureProviderWallet] Could not list wallets", (e as Error).message);
+    // If we can't list, we assume we might need to create or we return empty if it's a 403
+    if ((e as any).status !== 403) throw e;
+  }
 
   const wanted = (list ?? []).find((w: any) =>
     walletType === "trust"
@@ -46,11 +53,16 @@ async function ensureProviderWallet(
 
   let wallet = wanted;
   if (!wallet) {
-    wallet = await moovFetch<any>(`/accounts/${accountId}/wallets`, {
-      method: "POST",
-      scopes: walletScopes.write(accountId),
-      body: { name, description: `ChecksOps ${walletType} wallet` },
-    });
+    try {
+      wallet = await moovFetch<any>(`/accounts/${accountId}/wallets`, {
+        method: "POST",
+        scopes: walletScopes.write(accountId),
+        body: { name, description: `ChecksOps ${walletType} wallet` },
+      });
+    } catch (e) {
+      console.warn("[ensureProviderWallet] Could not create wallet", (e as Error).message);
+      throw e;
+    }
   }
 
   const available = wallet?.availableBalance?.valueDecimal
@@ -92,14 +104,28 @@ export async function syncWallet(
     accountId: string;
     environment: string;
     walletType?: WalletType;
+    skipProviderFetch?: boolean;
   },
 ): Promise<WalletRow> {
   const walletType: WalletType = args.walletType ?? "operating";
   const name = walletType === "trust" ? "Trust wallet" : "Operating wallet";
 
-  const provider = await ensureProviderWallet(args.accountId, walletType, name);
-  const pmId = provider.walletID
-    ? await walletPaymentMethodId(args.accountId, provider.walletID)
+  // Check if we already have a wallet record with a provider ID
+  const existing = await readWallet(supabase, args.tenantId, args.environment, walletType);
+  
+  let providerWalletId = existing?.provider_wallet_id;
+  let availableCents = existing?.available_cents ?? 0;
+  let pendingCents = existing?.pending_cents ?? 0;
+
+  if (!args.skipProviderFetch || !providerWalletId) {
+    const provider = await ensureProviderWallet(args.accountId, walletType, name);
+    providerWalletId = provider.walletID;
+    availableCents = provider.availableCents;
+    pendingCents = provider.pendingCents;
+  }
+
+  const pmId = providerWalletId
+    ? await walletPaymentMethodId(args.accountId, providerWalletId)
     : null;
 
   const { data, error } = await supabase
@@ -111,11 +137,11 @@ export async function syncWallet(
         environment: args.environment,
         wallet_type: walletType,
         name,
-        provider_wallet_id: provider.walletID ?? null,
+        provider_wallet_id: providerWalletId ?? null,
         provider_account_id: args.accountId,
         provider_payment_method_id: pmId,
-        available_cents: provider.availableCents,
-        pending_cents: provider.pendingCents,
+        available_cents: availableCents,
+        pending_cents: pendingCents,
         status: "active",
         last_synced_at: new Date().toISOString(),
       },

@@ -38,16 +38,24 @@ serve(async (req) => {
 
     let wallet;
     try {
+      // If the account isn't verified yet, provider balance fetch often 502s or 403s.
+      // We still want to provision the wallet record locally if possible.
+      const isVerified = account.onboarding_status === "active";
+      
       wallet = await syncWallet(supabase, {
         tenantId: tenant_id,
         accountId: account.provider_account_id,
         environment,
         walletType: wallet_type,
+        skipProviderFetch: !isVerified
       });
     } catch (e) {
       // Fall back to the last known local state so the UI still renders.
       const local = await readWallet(supabase, tenant_id, environment, wallet_type);
-      if (!local) return json({ error: (e as Error).message }, 502);
+      if (!local) {
+        console.error("[moov-wallet-sync] Sync failed and no local record", (e as Error).message);
+        return json({ error: (e as Error).message }, 502);
+      }
       wallet = local;
     }
 

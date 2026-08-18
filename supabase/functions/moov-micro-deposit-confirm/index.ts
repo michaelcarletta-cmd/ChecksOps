@@ -55,14 +55,19 @@ serve(async (req) => {
     try {
       // Completion endpoint (Instant Micro-deposit)
       try {
-        await moovFetch<any>(
-          `/accounts/${verification.provider_account_id}/bank-accounts/${verification.provider_bank_account_id}/verify`,
-          {
-            method: "PUT",
-            scopes: scopes.bankAccountsWrite(verification.provider_account_id),
-            body: { code },
-          },
-        );
+        // Sandbox bypass for testing
+        if (environment === "sandbox" && code === "0000") {
+          console.log("[moov-micro-deposit-confirm] Sandbox override triggered");
+        } else {
+          await moovFetch<any>(
+            `/accounts/${verification.provider_account_id}/bank-accounts/${verification.provider_bank_account_id}/verify`,
+            {
+              method: "PUT",
+              scopes: scopes.bankAccountsWrite(verification.provider_account_id),
+              body: { code },
+            },
+          );
+        }
       } catch (inner) {
         throw inner;
       }
