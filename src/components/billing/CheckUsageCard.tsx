@@ -113,7 +113,7 @@ export function CheckUsageCard() {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="rounded-lg bg-muted/30 p-3">
             <div className="text-xs text-muted-foreground">Checks processed</div>
             <div className="text-2xl font-bold">
@@ -121,13 +121,19 @@ export function CheckUsageCard() {
             </div>
           </div>
           <div className="rounded-lg bg-muted/30 p-3">
-            <div className="text-xs text-muted-foreground">Same Day</div>
+            <div className="text-xs text-muted-foreground">MortgageOps Requests</div>
+            <div className="text-2xl font-bold">
+              {isLoading ? "—" : data?.events?.filter(e => e.event_type === 'mortgage_handling').length ?? 0}
+            </div>
+          </div>
+          <div className="rounded-lg bg-muted/30 p-3">
+            <div className="text-xs text-muted-foreground">Same Day ACH</div>
             <div className="text-2xl font-bold">
               {isLoading ? "—" : data?.events?.filter(e => e.event_type === 'moov_same_day').length ?? 0}
             </div>
           </div>
           <div className="rounded-lg bg-muted/30 p-3">
-            <div className="text-xs text-muted-foreground">Instant</div>
+            <div className="text-xs text-muted-foreground">Instant ACH</div>
             <div className="text-2xl font-bold">
               {isLoading ? "—" : data?.events?.filter(e => e.event_type === 'moov_instant').length ?? 0}
             </div>
