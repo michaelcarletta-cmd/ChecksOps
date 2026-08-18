@@ -245,9 +245,20 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         .maybeSingle();
       if (rErr || !r) throw rErr || new Error("not found");
       setReq(r as RequestRow);
+
+      // Check for other billed requests on the same claim to determine fee
+      const { count: siblingCount } = await supabase
+        .from("mortgage_handling_requests")
+        .select("id", { count: 'exact', head: true })
+        .eq("claim_id", r.claim_id)
+        .eq("billing_status", "billed")
+        .neq("id", r.id);
+
+      const defaultFeeCents = (siblingCount ?? 0) > 0 ? 500 : 1000;
+
       // Hydrate invoice draft from stored values (or defaults)
       const rr = r as any;
-      setInvoiceServices(((rr.invoice_services_cents ?? 1000) / 100).toFixed(2));
+      setInvoiceServices(((rr.invoice_services_cents ?? defaultFeeCents) / 100).toFixed(2));
       setInvoiceShipping(rr.invoice_shipping_cents ? (rr.invoice_shipping_cents / 100).toFixed(2) : "");
       setInvoiceShippingDesc(rr.invoice_shipping_description || "2-Day shipping label");
       setInvoiceRecipient(rr.invoice_recipient_email || "");
