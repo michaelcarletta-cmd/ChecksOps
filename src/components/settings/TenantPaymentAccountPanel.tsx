@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -50,6 +50,19 @@ export function TenantPaymentAccountPanel({ tenantId, tenantName, isOpen, onClos
   const { toast } = useToast();
   const qc = useQueryClient();
   const [link, setLink] = useState<string | null>(null);
+  const [setupWindow, setSetupWindow] = useState<Window | null>(null);
+
+  useEffect(() => {
+    if (!setupWindow) return;
+    const interval = setInterval(() => {
+      if (setupWindow.closed) {
+        setSetupWindow(null);
+        refresh();
+        clearInterval(interval);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [setupWindow]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["tenant-payment-account", tenantId],
@@ -127,10 +140,11 @@ export function TenantPaymentAccountPanel({ tenantId, tenantName, isOpen, onClos
       setLink(url);
       if (url) {
         // Open in new tab automatically for a smoother "hosted" experience
-        window.open(url, '_blank', 'noopener,noreferrer');
+        const win = window.open(url, '_blank', 'noopener,noreferrer');
+        setSetupWindow(win);
         toast({ 
           title: "Onboarding started", 
-          description: "The onboarding form has opened in a new tab." 
+          description: "This view will refresh automatically once you close the onboarding tab." 
         });
       }
       refresh();
