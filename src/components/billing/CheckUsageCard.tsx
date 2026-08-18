@@ -16,7 +16,7 @@ interface UsageEvent {
   unit_price_cents: number;
   currency: string;
   status: string;
-  event_type?: "check_processing" | "moov_same_day" | "moov_instant";
+  event_type?: "check_processing" | "moov_same_day" | "moov_instant" | "mortgage_handling";
 }
 
 interface UsagePayload {
