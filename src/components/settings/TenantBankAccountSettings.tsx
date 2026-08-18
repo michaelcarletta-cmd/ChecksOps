@@ -23,7 +23,7 @@ export function TenantBankAccountSettings() {
   const { tenant } = useTenant();
   const { toast } = useToast();
   const { isAdmin } = usePermissions();
-  const { isPlaid } = usePaymentRail();
+  const { isMoov } = usePaymentRail();
   const qc = useQueryClient();
   const [isStarting, setIsStarting] = useState(false);
 
@@ -75,7 +75,7 @@ export function TenantBankAccountSettings() {
       try {
         // Moov rail: the row lands unverified and the
         // inline Moov Link widget on the account card finishes the job.
-        // Legacy rails (Actum/Plaid) are disabled globally.
+        // Legacy rails are disabled globally.
         return null;
       } catch (e: any) {
         if (insertedId) {
