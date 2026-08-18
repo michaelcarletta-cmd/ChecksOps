@@ -242,8 +242,7 @@ serve(async (req) => {
             paymentMethodID: source.provider_payment_method_id ?? source.provider_bank_account_id,
           },
           destination: {
-            paymentMethodID:
-              destinationMethod.provider_payment_method_id ?? destinationMethod.provider_bank_account_id,
+            paymentMethodID: railDecision.paymentMethodId ?? legacyDestinationMethodId,
           },
           amount: { currency: "USD", value: amount },
           description: (description ?? `ChecksOps payment to ${destinationLabel}`).slice(0, 128),
@@ -251,6 +250,8 @@ serve(async (req) => {
             checksops_transfer_id: draft.id,
             checksops_tenant_id: tenant_id,
             claim_id: claim_id ?? "",
+            requested_speed: railDecision.requestedSpeed,
+            selected_rail: railDecision.railType ?? "ach-credit-standard",
           },
         },
       });
