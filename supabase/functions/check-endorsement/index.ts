@@ -707,7 +707,7 @@ Deno.serve(async (req) => {
 
         let { data: endorsement } = await supabase
           .from("check_endorsements")
-          .select("id, payee_name, payee_type, status, token, token_expires_at, check_id, check_intake_items(carrier_name, check_number, amount, claim_id)")
+          .select("id, payee_name, payee_type, status, token, token_expires_at, check_id, check_intake_items(carrier_name, check_number, amount, claim_id, tenant_id)")
           .eq("token", eToken)
           .maybeSingle();
 
