@@ -64,6 +64,7 @@ export function normalizeSpeed(value: unknown): PaymentSpeed {
   const v = String(value ?? "standard").toLowerCase().replace(/[\s-]/g, "_");
   if (v === "instant" || v === "rtp" || v === "fednow") return "instant";
   if (v === "same_day" || v === "sameday") return "same_day";
+  // "next_day", "standard", "ach", unknown -> standard ACH.
   return "standard";
 }
 
