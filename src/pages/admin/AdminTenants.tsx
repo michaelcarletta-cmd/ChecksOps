@@ -328,6 +328,9 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
               </h3>
               <TenantDocumentsManager tenantId={tenant.id} />
             </div>
+            <div className="pt-6 border-t border-border/60">
+              <VerificationDocumentsPanel tenantId={tenant.id} readOnly />
+            </div>
           </TabsContent>
           <TabsContent value="integrations" className="mt-6 space-y-6">
             <ActumSettings />
