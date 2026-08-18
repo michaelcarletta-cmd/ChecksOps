@@ -32,7 +32,7 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
   const { user } = useAuth();
   const { tenant } = useTenant();
   const { toast } = useToast();
-  const { isActum, isPlaid } = usePaymentRail();
+  const { isPlaid } = usePaymentRail();
   const { enabled: moovEnabled } = usePaymentProviderEligibility();
   const qc = useQueryClient();
 

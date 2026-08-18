@@ -76,7 +76,7 @@ export function DisbursementConsole({
   const SPEED_LABELS: Record<string, string> = { next_day: "Next Day", same_day: "Same Day" };
   const [adminOverride, setAdminOverride] = useState(false);
   const { isAdmin } = usePermissions();
-  const { isActum, isPlaid } = usePaymentRail();
+  const { isPlaid } = usePaymentRail();
   // Moov is the primary disbursement rail. Actum/Plaid remain as the fallback
   // whenever a recipient has not connected a bank on the Moov rail yet.
   const { enabled: moovEnabled } = usePaymentProviderEligibility();

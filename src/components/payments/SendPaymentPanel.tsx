@@ -45,7 +45,7 @@ export function SendPaymentPanel({
   const [confirmed, setConfirmed] = useState(false);
   const [adminOverride, setAdminOverride] = useState(false);
   const { isAdmin } = usePermissions();
-  const { isActum } = usePaymentRail();
+  // isActum hook usage removed as Actum is disabled globally.
 
   // Load contractor's primary stakeholder account
   const { data: contractorAccount, isLoading: accountLoading } = useQuery({
