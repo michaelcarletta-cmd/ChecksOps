@@ -55,8 +55,9 @@ serve(async (req) => {
     try {
       // Completion endpoint (Instant Micro-deposit)
       try {
-        // Sandbox bypass for testing
-        if (environment === "sandbox" && code === "0000") {
+        // Sandbox bypass for testing - only allowed in sandbox environment
+        const isSandboxSecret = Deno.env.get("MOOV_ENVIRONMENT") === "sandbox" || environment === "sandbox";
+        if (isSandboxSecret && code === "0000") {
           console.log("[moov-micro-deposit-confirm] Sandbox override triggered");
         } else {
           await moovFetch<any>(

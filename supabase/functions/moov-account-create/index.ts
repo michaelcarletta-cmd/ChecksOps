@@ -82,7 +82,7 @@ serve(async (req) => {
             } : undefined,
           },
         },
-        capabilities: ["transfers", "send-funds", "collect-funds", "wallet", "send-funds.ach", "collect-funds.ach"],
+        capabilities: ["transfers", "send-funds", "wallet", "send-funds.ach"],
         // Provider-issued ToS acceptance token from the hosted ToS component.
         // Absent when the tenant will finish in hosted onboarding instead.
         ...(tosToken ? { termsOfService: { token: tosToken } } : {}),
