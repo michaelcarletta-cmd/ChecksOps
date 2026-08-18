@@ -16,7 +16,7 @@ interface UsageEvent {
   unit_price_cents: number;
   currency: string;
   status: string;
-  event_type?: "check_processing" | "actum_same_day" | "actum_instant";
+  event_type?: "check_processing" | "moov_same_day" | "moov_instant";
 }
 
 interface UsagePayload {
@@ -123,13 +123,13 @@ export function CheckUsageCard() {
           <div className="rounded-lg bg-muted/30 p-3">
             <div className="text-xs text-muted-foreground">Same Day</div>
             <div className="text-2xl font-bold">
-              {isLoading ? "—" : data?.events?.filter(e => e.event_type === 'actum_same_day').length ?? 0}
+              {isLoading ? "—" : data?.events?.filter(e => e.event_type === 'moov_same_day').length ?? 0}
             </div>
           </div>
           <div className="rounded-lg bg-muted/30 p-3">
             <div className="text-xs text-muted-foreground">Instant</div>
             <div className="text-2xl font-bold">
-              {isLoading ? "—" : data?.events?.filter(e => e.event_type === 'actum_instant').length ?? 0}
+              {isLoading ? "—" : data?.events?.filter(e => e.event_type === 'moov_instant').length ?? 0}
             </div>
           </div>
         </div>

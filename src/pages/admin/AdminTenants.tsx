@@ -764,7 +764,7 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
         <Separator />
 
         <div className="space-y-4">
-          <h3 className="text-sm font-medium">Moov Credit Usage Fees</h3>
+          <h3 className="text-sm font-medium">Moov Usage Fees</h3>
           <p className="text-xs text-muted-foreground">These fees are tracked for visibility. Tenants pay these directly to Moov.</p>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
@@ -881,7 +881,7 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
           <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
         ) : !bank ? (
           <div className="text-sm text-muted-foreground italic">
-            No verified bank account on file. Tenant must add one via Plaid in the Bank Account panel.
+            No verified bank account on file. Tenant must add one via Moov in the Bank Account panel.
           </div>
         ) : (
           <div className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
@@ -922,7 +922,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const [year, setYear] = useState(now.getFullYear());
   const [data, setData] = useState<any>(null);
   const [checkalt, setCheckalt] = useState<{ count: number; amount: number } | null>(null);
-  const [actum, setActum] = useState<{ count: number; amountOut: number } | null>(null);
+  const [moov, setMoov] = useState<{ count: number; amountOut: number } | null>(null);
   const [maintenance, setMaintenance] = useState<any[]>([]);
   const [tenantMeta, setTenantMeta] = useState<{ monthly_rate_cents: number; referral_discount_cents: number; is_founding_partner: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -947,7 +947,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
     const endISO = new Date(range.end.getTime() - 1).toISOString();
 
     try {
-      const [usageRes, checkaltRes, actumRes, maintRes, tenantRes] = await Promise.all([
+      const [usageRes, checkaltRes, moovRes, maintRes, tenantRes] = await Promise.all([
         supabase.rpc("get_tenant_check_usage", {
           _tenant_id: tenantId,
           _month_start: startISO,
@@ -960,7 +960,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
           .gte("created_at", range.start.toISOString())
           .lt("created_at", range.end.toISOString()),
         supabase
-          .from("actum_transactions")
+          .from("moov_transfers")
           .select("id, amount, transaction_type, status, created_at")
           .eq("tenant_id", tenantId)
           .gte("created_at", range.start.toISOString())
@@ -984,10 +984,10 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
         count: checkaltRes.data?.length ?? 0,
         amount: (checkaltRes.data ?? []).reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0),
       });
-      setActum({
-        count: actumRes.data?.length ?? 0,
-        amountOut: (actumRes.data ?? [])
-          .filter((r: any) => r.transaction_type === "credit")
+      setMoov({
+        count: moovRes.data?.length ?? 0,
+        amountOut: (moovRes.data ?? [])
+          .filter((r: any) => r.status === "completed")
           .reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0),
       });
       setMaintenance(maintRes.data ?? []);
@@ -1012,7 +1012,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const months = Array.from({ length: 12 }, (_, i) => ({ v: i, l: new Date(2020, i, 1).toLocaleString("en-US", { month: "long" }) }));
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
 
-  // Consolidated billing: check processing fees ($4/check), Actum disbursement fees ($1 credit),
+  // Consolidated billing: check processing fees ($4/check), Moov disbursement fees ($1 transfer),
   // maintenance for the month (monthly_rate - referral discount). Applies only when scope=month.
   const CHECK_FEE_CENTS = 400;
   const ACTUM_FEE_CENTS = 100;
@@ -1039,7 +1039,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
     setPulling(true);
     const line_items = [
       checkaltFeeCents > 0 && { label: "Check processing", detail: `${checkalt?.count ?? 0} checks × $4.00`, amount_cents: checkaltFeeCents },
-      actumFeeCents > 0 && { label: "Actum disbursements", detail: `${actum?.count ?? 0} × $1.00`, amount_cents: actumFeeCents },
+      moovFeeCents > 0 && { label: "Moov disbursements", detail: `${moov?.count ?? 0} × $1.00`, amount_cents: moovFeeCents },
       grossMaintenance > 0 && { label: "Monthly maintenance", detail: range.label, amount_cents: grossMaintenance },
       discount > 0 && { label: "Referral discount", detail: "applied to maintenance", amount_cents: -discount },
     ].filter(Boolean);
@@ -1074,7 +1074,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
           <div>
             <CardTitle>Usage & Payments — {range.label}</CardTitle>
             <CardDescription>
-              Checks processed, CheckAlt deposits, Actum disbursements & maintenance fees paid to ChecksOps.
+              Checks processed, CheckAlt deposits, Moov disbursements & maintenance fees paid to ChecksOps.
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -1124,7 +1124,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                 <div className="text-[10px] text-muted-foreground mt-1">${(checkalt?.amount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
               </div>
               <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Actum Out</div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Moov Out</div>
                 <div className="text-2xl font-bold mt-1">{actum?.count ?? 0}</div>
                 <div className="text-[10px] text-muted-foreground mt-1">${(actum?.amountOut ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
               </div>
@@ -1135,7 +1135,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
               </div>
             </div>
 
-            {/* Consolidated billing table — one ACH pull for CheckAlt + Actum + maintenance */}
+            {/* Consolidated billing table — one ACH pull for CheckAlt + Moov + maintenance */}
             {scope === "month" && (
               <div className="rounded-lg border">
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
@@ -1167,7 +1167,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                       <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(checkaltFeeCents)}</td>
                     </tr>
                     <tr>
-                      <td className="px-4 py-2">Actum disbursements</td>
+                      <td className="px-4 py-2">Moov disbursements</td>
                       <td className="text-right px-4 py-2 tabular-nums">{actum?.count ?? 0} txns</td>
                       <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">$1.00</td>
                       <td className="text-right px-4 py-2 tabular-nums font-medium">{fmt(actumFeeCents)}</td>

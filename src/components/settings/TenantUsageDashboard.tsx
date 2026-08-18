@@ -25,7 +25,7 @@ interface UsageEvent {
   unit_price_cents: number;
   currency: string;
   status: string;
-  event_type?: "check_processing" | "actum_same_day" | "actum_instant";
+  event_type?: "check_processing" | "moov_same_day" | "moov_instant";
   check_number?: string;
   payee_name?: string;
   processed_by?: string;
@@ -69,7 +69,7 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
     queryKey: ["tenant-usage-rollups", tenantId, now.getFullYear()],
     enabled: isOpen && !!tenantId,
     queryFn: async () => {
-      const [ytdChecksRes, checkaltRes, actumRes, maintRes, monthlyBreakdownRes] = await Promise.all([
+      const [ytdChecksRes, checkaltRes, moovRes, maintRes, monthlyBreakdownRes] = await Promise.all([
         supabase
           .from("check_billing_events")
           .select("id, unit_price_cents, event_type", { count: "exact" })
@@ -84,7 +84,7 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
           .gte("created_at", yearStart)
           .lt("created_at", yearEnd),
         supabase
-          .from("actum_transactions")
+          .from("moov_transfers")
           .select("id, amount, transaction_type, status, created_at")
           .eq("tenant_id", tenantId)
           .gte("created_at", yearStart)
@@ -116,9 +116,9 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
         (s: number, r: any) => s + Number(r.amount ?? 0),
         0,
       );
-      const actumCount = actumRes.data?.length ?? 0;
-      const actumOutAmount = (actumRes.data ?? [])
-        .filter((r: any) => r.transaction_type === "credit")
+      const moovCount = moovRes.data?.length ?? 0;
+      const moovOutAmount = (moovRes.data ?? [])
+        .filter((r: any) => r.status === "completed")
         .reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0);
       const maintenance = maintRes.data ?? [];
       const maintenancePaidCents = maintenance
@@ -133,7 +133,7 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
         ),
         monthlyCounts,
         checkalt: { count: checkaltCount, amount: checkaltAmount },
-        actum: { count: actumCount, amountOut: actumOutAmount },
+        moov: { count: moovCount, amountOut: moovOutAmount },
         maintenance,
         maintenancePaidCents,
       };
@@ -177,14 +177,14 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
               <div className="rounded-xl border bg-card p-4 shadow-sm">
                 <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Same Day</div>
                 <div className="text-3xl font-bold">
-                  {data?.events?.filter(e => e.event_type === 'actum_same_day').length ?? 0}
+                  {data?.events?.filter(e => e.event_type === 'moov_same_day').length ?? 0}
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-2">Moov $1.00 pass-through fee</div>
               </div>
               <div className="rounded-xl border bg-card p-4 shadow-sm">
                 <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Instant</div>
                 <div className="text-3xl font-bold">
-                  {data?.events?.filter(e => e.event_type === 'actum_instant').length ?? 0}
+                  {data?.events?.filter(e => e.event_type === 'moov_instant').length ?? 0}
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-2">Moov $1.50 pass-through fee</div>
               </div>
@@ -224,10 +224,10 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
                 </div>
               </div>
               <div className="rounded-lg border bg-card p-3">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Moov Disbursements YTD</div>
-                <div className="text-2xl font-bold mt-1">{rollups?.actum.count ?? 0}</div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Moov Out YTD</div>
+                <div className="text-2xl font-bold mt-1">{rollups?.moov.count ?? 0}</div>
                 <div className="text-[10px] text-muted-foreground mt-1">
-                  Sent: ${(rollups?.actum.amountOut ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  Sent: ${(rollups?.moov.amountOut ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </div>
               <div className="rounded-lg border bg-card p-3">
