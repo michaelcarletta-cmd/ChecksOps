@@ -23580,6 +23580,10 @@ export type Database = {
         Args: { payload: Json; queue_name: string }
         Returns: number
       }
+      ensure_partner_stakeholders: {
+        Args: { p_check_id: string }
+        Returns: Json
+      }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
       find_nearest_building_footprint: {
         Args: { search_lat: number; search_lng: number; search_radius?: number }
