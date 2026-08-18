@@ -70,15 +70,29 @@ test("instant uses RTP when the recipient supports it", () => {
   assert.equal(d.downgraded, false);
 });
 
-test("instant over the RTP ceiling falls back to same-day, then standard", () => {
+test("instant over the network ceilings falls all the way back to standard", () => {
+  // Above the RTP ceiling, and also above the same-day ACH ceiling, so the
+  // whole chain downgrades to standard ACH rather than failing the payout.
   const big = RTP_MAX_CENTS + 1;
-  const inHours = selectRail({ requestedSpeed: "instant", amountCents: big, railPaymentMethodIds: ALL_RAILS, now: DURING });
-  assert.equal(inHours.selectedSpeed, "same_day");
-  assert.equal(inHours.reason, "amount_exceeds_rtp_limit");
+  const d = selectRail({ requestedSpeed: "instant", amountCents: big, railPaymentMethodIds: ALL_RAILS, now: DURING });
+  assert.equal(d.selectedSpeed, "standard");
+  assert.equal(d.reason, "amount_exceeds_rtp_limit");
+  assert.equal(d.downgraded, true);
+  assert.deepEqual(
+    d.evaluated.map((e) => [e.speed, e.reason]),
+    [
+      ["instant", "amount_exceeds_rtp_limit"],
+      ["same_day", "amount_exceeds_same_day_limit"],
+      ["standard", null],
+    ],
+  );
+});
 
-  const afterHours = selectRail({ requestedSpeed: "instant", amountCents: big, railPaymentMethodIds: ALL_RAILS, now: AFTER_CUTOFF });
-  assert.equal(afterHours.selectedSpeed, "standard");
-  assert.equal(afterHours.downgraded, true);
+test("instant recipient without RTP, after cutoff, lands on standard", () => {
+  const d = selectRail({ requestedSpeed: "instant", amountCents: 500_00, railPaymentMethodIds: ACH_ONLY, now: AFTER_CUTOFF });
+  assert.equal(d.selectedSpeed, "standard");
+  assert.equal(d.railType, "ach-credit-standard");
+  assert.equal(d.downgraded, true);
 });
 
 test("non-eligible recipient (ACH only) downgrades instant to standard", () => {
