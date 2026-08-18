@@ -1507,7 +1507,7 @@ export default function CheckCommandCenter() {
       { tab: "reissue", count: reissueRequested.length },
       { tab: "deposited", count: depositedChecks.length },
       { tab: "fundsreleased", count: filteredFundsReleased.length },
-      { tab: "external_disbursements", count: stageTotals?.get('disbursed_externally')?.count ?? 0 },
+      { tab: "external_disbursements", count: laneCount("disbursed_externally", allChecks.filter(c => c.check_stage === "disbursed_externally")) },
       { tab: "fundsreceived", count: filteredFundsReceived.length },
     ];
     const currentCount = buckets.find((b) => b.tab === activeTab)?.count ?? 0;
@@ -1544,6 +1544,7 @@ export default function CheckCommandCenter() {
         qc.invalidateQueries({ queryKey: ["funds-released", tenantId] });
         qc.invalidateQueries({ queryKey: ["check-intake-items"] });
         qc.invalidateQueries({ queryKey: ["check-intake-items-deposited"] });
+        qc.invalidateQueries({ queryKey: ["check-intake-items", "disbursed_externally"] });
         qc.invalidateQueries({ queryKey: ["check-stage-totals"] });
         qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
         qc.invalidateQueries({ queryKey: ["funds-tab-disbursements", tenantId] });
@@ -1653,7 +1654,7 @@ export default function CheckCommandCenter() {
 
             // Reissue moved into Manager → Reissue sub-tab.
             { key: "fundsreleased", label: "Funds Released",   count: filteredFundsReleased.length,       icon: Banknote,       gradient: "from-emerald-500/20 to-teal-500/10",  accent: "text-emerald-400", ring: "ring-emerald-500/30" },
-            { key: "external_disbursements", label: "External Payments", count: stageTotals?.get('disbursed_externally')?.count ?? 0, icon: Banknote, gradient: "from-slate-500/20 to-gray-500/10", accent: "text-slate-400", ring: "ring-slate-500/30" },
+            { key: "external_disbursements", label: "External Payments", count: laneCount("disbursed_externally", allChecks.filter(c => c.check_stage === "disbursed_externally")), icon: Banknote, gradient: "from-slate-500/20 to-gray-500/10", accent: "text-slate-400", ring: "ring-slate-500/30" },
             { key: "fundsreceived", label: "Funds Received",   count: filteredFundsReceived.length,       icon: Banknote,       gradient: "from-sky-500/20 to-blue-500/10",      accent: "text-sky-400",     ring: "ring-sky-500/30" },
             // Partners moved into Manager → Partners sub-tab (2026-07-07).
             ...(canAccessManager ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield, gradient: "from-indigo-500/20 to-blue-500/10", accent: "text-indigo-400", ring: "ring-indigo-500/30" }] : []),
@@ -2214,7 +2215,7 @@ export default function CheckCommandCenter() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Banknote className="h-4 w-4 text-slate-400" />
-                  External Payments ({stageTotals?.get('disbursed_externally')?.count ?? 0})
+                  External Payments ({laneCount("disbursed_externally", allChecks.filter(c => c.check_stage === "disbursed_externally"))})
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
