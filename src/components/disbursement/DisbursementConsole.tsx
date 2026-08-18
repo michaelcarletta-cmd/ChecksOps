@@ -613,7 +613,7 @@ export function DisbursementConsole({
                   ))}
                 </ul>
                 <p className="text-[11px] opacity-90">
-                  Have the recipient confirm the two micro-deposits before sending, or an admin can override below.
+                  Have the recipient confirm the verification code before sending, or an admin can override below.
                 </p>
               </div>
             </div>
