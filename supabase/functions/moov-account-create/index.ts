@@ -83,6 +83,9 @@ serve(async (req) => {
           },
         },
         capabilities: ["transfers", "send-funds", "collect-funds", "wallet"],
+        // Provider-issued ToS acceptance token from the hosted ToS component.
+        // Absent when the tenant will finish in hosted onboarding instead.
+        ...(tosToken ? { termsOfService: { token: tosToken } } : {}),
         foreignID: tenant_id,
         metadata: { checksops_tenant_id: tenant_id },
       },
@@ -105,6 +108,9 @@ serve(async (req) => {
           onboarding_status: "onboarding_incomplete",
           verification_status: "not_started",
           provider_metadata: sanitize(created ?? {}),
+          ...(tosToken
+            ? { tos_accepted_at: new Date().toISOString(), tos_accepted_by: userId, tos_source: "tos_drop" }
+            : {}),
           last_synced_at: new Date().toISOString(),
         },
         { onConflict: "tenant_id,provider,environment" },

@@ -71,13 +71,24 @@ serve(async (req) => {
       }, 409);
     }
 
+    // Current API: POST .../verify. Older accounts still answer on the legacy
+    // micro-deposits path, so fall back rather than fail the tenant.
     try {
       await moovFetch<any>(
-        `/accounts/${accountId}/bank-accounts/${bankAccountId}/micro-deposits`,
+        `/accounts/${accountId}/bank-accounts/${bankAccountId}/verify`,
         { method: "POST", scopes: scopes.bankAccountsWrite(accountId) },
       );
     } catch (e) {
-      return json({ error: (e as Error).message }, 502);
+      const status = (e as any)?.status;
+      if (status !== 404 && status !== 405) return json({ error: (e as Error).message }, 502);
+      try {
+        await moovFetch<any>(
+          `/accounts/${accountId}/bank-accounts/${bankAccountId}/micro-deposits`,
+          { method: "POST", scopes: scopes.bankAccountsWrite(accountId) },
+        );
+      } catch (e2) {
+        return json({ error: (e2 as Error).message }, 502);
+      }
     }
 
     const { data: verification, error: vErr } = await supabase
