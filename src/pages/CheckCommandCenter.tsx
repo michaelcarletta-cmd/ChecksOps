@@ -1498,16 +1498,27 @@ export default function CheckCommandCenter() {
   useEffect(() => {
     const q = searchQuery.trim();
     if (!q) return;
+
+    // We define a small helper for searching lane counts so we can accurately jump 
+    // to a tab that contains the results.
+    const sharedIdSet = new Set(sharedChecks.map((c) => c.id));
+    const sharedInLane = (arr: CheckItem[]) => arr.reduce((n, c) => (sharedIdSet.has(c.id) ? n + 1 : n), 0);
+    const getLaneCount = (key: string, inMemory: CheckItem[]) => {
+      if (!stageTotals || q || classFilter !== "all") return inMemory.length;
+      const own = stageTotals.get(key)?.count ?? 0;
+      return own + sharedInLane(inMemory);
+    };
+
     const buckets: { tab: string; count: number }[] = [
-      { tab: "review", count: needsReview.length },
-      { tab: "endorsements", count: awaitingEndorsement.length },
-      { tab: "ready", count: readyForDeposit.length },
+      { tab: "review", count: getLaneCount("review", needsReview) },
+      { tab: "endorsements", count: getLaneCount("endorsing", awaitingEndorsement) },
+      { tab: "ready", count: getLaneCount("ready", readyForDeposit) },
       { tab: "lossdraft", count: lossDraftChecks.length },
       { tab: "branch", count: branchDeposit.length },
       { tab: "reissue", count: reissueRequested.length },
       { tab: "deposited", count: depositedChecks.length },
       { tab: "fundsreleased", count: filteredFundsReleased.length },
-      { tab: "external_disbursements", count: laneCount("disbursed_externally", allChecks.filter(c => c.check_stage === "disbursed_externally")) },
+      { tab: "external_disbursements", count: getLaneCount("disbursed_externally", allChecks.filter(c => c.check_stage === "disbursed_externally")) },
       { tab: "fundsreceived", count: filteredFundsReceived.length },
     ];
     const currentCount = buckets.find((b) => b.tab === activeTab)?.count ?? 0;
@@ -2215,7 +2226,7 @@ export default function CheckCommandCenter() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Banknote className="h-4 w-4 text-slate-400" />
-                  External Payments ({laneCount("disbursed_externally", allChecks.filter(c => c.check_stage === "disbursed_externally"))})
+                  External Payments ({allChecks.filter(c => c.check_stage === 'disbursed_externally' && matchesSearch(c)).length})
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
