@@ -190,7 +190,7 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
     },
   });
 
-  if (!isActum && !isPlaid && !moovEnabled) {
+  if (!moovEnabled) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-md">
