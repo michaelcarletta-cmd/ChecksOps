@@ -338,16 +338,19 @@ export function DisbursementConsole({
         console.log("Recording external manual disbursement batch for check:", checkIntakeItemId);
         
         // Mark the batch and splits as settled since it was recorded as manual payment
+        // Note: The 'status' check constraint on disbursement_batches doesn't include 'settled',
+        // but the 'advance_check_stage_on_batch_complete' trigger checks for it.
+        // We'll use 'completed' for the batch status to satisfy the constraint while triggering the logic.
         const { error: updateBatchErr } = await supabase
           .from("disbursement_batches")
           .update({ 
-            status: "settled",
-            metadata: { manual_recording: true, recorded_at: new Date().toISOString() }
+            status: "completed",
+            notes: (notes || "") + (notes ? "\n" : "") + "Recorded as external manual payment."
           })
           .eq("id", batch.id);
         
         if (updateBatchErr) {
-          console.error("Error updating batch to settled:", updateBatchErr);
+          console.error("Error updating batch to completed:", updateBatchErr);
           throw updateBatchErr;
         }
 
@@ -362,9 +365,6 @@ export function DisbursementConsole({
         }
 
         // Advance check stage to disbursed_externally if fully balanced
-        // Note: The database trigger advance_check_stage_on_batch_complete will also 
-        // try to advance it to 'funds_released' when status becomes 'settled'.
-        // We explicitly set it to 'disbursed_externally' here as requested.
         if (isBalanced && checkIntakeItemId) {
           console.log("Advancing check stage to disbursed_externally");
           const { error: stageUpdateErr1 } = await supabase
