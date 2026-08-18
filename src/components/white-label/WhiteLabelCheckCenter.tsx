@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { LogOut, Settings, BadgeCheck, Banknote, Receipt, Hammer } from "lucide-react";
+import { LogOut, Settings, BadgeCheck, Banknote, Receipt, Hammer, Wallet } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 
 const CheckCommandCenter = lazy(() => import("@/pages/CheckCommandCenter"));
@@ -77,6 +77,13 @@ export function WhiteLabelCheckCenter() {
             <Button variant="ghost" size="icon" className="h-8 w-8" asChild title="Cash Jobs">
               <Link to={`${resolveTenantBase() ?? `/wl/${tenant.slug}`}/cash-jobs`}>
                 <Hammer className="h-4 w-4" />
+              </Link>
+            </Button>
+          )}
+          {tenant && (
+            <Button variant="ghost" size="icon" className="h-8 w-8" asChild title="WalletOps">
+              <Link to={`${resolveTenantBase() ?? `/wl/${tenant.slug}`}/wallet-ops`}>
+                <Wallet className="h-4 w-4" />
               </Link>
             </Button>
           )}
