@@ -11,8 +11,8 @@ import {
 
 /**
  * Starts bank-account ownership verification for a recipient who will not use
- * an instant bank login. Two small credits land in the account and the
- * recipient confirms the amounts.
+ * an instant bank login. A $0.01 credit lands in the account containing a 
+ * 4-digit verification code (MV####).
  *
  * Nothing here ever touches a full account or routing number: the bank account
  * is already stored at the provider and referenced only by its provider id.
