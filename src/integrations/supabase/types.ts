@@ -25163,6 +25163,7 @@ export type Database = {
         | "ready_for_deposit"
         | "deposited"
         | "funds_released"
+        | "disbursed_externally"
       claim_doc_decision:
         | "deny_full"
         | "deny_partial"
@@ -25440,6 +25441,7 @@ export const Constants = {
         "ready_for_deposit",
         "deposited",
         "funds_released",
+        "disbursed_externally",
       ],
       claim_doc_decision: [
         "deny_full",
