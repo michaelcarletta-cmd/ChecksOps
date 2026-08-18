@@ -168,7 +168,9 @@ export async function moovFetch<T = any>(
     Origin: moovOrigin(),
   };
   if (opts.idempotencyKey) headers["X-Idempotency-Key"] = opts.idempotencyKey;
+  if (opts.apiVersion) headers["x-moov-version"] = opts.apiVersion;
   if (opts.onBehalfOf) headers["X-Account-ID"] = opts.onBehalfOf;
+
 
   const res = await fetch(`${moovHost()}${path}`, {
     method: opts.method ?? "GET",
