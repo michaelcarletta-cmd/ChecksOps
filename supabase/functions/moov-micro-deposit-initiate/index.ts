@@ -72,14 +72,14 @@ serve(async (req) => {
     }
 
     // Current API: POST .../verify (Instant Micro-deposit)
+    // The v2024.01.00 version explicitly supports this endpoint with the 
+    // expected 4-digit MV#### code generation.
     try {
       await moovFetch<any>(
         `/accounts/${accountId}/bank-accounts/${bankAccountId}/verify`,
         { 
           method: "POST", 
           scopes: scopes.bankAccountsWrite(accountId),
-          // x-moov-version is handled by moovFetch if pinned, but standard
-          // POST /verify is supported in current versions.
         },
       );
     } catch (e) {

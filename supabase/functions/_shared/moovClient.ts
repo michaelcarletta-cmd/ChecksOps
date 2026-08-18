@@ -150,9 +150,8 @@ export interface MoovRequestOptions {
   body?: unknown;
   idempotencyKey?: string;
   /**
-   * Explicit Moov API version (`x-moov-version`). Endpoints that depend on a
-   * dated contract — sweeps, for example — pin this instead of relying on
-   * Moov's legacy default version.
+   * Explicit Moov API version (`x-moov-version`). Defaults to the project-wide
+   * v2024.01.00 standard.
    */
   apiVersion?: string;
   /** Act on behalf of a connected account. */
@@ -170,9 +169,9 @@ export async function moovFetch<T = any>(
     "Content-Type": "application/json",
     Accept: "application/json",
     Origin: moovOrigin(),
+    "x-moov-version": opts.apiVersion ?? Deno.env.get("MOOV_API_VERSION") ?? "v2024.01.00",
   };
   if (opts.idempotencyKey) headers["X-Idempotency-Key"] = opts.idempotencyKey;
-  if (opts.apiVersion) headers["x-moov-version"] = opts.apiVersion;
   if (opts.onBehalfOf) headers["X-Account-ID"] = opts.onBehalfOf;
 
 
