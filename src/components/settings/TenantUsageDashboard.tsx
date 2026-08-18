@@ -25,10 +25,13 @@ interface UsageEvent {
   unit_price_cents: number;
   currency: string;
   status: string;
-  event_type?: "check_processing" | "moov_same_day" | "moov_instant";
+  event_type?: string;
   check_number?: string;
   payee_name?: string;
   processed_by?: string;
+  source?: string;
+  mortgage_company?: string;
+  loan_number?: string;
 }
 
 interface UsagePayload {
