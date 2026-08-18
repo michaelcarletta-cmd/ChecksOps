@@ -87,17 +87,21 @@ export function TenantUsageTracker() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Receipt className="h-4 w-4 text-primary" />
-              Processing Usage
+              Check Processing Usage
             </CardTitle>
             <CardDescription className="text-[10px]">Usage for {format(now, "MMMM yyyy")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold">{usage?.count ?? 0}</span>
+              <span className="text-3xl font-bold">
+                {usage?.events?.filter((e: any) => e.event_type === 'check_processing').length ?? 0}
+              </span>
               <span className="text-xs text-muted-foreground">checks processed</span>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              Estimated fees: <span className="font-semibold text-foreground">{formatCurrency((usage?.amount_cents ?? 0) / 100)}</span>
+              Estimated fees: <span className="font-semibold text-foreground">
+                {formatCurrency((usage?.events?.filter((e: any) => e.event_type === 'check_processing').reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0) / 100)}
+              </span>
             </p>
           </CardContent>
         </Card>
@@ -106,19 +110,21 @@ export function TenantUsageTracker() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Landmark className="h-4 w-4 text-amber-500" />
-              Mortgage Ops Usage
+              MortgageOps Usage
             </CardTitle>
             <CardDescription className="text-[10px]">Handled by ChecksOps this month</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold">{mortgageOpsUsage?.count ?? 0}</span>
+              <span className="text-3xl font-bold">
+                {usage?.events?.filter((e: any) => e.event_type === 'mortgage_handling').length ?? 0}
+              </span>
               <span className="text-xs text-muted-foreground">mortgage requests</span>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
               Month-end total (services + shipping):{" "}
               <span className="font-semibold text-foreground">
-                {formatCurrency((mortgageOpsUsage?.totalCents ?? 0) / 100)}
+                {formatCurrency((usage?.events?.filter((e: any) => e.event_type === 'mortgage_handling').reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0) / 100)}
               </span>
             </p>
           </CardContent>
@@ -128,16 +134,19 @@ export function TenantUsageTracker() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Landmark className="h-4 w-4 text-emerald-500" />
-              Total Settled Funds
+              Disbursement Usage
             </CardTitle>
-            <CardDescription className="text-[10px]">Actual deposits into your account</CardDescription>
+            <CardDescription className="text-[10px]">ACH payouts triggered this month</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-emerald-600">{formatCurrency(totalReceived)}</span>
+              <span className="text-3xl font-bold text-emerald-600">
+                {usage?.events?.filter((e: any) => e.event_type?.startsWith('moov_')).length ?? 0}
+              </span>
+              <span className="text-xs text-muted-foreground">transfers</span>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              Across <span className="font-semibold text-foreground">{fundsLog.filter((f: any) => f.status === 'settled').length}</span> cleared payments
+              Total volume: <span className="font-semibold text-foreground">{formatCurrency(totalReceived)}</span>
             </p>
           </CardContent>
         </Card>
@@ -150,7 +159,7 @@ export function TenantUsageTracker() {
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <ArrowDownCircle className="h-4 w-4 text-primary" />
-            Funding & Deposit Log
+            Usage & Processing Log
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -159,39 +168,42 @@ export function TenantUsageTracker() {
               <TableHeader>
                 <TableRow className="text-[10px] uppercase tracking-wider">
                   <TableHead className="pl-4">Date</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Event / Item</TableHead>
+                  <TableHead className="text-right">Estimated Fee</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {fundsLog.length === 0 ? (
+                {usage?.events?.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center text-xs text-muted-foreground">No funding activity found.</TableCell>
+                    <TableCell colSpan={4} className="h-24 text-center text-xs text-muted-foreground">No usage recorded for this period.</TableCell>
                   </TableRow>
                 ) : (
-                  fundsLog.map((row: any) => (
+                  usage?.events?.map((row: any) => (
                     <TableRow key={row.id} className="hover:bg-muted/30">
                       <TableCell className="pl-4 text-xs text-muted-foreground">
-                        {format(new Date(row.created_at), "MMM d, yyyy")}
+                        {format(new Date(row.billed_at), "MMM d, h:mm a")}
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
-                          <span className="text-xs font-medium">Check #{row.check_intake_items?.check_number || "—"}</span>
-                          <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{row.check_intake_items?.carrier_name}</span>
+                          <span className="text-xs font-medium">
+                            <Badge variant="secondary" className="text-[9px] h-4 px-1 py-0 uppercase mr-2">
+                              {row.event_type?.replace('_', ' ') || 'processing'}
+                            </Badge>
+                            Check #{row.check_number || "—"}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground truncate max-w-[150px]">
+                            {row.payee_name} {row.processed_by && `· ${row.processed_by}`}
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell className="text-right text-xs font-semibold tabular-nums">
-                        {formatCurrency(Number(row.payment_amount))}
+                        {formatCurrency(Number(row.unit_price_cents ?? 0) / 100)}
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge 
                           variant="outline" 
-                          className={`text-[9px] px-1.5 py-0 h-4 ${
-                            row.status === "settled" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" :
-                            row.status === "submitted" ? "bg-blue-500/10 text-blue-600 border-blue-500/20" :
-                            "bg-amber-500/10 text-amber-600 border-amber-500/20"
-                          }`}
+                          className="text-[9px] px-1.5 py-0 h-4"
                         >
                           {row.status}
                         </Badge>
