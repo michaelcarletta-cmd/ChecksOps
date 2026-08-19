@@ -488,7 +488,7 @@ export default function WalletOps() {
                     tick={{ fontSize: 10 }}
                     stroke="hsl(var(--muted-foreground))"
                     width={64}
-                    tickFormatter={(v) => money(Number(v))}
+                    tickFormatter={(v) => money(Number(v) * 100)}
                   />
                   <RTooltip
                     contentStyle={{
@@ -498,7 +498,7 @@ export default function WalletOps() {
                       fontSize: 12,
                       color: "hsl(var(--popover-foreground))",
                     }}
-                    formatter={(v: any) => [money(Number(v)), "Balance"]}
+                    formatter={(v: any) => [money(Number(v) * 100), "Balance"]}
                   />
                   <Area
                     type="monotone"
