@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature, ListTree, HelpCircle, Sparkles, TrendingUp, ShieldCheck, Cog, UserCog, Mail, Database, History, Bell, Activity, Cloud, Key, Share2, Receipt, Users, BarChart3 } from "lucide-react";
+import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature, ListTree, HelpCircle, Sparkles, TrendingUp, ShieldCheck, Cog, UserCog, Mail, Database, History, Bell, Activity, Cloud, Key, Share2, Receipt, Users, BarChart3, ListChecks } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 import {
@@ -32,6 +32,8 @@ import { LossTypesSettings } from "@/components/settings/LossTypesSettings";
 import { AutomationsSettings } from "@/components/settings/AutomationsSettings";
 import { CustomFieldsSettings } from "@/components/settings/CustomFieldsSettings";
 import { SignaturePresetsSettings } from "@/components/settings/SignaturePresetsSettings";
+import { SectionCard } from "@/components/settings/SectionCard";
+import { SettingsHero } from "@/components/settings/SettingsHero";
 // Moov settings hidden
 import { usePaymentRail } from "@/hooks/usePaymentRail";
 import { ReferralSettings } from "@/components/settings/ReferralSettings";
@@ -827,26 +829,22 @@ export default function Settings() {
           </div>
         </TabsContent>
 
-        <TabsContent value="workflow" className="w-full space-y-4">
+        <TabsContent value="workflow" className="w-full space-y-6">
+          <SettingsHero 
+            title="Workflow Configuration" 
+            description="Customize how claims move through your system, from statuses and sub-steps to custom data fields."
+            badge="Process & Data"
+            icon={<Cog className="h-4 w-4 text-primary" />}
+          />
 
-          {/* Claim Statuses - Collapsible */}
-          <Collapsible open={statusesOpen} onOpenChange={setStatusesOpen}>
-            <Card>
-              <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Claim Statuses</CardTitle>
-                      <CardDescription>
-                        Customize the status options available for claims ({statuses.length} statuses)
-                      </CardDescription>
-                    </div>
-                    <ChevronDown className={`h-5 w-5 transition-transform ${statusesOpen ? 'rotate-180' : ''}`} />
-                  </div>
-                </CardHeader>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <CardContent className="space-y-4">
+          <div className="grid gap-6">
+            {/* Claim Statuses */}
+            <SectionCard
+              title="Claim Statuses"
+              icon={<ListChecks className="h-4 w-4 text-sky-500" />}
+              accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
+              description={`Customize the status options available for claims (${statuses.length} statuses)`}
+            >
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       placeholder="Status name"
