@@ -126,6 +126,32 @@ export function CompanyBrandingSettings() {
     }
   };
 
+  const handleInvoiceLetterheadUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Please upload an image file (PNG, JPG)", variant: "destructive" });
+      return;
+    }
+
+    setUploadingInvoice(true);
+    try {
+      const path = `invoice_letterhead_${Date.now()}.${file.name.split(".").pop()}`;
+      const { error } = await supabase.storage.from("company-branding").upload(path, file);
+      
+      if (error) throw error;
+
+      const { data: urlData } = supabase.storage.from("company-branding").getPublicUrl(path);
+      
+      setInvoiceLetterheadUrl(urlData?.publicUrl || null);
+      toast({ title: "Invoice letterhead uploaded successfully" });
+    } catch (error: any) {
+      toast({ title: "Upload failed", description: error.message, variant: "destructive" });
+    } finally {
+      setUploadingInvoice(false);
+    }
+
   const handleLetterheadUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
