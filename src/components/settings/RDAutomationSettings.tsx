@@ -122,21 +122,14 @@ export const RDAutomationSettings = () => {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-500/10 rounded-lg">
-              <DollarSign className="h-5 w-5 text-amber-500" />
-            </div>
-            <div>
-              <CardTitle>Recoverable Depreciation Automation</CardTitle>
-              <CardDescription>
-                Configure global settings for RD tracking and follow-ups
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
+      <SectionCard
+        title="Recoverable Depreciation Automation"
+        accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
+        icon={<DollarSign className="h-4 w-4 text-amber-500" />}
+        description="Configure global settings for RD tracking and follow-ups"
+      >
+        <div className="space-y-6">
+
           {/* RD Request Follow-ups Section */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
