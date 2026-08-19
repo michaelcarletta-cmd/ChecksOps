@@ -68,7 +68,7 @@ serve(async (req) => {
     const { data: prior } = await supabase
       .from("payment_method_verifications")
       .select("*")
-      .eq("payment_method_id", payment_method_id)
+      .eq("payment_method_id", method.id)
       .eq("environment", environment)
       .order("created_at", { ascending: false })
       .maybeSingle();
@@ -103,7 +103,7 @@ serve(async (req) => {
       .from("payment_method_verifications")
       .insert({
         tenant_id,
-        payment_method_id,
+        payment_method_id: method.id,
         external_recipient_id,
         provider: "moov",
         environment,
@@ -120,7 +120,7 @@ serve(async (req) => {
     await supabase
       .from("payment_provider_methods")
       .update({ verification_status: "pending_micro_deposit" })
-      .eq("id", payment_method_id);
+      .eq("id", method.id);
 
     await logPaymentEvent(supabase, {
       tenant_id,
