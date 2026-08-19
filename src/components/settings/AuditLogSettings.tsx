@@ -233,7 +233,7 @@ export function AuditLogSettings() {
                 {logs.filter(l => l.action === "reveal_pii").length}
               </p>
             </Card>
-            <Card className="p-4">
+            <Card className="p-4 bg-muted/20 border-border/40">
               <div className="flex items-center gap-2">
                 <User className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">Unique Users</span>
@@ -242,7 +242,7 @@ export function AuditLogSettings() {
                 {new Set(logs.map(l => l.user_id).filter(Boolean)).size}
               </p>
             </Card>
-            <Card className="p-4">
+            <Card className="p-4 bg-muted/20 border-border/40">
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">Last 24h</span>
@@ -311,8 +311,8 @@ export function AuditLogSettings() {
               </Table>
             </ScrollArea>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
     </div>
   );
 }
