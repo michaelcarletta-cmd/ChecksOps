@@ -38,6 +38,9 @@ export function CompanyBrandingSettings() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [letterheadUrl, setLetterheadUrl] = useState<string | null>(null);
+  const [invoiceLetterheadUrl, setInvoiceLetterheadUrl] = useState<string | null>(null);
+  const [invoiceFooterNote, setInvoiceFooterNote] = useState("");
+  const [invoiceDefaultTerms, setInvoiceDefaultTerms] = useState("");
   const [signnowWebhookUrl, setSignnowWebhookUrl] = useState("");
   const [esignEmailSubject, setEsignEmailSubject] = useState("Action Required: Sign {document.name}");
   const [esignEmailBody, setEsignEmailBody] = useState("You have been requested to electronically sign a document. Please review the details below and click the button to proceed.");
@@ -55,6 +58,7 @@ export function CompanyBrandingSettings() {
   const [ocwBankAccountId, setOcwBankAccountId] = useState("");
   const [dateCoords, setDateCoords] = useState({ page: 1, x: 350, y: 600, w: 100, h: 25 });
   const [uploading, setUploading] = useState(false);
+  const [uploadingInvoice, setUploadingInvoice] = useState(false);
   const [saving, setSaving] = useState(false);
   const [brandingId, setBrandingId] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
