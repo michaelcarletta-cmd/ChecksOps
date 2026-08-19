@@ -916,60 +916,54 @@ export const AIKnowledgeBaseSettings = () => {
               </p>
             </TabsContent>
           </Tabs>
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
 
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-primary" />
-                Knowledge Validation
-              </CardTitle>
-              <CardDescription>
-                Verifies every uploaded document is processed, chunked, and embedded for reliable retrieval.
-              </CardDescription>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => refetchKnowledgeValidation()}
-                disabled={validationLoading}
-                className="gap-2"
-              >
-                {validationLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-                Refresh
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => repairValidationMutation.mutate()}
-                disabled={
-                  repairValidationMutation.isPending ||
-                  !knowledgeValidation ||
-                  knowledgeValidation.issues.length === 0
-                }
-                className="gap-2"
-              >
-                {repairValidationMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-                {repairValidationMutation.isPending
-                  ? `Auto-fixing ${repairProgress?.current || 0}/${repairProgress?.total || 0}`
-                  : "Auto-fix issues"}
-              </Button>
-            </div>
+      <SectionCard
+        title="Knowledge Validation"
+        icon={<CheckCircle className="h-4 w-4 text-emerald-500" />}
+        accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
+        description="Verifies that all knowledge assets are correctly indexed and searchable."
+        headerActions={
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetchKnowledgeValidation()}
+              disabled={validationLoading}
+              className="h-8 gap-2"
+            >
+              {validationLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3 w-3" />
+              )}
+              Refresh
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => repairValidationMutation.mutate()}
+              disabled={
+                repairValidationMutation.isPending ||
+                !knowledgeValidation ||
+                knowledgeValidation.issues.length === 0
+              }
+              className="h-8 gap-2"
+            >
+              {repairValidationMutation.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3 w-3" />
+              )}
+              {repairValidationMutation.isPending
+                ? `Fixing ${repairProgress?.current || 0}/${repairProgress?.total || 0}`
+                : "Auto-fix"}
+            </Button>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        }
+      >
+        <div className="space-y-4 pt-4">
           {validationLoading ? (
             <div className="flex items-center justify-center py-6">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
