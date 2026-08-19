@@ -828,7 +828,7 @@ export default function Settings() {
         {/* ActumSettings hidden */}
 
         <TabsContent value="profile" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
             <ProfileSettings />
           </div>
         </TabsContent>
@@ -994,7 +994,7 @@ export default function Settings() {
         </TabsContent>
 
 
-        <TabsContent value="users" className="w-full space-y-6 focus-visible:outline-none">
+        <TabsContent value="users" className="w-full focus-visible:outline-none">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
             <UserManagementSettings />
             {tenant && (
@@ -1044,13 +1044,13 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="workspaces" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
             <WorkspaceList />
           </div>
         </TabsContent>
 
         <TabsContent value="ai-key" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
             <TenantAIKeySettings />
           </div>
         </TabsContent>
