@@ -1093,9 +1093,12 @@ export default function Settings() {
 
 
         {isAdmin && (
-          <TabsContent value="audit-logs" className="w-full">
-            <AuditLogSettings />
+          <TabsContent value="audit-logs" className="w-full focus-visible:outline-none">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+              <AuditLogSettings />
+            </div>
           </TabsContent>
+
         )}
 
         {isAdmin && (
