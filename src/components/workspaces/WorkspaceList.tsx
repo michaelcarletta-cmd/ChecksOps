@@ -371,7 +371,7 @@ export function WorkspaceList({ embedded }: WorkspaceListProps = {}) {
           icon={<Users className="h-4 w-4 text-violet-500" />}
           accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
         >
-          <div className="pt-4">
+          <div className="pt-2">
             <div className="flex justify-end mb-4">
               <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
                 <DialogTrigger asChild>
