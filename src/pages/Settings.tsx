@@ -443,11 +443,16 @@ export default function Settings() {
 
   useEffect(() => {
     const tab = searchParams.get("tab");
+    const section = searchParams.get("section");
+    
     if (tab) {
       setActiveTab(tab);
-      if (tab === "organization") {
+      if (tab === "organization" || section === "branding") {
         setCompanyBrandingOpen(true);
       }
+    } else if (section === "branding") {
+      setActiveTab("organization");
+      setCompanyBrandingOpen(true);
     }
   }, [searchParams]);
 
