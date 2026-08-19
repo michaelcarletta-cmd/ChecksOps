@@ -130,14 +130,17 @@ function getFriendlyOcrError(rawError: string): string {
   const lower = rawError.toLowerCase();
 
   // Strip technical details if possible
-  if (lower.includes("failed to download image")) {
+  if (lower.includes("failed to download image") || lower.includes("failed_to_download_image")) {
     return "The check image could not be downloaded for analysis. Please try re-uploading.";
+  }
+  if (lower.includes("rate_limit") || lower.includes("ai 429")) {
+    return "AI processing limit reached. Please wait a moment before trying again.";
+  }
+  if (lower.includes("ai_credits_exhausted") || lower.includes("ai 402")) {
+    return "AI credits exhausted. Please check your billing settings.";
   }
   if (lower.includes("ai 401") || lower.includes("ai 403") || lower.includes("incorrect api key") || lower.includes("invalid api key")) {
     return "AI authentication failed. Please verify your OpenAI API key in Settings.";
-  }
-  if (lower.includes("ai 429")) {
-    return "AI processing limit reached. Please wait a moment before trying again.";
   }
   if (lower.includes("ai 400")) {
     return "The check analysis failed due to an image issue. Ensure the photo is clear and try again.";
