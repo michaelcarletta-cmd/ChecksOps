@@ -208,7 +208,7 @@ export function WhiteLabelSettings() {
               </TabsContent>
 
               <TabsContent value="branding" className="space-y-6">
-                {tenant && <BrandingSettings tenant={tenant} />}
+                <CompanyBrandingSettings />
                 <EmailSenderSettings />
                 <TenantEmailHealthPanel />
               </TabsContent>

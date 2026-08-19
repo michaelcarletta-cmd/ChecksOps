@@ -170,7 +170,13 @@ export function InvoicesTab() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate(`${location.pathname.includes('/wl/') ? location.pathname.split('/payments')[0] : '/freedom'}/settings?tab=branding`)}
+              onClick={() => {
+                const isWhiteLabel = location.pathname.includes('/wl/');
+                const base = isWhiteLabel ? location.pathname.split('/payments')[0] : '/freedom';
+                const tab = isWhiteLabel ? 'branding' : 'organization';
+                const section = isWhiteLabel ? '' : '&section=branding';
+                navigate(`${base}/settings?tab=${tab}${section}`);
+              }}
               className="hidden sm:flex"
             >
               <Settings className="h-4 w-4 mr-2" />
