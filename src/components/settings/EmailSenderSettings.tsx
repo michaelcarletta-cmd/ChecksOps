@@ -300,9 +300,6 @@ export function EmailSenderSettings() {
               </Badge>
             )}
           </div>
-        </SectionCard>
-      </div>
-    </div>
           <div className="grid gap-4 md:grid-cols-[2fr_1fr]">
             <div className="space-y-2">
               <Label htmlFor="domain">Sending domain</Label>
@@ -459,8 +456,8 @@ export function EmailSenderSettings() {
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </SectionCard>
+      </div>
     </div>
   );
 }
