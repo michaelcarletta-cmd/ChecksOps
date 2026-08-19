@@ -1018,7 +1018,9 @@ export default function Settings() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
 
           <AutomationsSettings />
-          <RDAutomationSettings />
+          <div className="pt-6">
+            <RDAutomationSettings />
+          </div>
           </div>
         </TabsContent>
 

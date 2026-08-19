@@ -121,7 +121,7 @@ export const RDAutomationSettings = () => {
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6">
       <SettingsHero
         title="RD Automation"
         description="Configure how Darwin automates recoverable depreciation tracking and follow-ups."
