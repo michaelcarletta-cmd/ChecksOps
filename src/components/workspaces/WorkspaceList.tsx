@@ -311,7 +311,6 @@ export function WorkspaceList({ embedded }: WorkspaceListProps = {}) {
         />
       )}
 
-
       <div className="grid gap-6 pb-12">
         {/* Pending Invites */}
         {invites && invites.length > 0 && (
