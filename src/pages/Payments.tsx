@@ -7,9 +7,10 @@ import { RevenueSummary } from "@/components/ledger/RevenueSummary";
 import { PayrollTab } from "@/pages/payments/PayrollTab";
 
 import { InvoicesTab } from "@/pages/payments/InvoicesTab";
+import { UsageLogTab } from "@/components/payments/UsageLogTab";
 import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 import { useAuth } from "@/hooks/useAuth";
-import { Receipt, FileText, Users, Wallet, Landmark, FileSpreadsheet, Sparkles, TrendingUp, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import { Receipt, FileText, Users, Wallet, Landmark, FileSpreadsheet, Sparkles, TrendingUp, ArrowUpRight, ArrowDownLeft, BarChart3 } from "lucide-react";
 
 function SectionCard({
   title,
