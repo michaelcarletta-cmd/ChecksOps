@@ -295,9 +295,9 @@ export function TenantBankAccountSettings() {
                 />
               </React.Fragment>
             );
-          })}
-        </CardContent>
-      </Card>
+        })}
+      </SectionCard>
     </div>
+
   );
 }
