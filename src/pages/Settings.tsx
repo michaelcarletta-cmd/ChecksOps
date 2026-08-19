@@ -55,6 +55,9 @@ import { NotificationDeliveryLogView } from "@/components/settings/NotificationD
 import StatusUrgencyNotificationsSettings from "@/components/settings/StatusUrgencyNotificationsSettings";
 import { JobNimbusSyncDiagnostics } from "@/components/settings/JobNimbusSyncDiagnostics";
 import { TenantManagement } from "@/components/settings/TenantManagement";
+import { TeamCapsSettings } from "@/components/settings/TeamCapsSettings";
+import { useTenant } from "@/contexts/TenantContext";
+
 
 import { useQuery } from "@tanstack/react-query";
 import { WorkspaceList } from "@/components/workspaces/WorkspaceList";
