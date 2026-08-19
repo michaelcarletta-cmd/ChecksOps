@@ -247,7 +247,7 @@ export function InvoicesTab() {
         </CardHeader>
 
         <CardContent>
-          {!account?.canReceivePayments && (
+          {account && account.status !== "active" && (
             <p className="mb-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
               Finish your payment account setup to start collecting invoice payments into your wallet.
             </p>
