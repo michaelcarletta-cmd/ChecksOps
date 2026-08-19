@@ -316,7 +316,7 @@ export function UserManagementSettings() {
                       {resettingUserId === user.id ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <KeyRound className="h-4 w-4 mr-1" />}
                       Reset Password
                     </Button>
-                    <Button variant="default" size="sm" onClick={() => approveUser(user.id, user.full_name || user.email)} className="bg-green-600 hover:bg-green-700">
+                    <Button variant="default" size="sm" onClick={() => approveUser(user.id, user.full_name || user.email)} className="bg-success text-success-foreground hover:bg-success/90">
                       <CheckCircle className="h-4 w-4 mr-1" /> Approve
                     </Button>
                     <Button variant="destructive" size="sm" onClick={() => denyUser(user.id, user.full_name || user.email)}>

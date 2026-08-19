@@ -208,16 +208,17 @@ export function LicensesSettings() {
     const days = differenceInDays(parseISO(expirationDate), new Date());
     
     if (days < 0) {
-      return { status: "expired", label: "Expired", color: "bg-red-500", days: Math.abs(days) };
+      return { status: "expired", label: "Expired", color: "bg-destructive text-destructive-foreground", days: Math.abs(days) };
     } else if (days <= 30) {
-      return { status: "critical", label: `${days} days`, color: "bg-red-500", days };
+      return { status: "critical", label: `${days} days`, color: "bg-destructive text-destructive-foreground", days };
     } else if (days <= 60) {
-      return { status: "warning", label: `${days} days`, color: "bg-yellow-500", days };
+      return { status: "warning", label: `${days} days`, color: "bg-warning text-warning-foreground", days };
     } else if (days <= 90) {
-      return { status: "upcoming", label: `${days} days`, color: "bg-orange-500", days };
+      return { status: "upcoming", label: `${days} days`, color: "bg-warning text-warning-foreground", days };
     }
-    return { status: "ok", label: `${days} days`, color: "bg-green-500", days };
+    return { status: "ok", label: `${days} days`, color: "bg-success text-success-foreground", days };
   };
+
 
   const getCEStatus = (required: number | null, completed: number | null) => {
     if (!required || required === 0) return null;
@@ -283,7 +284,7 @@ export function LicensesSettings() {
                           <Calendar className="h-3.5 w-3.5" />
                           <span>Expires: {format(parseISO(license.expiration_date), "MMM d, yyyy")}</span>
                           {expStatus && (
-                            <Badge className={`${expStatus.color} text-white text-xs ml-1`}>
+                            <Badge className={`${expStatus.color} text-xs ml-1`}>
                               {expStatus.status === "expired" ? `${expStatus.days}d overdue` : expStatus.label}
                             </Badge>
                           )}
