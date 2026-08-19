@@ -8,6 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Receipt, Search, Calendar, ArrowRight, BarChart3, TrendingUp, Activity, ShieldCheck, History } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
+import { SettingsHero } from "@/components/settings/SettingsHero";
+import { SectionCard } from "@/components/settings/SectionCard";
 
 const money = (cents: number) =>
   (Number(cents || 0) / 100).toLocaleString("en-US", {
