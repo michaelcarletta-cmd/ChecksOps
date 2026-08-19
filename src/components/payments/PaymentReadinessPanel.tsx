@@ -97,20 +97,19 @@ export function PaymentReadinessPanel() {
       const session = await invoke("moov-tos-token", { tenant_id: tenantId });
       await loadMoovJs();
       const el = document.createElement("moov-terms-of-service") as any;
+      // Documented Drop properties: an API token plus ready/error callbacks.
       el.token = session.token;
-      tosMountRef.current?.replaceChildren(el);
-      const token: string = await new Promise((resolve, reject) => {
-        el.onTermsOfServiceReady = () => {};
-        el.onError = (err: any) => reject(new Error(err?.message ?? "Terms could not be displayed."));
-        el.addEventListener("termsOfServiceToken", (evt: any) => {
-          const t = evt?.detail?.token ?? evt?.detail;
-          if (typeof t === "string") resolve(t);
-        });
-        el.generateToken?.().then((t: any) => {
-          const value = typeof t === "string" ? t : t?.token;
+      const tokenPromise: Promise<string> = new Promise((resolve, reject) => {
+        el.onTermsOfServiceTokenReady = (tosToken: any) => {
+          const value = typeof tosToken === "string" ? tosToken : tosToken?.token;
           if (value) resolve(value);
-        }).catch(reject);
+          else reject(new Error("Terms acceptance token was not returned."));
+        };
+        el.onTermsOfServiceTokenError = (err: any) =>
+          reject(new Error(err?.message ?? "Terms could not be displayed."));
       });
+      tosMountRef.current?.replaceChildren(el);
+      const token = await tokenPromise;
       await invoke("moov-tos-accept", { tenant_id: tenantId, terms_of_service_token: token });
       tosMountRef.current?.replaceChildren();
       toast({ title: "Terms accepted", description: "Your acceptance was recorded. Syncing account status..." });
@@ -122,6 +121,7 @@ export function PaymentReadinessPanel() {
       setTosBusy(false);
     }
   }
+
 
   if (!enabled) return null;
 
