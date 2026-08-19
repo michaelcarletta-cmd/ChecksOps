@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -180,13 +179,11 @@ export function ProfileSettings() {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       toast.error('Please upload an image file');
       return;
     }
 
-    // Validate file size (max 2MB)
     if (file.size > 2 * 1024 * 1024) {
       toast.error('Logo must be less than 2MB');
       return;
@@ -197,14 +194,12 @@ export function ProfileSettings() {
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}/logo.${fileExt}`;
 
-      // Upload to company-branding bucket (public)
       const { error: uploadError } = await supabase.storage
         .from('company-branding')
         .upload(fileName, file, { upsert: true });
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
       const { data: urlData } = supabase.storage
         .from('company-branding')
         .getPublicUrl(fileName);
@@ -212,7 +207,6 @@ export function ProfileSettings() {
       const logoUrl = urlData.publicUrl;
       setProfile(prev => ({ ...prev, logo_url: logoUrl }));
       
-      // Also save to profile immediately
       await supabase
         .from("profiles")
         .update({ logo_url: logoUrl } as any)
@@ -264,7 +258,6 @@ export function ProfileSettings() {
           accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
           description="Update your profile details and contact information"
         >
-        <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="full_name">Full Name</Label>
@@ -304,20 +297,14 @@ export function ProfileSettings() {
               />
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </SectionCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Building2 className="h-5 w-5" />
-            Company Logo
-          </CardTitle>
-          <CardDescription>
-            Upload your company logo for invoices and documents
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        <SectionCard
+          title="Company Logo"
+          icon={<Building2 className="h-4 w-4 text-violet-500" />}
+          accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
+          description="Upload your company logo for invoices and documents"
+        >
           <div className="flex items-start gap-6">
             {profile.logo_url ? (
               <div className="relative">
@@ -365,10 +352,8 @@ export function ProfileSettings() {
               </p>
             </div>
           </div>
-        </CardContent>
         </SectionCard>
 
-        {/* Full Licenses Management */}
         <LicensesSettings />
 
         <SectionCard
@@ -377,7 +362,6 @@ export function ProfileSettings() {
           accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
           description="This signature will be appended to emails sent from the CRM"
         >
-        <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email_signature">Signature</Label>
             <Textarea
@@ -391,121 +375,114 @@ export function ProfileSettings() {
           <p className="text-sm text-muted-foreground">
             Tip: Include your name, title, license number, and contact information.
           </p>
-        </CardContent>
-      </Card>
+        </SectionCard>
 
-      {/* Change Password */}
-      <ChangePasswordCard />
+        <ChangePasswordCard />
 
-      {/* Notifications - Collapsible */}
-      <Collapsible open={notificationsOpen} onOpenChange={setNotificationsOpen}>
-        <Card>
-          <CollapsibleTrigger asChild>
-            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Bell className="h-5 w-5" />
-                    Notification Preferences
-                  </CardTitle>
-                  <CardDescription>
-                    Choose how you want to receive notifications
-                  </CardDescription>
-                </div>
+        <Collapsible open={notificationsOpen} onOpenChange={setNotificationsOpen}>
+          <SectionCard
+            title="Notification Preferences"
+            icon={<Bell className="h-4 w-4 text-orange-500" />}
+            accent="bg-gradient-to-r from-orange-500/60 to-orange-500/10"
+            description="Choose how you want to receive notifications"
+          >
+            <CollapsibleTrigger asChild>
+              <div className="flex items-center justify-between cursor-pointer hover:bg-muted/5 transition-colors p-2 rounded -mx-2 mb-2">
+                <span className="text-sm font-medium">Click to configure preferences</span>
                 <ChevronDown className={`h-5 w-5 transition-transform ${notificationsOpen ? 'rotate-180' : ''}`} />
               </div>
-            </CardHeader>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-card">
-                <div className="flex items-center gap-4">
-                  <div className="p-2 rounded-md bg-primary/10">
-                    <Bell className="h-5 w-5 text-primary" />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="space-y-6 pt-4">
+                <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-card">
+                  <div className="flex items-center gap-4">
+                    <div className="p-2 rounded-md bg-primary/10">
+                      <Bell className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <Label htmlFor="in-app" className="text-base font-medium">
+                        In-App Notifications
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Receive notifications within the application
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor="in-app" className="text-base font-medium">
-                      In-App Notifications
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Receive notifications within the application
-                    </p>
-                  </div>
+                  <Switch
+                    id="in-app"
+                    checked={preferences.in_app_enabled}
+                    onCheckedChange={() => togglePreference("in_app_enabled")}
+                  />
                 </div>
-                <Switch
-                  id="in-app"
-                  checked={preferences.in_app_enabled}
-                  onCheckedChange={() => togglePreference("in_app_enabled")}
-                />
-              </div>
 
-              <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-card">
-                <div className="flex items-center gap-4">
-                  <div className="p-2 rounded-md bg-primary/10">
-                    <Mail className="h-5 w-5 text-primary" />
+                <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-card">
+                  <div className="flex items-center gap-4">
+                    <div className="p-2 rounded-md bg-primary/10">
+                      <Mail className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <Label htmlFor="email-notif" className="text-base font-medium">
+                        Email Notifications
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Receive notifications via email
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor="email-notif" className="text-base font-medium">
-                      Email Notifications
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Receive notifications via email
-                    </p>
-                  </div>
+                  <Switch
+                    id="email-notif"
+                    checked={preferences.email_enabled}
+                    onCheckedChange={() => togglePreference("email_enabled")}
+                  />
                 </div>
-                <Switch
-                  id="email-notif"
-                  checked={preferences.email_enabled}
-                  onCheckedChange={() => togglePreference("email_enabled")}
-                />
-              </div>
 
-              <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-card">
-                <div className="flex items-center gap-4">
-                  <div className="p-2 rounded-md bg-primary/10">
-                    <MessageSquare className="h-5 w-5 text-primary" />
+                <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-card">
+                  <div className="flex items-center gap-4">
+                    <div className="p-2 rounded-md bg-primary/10">
+                      <MessageSquare className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <Label htmlFor="sms" className="text-base font-medium">
+                        SMS Notifications
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Receive notifications via text message
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor="sms" className="text-base font-medium">
-                      SMS Notifications
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Receive notifications via text message
-                    </p>
-                  </div>
+                  <Switch
+                    id="sms"
+                    checked={preferences.sms_enabled}
+                    onCheckedChange={() => togglePreference("sms_enabled")}
+                  />
                 </div>
-                <Switch
-                  id="sms"
-                  checked={preferences.sms_enabled}
-                  onCheckedChange={() => togglePreference("sms_enabled")}
-                />
-              </div>
 
-              <div className="pt-2">
-                <Button onClick={handleSaveNotifications} disabled={savingNotifications}>
-                  {savingNotifications && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Save Notification Preferences
-                </Button>
-              </div>
+                <div className="pt-2">
+                  <Button onClick={handleSaveNotifications} disabled={savingNotifications}>
+                    {savingNotifications && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Notification Preferences
+                  </Button>
+                </div>
 
-              <div className="bg-muted/50 rounded-lg p-4">
-                <h4 className="text-sm font-medium mb-2">Notification Types</h4>
-                <ul className="text-sm text-muted-foreground space-y-1">
-                  <li>• <strong>Tasks:</strong> Due date reminders, overdue alerts, and new task assignments</li>
-                  <li>• <strong>Claims:</strong> Status updates, new activity, and portal notifications</li>
-                  <li>• <strong>Inspections:</strong> Scheduled inspection reminders</li>
-                  <li>• <strong>Signatures:</strong> Document signing requests and completions</li>
-                </ul>
+                <div className="bg-muted/50 rounded-lg p-4">
+                  <h4 className="text-sm font-medium mb-2">Notification Types</h4>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    <li>• <strong>Tasks:</strong> Due date reminders, overdue alerts, and new task assignments</li>
+                    <li>• <strong>Claims:</strong> Status updates, new activity, and portal notifications</li>
+                    <li>• <strong>Inspections:</strong> Scheduled inspection reminders</li>
+                    <li>• <strong>Signatures:</strong> Document signing requests and completions</li>
+                  </ul>
+                </div>
               </div>
-            </CardContent>
-          </CollapsibleContent>
-        </Card>
-      </Collapsible>
+            </CollapsibleContent>
+          </SectionCard>
+        </Collapsible>
+      </div>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving}>
-          <Save className="h-4 w-4 mr-2" />
-          {saving ? "Saving..." : "Save Profile"}
+      <div className="flex justify-end pt-4">
+        <Button onClick={handleSave} disabled={saving} size="lg">
+          {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Save Profile Changes
         </Button>
       </div>
     </div>
