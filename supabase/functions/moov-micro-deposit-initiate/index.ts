@@ -64,31 +64,26 @@ serve(async (req) => {
       return json({ error: "This bank account is not ready for verification yet." }, 409);
     }
 
-    // Guard against endless retries on the same account.
-    const { data: prior } = await supabase
-      .from("payment_method_verifications")
-      .select("*")
-      .eq("payment_method_id", method.id)
-      .eq("environment", environment)
-      .order("created_at", { ascending: false })
-      .maybeSingle();
-
-    // Only short-circuit when the provider itself considers the bank verified;
-    // a stale local "verified" row must not block a fresh micro-deposit.
-    if (prior?.status === "verified" && method.verification_status === "verified") {
-      return json({ success: true, already_verified: true, verification: prior });
+    // Moov is the only authority on whether this bank is already verified.
+    try {
+      const bank = await moovFetch<any>(
+        `/accounts/${accountId}/bank-accounts/${bankAccountId}`,
+        { scopes: scopes.bankAccountsRead(accountId) },
+      );
+      if (String(bank?.status ?? "").toLowerCase() === "verified") {
+        await supabase
+          .from("payment_provider_methods")
+          .update({ verification_status: "verified", connection_status: "connected" })
+          .eq("id", method.id);
+        return json({ success: true, already_verified: true, environment });
+      }
+    } catch {
+      /* non-fatal: the initiate call below is authoritative */
     }
 
-    if (prior && prior.attempts >= prior.max_attempts) {
-      return json({
-        error: "max_attempts_exceeded",
-        message: "This bank account has failed verification too many times. Connect it again.",
-      }, 409);
-    }
-
-    // Current API: POST .../verify (Instant Micro-deposit)
-    // The v2024.01.00 version explicitly supports this endpoint with the 
-    // expected 4-digit MV#### code generation.
+    // Current API: POST .../verify (Instant Micro-deposit).
+    // A previously exhausted local attempt counter does NOT block a restart —
+    // a brand-new verification is opened only if Moov accepts this call.
     try {
       await moovFetch<any>(
         `/accounts/${accountId}/bank-accounts/${bankAccountId}/verify`,
@@ -99,7 +94,10 @@ serve(async (req) => {
       );
     } catch (e) {
       console.error("[moov-micro-deposit-initiate] error", (e as Error).message);
-      return json({ error: (e as Error).message }, 502);
+      return json({
+        error: "initiate_failed",
+        message: "Could not start bank verification with the payment provider. Reconnect the bank account and try again.",
+      }, 502);
     }
 
     const { data: verification, error: vErr } = await supabase
@@ -134,7 +132,7 @@ serve(async (req) => {
       provider_metadata: sanitize({ bank_account: bankAccountId }),
     });
 
-    return json({ success: true, verification });
+    return json({ success: true, verification, environment });
   } catch (e) {
     console.error("[moov-micro-deposit-initiate]", (e as Error).message);
     return json({ error: (e as Error).message }, 500);
