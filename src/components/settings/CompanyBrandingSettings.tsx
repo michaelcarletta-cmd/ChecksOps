@@ -380,7 +380,6 @@ export function CompanyBrandingSettings() {
           </div>
           </div>
         </SectionCard>
-        </SectionCard>
 
         <SectionCard
           title="Letterhead"
@@ -649,7 +648,7 @@ export function CompanyBrandingSettings() {
           accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
           description="Customize the email sent to payees when a check endorsement is required. Reminder emails use a separate subject and body."
         >
-        <CardContent className="space-y-5">
+          <div className="space-y-5">
           <div>
             <Label className="text-xs text-muted-foreground mb-2 block">Available Merge Fields (click to insert)</Label>
             <div className="flex flex-wrap gap-1.5">
@@ -789,6 +788,7 @@ export function CompanyBrandingSettings() {
                 </div>
               </div>
             )}
+            </div>
           </div>
         </SectionCard>
 
