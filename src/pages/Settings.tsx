@@ -434,7 +434,8 @@ export default function Settings() {
   const [sigPresetsOpen, setSigPresetsOpen] = useState(false);
   
   const { toast } = useToast();
-  // isActumRail usage hidden/disabled globally.
+  const { tenant } = useTenant();
+
 
   // Check if current user is admin
   const { data: isAdmin, isLoading: isAdminLoading } = useQuery({
