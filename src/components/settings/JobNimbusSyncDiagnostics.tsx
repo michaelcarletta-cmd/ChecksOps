@@ -88,16 +88,21 @@ export function JobNimbusSyncDiagnostics() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Test Panel */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">🔔 Notification Test</CardTitle>
-          <CardDescription>
-            Create a minimal test task assigned to a mapped JobNimbus user, then verify the assignment was stored correctly.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <SettingsHero
+        title="JobNimbus Sync Diagnostics"
+        description="Verify and troubleshoot JobNimbus notification and task synchronization."
+        badge="System Diagnostics"
+        icon={<Activity className="h-4 w-4 text-primary" />}
+      />
+
+      <SectionCard
+        title="Notification Test"
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        icon={<Send className="h-4 w-4 text-primary" />}
+        description="Create a minimal test task assigned to a mapped JobNimbus user."
+      >
+        <div className="space-y-4">
           <Button onClick={runNotificationTest} disabled={testRunning} variant="outline">
             {testRunning ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
             Run Notification Test
@@ -142,16 +147,16 @@ export function JobNimbusSyncDiagnostics() {
               </Collapsible>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
 
-      {/* Troubleshooting Checklist */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">🔍 Troubleshooting Checklist</CardTitle>
-          <CardDescription>If notifications are not appearing, verify each of these items.</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <SectionCard
+        title="Troubleshooting Checklist"
+        accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
+        icon={<AlertTriangle className="h-4 w-4 text-amber-500" />}
+        description="If notifications are not appearing, verify each of these items."
+      >
+        <div className="space-y-2">
           <ul className="text-sm space-y-2 text-muted-foreground">
             <li>☐ The JobNimbus user has <strong>"Task Assigned"</strong> enabled in their Profile → Notification Preferences</li>
             <li>☐ They are checking the <strong>web bell icon</strong> (Notification Center) in JobNimbus</li>
@@ -160,24 +165,22 @@ export function JobNimbusSyncDiagnostics() {
             <li>☐ The verification GET confirms <strong>owners match = YES</strong> for the created task</li>
             <li>☐ The user is <strong>not the note author</strong> (self-notifications are skipped)</li>
           </ul>
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
 
-      {/* Sync Queue Diagnostics Table */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base">Sync Queue — Notification Diagnostics</CardTitle>
-              <CardDescription>Recent note & inspection syncs with notification verification details.</CardDescription>
-            </div>
+      <SectionCard
+        title="Sync Queue Diagnostics"
+        accent="bg-gradient-to-r from-blue-500/60 to-blue-500/10"
+        icon={<Activity className="h-4 w-4 text-blue-500" />}
+        description="Recent note & inspection syncs with notification verification details."
+      >
+        <div className="space-y-4">
+          <div className="flex justify-end mb-4">
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isRefetching}>
               <RefreshCw className={`h-4 w-4 mr-2 ${isRefetching ? "animate-spin" : ""}`} />
               Refresh
             </Button>
           </div>
-        </CardHeader>
-        <CardContent>
           {isLoading ? (
             <div className="space-y-2">
               {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
@@ -265,9 +268,8 @@ export function JobNimbusSyncDiagnostics() {
                 </TableBody>
               </Table>
             </ScrollArea>
-          )}
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
     </div>
   );
 }
