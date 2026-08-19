@@ -49,6 +49,42 @@ export function InvoicesTab() {
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [items, setItems] = useState<InvoiceLineItem[]>([emptyItem()]);
+  const [branding, setBranding] = useState<{
+    invoice_letterhead_url: string | null;
+    invoice_footer_note: string | null;
+    invoice_default_terms: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      const loadBranding = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: tenantUser } = await supabase
+            .from("tenant_users")
+            .select("tenant_id")
+            .eq("user_id", user.id)
+            .maybeSingle();
+          
+          if (tenantUser) {
+            const { data: tenant } = await supabase
+              .from("tenants")
+              .select("invoice_letterhead_url, invoice_footer_note, invoice_default_terms")
+              .eq("id", tenantUser.tenant_id)
+              .maybeSingle();
+            
+            if (tenant) {
+              setBranding(tenant);
+              if (tenant.invoice_default_terms) {
+                setDescription(tenant.invoice_default_terms);
+              }
+            }
+          }
+        }
+      };
+      loadBranding();
+    }
+  }, [open]);
 
   const rows = invoices.data ?? [];
 
