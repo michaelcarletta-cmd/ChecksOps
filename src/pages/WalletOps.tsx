@@ -53,6 +53,10 @@ import { useToast } from "@/hooks/use-toast";
 import { SWEEP_RAIL_HINT, SWEEP_RAIL_LABEL, type SweepPushRail } from "@/lib/payments/sweeps";
 import { WalletPanel } from "@/components/payments/WalletPanel";
 import { MoovTreasuryPanel } from "@/components/payments/MoovTreasuryPanel";
+import { PaymentAccountPanel } from "@/components/payments/PaymentAccountPanel";
+import { PaymentReadinessPanel } from "@/components/payments/PaymentReadinessPanel";
+import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
+
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 
 const money = (cents: number) =>
@@ -452,9 +456,22 @@ export default function WalletOps() {
             <span className="text-sm text-muted-foreground">
               Settlement bank {settlementMethod ? "connected" : "not connected"}
             </span>
-            <Button size="sm" asChild>
-              <Link to={`${tenantBase}/payments`}>Open Payment Account</Link>
-            </Button>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button size="sm">Open Payment Account</Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Payment Account Setup</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <PaymentAccountPanel />
+                  <PaymentReadinessPanel />
+                  <VerificationDocumentsPanel />
+                </div>
+              </DialogContent>
+            </Dialog>
+
           </div>
         </SectionCard>
       </div>
