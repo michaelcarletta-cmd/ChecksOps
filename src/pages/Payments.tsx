@@ -5,9 +5,10 @@ import { TaxSummary } from "@/components/ledger/TaxSummary";
 import { RevenueSummary } from "@/components/ledger/RevenueSummary";
 import { PayrollTab } from "@/pages/payments/PayrollTab";
 import { PaymentSettingsTab } from "@/pages/payments/PaymentSettingsTab";
+import { InvoicesTab } from "@/pages/payments/InvoicesTab";
 import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 import { useAuth } from "@/hooks/useAuth";
-import { Receipt, FileText, Users, Wallet, Settings2, Landmark } from "lucide-react";
+import { Receipt, FileText, Users, Wallet, Settings2, Landmark, FileSpreadsheet } from "lucide-react";
 
 export default function Payments() {
   const { userRole } = useAuth();
@@ -29,6 +30,10 @@ export default function Payments() {
           <TabsTrigger value="ledger" className="gap-2">
             <Receipt className="h-4 w-4" />
             Payment History
+          </TabsTrigger>
+          <TabsTrigger value="invoices" className="gap-2">
+            <FileSpreadsheet className="h-4 w-4" />
+            Invoices
           </TabsTrigger>
           <TabsTrigger value="revenue" className="gap-2">
             <Landmark className="h-4 w-4" />
@@ -57,6 +62,9 @@ export default function Payments() {
         </TabsList>
         <TabsContent value="ledger">
           <PaymentLedger />
+        </TabsContent>
+        <TabsContent value="invoices">
+          <InvoicesTab />
         </TabsContent>
         <TabsContent value="revenue">
           <RevenueSummary />
