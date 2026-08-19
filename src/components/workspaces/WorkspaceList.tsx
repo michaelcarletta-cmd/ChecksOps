@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Folder, Plus, Users, Building2, ExternalLink } from "lucide-react";
+import { Folder, Plus, Users, Building2, ExternalLink, Sparkles, Share2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
@@ -19,6 +19,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { SettingsHero } from "@/components/settings/SettingsHero";
+import { SectionCard } from "@/components/settings/SectionCard";
 
 interface Workspace {
   id: string;
