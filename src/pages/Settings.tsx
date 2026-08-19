@@ -7,8 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature, ListTree, HelpCircle } from "lucide-react";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature, ListTree, HelpCircle, Sparkles, TrendingUp, ShieldCheck, Cog, UserCog, Mail, Database, History, Bell, Activity, Cloud, Key, Share2, Receipt, Users } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+
 import {
   DndContext,
   closestCenter,
@@ -638,9 +639,9 @@ export default function Settings() {
   if (isAdminLoading) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">Settings</h1>
-          <p className="text-muted-foreground">Manage your claim workflow and dropdown options</p>
+        {/* Hero Section Placeholder */}
+        <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/15 via-primary/5 to-background p-4 md:p-6 animate-pulse">
+          <div className="h-32 w-full" />
         </div>
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -651,64 +652,133 @@ export default function Settings() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold">Settings</h1>
-          <p className="text-muted-foreground">Manage your claim workflow and dropdown options</p>
+      {/* Hero Section - WalletOps Style */}
+      <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/15 via-primary/5 to-background p-4 md:p-6">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
+        <div className="relative flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-2 min-w-0">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <span className="text-xs font-bold uppercase tracking-widest text-primary">System Configuration</span>
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Settings</h1>
+            <p className="text-sm text-muted-foreground max-w-md">
+              Manage your claim workflow, organization identity, and system integrations
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <div className="rounded-lg border border-primary/20 bg-background/40 backdrop-blur-sm p-3 min-w-[140px]">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                <TrendingUp className="h-3 w-3" /> Status
+              </div>
+              <div className="mt-1 text-xl font-semibold">Live</div>
+            </div>
+          </div>
         </div>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-muted-foreground hover:text-primary"
-              aria-label="Open ChecksOps Guide"
-              title="ChecksOps Guide — Help"
-            >
-              <HelpCircle className="h-5 w-5" />
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
-            <CheckCenterHelpPanel />
-          </DialogContent>
-        </Dialog>
+
+        <div className="absolute top-4 right-4 md:top-6 md:right-6">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-primary bg-background/40 backdrop-blur-sm"
+                aria-label="Open ChecksOps Guide"
+                title="ChecksOps Guide — Help"
+              >
+                <HelpCircle className="h-5 w-5" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+              <CheckCenterHelpPanel />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <Tabs defaultValue="workflow" className="space-y-6">
-        <TabsList className="flex flex-col md:flex-row md:flex-wrap h-auto w-full bg-muted/40 p-2 gap-1">
-          <TabsTrigger value="profile" className="w-full md:w-auto justify-start text-base font-medium px-4">My Profile</TabsTrigger>
+        <TabsList className="flex flex-row md:flex-wrap h-auto w-full bg-muted/20 p-1.5 gap-1 border-border/50">
+          <TabsTrigger value="profile" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <UserCog className="h-4 w-4" />
+            My Profile
+          </TabsTrigger>
           
-          <TabsTrigger value="workflow" className="w-full md:w-auto justify-start text-base font-medium px-4">Workflow Management</TabsTrigger>
-          <TabsTrigger value="users" className="w-full md:w-auto justify-start text-base font-medium px-4">User Management</TabsTrigger>
-          <TabsTrigger value="automations" className="w-full md:w-auto justify-start text-base font-medium px-4">Automations</TabsTrigger>
-          <TabsTrigger value="ai-knowledge" className="w-full md:w-auto justify-start text-base font-medium px-4">AI Knowledge Base</TabsTrigger>
+          <TabsTrigger value="workflow" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Cog className="h-4 w-4" />
+            Workflow
+          </TabsTrigger>
+          <TabsTrigger value="users" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Users className="h-4 w-4" />
+            Users
+          </TabsTrigger>
+          <TabsTrigger value="automations" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Activity className="h-4 w-4" />
+            Automations
+          </TabsTrigger>
+          <TabsTrigger value="ai-knowledge" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Sparkles className="h-4 w-4 text-primary" />
+            AI Knowledge
+          </TabsTrigger>
           
-          <TabsTrigger value="organization" className="w-full md:w-auto justify-start text-base font-medium px-4">Organization</TabsTrigger>
-          <TabsTrigger value="email" className="w-full md:w-auto justify-start text-base font-medium px-4">Email</TabsTrigger>
-          <TabsTrigger value="import" className="w-full md:w-auto justify-start text-base font-medium px-4">Import Data</TabsTrigger>
+          <TabsTrigger value="organization" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <ShieldCheck className="h-4 w-4" />
+            Organization
+          </TabsTrigger>
+          <TabsTrigger value="email" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Mail className="h-4 w-4" />
+            Email
+          </TabsTrigger>
+          <TabsTrigger value="import" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Database className="h-4 w-4" />
+            Import
+          </TabsTrigger>
           {isAdmin && (
-            <TabsTrigger value="audit-logs" className="w-full md:w-auto justify-start text-base font-medium px-4">Audit Logs</TabsTrigger>
+            <TabsTrigger value="audit-logs" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+              <History className="h-4 w-4" />
+              Audit Logs
+            </TabsTrigger>
           )}
           {isAdmin && (
-            <TabsTrigger value="notification-logs" className="w-full md:w-auto justify-start text-base font-medium px-4">Notification Logs</TabsTrigger>
+            <TabsTrigger value="notification-logs" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+              <Bell className="h-4 w-4" />
+              Notifications
+            </TabsTrigger>
           )}
           {isAdmin && (
-            <TabsTrigger value="urgency-alerts" className="w-full md:w-auto justify-start text-base font-medium px-4">Urgency Alerts</TabsTrigger>
+            <TabsTrigger value="urgency-alerts" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+              <Activity className="h-4 w-4 text-orange-500" />
+              Urgency
+            </TabsTrigger>
           )}
           {isAdmin && (
-            <TabsTrigger value="jn-diagnostics" className="w-full md:w-auto justify-start text-base font-medium px-4">JN Sync Diagnostics</TabsTrigger>
+            <TabsTrigger value="jn-diagnostics" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+              <Activity className="h-4 w-4" />
+              JN Sync
+            </TabsTrigger>
           )}
           {isAdmin && (
-            <TabsTrigger value="backup" className="w-full md:w-auto justify-start text-base font-medium px-4">Backup Status</TabsTrigger>
+            <TabsTrigger value="backup" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+              <Cloud className="h-4 w-4 text-sky-500" />
+              Backup
+            </TabsTrigger>
           )}
           {isAdmin && (
-            <TabsTrigger value="white-label" className="w-full md:w-auto justify-start text-base font-medium px-4">White-Label Tenants</TabsTrigger>
+            <TabsTrigger value="white-label" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+              <ShieldCheck className="h-4 w-4 text-violet-500" />
+              White-Label
+            </TabsTrigger>
           )}
           {isAdmin && SHOW_CHECKALT && (
-            <TabsTrigger value="checkalt" className="w-full md:w-auto justify-start text-base font-medium px-4">Deposits</TabsTrigger>
+            <TabsTrigger value="checkalt" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+              <Receipt className="h-4 w-4 text-emerald-500" />
+              Deposits
+            </TabsTrigger>
           )}
-          {/* Actum Disbursements hidden */}
-          <TabsTrigger value="referrals" className="w-full md:w-auto justify-start text-base font-medium px-4">Referrals</TabsTrigger>
+          <TabsTrigger value="referrals" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Share2 className="h-4 w-4" />
+            Referrals
+          </TabsTrigger>
         </TabsList>
 
 
