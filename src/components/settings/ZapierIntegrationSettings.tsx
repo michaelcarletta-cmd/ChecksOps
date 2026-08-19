@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ExternalLink, Zap, ArrowRight, CheckCircle2, Camera, FileText, Bell, Database } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { SectionCard } from "./SectionCard";
+import { SettingsHero } from "./SettingsHero";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -87,17 +88,20 @@ export function ZapierIntegrationSettings({ embedded }: ZapierIntegrationSetting
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Zap className="h-5 w-5 text-primary" />
-            Zapier Integration
-          </CardTitle>
-          <CardDescription>
-            Connect Freedom Claims with thousands of apps using Zapier's automation platform
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
+      <SettingsHero
+        title="Zapier Integration"
+        description="Connect with thousands of apps to automate claim workflows and data entry."
+        badge="Automations"
+        icon={<Zap className="h-4 w-4 text-primary" />}
+      />
+
+      <SectionCard
+        title="Zapier Integration"
+        icon={<Zap className="h-4 w-4 text-orange-500" />}
+        accent="bg-gradient-to-r from-orange-500/60 to-orange-500/10"
+        description="Connect Freedom Claims with thousands of apps using Zapier's automation platform."
+      >
+        <div className="space-y-6 pt-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-3 p-4 rounded-lg bg-muted/50 border">
               <h4 className="font-semibold flex items-center gap-2">
@@ -173,20 +177,16 @@ export function ZapierIntegrationSettings({ embedded }: ZapierIntegrationSetting
               </a>
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Zap className="h-5 w-5" />
-            Zap Templates
-          </CardTitle>
-          <CardDescription>
-            Follow these step-by-step guides to set up common automations in Zapier
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+      <SectionCard
+        title="Zap Templates"
+        icon={<Zap className="h-4 w-4 text-yellow-500" />}
+        accent="bg-gradient-to-r from-yellow-500/60 to-yellow-500/10"
+        description="Follow these step-by-step guides to set up common automations in Zapier."
+      >
+        <div className="pt-4">
           <div className="grid gap-4 md:grid-cols-2">
             {zapTemplates.map((template, idx) => {
               const Icon = template.icon;
@@ -210,8 +210,8 @@ export function ZapierIntegrationSettings({ embedded }: ZapierIntegrationSetting
               );
             })}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
     </div>
   );
 }
