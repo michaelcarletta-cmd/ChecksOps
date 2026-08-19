@@ -840,7 +840,7 @@ export default function Settings() {
           </div>
         </TabsContent>
 
-        <TabsContent value="workflow" className="w-full space-y-6 focus-visible:outline-none">
+        <TabsContent value="workflow" className="w-full focus-visible:outline-none">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
 
 
@@ -1016,7 +1016,7 @@ export default function Settings() {
         </TabsContent>
 
 
-        <TabsContent value="automations" className="w-full space-y-6 focus-visible:outline-none">
+        <TabsContent value="automations" className="w-full focus-visible:outline-none">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
 
           <AutomationsSettings />
@@ -1027,7 +1027,7 @@ export default function Settings() {
         </TabsContent>
 
 
-        <TabsContent value="ai-knowledge" className="w-full space-y-6 focus-visible:outline-none">
+        <TabsContent value="ai-knowledge" className="w-full focus-visible:outline-none">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
 
           <AIKnowledgeBaseSettings />
@@ -1036,7 +1036,7 @@ export default function Settings() {
         </TabsContent>
 
 
-        <TabsContent value="organization" className="w-full space-y-6 focus-visible:outline-none">
+        <TabsContent value="organization" className="w-full focus-visible:outline-none">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
             <OrganizationSettings />
             <CompanyBrandingSettings />
