@@ -305,40 +305,80 @@ export function CompanyBrandingSettings() {
         </SectionCard>
 
         <SectionCard
-          title="Letterhead"
+          title="Logos & Brand Assets"
           icon={<ImageIcon className="h-4 w-4 text-violet-500" />}
           accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
-          description="Upload your primary company letterhead image to use in generated reports and documents."
+          description="Manage your company logo for the application sidebar and letterhead for generated documents."
         >
-          <div className="space-y-4">
-            {letterheadUrl && (
-              <div className="border rounded-lg p-4 bg-muted/50">
-                <p className="text-sm text-muted-foreground mb-2">Current Letterhead:</p>
-                <img src={letterheadUrl} alt="Company letterhead" className="max-h-32 object-contain" />
-              </div>
-            )}
-            
-            <div>
-              <Label htmlFor="letterhead-upload" className="cursor-pointer">
-                <div className="border-2 border-dashed rounded-lg p-6 text-center hover:bg-muted/50 transition-colors">
-                  {uploading ? (
-                    <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin text-muted-foreground" />
-                  ) : (
-                    <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                  )}
-                  <p className="text-sm text-muted-foreground">
-                    {uploading ? "Uploading..." : "Click to upload letterhead image (PNG, JPG)"}
-                  </p>
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Sidebar Logo */}
+            <div className="space-y-4">
+              <Label className="text-sm font-medium">Application Sidebar Logo</Label>
+              <p className="text-xs text-muted-foreground">This logo appears in the top-left corner of the dashboard sidebar.</p>
+              
+              {logoUrl && (
+                <div className="border rounded-lg p-4 bg-muted/50 flex items-center justify-center">
+                  <img src={logoUrl} alt="Company logo" className="h-12 w-auto object-contain" />
                 </div>
-              </Label>
-              <Input
-                id="letterhead-upload"
-                type="file"
-                accept="image/*"
-                onChange={handleLetterheadUpload}
-                className="hidden"
-                disabled={uploading}
-              />
+              )}
+              
+              <div>
+                <Label htmlFor="logo-upload" className="cursor-pointer">
+                  <div className="border-2 border-dashed rounded-lg p-4 text-center hover:bg-muted/50 transition-colors">
+                    {uploadingLogo ? (
+                      <Loader2 className="h-6 w-6 mx-auto mb-2 animate-spin text-muted-foreground" />
+                    ) : (
+                      <Upload className="h-6 w-6 mx-auto mb-2 text-muted-foreground" />
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {uploadingLogo ? "Uploading..." : "Click to upload square or horizontal logo"}
+                    </p>
+                  </div>
+                </Label>
+                <Input
+                  id="logo-upload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoUpload}
+                  className="hidden"
+                  disabled={uploadingLogo}
+                />
+              </div>
+            </div>
+
+            {/* Document Letterhead */}
+            <div className="space-y-4">
+              <Label className="text-sm font-medium">Document Letterhead</Label>
+              <p className="text-xs text-muted-foreground">Used at the top of generated reports, demand letters, and claim documents.</p>
+              
+              {letterheadUrl && (
+                <div className="border rounded-lg p-4 bg-muted/50 flex items-center justify-center">
+                  <img src={letterheadUrl} alt="Company letterhead" className="h-12 w-auto object-contain" />
+                </div>
+              )}
+              
+              <div>
+                <Label htmlFor="letterhead-upload" className="cursor-pointer">
+                  <div className="border-2 border-dashed rounded-lg p-4 text-center hover:bg-muted/50 transition-colors">
+                    {uploading ? (
+                      <Loader2 className="h-6 w-6 mx-auto mb-2 animate-spin text-muted-foreground" />
+                    ) : (
+                      <Upload className="h-6 w-6 mx-auto mb-2 text-muted-foreground" />
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {uploading ? "Uploading..." : "Click to upload wide letterhead image"}
+                    </p>
+                  </div>
+                </Label>
+                <Input
+                  id="letterhead-upload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLetterheadUpload}
+                  className="hidden"
+                  disabled={uploading}
+                />
+              </div>
             </div>
           </div>
         </SectionCard>
