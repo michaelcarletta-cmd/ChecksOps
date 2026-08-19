@@ -1041,9 +1041,9 @@ export default function Settings() {
                     <div className="flex items-center gap-2">
                       <FolderKanban className="h-5 w-5" />
                       <div>
-                        <CardTitle>Workspaces</CardTitle>
+                        <CardTitle>Partner Workspaces</CardTitle>
                         <CardDescription>
-                          Manage workspaces and linked partner instances
+                          Manage linked partner instances and cross-tenant collaboration
                         </CardDescription>
                       </div>
                     </div>
@@ -1058,6 +1058,8 @@ export default function Settings() {
               </CollapsibleContent>
             </Card>
           </Collapsible>
+
+          <OrganizationSettings />
         </TabsContent>
 
 
