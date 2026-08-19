@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Plus, Trash2, GripVertical, Loader2, Pencil } from "lucide-react";
+import { Plus, Trash2, GripVertical, Loader2, Pencil, Layout } from "lucide-react";
+import { SettingsHero } from "./SettingsHero";
+import { SectionCard } from "./SectionCard";
 import {
   DndContext,
   closestCenter,
@@ -535,12 +536,14 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Custom Fields</h2>
-          <p className="text-muted-foreground">Add custom data fields to claim overview pages</p>
-        </div>
+        <SettingsHero
+          title="Custom Fields"
+          description="Add and manage custom data fields for claim overview pages."
+          badge="Platform Customization"
+          icon={<Layout className="h-4 w-4 text-primary" />}
+        />
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button>
@@ -564,13 +567,16 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
         </Dialog>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Custom Fields</CardTitle>
-          <CardDescription>{customFields?.length || 0} custom field(s) configured — drag to reorder</CardDescription>
-        </CardHeader>
-        <CardContent>{tableContent}</CardContent>
-      </Card>
+      <SectionCard
+        title="Configured Fields"
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        icon={<Layout className="h-4 w-4 text-primary" />}
+        description={`${customFields?.length || 0} custom field(s) configured — drag to reorder`}
+      >
+        <div className="space-y-4">
+          {tableContent}
+        </div>
+      </SectionCard>
 
       {dialogs}
     </div>
