@@ -99,6 +99,15 @@ export function WhiteLabelSettings() {
   const { tenant } = useTenant();
   const { user, loading } = useAuth();
   const { isAdmin } = usePermissions();
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "profile");
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
 
   const { data: tenantRole } = useQuery({
     queryKey: ["tenant-user-role", tenant?.id, user?.id],
