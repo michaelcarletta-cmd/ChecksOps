@@ -3,9 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { KeyRound, Loader2, Eye, EyeOff } from "lucide-react";
+import { SectionCard } from "./SectionCard";
 
 export function ChangePasswordCard() {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -27,7 +27,6 @@ export function ChangePasswordCard() {
 
     setSaving(true);
     try {
-      // Verify current password by re-authenticating
       const { data: userData } = await supabase.auth.getUser();
       const email = userData.user?.email;
       if (!email) throw new Error("No authenticated user");
@@ -58,17 +57,13 @@ export function ChangePasswordCard() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <KeyRound className="h-5 w-5" />
-          Change Password
-        </CardTitle>
-        <CardDescription>
-          Update the password used to sign in to your account
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <SectionCard
+      title="Change Password"
+      icon={<KeyRound className="h-4 w-4 text-emerald-500" />}
+      accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
+      description="Update the password used to sign in to your account"
+    >
+      <div className="space-y-4 pt-2">
         <div className="space-y-2">
           <Label htmlFor="current_password">Current Password</Label>
           <div className="relative">
@@ -134,7 +129,7 @@ export function ChangePasswordCard() {
           Use at least 8 characters. For best security, mix uppercase, lowercase, numbers, and symbols.
         </p>
 
-        <div className="flex justify-end">
+        <div className="flex justify-end pt-2">
           <Button
             onClick={handleChangePassword}
             disabled={saving || !currentPassword || !newPassword || !confirmPassword}
@@ -143,7 +138,7 @@ export function ChangePasswordCard() {
             {saving ? "Updating..." : "Update Password"}
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </SectionCard>
   );
 }
