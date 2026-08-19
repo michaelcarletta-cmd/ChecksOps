@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import {
   FileText, Upload, Loader2, Trash2, Download, Palette, Home as HomeIcon,
-  FileSignature, Image as ImageIcon, Headset,
+  FileSignature, Image as ImageIcon, Headset, Eye,
 } from "lucide-react";
 
 // Categories stored as doc_type = `library:<category>:<slug>`
