@@ -918,13 +918,21 @@ export default function Settings() {
             </SectionCard>
 
             <SectionCard
-              title="Integrations"
+              title="SMS Commands"
+              icon={<Phone className="h-4 w-4 text-sky-500" />}
+              accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
+              description="Interact with Darwin AI via text message"
+            >
+              <PhoneVerificationSettings />
+            </SectionCard>
+
+            <SectionCard
+              title="Third-Party Integrations"
               icon={<Zap className="h-4 w-4 text-rose-500" />}
               accent="bg-gradient-to-r from-rose-500/60 to-rose-500/10"
-              description="Configure external integrations for your workflow"
+              description="Configure external connections for your workflow"
             >
-              <div className="space-y-6">
-                <PhoneVerificationSettings />
+              <div className="space-y-6 pt-4">
                 <OutlookConnectionSettings embedded />
                 <ZapierIntegrationSettings embedded />
                 <QuickBooksSettings embedded />
