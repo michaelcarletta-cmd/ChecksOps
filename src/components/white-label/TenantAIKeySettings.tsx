@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
@@ -17,8 +17,52 @@ import {
   RefreshCw,
   ExternalLink,
   Shield,
+  Info,
 } from "lucide-react";
 import { format } from "date-fns";
+
+const formatFriendlyAIError = (error: string | null) => {
+  if (!error) return null;
+  const lower = error.toLowerCase();
+
+  if (lower.includes("image could not be downloaded") || lower.includes("failed to download")) {
+    return {
+      title: "Image Access Issue",
+      message: "OpenAI was unable to download the check image from storage. This usually resolves automatically on retry.",
+      tip: "If this persists, try re-uploading the check.",
+    };
+  }
+
+  if (lower.includes("authentication failed") || lower.includes("ai 401") || lower.includes("ai 403")) {
+    return {
+      title: "Authentication Failed",
+      message: "OpenAI rejected the API key. It might be invalid or have expired.",
+      tip: "Generate a new key at platform.openai.com and replace it below.",
+    };
+  }
+
+  if (lower.includes("limit reached") || lower.includes("ai 429")) {
+    return {
+      title: "Rate Limit Reached",
+      message: "Too many AI requests in a short period.",
+      tip: "Please wait a few minutes before trying again.",
+    };
+  }
+
+  if (lower.includes("credits exhausted") || lower.includes("ai 402")) {
+    return {
+      title: "Insufficient Credits",
+      message: "Your OpenAI account has run out of credits or has no payment method attached.",
+      tip: "Check your billing status at platform.openai.com/settings/organization/billing.",
+    };
+  }
+
+  return {
+    title: "AI Analysis Notice",
+    message: error.replace(/^OCR provider fallback used after: /i, ""),
+    tip: null,
+  };
+};
 
 export function TenantAIKeySettings() {
   const { tenant } = useTenant();
