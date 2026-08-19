@@ -256,7 +256,7 @@ export function MicroDepositVerification({
       variant="outline"
       className="h-7 text-[10px] gap-1.5"
       onClick={() => { setShowConfirm(true); initiate.mutate(); }}
-      disabled={busy || !paymentMethodId}
+      disabled={busy}
     >
       <Landmark className="h-3.5 w-3.5" />
       Verify with instant micro-deposit
