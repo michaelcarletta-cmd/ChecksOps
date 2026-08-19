@@ -564,6 +564,29 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                     <Button variant="outline" size="sm" onClick={() => handleDownload(file)}>
                       <Download className="h-3 w-3 mr-1" /> Download
                     </Button>
+                    {file.file_type?.includes("pdf") && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="text-amber-500 border-amber-500/30 hover:bg-amber-500/10"
+                        onClick={() => {
+                          const tabsList = document.querySelector('[role="tablist"]');
+                          const sigTrigger = tabsList?.querySelector('[value="templates"]');
+                          if (sigTrigger instanceof HTMLElement) {
+                            sigTrigger.click();
+                            // We pass state via local storage or a more robust state management if needed, 
+                            // but for now, switching tabs is the first step.
+                            // To make it seamless, we could use a custom event or store the file in a shared state.
+                            toast({
+                              title: "Switching to Signatures",
+                              description: "Select 'Request Signature' and choose this file from 'Claim Files'.",
+                            });
+                          }
+                        }}
+                      >
+                        <FileSignature className="h-3 w-3 mr-1" /> Send for Signature
+                      </Button>
+                    )}
                     {(file.file_name.toLowerCase().endsWith('.docx') || file.file_name.toLowerCase().endsWith('.pdf')) && (
                       <Button variant="outline" size="sm" onClick={() => handleSaveAsTemplate(file)}>
                         <FileUp className="h-3 w-3 mr-1" /> Save as Template
@@ -678,7 +701,7 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
     <Tabs defaultValue="files" className="w-full">
       <TabsList className="flex flex-row w-full bg-muted/40 p-2 gap-1 overflow-x-auto scrollbar-hide">
         <TabsTrigger value="files" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">Documents & Files</TabsTrigger>
-        {isStaffOrAdmin && claim && (
+        {claim && (
           <TabsTrigger value="templates" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">Templates & Signatures</TabsTrigger>
         )}
       </TabsList>
@@ -917,7 +940,7 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
       </Dialog>
       </TabsContent>
 
-      {isStaffOrAdmin && claim && (
+      {claim && (
         <TabsContent value="templates" className="mt-4 space-y-4">
           <ClaimTemplates claimId={claimId} claim={claim} />
         </TabsContent>
