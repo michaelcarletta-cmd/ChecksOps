@@ -144,14 +144,18 @@ export function CompanyBrandingSettings() {
       if (tenantUser) {
         const { data: tenant } = await supabase
           .from("tenants")
-          .select("invoice_letterhead_url, invoice_footer_note, invoice_default_terms")
+          .select("invoice_letterhead_url, invoice_footer_note, invoice_default_terms, vendor_cap, sales_rep_cap, subcontractor_cap")
           .eq("id", tenantUser.tenant_id)
           .maybeSingle();
         
         if (tenant) {
-          setInvoiceLetterheadUrl(tenant.invoice_letterhead_url || null);
-          setInvoiceFooterNote(tenant.invoice_footer_note || "");
-          setInvoiceDefaultTerms(tenant.invoice_default_terms || "");
+          const t = tenant as any;
+          setInvoiceLetterheadUrl(t.invoice_letterhead_url || null);
+          setInvoiceFooterNote(t.invoice_footer_note || "");
+          setInvoiceDefaultTerms(t.invoice_default_terms || "");
+          setVendorCap(t.vendor_cap ?? 5);
+          setSalesRepCap(t.sales_rep_cap ?? 5);
+          setSubcontractorCap(t.subcontractor_cap ?? 5);
         }
       }
     }
