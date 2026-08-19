@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
   Database, 
@@ -14,8 +13,6 @@ import {
   Zap,
   Shield,
   HardDrive,
-  Clock,
-  Activity
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SettingsHero } from "./SettingsHero";
@@ -139,6 +136,7 @@ export function BackupStatusSettings() {
         icon={<Database className="h-4 w-4 text-primary" />}
         description="All database tables are included in daily backups."
       >
+        <div className="space-y-4">
           {isLoading ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {[...Array(12)].map((_, i) => (
@@ -164,6 +162,7 @@ export function BackupStatusSettings() {
               ))}
             </div>
           )}
+        </div>
       </SectionCard>
 
       <SectionCard
@@ -172,6 +171,7 @@ export function BackupStatusSettings() {
         icon={<HardDrive className="h-4 w-4 text-blue-500" />}
         description="All uploaded files are stored with redundancy."
       >
+        <div className="space-y-4">
           {isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {[...Array(3)].map((_, i) => (
