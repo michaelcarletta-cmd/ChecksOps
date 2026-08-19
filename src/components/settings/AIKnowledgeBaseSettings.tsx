@@ -1071,17 +1071,15 @@ export const AIKnowledgeBaseSettings = () => {
             </>
           ) : (
             <p className="text-sm text-muted-foreground">Validation data is unavailable right now.</p>
-          )}
-        </CardContent>
-      </Card>
+      </SectionCard>
 
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle>Uploaded Documents</CardTitle>
-          <CardDescription>
-            {documents?.length || 0} documents in the knowledge base
-          </CardDescription>
-        </CardHeader>
+      <SectionCard
+        title="Uploaded Documents"
+        accent="bg-gradient-to-r from-blue-500/60 to-blue-500/10"
+        icon={<FileText className="h-4 w-4 text-blue-500" />}
+        description={`${documents?.length || 0} documents in the knowledge base`}
+      >
+
         <CardContent>
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
