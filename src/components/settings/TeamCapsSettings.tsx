@@ -114,7 +114,8 @@ export function TeamCapsSettings({
             )}
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </SectionCard>
+
   );
 }
