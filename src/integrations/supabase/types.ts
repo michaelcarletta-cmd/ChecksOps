@@ -16008,6 +16008,172 @@ export type Database = {
           },
         ]
       }
+      moov_invoice_customers: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          customer_type: string
+          display_name: string
+          email: string
+          environment: string
+          id: string
+          moov_account_id: string
+          phone: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          customer_type?: string
+          display_name: string
+          email: string
+          environment?: string
+          id?: string
+          moov_account_id: string
+          phone?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          customer_type?: string
+          display_name?: string
+          email?: string
+          environment?: string
+          id?: string
+          moov_account_id?: string
+          phone?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moov_invoice_customers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moov_invoice_customers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      moov_invoices: {
+        Row: {
+          claim_id: string | null
+          created_at: string
+          created_by: string | null
+          customer_email: string
+          customer_id: string | null
+          customer_moov_account_id: string | null
+          customer_name: string
+          description: string | null
+          due_date: string | null
+          environment: string
+          id: string
+          invoice_date: string | null
+          invoice_number: string | null
+          last_synced_at: string | null
+          line_items: Json
+          moov_account_id: string
+          moov_invoice_id: string | null
+          paid_amount: number
+          paid_at: string | null
+          payment_link_url: string | null
+          provider_metadata: Json
+          sent_at: string | null
+          status: string
+          tenant_id: string
+          total_amount: number
+          updated_at: string
+        }
+        Insert: {
+          claim_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_email: string
+          customer_id?: string | null
+          customer_moov_account_id?: string | null
+          customer_name: string
+          description?: string | null
+          due_date?: string | null
+          environment?: string
+          id?: string
+          invoice_date?: string | null
+          invoice_number?: string | null
+          last_synced_at?: string | null
+          line_items?: Json
+          moov_account_id: string
+          moov_invoice_id?: string | null
+          paid_amount?: number
+          paid_at?: string | null
+          payment_link_url?: string | null
+          provider_metadata?: Json
+          sent_at?: string | null
+          status?: string
+          tenant_id: string
+          total_amount?: number
+          updated_at?: string
+        }
+        Update: {
+          claim_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_email?: string
+          customer_id?: string | null
+          customer_moov_account_id?: string | null
+          customer_name?: string
+          description?: string | null
+          due_date?: string | null
+          environment?: string
+          id?: string
+          invoice_date?: string | null
+          invoice_number?: string | null
+          last_synced_at?: string | null
+          line_items?: Json
+          moov_account_id?: string
+          moov_invoice_id?: string | null
+          paid_amount?: number
+          paid_at?: string | null
+          payment_link_url?: string | null
+          provider_metadata?: Json
+          sent_at?: string | null
+          status?: string
+          tenant_id?: string
+          total_amount?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moov_invoices_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "moov_invoice_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moov_invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moov_invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mortgage_companies: {
         Row: {
           address_line_1: string | null
