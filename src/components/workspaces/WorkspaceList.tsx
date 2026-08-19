@@ -472,5 +472,3 @@ export function WorkspaceList({ embedded }: WorkspaceListProps = {}) {
     </div>
   );
 }
-  );
-}
