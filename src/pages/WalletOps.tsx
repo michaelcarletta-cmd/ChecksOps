@@ -1,12 +1,10 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   Select,
@@ -20,15 +18,12 @@ import {
   ArrowUpRight,
   BadgeCheck,
   Banknote,
-  CircleAlert,
   Clock,
   Gauge,
   Landmark,
   Loader2,
   RefreshCw,
-  ShieldCheck,
   Sparkles,
-  Timer,
   Wallet,
   Zap,
 } from "lucide-react";
@@ -155,15 +150,6 @@ export default function WalletOps() {
   const pendingIn = transferData?.pendingInCents ?? 0;
   const minimumCents = config?.minimum_balance_cents ?? 0;
 
-  const coverage = useMemo(() => {
-    if (syncFailed || !wallet) return null;
-    const spendable = wallet.available_cents - minimumCents;
-    return {
-      spendable,
-      covered: spendable >= pendingOut,
-      ratio: pendingOut > 0 ? Math.min(Math.max(spendable / pendingOut, 0), 1) : 1,
-    };
-  }, [wallet, minimumCents, pendingOut, syncFailed]);
 
   async function handleSavePayoutSpeed() {
     if (!effectiveRail) return;
@@ -409,40 +395,6 @@ export default function WalletOps() {
           )}
         </SectionCard>
 
-        {/* Payment approvals */}
-        <SectionCard
-          title="Payment Approvals"
-          icon={<ShieldCheck className="h-4 w-4 text-rose-500" />}
-          accent="bg-gradient-to-r from-rose-500/60 to-rose-500/10"
-          action={
-            <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground">
-              Not enforced yet
-            </Badge>
-          }
-        >
-          <p className="text-sm text-muted-foreground">
-            Approval thresholds are being rolled out. Today, every payout is authorized by the person who
-            releases it in the disbursement console, and each release is recorded in the payment history.
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2 opacity-60">
-            <div className="space-y-1.5">
-              <Label>Manager approval over</Label>
-              <Input value="$5,000.00" readOnly disabled />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Dual approval over</Label>
-              <Input value="$25,000.00" readOnly disabled />
-            </div>
-            <div className="flex items-center justify-between rounded-md border p-3 sm:col-span-2">
-              <span className="text-sm">Require approval for instant payouts</span>
-              <Switch checked={false} disabled />
-            </div>
-          </div>
-          <Button variant="outline" asChild>
-            <Link to={`${tenantBase}/payments`}>Review payment history</Link>
-          </Button>
-        </SectionCard>
-
         {/* Readiness shortcut */}
         <SectionCard
           title="Payment Account"
@@ -481,68 +433,6 @@ export default function WalletOps() {
           </div>
         </SectionCard>
       </div>
-
-      {/* Treasury health */}
-      <SectionCard
-        title="Treasury Health"
-        icon={<Timer className="h-4 w-4 text-primary" />}
-        accent="bg-gradient-to-r from-primary/60 to-primary/10"
-      >
-        {syncFailed || !wallet ? (
-          <p className="text-sm text-muted-foreground">
-            Balance figures are unavailable right now, so coverage can't be calculated. Try refreshing in a
-            moment.
-          </p>
-        ) : (
-          <>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-lg border p-3">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Spendable after reserve
-                </p>
-                <p className="mt-1 text-xl font-semibold">{money(coverage?.spendable ?? 0)}</p>
-              </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Payouts in flight
-                </p>
-                <p className="mt-1 text-xl font-semibold">{money(pendingOut)}</p>
-              </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Automatic payouts
-                </p>
-                <p className="mt-1 text-xl font-semibold">{sweepsOn ? "On" : "Off"}</p>
-              </div>
-            </div>
-
-            {pendingOut > 0 && (
-              <div className="space-y-1.5">
-                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className={`h-full transition-all duration-500 ${
-                      coverage?.covered ? "bg-emerald-500" : "bg-amber-500"
-                    }`}
-                    style={{ width: `${Math.round((coverage?.ratio ?? 0) * 100)}%` }}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {coverage?.covered
-                    ? "Your balance covers every payout currently in flight."
-                    : "Payouts in flight exceed your spendable balance — add funds to avoid delays."}
-                </p>
-              </div>
-            )}
-
-            {!coverage?.covered && pendingOut > 0 && (
-              <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-600 dark:text-amber-400">
-                <CircleAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                Add funds or pause automatic payouts until in-flight payments settle.
-              </div>
-            )}
-          </>
-        )}
-      </SectionCard>
 
       {/* Recent activity */}
       <SectionCard
