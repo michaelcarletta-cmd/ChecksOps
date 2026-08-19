@@ -76,6 +76,10 @@ export default function Payments() {
             <Receipt className="h-4 w-4" />
             Payment History
           </TabsTrigger>
+          <TabsTrigger value="usage" className="gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Usage Log
+          </TabsTrigger>
           <TabsTrigger value="invoices" className="gap-2">
             <FileSpreadsheet className="h-4 w-4" />
             Invoices
@@ -106,6 +110,15 @@ export default function Payments() {
             accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
           >
             <PaymentLedger />
+          </SectionCard>
+        </TabsContent>
+        <TabsContent value="usage" className="mt-6">
+          <SectionCard
+            title="Usage Log"
+            icon={<BarChart3 className="h-4 w-4 text-primary" />}
+            accent="bg-gradient-to-r from-primary/60 to-primary/10"
+          >
+            <UsageLogTab />
           </SectionCard>
         </TabsContent>
         <TabsContent value="invoices" className="mt-6">
