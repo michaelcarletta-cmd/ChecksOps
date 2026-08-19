@@ -6,8 +6,36 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, Building2, FileText, Loader2, Mail, Eye, EyeOff, Palette, FileCheck } from "lucide-react";
+import { Upload, Building2, FileText, Loader2, Mail, Eye, EyeOff, Palette, FileCheck, Sparkles, Image as ImageIcon, Type, Layout } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+
+function SectionCard({
+  title,
+  icon,
+  accent,
+  description,
+  children,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  accent: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card className="overflow-hidden border-border/60 shadow-sm">
+      <div className={`h-1.5 ${accent}`} />
+      <CardHeader className="flex flex-col gap-1 p-4 pb-2">
+        <CardTitle className="flex items-center gap-2 text-base font-semibold">
+          {icon}
+          {title}
+        </CardTitle>
+        {description && <CardDescription>{description}</CardDescription>}
+      </CardHeader>
+      <CardContent className="space-y-4 p-4 pt-2">{children}</CardContent>
+    </Card>
+  );
+}
 
 const MERGE_FIELDS = [
   { field: "{signer.name}", label: "Signer Name" },
@@ -290,25 +318,37 @@ export function CompanyBrandingSettings() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Building2 className="h-5 w-5" />
-            Company Information
-          </CardTitle>
-          <CardDescription>
-            This information will appear on generated reports and demand letters
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label>Company Name</Label>
-            <Input
-              value={companyName}
-              onChange={(e) => setCompanyName(e.target.value)}
-              placeholder="Freedom Claims Adjusting"
-            />
+      {/* Hero Section */}
+      <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/15 via-primary/5 to-background p-4 md:p-6">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
+        <div className="relative flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <span className="text-xs font-bold uppercase tracking-widest text-primary">Identity & Branding</span>
           </div>
+          <h1 className="text-3xl font-bold tracking-tight">Company Settings</h1>
+          <p className="text-sm text-muted-foreground max-w-2xl">
+            Configure your organization's visual identity, contact information, and document presentation across the platform.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <SectionCard
+          title="Company Information"
+          icon={<Building2 className="h-4 w-4 text-sky-500" />}
+          accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
+          description="This information will appear on generated reports, demand letters, and invoices."
+        >
+          <div className="space-y-4">
+            <div>
+              <Label>Company Name</Label>
+              <Input
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="Freedom Claims Adjusting"
+              />
+            </div>
 
           <div>
             <Label>Address</Label>
@@ -338,20 +378,15 @@ export function CompanyBrandingSettings() {
               />
             </div>
           </div>
-        </CardContent>
-      </Card>
+          </div>
+        </SectionCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Letterhead
-          </CardTitle>
-          <CardDescription>
-            Upload your company letterhead image to use in generated reports
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+        <SectionCard
+          title="Letterhead"
+          icon={<ImageIcon className="h-4 w-4 text-violet-500" />}
+          accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
+          description="Upload your primary company letterhead image to use in generated reports and documents."
+        >
           <div className="space-y-4">
             {letterheadUrl && (
               <div className="border rounded-lg p-4 bg-muted/50">
@@ -383,20 +418,14 @@ export function CompanyBrandingSettings() {
               />
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </SectionCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Invoice Branding
-          </CardTitle>
-          <CardDescription>
-            Customize the look and feel of your customer invoices
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
+        <SectionCard
+          title="Invoice Branding"
+          icon={<Layout className="h-4 w-4 text-emerald-500" />}
+          accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
+          description="Customize the visual presentation and default terms of your customer-facing invoices."
+        >
           <div>
             <Label>Invoice Letterhead</Label>
             <div className="mt-2">
@@ -447,21 +476,15 @@ export function CompanyBrandingSettings() {
             />
             <p className="text-xs text-muted-foreground mt-1">Default terms added to every new invoice</p>
           </div>
-        </CardContent>
-      </Card>
+        </SectionCard>
 
-      {/* Signature Request Email Template */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Mail className="h-5 w-5" />
-            Signature Request Email Template
-          </CardTitle>
-          <CardDescription>
-            Customize the email sent to signers when a signature is requested. Use merge fields to personalize each email.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
+        <SectionCard
+          title="Signature Request Email Template"
+          icon={<Mail className="h-4 w-4 text-amber-500" />}
+          accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
+          description="Customize the email sent to signers when a signature is requested. Use merge fields to personalize each email."
+        >
+          <div className="space-y-5">
           {/* Merge fields reference */}
           <div>
             <Label className="text-xs text-muted-foreground mb-2 block">Available Merge Fields (click to insert into body)</Label>
@@ -617,21 +640,16 @@ export function CompanyBrandingSettings() {
               </div>
             )}
           </div>
-        </CardContent>
-      </Card>
+          </div>
+        </SectionCard>
 
-      {/* Check Endorsement Email Template */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Mail className="h-5 w-5" />
-            Check Endorsement Email Template
-          </CardTitle>
-          <CardDescription>
-            Customize the email sent to payees when a check endorsement is required. Reminder emails use a separate subject and body.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
+        <SectionCard
+          title="Check Endorsement Email Template"
+          icon={<Mail className="h-4 w-4 text-sky-500" />}
+          accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
+          description="Customize the email sent to payees when a check endorsement is required. Reminder emails use a separate subject and body."
+        >
+          <div className="space-y-5">
           <div>
             <Label className="text-xs text-muted-foreground mb-2 block">Available Merge Fields (click to insert)</Label>
             <div className="flex flex-wrap gap-1.5">
@@ -771,22 +789,16 @@ export function CompanyBrandingSettings() {
                 </div>
               </div>
             )}
+            </div>
           </div>
-        </CardContent>
-      </Card>
+        </SectionCard>
 
-      {/* Online Check Writer */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileCheck className="h-5 w-5" />
-            Online Check Writer
-          </CardTitle>
-          <CardDescription>
-            Configure your Online Check Writer bank account for sending checks
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        <SectionCard
+          title="Online Check Writer"
+          icon={<FileCheck className="h-4 w-4 text-blue-500" />}
+          accent="bg-gradient-to-r from-blue-500/60 to-blue-500/10"
+          description="Configure your Online Check Writer bank account for sending checks."
+        >
           <div>
             <Label>Bank Account ID</Label>
             <Input
@@ -801,20 +813,15 @@ export function CompanyBrandingSettings() {
               </a>
             </p>
           </div>
-        </CardContent>
-      </Card>
+        </SectionCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Zapier Webhook Integration
-          </CardTitle>
-          <CardDescription>
-            Configure a Zapier webhook URL for external document signing or automation workflows
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        <SectionCard
+          title="Zapier Webhook Integration"
+          icon={<FileText className="h-4 w-4 text-orange-500" />}
+          accent="bg-gradient-to-r from-orange-500/60 to-orange-500/10"
+          description="Configure a Zapier webhook URL for external document signing or automation workflows."
+        >
+        
           <div>
             <Label>Zapier Webhook URL</Label>
             <Input
@@ -854,12 +861,14 @@ export function CompanyBrandingSettings() {
               <div><Label className="text-xs">Height</Label><Input type="number" value={dateCoords.h} onChange={(e) => setDateCoords({...dateCoords, h: +e.target.value})} /></div>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </SectionCard>
+      </div>
 
-      <Button onClick={saveSettings} disabled={saving}>
-        {saving ? "Saving..." : "Save Company Branding"}
-      </Button>
+      <div className="flex justify-end pt-4">
+        <Button onClick={saveSettings} disabled={saving}>
+          {saving ? "Saving..." : "Save Company Branding"}
+        </Button>
+      </div>
     </div>
   );
 }
