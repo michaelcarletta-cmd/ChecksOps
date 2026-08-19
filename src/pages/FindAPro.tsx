@@ -223,45 +223,43 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
           </div>
 
 
-          <form onSubmit={(e) => { e.preventDefault(); load(); }} className="grid grid-cols-1 md:grid-cols-6 gap-3">
-            <div className="md:col-span-2 relative">
-              <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or specialty" className="pl-9" />
-            </div>
-            <Select value={trade} onValueChange={setTrade}>
-              <SelectTrigger><SelectValue placeholder="Trade" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All trades</SelectItem>
-                {TRADE_OPTIONS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={state} onValueChange={setState}>
-              <SelectTrigger><SelectValue placeholder="State" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All states</SelectItem>
-                {STATE_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={minRating} onValueChange={setMinRating}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="0">Any rating</SelectItem>
-                <SelectItem value="3">3★+</SelectItem>
-                <SelectItem value="4">4★+</SelectItem>
-                <SelectItem value="4.5">4.5★+</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="rating">Top rated</SelectItem>
-                <SelectItem value="jobs">Most jobs</SelectItem>
-                <SelectItem value="recent">Newest</SelectItem>
-              </SelectContent>
-            </Select>
-          </form>
+          <div className="bg-card/30 p-1.5 rounded-xl border border-border/50 shadow-2xl backdrop-blur-md">
+            <form onSubmit={(e) => { e.preventDefault(); load(); }} className="grid grid-cols-1 md:grid-cols-6 gap-2">
+              <div className="md:col-span-2 relative">
+                <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or specialty" className="pl-9 bg-background/50 border-transparent focus:border-primary/50" />
+              </div>
+              <Select value={trade} onValueChange={setTrade}>
+                <SelectTrigger className="bg-background/50 border-transparent focus:border-primary/50"><SelectValue placeholder="Trade" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All trades</SelectItem>
+                  {TRADE_OPTIONS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={state} onValueChange={setState}>
+                <SelectTrigger className="bg-background/50 border-transparent focus:border-primary/50"><SelectValue placeholder="State" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All states</SelectItem>
+                  {TRADE_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={minRating} onValueChange={setMinRating}>
+                <SelectTrigger className="bg-background/50 border-transparent focus:border-primary/50"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">Any rating</SelectItem>
+                  <SelectItem value="3">3★+</SelectItem>
+                  <SelectItem value="4">4★+</SelectItem>
+                  <SelectItem value="4.5">4.5★+</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button type="submit" className="w-full bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20">
+                Update Results
+              </Button>
+            </form>
+          </div>
         </div>
       </div>
+
 
       <main className="max-w-6xl mx-auto px-4 py-8">
         <TrustStrip />
