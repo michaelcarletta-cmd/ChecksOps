@@ -640,6 +640,7 @@ export function CompanyBrandingSettings() {
               </div>
             )}
           </div>
+          </div>
         </SectionCard>
 
         <SectionCard
