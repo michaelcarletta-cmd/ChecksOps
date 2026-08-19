@@ -319,11 +319,11 @@ export function WorkspaceList({ embedded }: WorkspaceListProps = {}) {
             icon={<Plus className="h-4 w-4 text-amber-500" />}
             accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
           >
-            <div className="space-y-4 pt-2">
+            <div className="space-y-4 pt-4">
               {invites.map((invite: any) => (
                 <div
                   key={invite.id}
-                  className="flex items-center justify-between p-4 bg-card/30 backdrop-blur-sm rounded-lg border border-border/60"
+                  className="flex items-center justify-between p-4 bg-muted/30 backdrop-blur-sm rounded-lg border border-border/60"
                 >
                   <div>
                     <p className="font-medium">{invite.workspaces?.name}</p>
@@ -354,12 +354,12 @@ export function WorkspaceList({ embedded }: WorkspaceListProps = {}) {
 
         {/* Workspaces List */}
         <SectionCard
-          title="Shared Workspaces"
+          title="Connected Workspaces"
           description="Collaborative spaces with partner companies"
           icon={<Users className="h-4 w-4 text-violet-500" />}
           accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
         >
-          <div className="pt-2">
+          <div className="pt-4">
             <div className="flex justify-end mb-4">
               <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
                 <DialogTrigger asChild>
@@ -421,7 +421,7 @@ export function WorkspaceList({ embedded }: WorkspaceListProps = {}) {
                 {workspaces.map((workspace: any) => (
                   <div
                     key={workspace.id}
-                    className="group flex flex-col p-5 bg-card/30 backdrop-blur-sm border border-border/60 hover:border-violet-500/30 transition-all rounded-xl cursor-pointer"
+                    className="group flex flex-col p-5 bg-muted/30 backdrop-blur-sm border border-border/60 hover:border-violet-500/30 transition-all rounded-xl cursor-pointer"
                     onClick={() => navigate(`/workspaces/${workspace.id}`)}
                   >
                     <div className="flex-1 space-y-1">
