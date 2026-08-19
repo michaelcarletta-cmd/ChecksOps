@@ -830,9 +830,9 @@ export default function Settings() {
         <TabsContent value="workflow" className="w-full space-y-6">
           <SettingsHero 
             title="Workflow Configuration" 
-            description="Customize how claims move through your system, from statuses and sub-steps to custom data fields."
-            badge="Process & Data"
-            icon={<Cog className="h-4 w-4 text-primary" />}
+            description="Customize claim statuses and automation stages to match your operations."
+            badge="Operations"
+            icon={<ListChecks className="h-4 w-4 text-primary" />}
           />
 
           <div className="grid gap-6">
