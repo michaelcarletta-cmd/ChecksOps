@@ -164,18 +164,30 @@ export function useAllTenantWalletBalances(isAdmin: boolean, walletType: "operat
     queryFn: async () => {
       const { data, error } = await supabase
         .from("payment_wallets")
-        .select("tenant_id, available_cents, pending_cents, status, last_synced_at, tenants(name)")
+        .select("tenant_id, available_cents, pending_cents, status, last_synced_at")
         .eq("wallet_type", walletType)
         .order("available_cents", { ascending: false });
       if (error) throw error;
+
+      const tenantIds = Array.from(new Set((data ?? []).map((r: any) => r.tenant_id).filter(Boolean)));
+      const nameById = new Map<string, string>();
+      if (tenantIds.length) {
+        const { data: tenants } = await supabase
+          .from("tenants")
+          .select("id, name")
+          .in("id", tenantIds);
+        (tenants ?? []).forEach((t: any) => nameById.set(t.id, t.name));
+      }
+
       return (data ?? []).map((r: any) => ({
         tenant_id: r.tenant_id,
-        tenant_name: r.tenants?.name ?? "Organization",
+        tenant_name: nameById.get(r.tenant_id) ?? "Organization",
         available_cents: Number(r.available_cents || 0),
         pending_cents: Number(r.pending_cents || 0),
         status: r.status,
         last_synced_at: r.last_synced_at,
       }));
     },
+
   });
 }
