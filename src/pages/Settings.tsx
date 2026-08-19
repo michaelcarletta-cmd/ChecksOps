@@ -829,7 +829,6 @@ export default function Settings() {
 
         <TabsContent value="profile" className="w-full focus-visible:outline-none">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
-
             <ProfileSettings />
           </div>
         </TabsContent>
@@ -1048,9 +1047,7 @@ export default function Settings() {
 
         <TabsContent value="workspaces" className="w-full focus-visible:outline-none">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
-
             <WorkspaceList />
-
           </div>
         </TabsContent>
 
