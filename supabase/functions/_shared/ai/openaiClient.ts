@@ -206,13 +206,22 @@ async function executeChat(
 
   const data = await res.json();
   if (!res.ok) {
+    const rawMessage = data?.error?.message || "Unknown error";
     console.error(
       `[aiClient] ${contextLabel} error (${pickProvider(model)} ${model}):`,
       JSON.stringify(data).slice(0, 500),
     );
+    
+    // Normalize well-known errors for cleaner upstream handling
     if (res.status === 429) throw new Error("RATE_LIMIT");
     if (res.status === 402) throw new Error("AI_CREDITS_EXHAUSTED");
-    throw new Error(`AI ${res.status}: ${data?.error?.message || "Unknown error"}`);
+    
+    // Specifically handle the "failed to download image" case which is a common 400
+    if (res.status === 400 && rawMessage.toLowerCase().includes("failed to download")) {
+      throw new Error("FAILED_TO_DOWNLOAD_IMAGE");
+    }
+
+    throw new Error(`AI ${res.status}: ${rawMessage}`);
   }
   return { data, resolvedModel: data.model || model };
 }
