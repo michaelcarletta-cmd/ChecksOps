@@ -171,30 +171,39 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
             <p className="text-xs text-muted-foreground">{(error as any).message}</p>
           </div>
         ) : (
-          <div className="space-y-6 overflow-y-auto pr-2">
+          <div className="space-y-6 overflow-y-auto pr-2 pb-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="rounded-xl border bg-card p-4 shadow-sm">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Check Processing</div>
-                <div className="text-2xl font-bold">
+              <div className="rounded-xl border border-border/50 bg-card/30 p-4 shadow-sm backdrop-blur-sm">
+                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                  <TrendingUp className="h-3 w-3" /> Check Processing
+                </div>
+                <div className="text-3xl font-bold tracking-tight">
                   {data?.events?.filter(e => e.event_type === 'check_processing').length ?? 0}
                 </div>
-                <div className="text-[10px] text-muted-foreground mt-2">Standard processing</div>
+                <div className="text-[10px] text-muted-foreground mt-2">Standard processing volume</div>
               </div>
-              <div className="rounded-xl border bg-card p-4 shadow-sm">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">MortgageOps Usage</div>
-                <div className="text-2xl font-bold">
+              
+              <div className="rounded-xl border border-border/50 bg-card/30 p-4 shadow-sm backdrop-blur-sm">
+                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                  <Receipt className="h-3 w-3" /> MortgageOps
+                </div>
+                <div className="text-3xl font-bold tracking-tight">
                   {data?.mortgage_count ?? data?.events?.filter(e => e.event_type === 'mortgage_handling').length ?? 0}
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-2">Mortgage handling requests</div>
               </div>
-              <div className="rounded-xl border bg-card p-4 shadow-sm">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Disbursement Usage</div>
-                <div className="text-2xl font-bold">
+
+              <div className="rounded-xl border border-border/50 bg-card/30 p-4 shadow-sm backdrop-blur-sm">
+                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                  <DollarSign className="h-3 w-3" /> Disbursements
+                </div>
+                <div className="text-3xl font-bold tracking-tight">
                   {data?.events?.filter(e => e.event_type?.startsWith('moov_')).length ?? 0}
                 </div>
-                <div className="text-[10px] text-muted-foreground mt-2">ACH disbursements (Same Day/Instant)</div>
+                <div className="text-[10px] text-muted-foreground mt-2">ACH (Same Day/Instant)</div>
               </div>
             </div>
+
 
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-5">
               <div className="flex items-center justify-between">
