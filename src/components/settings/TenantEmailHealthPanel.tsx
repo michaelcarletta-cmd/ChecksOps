@@ -42,7 +42,7 @@ export function TenantEmailHealthPanel() {
         .eq("tenant_id", tenantId)
         .gte("created_at", since)
         .order("created_at", { ascending: false })
-        .limit(500),
+        .limit(1000),
       supabase
         .from("suppressed_emails")
         .select("email, reason, created_at, metadata")
