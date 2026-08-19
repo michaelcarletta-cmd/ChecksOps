@@ -151,6 +151,7 @@ export function CompanyBrandingSettings() {
     } finally {
       setUploadingInvoice(false);
     }
+  };
 
   const handleLetterheadUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
