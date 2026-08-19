@@ -201,9 +201,11 @@ export function TenantProBadgeManagement({ tenantId, tenantName, isOpen, onClose
                     </ul>
                   )}
                 </div>
-              );
+                );
+              })}
             </div>
           )}
+
         </div>
       </DialogContent>
     </Dialog>
