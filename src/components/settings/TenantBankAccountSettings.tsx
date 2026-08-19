@@ -180,33 +180,38 @@ export function TenantBankAccountSettings() {
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading...</div>;
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Banknote className="h-4 w-4 text-blue-400" />
-                Bank Account
-              </CardTitle>
-              <CardDescription className="text-xs mt-1">
-                Your bank account for receiving check deposits. Sign in with your bank via Moov — routing & account number, holder name, and account type are captured securely through your bank login. No manual entry.
-              </CardDescription>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs"
-              onClick={() => addAccount.mutate()}
-              disabled={isStarting}
-            >
-              {isStarting
-                ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Opening bank login...</>
-                : <><Plus className="h-3 w-3 mr-1" /> Add account</>}
-            </Button>
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <SettingsHero
+        title="Bank Account"
+        description="Your bank account for receiving check deposits. Sign in with your bank via Moov — routing & account number, holder name, and account type are captured securely through your bank login. No manual entry."
+        badge="Financials"
+        icon={<Banknote className="h-4 w-4 text-primary" />}
+      />
+
+      <SectionCard
+        title="Operating Account"
+        accent="bg-gradient-to-r from-blue-400/60 to-blue-400/10"
+        icon={<Banknote className="h-4 w-4 text-blue-400" />}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-sm text-muted-foreground">
+              Link a primary business account for all claim deposits and treasury operations.
+            </p>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() => addAccount.mutate()}
+            disabled={isStarting}
+          >
+            {isStarting
+              ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Opening bank login...</>
+              : <><Plus className="h-3 w-3 mr-1" /> Add account</>}
+          </Button>
+        </div>
+
 
           {accounts.length === 0 && (
             <p className="text-xs text-muted-foreground text-center py-4">
