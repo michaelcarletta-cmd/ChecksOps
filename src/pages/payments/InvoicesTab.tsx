@@ -169,7 +169,7 @@ export function InvoicesTab() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate("/freedom/settings?tab=organization")}
+              onClick={() => navigate(`${location.pathname.includes('/wl/') ? location.pathname.split('/payments')[0] : '/freedom'}/settings?tab=branding`)}
               className="hidden sm:flex"
             >
               <Settings className="h-4 w-4 mr-2" />
