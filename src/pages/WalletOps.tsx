@@ -452,9 +452,22 @@ export default function WalletOps() {
             <span className="text-sm text-muted-foreground">
               Settlement bank {settlementMethod ? "connected" : "not connected"}
             </span>
-            <Button size="sm" asChild>
-              <Link to={`${tenantBase}/payments`}>Open Payment Account</Link>
-            </Button>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button size="sm">Open Payment Account</Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Payment Account Setup</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <PaymentAccountPanel />
+                  <PaymentReadinessPanel />
+                  <VerificationDocumentsPanel />
+                </div>
+              </DialogContent>
+            </Dialog>
+
           </div>
         </SectionCard>
       </div>
