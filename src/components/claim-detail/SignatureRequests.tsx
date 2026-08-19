@@ -26,6 +26,21 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
 
+  useEffect(() => {
+    const stored = localStorage.getItem("preselected_sig_file");
+    if (stored) {
+      try {
+        const file = JSON.parse(stored);
+        localStorage.removeItem("preselected_sig_file");
+        setSourceType("claim_file");
+        setSelectedClaimFile(file);
+        setIsCreateOpen(true);
+      } catch (e) {
+        console.error("Failed to parse preselected file", e);
+      }
+    }
+  }, []);
+
   // Expose methods via a custom hook or event if we want better integration, 
   // but for now we'll check localStorage for a file to pre-select.
   const checkPreselectedFile = () => {
