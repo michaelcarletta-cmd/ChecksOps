@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,16 +56,12 @@ export function TeamCapsSettings({
   };
 
   return (
-    <>
-      <SectionCard
-
+    <SectionCard
       title="Team Role Limits"
       accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
       icon={<Users className="h-4 w-4 text-amber-500" />}
       description="Set the maximum number of team members allowed for specific roles."
     >
-      
-
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-1.5">
@@ -116,8 +111,7 @@ export function TeamCapsSettings({
             )}
           </Button>
         </div>
+      </div>
     </SectionCard>
-    </>
   );
 }
-
