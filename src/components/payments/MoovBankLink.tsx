@@ -1,7 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Loader2, ShieldCheck } from "lucide-react";
 
 interface Props {
   tenantId: string;
@@ -10,130 +20,145 @@ interface Props {
 }
 
 /**
- * Moov.js Bank Account Drop wrapper.
- * 
- * Safely collects bank account details (routing/account) via an iframe
- * and links them to the Moov account without the sensitive data ever 
- * touching our servers.
+ * Settlement bank collection form.
+ *
+ * Moov.js exposes no hosted bank-account Drop, so the details are posted to the
+ * `moov-bank-account-add` function, which forwards them straight to the payment
+ * provider. Only safe metadata (bank name, account type, last four) is stored.
+ * Ownership is proven afterwards with instant micro-deposit verification.
  */
 export function MoovBankLink({ tenantId, onConnected, onExit }: Props) {
   const { toast } = useToast();
-  const [token, setToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const mountRef = useRef<HTMLDivElement>(null);
+  const [saving, setSaving] = useState(false);
+  const [holderName, setHolderName] = useState("");
+  const [holderType, setHolderType] = useState("business");
+  const [bankAccountType, setBankAccountType] = useState("checking");
+  const [routingNumber, setRoutingNumber] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
 
-  useEffect(() => {
-    let active = true;
-    async function init() {
-      try {
-        const { data, error } = await supabase.functions.invoke("moov-bank-link-token", {
-          body: { tenant_id: tenantId }
-        });
-        if (error) throw error;
-        if (!active) return;
-        setToken(data.token);
-      } catch (e: any) {
-        toast({
-          title: "Couldn't start bank link",
-          description: e.message,
-          variant: "destructive"
-        });
-        onExit?.();
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-    init();
-    return () => { active = false; };
-  }, [tenantId, toast, onExit]);
+  const digitsOnly = (value: string, max: number) => value.replace(/\D/g, "").slice(0, max);
 
-  useEffect(() => {
-    if (!token || !mountRef.current) return;
+  const canSubmit =
+    holderName.trim().length >= 2 &&
+    routingNumber.length === 9 &&
+    accountNumber.length >= 4 &&
+    !saving;
 
-    let mounted = true;
-    let cancelled = false;
-
-    async function loadSdk() {
-      if (customElements.get("moov-bank-account")) return;
-      await new Promise<void>((resolve, reject) => {
-        const existing = document.querySelector<HTMLScriptElement>('script[src="https://js.moov.io/v1"]');
-        if (existing) {
-          existing.addEventListener("load", () => resolve());
-          existing.addEventListener("error", () => reject(new Error("Failed to load Moov.js")));
-          if (customElements.get("moov-bank-account")) resolve();
-          return;
-        }
-        const script = document.createElement("script");
-        script.src = "https://js.moov.io/v1";
-        script.async = true;
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error("Failed to load Moov.js"));
-        document.head.appendChild(script);
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setSaving(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("moov-bank-account-add", {
+        body: {
+          tenant_id: tenantId,
+          holder_name: holderName.trim(),
+          holder_type: holderType,
+          bank_account_type: bankAccountType,
+          routing_number: routingNumber,
+          account_number: accountNumber,
+        },
       });
-      await customElements.whenDefined("moov-bank-account");
-    }
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
 
-    loadSdk()
-      .then(() => {
-        if (cancelled || !mountRef.current) return;
-        const el = document.createElement("moov-bank-account") as any;
-        el.token = token;
-
-        mountRef.current.replaceChildren(el);
-
-        el.onCancel = () => {
-          onExit?.();
-        };
-
-        el.onSuccess = (bankAccount: any) => {
-          const id = bankAccount?.bankAccountID ?? bankAccount?.bankAccountId;
-          toast({
-            title: "Bank account linked",
-            description: "Your bank account has been securely attached. Verification may be required."
-          });
-          if (id) {
-            onConnected?.(id);
-          }
-        };
-
-        el.onError = (err: any) => {
-          toast({
-            title: "Bank link failed",
-            description: err?.message ?? "An unexpected error occurred.",
-            variant: "destructive"
-          });
-        };
-      })
-      .catch((err: any) => {
-        if (cancelled) return;
-        toast({
-          title: "Bank link failed",
-          description: err?.message ?? "Couldn't load the secure bank form.",
-          variant: "destructive"
-        });
+      setAccountNumber("");
+      setRoutingNumber("");
+      toast({
+        title: "Bank account connected",
+        description: "Verify ownership with an instant micro-deposit to finish.",
       });
-
-    return () => {
-      mounted = false;
-      cancelled = true;
-      if (mountRef.current) mountRef.current.replaceChildren();
-    };
-  }, [token, toast, onConnected, onExit]);
-
+      onConnected?.((data as any)?.bank_account_id ?? "");
+    } catch (err: any) {
+      toast({
+        title: "Couldn't connect the bank account",
+        description: err?.message ?? "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
-    <div className="min-h-[300px] flex flex-col items-center justify-center p-4 border rounded-lg bg-card/50">
-      {loading && (
-        <div className="flex flex-col items-center gap-2 text-muted-foreground">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <p className="text-sm">Connecting to secure banking partner...</p>
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-4 p-4 border rounded-lg bg-card/50"
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor="bank-holder-name">Account holder name</Label>
+          <Input
+            id="bank-holder-name"
+            value={holderName}
+            onChange={(e) => setHolderName(e.target.value.slice(0, 128))}
+            placeholder="Exactly as it appears at the bank"
+            autoComplete="off"
+          />
         </div>
-      )}
-      <div ref={mountRef} className="w-full max-w-md" />
-      <p className="text-[10px] text-muted-foreground mt-4 text-center max-w-[300px]">
-        Your bank details are encrypted and sent directly to Moov. 
-        ChecksOps never sees or stores your login or account numbers.
+
+        <div className="space-y-2">
+          <Label>Holder type</Label>
+          <Select value={holderType} onValueChange={setHolderType}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="business">Business</SelectItem>
+              <SelectItem value="individual">Individual</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Account type</Label>
+          <Select value={bankAccountType} onValueChange={setBankAccountType}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="checking">Checking</SelectItem>
+              <SelectItem value="savings">Savings</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="bank-routing">Routing number</Label>
+          <Input
+            id="bank-routing"
+            inputMode="numeric"
+            value={routingNumber}
+            onChange={(e) => setRoutingNumber(digitsOnly(e.target.value, 9))}
+            placeholder="9 digits"
+            autoComplete="off"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="bank-account">Account number</Label>
+          <Input
+            id="bank-account"
+            inputMode="numeric"
+            value={accountNumber}
+            onChange={(e) => setAccountNumber(digitsOnly(e.target.value, 17))}
+            placeholder="4–17 digits"
+            autoComplete="off"
+          />
+        </div>
+      </div>
+
+      <p className="text-[11px] text-muted-foreground flex items-start gap-2">
+        <ShieldCheck className="h-3.5 w-3.5 mt-px shrink-0" />
+        Bank details are sent directly to our payment provider. ChecksOps stores only
+        the bank name, account type, and last four digits.
       </p>
-    </div>
+
+      <div className="flex gap-2 justify-end">
+        <Button type="button" variant="ghost" onClick={() => onExit?.()} disabled={saving}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={!canSubmit}>
+          {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          Connect bank
+        </Button>
+      </div>
+    </form>
   );
 }

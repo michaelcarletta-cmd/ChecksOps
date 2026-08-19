@@ -39,8 +39,18 @@ serve(async (req) => {
       .maybeSingle();
     if (!verification) return json({ error: "Verification not found." }, 404);
     if (verification.status === "verified") {
-      return json({ success: true, already_verified: true, verification });
+      // Trust the provider, not the local row: re-run the confirmation when the
+      // bank itself is still unverified at Moov.
+      const { data: pm } = await supabase
+        .from("payment_provider_methods")
+        .select("verification_status")
+        .eq("id", verification.payment_method_id)
+        .maybeSingle();
+      if (pm?.verification_status === "verified") {
+        return json({ success: true, already_verified: true, verification });
+      }
     }
+
     if (verification.attempts >= verification.max_attempts) {
       await supabase.from("payment_method_verifications")
         .update({ status: "max_attempts_exceeded" }).eq("id", verification_id);
@@ -53,25 +63,19 @@ serve(async (req) => {
     const attempts = verification.attempts + 1;
 
     try {
-      // Completion endpoint (Instant Micro-deposit)
-      try {
-        // Sandbox bypass for testing - only allowed in sandbox environment
-        const isSandboxSecret = Deno.env.get("MOOV_ENVIRONMENT") === "sandbox" || environment === "sandbox";
-        if (isSandboxSecret && code === "0000") {
-          console.log("[moov-micro-deposit-confirm] Sandbox override triggered");
-        } else {
-          await moovFetch<any>(
-            `/accounts/${verification.provider_account_id}/bank-accounts/${verification.provider_bank_account_id}/verify`,
-            {
-              method: "PUT",
-              scopes: scopes.bankAccountsWrite(verification.provider_account_id),
-              body: { code },
-            },
-          );
-        }
-      } catch (inner) {
-        throw inner;
-      }
+      // Instant micro-deposit completion. Moov expects the statement code in
+      // its "MV####" form; the UI collects only the four digits.
+      const digits = String(code).replace(/\D/g, "").slice(0, 4);
+      const providerCode = `MV${digits}`;
+      await moovFetch<any>(
+        `/accounts/${verification.provider_account_id}/bank-accounts/${verification.provider_bank_account_id}/verify`,
+        {
+          method: "PUT",
+          scopes: scopes.bankAccountsWrite(verification.provider_account_id),
+          body: { code: providerCode },
+        },
+      );
+
     } catch (e) {
       const exhausted = attempts >= verification.max_attempts;
       await supabase.from("payment_method_verifications").update({

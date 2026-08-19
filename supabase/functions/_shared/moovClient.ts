@@ -120,6 +120,7 @@ export async function moovToken(scopes: string[]): Promise<string> {
 /** Scope helpers — Moov scopes are per-resource and per-account. */
 export const scopes = {
   accountsWrite: () => ["/accounts.write"],
+  accountsRead: () => ["/accounts.read"],
   accountRead: (id: string) => [`/accounts/${id}/profile.read`],
   accountWrite: (id: string) => [`/accounts/${id}/profile.write`],
   capabilitiesRead: (id: string) => [`/accounts/${id}/capabilities.read`],
@@ -133,13 +134,17 @@ export const scopes = {
   representativesRead: (id: string) => [`/accounts/${id}/representatives.read`],
   filesRead: (id: string) => [`/accounts/${id}/files.read`],
   filesWrite: (id: string) => [`/accounts/${id}/files.write`],
-  /** Scopes handed to a browser-side Moov.js session for a recipient. */
+  /**
+   * Scopes handed to a browser-side Moov.js session for a recipient.
+   * Only documented scopes belong here — bank-accounts.write covers the
+   * verification calls the bank-link Drop makes.
+   */
   dropBankLink: (id: string) => [
     `/accounts/${id}/bank-accounts.write`,
     `/accounts/${id}/bank-accounts.read`,
     `/accounts/${id}/profile.read`,
-    `/accounts/${id}/bank-accounts.verify`,
   ],
+
 };
 
 /* ---------------- REST ---------------- */

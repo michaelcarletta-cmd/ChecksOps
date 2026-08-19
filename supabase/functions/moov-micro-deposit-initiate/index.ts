@@ -23,23 +23,35 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { tenant_id, payment_method_id, external_recipient_id = null } = body ?? {};
+    const { tenant_id, payment_method_id = null, external_recipient_id = null } = body ?? {};
 
     if (!tenant_id) return json({ error: "tenant_id is required" }, 400);
-    if (!payment_method_id) return json({ error: "payment_method_id is required" }, 400);
 
     const caller = await requireMoovCaller(req, tenant_id);
     if (isResponse(caller)) return caller;
     const { supabase, environment, userId } = caller;
 
-    const { data: method } = await supabase
+    // Callers that manage a specific recipient pass the method explicitly. The
+    // organization's own settlement bank has exactly one connected method, so
+    // fall back to it when no id is supplied.
+    let methodQuery = supabase
       .from("payment_provider_methods")
       .select("*")
-      .eq("id", payment_method_id)
       .eq("provider", "moov")
-      .eq("environment", environment)
-      .maybeSingle();
+      .eq("environment", environment);
+
+    methodQuery = payment_method_id
+      ? methodQuery.eq("id", payment_method_id)
+      : methodQuery
+          .eq("tenant_id", tenant_id)
+          .is("external_recipient_id", null)
+          .neq("connection_status", "disconnected")
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+    const { data: method } = await methodQuery.maybeSingle();
     if (!method) return json({ error: "Bank account not found." }, 404);
+
 
     // The bank account must belong to this tenant or to one of its recipients.
     if (method.tenant_id && method.tenant_id !== tenant_id) {
@@ -56,14 +68,17 @@ serve(async (req) => {
     const { data: prior } = await supabase
       .from("payment_method_verifications")
       .select("*")
-      .eq("payment_method_id", payment_method_id)
+      .eq("payment_method_id", method.id)
       .eq("environment", environment)
       .order("created_at", { ascending: false })
       .maybeSingle();
 
-    if (prior?.status === "verified") {
+    // Only short-circuit when the provider itself considers the bank verified;
+    // a stale local "verified" row must not block a fresh micro-deposit.
+    if (prior?.status === "verified" && method.verification_status === "verified") {
       return json({ success: true, already_verified: true, verification: prior });
     }
+
     if (prior && prior.attempts >= prior.max_attempts) {
       return json({
         error: "max_attempts_exceeded",
@@ -91,7 +106,7 @@ serve(async (req) => {
       .from("payment_method_verifications")
       .insert({
         tenant_id,
-        payment_method_id,
+        payment_method_id: method.id,
         external_recipient_id,
         provider: "moov",
         environment,
@@ -108,7 +123,7 @@ serve(async (req) => {
     await supabase
       .from("payment_provider_methods")
       .update({ verification_status: "pending_micro_deposit" })
-      .eq("id", payment_method_id);
+      .eq("id", method.id);
 
     await logPaymentEvent(supabase, {
       tenant_id,

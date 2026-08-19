@@ -47,7 +47,7 @@ serve(async (req) => {
 
     // 2. Platform account listing (needs /accounts.write on the key).
     await record("list_accounts", async () => {
-      const res = await moovFetch<any>("/accounts", { method: "GET", scopes: scopes.accountsWrite() });
+      const res = await moovFetch<any>("/accounts", { method: "GET", scopes: scopes.accountsRead() });
       const list = Array.isArray(res) ? res : res?.accounts ?? [];
       return { count: list.length, ids: list.map((a: any) => a?.accountID ?? a?.accountId).slice(0, 5) };
     });
