@@ -278,7 +278,16 @@ export function InvoicesTab() {
                     <span className="text-sm text-muted-foreground">Invoice total</span>
                     <span className="text-lg font-semibold">{currency(draftTotal)}</span>
                   </div>
+
+                  {branding?.invoice_footer_note && (
+                    <div className="rounded-md border border-dashed border-border p-3 text-center">
+                      <p className="text-xs italic text-muted-foreground">
+                        Footer: "{branding.invoice_footer_note}"
+                      </p>
+                    </div>
+                  )}
                 </div>
+
 
                 <DialogFooter className="gap-2">
                   <Button variant="outline" onClick={() => submit(false)} disabled={!canSubmit || createInvoice.isPending}>
