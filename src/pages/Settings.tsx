@@ -1060,7 +1060,7 @@ export default function Settings() {
           </Collapsible>
           
           {/* Company Branding - Collapsible */}
-          <Collapsible open={companyBrandingOpen} onOpenChange={setCompanyBrandingOpen}>
+          <Collapsible id="branding-collapsible" open={companyBrandingOpen} onOpenChange={setCompanyBrandingOpen}>
             <Card>
               <CollapsibleTrigger asChild>
                 <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
