@@ -439,68 +439,6 @@ export default function WalletOps() {
         </SectionCard>
       </div>
 
-      {/* Treasury health */}
-      <SectionCard
-        title="Treasury Health"
-        icon={<Timer className="h-4 w-4 text-primary" />}
-        accent="bg-gradient-to-r from-primary/60 to-primary/10"
-      >
-        {syncFailed || !wallet ? (
-          <p className="text-sm text-muted-foreground">
-            Balance figures are unavailable right now, so coverage can't be calculated. Try refreshing in a
-            moment.
-          </p>
-        ) : (
-          <>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-lg border p-3">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Spendable after reserve
-                </p>
-                <p className="mt-1 text-xl font-semibold">{money(coverage?.spendable ?? 0)}</p>
-              </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Payouts in flight
-                </p>
-                <p className="mt-1 text-xl font-semibold">{money(pendingOut)}</p>
-              </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Automatic payouts
-                </p>
-                <p className="mt-1 text-xl font-semibold">{sweepsOn ? "On" : "Off"}</p>
-              </div>
-            </div>
-
-            {pendingOut > 0 && (
-              <div className="space-y-1.5">
-                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className={`h-full transition-all duration-500 ${
-                      coverage?.covered ? "bg-emerald-500" : "bg-amber-500"
-                    }`}
-                    style={{ width: `${Math.round((coverage?.ratio ?? 0) * 100)}%` }}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {coverage?.covered
-                    ? "Your balance covers every payout currently in flight."
-                    : "Payouts in flight exceed your spendable balance — add funds to avoid delays."}
-                </p>
-              </div>
-            )}
-
-            {!coverage?.covered && pendingOut > 0 && (
-              <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-600 dark:text-amber-400">
-                <CircleAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                Add funds or pause automatic payouts until in-flight payments settle.
-              </div>
-            )}
-          </>
-        )}
-      </SectionCard>
-
       {/* Recent activity */}
       <SectionCard
         title="Recent Wallet Activity"
