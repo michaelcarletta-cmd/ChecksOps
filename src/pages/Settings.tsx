@@ -842,11 +842,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="workflow" className="w-full focus-visible:outline-none">
-          <SettingsPageShell>
-              </CollapsibleContent>
-            </SectionCard>
-          </Collapsible>
-          </SettingsPageShell>
+          <SettingsPageShell />
         </TabsContent>
 
 
