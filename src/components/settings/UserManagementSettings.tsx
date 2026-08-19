@@ -442,62 +442,65 @@ export function UserManagementSettings() {
           description="Manage roles and access for existing team members"
         >
           <div className="space-y-4 pt-2">
-          {users.map((user) => (
-            <div
-              key={user.id}
-              className="flex items-start justify-between p-4 border border-border/60 rounded-lg bg-muted/20 backdrop-blur-sm hover:border-sky-500/30 transition-colors"
-            >
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-2">
-                  <Shield className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-foreground font-medium">
-                    {user.full_name || "Unnamed User"}
-                  </p>
-                  {user.approval_status === 'denied' && (
-                    <Badge variant="destructive" className="text-xs">Denied</Badge>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground mb-3">{user.email}</p>
-                
-                <div className="flex flex-wrap gap-2">
-                  {user.roles.length === 0 ? (
-                    <Badge variant="outline" className="text-muted-foreground">
-                      No roles assigned
-                    </Badge>
-                  ) : (
-                    user.roles.map((userRole) => (
-                      <Badge
-                        key={userRole.id}
-                        variant={ROLE_COLORS[userRole.role] as "default" | "destructive" | "outline" | "secondary"}
-                        className="flex items-center gap-2"
-                      >
-                        {ROLE_LABELS[userRole.role]}
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeRole(userRole.id, user.id, userRole.role)}
-                          className="ml-1 h-5 w-5 p-0"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
+            {users.map((user) => (
+              <div
+                key={user.id}
+                className="flex items-start justify-between p-4 border border-border/60 rounded-lg bg-muted/20 backdrop-blur-sm hover:border-sky-500/30 transition-colors"
+              >
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Shield className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-foreground font-medium">
+                      {user.full_name || "Unnamed User"}
+                    </p>
+                    {user.approval_status === 'denied' && (
+                      <Badge variant="destructive" className="text-xs">Denied</Badge>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-3">{user.email}</p>
+                  
+                  <div className="flex flex-wrap gap-2">
+                    {user.roles.length === 0 ? (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        No roles assigned
                       </Badge>
-                    ))
-                  )}
+                    ) : (
+                      user.roles.map((userRole) => (
+                        <Badge
+                          key={userRole.id}
+                          variant={ROLE_COLORS[userRole.role] as "default" | "destructive" | "outline" | "secondary"}
+                          className="flex items-center gap-2"
+                        >
+                          {ROLE_LABELS[userRole.role]}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeRole(userRole.id, user.id, userRole.role)}
+                            className="ml-1 h-5 w-5 p-0"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </Badge>
+                      ))
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              <div className="ml-4 flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => sendPasswordResetEmail(user.id, user.email, user.full_name || user.email)}
-                  disabled={resettingUserId === user.id}
-                  title="Send password reset email"
-                >
-                  {resettingUserId === user.id ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
+                <div className="ml-4 flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => sendPasswordResetEmail(user.id, user.email, user.full_name || user.email)}
+                    disabled={resettingUserId === user.id}
+                    title="Send password reset email"
+                  >
+                    {resettingUserId === user.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <KeyRound className="h-4 w-4" />
+                    )}
+                  </Button>
                     <KeyRound className="h-4 w-4" />
                   )}
                 </Button>
