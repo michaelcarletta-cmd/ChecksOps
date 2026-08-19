@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Trash2, Plus, BellRing, Clock } from "lucide-react";
 import { toast } from "sonner";
+import { SettingsHero } from "./SettingsHero";
+import { SectionCard } from "./SectionCard";
 
 interface Recipient {
   id: string;
@@ -126,19 +128,20 @@ export default function StatusUrgencyNotificationsSettings() {
   };
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BellRing className="h-5 w-5" />
-            Urgency SMS Recipients
-          </CardTitle>
-          <CardDescription>
-            Workspace admins who will receive SMS alerts when claims breach
-            status-based inactivity thresholds. Recipients receive at most one
-            SMS per claim per rule per 24 hours.
-          </CardDescription>
-        </CardHeader>
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <SettingsHero
+        title="Status Inactivity Alerts"
+        description="Configure SMS notifications for claims that breach status-based thresholds."
+        badge="Notifications"
+        icon={<BellRing className="h-4 w-4 text-primary" />}
+      />
+
+      <SectionCard
+        title="SMS Recipients"
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        icon={<BellRing className="h-4 w-4 text-primary" />}
+        description="Admins who will receive SMS alerts."
+      >
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
@@ -169,8 +172,7 @@ export default function StatusUrgencyNotificationsSettings() {
 
           {recipients.length === 0 ? (
             <div className="text-sm text-muted-foreground py-6 text-center border border-dashed rounded">
-              No recipients yet. Add at least one phone number to receive
-              urgency alerts.
+              No recipients yet.
             </div>
           ) : (
             <Table>
@@ -188,17 +190,10 @@ export default function StatusUrgencyNotificationsSettings() {
                     <TableCell>{r.display_name}</TableCell>
                     <TableCell className="font-mono text-sm">{r.phone_number}</TableCell>
                     <TableCell>
-                      <Switch
-                        checked={r.is_active}
-                        onCheckedChange={() => handleToggle(r)}
-                      />
+                      <Switch checked={r.is_active} onCheckedChange={() => handleToggle(r)} />
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(r.id)}
-                      >
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(r.id)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </TableCell>
@@ -208,28 +203,19 @@ export default function StatusUrgencyNotificationsSettings() {
             </Table>
           )}
         </CardContent>
-      </Card>
+      </SectionCard>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Status-Based Urgency Rules
-              </CardTitle>
-              <CardDescription>
-                Each rule fires when a claim sits in the listed statuses with no
-                activity beyond its threshold. Litigation claims are always
-                excluded.
-              </CardDescription>
-            </div>
+      <SectionCard
+        title="Urgency Rules"
+        accent="bg-gradient-to-r from-muted-foreground/60 to-muted-foreground/10"
+        icon={<Clock className="h-4 w-4 text-muted-foreground" />}
+      >
+        <CardContent>
+          <div className="flex items-center justify-end mb-4">
             <Button variant="outline" onClick={handleRunScanNow} disabled={scanning}>
               {scanning ? "Scanning…" : "Run scan now"}
             </Button>
           </div>
-        </CardHeader>
-        <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
@@ -244,38 +230,29 @@ export default function StatusUrgencyNotificationsSettings() {
                 <TableRow key={rule.id}>
                   <TableCell>
                     <div className="font-medium">{rule.display_label}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {rule.trigger_kind.replace(/_/g, " ")}
-                    </div>
+                    <div className="text-xs text-muted-foreground">{rule.trigger_kind.replace(/_/g, " ")}</div>
                   </TableCell>
                   <TableCell>
                     {rule.trigger_kind === "inactivity"
-                      ? `${rule.threshold_days} ${rule.count_mode === "business" ? "biz" : "cal"} days`
-                      : rule.trigger_kind === "inspection_morning_of"
-                      ? "Morning of"
-                      : "Day after"}
+                      ? `${rule.threshold_days} days`
+                      : "Trigger"}
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1 max-w-xl">
                       {rule.status_names.map((s) => (
-                        <Badge key={s} variant="secondary" className="text-xs">
-                          {s}
-                        </Badge>
+                        <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>
                       ))}
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Switch
-                      checked={rule.is_enabled}
-                      onCheckedChange={() => handleToggleRule(rule)}
-                    />
+                    <Switch checked={rule.is_enabled} onCheckedChange={() => handleToggleRule(rule)} />
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </CardContent>
-      </Card>
+      </SectionCard>
     </div>
   );
 }

@@ -2,13 +2,15 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Upload, Download, FileText, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Upload, Download, FileText, AlertCircle, CheckCircle2, Database } from "lucide-react";
 import * as XLSX from "xlsx";
+import { SettingsHero } from "./SettingsHero";
+import { SectionCard } from "./SectionCard";
 
 interface ImportResult {
   success: number;
@@ -73,11 +75,9 @@ export function ImportSettings() {
         const binaryStr = event.target?.result;
         const workbook = XLSX.read(binaryStr, { type: "binary" });
         
-        // Get the first sheet
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         
-        // Convert to JSON with headers
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
         
         if (jsonData.length === 0) {
@@ -89,12 +89,10 @@ export function ImportSettings() {
           return;
         }
 
-        // Extract headers from first row keys
         const fileHeaders = Object.keys(jsonData[0] as object);
         setHeaders(fileHeaders);
         setData(jsonData);
 
-        // Auto-map fields based on similar names
         const autoMapping: Record<string, string> = {};
         Object.keys(FIELD_MAPPINGS).forEach((dbField) => {
           const matchingHeader = fileHeaders.find(
@@ -155,22 +153,18 @@ export function ImportSettings() {
       const row = data[i];
       
       try {
-        // Map columns to database fields
         const claimData: any = {
           claim_number: row[fieldMapping.claim_number],
           policyholder_name: row[fieldMapping.policyholder_name],
         };
 
-        // Add optional fields if mapped
         Object.keys(fieldMapping).forEach((dbField) => {
           const column = fieldMapping[dbField];
           if (column && row[column] && dbField !== 'claim_number' && dbField !== 'policyholder_name') {
             let value = row[column];
             
-            // Handle date fields - Excel stores dates as serial numbers
             if (dbField === 'loss_date' && value) {
               if (typeof value === 'number') {
-                // Excel date serial number
                 const date = XLSX.SSF.parse_date_code(value);
                 value = `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
               } else {
@@ -181,7 +175,6 @@ export function ImportSettings() {
               }
             }
             
-            // Handle numeric fields
             if (dbField === 'claim_amount' && value) {
               value = parseFloat(value.toString().replace(/[^0-9.-]/g, ''));
             }
@@ -190,7 +183,6 @@ export function ImportSettings() {
           }
         });
 
-        // Insert claim
         const { error } = await supabase
           .from("claims")
           .insert(claimData);
@@ -222,7 +214,6 @@ export function ImportSettings() {
   };
 
   const downloadTemplate = () => {
-    // Create worksheet data
     const templateData = [
       Object.values(FIELD_MAPPINGS),
       [
@@ -253,16 +244,20 @@ export function ImportSettings() {
   };
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Import Claims from Excel</CardTitle>
-          <CardDescription>
-            Upload an Excel or CSV file from your previous system to bulk import claims
-          </CardDescription>
-        </CardHeader>
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <SettingsHero
+        title="Import Claims"
+        description="Bulk import your existing claim data from Excel or CSV files."
+        badge="Data Migration"
+        icon={<Database className="h-4 w-4 text-primary" />}
+      />
+
+      <SectionCard
+        title="Import Claims from Excel"
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        icon={<Upload className="h-4 w-4 text-primary" />}
+      >
         <CardContent className="space-y-6">
-          {/* Template Download */}
           <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
             <div className="flex items-center gap-3">
               <FileText className="h-5 w-5 text-muted-foreground" />
@@ -279,7 +274,6 @@ export function ImportSettings() {
             </Button>
           </div>
 
-          {/* File Upload */}
           <div className="space-y-2">
             <Label htmlFor="import-file">Upload Excel or CSV File</Label>
             <div className="flex items-center gap-4">
@@ -306,7 +300,6 @@ export function ImportSettings() {
             </div>
           </div>
 
-          {/* Field Mapping */}
           {headers.length > 0 && (
             <div className="space-y-4">
               <div>
@@ -352,7 +345,6 @@ export function ImportSettings() {
             </div>
           )}
 
-          {/* Import Progress */}
           {importing && (
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
@@ -363,7 +355,6 @@ export function ImportSettings() {
             </div>
           )}
 
-          {/* Import Results */}
           {importResult && (
             <Alert variant={importResult.failed > 0 ? "destructive" : "default"}>
               {importResult.failed > 0 ? (
@@ -402,7 +393,6 @@ export function ImportSettings() {
             </Alert>
           )}
 
-          {/* Import Button */}
           <div className="flex justify-end">
             <Button
               onClick={handleImport}
@@ -412,14 +402,14 @@ export function ImportSettings() {
             </Button>
           </div>
         </CardContent>
-      </Card>
+      </SectionCard>
 
-      {/* Import Tips */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Import Tips</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
+      <SectionCard
+        title="Import Tips"
+        accent="bg-gradient-to-r from-muted-foreground/60 to-muted-foreground/10"
+        icon={<FileText className="h-4 w-4 text-muted-foreground" />}
+      >
+        <div className="space-y-3 text-sm">
           <div>
             <strong>Supported Formats:</strong> Excel (.xlsx, .xls) and CSV files are supported.
           </div>
@@ -438,8 +428,8 @@ export function ImportSettings() {
           <div>
             <strong>Large Imports:</strong> For files with more than 1000 records, consider breaking them into smaller batches.
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
     </div>
   );
 }

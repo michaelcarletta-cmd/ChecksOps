@@ -683,6 +683,7 @@ export const AIKnowledgeBaseSettings = () => {
         badge="AI Training"
         icon={<Brain className="h-4 w-4 text-primary" />}
       />
+
       <SectionCard
         title="Knowledge Sources"
         accent="bg-gradient-to-r from-primary/60 to-primary/10"

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,6 +12,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { usePermissions } from "@/hooks/usePermissions";
+import { SettingsHero } from "./SettingsHero";
+import { SectionCard } from "./SectionCard";
 
 interface AuditLog {
   id: string;
@@ -136,20 +138,20 @@ export function AuditLogSettings() {
   }
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5" />
-                Audit Logs
-              </CardTitle>
-              <CardDescription>
-                Security audit trail of all system actions
-              </CardDescription>
-            </div>
-            <div className="flex gap-2">
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <SettingsHero
+        title="Audit Logs"
+        description="Security audit trail of all system actions."
+        badge="Security"
+        icon={<Shield className="h-4 w-4 text-primary" />}
+      />
+
+      <SectionCard
+        title="Activity Log"
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        icon={<Shield className="h-4 w-4 text-primary" />}
+      >
+        <div className="flex items-center justify-end mb-4 gap-2">
               <Button 
                 variant="outline" 
                 size="sm"
@@ -168,10 +170,9 @@ export function AuditLogSettings() {
                 <Download className="h-4 w-4 mr-2" />
                 Export CSV
               </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        </div>
+
+        <div className="space-y-4">
           {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
@@ -305,8 +306,8 @@ export function AuditLogSettings() {
               </Table>
             </ScrollArea>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
     </div>
   );
 }
