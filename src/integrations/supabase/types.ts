@@ -21313,6 +21313,7 @@ export type Database = {
           id: string
           mime_type: string | null
           notes: string | null
+          shared_with_homeowners: boolean | null
           tenant_id: string
           updated_at: string
           uploaded_by: string | null
@@ -21328,6 +21329,7 @@ export type Database = {
           id?: string
           mime_type?: string | null
           notes?: string | null
+          shared_with_homeowners?: boolean | null
           tenant_id: string
           updated_at?: string
           uploaded_by?: string | null
@@ -21343,6 +21345,7 @@ export type Database = {
           id?: string
           mime_type?: string | null
           notes?: string | null
+          shared_with_homeowners?: boolean | null
           tenant_id?: string
           updated_at?: string
           uploaded_by?: string | null

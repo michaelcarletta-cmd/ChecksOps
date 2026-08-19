@@ -11,11 +11,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import {
   FileText, Upload, Loader2, Trash2, Download, Palette, Home as HomeIcon,
-  FileSignature, Image as ImageIcon, Headset,
+  FileSignature, Image as ImageIcon, Headset, Eye,
 } from "lucide-react";
 
 // Categories stored as doc_type = `library:<category>:<slug>`
-type LibraryCategory = "template" | "shingle" | "siding" | "letterhead";
+type LibraryCategory = "template" | "shingle" | "siding" | "letterhead" | "catalog";
 
 const CATEGORIES: {
   key: LibraryCategory;
@@ -47,6 +47,13 @@ const CATEGORIES: {
     icon: Palette,
   },
   {
+    key: "catalog",
+    label: "Catalogs",
+    description: "Roofing, siding, and other material catalogs shared with homeowners.",
+    accept: ".pdf,image/*",
+    icon: Palette,
+  },
+  {
     key: "letterhead",
     label: "Letterhead",
     description: "Logo, footer, signature blocks used on generated docs & emails.",
@@ -65,6 +72,7 @@ interface LibraryRow {
   file_size: number | null;
   notes: string | null;
   auto_share_mortgage_ops: boolean | null;
+  shared_with_homeowners: boolean | null;
   created_at: string;
 }
 
@@ -234,6 +242,7 @@ function UploadBar({
 
 function LibraryItem({ row, onChange }: { row: LibraryRow; onChange: () => void }) {
   const [autoShare, setAutoShare] = useState(!!row.auto_share_mortgage_ops);
+  const [sharedHomeowner, setSharedHomeowner] = useState(!!row.shared_with_homeowners);
   const [saving, setSaving] = useState(false);
 
   const open = async () => {
@@ -264,6 +273,28 @@ function LibraryItem({ row, onChange }: { row: LibraryRow; onChange: () => void 
       title: next ? "Will auto-share with Mortgage Ops" : "Auto-share turned off",
       description: next
         ? "This document is attached automatically when a check is sent to the Mortgage Desk."
+        : undefined,
+    });
+    onChange();
+  };
+
+  const toggleSharedHomeowner = async (next: boolean) => {
+    setSharedHomeowner(next);
+    setSaving(true);
+    const { error } = await supabase
+      .from("tenant_documents" as any)
+      .update({ shared_with_homeowners: next } as any)
+      .eq("id", row.id);
+    setSaving(false);
+    if (error) {
+      setSharedHomeowner(!next);
+      toast({ title: "Could not update", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({
+      title: next ? "Shared with Clients" : "Unshared with Clients",
+      description: next
+        ? "This document will now appear in the Homeowner Ledger Resource Center."
         : undefined,
     });
     onChange();
@@ -306,6 +337,18 @@ function LibraryItem({ row, onChange }: { row: LibraryRow; onChange: () => void 
         <span className="flex items-center gap-1">
           <Headset className="h-3 w-3" />
           Auto-share with Mortgage Ops
+        </span>
+      </label>
+      <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none mr-1">
+        <Checkbox
+          checked={sharedHomeowner}
+          disabled={saving}
+          onCheckedChange={(v) => toggleSharedHomeowner(v === true)}
+          aria-label="Share with Clients"
+        />
+        <span className="flex items-center gap-1">
+          <Eye className="h-3 w-3" />
+          Share with Clients
         </span>
       </label>
       <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={open} title="Open">
