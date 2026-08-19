@@ -117,11 +117,37 @@ function shouldFallbackTenantAiError(message: string): boolean {
   return lower.includes("ai 400") ||
     lower.includes("ai 401") ||
     lower.includes("ai 403") ||
+    lower.includes("ai 429") || // Add rate limit fallback
     lower.includes("invalid model") ||
     lower.includes("model id") ||
     lower.includes("model_not_found") ||
     lower.includes("incorrect api key") ||
-    lower.includes("invalid api key");
+    lower.includes("invalid api key") ||
+    lower.includes("failed to download image"); // Explicitly catch download errors
+}
+
+function getFriendlyOcrError(rawError: string): string {
+  const lower = rawError.toLowerCase();
+
+  // Strip technical details if possible
+  if (lower.includes("failed to download image") || lower.includes("failed_to_download_image")) {
+    return "The check image could not be downloaded for analysis. Please try re-uploading.";
+  }
+  if (lower.includes("rate_limit") || lower.includes("ai 429")) {
+    return "AI processing limit reached. Please wait a moment before trying again.";
+  }
+  if (lower.includes("ai_credits_exhausted") || lower.includes("ai 402")) {
+    return "AI credits exhausted. Please check your billing settings.";
+  }
+  if (lower.includes("ai 401") || lower.includes("ai 403") || lower.includes("incorrect api key") || lower.includes("invalid api key")) {
+    return "AI authentication failed. Please verify your OpenAI API key in Settings.";
+  }
+  if (lower.includes("ai 400")) {
+    return "The check analysis failed due to an image issue. Ensure the photo is clear and try again.";
+  }
+  
+  // Strip common technical prefixes but keep some context
+  return rawError.replace(/^AI \d{3}: /i, "").slice(0, 200);
 }
 
 async function validateTenantKeyForOcrFallback(
@@ -150,8 +176,8 @@ async function validateTenantKeyForOcrFallback(
     const updates: Record<string, unknown> = {
       last_validated_at: new Date().toISOString(),
       last_error: ok
-        ? `OCR provider fallback used after: ${originalError}`.slice(0, 500)
-        : `OpenAI key validation failed during OCR fallback${status ? ` (${status})` : ""}: ${originalError}`.slice(0, 500),
+        ? `OCR provider fallback used after: ${getFriendlyOcrError(originalError)}`.slice(0, 500)
+        : `OpenAI key validation failed: ${getFriendlyOcrError(originalError)}`.slice(0, 500),
     };
     if (!ok) updates.status = "invalid";
 
