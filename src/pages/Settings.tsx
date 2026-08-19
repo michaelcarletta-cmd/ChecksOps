@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature, ListTree, HelpCircle, Sparkles, TrendingUp, ShieldCheck, Cog, UserCog, Mail, Database, History, Bell, Activity, Cloud, Key, Share2, Receipt, Users, BarChart3 } from "lucide-react";
+import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature, ListTree, HelpCircle, Sparkles, TrendingUp, ShieldCheck, Cog, UserCog, Mail, Database, History, Bell, Activity, Cloud, Key, Share2, Receipt, Users, BarChart3, User, KeyRound, Building2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { SectionCard } from "@/components/settings/SectionCard";
 
@@ -44,6 +44,7 @@ import { UserManagementSettings } from "@/components/settings/UserManagementSett
 import { ProfileSettings } from "@/components/settings/ProfileSettings";
 import { CheckCenterHelpPanel } from "@/components/check-review/CheckCenterHelp";
 import { AIKnowledgeBaseSettings } from "@/components/settings/AIKnowledgeBaseSettings";
+import { TenantAIKeySettings } from "@/components/white-label/TenantAIKeySettings";
 import { CounterArgumentsSettings } from "@/components/settings/CounterArgumentsSettings";
 import { QuickBooksSettings } from "@/components/settings/QuickBooksSettings";
 import { BackupStatusSettings } from "@/components/settings/BackupStatusSettings";
@@ -725,8 +726,8 @@ export default function Settings() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="flex flex-row md:flex-wrap h-auto w-full bg-muted/20 p-1.5 gap-1 border-border/50">
           <TabsTrigger value="profile" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <UserCog className="h-4 w-4" />
-            My Profile
+            <User className="h-4 w-4" />
+            Profile
           </TabsTrigger>
           
           <TabsTrigger value="workflow" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
@@ -751,8 +752,16 @@ export default function Settings() {
           </TabsTrigger>
           
           <TabsTrigger value="organization" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <ShieldCheck className="h-4 w-4" />
+            <Building2 className="h-4 w-4" />
             Company Settings
+          </TabsTrigger>
+          <TabsTrigger value="workspaces" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Share2 className="h-4 w-4" />
+            Partners
+          </TabsTrigger>
+          <TabsTrigger value="ai-key" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <KeyRound className="h-4 w-4" />
+            AI Key
           </TabsTrigger>
           <TabsTrigger value="import" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <Database className="h-4 w-4" />
@@ -819,10 +828,7 @@ export default function Settings() {
         {/* ActumSettings hidden */}
 
         <TabsContent value="profile" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
-
-            <ProfileSettings />
-          </div>
+          <ProfileSettings />
         </TabsContent>
 
         <TabsContent value="referrals" className="w-full focus-visible:outline-none">
@@ -1002,10 +1008,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="usage" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
-
-            <UsageLogTab />
-          </div>
+          <UsageLogTab />
         </TabsContent>
 
 
@@ -1029,30 +1032,19 @@ export default function Settings() {
 
         <TabsContent value="organization" className="w-full space-y-6 focus-visible:outline-none">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
-
             <OrganizationSettings />
             <CompanyBrandingSettings />
             <EmailSenderSettings />
             <TenantEmailHealthPanel />
-            
-            {/* Workspaces - Collapsible */}
-            <Collapsible open={workspacesOpen} onOpenChange={setWorkspacesOpen}>
-              <SectionCard
-                title="Partner Workspaces"
-                icon={<FolderKanban className="h-4 w-4 text-orange-500" />}
-                accent="bg-gradient-to-r from-orange-500/60 to-orange-500/10"
-                description="Manage linked partner instances and cross-tenant collaboration"
-                collapsible={{
-                  open: workspacesOpen,
-                  onOpenChange: setWorkspacesOpen
-                }}
-              >
-                <div className="pt-2">
-                  <WorkspaceList embedded />
-                </div>
-              </SectionCard>
-            </Collapsible>
           </div>
+        </TabsContent>
+
+        <TabsContent value="workspaces" className="w-full focus-visible:outline-none">
+          <WorkspaceList />
+        </TabsContent>
+
+        <TabsContent value="ai-key" className="w-full focus-visible:outline-none">
+          <TenantAIKeySettings />
         </TabsContent>
 
 
