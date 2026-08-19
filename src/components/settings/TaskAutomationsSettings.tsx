@@ -488,114 +488,66 @@ export function TaskAutomationsSettings() {
             </DialogContent>
           </Dialog>
         </div>
-      </CardHeader>
-      <CardContent>
-        {/* Mobile-friendly card layout */}
-        <div className="space-y-3 md:hidden">
-          {automations.length === 0 ? (
-            <p className="text-center text-muted-foreground py-4">
-              No task automations configured. Create one to get started.
-            </p>
-          ) : (
-            automations.map((automation) => (
-              <div key={automation.id} className="border rounded-lg p-3 space-y-2">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{automation.title}</p>
-                    {automation.description && (
-                      <p className="text-xs text-muted-foreground truncate">{automation.description}</p>
-                    )}
-                  </div>
-                  <Switch
-                    checked={automation.is_active}
-                    onCheckedChange={() => toggleActive(automation.id, automation.is_active)}
-                  />
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <Badge variant={automation.trigger_type === "on_sub_status_change" ? "default" : "outline"} className="text-[10px]">
+        <div className="grid gap-4">
+          {automations.length === 0 && (
+            <div className="text-center py-8 border-2 border-dashed rounded-lg">
+              <p className="text-sm text-muted-foreground">No task automations created yet.</p>
+            </div>
+          )}
+          {automations.map((automation) => (
+            <div key={automation.id} className="flex items-center justify-between p-4 rounded-lg border bg-muted/20">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{automation.title}</span>
+                  <Badge variant="outline" className="text-[10px] py-0">
                     {getTriggerDisplay(automation)}
                   </Badge>
-                  <Badge variant="outline" className="text-[10px] capitalize">{automation.priority}</Badge>
-                  <span className="text-[10px] text-muted-foreground">
-                    Due: {automation.due_date_offset === 0 ? "Same day" : `${automation.due_date_offset}d`}
-                  </span>
+                  <Badge 
+                    className={`text-[10px] py-0 font-bold uppercase ${
+                      automation.priority === 'high' ? 'bg-red-500/10 text-red-500' :
+                      automation.priority === 'medium' ? 'bg-amber-500/10 text-amber-500' :
+                      'bg-blue-500/10 text-blue-500'
+                    }`}
+                    variant="outline"
+                  >
+                    {automation.priority}
+                  </Badge>
                 </div>
-                <div className="flex gap-1 justify-end">
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(automation)}>
-                    <Edit className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelete(automation.id)}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+                {automation.description && (
+                  <p className="text-xs text-muted-foreground">{automation.description}</p>
+                )}
+                {automation.due_date_offset > 0 && (
+                  <p className="text-[10px] text-muted-foreground">
+                    Due {automation.due_date_offset} days after trigger
+                  </p>
+                )}
               </div>
-            ))
-          )}
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={automation.is_active}
+                  onCheckedChange={() => toggleActive(automation.id, automation.is_active)}
+                />
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8"
+                  onClick={() => handleEdit(automation)}
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                  onClick={() => handleDelete(automation.id)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ))}
         </div>
-
-        {/* Desktop table */}
-        <div className="hidden md:block">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Task</TableHead>
-                <TableHead>Trigger</TableHead>
-                <TableHead>Priority</TableHead>
-                <TableHead>Due Date</TableHead>
-                <TableHead>Active</TableHead>
-                <TableHead className="w-24">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {automations.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
-                    No task automations configured. Create one to get started.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                automations.map((automation) => (
-                  <TableRow key={automation.id}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{automation.title}</div>
-                        {automation.description && (
-                          <div className="text-sm text-muted-foreground">{automation.description}</div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm">{getTriggerDisplay(automation)}</TableCell>
-                    <TableCell>
-                      <span className="capitalize">{automation.priority}</span>
-                    </TableCell>
-                    <TableCell>
-                      {automation.due_date_offset === 0
-                        ? "Same day"
-                        : `${automation.due_date_offset} day${automation.due_date_offset !== 1 ? "s" : ""}`}
-                    </TableCell>
-                    <TableCell>
-                      <Switch
-                        checked={automation.is_active}
-                        onCheckedChange={() => toggleActive(automation.id, automation.is_active)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => handleEdit(automation)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(automation.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+    </SectionCard>
   );
 }
