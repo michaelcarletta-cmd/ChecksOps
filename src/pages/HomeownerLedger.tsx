@@ -58,6 +58,15 @@ type PendingEndorsement = {
   parties: PendingEndorsementParty[];
 };
 
+type SharedDocument = {
+  id: string;
+  file_name: string;
+  doc_type: string;
+  mime_type: string | null;
+  file_size: number | null;
+  url: string;
+};
+
 type Summary = {
   ok: boolean;
   mode: "claim" | "pre_claim";
@@ -68,6 +77,7 @@ type Summary = {
   pending_upload_count: number;
   pending_signatures?: PendingSignature[];
   pending_endorsements?: PendingEndorsement[];
+  shared_documents?: SharedDocument[];
   can_upload: boolean;
 };
 
@@ -205,6 +215,7 @@ function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () =>
 
       <PendingEndorsementsPanel pending={data.pending_endorsements ?? []} />
       <PendingSignaturesPanel token={token} pending={data.pending_signatures ?? []} />
+      <SharedDocumentsPanel documents={data.shared_documents ?? []} />
 
 
       <Card>
@@ -444,6 +455,50 @@ function PendingSignaturesPanel({ token, pending }: { token: string; pending: Pe
             </ul>
           </div>
         ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SharedDocumentsPanel({ documents }: { documents: SharedDocument[] }) {
+  if (!documents || documents.length === 0) return null;
+  
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Palette className="h-4 w-4 text-primary" /> Resource Center
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Helpful guides and catalogs shared by your project team.
+        </p>
+        <ul className="space-y-2">
+          {documents.map((doc) => (
+            <li key={doc.id} className="flex items-center justify-between gap-3 border rounded-md p-2 bg-muted/20">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-sm font-medium truncate">{doc.file_name}</div>
+                  <div className="text-[10px] text-muted-foreground uppercase">
+                    {doc.doc_type.split(":")[1] || "Document"}
+                    {doc.file_size ? ` · ${(doc.file_size / 1024).toFixed(0)} KB` : ""}
+                  </div>
+                </div>
+              </div>
+              <Button 
+                size="sm" 
+                variant="ghost" 
+                className="h-8 gap-1 text-xs"
+                onClick={() => window.open(doc.url, "_blank")}
+              >
+                <Download className="h-3.5 w-3.5" />
+                View
+              </Button>
+            </li>
+          ))}
+        </ul>
       </CardContent>
     </Card>
   );

@@ -50,6 +50,7 @@ Deno.serve(async (req) => {
     let pending_upload_count = 0
     let pending_signatures: any[] = []
     let pending_endorsements: any[] = []
+    let shared_documents: any[] = []
 
     if (tok.claim_id) {
       const { data: c, error: claimErr } = await supabase
@@ -214,6 +215,28 @@ Deno.serve(async (req) => {
         }
         pending_endorsements = Array.from(byCheck.values())
       }
+
+      // Shared Documents (Catalogs, etc)
+      const { data: sharedDocs } = await supabase
+        .from('tenant_documents')
+        .select('id, file_name, file_path, doc_type, mime_type, file_size')
+        .eq('tenant_id', tok.tenant_id)
+        .eq('shared_with_homeowners', true)
+        .order('created_at', { ascending: false })
+
+      if (sharedDocs) {
+        // Generate signed URLs for each
+        const docPromises = sharedDocs.map(async (doc: any) => {
+          const { data } = await supabase.storage
+            .from('tenant-documents')
+            .createSignedUrl(doc.file_path, 60 * 60 * 24) // 24 hours
+          return {
+            ...doc,
+            url: data?.signedUrl
+          }
+        })
+        shared_documents = await Promise.all(docPromises)
+      }
     } else {
       // Pre-claim: show pending uploads for this token
       const { count } = await supabase
@@ -233,6 +256,7 @@ Deno.serve(async (req) => {
       pending_upload_count,
       pending_signatures,
       pending_endorsements,
+      shared_documents,
       can_upload: true,
     })
   } catch (e) {
