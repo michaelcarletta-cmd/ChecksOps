@@ -435,8 +435,21 @@ export default function Settings() {
   const [workspacesOpen, setWorkspacesOpen] = useState(false);
   const [sigPresetsOpen, setSigPresetsOpen] = useState(false);
   
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "workflow");
+  
   const { toast } = useToast();
   const { tenant } = useTenant();
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab) {
+      setActiveTab(tab);
+      if (tab === "organization") {
+        setCompanyBrandingOpen(true);
+      }
+    }
+  }, [searchParams]);
 
 
   // Check if current user is admin
