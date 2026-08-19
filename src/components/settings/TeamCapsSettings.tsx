@@ -63,7 +63,7 @@ export function TeamCapsSettings({
       icon={<Users className="h-4 w-4 text-amber-500" />}
       description="Set the maximum number of team members allowed for specific roles."
     >
-      <div className="space-y-4 pt-2">
+      
 
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
