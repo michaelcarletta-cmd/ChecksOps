@@ -12,10 +12,12 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Plus, Play, Trash2, Clock, Mail, MessageSquare, CheckSquare, AlertCircle, Zap, ListTodo, Pencil, Settings } from "lucide-react";
+import { Loader2, Plus, Play, Trash2, Clock, Mail, MessageSquare, CheckSquare, AlertCircle, Zap, ListTodo, Pencil, Settings, Activity, Sparkles } from "lucide-react";
 import { TaskAutomationsSettings } from "./TaskAutomationsSettings";
 import { AutomationGlobalSettings } from "./AutomationGlobalSettings";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
+import { SectionCard } from "./SectionCard";
+import { SettingsHero } from "./SettingsHero";
 
 interface TriggerConfig {
   // For scheduled
