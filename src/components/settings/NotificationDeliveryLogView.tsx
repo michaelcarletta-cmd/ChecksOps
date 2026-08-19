@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,6 +11,8 @@ import { Bell, Search, RefreshCw, Download, AlertTriangle, CheckCircle, XCircle,
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
+import { SectionCard } from "./SectionCard";
+import { SettingsHero } from "./SettingsHero";
 
 interface DeliveryLog {
   id: string;
@@ -125,31 +127,32 @@ export function NotificationDeliveryLogView() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Bell className="h-5 w-5" />
-                Notification Delivery Logs
-              </CardTitle>
-              <CardDescription>
-                Audit trail for all urgent task notification delivery attempts
-              </CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isRefetching}>
-                <RefreshCw className={`h-4 w-4 mr-2 ${isRefetching ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleExport} disabled={filteredLogs.length === 0}>
-                <Download className="h-4 w-4 mr-2" />
-                Export CSV
-              </Button>
-            </div>
+      <SettingsHero
+        title="Notification Logs"
+        description="Audit trail for all automated notification delivery attempts across all channels."
+        badge="Communication"
+        icon={<Bell className="h-4 w-4 text-primary" />}
+      />
+
+      <SectionCard
+        title="Delivery Logs"
+        icon={<Bell className="h-4 w-4 text-sky-500" />}
+        accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
+        description="Monitor notification status and provider responses for all system alerts."
+        headerActions={
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isRefetching} className="h-8">
+              <RefreshCw className={`h-3 w-3 mr-2 ${isRefetching ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExport} disabled={filteredLogs.length === 0} className="h-8">
+              <Download className="h-3 w-3 mr-2" />
+              Export
+            </Button>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        }
+      >
+        <div className="space-y-6 pt-4">
           {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
@@ -191,28 +194,28 @@ export function NotificationDeliveryLogView() {
 
           {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card className="p-4">
+            <Card className="p-4 bg-muted/20 border-border/40">
               <div className="flex items-center gap-2">
                 <Bell className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">Total</span>
               </div>
               <p className="text-2xl font-bold mt-1">{logs.length}</p>
             </Card>
-            <Card className="p-4">
+            <Card className="p-4 bg-muted/20 border-border/40">
               <div className="flex items-center gap-2">
                 <CheckCircle className="h-4 w-4 text-emerald-600" />
                 <span className="text-sm text-muted-foreground">Sent</span>
               </div>
               <p className="text-2xl font-bold mt-1">{sentCount}</p>
             </Card>
-            <Card className="p-4">
+            <Card className="p-4 bg-muted/20 border-border/40">
               <div className="flex items-center gap-2">
                 <XCircle className="h-4 w-4 text-destructive" />
                 <span className="text-sm text-muted-foreground">Failed</span>
               </div>
               <p className="text-2xl font-bold mt-1">{failedCount}</p>
             </Card>
-            <Card className="p-4">
+            <Card className="p-4 bg-muted/20 border-border/40">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-amber-600" />
                 <span className="text-sm text-muted-foreground">Skipped</span>
@@ -286,8 +289,8 @@ export function NotificationDeliveryLogView() {
               </Table>
             </ScrollArea>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
     </div>
   );
 }
