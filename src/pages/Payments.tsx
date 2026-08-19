@@ -11,6 +11,32 @@ import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 import { useAuth } from "@/hooks/useAuth";
 import { Receipt, FileText, Users, Wallet, Landmark, FileSpreadsheet, Sparkles, TrendingUp, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 
+function SectionCard({
+  title,
+  icon,
+  accent,
+  children,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  accent: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card className="overflow-hidden border-border/60 shadow-sm">
+      <div className={`h-1.5 ${accent}`} />
+      <CardHeader className="flex flex-row items-center gap-3 p-4 pb-2">
+        <CardTitle className="flex items-center gap-2 text-base font-semibold">
+          {icon}
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-4 pt-2">{children}</CardContent>
+    </Card>
+  );
+}
+
+
 export default function Payments() {
   const { userRole } = useAuth();
   const isAdmin = userRole === "admin";
