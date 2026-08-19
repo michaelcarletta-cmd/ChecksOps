@@ -173,7 +173,7 @@ export function ProfileSettings() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pt-0">
       <SettingsHero
         title="Profile Settings"
         description="Manage your personal information, security, and notification preferences."

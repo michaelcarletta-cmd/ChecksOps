@@ -818,7 +818,7 @@ export default function Settings() {
 
         {SHOW_CHECKALT && (
           <TabsContent value="checkalt" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
               <CheckAltSettings />
             </div>
           </TabsContent>
@@ -828,21 +828,21 @@ export default function Settings() {
         {/* ActumSettings hidden */}
 
         <TabsContent value="profile" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
 
             <ProfileSettings />
           </div>
         </TabsContent>
 
         <TabsContent value="referrals" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
             <ReferralSettings />
             <AdminReferralDashboard />
           </div>
         </TabsContent>
 
         <TabsContent value="workflow" className="w-full space-y-6 focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
 
 
           {/* Claim Statuses - Collapsible */}
@@ -996,7 +996,7 @@ export default function Settings() {
 
 
         <TabsContent value="users" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
             <UserManagementSettings />
             {tenant && (
               <TeamCapsSettings 
@@ -1011,12 +1011,14 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="usage" className="w-full focus-visible:outline-none">
-          <UsageLogTab />
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+            <UsageLogTab />
+          </div>
         </TabsContent>
 
 
         <TabsContent value="automations" className="w-full space-y-6 focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
 
           <AutomationsSettings />
           <div className="pt-6">
@@ -1027,7 +1029,7 @@ export default function Settings() {
 
 
         <TabsContent value="ai-knowledge" className="w-full space-y-6 focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
 
           <AIKnowledgeBaseSettings />
           <CounterArgumentsSettings />
@@ -1036,7 +1038,7 @@ export default function Settings() {
 
 
         <TabsContent value="organization" className="w-full space-y-6 focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
             <OrganizationSettings />
             <CompanyBrandingSettings />
             <EmailSenderSettings />
@@ -1045,7 +1047,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="workspaces" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
 
             <WorkspaceList />
 
@@ -1053,7 +1055,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="ai-key" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
 
             <TenantAIKeySettings />
 
@@ -1062,7 +1064,7 @@ export default function Settings() {
 
 
         <TabsContent value="import" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
             <ImportSettings />
           </div>
         </TabsContent>
@@ -1071,7 +1073,7 @@ export default function Settings() {
 
         {isAdmin && (
           <TabsContent value="audit-logs" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
               <AuditLogSettings />
             </div>
           </TabsContent>
@@ -1080,7 +1082,7 @@ export default function Settings() {
 
         {isAdmin && (
           <TabsContent value="notification-logs" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
               <NotificationDeliveryLogView />
             </div>
           </TabsContent>
@@ -1089,7 +1091,7 @@ export default function Settings() {
 
         {isAdmin && (
           <TabsContent value="urgency-alerts" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
               <StatusUrgencyNotificationsSettings />
             </div>
           </TabsContent>
@@ -1098,7 +1100,7 @@ export default function Settings() {
 
         {isAdmin && (
           <TabsContent value="jn-diagnostics" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
               <JobNimbusSyncDiagnostics />
             </div>
           </TabsContent>
@@ -1107,7 +1109,7 @@ export default function Settings() {
 
         {isAdmin && (
           <TabsContent value="backup" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
               <BackupStatusSettings />
             </div>
           </TabsContent>
@@ -1115,7 +1117,7 @@ export default function Settings() {
         )}
         {isAdmin && (
           <TabsContent value="white-label" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
               <TenantManagement />
             </div>
           </TabsContent>
