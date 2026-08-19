@@ -993,7 +993,10 @@ export default function Settings() {
               onUpdate={() => {}} 
             />
           )}
+        </TabsContent>
 
+        <TabsContent value="usage" className="w-full">
+          <UsageLogTab />
         </TabsContent>
 
 
