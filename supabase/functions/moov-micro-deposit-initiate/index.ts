@@ -73,9 +73,12 @@ serve(async (req) => {
       .order("created_at", { ascending: false })
       .maybeSingle();
 
-    if (prior?.status === "verified") {
+    // Only short-circuit when the provider itself considers the bank verified;
+    // a stale local "verified" row must not block a fresh micro-deposit.
+    if (prior?.status === "verified" && method.verification_status === "verified") {
       return json({ success: true, already_verified: true, verification: prior });
     }
+
     if (prior && prior.attempts >= prior.max_attempts) {
       return json({
         error: "max_attempts_exceeded",
