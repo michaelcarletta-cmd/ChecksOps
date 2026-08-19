@@ -751,8 +751,16 @@ export default function Settings() {
           </TabsTrigger>
           
           <TabsTrigger value="organization" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <ShieldCheck className="h-4 w-4" />
+            <Building2 className="h-4 w-4" />
             Company Settings
+          </TabsTrigger>
+          <TabsTrigger value="workspaces" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Share2 className="h-4 w-4" />
+            Partners
+          </TabsTrigger>
+          <TabsTrigger value="ai-key" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <KeyRound className="h-4 w-4" />
+            AI Key
           </TabsTrigger>
           <TabsTrigger value="import" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <Database className="h-4 w-4" />
@@ -819,10 +827,7 @@ export default function Settings() {
         {/* ActumSettings hidden */}
 
         <TabsContent value="profile" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
-
-            <ProfileSettings />
-          </div>
+          <ProfileSettings />
         </TabsContent>
 
         <TabsContent value="referrals" className="w-full focus-visible:outline-none">
@@ -1002,10 +1007,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="usage" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
-
-            <UsageLogTab />
-          </div>
+          <UsageLogTab />
         </TabsContent>
 
 
@@ -1029,30 +1031,19 @@ export default function Settings() {
 
         <TabsContent value="organization" className="w-full space-y-6 focus-visible:outline-none">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
-
             <OrganizationSettings />
             <CompanyBrandingSettings />
             <EmailSenderSettings />
             <TenantEmailHealthPanel />
-            
-            {/* Workspaces - Collapsible */}
-            <Collapsible open={workspacesOpen} onOpenChange={setWorkspacesOpen}>
-              <SectionCard
-                title="Partner Workspaces"
-                icon={<FolderKanban className="h-4 w-4 text-orange-500" />}
-                accent="bg-gradient-to-r from-orange-500/60 to-orange-500/10"
-                description="Manage linked partner instances and cross-tenant collaboration"
-                collapsible={{
-                  open: workspacesOpen,
-                  onOpenChange: setWorkspacesOpen
-                }}
-              >
-                <div className="pt-2">
-                  <WorkspaceList embedded />
-                </div>
-              </SectionCard>
-            </Collapsible>
           </div>
+        </TabsContent>
+
+        <TabsContent value="workspaces" className="w-full focus-visible:outline-none">
+          <WorkspaceList />
+        </TabsContent>
+
+        <TabsContent value="ai-key" className="w-full focus-visible:outline-none">
+          <TenantAIKeySettings />
         </TabsContent>
 
 
