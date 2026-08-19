@@ -21748,6 +21748,9 @@ export type Database = {
           email_reply_to: string | null
           id: string
           internal_notes: string | null
+          invoice_default_terms: string | null
+          invoice_footer_note: string | null
+          invoice_letterhead_url: string | null
           is_founding_partner: boolean
           is_system_tenant: boolean | null
           kyc_completed_at: string | null
@@ -21829,6 +21832,9 @@ export type Database = {
           email_reply_to?: string | null
           id?: string
           internal_notes?: string | null
+          invoice_default_terms?: string | null
+          invoice_footer_note?: string | null
+          invoice_letterhead_url?: string | null
           is_founding_partner?: boolean
           is_system_tenant?: boolean | null
           kyc_completed_at?: string | null
@@ -21910,6 +21916,9 @@ export type Database = {
           email_reply_to?: string | null
           id?: string
           internal_notes?: string | null
+          invoice_default_terms?: string | null
+          invoice_footer_note?: string | null
+          invoice_letterhead_url?: string | null
           is_founding_partner?: boolean
           is_system_tenant?: boolean | null
           kyc_completed_at?: string | null
