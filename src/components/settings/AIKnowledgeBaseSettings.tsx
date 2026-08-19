@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Upload, Trash2, FileText, Video, Loader2, CheckCircle, XCircle, Clock, Brain, Image, Link, Globe, AlignLeft, RefreshCw } from "lucide-react";
+import { Upload, Trash2, FileText, Video, Loader2, CheckCircle, XCircle, Clock, Brain, Image, Link, Globe, AlignLeft, RefreshCw, Activity, ShieldCheck } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +22,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { SettingsHero } from "./SettingsHero";
+import { SectionCard } from "./SectionCard";
 
 const CATEGORIES = [
   { value: "insurance-regulations", label: "Insurance Regulations" },
