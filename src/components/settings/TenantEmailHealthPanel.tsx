@@ -33,26 +33,28 @@ export function TenantEmailHealthPanel() {
   const load = async () => {
     if (!tenantId) return;
     setLoading(true);
-    const since = new Date(Date.now() - WINDOW_DAYS * 86400_000).toISOString();
+    
+    // We increase the window to 60 days to catch more historical emails
+    const since = new Date(Date.now() - (WINDOW_DAYS * 2) * 86400_000).toISOString();
 
-    const [{ data: logRows }, { data: supRows }] = await Promise.all([
+    const [logsResult, suppressionResult] = await Promise.all([
       supabase
         .from("email_send_log")
-        .select("status, created_at, recipient_email, template_name, error_message")
-        .eq("tenant_id", tenantId)
+        .select("status, created_at, recipient_email, template_name, error_message, tenant_id")
+        .or(`tenant_id.eq.${tenantId},tenant_id.is.null`)
         .gte("created_at", since)
         .order("created_at", { ascending: false })
         .limit(1000),
       supabase
         .from("suppressed_emails")
-        .select("email, reason, created_at, metadata")
-        .eq("tenant_id", tenantId)
+        .select("email, reason, created_at, metadata, tenant_id")
+        .or(`tenant_id.eq.${tenantId},tenant_id.is.null`)
         .order("created_at", { ascending: false })
         .limit(100),
     ]);
 
-    setLogs((logRows as LogRow[]) || []);
-    setSuppressions((supRows as SuppressionRow[]) || []);
+    setLogs((logsResult.data as LogRow[]) || []);
+    setSuppressions((suppressionResult.data as SuppressionRow[]) || []);
     setLoading(false);
   };
 
