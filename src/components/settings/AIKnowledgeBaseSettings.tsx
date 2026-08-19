@@ -1170,8 +1170,8 @@ export const AIKnowledgeBaseSettings = () => {
               <p className="text-sm">Upload documents to enhance the AI assistant's knowledge</p>
             </div>
           )}
-        </CardContent>
-      </Card>
+      </SectionCard>
+
 
       <AlertDialog open={!!deleteDocId} onOpenChange={() => setDeleteDocId(null)}>
         <AlertDialogContent>
