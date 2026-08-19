@@ -378,7 +378,7 @@ export function UserManagementSettings() {
         icon={<Users className="h-4 w-4 text-primary" />}
       />
 
-      <div className="grid gap-6 pb-12">
+      <div className="grid gap-6">
         {/* Pending Approvals Section */}
         {pendingUsers.length > 0 && (
           <SectionCard
