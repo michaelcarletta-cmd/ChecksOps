@@ -1,41 +1,24 @@
----
-name: Tenant Document E-Signature
-description: Enable tenants to send documents for e-signature directly from the claim files library, mirroring the MortgageOps signature workflow.
-type: feature
----
+# Plan - Tenant Document E-Signature
 
-# Tenant Document E-Signature
-
-Enable tenants to initiate e-signature requests for any claim document, using the same field-placement and recipient logic currently used by Mortgage Ops.
+Enabling tenants to send documents for electronic signature directly from the claim files library.
 
 ## Proposed Changes
 
-### Database & Schema
-- No schema changes required; the `signature_requests` and `signature_signers` tables already support general claim-level requests.
-- Ensure RLS policies for `signature_requests` allow `authenticated` users (tenants) to insert and select for claims they own.
+### Database & Permissions
+- Verify `authenticated` users can insert into `signature_requests` and `signature_signers` (verified: RLS policies exist, but may need explicit GRANT if permission errors occur).
 
-### Frontend Components
+### Claim Detail UI (`src/components/claim-detail/`)
+- **`ClaimFiles.tsx`**: Add a "Send for Signature" button to PDF files in the document list.
+- **Integration**: Clicking this button will store the file metadata in `localStorage` and switch to the "Templates & Signatures" tab.
+- **Tab Visibility**: Remove `isStaffOrAdmin` restriction from the "Templates & Signatures" tab so all tenants can access e-signatures for their claims.
 
-#### 1. Signature Field Placer (Shared)
-- The field placement logic in `MortgageOpsRequestDetail.tsx` (using `FieldPlacementEditor`) should be extracted or mirrored for tenant use.
-
-#### 2. Claim Files Enhancement (`src/components/claim-detail/ClaimFiles.tsx`)
-- Add a "Send for Signature" action to the file row dropdown/actions for PDF files.
-- Implement the signature request workflow:
-  - Select recipient(s) from claim stakeholders (Homeowner, Contractor, etc.).
-  - Open a dialog with `FieldPlacementEditor` to place signature/date fields.
-  - Dispatch the request via the `send-signature-request` edge function.
-
-#### 3. Mortgage Ops Parity
-- Ensure `MortgageOpsRequestDetail.tsx` and `ClaimFiles.tsx` use the same underlying service/function for sending signature requests to maintain consistency.
+### Signature Flow (`src/components/claim-detail/SignatureRequests.tsx`)
+- Add an `useEffect` hook to check for pre-selected files in `localStorage`.
+- If found, set the source type to "Existing Claim File", select the file, and open the request dialog automatically.
 
 ## Technical Details
-- **Edge Function**: `send-signature-request` already exists and handles the dispatching logic.
-- **Field Placement**: Uses `FieldPlacementEditor` which takes a signed URL of the PDF and allows drag-and-drop placement of fields.
-- **Permissions**: Verify that the `authenticated` role has `GRANT` on `signature_requests` and `signature_signers`.
+- **Permissions**: Granting `INSERT` on `signature_requests` to the `authenticated` role.
+- **Workflow**: `ClaimFiles` -> `localStorage` -> `Tab Change` -> `SignatureRequests` auto-trigger.
 
-## Verification Plan
-1. Upload a PDF to a claim as a tenant.
-2. Trigger "Send for Signature".
-3. Place fields and send to a stakeholder.
-4. Verify the stakeholder receives the request and the status updates in the claim.
+## User Review Required
+- Does the "Templates & Signatures" tab contain any other internal staff-only info that tenants should not see? (Review of `ClaimTemplates` and `SignatureRequests` suggests it is safe for tenant use).

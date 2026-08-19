@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp, Trash2, ExternalLink, Copy, Calculator, Bot, RefreshCw, Loader2, ChevronRight, AlertTriangle, CheckCircle2, XCircle, ScanLine, Zap } from "lucide-react";
+import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp, Trash2, ExternalLink, Copy, Calculator, Bot, RefreshCw, Loader2, ChevronRight, AlertTriangle, CheckCircle2, XCircle, ScanLine, Zap, FileSignature } from "lucide-react";
 import { DOCUMENT_TYPE_LABELS, TEXT_QUALITY_LABELS, type TextQualityStatus } from "@/lib/document-intelligence-types";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -564,6 +564,27 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                     <Button variant="outline" size="sm" onClick={() => handleDownload(file)}>
                       <Download className="h-3 w-3 mr-1" /> Download
                     </Button>
+                    {file.file_type?.includes("pdf") && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="text-amber-500 border-amber-500/30 hover:bg-amber-500/10"
+                        onClick={() => {
+                          localStorage.setItem("preselected_sig_file", JSON.stringify(file));
+                          const tabsList = document.querySelector('[role="tablist"]');
+                          const sigTrigger = tabsList?.querySelector('[value="templates"]');
+                          if (sigTrigger instanceof HTMLElement) {
+                            sigTrigger.click();
+                            toast({
+                              title: "Switching to Signatures",
+                              description: `Loading ${file.file_name} into signature request flow.`,
+                            });
+                          }
+                        }}
+                      >
+                        <FileSignature className="h-3 w-3 mr-1" /> Send for Signature
+                      </Button>
+                    )}
                     {(file.file_name.toLowerCase().endsWith('.docx') || file.file_name.toLowerCase().endsWith('.pdf')) && (
                       <Button variant="outline" size="sm" onClick={() => handleSaveAsTemplate(file)}>
                         <FileUp className="h-3 w-3 mr-1" /> Save as Template
@@ -678,7 +699,7 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
     <Tabs defaultValue="files" className="w-full">
       <TabsList className="flex flex-row w-full bg-muted/40 p-2 gap-1 overflow-x-auto scrollbar-hide">
         <TabsTrigger value="files" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">Documents & Files</TabsTrigger>
-        {isStaffOrAdmin && claim && (
+        {claim && (
           <TabsTrigger value="templates" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">Templates & Signatures</TabsTrigger>
         )}
       </TabsList>
@@ -917,7 +938,7 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
       </Dialog>
       </TabsContent>
 
-      {isStaffOrAdmin && claim && (
+      {claim && (
         <TabsContent value="templates" className="mt-4 space-y-4">
           <ClaimTemplates claimId={claimId} claim={claim} />
         </TabsContent>
