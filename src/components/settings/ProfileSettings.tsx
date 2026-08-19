@@ -493,8 +493,5 @@ export function ProfileSettings() {
         </div>
       </SectionCard>
     </div>
-        </div>
-      </SectionCard>
-    </div>
   );
 }
