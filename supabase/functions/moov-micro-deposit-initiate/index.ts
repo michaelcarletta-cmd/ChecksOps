@@ -132,7 +132,7 @@ serve(async (req) => {
       provider_metadata: sanitize({ bank_account: bankAccountId }),
     });
 
-    return json({ success: true, verification });
+    return json({ success: true, verification, environment });
   } catch (e) {
     console.error("[moov-micro-deposit-initiate]", (e as Error).message);
     return json({ error: (e as Error).message }, 500);
