@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
@@ -441,7 +441,7 @@ export function UserManagementSettings() {
           accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
           description="Manage roles and access for existing team members"
         >
-        <div className="space-y-4">
+        <div className="space-y-4 pt-4">
           {users.map((user) => (
             <div
               key={user.id}
