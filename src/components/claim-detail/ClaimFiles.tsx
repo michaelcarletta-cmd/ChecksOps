@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp, Trash2, ExternalLink, Copy, Calculator, Bot, RefreshCw, Loader2, ChevronRight, AlertTriangle, CheckCircle2, XCircle, ScanLine, Zap } from "lucide-react";
+import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp, Trash2, ExternalLink, Copy, Calculator, Bot, RefreshCw, Loader2, ChevronRight, AlertTriangle, CheckCircle2, XCircle, ScanLine, Zap, FileSignature } from "lucide-react";
 import { DOCUMENT_TYPE_LABELS, TEXT_QUALITY_LABELS, type TextQualityStatus } from "@/lib/document-intelligence-types";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
