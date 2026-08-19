@@ -51,3 +51,5 @@ project_id = "nbcqwpysqgyxrrbgtmkw"
     verify_jwt = false
   [functions.actum-return-webhook]
     verify_jwt = false
+  [functions.moov-webhook]
+    verify_jwt = false
