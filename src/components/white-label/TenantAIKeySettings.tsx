@@ -322,7 +322,7 @@ export function TenantAIKeySettings() {
           icon={<Shield className="h-4 w-4 text-muted-foreground" />}
           accent="bg-muted"
         >
-          <div className="text-xs text-muted-foreground space-y-2 leading-relaxed">
+          <div className="text-xs text-muted-foreground space-y-2 leading-relaxed pt-2">
             <p className="font-medium text-foreground">Direct Billing Control</p>
             <p>
               All AI calls for this tenant use your OpenAI account directly. You'll see usage
