@@ -301,163 +301,176 @@ export function WorkspaceList({ embedded }: WorkspaceListProps = {}) {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Pending Invites */}
-      {invites && invites.length > 0 && (
-        <Card className="border-primary/50">
-          <CardHeader>
-            <CardTitle className="text-lg">Pending Invitations</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {invites.map((invite: any) => (
-              <div
-                key={invite.id}
-                className="flex items-center justify-between p-4 bg-muted rounded-lg"
-              >
-                <div>
-                  <p className="font-medium">{invite.workspaces?.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Invited by {invite.workspaces?.owner_org?.name}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDeclineInvite(invite.id)}
-                  >
-                    Decline
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => handleAcceptInvite(invite.id, invite.workspace_id)}
-                  >
-                    Accept
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+    <div className={`space-y-6 ${embedded ? "" : "max-w-7xl mx-auto"}`}>
+      {!embedded && (
+        <SettingsHero
+          title="Partner Ecosystem"
+          description="Manage collaborative spaces and shared claim data with outside organizations."
+          badge="Shared Workspaces"
+          icon={<Share2 className="h-4 w-4 text-primary" />}
+        />
       )}
 
-      {/* Workspaces List */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Shared Workspaces</CardTitle>
-            <CardDescription>
-              Collaborative spaces with partner companies
-            </CardDescription>
-          </div>
-          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                New Workspace
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create Workspace</DialogTitle>
-                <DialogDescription>
-                  Create a new shared workspace for collaboration
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Workspace Name</Label>
-                  <Input
-                    placeholder="e.g., Partner Claims"
-                    value={newWorkspaceName}
-                    onChange={(e) => setNewWorkspaceName(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Description (optional)</Label>
-                  <Textarea
-                    placeholder="What is this workspace for?"
-                    value={newWorkspaceDescription}
-                    onChange={(e) => setNewWorkspaceDescription(e.target.value)}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleCreateWorkspace} disabled={isCreating}>
-                  {isCreating ? "Creating..." : "Create Workspace"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">Loading...</div>
-          ) : workspaces && workspaces.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {workspaces.map((workspace: any) => (
-                <Card
-                  key={workspace.id}
-                  className="cursor-pointer hover:border-primary transition-colors"
-                  onClick={() => navigate(`/workspaces/${workspace.id}`)}
+      <div className="grid gap-6 pb-12">
+        {/* Pending Invites */}
+        {invites && invites.length > 0 && (
+          <SectionCard
+            title="Pending Invitations"
+            icon={<Plus className="h-4 w-4 text-amber-500" />}
+            accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
+          >
+            <div className="space-y-4 pt-2">
+              {invites.map((invite: any) => (
+                <div
+                  key={invite.id}
+                  className="flex items-center justify-between p-4 bg-card/30 backdrop-blur-sm rounded-lg border border-border/60"
                 >
-                  <CardHeader className="pb-2">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-2">
-                        <Folder className="h-5 w-5 text-primary" />
-                        <CardTitle className="text-base">{workspace.name}</CardTitle>
-                      </div>
-                      <Badge variant={workspace.memberRole === "owner" ? "default" : "secondary"}>
-                        {workspace.memberRole}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {workspace.description && (
-                      <p className="text-sm text-muted-foreground mb-3">
-                        {workspace.description}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Users className="h-4 w-4" />
-                        {workspace.workspace_members?.length || 0} orgs
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <ExternalLink className="h-4 w-4" />
-                        {workspace.claimCount} claims
-                      </div>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-1">
-                      {workspace.workspace_members?.slice(0, 3).map((member: any) => (
-                        <Badge key={member.org_id} variant="outline" className="text-xs">
-                          {member.orgs?.name}
-                        </Badge>
-                      ))}
-                      {workspace.workspace_members?.length > 3 && (
-                        <Badge variant="outline" className="text-xs">
-                          +{workspace.workspace_members.length - 3} more
-                        </Badge>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                  <div>
+                    <p className="font-medium">{invite.workspaces?.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Invited by {invite.workspaces?.owner_org?.name}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDeclineInvite(invite.id)}
+                    >
+                      Decline
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleAcceptInvite(invite.id, invite.workspace_id)}
+                    >
+                      Accept
+                    </Button>
+                  </div>
+                </div>
               ))}
             </div>
-          ) : (
-            <div className="text-center py-8">
-              <Folder className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="font-semibold mb-2">No workspaces yet</h3>
-              <p className="text-muted-foreground mb-4">
-                Create a workspace to start collaborating with partners
-              </p>
+          </SectionCard>
+        )}
+
+        {/* Workspaces List */}
+        <SectionCard
+          title="Shared Workspaces"
+          description="Collaborative spaces with partner companies"
+          icon={<Users className="h-4 w-4 text-violet-500" />}
+          accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
+        >
+          <div className="pt-2">
+            <div className="flex justify-end mb-4">
+              <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+                <DialogTrigger asChild>
+                  <Button size="sm">
+                    <Plus className="h-4 w-4 mr-2" /> New Workspace
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create Workspace</DialogTitle>
+                    <DialogDescription>
+                      Start a new shared workspace for multi-org collaboration
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Workspace Name</Label>
+                      <Input
+                        id="name"
+                        value={newWorkspaceName}
+                        onChange={(e) => setNewWorkspaceName(e.target.value)}
+                        placeholder="e.g. Acme & Freedom Collaboration"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="description">Description (Optional)</Label>
+                      <Textarea
+                        id="description"
+                        value={newWorkspaceDescription}
+                        onChange={(e) => setNewWorkspaceDescription(e.target.value)}
+                        placeholder="Purpose of this shared space..."
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowCreateDialog(false)}
+                      disabled={isCreating}
+                    >
+                      Cancel
+                    </Button>
+                    <Button onClick={handleCreateWorkspace} disabled={isCreating}>
+                      {isCreating ? "Creating..." : "Create Workspace"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
-          )}
-        </CardContent>
-      </Card>
+
+            {isLoading ? (
+              <div className="space-y-4">
+                {[1, 2].map((i) => (
+                  <div key={i} className="h-32 bg-muted/50 rounded-lg animate-pulse" />
+                ))}
+              </div>
+            ) : workspaces && workspaces.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {workspaces.map((workspace: any) => (
+                  <div
+                    key={workspace.id}
+                    className="group flex flex-col p-5 bg-card/30 backdrop-blur-sm border border-border/60 hover:border-violet-500/30 transition-all rounded-xl cursor-pointer"
+                    onClick={() => navigate(`/workspaces/${workspace.id}`)}
+                  >
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <Folder className="h-4 w-4 text-violet-400" />
+                          <h4 className="font-semibold">{workspace.name}</h4>
+                        </div>
+                        <Badge variant="outline" className="text-[10px] py-0 border-violet-500/20 text-violet-300">
+                          {workspace.memberRole}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground line-clamp-2 min-h-[40px]">
+                        {workspace.description || "No description provided"}
+                      </p>
+                      <div className="flex flex-col gap-2 mt-4 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-2 bg-muted/30 px-2 py-1 rounded">
+                          <Building2 className="h-3 w-3" />
+                          Owner: {workspace.owner_org?.name}
+                        </span>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="flex items-center gap-1">
+                            <Users className="h-3 w-3" />
+                            {workspace.workspace_members?.length || 0} orgs
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <ExternalLink className="h-3 w-3" />
+                            {workspace.claimCount} claims
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 border border-dashed rounded-xl bg-muted/20">
+                <Users className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                <h4 className="font-medium text-foreground">No Shared Workspaces</h4>
+                <p className="text-sm text-muted-foreground max-w-xs mx-auto mt-1">
+                  Connect with partners to create collaborative spaces for your claims.
+                </p>
+              </div>
+            )}
+          </div>
+        </SectionCard>
+      </div>
     </div>
+  );
+}
   );
 }
