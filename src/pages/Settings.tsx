@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature, ListTree, HelpCircle, Sparkles, TrendingUp, ShieldCheck, Cog, UserCog, Mail, Database, History, Bell, Activity, Cloud, Key, Share2, Receipt, Users, BarChart3 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { SectionCard } from "@/components/settings/SectionCard";
 
 import {
   DndContext,
