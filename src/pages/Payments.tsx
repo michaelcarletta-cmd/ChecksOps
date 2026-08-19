@@ -1,4 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PaymentLedger } from "@/components/ledger/PaymentLedger";
 import { RecipientReport } from "@/components/ledger/RecipientReport";
 import { TaxSummary } from "@/components/ledger/TaxSummary";
@@ -71,24 +72,60 @@ export default function Payments() {
             </TabsTrigger>
           )}
         </TabsList>
-        <TabsContent value="ledger">
-          <PaymentLedger />
+        <TabsContent value="ledger" className="mt-6">
+          <SectionCard
+            title="Payment History"
+            icon={<Receipt className="h-4 w-4 text-sky-500" />}
+            accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
+          >
+            <PaymentLedger />
+          </SectionCard>
         </TabsContent>
-        <TabsContent value="invoices">
-          <InvoicesTab />
+        <TabsContent value="invoices" className="mt-6">
+          <SectionCard
+            title="Invoices"
+            icon={<FileSpreadsheet className="h-4 w-4 text-emerald-500" />}
+            accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
+          >
+            <InvoicesTab />
+          </SectionCard>
         </TabsContent>
-        <TabsContent value="revenue">
-          <RevenueSummary />
+        <TabsContent value="revenue" className="mt-6">
+          <SectionCard
+            title="Revenue & Profit"
+            icon={<Landmark className="h-4 w-4 text-blue-500" />}
+            accent="bg-gradient-to-r from-blue-500/60 to-blue-500/10"
+          >
+            <RevenueSummary />
+          </SectionCard>
         </TabsContent>
-        <TabsContent value="recipients">
-          <RecipientReport />
+        <TabsContent value="recipients" className="mt-6">
+          <SectionCard
+            title="Recipients"
+            icon={<Users className="h-4 w-4 text-violet-500" />}
+            accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
+          >
+            <RecipientReport />
+          </SectionCard>
         </TabsContent>
-        <TabsContent value="tax">
-          <TaxSummary />
+        <TabsContent value="tax" className="mt-6">
+          <SectionCard
+            title="Tax & 1099"
+            icon={<FileText className="h-4 w-4 text-orange-500" />}
+            accent="bg-gradient-to-r from-orange-500/60 to-orange-500/10"
+          >
+            <TaxSummary />
+          </SectionCard>
         </TabsContent>
         {isAdmin && (
-          <TabsContent value="payroll">
-            <PayrollTab />
+          <TabsContent value="payroll" className="mt-6">
+            <SectionCard
+              title="Payroll"
+              icon={<Wallet className="h-4 w-4 text-amber-500" />}
+              accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
+            >
+              <PayrollTab />
+            </SectionCard>
           </TabsContent>
         )}
       </Tabs>
