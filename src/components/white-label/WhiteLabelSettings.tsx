@@ -303,35 +303,54 @@ function ProfileSettings({ tenant }: { tenant: any }) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm">Company Profile</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="space-y-6">
+      <SettingsHero
+        title="Company Profile"
+        description="Your company identity, workspace URL, and partner code for check sharing."
+        badge="Personal Settings"
+        icon={<Building2 className="h-4 w-4 text-primary" />}
+      />
+
+      <SectionCard
+        title="Company Information"
+        icon={<Building2 className="h-4 w-4 text-sky-500" />}
+        accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
+        description="Update how your company appears across ChecksOps"
+      >
         <div className="space-y-2">
-          <Label className="text-xs">Company Name</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} />
+          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Company Name</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} className="h-9" />
         </div>
         <div className="space-y-2">
-          <Label className="text-xs">Slug (URL path)</Label>
-          <Input value={tenant.slug} disabled className="opacity-60" />
-          <p className="text-[10px] text-muted-foreground">Workspace URL: {tenantUrl}</p>
+          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Slug (URL path)</Label>
+          <Input value={tenant.slug} disabled className="h-9 opacity-60" />
+          <p className="text-xs text-muted-foreground">Workspace URL: {tenantUrl}</p>
         </div>
-        <div className="space-y-2">
-          <Label className="text-xs">Partner Code</Label>
-          <Input value={tenant.partner_code || "—"} disabled className="font-mono tracking-widest opacity-60" />
-          <p className="text-[10px] text-muted-foreground">Share this code with partners for check sharing.</p>
+        <div className="flex justify-end">
+          <Button onClick={handleSave} disabled={saving} size="sm">
+            {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
+            Save Changes
+          </Button>
         </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Partner Code & Plan"
+        icon={<Link2 className="h-4 w-4 text-violet-500" />}
+        accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
+        description="Identifiers used for partner check sharing and billing"
+      >
         <div className="space-y-2">
-          <Label className="text-xs">Plan</Label>
+          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Partner Code</Label>
+          <Input value={tenant.partner_code || "—"} disabled className="h-9 font-mono tracking-widest opacity-60" />
+          <p className="text-xs text-muted-foreground">Share this code with partners for check sharing.</p>
+        </div>
+        <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2">
+          <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Plan</span>
           <Badge variant="outline">{tenant.plan_tier}</Badge>
         </div>
-        <Button onClick={handleSave} disabled={saving} size="sm">
-          {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
-          Save Changes
-        </Button>
-      </CardContent>
-    </Card>
+      </SectionCard>
+    </div>
   );
 }
 
