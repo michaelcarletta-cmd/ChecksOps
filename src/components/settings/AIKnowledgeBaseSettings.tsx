@@ -1072,7 +1072,9 @@ export const AIKnowledgeBaseSettings = () => {
           ) : (
             <p className="text-sm text-muted-foreground">Validation data is unavailable right now.</p>
           )}
+        </div>
       </SectionCard>
+
 
 
       <SectionCard
