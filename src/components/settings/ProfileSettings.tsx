@@ -487,7 +487,11 @@ export function ProfileSettings() {
       >
         <div className="flex justify-end pt-4">
           <Button onClick={handleSave} disabled={saving} size="lg" className="px-8">
-            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {saving ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
             Save Profile Changes
           </Button>
         </div>
