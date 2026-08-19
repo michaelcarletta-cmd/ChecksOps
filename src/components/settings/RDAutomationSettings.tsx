@@ -279,11 +279,6 @@ export const RDAutomationSettings = () => {
         </div>
       </SectionCard>
 
-
-
-
-
-
       <SectionCard
         title="How RD Tracking Works"
         accent="bg-gradient-to-r from-blue-500/60 to-blue-500/10"
