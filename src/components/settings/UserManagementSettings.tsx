@@ -501,9 +501,6 @@ export function UserManagementSettings() {
                       <KeyRound className="h-4 w-4" />
                     )}
                   </Button>
-                    <KeyRound className="h-4 w-4" />
-                  )}
-                </Button>
                 <Select
                   value={selectedRoles[user.id]}
                   onValueChange={(role) => {
