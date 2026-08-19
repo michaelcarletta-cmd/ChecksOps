@@ -7,7 +7,9 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Building2, UserPlus, Trash2, Crown, Shield, User, Pencil, Check, ChevronsUpDown } from "lucide-react";
+import { Building2, UserPlus, Trash2, Crown, Shield, User, Pencil, Check, ChevronsUpDown, Sparkles } from "lucide-react";
+import { SectionCard } from "./SectionCard";
+import { SettingsHero } from "./SettingsHero";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
@@ -426,16 +428,19 @@ export function OrganizationSettings() {
   if (!userOrg) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Building2 className="h-5 w-5" />
-            Organization
-          </CardTitle>
-          <CardDescription>
-            Create an organization to enable workspace collaboration with partner companies
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+      <SettingsHero
+        title="Organization"
+        description="Create an organization to enable workspace collaboration with partner companies"
+        badge="Collaboration"
+        icon={<Building2 className="h-4 w-4 text-primary" />}
+      />
+
+      <SectionCard
+        title="Setup Organization"
+        icon={<Building2 className="h-4 w-4 text-sky-500" />}
+        accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
+        description="Create your company organization to collaborate with partners"
+      >
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
             <DialogTrigger asChild>
               <Button>
@@ -489,8 +494,8 @@ export function OrganizationSettings() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        </CardContent>
-      </Card>
+        </SectionCard>
+      </div>
     );
   }
 
@@ -765,8 +770,100 @@ export function OrganizationSettings() {
               ))}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+          {isOrgAdmin && (
+            <div className="mt-6 flex justify-end">
+              <Dialog open={showAddMemberDialog} onOpenChange={setShowAddMemberDialog}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Add Team Member
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add Team Member</DialogTitle>
+                    <DialogDescription>
+                      Add a staff member to your organization
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Staff Member</Label>
+                      <Popover open={userSearchOpen} onOpenChange={setUserSearchOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={userSearchOpen}
+                            className="w-full justify-between"
+                          >
+                            {selectedUserId
+                              ? availableUsers?.find((user) => user.id === selectedUserId)?.email
+                              : "Search users..."}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[400px] p-0">
+                          <Command>
+                            <CommandInput placeholder="Search staff members..." />
+                            <CommandList>
+                              <CommandEmpty>No staff members found.</CommandEmpty>
+                              <CommandGroup>
+                                {availableUsers?.map((user) => (
+                                  <CommandItem
+                                    key={user.id}
+                                    value={user.email}
+                                    onSelect={() => {
+                                      setSelectedUserId(user.id);
+                                      setUserSearchOpen(false);
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        selectedUserId === user.id ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    <div className="flex flex-col">
+                                      <span>{user.full_name}</span>
+                                      <span className="text-xs text-muted-foreground">{user.email}</span>
+                                    </div>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Role</Label>
+                      <Select value={newMemberRole} onValueChange={setNewMemberRole}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="owner">Owner</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                          <SelectItem value="member">Member</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setShowAddMemberDialog(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleAddMember} disabled={isAddingMember}>
+                      {isAddingMember ? "Adding..." : "Add Member"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
+          )}
+        </SectionCard>
+      </div>
     </div>
   );
 }
