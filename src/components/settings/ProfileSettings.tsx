@@ -241,7 +241,7 @@ export function ProfileSettings() {
                 <img 
                   src={profile.logo_url} 
                   alt="Company logo" 
-                  className="h-24 w-auto max-w-[200px] object-contain border rounded-lg p-2 bg-white"
+                  className="h-24 w-auto max-w-[200px] object-contain rounded-lg border border-border/60 bg-muted/30 p-2"
                 />
                 <Button
                   variant="destructive"

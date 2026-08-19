@@ -283,22 +283,33 @@ export function WorkspaceList({ embedded }: WorkspaceListProps = {}) {
 
   if (!userOrg) {
     return (
-      <Card>
-        <CardContent className="py-8">
-          <div className="text-center">
-            <Building2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="font-semibold mb-2">No Organization</h3>
-            <p className="text-muted-foreground mb-4">
-              Create an organization in Settings to enable workspace collaboration
+      <div className="space-y-6">
+        {!embedded && (
+          <SettingsHero
+            title="Partner Ecosystem"
+            description="Manage collaborative spaces and shared claim data with outside organizations."
+            badge="Shared Workspaces"
+            icon={<Share2 className="h-4 w-4 text-primary" />}
+          />
+        )}
+        <SectionCard
+          title="No Organization"
+          description="Workspace collaboration requires an organization"
+          icon={<Building2 className="h-4 w-4 text-violet-500" />}
+          accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
+        >
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <Building2 className="mb-4 h-12 w-12 text-muted-foreground" />
+            <p className="mb-4 text-sm text-muted-foreground">
+              Create an organization in Company Settings to enable workspace collaboration.
             </p>
-            <Button onClick={() => navigate("/settings")}>
-              Go to Settings
-            </Button>
+            <Button onClick={() => navigate("/settings")}>Go to Settings</Button>
           </div>
-        </CardContent>
-      </Card>
+        </SectionCard>
+      </div>
     );
   }
+
 
   return (
     <div className="space-y-6">
@@ -311,15 +322,16 @@ export function WorkspaceList({ embedded }: WorkspaceListProps = {}) {
         />
       )}
 
-      <div className="grid gap-6 pb-12">
+      <div className="grid gap-6">
         {/* Pending Invites */}
         {invites && invites.length > 0 && (
           <SectionCard
             title="Pending Invitations"
+            description="Workspace invitations awaiting your response"
             icon={<Plus className="h-4 w-4 text-amber-500" />}
             accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
           >
-            <div className="space-y-4 pt-4">
+            <div className="space-y-4 pt-2">
               {invites.map((invite: any) => (
                 <div
                   key={invite.id}
@@ -359,7 +371,7 @@ export function WorkspaceList({ embedded }: WorkspaceListProps = {}) {
           icon={<Users className="h-4 w-4 text-violet-500" />}
           accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
         >
-          <div className="pt-4">
+          <div className="pt-2">
             <div className="flex justify-end mb-4">
               <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
                 <DialogTrigger asChild>

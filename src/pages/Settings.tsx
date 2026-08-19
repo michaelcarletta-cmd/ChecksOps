@@ -11,6 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature, ListTree, HelpCircle, Sparkles, TrendingUp, ShieldCheck, Cog, UserCog, Mail, Database, History, Bell, Activity, Cloud, Key, Share2, Receipt, Users, BarChart3, User, KeyRound, Building2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { SectionCard } from "@/components/settings/SectionCard";
+import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 
 import {
   DndContext,
@@ -818,9 +819,9 @@ export default function Settings() {
 
         {SHOW_CHECKALT && (
           <TabsContent value="checkalt" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+            <SettingsPageShell>
               <CheckAltSettings />
-            </div>
+            </SettingsPageShell>
           </TabsContent>
         )}
 
@@ -828,174 +829,29 @@ export default function Settings() {
         {/* ActumSettings hidden */}
 
         <TabsContent value="profile" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto space-y-6 pb-12 pt-6">
+          <SettingsPageShell>
             <ProfileSettings />
-          </div>
+          </SettingsPageShell>
         </TabsContent>
 
         <TabsContent value="referrals" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+          <SettingsPageShell>
             <ReferralSettings />
             <AdminReferralDashboard />
-          </div>
+          </SettingsPageShell>
         </TabsContent>
 
         <TabsContent value="workflow" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
-
-
-          {/* Claim Statuses - Collapsible */}
-          <Collapsible open={statusesOpen} onOpenChange={setStatusesOpen}>
-            <SectionCard
-              title="Claim Statuses"
-              icon={<ListTree className="h-4 w-4 text-primary" />}
-              accent="bg-gradient-to-r from-primary/60 to-primary/10"
-              description={`Customize the status options available for claims (${statuses.length} statuses)`}
-              collapsible={{
-                open: statusesOpen,
-                onOpenChange: setStatusesOpen
-              }}
-            >
-              <CollapsibleContent>
-                <div className="space-y-4 pt-2">
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Input
-                      placeholder="Status name"
-                      value={newStatusName}
-                      onChange={(e) => setNewStatusName(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && addStatus()}
-                      className="h-10 text-sm flex-1"
-                    />
-                    <div className="flex gap-2">
-                      <Input
-                        type="color"
-                        value={newStatusColor}
-                        onChange={(e) => setNewStatusColor(e.target.value)}
-                        className="w-14 h-10 p-1"
-                      />
-                      <Button onClick={addStatus} className="h-10 whitespace-nowrap">
-                        <Plus className="h-4 w-4 mr-1" />
-                        Add
-                      </Button>
-                    </div>
-                  </div>
-
-                  <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragEnd={handleDragEnd}
-                  >
-                    <SortableContext
-                      items={statuses.map(s => s.id)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      {statuses.map((status) => (
-                        <SortableStatusRow
-                          key={status.id}
-                          status={status}
-                          onUpdateName={updateStatusName}
-                          onUpdateColor={updateStatusColor}
-                          onUpdateGradient={updateStatusGradient}
-                          onDelete={deleteStatus}
-                          onRefresh={fetchStatuses}
-                        />
-                      ))}
-                    </SortableContext>
-                  </DndContext>
-                </div>
+          <SettingsPageShell>
               </CollapsibleContent>
             </SectionCard>
           </Collapsible>
-
-          {/* Loss Types - Collapsible */}
-          <Collapsible open={lossTypesOpen} onOpenChange={setLossTypesOpen}>
-            <SectionCard
-              title="Loss Types"
-              icon={<Database className="h-4 w-4 text-sky-500" />}
-              accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
-              description="Manage the types of losses available for claims"
-              collapsible={{
-                open: lossTypesOpen,
-                onOpenChange: setLossTypesOpen
-              }}
-            >
-              <CollapsibleContent>
-                <div className="pt-2">
-                  <LossTypesSettings embedded />
-                </div>
-              </CollapsibleContent>
-            </SectionCard>
-          </Collapsible>
-
-          {/* Custom Fields - Collapsible */}
-          <Collapsible open={customFieldsOpen} onOpenChange={setCustomFieldsOpen}>
-            <SectionCard
-              title="Custom Fields"
-              icon={<Plus className="h-4 w-4 text-emerald-500" />}
-              accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
-              description="Add custom data fields to claim overview pages"
-              collapsible={{
-                open: customFieldsOpen,
-                onOpenChange: setCustomFieldsOpen
-              }}
-            >
-              <CollapsibleContent>
-                <div className="pt-2">
-                  <CustomFieldsSettings embedded />
-                </div>
-              </CollapsibleContent>
-            </SectionCard>
-          </Collapsible>
-
-          {/* Signature Document Presets - Collapsible */}
-          <Collapsible open={sigPresetsOpen} onOpenChange={setSigPresetsOpen}>
-            <SectionCard
-              title="Signature Document Presets"
-              icon={<FileSignature className="h-4 w-4 text-violet-500" />}
-              accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
-              description="Default labels and help text shown to signers per document type"
-              collapsible={{
-                open: sigPresetsOpen,
-                onOpenChange: setSigPresetsOpen
-              }}
-            >
-              <CollapsibleContent>
-                <div className="pt-2">
-                  <SignaturePresetsSettings embedded />
-                </div>
-              </CollapsibleContent>
-            </SectionCard>
-          </Collapsible>
-
-          <Collapsible open={integrationsOpen} onOpenChange={setIntegrationsOpen}>
-            <SectionCard
-              title="Integrations"
-              icon={<Share2 className="h-4 w-4 text-primary" />}
-              accent="bg-gradient-to-r from-primary/60 to-primary/10"
-              description="Configure external integrations for your workflow"
-              collapsible={{
-                open: integrationsOpen,
-                onOpenChange: setIntegrationsOpen
-              }}
-            >
-              <CollapsibleContent>
-                <div className="space-y-6 pt-2">
-                  <PhoneVerificationSettings />
-                  <OutlookConnectionSettings embedded />
-                  <ZapierIntegrationSettings embedded />
-                  <QuickBooksSettings embedded />
-                  {/* ActumSettings integration hidden */}
-                  
-                </div>
-              </CollapsibleContent>
-            </SectionCard>
-          </Collapsible>
-          </div>
+          </SettingsPageShell>
         </TabsContent>
 
 
         <TabsContent value="users" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto space-y-6 pb-12 pt-6">
+          <SettingsPageShell>
             <UserManagementSettings />
             {tenant && (
               <TeamCapsSettings 
@@ -1006,117 +862,112 @@ export default function Settings() {
                 onUpdate={() => {}} 
               />
             )}
-          </div>
+          </SettingsPageShell>
         </TabsContent>
 
         <TabsContent value="usage" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+          <SettingsPageShell>
             <UsageLogTab />
-          </div>
+          </SettingsPageShell>
         </TabsContent>
 
 
         <TabsContent value="automations" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
-
-          <AutomationsSettings />
-          <div className="pt-6">
-            <RDAutomationSettings />
-          </div>
-          </div>
+          <SettingsPageShell>
+          </SettingsPageShell>
         </TabsContent>
 
 
         <TabsContent value="ai-knowledge" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+          <SettingsPageShell>
 
           <AIKnowledgeBaseSettings />
           <CounterArgumentsSettings />
-          </div>
+          </SettingsPageShell>
         </TabsContent>
 
 
         <TabsContent value="organization" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+          <SettingsPageShell>
             <OrganizationSettings />
             <CompanyBrandingSettings />
             <EmailSenderSettings />
             <TenantEmailHealthPanel />
-          </div>
+          </SettingsPageShell>
         </TabsContent>
 
         <TabsContent value="workspaces" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto space-y-6 pb-12 pt-6">
+          <SettingsPageShell>
             <WorkspaceList />
-          </div>
+          </SettingsPageShell>
         </TabsContent>
 
         <TabsContent value="ai-key" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+          <SettingsPageShell>
 
             <TenantAIKeySettings />
 
-          </div>
+          </SettingsPageShell>
         </TabsContent>
 
 
         <TabsContent value="import" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+            <SettingsPageShell>
             <ImportSettings />
-          </div>
+          </SettingsPageShell>
         </TabsContent>
 
 
 
         {isAdmin && (
           <TabsContent value="audit-logs" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+            <SettingsPageShell>
               <AuditLogSettings />
-            </div>
+            </SettingsPageShell>
           </TabsContent>
 
         )}
 
         {isAdmin && (
           <TabsContent value="notification-logs" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+            <SettingsPageShell>
               <NotificationDeliveryLogView />
-            </div>
+            </SettingsPageShell>
           </TabsContent>
 
         )}
 
         {isAdmin && (
           <TabsContent value="urgency-alerts" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+            <SettingsPageShell>
               <StatusUrgencyNotificationsSettings />
-            </div>
+            </SettingsPageShell>
           </TabsContent>
 
         )}
 
         {isAdmin && (
           <TabsContent value="jn-diagnostics" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+            <SettingsPageShell>
               <JobNimbusSyncDiagnostics />
-            </div>
+            </SettingsPageShell>
           </TabsContent>
 
         )}
 
         {isAdmin && (
           <TabsContent value="backup" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+            <SettingsPageShell>
               <BackupStatusSettings />
-            </div>
+            </SettingsPageShell>
           </TabsContent>
 
         )}
         {isAdmin && (
           <TabsContent value="white-label" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+            <SettingsPageShell>
               <TenantManagement />
-            </div>
+            </SettingsPageShell>
           </TabsContent>
 
         )}

@@ -327,7 +327,7 @@ export function OrganizationSettings() {
 
   if (!userOrg) {
     return (
-      <div className="space-y-6 pt-0">
+      <div className="space-y-6">
         <SettingsHero
           title="Organization"
           description="Create an organization to enable workspace collaboration with partner companies"
@@ -415,7 +415,7 @@ export function OrganizationSettings() {
   const org = userOrg.orgs as unknown as Org;
 
   return (
-    <div className="space-y-6 pt-0">
+    <div className="space-y-6">
       <SettingsHero
         title={org.name}
         description="Manage your company organization and collaborate with partners."
