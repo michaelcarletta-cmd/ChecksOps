@@ -181,6 +181,7 @@ export function ProfileSettings() {
         icon={<User className="h-4 w-4 text-primary" />}
       />
 
+
       <div className="grid gap-6">
         <SectionCard
           title="Personal Information"
