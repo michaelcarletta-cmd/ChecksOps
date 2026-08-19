@@ -150,37 +150,29 @@ export function TenantAIKeySettings() {
   );
 
   return (
-    <div className="space-y-6">
-      {/* Status card */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <KeyRound className="h-4 w-4" /> OpenAI API Key
-            {hasKey && status === "active" && (
-              <Badge className="text-[9px] px-1.5 py-0 bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
-                Active
-              </Badge>
-            )}
-            {hasKey && status === "invalid" && (
-              <Badge variant="destructive" className="text-[9px] px-1.5 py-0">
-                Invalid
-              </Badge>
-            )}
-            {hasKey && status === "unverified" && (
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0">
-                Unverified
-              </Badge>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <SettingsHero
+        title="AI Intelligence Engine"
+        description="Configure your OpenAI API key to enable Darwin's document analysis and OCR intelligence."
+        badge="Darwin Intelligence"
+        icon={<Sparkles className="h-4 w-4 text-primary" />}
+      />
+
+      <div className="grid gap-6 pb-12">
+        {/* Status card */}
+        <SectionCard
+          title="Key Status & Diagnostics"
+          icon={<KeyRound className="h-4 w-4 text-amber-500" />}
+          accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
+          description="Current health and validation status of your OpenAI integration"
+        >
           {isLoading ? (
             <Loader2 className="h-5 w-5 animate-spin" />
           ) : hasKey ? (
             <div className="space-y-3">
-              <div className="flex items-center justify-between rounded-lg border border-border/60 px-4 py-3">
+              <div className="flex items-center justify-between rounded-lg border border-border/60 px-4 py-3 bg-card/30 backdrop-blur-sm">
                 <div>
-                  <div className="text-sm font-mono">sk-•••••••••••••••{cred.key_last_4}</div>
+                  <div className="text-sm font-mono text-amber-200">sk-•••••••••••••••{cred.key_last_4}</div>
                   {cred.last_validated_at && (
                     <div className="text-xs text-muted-foreground mt-1">
                       Last verified{" "}
@@ -252,118 +244,91 @@ export function TenantAIKeySettings() {
               </p>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </SectionCard>
 
-      {/* Add/replace key */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm">{hasKey ? "Replace key" : "Add your OpenAI key"}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <p className="font-medium text-foreground">How it works</p>
-            <ol className="space-y-1 list-decimal list-inside">
-              <li>
-                Create an account at{" "}
-                <a
-                  href="https://platform.openai.com/signup"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-primary inline-flex items-center gap-0.5 hover:underline"
-                >
-                  platform.openai.com <ExternalLink className="h-3 w-3" />
-                </a>
-              </li>
-              <li>
-                Add a payment method under{" "}
-                <a
-                  href="https://platform.openai.com/settings/organization/billing/overview"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-primary inline-flex items-center gap-0.5 hover:underline"
-                >
-                  Billing <ExternalLink className="h-3 w-3" />
-                </a>
-              </li>
-              <li>
-                Create a key at{" "}
-                <a
-                  href="https://platform.openai.com/api-keys"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-primary inline-flex items-center gap-0.5 hover:underline"
-                >
-                  API keys <ExternalLink className="h-3 w-3" />
-                </a>{" "}
-                — copy it (starts with <code className="text-foreground">sk-</code>) and paste below
-              </li>
-            </ol>
-          </div>
+        {/* Add/replace key */}
+        <SectionCard
+          title={hasKey ? "Rotate API Key" : "Connect OpenAI Account"}
+          icon={<Plus className="h-4 w-4 text-primary" />}
+          accent="bg-gradient-to-r from-primary/60 to-primary/10"
+          description={hasKey ? "Replace your current key with a new one" : "Enter your sk-... key from platform.openai.com"}
+        >
+          <div className="space-y-4">
+            <div className="space-y-2 text-xs text-muted-foreground bg-muted/30 p-4 rounded-lg">
+              <p className="font-medium text-foreground mb-1">How to connect:</p>
+              <ol className="space-y-2 list-decimal list-inside">
+                <li>
+                  Create an account at{" "}
+                  <a
+                    href="https://platform.openai.com/signup"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary inline-flex items-center gap-0.5 hover:underline"
+                  >
+                    platform.openai.com <ExternalLink className="h-3 w-3" />
+                  </a>
+                </li>
+                <li>
+                  Add a payment method under <strong>Billing</strong> to enable API access
+                </li>
+                <li>
+                  Create a key at <strong>API keys</strong> and paste it below
+                </li>
+              </ol>
+            </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="oai-key" className="text-xs">
-              OpenAI API key
-            </Label>
-            <Input
-              id="oai-key"
-              type="password"
-              autoComplete="off"
-              placeholder="sk-..."
-              value={keyInput}
-              onChange={(e) => setKeyInput(e.target.value)}
-              className="font-mono text-sm"
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Your key is encrypted at rest and never shown again after saving.
-            </p>
-          </div>
-
-          <Button
-            disabled={!keyInput.trim().startsWith("sk-") || saveMutation.isPending}
-            onClick={() => saveMutation.mutate(keyInput.trim())}
-            className="w-full"
-          >
-            {saveMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Validating with OpenAI...
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="h-4 w-4 mr-2" />
-                Save and verify
-              </>
-            )}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Security disclaimer */}
-      <Card className="border-border/60">
-        <CardContent className="pt-4 pb-3">
-          <div className="flex items-start gap-2">
-            <Shield className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-            <div className="text-xs text-muted-foreground space-y-1">
-              <p className="font-medium text-foreground">You own this key. We bill nothing.</p>
-              <p>
-                All AI calls for this tenant use your OpenAI account directly. You'll see usage
-                and pay invoices through OpenAI's dashboard — not through us. Revoke this key
-                anytime at{" "}
-                <a
-                  href="https://platform.openai.com/api-keys"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  platform.openai.com/api-keys
-                </a>
-                .
+            <div className="space-y-2">
+              <Label htmlFor="oai-key">OpenAI API key</Label>
+              <Input
+                id="oai-key"
+                type="password"
+                autoComplete="off"
+                placeholder="sk-..."
+                value={keyInput}
+                onChange={(e) => setKeyInput(e.target.value)}
+                className="font-mono text-sm h-10"
+              />
+              <p className="text-[11px] text-muted-foreground italic">
+                Your key is encrypted at rest and never shown again after saving.
               </p>
             </div>
+
+            <Button
+              disabled={!keyInput.trim().startsWith("sk-") || saveMutation.isPending}
+              onClick={() => saveMutation.mutate(keyInput.trim())}
+              className="w-full"
+            >
+              {saveMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Validating with OpenAI...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Save and verify
+                </>
+              )}
+            </Button>
           </div>
-        </CardContent>
-      </Card>
+        </SectionCard>
+
+        {/* Security disclaimer */}
+        <SectionCard
+          title="Privacy & Billing"
+          icon={<Shield className="h-4 w-4 text-muted-foreground" />}
+          accent="bg-muted"
+        >
+          <div className="text-xs text-muted-foreground space-y-2 leading-relaxed">
+            <p className="font-medium text-foreground">Direct Billing Control</p>
+            <p>
+              All AI calls for this tenant use your OpenAI account directly. You'll see usage
+              and pay invoices through OpenAI's dashboard. ChecksOps does not markup or bill for 
+              your AI usage. You can revoke this key at any time in your OpenAI settings.
+            </p>
+          </div>
+        </SectionCard>
+      </div>
     </div>
   );
 }
