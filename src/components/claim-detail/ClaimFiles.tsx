@@ -570,16 +570,14 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                         size="sm" 
                         className="text-amber-500 border-amber-500/30 hover:bg-amber-500/10"
                         onClick={() => {
+                          localStorage.setItem("preselected_sig_file", JSON.stringify(file));
                           const tabsList = document.querySelector('[role="tablist"]');
                           const sigTrigger = tabsList?.querySelector('[value="templates"]');
                           if (sigTrigger instanceof HTMLElement) {
                             sigTrigger.click();
-                            // We pass state via local storage or a more robust state management if needed, 
-                            // but for now, switching tabs is the first step.
-                            // To make it seamless, we could use a custom event or store the file in a shared state.
                             toast({
                               title: "Switching to Signatures",
-                              description: "Select 'Request Signature' and choose this file from 'Claim Files'.",
+                              description: `Loading ${file.file_name} into signature request flow.`,
                             });
                           }
                         }}
