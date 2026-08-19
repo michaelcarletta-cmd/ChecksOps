@@ -240,7 +240,7 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
                 <SelectTrigger className="bg-background/50 border-transparent focus:border-primary/50"><SelectValue placeholder="State" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All states</SelectItem>
-                  {TRADE_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  {STATE_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select value={minRating} onValueChange={setMinRating}>
