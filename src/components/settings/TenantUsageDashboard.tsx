@@ -8,8 +8,9 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Receipt, Loader2, AlertCircle } from "lucide-react";
+import { Receipt, Loader2, AlertCircle, TrendingUp, DollarSign } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
+import { SectionCard } from "./SectionCard";
 
 interface TenantUsageDashboardProps {
   tenantId: string;
