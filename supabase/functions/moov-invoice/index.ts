@@ -75,6 +75,12 @@ serve(async (req) => {
       return json({ error: "Finish your payment account setup before sending invoices." }, 400);
     }
 
+    const { data: tenantBranding } = await supabase
+      .from("tenants")
+      .select("invoice_letterhead_url, invoice_footer_note, invoice_default_terms")
+      .eq("id", tenant_id)
+      .maybeSingle();
+
     /* ------------------------------ create ------------------------------ */
     if (action === "create" || action === "create_and_send") {
       const customerName = String(body.customer_name ?? "").trim();
