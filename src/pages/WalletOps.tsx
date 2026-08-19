@@ -18,18 +18,34 @@ import {
   ArrowUpRight,
   BadgeCheck,
   Banknote,
+  Building2,
   Clock,
   Gauge,
   Landmark,
   Loader2,
   RefreshCw,
   Sparkles,
+  TrendingUp,
   Wallet,
   Zap,
 } from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip as RTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { useWallet } from "@/hooks/useWallet";
 import { useSweepConfig } from "@/hooks/useSweepConfig";
-import { useWalletOpsReadiness, useWalletOpsTransfers } from "@/hooks/useWalletOps";
+import {
+  useAllTenantWalletBalances,
+  useWalletOpsReadiness,
+  useWalletOpsTransfers,
+  useWalletRunningBalance,
+} from "@/hooks/useWalletOps";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
