@@ -645,20 +645,14 @@ export function CompanyBrandingSettings() {
               </div>
             )}
           </div>
-        </CardContent>
-      </Card>
+        </SectionCard>
 
-      {/* Check Endorsement Email Template */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Mail className="h-5 w-5" />
-            Check Endorsement Email Template
-          </CardTitle>
-          <CardDescription>
-            Customize the email sent to payees when a check endorsement is required. Reminder emails use a separate subject and body.
-          </CardDescription>
-        </CardHeader>
+        <SectionCard
+          title="Check Endorsement Email Template"
+          icon={<Mail className="h-4 w-4 text-sky-500" />}
+          accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
+          description="Customize the email sent to payees when a check endorsement is required. Reminder emails use a separate subject and body."
+        >
         <CardContent className="space-y-5">
           <div>
             <Label className="text-xs text-muted-foreground mb-2 block">Available Merge Fields (click to insert)</Label>
@@ -802,17 +796,12 @@ export function CompanyBrandingSettings() {
           </div>
         </SectionCard>
 
-      {/* Online Check Writer */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileCheck className="h-5 w-5" />
-            Online Check Writer
-          </CardTitle>
-          <CardDescription>
-            Configure your Online Check Writer bank account for sending checks
-          </CardDescription>
-        </CardHeader>
+        <SectionCard
+          title="Online Check Writer"
+          icon={<FileCheck className="h-4 w-4 text-blue-500" />}
+          accent="bg-gradient-to-r from-blue-500/60 to-blue-500/10"
+          description="Configure your Online Check Writer bank account for sending checks."
+        >
         <CardContent className="space-y-4">
           <div>
             <Label>Bank Account ID</Label>
@@ -882,6 +871,7 @@ export function CompanyBrandingSettings() {
       <div className="flex justify-end pt-4">
         {saving ? "Saving..." : "Save Company Branding"}
       </Button>
+      </div>
     </div>
   );
 }
