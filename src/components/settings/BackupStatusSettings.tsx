@@ -14,9 +14,12 @@ import {
   Zap,
   Shield,
   HardDrive,
-  Clock
+  Clock,
+  Activity
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SettingsHero } from "./SettingsHero";
+import { SectionCard } from "./SectionCard";
 
 interface DataCount {
   label: string;
@@ -105,45 +108,37 @@ export function BackupStatusSettings() {
   ] : [];
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <Shield className="h-6 w-6 text-green-500" />
-            <div>
-              <CardTitle>Backup Status</CardTitle>
-              <CardDescription>
-                All your data is automatically backed up daily with Lovable Cloud
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-4 p-4 bg-green-500/10 rounded-lg border border-green-500/20">
-            <div className="h-3 w-3 rounded-full bg-green-500 animate-pulse" />
-            <div>
-              <p className="font-medium text-green-700 dark:text-green-400">Automatic Backups Active</p>
-              <p className="text-sm text-muted-foreground">
-                Daily database backups with point-in-time recovery capability
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <SettingsHero
+        title="Backup Status"
+        description="Monitor the health and redundancy of your claim data and files."
+        badge="Security & Compliance"
+        icon={<Shield className="h-4 w-4 text-primary" />}
+      />
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <Database className="h-6 w-6 text-primary" />
-            <div>
-              <CardTitle>Database Records</CardTitle>
-              <CardDescription>
-                All database tables are included in daily backups
-              </CardDescription>
-            </div>
+      <SectionCard
+        title="Backup Health"
+        accent="bg-gradient-to-r from-green-500/60 to-green-500/10"
+        icon={<Shield className="h-4 w-4 text-green-500" />}
+        description="All your data is automatically backed up daily with Lovable Cloud."
+      >
+        <div className="flex items-center gap-4 p-4 bg-green-500/10 rounded-lg border border-green-500/20">
+          <div className="h-3 w-3 rounded-full bg-green-500 animate-pulse" />
+          <div>
+            <p className="font-medium text-green-700 dark:text-green-400">Automatic Backups Active</p>
+            <p className="text-sm text-muted-foreground">
+              Daily database backups with point-in-time recovery capability
+            </p>
           </div>
-        </CardHeader>
-        <CardContent>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Database Records"
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        icon={<Database className="h-4 w-4 text-primary" />}
+        description="All database tables are included in daily backups."
+      >
           {isLoading ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {[...Array(12)].map((_, i) => (
@@ -169,22 +164,14 @@ export function BackupStatusSettings() {
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+      </SectionCard>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <HardDrive className="h-6 w-6 text-primary" />
-            <div>
-              <CardTitle>File Storage</CardTitle>
-              <CardDescription>
-                All uploaded files are stored with redundancy
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
+      <SectionCard
+        title="File Storage"
+        accent="bg-gradient-to-r from-blue-500/60 to-blue-500/10"
+        icon={<HardDrive className="h-4 w-4 text-blue-500" />}
+        description="All uploaded files are stored with redundancy."
+      >
           {isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {[...Array(3)].map((_, i) => (
@@ -210,23 +197,15 @@ export function BackupStatusSettings() {
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+      </SectionCard>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <Clock className="h-6 w-6 text-primary" />
-            <div>
-              <CardTitle>Storage Buckets</CardTitle>
-              <CardDescription>
-                Dedicated storage buckets with automatic redundancy
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <SectionCard
+        title="Storage Buckets"
+        accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
+        icon={<FolderOpen className="h-4 w-4 text-amber-500" />}
+        description="Dedicated storage buckets with automatic redundancy."
+      >
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[
               { name: "claim-files", description: "Claim documents and uploads", isPublic: false },
               { name: "document-templates", description: "Reusable document templates", isPublic: false },
@@ -247,8 +226,8 @@ export function BackupStatusSettings() {
               </div>
             ))}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
     </div>
   );
 }
