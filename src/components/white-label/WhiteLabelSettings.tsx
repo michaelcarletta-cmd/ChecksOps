@@ -31,6 +31,8 @@ import { TenantPartnerManager } from "./TenantPartnerManager";
 import { TenantAIKeySettings } from "./TenantAIKeySettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
+import { SettingsHero } from "@/components/settings/SettingsHero";
+import { SectionCard } from "@/components/settings/SectionCard";
 
 import { ContractorServiceAreaCard } from "@/components/networking/ContractorServiceAreaCard";
 import { ContractorLeadsCard } from "@/components/networking/ContractorLeadsCard";
