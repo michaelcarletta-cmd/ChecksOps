@@ -386,6 +386,70 @@ export function CompanyBrandingSettings() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Invoice Branding
+          </CardTitle>
+          <CardDescription>
+            Customize the look and feel of your customer invoices
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div>
+            <Label>Invoice Letterhead</Label>
+            <div className="mt-2">
+              <Label
+                htmlFor="invoice-letterhead-upload"
+                className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                  {invoiceLetterheadUrl ? (
+                    <img src={invoiceLetterheadUrl} alt="Invoice Letterhead Preview" className="h-20 object-contain mb-2" />
+                  ) : (
+                    <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                  )}
+                  <p className="text-sm text-muted-foreground">
+                    {uploadingInvoice ? "Uploading..." : "Click to upload invoice letterhead"}
+                  </p>
+                </div>
+              </Label>
+              <Input
+                id="invoice-letterhead-upload"
+                type="file"
+                accept="image/*"
+                onChange={handleInvoiceLetterheadUpload}
+                className="hidden"
+                disabled={uploadingInvoice}
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label>Invoice Footer Note</Label>
+            <Textarea
+              value={invoiceFooterNote}
+              onChange={(e) => setInvoiceFooterNote(e.target.value)}
+              placeholder="Thank you for your business!"
+              rows={2}
+            />
+            <p className="text-xs text-muted-foreground mt-1">Appears at the bottom of the invoice</p>
+          </div>
+
+          <div>
+            <Label>Default Payment Terms</Label>
+            <Textarea
+              value={invoiceDefaultTerms}
+              onChange={(e) => setInvoiceDefaultTerms(e.target.value)}
+              placeholder="Payment is due within 30 days. Please make checks payable to..."
+              rows={3}
+            />
+            <p className="text-xs text-muted-foreground mt-1">Default terms added to every new invoice</p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Signature Request Email Template */}
       <Card>
         <CardHeader>
