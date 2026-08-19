@@ -69,14 +69,15 @@ export function CompanyBrandingSettings() {
   }, []);
 
   const loadSettings = async () => {
-    const { data, error } = await supabase
+    // 1. Get branding details from company_branding
+    const { data: brandingData, error: brandingError } = await supabase
       .from("company_branding" as any)
       .select("*")
       .limit(1)
       .maybeSingle();
     
-    if (data) {
-      const branding = data as any;
+    if (brandingData) {
+      const branding = brandingData as any;
       setBrandingId(branding.id);
       setCompanyName(branding.company_name || "");
       setAddress(branding.company_address || "");
@@ -97,6 +98,31 @@ export function CompanyBrandingSettings() {
       setSigCoords({ page: branding.esign_signature_page || 1, x: branding.esign_signature_x || 100, y: branding.esign_signature_y || 600, w: branding.esign_signature_width || 200, h: branding.esign_signature_height || 50 });
       setDateCoords({ page: branding.esign_date_page || 1, x: branding.esign_date_x || 350, y: branding.esign_date_y || 600, w: branding.esign_date_width || 100, h: branding.esign_date_height || 25 });
       setOcwBankAccountId(branding.online_check_writer_bank_account_id || "");
+    }
+
+    // 2. Get invoice-specific settings from the current tenant
+    // We fetch the current user first to resolve their tenant
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: tenantUser } = await supabase
+        .from("tenant_users")
+        .select("tenant_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (tenantUser) {
+        const { data: tenant } = await supabase
+          .from("tenants")
+          .select("invoice_letterhead_url, invoice_footer_note, invoice_default_terms")
+          .eq("id", tenantUser.tenant_id)
+          .maybeSingle();
+        
+        if (tenant) {
+          setInvoiceLetterheadUrl(tenant.invoice_letterhead_url || null);
+          setInvoiceFooterNote(tenant.invoice_footer_note || "");
+          setInvoiceDefaultTerms(tenant.invoice_default_terms || "");
+        }
+      }
     }
   };
 
