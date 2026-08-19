@@ -1047,11 +1047,9 @@ export default function Settings() {
                   onOpenChange: setWorkspacesOpen
                 }}
               >
-                <CollapsibleContent>
-                  <div className="pt-2">
-                    <WorkspaceList embedded />
-                  </div>
-                </CollapsibleContent>
+                <div className="pt-2">
+                  <WorkspaceList embedded />
+                </div>
               </SectionCard>
             </Collapsible>
           </div>
