@@ -9,9 +9,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, Edit } from "lucide-react";
+import { Plus, Trash2, Edit, CheckSquare, Activity } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { SectionCard } from "./SectionCard";
 
 type TriggerType = "on_claim_creation" | "on_status_change" | "on_sub_status_change" | "on_check_status_change";
 
@@ -272,15 +273,15 @@ export function TaskAutomationsSettings() {
     .filter(g => g.subs.length > 0);
 
   return (
-    <Card>
-      <CardHeader>
+    <SectionCard
+      title="Task Automations"
+      icon={<CheckSquare className="h-4 w-4 text-primary" />}
+      accent="bg-gradient-to-r from-primary/60 to-primary/10"
+      description="Automatically create tasks when claims are created, enter specific statuses, or reach sub-steps"
+    >
+      <div className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-          <div>
-            <CardTitle>Task Automations</CardTitle>
-            <CardDescription>
-              Automatically create tasks when claims are created, enter specific statuses, or reach sub-steps
-            </CardDescription>
-          </div>
+          <h3 className="text-sm font-medium">Task Rules</h3>
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
             setIsDialogOpen(open);
             if (!open) resetForm();
