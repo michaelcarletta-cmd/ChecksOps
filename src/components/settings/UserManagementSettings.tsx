@@ -491,12 +491,13 @@ export function UserManagementSettings() {
                 <Button
                   variant="outline"
                   size="icon"
+                  className="h-8 w-8"
                   onClick={() => sendPasswordResetEmail(user.id, user.email, user.full_name || user.email)}
                   disabled={resettingUserId === user.id}
                   title="Send password reset email"
                 >
                   {resettingUserId === user.id ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-3 w-3 animate-spin" />
                   ) : (
                     <KeyRound className="h-4 w-4" />
                   )}

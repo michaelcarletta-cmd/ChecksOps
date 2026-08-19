@@ -6,8 +6,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Edit2, Save, X, BookOpen, Search } from "lucide-react";
+import { Plus, Trash2, Edit2, Save, X, BookOpen, Search, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { SectionCard } from "./SectionCard";
+import { SettingsHero } from "./SettingsHero";
 import {
   Dialog,
   DialogContent,
@@ -196,18 +198,20 @@ export const CounterArgumentsSettings = () => {
   }, {} as Record<string, CounterArgument[]>);
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <BookOpen className="h-5 w-5" />
-              Counter-Argument Library
-            </CardTitle>
-            <CardDescription>
-              Manage proven rebuttals for common denial reasons. Darwin uses these when generating responses.
-            </CardDescription>
-          </div>
+    <div className="space-y-6">
+      <SettingsHero
+        title="Rebuttal Library"
+        description="Proven counter-arguments Darwin uses to dismantle insurance carrier denials."
+        badge="Copilot Strategy"
+        icon={<BookOpen className="h-4 w-4 text-primary" />}
+      />
+
+      <SectionCard
+        title="Counter-Arguments"
+        icon={<Sparkles className="h-4 w-4 text-amber-500" />}
+        accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
+        description="Manage the rebuttal templates Darwin uses when analyzing denial letters."
+        headerActions={
           <Dialog open={dialogOpen} onOpenChange={(open) => {
             setDialogOpen(open);
             if (!open) {
@@ -293,9 +297,9 @@ export const CounterArgumentsSettings = () => {
               </div>
             </DialogContent>
           </Dialog>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        }
+      >
+        <div className="space-y-4 pt-4">
         {/* Search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -391,7 +395,8 @@ export const CounterArgumentsSettings = () => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </CardContent>
-    </Card>
+        </div>
+      </SectionCard>
+    </div>
   );
 };
