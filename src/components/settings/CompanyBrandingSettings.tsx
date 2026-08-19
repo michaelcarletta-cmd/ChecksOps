@@ -378,8 +378,8 @@ export function CompanyBrandingSettings() {
               />
             </div>
           </div>
-        </CardContent>
-      </Card>
+          </div>
+        </SectionCard>
 
         <SectionCard
           title="Letterhead"
@@ -418,8 +418,7 @@ export function CompanyBrandingSettings() {
               />
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </SectionCard>
 
         <SectionCard
           title="Invoice Branding"
@@ -477,8 +476,7 @@ export function CompanyBrandingSettings() {
             />
             <p className="text-xs text-muted-foreground mt-1">Default terms added to every new invoice</p>
           </div>
-        </CardContent>
-      </Card>
+        </SectionCard>
 
       {/* Signature Request Email Template */}
       <Card>
