@@ -370,7 +370,7 @@ export function UserManagementSettings() {
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6">
       <SettingsHero
         title="User Management"
         description="Manage your team's access, roles, and pending approvals."

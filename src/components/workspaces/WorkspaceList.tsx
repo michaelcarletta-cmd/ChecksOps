@@ -301,7 +301,7 @@ export function WorkspaceList({ embedded }: WorkspaceListProps = {}) {
   }
 
   return (
-    <div className={`space-y-6 ${embedded ? "" : "max-w-7xl mx-auto"}`}>
+    <div className={`space-y-6 pb-12 ${embedded ? "" : ""}`}>
       {!embedded && (
         <SettingsHero
           title="Partner Ecosystem"
