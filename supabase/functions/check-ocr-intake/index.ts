@@ -173,8 +173,8 @@ async function validateTenantKeyForOcrFallback(
     const updates: Record<string, unknown> = {
       last_validated_at: new Date().toISOString(),
       last_error: ok
-        ? `OCR provider fallback used after: ${originalError}`.slice(0, 500)
-        : `OpenAI key validation failed during OCR fallback${status ? ` (${status})` : ""}: ${originalError}`.slice(0, 500),
+        ? `OCR provider fallback used after: ${getFriendlyOcrError(originalError)}`.slice(0, 500)
+        : `OpenAI key validation failed: ${getFriendlyOcrError(originalError)}`.slice(0, 500),
     };
     if (!ok) updates.status = "invalid";
 
