@@ -299,7 +299,6 @@ export function EmailSenderSettings() {
                 {settings.domain_status}
               </Badge>
             )}
-          </div>
           <div className="grid gap-4 md:grid-cols-[2fr_1fr]">
             <div className="space-y-2">
               <Label htmlFor="domain">Sending domain</Label>
