@@ -121,7 +121,8 @@ export const RDAutomationSettings = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-7xl mx-auto">
+
       <SectionCard
         title="Recoverable Depreciation Automation"
         accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
