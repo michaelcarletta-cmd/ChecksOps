@@ -51,10 +51,36 @@ export function MoovBankLink({ tenantId, onConnected, onExit }: Props) {
     if (!token || !mountRef.current) return;
 
     let mounted = true;
-    const el = document.createElement("moov-bank-account") as any;
-    el.token = token;
+    let cancelled = false;
 
-    mountRef.current.replaceChildren(el);
+    async function loadSdk() {
+      if (customElements.get("moov-bank-account")) return;
+      await new Promise<void>((resolve, reject) => {
+        const existing = document.querySelector<HTMLScriptElement>('script[src="https://js.moov.io/v1"]');
+        if (existing) {
+          existing.addEventListener("load", () => resolve());
+          existing.addEventListener("error", () => reject(new Error("Failed to load Moov.js")));
+          if (customElements.get("moov-bank-account")) resolve();
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = "https://js.moov.io/v1";
+        script.async = true;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error("Failed to load Moov.js"));
+        document.head.appendChild(script);
+      });
+      await customElements.whenDefined("moov-bank-account");
+    }
+
+    loadSdk()
+      .then(() => {
+        if (cancelled || !mountRef.current) return;
+        const el = document.createElement("moov-bank-account") as any;
+        el.token = token;
+
+        mountRef.current.replaceChildren(el);
+
 
     el.onCancel = () => {
       onExit?.();
