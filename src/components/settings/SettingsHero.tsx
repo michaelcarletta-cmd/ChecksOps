@@ -10,7 +10,7 @@ interface SettingsHeroProps {
 
 export function SettingsHero({ title, description, badge, icon }: SettingsHeroProps) {
   return (
-    <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/15 via-primary/5 to-background p-4 md:p-6">
+    <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/15 via-primary/5 to-background p-4 md:p-6 mb-0">
       <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
       <div className="relative flex flex-col gap-2">
         <div className="flex items-center gap-2">
