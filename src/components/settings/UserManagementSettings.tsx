@@ -575,6 +575,5 @@ export function UserManagementSettings() {
         </div>
       </SectionCard>
     </div>
-  </div>
   );
 }
