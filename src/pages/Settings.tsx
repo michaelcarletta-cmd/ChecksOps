@@ -676,7 +676,7 @@ export default function Settings() {
             </div>
           </div>
         </div>
-      </div>
+
         <div className="absolute top-4 right-4 md:top-6 md:right-6">
           <Dialog>
             <DialogTrigger asChild>
