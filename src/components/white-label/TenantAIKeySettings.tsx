@@ -19,6 +19,7 @@ import {
   Shield,
   Info,
   Sparkles,
+  Plus,
 } from "lucide-react";
 import { format } from "date-fns";
 import { SettingsHero } from "@/components/settings/SettingsHero";
