@@ -1025,7 +1025,11 @@ export default function Settings() {
           <CounterArgumentsSettings />
         </TabsContent>
 
-        <TabsContent value="organization" className="w-full space-y-4">
+        <TabsContent value="organization" className="w-full space-y-6">
+          <CompanyBrandingSettings />
+          <EmailSenderSettings />
+          <TenantEmailHealthPanel />
+          
           <OrganizationSettings />
           
           {/* Workspaces - Collapsible */}
@@ -1054,36 +1058,6 @@ export default function Settings() {
               </CollapsibleContent>
             </Card>
           </Collapsible>
-          
-          {/* Company Branding - Collapsible */}
-          <Collapsible id="branding-collapsible" open={companyBrandingOpen} onOpenChange={setCompanyBrandingOpen}>
-            <Card>
-              <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Company Branding</CardTitle>
-                      <CardDescription>
-                        Configure company information, letterhead, and integrations
-                      </CardDescription>
-                    </div>
-                    <ChevronDown className={`h-5 w-5 transition-transform ${companyBrandingOpen ? 'rotate-180' : ''}`} />
-                  </div>
-                </CardHeader>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <CardContent>
-                  <CompanyBrandingSettings />
-                </CardContent>
-              </CollapsibleContent>
-            </Card>
-          </Collapsible>
-
-        </TabsContent>
-
-        <TabsContent value="email" className="w-full space-y-4">
-          <EmailSenderSettings />
-          <TenantEmailHealthPanel />
         </TabsContent>
 
 
