@@ -2,11 +2,12 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Trash2, Pencil, Check, X } from "lucide-react";
+import { Plus, Trash2, Pencil, Check, X, FileSearch } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { SettingsHero } from "./SettingsHero";
+import { SectionCard } from "./SectionCard";
 
 interface LossType {
   id: string;
@@ -264,12 +265,23 @@ export function LossTypesSettings({ embedded = false }: LossTypesSettingsProps) 
   }
 
   return (
-    <div className="space-y-6">
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">Add New Loss Type</h3>
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <SettingsHero
+        title="Loss Types"
+        description="Manage the categories of insurance losses used for claim classification."
+        badge="System Configuration"
+        icon={<FileSearch className="h-4 w-4 text-primary" />}
+      />
+
+      <SectionCard
+        title="Add New Loss Type"
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        icon={<Plus className="h-4 w-4 text-primary" />}
+        description="Create a new classification for insurance claims."
+      >
         <div className="flex gap-3">
           <div className="flex-1">
-            <Label htmlFor="newType">Loss Type Name</Label>
+            <Label htmlFor="newType" className="sr-only">Loss Type Name</Label>
             <Input
               id="newType"
               value={newTypeName}
@@ -278,20 +290,24 @@ export function LossTypesSettings({ embedded = false }: LossTypesSettingsProps) 
               onKeyPress={(e) => e.key === "Enter" && handleAdd()}
             />
           </div>
-          <Button onClick={handleAdd} disabled={loading || !newTypeName.trim()} className="mt-auto">
+          <Button onClick={handleAdd} disabled={loading || !newTypeName.trim()}>
             <Plus className="h-4 w-4 mr-2" />
             Add
           </Button>
         </div>
-      </Card>
+      </SectionCard>
 
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">Existing Loss Types</h3>
+      <SectionCard
+        title="Existing Loss Types"
+        accent="bg-gradient-to-r from-blue-500/60 to-blue-500/10"
+        icon={<FileSearch className="h-4 w-4 text-blue-500" />}
+        description={`Manage ${lossTypes.length} configured loss types.`}
+      >
         <div className="space-y-3">
           {lossTypes.map((type) => (
             <div
               key={type.id}
-              className="flex items-center justify-between p-3 border border-border rounded-lg"
+              className="flex items-center justify-between p-3 border border-border rounded-lg bg-muted/30"
             >
               {editingId === type.id ? (
                 <div className="flex items-center gap-2 flex-1">
@@ -353,7 +369,7 @@ export function LossTypesSettings({ embedded = false }: LossTypesSettingsProps) 
             </div>
           ))}
         </div>
-      </Card>
+      </SectionCard>
     </div>
   );
 }

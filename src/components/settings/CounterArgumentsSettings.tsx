@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Edit2, Save, X, BookOpen, Search } from "lucide-react";
+import { Plus, Trash2, Edit2, Save, X, BookOpen, Search, Brain } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { SettingsHero } from "./SettingsHero";
+import { SectionCard } from "./SectionCard";
 import {
   Dialog,
   DialogContent,
@@ -196,106 +197,109 @@ export const CounterArgumentsSettings = () => {
   }, {} as Record<string, CounterArgument[]>);
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <BookOpen className="h-5 w-5" />
-              Counter-Argument Library
-            </CardTitle>
-            <CardDescription>
-              Manage proven rebuttals for common denial reasons. Darwin uses these when generating responses.
-            </CardDescription>
-          </div>
-          <Dialog open={dialogOpen} onOpenChange={(open) => {
-            setDialogOpen(open);
-            if (!open) {
-              setEditingId(null);
-              setFormData({
-                denial_category: "",
-                denial_reason: "",
-                denial_keywords: "",
-                rebuttal_template: "",
-                legal_citations: ""
-              });
-            }
-          }}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Counter-Argument
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>{editingId ? "Edit" : "Add"} Counter-Argument</DialogTitle>
-                <DialogDescription>
-                  Create a rebuttal template for a common denial reason
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Category *</label>
-                    <Input
-                      value={formData.denial_category}
-                      onChange={(e) => setFormData({ ...formData, denial_category: e.target.value })}
-                      placeholder="e.g., Pre-existing Condition"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Denial Reason *</label>
-                    <Input
-                      value={formData.denial_reason}
-                      onChange={(e) => setFormData({ ...formData, denial_reason: e.target.value })}
-                      placeholder="e.g., Damage existed prior to claim"
-                    />
-                  </div>
-                </div>
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <SettingsHero
+        title="Counter-Arguments"
+        description="Darwin uses these rebuttals for common denial reasons when generating responses."
+        badge="AI Intelligence"
+        icon={<Brain className="h-4 w-4 text-primary" />}
+      />
+
+      <div className="flex justify-end">
+        <Dialog open={dialogOpen} onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) {
+            setEditingId(null);
+            setFormData({
+              denial_category: "",
+              denial_reason: "",
+              denial_keywords: "",
+              rebuttal_template: "",
+              legal_citations: ""
+            });
+          }
+        }}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Counter-Argument
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{editingId ? "Edit" : "Add"} Counter-Argument</DialogTitle>
+              <DialogDescription>
+                Create a rebuttal template for a common denial reason
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Keywords (comma-separated)</label>
+                  <label className="text-sm font-medium">Category *</label>
                   <Input
-                    value={formData.denial_keywords}
-                    onChange={(e) => setFormData({ ...formData, denial_keywords: e.target.value })}
-                    placeholder="pre-existing, prior damage, wear and tear"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Darwin uses these keywords to automatically match this rebuttal to denial letters
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Rebuttal Template *</label>
-                  <Textarea
-                    value={formData.rebuttal_template}
-                    onChange={(e) => setFormData({ ...formData, rebuttal_template: e.target.value })}
-                    placeholder="Enter the rebuttal template. Use placeholders like [DAMAGE_TYPE], [DATE_OF_LOSS], [SPECIFIC_OBSERVATIONS] that Darwin will fill in."
-                    className="min-h-[200px]"
+                    value={formData.denial_category}
+                    onChange={(e) => setFormData({ ...formData, denial_category: e.target.value })}
+                    placeholder="e.g., Pre-existing Condition"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Legal Citations</label>
+                  <label className="text-sm font-medium">Denial Reason *</label>
                   <Input
-                    value={formData.legal_citations}
-                    onChange={(e) => setFormData({ ...formData, legal_citations: e.target.value })}
-                    placeholder="e.g., N.J.S.A. 17:29B-4 / 40 P.S. § 1171.5"
+                    value={formData.denial_reason}
+                    onChange={(e) => setFormData({ ...formData, denial_reason: e.target.value })}
+                    placeholder="e.g., Damage existed prior to claim"
                   />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleSubmit}>
-                    <Save className="h-4 w-4 mr-2" />
-                    {editingId ? "Update" : "Save"}
-                  </Button>
                 </div>
               </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Keywords (comma-separated)</label>
+                <Input
+                  value={formData.denial_keywords}
+                  onChange={(e) => setFormData({ ...formData, denial_keywords: e.target.value })}
+                  placeholder="pre-existing, prior damage, wear and tear"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Darwin uses these keywords to automatically match this rebuttal to denial letters
+                </p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Rebuttal Template *</label>
+                <Textarea
+                  value={formData.rebuttal_template}
+                  onChange={(e) => setFormData({ ...formData, rebuttal_template: e.target.value })}
+                  placeholder="Enter the rebuttal template. Use placeholders like [DAMAGE_TYPE], [DATE_OF_LOSS], [SPECIFIC_OBSERVATIONS] that Darwin will fill in."
+                  className="min-h-[200px]"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Legal Citations</label>
+                <Input
+                  value={formData.legal_citations}
+                  onChange={(e) => setFormData({ ...formData, legal_citations: e.target.value })}
+                  placeholder="e.g., N.J.S.A. 17:29B-4 / 40 P.S. § 1171.5"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSubmit}>
+                  <Save className="h-4 w-4 mr-2" />
+                  {editingId ? "Update" : "Save"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <SectionCard
+        title="Rebuttal Library"
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        icon={<BookOpen className="h-4 w-4 text-primary" />}
+        description={`Manage ${counterArguments.length} proven rebuttals for common denial reasons.`}
+      >
+        <div className="space-y-4">
         {/* Search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -391,7 +395,8 @@ export const CounterArgumentsSettings = () => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </CardContent>
-    </Card>
+        </div>
+      </SectionCard>
+    </div>
   );
 };

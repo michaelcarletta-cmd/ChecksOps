@@ -683,13 +683,14 @@ export const AIKnowledgeBaseSettings = () => {
         badge="AI Training"
         icon={<Brain className="h-4 w-4 text-primary" />}
       />
+
       <SectionCard
         title="Knowledge Sources"
         accent="bg-gradient-to-r from-primary/60 to-primary/10"
         icon={<Brain className="h-4 w-4 text-primary" />}
         description="Add new content for the AI to learn from."
       >
-
+        <div className="space-y-4">
           <Tabs defaultValue="files" className="w-full">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="files" className="flex items-center gap-2">
@@ -914,6 +915,7 @@ export const AIKnowledgeBaseSettings = () => {
               </p>
             </TabsContent>
           </Tabs>
+        </div>
       </SectionCard>
 
       <SectionCard
@@ -1083,8 +1085,7 @@ export const AIKnowledgeBaseSettings = () => {
         icon={<FileText className="h-4 w-4 text-blue-500" />}
         description={`${documents?.length || 0} documents in the knowledge base`}
       >
-
-        <div>
+        <div className="space-y-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
