@@ -322,15 +322,16 @@ export function WorkspaceList({ embedded }: WorkspaceListProps = {}) {
         />
       )}
 
-      <div className="grid gap-6 pb-12">
+      <div className="grid gap-6">
         {/* Pending Invites */}
         {invites && invites.length > 0 && (
           <SectionCard
             title="Pending Invitations"
+            description="Workspace invitations awaiting your response"
             icon={<Plus className="h-4 w-4 text-amber-500" />}
             accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
           >
-            <div className="space-y-4 pt-4">
+            <div className="space-y-4 pt-2">
               {invites.map((invite: any) => (
                 <div
                   key={invite.id}
