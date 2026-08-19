@@ -157,6 +157,7 @@ serve(async (req) => {
               quantity: i.quantity,
             })),
           },
+          ...(tenantBranding?.invoice_footer_note ? { footer: String(tenantBranding.invoice_footer_note).slice(0, 1000) } : {}),
         },
       });
 
