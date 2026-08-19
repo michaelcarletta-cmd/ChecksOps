@@ -1030,7 +1030,7 @@ export default function Settings() {
           <EmailSenderSettings />
           <TenantEmailHealthPanel />
           
-          <OrganizationSettings />
+          
           
           {/* Workspaces - Collapsible */}
           <Collapsible open={workspacesOpen} onOpenChange={setWorkspacesOpen}>
