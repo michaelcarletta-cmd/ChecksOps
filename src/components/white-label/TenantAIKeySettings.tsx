@@ -256,7 +256,7 @@ export function TenantAIKeySettings() {
           accent="bg-gradient-to-r from-primary/60 to-primary/10"
           description={hasKey ? "Replace your current key with a new one" : "Enter your sk-... key from platform.openai.com"}
         >
-          <div className="space-y-4">
+          <div className="space-y-4 pt-2">
             <div className="space-y-2 text-xs text-muted-foreground bg-muted/30 p-4 rounded-lg">
               <p className="font-medium text-foreground mb-1">How to connect:</p>
               <ol className="space-y-2 list-decimal list-inside">
