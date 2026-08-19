@@ -1533,14 +1533,6 @@ export const AutomationsSettings = () => {
           ))}
         </TabsContent>
       </Tabs>
-    </TabsContent>
-
-        <TabsContent value="task-automations">
-          <TaskAutomationsSettings />
-        </TabsContent>
-
-        <TabsContent value="global-settings">
-          <AutomationGlobalSettings />
         </TabsContent>
       </Tabs>
     </div>
