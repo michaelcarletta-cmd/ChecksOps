@@ -479,12 +479,18 @@ export function ProfileSettings() {
         </Collapsible>
       </div>
 
-      <div className="flex justify-end pt-4">
-        <Button onClick={handleSave} disabled={saving} size="lg">
-          {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Save Profile Changes
-        </Button>
-      </div>
+      <SectionCard
+        title="Account Actions"
+        icon={<Save className="h-4 w-4 text-primary" />}
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+      >
+        <div className="flex justify-end">
+          <Button onClick={handleSave} disabled={saving} size="lg">
+            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Save Profile Changes
+          </Button>
+        </div>
+      </SectionCard>
     </div>
   );
 }
