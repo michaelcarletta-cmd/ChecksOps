@@ -12,6 +12,8 @@ import { Separator } from "@/components/ui/separator";
 import { Loader2, Save, ShieldCheck, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { formatPhoneNumber } from "@/lib/utils";
+import { SettingsHero } from "./SettingsHero";
+import { SectionCard } from "./SectionCard";
 
 
 type AddressParts = { street: string; city: string; state: string; zip: string };
