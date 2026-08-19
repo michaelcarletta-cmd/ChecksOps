@@ -977,9 +977,19 @@ export default function Settings() {
           </Collapsible>
         </TabsContent>
 
-        <TabsContent value="users" className="w-full">
+        <TabsContent value="users" className="w-full space-y-6">
           <UserManagementSettings />
+          {tenant && (
+            <TeamCapsSettings 
+              vendorCap={tenant.vendor_cap ?? 5}
+              salesRepCap={tenant.sales_rep_cap ?? 5}
+              subcontractorCap={tenant.subcontractor_cap ?? 5}
+              tenantId={tenant.id}
+              onUpdate={() => {}} 
+            />
+          )}
         </TabsContent>
+
 
         <TabsContent value="automations" className="w-full space-y-6">
           <AutomationsSettings />
