@@ -674,18 +674,20 @@ export const AIKnowledgeBaseSettings = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Brain className="h-5 w-5 text-primary" />
-            AI Knowledge Base
-          </CardTitle>
-          <CardDescription>
-            Upload documents, images, videos, add URLs, or enter text to train the AI assistant.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <SettingsHero
+        title="AI Knowledge Base"
+        description="Upload documents, images, videos, add URLs, or enter text to train the AI assistant."
+        badge="AI Training"
+        icon={<Brain className="h-4 w-4 text-primary" />}
+      />
+      <SectionCard
+        title="Knowledge Sources"
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        icon={<Brain className="h-4 w-4 text-primary" />}
+        description="Add new content for the AI to learn from."
+      >
+
           <Tabs defaultValue="files" className="w-full">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="files" className="flex items-center gap-2">
