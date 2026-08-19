@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Loader2, Mail, ShieldCheck, Globe, RefreshCw, Copy, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Loader2, Mail, ShieldCheck, Globe, RefreshCw, Copy, CheckCircle2, AlertTriangle, Sparkles } from "lucide-react";
+import { SectionCard } from "./SectionCard";
+import { SettingsHero } from "./SettingsHero";
 import {
   Table,
   TableBody,
@@ -191,20 +193,20 @@ export function EmailSenderSettings() {
   }
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Mail className="h-5 w-5 text-primary" />
-            <div>
-              <CardTitle>Email sender</CardTitle>
-              <CardDescription>
-                Control how outbound emails from this tenant appear to recipients.
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
+    <div className="space-y-6">
+      <SettingsHero
+        title="Email Sender"
+        description="Control how outbound emails from this tenant appear to recipients."
+        badge="Communication"
+        icon={<Mail className="h-4 w-4 text-primary" />}
+      />
+
+      <div className="grid gap-6">
+        <SectionCard
+          title="Email Sender Configuration"
+          icon={<Mail className="h-4 w-4 text-sky-500" />}
+          accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
+        >
           <Alert>
             <ShieldCheck className="h-4 w-4" />
             <AlertTitle>
@@ -276,21 +278,14 @@ export function EmailSenderSettings() {
               Save
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </SectionCard>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Globe className="h-5 w-5 text-primary" />
-              <div>
-                <CardTitle className="text-base">Custom sending domain</CardTitle>
-                <CardDescription>
-                  Send from your own domain (e.g. <code>mail.yourcompany.com</code>).
-                </CardDescription>
-              </div>
-            </div>
+        <SectionCard
+          title="Custom Sending Domain"
+          icon={<Globe className="h-4 w-4 text-violet-500" />}
+          accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
+          description="Send from your own domain (e.g. mail.yourcompany.com)."
+        >
             {settings?.sending_mode === "custom" && (
               <Badge
                 variant={
@@ -305,8 +300,9 @@ export function EmailSenderSettings() {
               </Badge>
             )}
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        </SectionCard>
+      </div>
+    </div>
           <div className="grid gap-4 md:grid-cols-[2fr_1fr]">
             <div className="space-y-2">
               <Label htmlFor="domain">Sending domain</Label>
