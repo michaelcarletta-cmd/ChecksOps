@@ -57,17 +57,14 @@ export function TeamCapsSettings({
   };
 
   return (
-    <Card className="overflow-hidden border-border/60 shadow-sm">
-      <div className="h-1.5 bg-gradient-to-r from-amber-500/60 to-amber-500/10" />
-      <CardHeader className="flex flex-col gap-1 p-4 pb-2">
-        <CardTitle className="flex items-center gap-2 text-base font-semibold">
-          <Users className="h-4 w-4 text-amber-500" />
-          Team Caps
-        </CardTitle>
-        <CardDescription>
-          Set the maximum number of team members allowed for specific roles.
-        </CardDescription>
-      </CardHeader>
+    <SectionCard
+      title="Team Role Limits"
+      accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
+      icon={<Users className="h-4 w-4 text-amber-500" />}
+      description="Set the maximum number of team members allowed for specific roles."
+    >
+      <div className="space-y-4 pt-2">
+
       <CardContent className="space-y-4 p-4 pt-2">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-1.5">
