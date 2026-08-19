@@ -91,3 +91,91 @@ export function useWalletOpsReadiness() {
     },
   });
 }
+
+export interface RunningBalancePoint {
+  id: string;
+  created_at: string;
+  label: string;
+  direction: "credit" | "debit";
+  amount_cents: number;
+  balance_cents: number;
+}
+
+/**
+ * Chronological running balance for the current organization's wallet,
+ * straight from `payment_wallet_ledger` (balance_after_cents is authoritative).
+ */
+export function useWalletRunningBalance(walletType: "operating" | "trust" = "operating", limit = 60) {
+  const { tenantId, enabled } = usePaymentProviderEligibility();
+
+  return useQuery({
+    queryKey: ["wallet-running-balance", tenantId, walletType, limit],
+    enabled: !!tenantId && enabled,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data: wallet } = await supabase
+        .from("payment_wallets")
+        .select("id")
+        .eq("tenant_id", tenantId!)
+        .eq("wallet_type", walletType)
+        .maybeSingle();
+      if (!wallet?.id) return { points: [] as RunningBalancePoint[] };
+
+      const { data, error } = await supabase
+        .from("payment_wallet_ledger")
+        .select("id, created_at, entry_type, direction, amount_cents, balance_after_cents, memo")
+        .eq("wallet_id", wallet.id)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+
+      const points: RunningBalancePoint[] = (data ?? [])
+        .slice()
+        .reverse()
+        .map((r: any) => ({
+          id: r.id,
+          created_at: r.created_at,
+          label: r.memo || r.entry_type,
+          direction: r.direction,
+          amount_cents: Number(r.amount_cents || 0),
+          balance_cents: Number(r.balance_after_cents || 0),
+        }));
+
+      return { points };
+    },
+  });
+}
+
+export interface TenantWalletBalance {
+  tenant_id: string;
+  tenant_name: string;
+  available_cents: number;
+  pending_cents: number;
+  status: string;
+  last_synced_at: string | null;
+}
+
+/** Admin-only: running balance per organization. */
+export function useAllTenantWalletBalances(isAdmin: boolean, walletType: "operating" | "trust" = "operating") {
+  return useQuery<TenantWalletBalance[]>({
+    queryKey: ["wallet-balances-all-tenants", walletType],
+    enabled: isAdmin,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("payment_wallets")
+        .select("tenant_id, available_cents, pending_cents, status, last_synced_at, tenants(name)")
+        .eq("wallet_type", walletType)
+        .order("available_cents", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((r: any) => ({
+        tenant_id: r.tenant_id,
+        tenant_name: r.tenants?.name ?? "Organization",
+        available_cents: Number(r.available_cents || 0),
+        pending_cents: Number(r.pending_cents || 0),
+        status: r.status,
+        last_synced_at: r.last_synced_at,
+      }));
+    },
+  });
+}

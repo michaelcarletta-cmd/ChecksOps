@@ -18,18 +18,34 @@ import {
   ArrowUpRight,
   BadgeCheck,
   Banknote,
+  Building2,
   Clock,
   Gauge,
   Landmark,
   Loader2,
   RefreshCw,
   Sparkles,
+  TrendingUp,
   Wallet,
   Zap,
 } from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip as RTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { useWallet } from "@/hooks/useWallet";
 import { useSweepConfig } from "@/hooks/useSweepConfig";
-import { useWalletOpsReadiness, useWalletOpsTransfers } from "@/hooks/useWalletOps";
+import {
+  useAllTenantWalletBalances,
+  useWalletOpsReadiness,
+  useWalletOpsTransfers,
+  useWalletRunningBalance,
+} from "@/hooks/useWalletOps";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
@@ -122,6 +138,15 @@ export default function WalletOps() {
   } = useSweepConfig("operating");
   const { data: transferData, isLoading: transfersLoading } = useWalletOpsTransfers();
   const { data: readiness } = useWalletOpsReadiness();
+  const { data: runningData, isLoading: runningLoading } = useWalletRunningBalance("operating");
+  const { data: tenantBalances } = useAllTenantWalletBalances(userRole === "admin");
+
+  const runningPoints = runningData?.points ?? [];
+  const chartData = runningPoints.map((p) => ({
+    date: new Date(p.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+    balance: p.balance_cents / 100,
+  }));
+
 
   const [payoutRail, setPayoutRail] = useState<SweepPushRail | "">("");
 
@@ -433,6 +458,127 @@ export default function WalletOps() {
           </div>
         </SectionCard>
       </div>
+
+      {/* Running balance */}
+      <SectionCard
+        title="Running Balance"
+        icon={<TrendingUp className="h-4 w-4 text-emerald-500" />}
+        accent="bg-gradient-to-r from-emerald-500/60 to-transparent"
+      >
+        {runningLoading ? (
+          <p className="text-sm text-muted-foreground">Loading balance history…</p>
+        ) : runningPoints.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No balance movements yet. Funding, payouts, and fees build your running balance here.
+          </p>
+        ) : (
+          <>
+            <div className="h-44 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="walletBalanceFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.45} />
+                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                  <YAxis
+                    tick={{ fontSize: 10 }}
+                    stroke="hsl(var(--muted-foreground))"
+                    width={64}
+                    tickFormatter={(v) => money(Number(v) * 100)}
+                  />
+                  <RTooltip
+                    contentStyle={{
+                      background: "hsl(var(--popover))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: 8,
+                      fontSize: 12,
+                      color: "hsl(var(--popover-foreground))",
+                    }}
+                    formatter={(v: any) => [money(Number(v) * 100), "Balance"]}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="balance"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={2}
+                    fill="url(#walletBalanceFill)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="divide-y rounded-md border">
+              {runningPoints
+                .slice()
+                .reverse()
+                .slice(0, 8)
+                .map((p) => (
+                  <div key={p.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{ENTRY_LABEL[p.label] ?? p.label}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(p.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className={p.direction === "credit" ? "text-emerald-500" : "text-foreground"}>
+                        {p.direction === "credit" ? "+" : "−"}
+                        {money(p.amount_cents)}
+                      </p>
+                      <p className="text-[11px] font-semibold">
+                        Running balance {money(p.balance_cents)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </>
+        )}
+      </SectionCard>
+
+      {/* Per-organization balances (admin) */}
+      {isAdmin && (tenantBalances?.length ?? 0) > 0 && (
+        <SectionCard
+          title="Balances by Organization"
+          icon={<Building2 className="h-4 w-4 text-violet-500" />}
+          accent="bg-gradient-to-r from-violet-500/60 to-transparent"
+        >
+          <div className="divide-y rounded-md border">
+            {tenantBalances!.map((t) => (
+              <div key={t.tenant_id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{t.tenant_name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t.last_synced_at
+                      ? `Synced ${new Date(t.last_synced_at).toLocaleString()}`
+                      : "Not synced yet"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {t.pending_cents > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {money(t.pending_cents)} pending
+                    </span>
+                  )}
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] ${STATUS_TONE[t.status] ?? "border-muted-foreground/30 text-muted-foreground"}`}
+                  >
+                    {t.status}
+                  </Badge>
+                  <span className="font-semibold tabular-nums">
+                    {t.status === "sync_failed" ? "Unavailable" : money(t.available_cents)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
 
       {/* Recent activity */}
       <SectionCard
