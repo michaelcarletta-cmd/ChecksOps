@@ -436,12 +436,12 @@ export function UserManagementSettings() {
         )}
 
         <SectionCard
-          title="System Users"
+          title="Active System Users"
           icon={<Shield className="h-4 w-4 text-sky-500" />}
           accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
           description="Manage roles and access for existing team members"
         >
-        <div className="space-y-4">
+          <div className="space-y-4 pt-2">
           {users.map((user) => (
             <div
               key={user.id}

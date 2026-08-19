@@ -243,9 +243,9 @@ export function ProfileSettings() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-7xl mx-auto">
       <SettingsHero
-        title="My Profile"
+        title="Profile Settings"
         description="Manage your personal information, security, and notification preferences."
         badge="Personal Settings"
         icon={<User className="h-4 w-4 text-primary" />}
@@ -481,14 +481,18 @@ export function ProfileSettings() {
 
       <SectionCard
         title="Account Actions"
-        icon={<Save className="h-4 w-4 text-primary" />}
-        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        icon={<Save className="h-4 w-4 text-emerald-500" />}
+        accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
+        description="Save or update your profile changes"
       >
-        <div className="flex justify-end">
-          <Button onClick={handleSave} disabled={saving} size="lg">
+        <div className="flex justify-end pt-4">
+          <Button onClick={handleSave} disabled={saving} size="lg" className="px-8">
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Profile Changes
           </Button>
+        </div>
+      </SectionCard>
+    </div>
         </div>
       </SectionCard>
     </div>
