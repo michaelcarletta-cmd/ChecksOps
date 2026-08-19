@@ -725,8 +725,8 @@ export default function Settings() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="flex flex-row md:flex-wrap h-auto w-full bg-muted/20 p-1.5 gap-1 border-border/50">
           <TabsTrigger value="profile" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <UserCog className="h-4 w-4" />
-            My Profile
+            <User className="h-4 w-4" />
+            Profile
           </TabsTrigger>
           
           <TabsTrigger value="workflow" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
