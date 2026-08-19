@@ -275,9 +275,10 @@ export const RDAutomationSettings = () => {
               )}
               Save Settings
             </Button>
+          </div>
         </div>
-      </div>
-    </SectionCard>
+      </SectionCard>
+
 
 
       <Card className="bg-muted/30">
