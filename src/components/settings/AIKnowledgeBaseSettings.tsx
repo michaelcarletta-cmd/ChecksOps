@@ -964,9 +964,9 @@ export const AIKnowledgeBaseSettings = () => {
                   : "Auto-fix issues"}
               </Button>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        </div>
+        <div className="space-y-4">
+
           {validationLoading ? (
             <div className="flex items-center justify-center py-6">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
