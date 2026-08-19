@@ -4,9 +4,14 @@ import { corsHeaders, json, isResponse, requireMoovCaller } from "../_shared/moo
 
 /**
  * Mints a short-lived browser token for the provider's hosted Terms of Service
- * component. The component itself records the acceptance (IP, user agent,
- * timestamp) with the provider — ChecksOps never fakes or self-asserts it, and
- * we only store the resulting acceptance timestamp for display.
+ * component (Moov.js `<moov-terms-of-service>` Drop).
+ *
+ * The Drop calls Moov's "generate a terms of service token" endpoint itself and
+ * only needs a generic API access token. There is no `/terms-of-service.write`
+ * scope in Moov's scope reference — the minimal non-account-restricted scope
+ * (`/ping.read`) is what the Drop is authenticated with. The Drop records the
+ * acceptance (IP, user agent, timestamp) with Moov; ChecksOps never self-asserts
+ * it and only stores the resulting acceptance timestamp for display.
  */
 
 serve(async (req) => {
@@ -20,7 +25,8 @@ serve(async (req) => {
     if (isResponse(caller)) return caller;
     const { environment } = caller;
 
-    const token = await moovToken(["/terms-of-service.write"]);
+    const token = await moovToken(["/ping.read"]);
+
 
     return json({
       success: true,
