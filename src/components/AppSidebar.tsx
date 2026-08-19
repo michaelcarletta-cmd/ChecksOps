@@ -43,6 +43,22 @@ export function AppSidebar() {
   const { open } = useSidebar();
   const { signOut, user, userRole } = useAuth();
 
+  // Fetch tenant branding for dynamic logo
+  const { data: branding } = useQuery({
+    queryKey: ["company-branding", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("company_branding" as any)
+        .select("logo_url")
+        .maybeSingle();
+      if (error) return null;
+      return data as any;
+    },
+    enabled: !!user?.id,
+  });
+
+  const sidebarLogo = branding?.logo_url || logo;
+
   const visibleItems = mainItems.filter(item => {
     if ('adminOnly' in item && item.adminOnly && userRole !== 'admin') return false;
     if ('ownerOnly' in item && item.ownerOnly && user?.email !== 'mcarletta@freedomadj.com') return false;
@@ -101,7 +117,7 @@ export function AppSidebar() {
     <Sidebar className="border-r border-white/20 text-white" style={{ background: 'linear-gradient(180deg, hsl(220, 60%, 55%) 0%, hsl(220, 80%, 85%) 50%, #ffffff 100%)' }}>
       <SidebarContent>
         <div className="px-4 py-4 flex items-center">
-          <img src={logo} alt="Freedom Claims" className="h-10 w-auto" />
+          <img src={sidebarLogo} alt="Freedom Claims" className="h-10 w-auto object-contain" />
         </div>
 
         <div className="h-20" />

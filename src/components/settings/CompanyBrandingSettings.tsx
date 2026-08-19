@@ -41,11 +41,13 @@ export function CompanyBrandingSettings() {
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [letterheadUrl, setLetterheadUrl] = useState<string | null>(null);
   const [invoiceLetterheadUrl, setInvoiceLetterheadUrl] = useState<string | null>(null);
   const [invoiceFooterNote, setInvoiceFooterNote] = useState("");
   const [invoiceDefaultTerms, setInvoiceDefaultTerms] = useState("");
   
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingInvoice, setUploadingInvoice] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -71,6 +73,7 @@ export function CompanyBrandingSettings() {
       setAddress(branding.company_address || "");
       setPhone(branding.company_phone || "");
       setEmail(branding.company_email || "");
+      setLogoUrl(branding.logo_url || null);
       setLetterheadUrl(branding.letterhead_url || null);
     }
 
@@ -153,6 +156,33 @@ export function CompanyBrandingSettings() {
       setUploading(false);
     }
   };
+  
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Please upload an image file (PNG, JPG)", variant: "destructive" });
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const path = `logo_${Date.now()}.${file.name.split(".").pop()}`;
+      const { error } = await supabase.storage.from("company-branding").upload(path, file);
+      
+      if (error) throw error;
+
+      const { data: urlData } = supabase.storage.from("company-branding").getPublicUrl(path);
+      
+      setLogoUrl(urlData?.publicUrl || null);
+      toast({ title: "Company logo uploaded successfully" });
+    } catch (error: any) {
+      toast({ title: "Upload failed", description: error.message, variant: "destructive" });
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   const saveSettings = async () => {
     setSaving(true);
@@ -162,6 +192,7 @@ export function CompanyBrandingSettings() {
         company_address: address,
         company_phone: phone,
         company_email: email,
+        logo_url: logoUrl,
         letterhead_url: letterheadUrl,
         updated_at: new Date().toISOString()
       };
