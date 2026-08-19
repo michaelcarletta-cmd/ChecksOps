@@ -751,11 +751,7 @@ export default function Settings() {
           
           <TabsTrigger value="organization" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <ShieldCheck className="h-4 w-4" />
-            Organization
-          </TabsTrigger>
-          <TabsTrigger value="email" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <Mail className="h-4 w-4" />
-            Email
+            Company Settings
           </TabsTrigger>
           <TabsTrigger value="import" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <Database className="h-4 w-4" />
