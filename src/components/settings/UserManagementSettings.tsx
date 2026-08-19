@@ -557,24 +557,23 @@ export function UserManagementSettings() {
             </div>
           )}
         </div>
-      </Card>
-
-      <Card className="p-4 bg-muted/50 border-border">
-        <div className="flex gap-3">
-          <Shield className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
-          <div className="space-y-1 text-sm">
-            <p className="font-medium text-foreground">Role Descriptions</p>
-            <ul className="text-muted-foreground space-y-1 list-disc list-inside">
-              <li><strong>Admin:</strong> Full system access, can manage all settings and users</li>
-              <li><strong>Staff:</strong> Can manage claims, clients, and tasks (requires approval on signup)</li>
-            </ul>
-            <p className="text-muted-foreground mt-2 text-xs">
-              Clients, contractors, and referrers are managed on their respective pages.
-            </p>
+        <div className="mt-6 p-4 bg-muted/30 rounded-lg border border-border/50">
+          <div className="flex gap-3">
+            <Shield className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+            <div className="space-y-1 text-sm">
+              <p className="font-medium text-foreground">Role Descriptions</p>
+              <ul className="text-muted-foreground space-y-1 list-disc list-inside">
+                <li><strong>Admin:</strong> Full system access, can manage all settings and users</li>
+                <li><strong>Staff:</strong> Can manage claims, clients, and tasks (requires approval on signup)</li>
+              </ul>
+              <p className="text-muted-foreground mt-2 text-xs">
+                Clients, contractors, and referrers are managed on their respective pages.
+              </p>
+            </div>
           </div>
         </div>
-        </SectionCard>
-      </div>
+      </SectionCard>
     </div>
+  </div>
   );
 }
