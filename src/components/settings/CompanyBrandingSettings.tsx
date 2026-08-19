@@ -278,6 +278,9 @@ export function CompanyBrandingSettings() {
               invoice_letterhead_url: invoiceLetterheadUrl,
               invoice_footer_note: invoiceFooterNote,
               invoice_default_terms: invoiceDefaultTerms,
+              vendor_cap: vendorCap,
+              sales_rep_cap: salesRepCap,
+              subcontractor_cap: subcontractorCap,
             })
             .eq("id", tenantUser.tenant_id);
         }
