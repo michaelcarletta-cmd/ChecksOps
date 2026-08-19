@@ -380,6 +380,7 @@ export function CompanyBrandingSettings() {
           </div>
           </div>
         </SectionCard>
+        </SectionCard>
 
         <SectionCard
           title="Letterhead"
@@ -478,18 +479,13 @@ export function CompanyBrandingSettings() {
           </div>
         </SectionCard>
 
-      {/* Signature Request Email Template */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Mail className="h-5 w-5" />
-            Signature Request Email Template
-          </CardTitle>
-          <CardDescription>
-            Customize the email sent to signers when a signature is requested. Use merge fields to personalize each email.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
+        <SectionCard
+          title="Signature Request Email Template"
+          icon={<Mail className="h-4 w-4 text-amber-500" />}
+          accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
+          description="Customize the email sent to signers when a signature is requested. Use merge fields to personalize each email."
+        >
+          <div className="space-y-5">
           {/* Merge fields reference */}
           <div>
             <Label className="text-xs text-muted-foreground mb-2 block">Available Merge Fields (click to insert into body)</Label>
@@ -802,7 +798,6 @@ export function CompanyBrandingSettings() {
           accent="bg-gradient-to-r from-blue-500/60 to-blue-500/10"
           description="Configure your Online Check Writer bank account for sending checks."
         >
-        <CardContent className="space-y-4">
           <div>
             <Label>Bank Account ID</Label>
             <Input
@@ -825,7 +820,7 @@ export function CompanyBrandingSettings() {
           accent="bg-gradient-to-r from-orange-500/60 to-orange-500/10"
           description="Configure a Zapier webhook URL for external document signing or automation workflows."
         >
-        <CardContent className="space-y-4">
+        
           <div>
             <Label>Zapier Webhook URL</Label>
             <Input
@@ -869,8 +864,9 @@ export function CompanyBrandingSettings() {
       </div>
 
       <div className="flex justify-end pt-4">
-        {saving ? "Saving..." : "Save Company Branding"}
-      </Button>
+        <Button onClick={saveSettings} disabled={saving}>
+          {saving ? "Saving..." : "Save Company Branding"}
+        </Button>
       </div>
     </div>
   );
