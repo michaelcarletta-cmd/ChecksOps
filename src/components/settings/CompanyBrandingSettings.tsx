@@ -400,29 +400,7 @@ export function CompanyBrandingSettings() {
           tenantId={brandingId || ""}
           onUpdate={loadSettings}
         />
-                <Label>Sales Rep Cap</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={salesRepCap}
-                  onChange={(e) => setSalesRepCap(parseInt(e.target.value) || 0)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Subcontractor Cap</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={subcontractorCap}
-                  onChange={(e) => setSubcontractorCap(parseInt(e.target.value) || 0)}
-                />
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground italic">
-              Caps are enforced per tenant organization. Default is 5 members per role.
-            </p>
-          </div>
-        </SectionCard>
+
 
         <SectionCard
           title="Letterhead"
