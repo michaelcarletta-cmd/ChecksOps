@@ -155,15 +155,6 @@ export default function WalletOps() {
   const pendingIn = transferData?.pendingInCents ?? 0;
   const minimumCents = config?.minimum_balance_cents ?? 0;
 
-  const coverage = useMemo(() => {
-    if (syncFailed || !wallet) return null;
-    const spendable = wallet.available_cents - minimumCents;
-    return {
-      spendable,
-      covered: spendable >= pendingOut,
-      ratio: pendingOut > 0 ? Math.min(Math.max(spendable / pendingOut, 0), 1) : 1,
-    };
-  }, [wallet, minimumCents, pendingOut, syncFailed]);
 
   async function handleSavePayoutSpeed() {
     if (!effectiveRail) return;
