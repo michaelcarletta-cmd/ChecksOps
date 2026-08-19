@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useMoovInvoices, type InvoiceLineItem } from "@/hooks/useMoovInvoices";
 import { usePaymentAccount } from "@/hooks/usePaymentAccount";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Plus, Trash2, Send, Link2, MoreHorizontal, RefreshCw, Loader2, FileText, Clock, CheckCircle2, Ban,
 } from "lucide-react";
@@ -48,6 +49,42 @@ export function InvoicesTab() {
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [items, setItems] = useState<InvoiceLineItem[]>([emptyItem()]);
+  const [branding, setBranding] = useState<{
+    invoice_letterhead_url: string | null;
+    invoice_footer_note: string | null;
+    invoice_default_terms: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      const loadBranding = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: tenantUser } = await supabase
+            .from("tenant_users")
+            .select("tenant_id")
+            .eq("user_id", user.id)
+            .maybeSingle();
+          
+          if (tenantUser) {
+            const { data: tenant } = await supabase
+              .from("tenants")
+              .select("invoice_letterhead_url, invoice_footer_note, invoice_default_terms")
+              .eq("id", tenantUser.tenant_id)
+              .maybeSingle();
+            
+            if (tenant) {
+              setBranding(tenant);
+              if (tenant.invoice_default_terms) {
+                setDescription(tenant.invoice_default_terms);
+              }
+            }
+          }
+        }
+      };
+      loadBranding();
+    }
+  }, [open]);
 
   const rows = invoices.data ?? [];
 
@@ -153,6 +190,17 @@ export function InvoicesTab() {
                   </DialogDescription>
                 </DialogHeader>
 
+                {branding?.invoice_letterhead_url && (
+                  <div className="mb-4 flex justify-center border-b pb-4">
+                    <img 
+                      src={branding.invoice_letterhead_url} 
+                      alt="Invoice Letterhead" 
+                      className="max-h-16 object-contain opacity-80" 
+                    />
+                  </div>
+                )}
+
+
                 <div className="space-y-4">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
@@ -230,7 +278,16 @@ export function InvoicesTab() {
                     <span className="text-sm text-muted-foreground">Invoice total</span>
                     <span className="text-lg font-semibold">{currency(draftTotal)}</span>
                   </div>
+
+                  {branding?.invoice_footer_note && (
+                    <div className="rounded-md border border-dashed border-border p-3 text-center">
+                      <p className="text-xs italic text-muted-foreground">
+                        Footer: "{branding.invoice_footer_note}"
+                      </p>
+                    </div>
+                  )}
                 </div>
+
 
                 <DialogFooter className="gap-2">
                   <Button variant="outline" onClick={() => submit(false)} disabled={!canSubmit || createInvoice.isPending}>

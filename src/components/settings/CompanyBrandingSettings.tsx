@@ -38,6 +38,9 @@ export function CompanyBrandingSettings() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [letterheadUrl, setLetterheadUrl] = useState<string | null>(null);
+  const [invoiceLetterheadUrl, setInvoiceLetterheadUrl] = useState<string | null>(null);
+  const [invoiceFooterNote, setInvoiceFooterNote] = useState("");
+  const [invoiceDefaultTerms, setInvoiceDefaultTerms] = useState("");
   const [signnowWebhookUrl, setSignnowWebhookUrl] = useState("");
   const [esignEmailSubject, setEsignEmailSubject] = useState("Action Required: Sign {document.name}");
   const [esignEmailBody, setEsignEmailBody] = useState("You have been requested to electronically sign a document. Please review the details below and click the button to proceed.");
@@ -55,6 +58,7 @@ export function CompanyBrandingSettings() {
   const [ocwBankAccountId, setOcwBankAccountId] = useState("");
   const [dateCoords, setDateCoords] = useState({ page: 1, x: 350, y: 600, w: 100, h: 25 });
   const [uploading, setUploading] = useState(false);
+  const [uploadingInvoice, setUploadingInvoice] = useState(false);
   const [saving, setSaving] = useState(false);
   const [brandingId, setBrandingId] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -65,14 +69,15 @@ export function CompanyBrandingSettings() {
   }, []);
 
   const loadSettings = async () => {
-    const { data, error } = await supabase
+    // 1. Get branding details from company_branding
+    const { data: brandingData, error: brandingError } = await supabase
       .from("company_branding" as any)
       .select("*")
       .limit(1)
       .maybeSingle();
     
-    if (data) {
-      const branding = data as any;
+    if (brandingData) {
+      const branding = brandingData as any;
       setBrandingId(branding.id);
       setCompanyName(branding.company_name || "");
       setAddress(branding.company_address || "");
@@ -93,6 +98,58 @@ export function CompanyBrandingSettings() {
       setSigCoords({ page: branding.esign_signature_page || 1, x: branding.esign_signature_x || 100, y: branding.esign_signature_y || 600, w: branding.esign_signature_width || 200, h: branding.esign_signature_height || 50 });
       setDateCoords({ page: branding.esign_date_page || 1, x: branding.esign_date_x || 350, y: branding.esign_date_y || 600, w: branding.esign_date_width || 100, h: branding.esign_date_height || 25 });
       setOcwBankAccountId(branding.online_check_writer_bank_account_id || "");
+    }
+
+    // 2. Get invoice-specific settings from the current tenant
+    // We fetch the current user first to resolve their tenant
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: tenantUser } = await supabase
+        .from("tenant_users")
+        .select("tenant_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (tenantUser) {
+        const { data: tenant } = await supabase
+          .from("tenants")
+          .select("invoice_letterhead_url, invoice_footer_note, invoice_default_terms")
+          .eq("id", tenantUser.tenant_id)
+          .maybeSingle();
+        
+        if (tenant) {
+          setInvoiceLetterheadUrl(tenant.invoice_letterhead_url || null);
+          setInvoiceFooterNote(tenant.invoice_footer_note || "");
+          setInvoiceDefaultTerms(tenant.invoice_default_terms || "");
+        }
+      }
+    }
+  };
+
+  const handleInvoiceLetterheadUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Please upload an image file (PNG, JPG)", variant: "destructive" });
+      return;
+    }
+
+    setUploadingInvoice(true);
+    try {
+      const path = `invoice_letterhead_${Date.now()}.${file.name.split(".").pop()}`;
+      const { error } = await supabase.storage.from("company-branding").upload(path, file);
+      
+      if (error) throw error;
+
+      const { data: urlData } = supabase.storage.from("company-branding").getPublicUrl(path);
+      
+      setInvoiceLetterheadUrl(urlData?.publicUrl || null);
+      toast({ title: "Invoice letterhead uploaded successfully" });
+    } catch (error: any) {
+      toast({ title: "Upload failed", description: error.message, variant: "destructive" });
+    } finally {
+      setUploadingInvoice(false);
     }
   };
 
@@ -169,6 +226,26 @@ export function CompanyBrandingSettings() {
           .select()
           .single();
         if (data) setBrandingId((data as any).id);
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: tenantUser } = await supabase
+          .from("tenant_users")
+          .select("tenant_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        
+        if (tenantUser) {
+          await supabase
+            .from("tenants")
+            .update({
+              invoice_letterhead_url: invoiceLetterheadUrl,
+              invoice_footer_note: invoiceFooterNote,
+              invoice_default_terms: invoiceDefaultTerms,
+            })
+            .eq("id", tenantUser.tenant_id);
+        }
       }
 
       toast({ title: "Company branding saved" });
@@ -305,6 +382,70 @@ export function CompanyBrandingSettings() {
                 disabled={uploading}
               />
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Invoice Branding
+          </CardTitle>
+          <CardDescription>
+            Customize the look and feel of your customer invoices
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div>
+            <Label>Invoice Letterhead</Label>
+            <div className="mt-2">
+              <Label
+                htmlFor="invoice-letterhead-upload"
+                className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                  {invoiceLetterheadUrl ? (
+                    <img src={invoiceLetterheadUrl} alt="Invoice Letterhead Preview" className="h-20 object-contain mb-2" />
+                  ) : (
+                    <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                  )}
+                  <p className="text-sm text-muted-foreground">
+                    {uploadingInvoice ? "Uploading..." : "Click to upload invoice letterhead"}
+                  </p>
+                </div>
+              </Label>
+              <Input
+                id="invoice-letterhead-upload"
+                type="file"
+                accept="image/*"
+                onChange={handleInvoiceLetterheadUpload}
+                className="hidden"
+                disabled={uploadingInvoice}
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label>Invoice Footer Note</Label>
+            <Textarea
+              value={invoiceFooterNote}
+              onChange={(e) => setInvoiceFooterNote(e.target.value)}
+              placeholder="Thank you for your business!"
+              rows={2}
+            />
+            <p className="text-xs text-muted-foreground mt-1">Appears at the bottom of the invoice</p>
+          </div>
+
+          <div>
+            <Label>Default Payment Terms</Label>
+            <Textarea
+              value={invoiceDefaultTerms}
+              onChange={(e) => setInvoiceDefaultTerms(e.target.value)}
+              placeholder="Payment is due within 30 days. Please make checks payable to..."
+              rows={3}
+            />
+            <p className="text-xs text-muted-foreground mt-1">Default terms added to every new invoice</p>
           </div>
         </CardContent>
       </Card>
