@@ -98,7 +98,7 @@ export function OrganizationSettings() {
   const fetchUserOrg = async () => {
     try {
       const { data, error } = await supabase
-        .from("organization_members")
+        .from("organization_members" as any)
         .select(`
           *,
           orgs:organization_id (*)
@@ -109,8 +109,8 @@ export function OrganizationSettings() {
       if (error) throw error;
       setUserOrg(data);
 
-      if (data?.organization_id) {
-        fetchOrgMembers(data.organization_id);
+      if ((data as any)?.organization_id) {
+        fetchOrgMembers((data as any).organization_id);
       }
     } catch (error) {
       console.error("Error fetching org:", error);
@@ -122,7 +122,7 @@ export function OrganizationSettings() {
   const fetchOrgMembers = async (orgId: string) => {
     try {
       const { data, error } = await supabase
-        .from("organization_members")
+        .from("organization_members" as any)
         .select(`
           *,
           profiles:user_id (full_name, email)
@@ -158,9 +158,8 @@ export function OrganizationSettings() {
 
     setIsCreating(true);
     try {
-      // 1. Create organization
       const { data: org, error: orgError } = await supabase
-        .from("organizations")
+        .from("organizations" as any)
         .insert({
           name: newOrgName,
           slug: newOrgSlug,
@@ -173,7 +172,7 @@ export function OrganizationSettings() {
 
       // 2. Add current user as owner
       const { error: memberError } = await supabase
-        .from("organization_members")
+        .from("organization_members" as any)
         .insert({
           organization_id: org.id,
           user_id: user?.id,
@@ -202,7 +201,7 @@ export function OrganizationSettings() {
     setIsEditing(true);
     try {
       const { error } = await supabase
-        .from("organizations")
+        .from("organizations" as any)
         .update({
           name: editOrgName,
           slug: editOrgSlug,
@@ -226,7 +225,7 @@ export function OrganizationSettings() {
     setIsDeleting(true);
     try {
       const { error } = await supabase
-        .from("organizations")
+        .from("organizations" as any)
         .delete()
         .eq("id", userOrg.organization_id);
 
@@ -250,7 +249,7 @@ export function OrganizationSettings() {
     setIsAddingMember(true);
     try {
       const { error } = await supabase
-        .from("organization_members")
+        .from("organization_members" as any)
         .insert({
           organization_id: userOrg.organization_id,
           user_id: selectedUserId,
@@ -273,7 +272,7 @@ export function OrganizationSettings() {
   const handleRemoveMember = async (memberId: string) => {
     try {
       const { error } = await supabase
-        .from("organization_members")
+        .from("organization_members" as any)
         .delete()
         .eq("id", memberId);
 
@@ -289,7 +288,7 @@ export function OrganizationSettings() {
   const handleUpdateRole = async (memberId: string, role: string) => {
     try {
       const { error } = await supabase
-        .from("organization_members")
+        .from("organization_members" as any)
         .update({ role: role as any })
         .eq("id", memberId);
 
