@@ -1403,134 +1403,138 @@ export const AutomationsSettings = () => {
         </Dialog>
       </div>
 
-      <Tabs defaultValue="automations">
-        <TabsList>
-          <TabsTrigger value="automations">Automations</TabsTrigger>
-          <TabsTrigger value="history">Execution History</TabsTrigger>
+      <Tabs defaultValue="automations" className="w-full">
+        <TabsList className="grid w-full grid-cols-4 mb-6">
+          <TabsTrigger value="automations">Events & Triggers</TabsTrigger>
+          <TabsTrigger value="task-automations">Recurring Tasks</TabsTrigger>
+          <TabsTrigger value="global-settings">Settings</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="automations" className="space-y-4">
-          {automations?.length === 0 && (
-            <Card>
-              <CardContent className="py-8 text-center text-muted-foreground">
-                No automations created yet. Click "New Automation" to get started.
-              </CardContent>
-            </Card>
-          )}
-          {automations?.map((automation) => (
-            <Card key={automation.id}>
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle>{automation.name}</CardTitle>
-                    <CardDescription>{automation.description}</CardDescription>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={automation.is_active}
-                      onCheckedChange={(checked) =>
-                        toggleMutation.mutate({ id: automation.id, is_active: checked })
-                      }
-                    />
-                    {automation.trigger_type === 'manual' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => manualTriggerMutation.mutate(automation.id)}
-                        disabled={!automation.is_active}
-                      >
-                        <Play className="h-4 w-4" />
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openEditDialog(automation)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => deleteMutation.mutate(automation.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline" className="flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {getTriggerDescription(automation)}
-                    </Badge>
-                    <Badge variant={automation.is_active ? "default" : "secondary"}>
-                      {automation.is_active ? "Active" : "Inactive"}
-                    </Badge>
-                  </div>
-                  
-                  {/* Show actions */}
-                  {Array.isArray(automation.actions) && automation.actions.length > 0 && (
-                    <div className="flex flex-wrap gap-2 pt-2">
-                      {(automation.actions as unknown as ActionConfig[]).map((action, index) => (
-                        <Badge key={index} variant="secondary" className="flex items-center gap-1">
-                          {getActionIcon(action.type)}
-                          <span className="text-xs">
-                            {action.type === 'send_email' && 'Email'}
-                            {action.type === 'send_sms' && 'SMS'}
-                            {action.type === 'create_task' && 'Task'}
-                            {action.type === 'send_notification' && 'Notification'}
-                          </span>
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </TabsContent>
-
-        <TabsContent value="history" className="space-y-4">
-          {executions?.length === 0 && (
-            <Card>
-              <CardContent className="py-8 text-center text-muted-foreground">
-                No execution history yet. Automations will appear here when they run.
-              </CardContent>
-            </Card>
-          )}
-          {executions?.map((execution: any) => (
-            <Card key={execution.id}>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">{execution.automation?.name}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {new Date(execution.created_at).toLocaleString()}
-                    </div>
-                  </div>
-                  <Badge
-                    variant={
-                      execution.status === 'success'
-                        ? 'default'
-                        : execution.status === 'failed'
-                        ? 'destructive'
-                        : 'secondary'
-                    }
-                  >
-                    {execution.status}
-                  </Badge>
-                </div>
-                {execution.error_message && (
-                  <div className="mt-2 text-sm text-destructive">
-                    Error: {execution.error_message}
+        <TabsContent value="automations" className="space-y-6">
+          <SectionCard
+            title="Event Automations"
+            icon={<Sparkles className="h-4 w-4 text-primary" />}
+            accent="bg-gradient-to-r from-primary/60 to-primary/10"
+            description="Configure actions that trigger automatically when claim events occur."
+          >
+            <div className="space-y-6">
+              <div className="grid gap-4">
+                {automations?.length === 0 && (
+                  <div className="text-center py-8 border-2 border-dashed rounded-lg">
+                    <p className="text-sm text-muted-foreground">No automations created yet.</p>
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          ))}
+                {automations?.map((automation) => (
+                  <div key={automation.id} className="flex items-center justify-between p-4 rounded-lg border bg-muted/20">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{automation.name}</span>
+                        <Badge variant="outline" className="text-[10px] py-0">
+                          {getTriggerDescription(automation)}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{automation.description}</p>
+                      <div className="flex gap-2">
+                        {(automation.actions as unknown as ActionConfig[]).map((action, index) => (
+                          <div key={index} className="flex items-center gap-1 text-[10px] text-muted-foreground bg-background/50 px-1.5 py-0.5 rounded border">
+                            {getActionIcon(action.type)}
+                            <span className="capitalize">{action.type.replace(/_/g, ' ')}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={automation.is_active}
+                        onCheckedChange={(checked) =>
+                          toggleMutation.mutate({ id: automation.id, is_active: checked })
+                        }
+                      />
+                      {automation.trigger_type === 'manual' && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          onClick={() => manualTriggerMutation.mutate(automation.id)}
+                          disabled={!automation.is_active}
+                        >
+                          <Play className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
+                        onClick={() => openEditDialog(automation)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        onClick={() => deleteMutation.mutate(automation.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </SectionCard>
+        </TabsContent>
+
+        <TabsContent value="task-automations" className="space-y-6">
+          <TaskAutomationsSettings />
+        </TabsContent>
+
+        <TabsContent value="global-settings" className="space-y-6">
+          <AutomationGlobalSettings />
+        </TabsContent>
+
+        <TabsContent value="history" className="space-y-6">
+          <SectionCard
+            title="Execution History"
+            icon={<History className="h-4 w-4 text-muted-foreground" />}
+            description="Recent automation events and their results."
+          >
+            <div className="space-y-4">
+              {executions?.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">No execution history yet.</p>
+              )}
+              {executions?.map((execution: any) => (
+                <div key={execution.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium">{execution.automation?.name}</span>
+                      <Badge
+                        variant={
+                          execution.status === 'success'
+                            ? 'default'
+                            : execution.status === 'failed'
+                            ? 'destructive'
+                            : 'secondary'
+                        }
+                        className="text-[10px] py-0"
+                      >
+                        {execution.status}
+                      </Badge>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      {new Date(execution.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                  {execution.error_message && (
+                    <p className="text-[10px] text-destructive max-w-[200px] truncate">
+                      {execution.error_message}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </SectionCard>
         </TabsContent>
       </Tabs>
         </TabsContent>
