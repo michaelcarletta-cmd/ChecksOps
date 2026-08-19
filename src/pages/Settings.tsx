@@ -814,14 +814,17 @@ export default function Settings() {
 
         {/* ActumSettings hidden */}
 
-        <TabsContent value="profile" className="w-full">
-          <ProfileSettings />
+        <TabsContent value="profile" className="w-full focus-visible:outline-none">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <ProfileSettings />
+          </div>
         </TabsContent>
 
-
-        <TabsContent value="referrals" className="w-full">
-          <ReferralSettings />
-          <AdminReferralDashboard />
+        <TabsContent value="referrals" className="w-full focus-visible:outline-none">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <ReferralSettings />
+            <AdminReferralDashboard />
+          </div>
         </TabsContent>
 
         <TabsContent value="workflow" className="w-full space-y-4">
@@ -997,21 +1000,25 @@ export default function Settings() {
           </Collapsible>
         </TabsContent>
 
-        <TabsContent value="users" className="w-full space-y-6">
-          <UserManagementSettings />
-          {tenant && (
-            <TeamCapsSettings 
-              vendorCap={tenant.vendor_cap ?? 5}
-              salesRepCap={tenant.sales_rep_cap ?? 5}
-              subcontractorCap={tenant.subcontractor_cap ?? 5}
-              tenantId={tenant.id}
-              onUpdate={() => {}} 
-            />
-          )}
+        <TabsContent value="users" className="w-full space-y-6 focus-visible:outline-none">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+            <UserManagementSettings />
+            {tenant && (
+              <TeamCapsSettings 
+                vendorCap={tenant.vendor_cap ?? 5}
+                salesRepCap={tenant.sales_rep_cap ?? 5}
+                subcontractorCap={tenant.subcontractor_cap ?? 5}
+                tenantId={tenant.id}
+                onUpdate={() => {}} 
+              />
+            )}
+          </div>
         </TabsContent>
 
-        <TabsContent value="usage" className="w-full">
-          <UsageLogTab />
+        <TabsContent value="usage" className="w-full focus-visible:outline-none">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <UsageLogTab />
+          </div>
         </TabsContent>
 
 
@@ -1025,41 +1032,40 @@ export default function Settings() {
           <CounterArgumentsSettings />
         </TabsContent>
 
-        <TabsContent value="organization" className="w-full space-y-6">
-          <CompanyBrandingSettings />
-          <EmailSenderSettings />
-          <TenantEmailHealthPanel />
-          
-          
-          
-          {/* Workspaces - Collapsible */}
-          <Collapsible open={workspacesOpen} onOpenChange={setWorkspacesOpen}>
-            <Card>
-              <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <FolderKanban className="h-5 w-5" />
-                      <div>
-                        <CardTitle>Partner Workspaces</CardTitle>
-                        <CardDescription>
-                          Manage linked partner instances and cross-tenant collaboration
-                        </CardDescription>
+        <TabsContent value="organization" className="w-full space-y-6 focus-visible:outline-none">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+            <OrganizationSettings />
+            <CompanyBrandingSettings />
+            <EmailSenderSettings />
+            <TenantEmailHealthPanel />
+            
+            {/* Workspaces - Collapsible */}
+            <Collapsible open={workspacesOpen} onOpenChange={setWorkspacesOpen}>
+              <Card>
+                <CollapsibleTrigger asChild>
+                  <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FolderKanban className="h-5 w-5" />
+                        <div>
+                          <CardTitle>Partner Workspaces</CardTitle>
+                          <CardDescription>
+                            Manage linked partner instances and cross-tenant collaboration
+                          </CardDescription>
+                        </div>
                       </div>
+                      <ChevronDown className={`h-5 w-5 transition-transform ${workspacesOpen ? 'rotate-180' : ''}`} />
                     </div>
-                    <ChevronDown className={`h-5 w-5 transition-transform ${workspacesOpen ? 'rotate-180' : ''}`} />
-                  </div>
-                </CardHeader>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <CardContent>
-                  <WorkspaceList embedded />
-                </CardContent>
-              </CollapsibleContent>
-            </Card>
-          </Collapsible>
-
-          <OrganizationSettings />
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent>
+                    <WorkspaceList embedded />
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+          </div>
         </TabsContent>
 
 
