@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,7 +11,10 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Upload, Trash2, FileText, Video, Loader2, CheckCircle, XCircle, Clock, Brain, Image, Link, Globe, AlignLeft, RefreshCw } from "lucide-react";
+import { Upload, Trash2, FileText, Video, Loader2, CheckCircle, XCircle, Clock, Brain, Image, Link, Globe, AlignLeft, RefreshCw, Sparkles } from "lucide-react";
+import { SectionCard } from "./SectionCard";
+import { SettingsHero } from "./SettingsHero";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -675,17 +678,20 @@ export const AIKnowledgeBaseSettings = () => {
 
   return (
     <div className="space-y-6">
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Brain className="h-5 w-5 text-primary" />
-            AI Knowledge Base
-          </CardTitle>
-          <CardDescription>
-            Upload documents, images, videos, add URLs, or enter text to train the AI assistant.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <SettingsHero
+        title="Knowledge Engine"
+        description="Train your AI copilot with industry regulations, building codes, and custom policy language."
+        badge="Copilot Training"
+        icon={<Brain className="h-4 w-4 text-primary" />}
+      />
+
+      <SectionCard
+        title="Add Knowledge"
+        icon={<Sparkles className="h-4 w-4 text-violet-500" />}
+        accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
+        description="Upload documents, website URLs, or raw text to expand Darwin's intelligence."
+      >
+        <div className="space-y-4 pt-4">
           <Tabs defaultValue="files" className="w-full">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="files" className="flex items-center gap-2">
@@ -910,60 +916,54 @@ export const AIKnowledgeBaseSettings = () => {
               </p>
             </TabsContent>
           </Tabs>
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
 
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-primary" />
-                Knowledge Validation
-              </CardTitle>
-              <CardDescription>
-                Verifies every uploaded document is processed, chunked, and embedded for reliable retrieval.
-              </CardDescription>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => refetchKnowledgeValidation()}
-                disabled={validationLoading}
-                className="gap-2"
-              >
-                {validationLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-                Refresh
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => repairValidationMutation.mutate()}
-                disabled={
-                  repairValidationMutation.isPending ||
-                  !knowledgeValidation ||
-                  knowledgeValidation.issues.length === 0
-                }
-                className="gap-2"
-              >
-                {repairValidationMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-                {repairValidationMutation.isPending
-                  ? `Auto-fixing ${repairProgress?.current || 0}/${repairProgress?.total || 0}`
-                  : "Auto-fix issues"}
-              </Button>
-            </div>
+      <SectionCard
+        title="Knowledge Validation"
+        icon={<CheckCircle className="h-4 w-4 text-emerald-500" />}
+        accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
+        description="Verifies that all knowledge assets are correctly indexed and searchable."
+        headerActions={
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetchKnowledgeValidation()}
+              disabled={validationLoading}
+              className="h-8 gap-2"
+            >
+              {validationLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3 w-3" />
+              )}
+              Refresh
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => repairValidationMutation.mutate()}
+              disabled={
+                repairValidationMutation.isPending ||
+                !knowledgeValidation ||
+                knowledgeValidation.issues.length === 0
+              }
+              className="h-8 gap-2"
+            >
+              {repairValidationMutation.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3 w-3" />
+              )}
+              {repairValidationMutation.isPending
+                ? `Fixing ${repairProgress?.current || 0}/${repairProgress?.total || 0}`
+                : "Auto-fix"}
+            </Button>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        }
+      >
+        <div className="space-y-4 pt-4">
           {validationLoading ? (
             <div className="flex items-center justify-center py-6">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -1069,17 +1069,16 @@ export const AIKnowledgeBaseSettings = () => {
           ) : (
             <p className="text-sm text-muted-foreground">Validation data is unavailable right now.</p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
 
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle>Uploaded Documents</CardTitle>
-          <CardDescription>
-            {documents?.length || 0} documents in the knowledge base
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+      <SectionCard
+        title="Knowledge Inventory"
+        icon={<Brain className="h-4 w-4 text-primary" />}
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        description={`${documents?.length || 0} documents in the knowledge base`}
+      >
+        <div className="space-y-4 pt-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -1169,8 +1168,8 @@ export const AIKnowledgeBaseSettings = () => {
               <p className="text-sm">Upload documents to enhance the AI assistant's knowledge</p>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
 
       <AlertDialog open={!!deleteDocId} onOpenChange={() => setDeleteDocId(null)}>
         <AlertDialogContent>

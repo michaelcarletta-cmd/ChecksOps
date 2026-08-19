@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, ShieldAlert } from "lucide-react";
 import { format } from "date-fns";
+import { SectionCard } from "./SectionCard";
 
 export function GLBASecurityEventsLog() {
   const { tenant } = useTenant();
@@ -25,14 +25,13 @@ export function GLBASecurityEventsLog() {
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base flex items-center gap-2">
-          <ShieldAlert className="h-4 w-4 text-primary" /> Security & compliance event log
-        </CardTitle>
-        <CardDescription>Append-only log of GLBA, AML, and ACH compliance events (most recent 200).</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <SectionCard
+      title="Security & Compliance Events"
+      icon={<ShieldAlert className="h-4 w-4 text-rose-500" />}
+      accent="bg-gradient-to-r from-rose-500/60 to-rose-500/10"
+      description="Append-only log of GLBA, AML, and ACH compliance events (most recent 200)."
+    >
+      <div className="pt-2">
         {isLoading ? (
           <div className="flex justify-center py-8"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
         ) : !data?.length ? (
@@ -40,7 +39,7 @@ export function GLBASecurityEventsLog() {
         ) : (
           <div className="space-y-2">
             {data.map((e) => (
-              <div key={e.id} className="flex items-start justify-between gap-3 p-2.5 rounded-md border bg-muted/20">
+              <div key={e.id} className="flex items-start justify-between gap-3 p-2.5 rounded-md border bg-muted/20 hover:bg-muted/30 transition-colors">
                 <div className="space-y-0.5 min-w-0">
                   <div className="flex items-center gap-2">
                     <code className="text-[11px] font-mono text-foreground">{e.event_type}</code>
@@ -57,8 +56,8 @@ export function GLBASecurityEventsLog() {
             ))}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </SectionCard>
   );
 }
 

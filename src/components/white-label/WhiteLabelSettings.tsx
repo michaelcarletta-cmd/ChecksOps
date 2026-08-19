@@ -7,16 +7,18 @@ import { Navigate, Link } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { 
   LogOut, Building2, Users, Link2, CreditCard, Palette, ArrowLeft,
   Loader2, Save, Trash2, Receipt, Banknote, KeyRound, HelpCircle,
-  ArrowDownToLine, FileBarChart, Gift, ShieldCheck, FileText
+  ArrowDownToLine, FileBarChart, Gift, ShieldCheck, FileText, Settings as SettingsIcon
 } from "lucide-react";
+import { SectionCard } from "@/components/settings/SectionCard";
+import { SettingsHero } from "@/components/settings/SettingsHero";
 import { ReferralSettings } from "@/components/settings/ReferralSettings";
 import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
 import { TenantEmailHealthPanel } from "@/components/settings/TenantEmailHealthPanel";
@@ -161,8 +163,13 @@ export function WhiteLabelSettings() {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto p-4 md:p-8">
-        <h1 className="text-xl font-bold mb-6">Settings</h1>
+      <main className="max-w-4xl mx-auto p-4 md:p-8">
+        <SettingsHero
+          title="Organization Settings"
+          description="Manage your company profile, users, branding, and billing preferences."
+          badge="Workspace"
+          icon={<SettingsIcon className="h-4 w-4 text-primary" />}
+        />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
@@ -244,12 +251,12 @@ export function WhiteLabelSettings() {
 
 
           <TabsContent value="directory" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <SearchIcon className="h-4 w-4" /> How homeowners find you
-                </CardTitle>
-              </CardHeader>
+            <SectionCard
+              title="Find-a-Pro Visibility"
+              icon={<SearchIcon className="h-4 w-4 text-blue-500" />}
+              accent="bg-gradient-to-r from-blue-500/60 to-blue-500/10"
+              description="Configure how homeowners discover your business on our public directory."
+            >
               <CardContent className="space-y-3 text-sm text-muted-foreground">
                 <p>
                   Verified ChecksOps contractors are listed on the public{" "}
@@ -265,7 +272,7 @@ export function WhiteLabelSettings() {
                   starts with one of your prefixes <em>or</em> they fall inside your radius.
                 </p>
               </CardContent>
-            </Card>
+            </SectionCard>
             <MyVerificationStatus />
             <ContractorServiceAreaCard />
             <ContractorLeadsCard />
@@ -303,11 +310,13 @@ function ProfileSettings({ tenant }: { tenant: any }) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm">Company Profile</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <SectionCard
+      title="Company Profile"
+      icon={<Building2 className="h-4 w-4 text-primary" />}
+      accent="bg-gradient-to-r from-primary/60 to-primary/10"
+      description="Update your business information and workspace identification."
+    >
+      <div className="space-y-4 pt-4">
         <div className="space-y-2">
           <Label className="text-xs">Company Name</Label>
           <Input value={name} onChange={(e) => setName(e.target.value)} />
@@ -330,8 +339,8 @@ function ProfileSettings({ tenant }: { tenant: any }) {
           {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
           Save Changes
         </Button>
-      </CardContent>
-    </Card>
+      </div>
+    </SectionCard>
   );
 }
 
@@ -405,18 +414,20 @@ function BankingSettings({ tenantId }: { tenantId: string }) {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center justify-between">
-            <span>Bank Accounts</span>
-            {!showForm && (
-              <Button size="sm" variant="outline" onClick={() => setShowForm(true)}>
-                Add Account
-              </Button>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+      <SectionCard
+        title="Bank Accounts"
+        icon={<Banknote className="h-4 w-4 text-emerald-500" />}
+        accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
+        description="Bank account information for receiving digital deposits."
+        headerActions={
+          !showForm && (
+            <Button size="sm" variant="outline" onClick={() => setShowForm(true)} className="h-8">
+              Add Account
+            </Button>
+          )
+        }
+      >
+        <div className="space-y-4 pt-2">
           <p className="text-xs text-muted-foreground mb-4">
             Bank account information for receiving digital deposits. Full account numbers are never stored — only the last 4 digits are saved for identification.
           </p>
@@ -495,8 +506,8 @@ function BankingSettings({ tenantId }: { tenantId: string }) {
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
     </div>
   );
 }
@@ -560,11 +571,13 @@ function BrandingSettings({ tenant }: { tenant: any }) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm">Branding & Appearance</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <SectionCard
+      title="Branding & Appearance"
+      icon={<Palette className="h-4 w-4 text-primary" />}
+      accent="bg-gradient-to-r from-primary/60 to-primary/10"
+      description="Customize your workspace logo and color palette."
+    >
+      <div className="space-y-4 pt-4">
         <div className="space-y-2">
           <Label className="text-xs">Logo</Label>
           <div className="flex flex-wrap items-center gap-2">
@@ -624,7 +637,7 @@ function BrandingSettings({ tenant }: { tenant: any }) {
           {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
           Save Branding
         </Button>
-      </CardContent>
-    </Card>
+      </div>
+    </SectionCard>
   );
 }

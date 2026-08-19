@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UserPlus, Trash2, Shield, UserX, CheckCircle, XCircle, Clock, KeyRound, Loader2, Users, Sparkles } from "lucide-react";
+import { UserPlus, Trash2, Shield, UserX, CheckCircle, XCircle, Clock, KeyRound, Loader2, Users } from "lucide-react";
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
 
@@ -70,28 +69,19 @@ export function UserManagementSettings() {
     try {
       setLoading(true);
       
-      // Fetch all profiles
       const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
         .select("*")
         .order("email");
 
-      if (profilesError) {
-        console.error("Profiles error:", profilesError);
-        throw profilesError;
-      }
+      if (profilesError) throw profilesError;
 
-      // Fetch all user roles
       const { data: roles, error: rolesError } = await supabase
         .from("user_roles")
         .select("*");
 
-      if (rolesError) {
-        console.error("Roles error:", rolesError);
-        throw rolesError;
-      }
+      if (rolesError) throw rolesError;
 
-      // Combine profiles with their roles
       const usersWithRoles: UserWithRoles[] = (profiles || [])
         .map((profile) => ({
           ...profile,
@@ -99,23 +89,16 @@ export function UserManagementSettings() {
           roles: (roles || []).filter((role) => role.user_id === profile.id),
         }));
 
-      // Filter to only show staff/admin users (exclude clients, contractors, referrers)
       const staffAdminUsers = usersWithRoles.filter(u => {
         const hasPortalRole = u.roles.some(r => 
           r.role === 'client' || r.role === 'contractor' || r.role === 'referrer'
         );
         const hasStaffRole = u.roles.some(r => r.role === 'staff' || r.role === 'admin');
-        // Show if has staff/admin role OR has no roles (new user) OR is pending
         return !hasPortalRole && (hasStaffRole || u.roles.length === 0 || u.approval_status === 'pending');
       });
 
-      // Separate pending staff users from approved users
-      const pending = staffAdminUsers.filter(
-        u => u.approval_status === 'pending'
-      );
-      const approved = staffAdminUsers.filter(
-        u => u.approval_status !== 'pending'
-      );
+      const pending = staffAdminUsers.filter(u => u.approval_status === 'pending');
+      const approved = staffAdminUsers.filter(u => u.approval_status !== 'pending');
 
       setPendingUsers(pending);
       setUsers(approved);
@@ -379,7 +362,6 @@ export function UserManagementSettings() {
       />
 
       <div className="grid gap-6">
-        {/* Pending Approvals Section */}
         {pendingUsers.length > 0 && (
           <SectionCard
             title={`Pending Staff Approvals (${pendingUsers.length})`}
@@ -387,51 +369,51 @@ export function UserManagementSettings() {
             accent="bg-gradient-to-r from-orange-500/60 to-orange-500/10"
             description="New staff members awaiting your approval to access the system"
           >
-          <div className="space-y-3">
-            {pendingUsers.map((user) => (
-              <div
-                key={user.id}
-                className="flex items-center justify-between p-4 border border-yellow-500/30 rounded-lg bg-background"
-              >
-                <div>
-                  <p className="font-medium">{user.full_name || "Unnamed User"}</p>
-                  <p className="text-sm text-muted-foreground">{user.email}</p>
+            <div className="space-y-3 pt-4">
+              {pendingUsers.map((user) => (
+                <div
+                  key={user.id}
+                  className="flex items-center justify-between p-4 border border-yellow-500/30 rounded-lg bg-background"
+                >
+                  <div>
+                    <p className="font-medium">{user.full_name || "Unnamed User"}</p>
+                    <p className="text-sm text-muted-foreground">{user.email}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => sendPasswordResetEmail(user.id, user.email, user.full_name || user.email)}
+                      disabled={resettingUserId === user.id}
+                    >
+                      {resettingUserId === user.id ? (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      ) : (
+                        <KeyRound className="h-4 w-4 mr-1" />
+                      )}
+                      Reset Password
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => approveUser(user.id, user.full_name || user.email)}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <CheckCircle className="h-4 w-4 mr-1" />
+                      Approve
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => denyUser(user.id, user.full_name || user.email)}
+                    >
+                      <XCircle className="h-4 w-4 mr-1" />
+                      Deny
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => sendPasswordResetEmail(user.id, user.email, user.full_name || user.email)}
-                    disabled={resettingUserId === user.id}
-                  >
-                    {resettingUserId === user.id ? (
-                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                    ) : (
-                      <KeyRound className="h-4 w-4 mr-1" />
-                    )}
-                    Reset Password
-                  </Button>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => approveUser(user.id, user.full_name || user.email)}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    <CheckCircle className="h-4 w-4 mr-1" />
-                    Approve
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => denyUser(user.id, user.full_name || user.email)}
-                  >
-                    <XCircle className="h-4 w-4 mr-1" />
-                    Deny
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
           </SectionCard>
         )}
 
@@ -441,139 +423,143 @@ export function UserManagementSettings() {
           accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
           description="Manage roles and access for existing team members"
         >
-        <div className="space-y-4">
-          {users.map((user) => (
-            <div
-              key={user.id}
-              className="flex items-start justify-between p-4 border border-border rounded-lg"
-            >
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-2">
-                  <Shield className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-foreground font-medium">
-                    {user.full_name || "Unnamed User"}
-                  </p>
-                  {user.approval_status === 'denied' && (
-                    <Badge variant="destructive" className="text-xs">Denied</Badge>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground mb-3">{user.email}</p>
-                
-                <div className="flex flex-wrap gap-2">
-                  {user.roles.length === 0 ? (
-                    <Badge variant="outline" className="text-muted-foreground">
-                      No roles assigned
-                    </Badge>
-                  ) : (
-                    user.roles.map((userRole) => (
-                      <Badge
-                        key={userRole.id}
-                        variant={ROLE_COLORS[userRole.role] as "default" | "destructive" | "outline" | "secondary"}
-                        className="flex items-center gap-2"
-                      >
-                        {ROLE_LABELS[userRole.role]}
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeRole(userRole.id, user.id, userRole.role)}
-                          className="ml-1 h-5 w-5 p-0"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
+          <div className="space-y-4 pt-4">
+            {users.map((user) => (
+              <div
+                key={user.id}
+                className="flex items-start justify-between p-4 border border-border rounded-lg"
+              >
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Shield className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-foreground font-medium">
+                      {user.full_name || "Unnamed User"}
+                    </p>
+                    {user.approval_status === 'denied' && (
+                      <Badge variant="destructive" className="text-xs">Denied</Badge>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-3">{user.email}</p>
+                  
+                  <div className="flex flex-wrap gap-2">
+                    {user.roles.length === 0 ? (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        No roles assigned
                       </Badge>
-                    ))
-                  )}
+                    ) : (
+                      user.roles.map((userRole) => (
+                        <Badge
+                          key={userRole.id}
+                          variant={ROLE_COLORS[userRole.role] as "default" | "destructive" | "outline" | "secondary"}
+                          className="flex items-center gap-2"
+                        >
+                          {ROLE_LABELS[userRole.role]}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeRole(userRole.id, user.id, userRole.role)}
+                            className="ml-1 h-5 w-5 p-0"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </Badge>
+                      ))
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              <div className="ml-4 flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => sendPasswordResetEmail(user.id, user.email, user.full_name || user.email)}
-                  disabled={resettingUserId === user.id}
-                  title="Send password reset email"
-                >
-                  {resettingUserId === user.id ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <KeyRound className="h-4 w-4" />
+                <div className="ml-4 flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => sendPasswordResetEmail(user.id, user.email, user.full_name || user.email)}
+                    disabled={resettingUserId === user.id}
+                    title="Send password reset email"
+                  >
+                    {resettingUserId === user.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <KeyRound className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Select
+                    value={selectedRoles[user.id]}
+                    onValueChange={(role) => {
+                      if (role) {
+                        addRole(user.id, role);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Add role..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">
+                        <div className="flex items-center gap-2">
+                          <UserPlus className="h-4 w-4" />
+                          Admin
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="staff">
+                        <div className="flex items-center gap-2">
+                          <UserPlus className="h-4 w-4" />
+                          Staff
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  
+                  {user.roles.length > 0 && (
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => removeAllRoles(user.id, user.full_name || user.email)}
+                      title="Remove all roles from this user"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   )}
-                </Button>
-                <Select
-                  value={selectedRoles[user.id]}
-                  onValueChange={(role) => {
-                    if (role) {
-                      addRole(user.id, role);
-                    }
-                  }}
-                >
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Add role..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="admin">
-                      <div className="flex items-center gap-2">
-                        <UserPlus className="h-4 w-4" />
-                        Admin
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="staff">
-                      <div className="flex items-center gap-2">
-                        <UserPlus className="h-4 w-4" />
-                        Staff
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                
-                {user.roles.length > 0 && (
+                  
                   <Button
                     variant="destructive"
                     size="icon"
-                    onClick={() => removeAllRoles(user.id, user.full_name || user.email)}
-                    title="Remove all roles from this user"
+                    className="h-8 w-8"
+                    onClick={() => deleteUser(user.id, user.full_name || user.email)}
+                    title="Permanently delete this user"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <UserX className="h-4 w-4" />
                   </Button>
-                )}
-                
-                <Button
-                  variant="destructive"
-                  size="icon"
-                  onClick={() => deleteUser(user.id, user.full_name || user.email)}
-                  title="Permanently delete this user"
-                >
-                  <UserX className="h-4 w-4" />
-                </Button>
+                </div>
+              </div>
+            ))}
+
+            {users.length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">
+                No users found
+              </div>
+            )}
+          </div>
+          
+          <div className="mt-6 p-4 bg-muted/30 rounded-lg border border-border/50">
+            <div className="flex gap-3">
+              <Shield className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <div className="space-y-1 text-sm">
+                <p className="font-medium text-foreground">Role Descriptions</p>
+                <ul className="text-muted-foreground space-y-1 list-disc list-inside">
+                  <li><strong>Admin:</strong> Full system access, can manage all settings and users</li>
+                  <li><strong>Staff:</strong> Can manage claims, clients, and tasks (requires approval on signup)</li>
+                </ul>
+                <p className="text-muted-foreground mt-2 text-xs">
+                  Clients, contractors, and referrers are managed on their respective pages.
+                </p>
               </div>
             </div>
-          ))}
-
-          {users.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              No users found
-            </div>
-          )}
-        </div>
-        <div className="mt-6 p-4 bg-muted/30 rounded-lg border border-border/50">
-          <div className="flex gap-3">
-            <Shield className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
-            <div className="space-y-1 text-sm">
-              <p className="font-medium text-foreground">Role Descriptions</p>
-              <ul className="text-muted-foreground space-y-1 list-disc list-inside">
-                <li><strong>Admin:</strong> Full system access, can manage all settings and users</li>
-                <li><strong>Staff:</strong> Can manage claims, clients, and tasks (requires approval on signup)</li>
-              </ul>
-              <p className="text-muted-foreground mt-2 text-xs">
-                Clients, contractors, and referrers are managed on their respective pages.
-              </p>
-            </div>
           </div>
-        </div>
-      </SectionCard>
+        </SectionCard>
+      </div>
     </div>
-  </div>
   );
 }
