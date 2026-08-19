@@ -11,6 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature, ListTree, HelpCircle, Sparkles, TrendingUp, ShieldCheck, Cog, UserCog, Mail, Database, History, Bell, Activity, Cloud, Key, Share2, Receipt, Users, BarChart3, User, KeyRound, Building2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { SectionCard } from "@/components/settings/SectionCard";
+import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 
 import {
   DndContext,
@@ -818,7 +819,7 @@ export default function Settings() {
 
         {SHOW_CHECKALT && (
           <TabsContent value="checkalt" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+            <SettingsPageShell>
               <CheckAltSettings />
             </div>
           </TabsContent>
@@ -828,20 +829,20 @@ export default function Settings() {
         {/* ActumSettings hidden */}
 
         <TabsContent value="profile" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto space-y-6 pb-12 pt-6">
+          <SettingsPageShell>
             <ProfileSettings />
           </div>
         </TabsContent>
 
         <TabsContent value="referrals" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+          <SettingsPageShell>
             <ReferralSettings />
             <AdminReferralDashboard />
           </div>
         </TabsContent>
 
         <TabsContent value="workflow" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+          <SettingsPageShell>
 
 
           {/* Claim Statuses - Collapsible */}
@@ -995,7 +996,7 @@ export default function Settings() {
 
 
         <TabsContent value="users" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto space-y-6 pb-12 pt-6">
+          <SettingsPageShell>
             <UserManagementSettings />
             {tenant && (
               <TeamCapsSettings 
@@ -1010,14 +1011,14 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="usage" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+          <SettingsPageShell>
             <UsageLogTab />
           </div>
         </TabsContent>
 
 
         <TabsContent value="automations" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+          <SettingsPageShell>
 
           <AutomationsSettings />
           <div className="pt-6">
@@ -1028,7 +1029,7 @@ export default function Settings() {
 
 
         <TabsContent value="ai-knowledge" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+          <SettingsPageShell>
 
           <AIKnowledgeBaseSettings />
           <CounterArgumentsSettings />
@@ -1037,7 +1038,7 @@ export default function Settings() {
 
 
         <TabsContent value="organization" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+          <SettingsPageShell>
             <OrganizationSettings />
             <CompanyBrandingSettings />
             <EmailSenderSettings />
@@ -1046,13 +1047,13 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="workspaces" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto space-y-6 pb-12 pt-6">
+          <SettingsPageShell>
             <WorkspaceList />
           </div>
         </TabsContent>
 
         <TabsContent value="ai-key" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+          <SettingsPageShell>
 
             <TenantAIKeySettings />
 
@@ -1061,7 +1062,7 @@ export default function Settings() {
 
 
         <TabsContent value="import" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+            <SettingsPageShell>
             <ImportSettings />
           </div>
         </TabsContent>
@@ -1070,7 +1071,7 @@ export default function Settings() {
 
         {isAdmin && (
           <TabsContent value="audit-logs" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+            <SettingsPageShell>
               <AuditLogSettings />
             </div>
           </TabsContent>
@@ -1079,7 +1080,7 @@ export default function Settings() {
 
         {isAdmin && (
           <TabsContent value="notification-logs" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+            <SettingsPageShell>
               <NotificationDeliveryLogView />
             </div>
           </TabsContent>
@@ -1088,7 +1089,7 @@ export default function Settings() {
 
         {isAdmin && (
           <TabsContent value="urgency-alerts" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+            <SettingsPageShell>
               <StatusUrgencyNotificationsSettings />
             </div>
           </TabsContent>
@@ -1097,7 +1098,7 @@ export default function Settings() {
 
         {isAdmin && (
           <TabsContent value="jn-diagnostics" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+            <SettingsPageShell>
               <JobNimbusSyncDiagnostics />
             </div>
           </TabsContent>
@@ -1106,7 +1107,7 @@ export default function Settings() {
 
         {isAdmin && (
           <TabsContent value="backup" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+            <SettingsPageShell>
               <BackupStatusSettings />
             </div>
           </TabsContent>
@@ -1114,7 +1115,7 @@ export default function Settings() {
         )}
         {isAdmin && (
           <TabsContent value="white-label" className="w-full focus-visible:outline-none">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12 pt-6">
+            <SettingsPageShell>
               <TenantManagement />
             </div>
           </TabsContent>
