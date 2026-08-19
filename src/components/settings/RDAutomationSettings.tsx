@@ -128,8 +128,8 @@ export const RDAutomationSettings = () => {
         accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
         description="Configure global settings for RD tracking and follow-ups"
       >
-        <div className="space-y-6">
-        <CardContent className="space-y-6">
+        <div className="space-y-6 pt-4">
+        
           {/* RD Request Follow-ups Section */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
