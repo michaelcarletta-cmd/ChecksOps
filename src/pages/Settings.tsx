@@ -751,11 +751,7 @@ export default function Settings() {
           
           <TabsTrigger value="organization" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <ShieldCheck className="h-4 w-4" />
-            Organization
-          </TabsTrigger>
-          <TabsTrigger value="email" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <Mail className="h-4 w-4" />
-            Email
+            Company Settings
           </TabsTrigger>
           <TabsTrigger value="import" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <Database className="h-4 w-4" />
@@ -1029,8 +1025,12 @@ export default function Settings() {
           <CounterArgumentsSettings />
         </TabsContent>
 
-        <TabsContent value="organization" className="w-full space-y-4">
-          <OrganizationSettings />
+        <TabsContent value="organization" className="w-full space-y-6">
+          <CompanyBrandingSettings />
+          <EmailSenderSettings />
+          <TenantEmailHealthPanel />
+          
+          
           
           {/* Workspaces - Collapsible */}
           <Collapsible open={workspacesOpen} onOpenChange={setWorkspacesOpen}>
@@ -1041,9 +1041,9 @@ export default function Settings() {
                     <div className="flex items-center gap-2">
                       <FolderKanban className="h-5 w-5" />
                       <div>
-                        <CardTitle>Workspaces</CardTitle>
+                        <CardTitle>Partner Workspaces</CardTitle>
                         <CardDescription>
-                          Manage workspaces and linked partner instances
+                          Manage linked partner instances and cross-tenant collaboration
                         </CardDescription>
                       </div>
                     </div>
@@ -1058,36 +1058,8 @@ export default function Settings() {
               </CollapsibleContent>
             </Card>
           </Collapsible>
-          
-          {/* Company Branding - Collapsible */}
-          <Collapsible id="branding-collapsible" open={companyBrandingOpen} onOpenChange={setCompanyBrandingOpen}>
-            <Card>
-              <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Company Branding</CardTitle>
-                      <CardDescription>
-                        Configure company information, letterhead, and integrations
-                      </CardDescription>
-                    </div>
-                    <ChevronDown className={`h-5 w-5 transition-transform ${companyBrandingOpen ? 'rotate-180' : ''}`} />
-                  </div>
-                </CardHeader>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <CardContent>
-                  <CompanyBrandingSettings />
-                </CardContent>
-              </CollapsibleContent>
-            </Card>
-          </Collapsible>
 
-        </TabsContent>
-
-        <TabsContent value="email" className="w-full space-y-4">
-          <EmailSenderSettings />
-          <TenantEmailHealthPanel />
+          <OrganizationSettings />
         </TabsContent>
 
 
