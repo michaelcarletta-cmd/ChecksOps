@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -434,8 +435,21 @@ export default function Settings() {
   const [workspacesOpen, setWorkspacesOpen] = useState(false);
   const [sigPresetsOpen, setSigPresetsOpen] = useState(false);
   
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "workflow");
+  
   const { toast } = useToast();
   const { tenant } = useTenant();
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab) {
+      setActiveTab(tab);
+      if (tab === "organization") {
+        setCompanyBrandingOpen(true);
+      }
+    }
+  }, [searchParams]);
 
 
   // Check if current user is admin
@@ -702,8 +716,8 @@ export default function Settings() {
         </div>
       </div>
 
-      <Tabs defaultValue="workflow" className="space-y-6">
-        <TabsList className="flex flex-row md:flex-wrap h-auto w-full bg-muted/20 p-1.5 gap-1 border-border/50">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="flex flex-row md:flex-wrap h-auto w-full bg-muted/20 p-1.5 gap-1 border-border/50">
           <TabsTrigger value="profile" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <UserCog className="h-4 w-4" />
             My Profile

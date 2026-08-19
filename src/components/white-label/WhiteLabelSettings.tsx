@@ -1,4 +1,5 @@
-import { useState, lazy, Suspense } from "react";
+import { useState, lazy, Suspense, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -98,6 +99,15 @@ export function WhiteLabelSettings() {
   const { tenant } = useTenant();
   const { user, loading } = useAuth();
   const { isAdmin } = usePermissions();
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "profile");
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
 
   const { data: tenantRole } = useQuery({
     queryKey: ["tenant-user-role", tenant?.id, user?.id],
@@ -153,7 +163,7 @@ export function WhiteLabelSettings() {
       <main className="max-w-3xl mx-auto p-4 md:p-8">
         <h1 className="text-xl font-bold mb-6">Settings</h1>
 
-        <Tabs defaultValue="profile" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
             <TabsTrigger value="profile" className="text-xs gap-1"><Building2 className="h-3 w-3" />Profile</TabsTrigger>
             <TabsTrigger value="usage" className="text-xs gap-1"><Receipt className="h-3 w-3" />Usage</TabsTrigger>

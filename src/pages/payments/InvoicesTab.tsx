@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useMoovInvoices, type InvoiceLineItem } from "@/hooks/useMoovInvoices";
 import { usePaymentAccount } from "@/hooks/usePaymentAccount";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   Plus, Trash2, Send, Link2, MoreHorizontal, RefreshCw, Loader2, FileText, Clock, CheckCircle2, Ban, Settings,
 } from "lucide-react";
@@ -41,6 +41,7 @@ const emptyItem = (): InvoiceLineItem => ({ name: "", unit_price: 0, quantity: 1
 export function InvoicesTab() {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const { invoices, createInvoice, sendInvoice, cancelInvoice, syncInvoices } = useMoovInvoices();
   const { account } = usePaymentAccount();
 
@@ -169,7 +170,7 @@ export function InvoicesTab() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate("/freedom/settings?tab=organization")}
+              onClick={() => navigate(`${location.pathname.includes('/wl/') ? location.pathname.split('/payments')[0] : '/freedom'}/settings?tab=branding`)}
               className="hidden sm:flex"
             >
               <Settings className="h-4 w-4 mr-2" />
