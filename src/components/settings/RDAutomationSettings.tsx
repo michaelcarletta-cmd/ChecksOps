@@ -128,6 +128,12 @@ export const RDAutomationSettings = () => {
         badge="AI Automations"
         icon={<Zap className="h-4 w-4 text-primary" />}
       />
+      <SettingsHero
+        title="RD Automation"
+        description="Configure how Darwin automates recoverable depreciation tracking and follow-ups."
+        badge="AI Automations"
+        icon={<Zap className="h-4 w-4 text-primary" />}
+      />
 
       <SectionCard
         title="Recoverable Depreciation Automation"
