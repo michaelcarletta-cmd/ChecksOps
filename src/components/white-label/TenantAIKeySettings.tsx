@@ -18,8 +18,11 @@ import {
   ExternalLink,
   Shield,
   Info,
+  Sparkles,
 } from "lucide-react";
 import { format } from "date-fns";
+import { SettingsHero } from "@/components/settings/SettingsHero";
+import { SectionCard } from "@/components/settings/SectionCard";
 
 const formatFriendlyAIError = (error: string | null) => {
   if (!error) return null;
