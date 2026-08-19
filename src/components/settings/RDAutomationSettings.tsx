@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { SectionCard } from "./SectionCard";
 
 interface RDSettings {
   rd_request_interval_days: number;
