@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature, ListTree, HelpCircle, Sparkles, TrendingUp, ShieldCheck, Cog, UserCog, Mail, Database, History, Bell, Activity, Cloud, Key, Share2, Receipt, Users } from "lucide-react";
+import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature, ListTree, HelpCircle, Sparkles, TrendingUp, ShieldCheck, Cog, UserCog, Mail, Database, History, Bell, Activity, Cloud, Key, Share2, Receipt, Users, BarChart3 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 import {
@@ -56,6 +56,7 @@ import StatusUrgencyNotificationsSettings from "@/components/settings/StatusUrge
 import { JobNimbusSyncDiagnostics } from "@/components/settings/JobNimbusSyncDiagnostics";
 import { TenantManagement } from "@/components/settings/TenantManagement";
 import { TeamCapsSettings } from "@/components/settings/TeamCapsSettings";
+import { UsageLogTab } from "@/components/payments/UsageLogTab";
 import { useTenant } from "@/contexts/TenantContext";
 
 
@@ -716,6 +717,10 @@ export default function Settings() {
             <Users className="h-4 w-4" />
             Users
           </TabsTrigger>
+          <TabsTrigger value="usage" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <BarChart3 className="h-4 w-4" />
+            Usage
+          </TabsTrigger>
           <TabsTrigger value="automations" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <Activity className="h-4 w-4" />
             Automations
@@ -988,7 +993,10 @@ export default function Settings() {
               onUpdate={() => {}} 
             />
           )}
+        </TabsContent>
 
+        <TabsContent value="usage" className="w-full">
+          <UsageLogTab />
         </TabsContent>
 
 
