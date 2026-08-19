@@ -7,11 +7,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { RefreshCw, ChevronDown, AlertTriangle, CheckCircle, XCircle, HelpCircle, Send, Loader2 } from "lucide-react";
+import { RefreshCw, ChevronDown, AlertTriangle, CheckCircle, XCircle, HelpCircle, Send, Loader2, Activity } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { SettingsHero } from "./SettingsHero";
+import { SectionCard } from "./SectionCard";
 
 const STATUS_COLORS: Record<string, string> = {
   task_created_assignment_verified: "bg-emerald-500/15 text-emerald-700 border-emerald-500/30",
