@@ -213,18 +213,24 @@ export function CompanyBrandingSettings() {
         updated_at: new Date().toISOString()
       };
 
-      if (brandingId) {
-        await supabase
-          .from("company_branding" as any)
-          .update(brandingData)
-          .eq("id", brandingId);
-      } else {
-        const { data } = await supabase
-          .from("company_branding" as any)
-          .insert(brandingData)
-          .select()
-          .single();
-        if (data) setBrandingId((data as any).id);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: tenantUser } = await supabase
+          .from("tenant_users")
+          .select("tenant_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        
+        if (tenantUser) {
+          await supabase
+            .from("tenants")
+            .update({
+              invoice_letterhead_url: invoiceLetterheadUrl,
+              invoice_footer_note: invoiceFooterNote,
+              invoice_default_terms: invoiceDefaultTerms,
+            })
+            .eq("id", tenantUser.tenant_id);
+        }
       }
 
       toast({ title: "Company branding saved" });
