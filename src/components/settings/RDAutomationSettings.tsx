@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, DollarSign, Clock, Mail, Save } from "lucide-react";
+import { Loader2, DollarSign, Clock, Mail, Save, Zap } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -15,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { SectionCard } from "./SectionCard";
+import { SettingsHero } from "./SettingsHero";
 
 interface RDSettings {
   rd_request_interval_days: number;
@@ -122,6 +122,12 @@ export const RDAutomationSettings = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
+      <SettingsHero
+        title="RD Automation"
+        description="Configure how Darwin automates recoverable depreciation tracking and follow-ups."
+        badge="AI Automations"
+        icon={<Zap className="h-4 w-4 text-primary" />}
+      />
 
       <SectionCard
         title="Recoverable Depreciation Automation"
@@ -278,22 +284,16 @@ export const RDAutomationSettings = () => {
 
 
 
-      <Card className="bg-muted/30">
-        <CardContent className="pt-6">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-blue-500/10 rounded-lg">
-              <DollarSign className="h-4 w-4 text-blue-500" />
-            </div>
-            <div className="space-y-1">
-              <h4 className="text-sm font-medium">How RD Tracking Works</h4>
-              <div className="text-sm text-muted-foreground space-y-2">
-                <p><strong>RD Request Follow-ups:</strong> When a claim enters "Recoverable Depreciation Requested" status with RD tracking enabled, Darwin will automatically email the adjuster to confirm invoice receipt and track RD release. Follow-ups continue until the claim status changes to "Waiting on Recoverable Depreciation".</p>
-                <p><strong>RD Check Receipt:</strong> Once the carrier releases the check, Darwin tracks delivery and checks in with both the policyholder and insurance company to confirm receipt. If overdue, we'll request a trace or reissue from the carrier.</p>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <SectionCard
+        title="How RD Tracking Works"
+        accent="bg-gradient-to-r from-blue-500/60 to-blue-500/10"
+        icon={<DollarSign className="h-4 w-4 text-blue-500" />}
+      >
+        <div className="text-sm text-muted-foreground space-y-2">
+          <p><strong>RD Request Follow-ups:</strong> When a claim enters "Recoverable Depreciation Requested" status with RD tracking enabled, Darwin will automatically email the adjuster to confirm invoice receipt and track RD release. Follow-ups continue until the claim status changes to "Waiting on Recoverable Depreciation".</p>
+          <p><strong>RD Check Receipt:</strong> Once the carrier releases the check, Darwin tracks delivery and checks in with both the policyholder and insurance company to confirm receipt. If overdue, we'll request a trace or reissue from the carrier.</p>
+        </div>
+      </SectionCard>
     </div>
   );
 };
