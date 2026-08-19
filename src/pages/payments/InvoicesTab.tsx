@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useMoovInvoices, type InvoiceLineItem } from "@/hooks/useMoovInvoices";
 import { usePaymentAccount } from "@/hooks/usePaymentAccount";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   Plus, Trash2, Send, Link2, MoreHorizontal, RefreshCw, Loader2, FileText, Clock, CheckCircle2, Ban, Settings,
 } from "lucide-react";
