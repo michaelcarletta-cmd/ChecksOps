@@ -7,9 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { Phone, CheckCircle, Loader2, Send, ShieldCheck, Trash2, Settings2, Smartphone } from "lucide-react";
-import { SectionCard } from "./SectionCard";
-import { SettingsHero } from "./SettingsHero";
+import { Phone, CheckCircle, Loader2, Send, ShieldCheck, Trash2, Settings2 } from "lucide-react";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -163,21 +161,17 @@ export function PhoneVerificationSettings() {
   }
 
   return (
-    <div className="space-y-6">
-      <SettingsHero
-        title="SMS Commands"
-        description="Configure your mobile integration for AI-powered text message interactions."
-        badge="Darwin AI"
-        icon={<Phone className="h-4 w-4 text-primary" />}
-      />
-
-      <SectionCard
-        title="Phone Link"
-        icon={<Smartphone className="h-4 w-4 text-blue-500" />}
-        accent="bg-gradient-to-r from-blue-500/60 to-blue-500/10"
-        description="Link your phone number to interact with Darwin via SMS."
-      >
-        <div className="space-y-4 pt-4">
+    <Card className="bg-card border-border">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-foreground">
+          <Phone className="h-5 w-5 text-primary" />
+          Darwin SMS Commands
+        </CardTitle>
+        <CardDescription>
+          Link your phone number to send commands to Darwin via text message.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
         {linkStatus?.is_verified ? (
           <div className="space-y-3">
             <div className="flex items-center gap-3 p-3 bg-green-500/10 rounded-lg border border-green-500/20">
@@ -284,8 +278,7 @@ export function PhoneVerificationSettings() {
             </div>
           </>
         )}
-        </div>
-      </SectionCard>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

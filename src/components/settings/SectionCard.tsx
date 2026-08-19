@@ -6,7 +6,6 @@ interface SectionCardProps {
   icon: React.ReactNode;
   accent: string;
   description?: string;
-  headerActions?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }
@@ -16,7 +15,6 @@ export function SectionCard({
   icon,
   accent,
   description,
-  headerActions,
   children,
   className,
 }: SectionCardProps) {
@@ -24,12 +22,9 @@ export function SectionCard({
     <Card className={`overflow-hidden border-border/60 shadow-sm ${className || ""}`}>
       <div className={`h-1.5 ${accent}`} />
       <CardHeader className="flex flex-col gap-1 p-4 pb-2">
-        <CardTitle className="flex items-center justify-between gap-2 text-base font-semibold">
-          <div className="flex items-center gap-2">
-            {icon}
-            {title}
-          </div>
-          {headerActions}
+        <CardTitle className="flex items-center gap-2 text-base font-semibold">
+          {icon}
+          {title}
         </CardTitle>
         {description && <CardDescription>{description}</CardDescription>}
       </CardHeader>

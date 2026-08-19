@@ -12,8 +12,6 @@ import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useTenant } from "@/contexts/TenantContext";
 import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw, UserPlus, UserCheck, Landmark } from "lucide-react";
-import { SectionCard } from "./SectionCard";
-import { SettingsHero } from "./SettingsHero";
 
 /**
  * Admin-only configuration panel for the CheckAlt (FinCapture) RDC integration.
@@ -268,29 +266,29 @@ export function CheckAltSettings() {
 
   return (
     <div className="space-y-6">
-      <SettingsHero
-        title="CheckAlt RDC Integration"
-        description="Configure Remote Deposit Capture to automate check processing and deposits."
-        badge="Banking Infrastructure"
-        icon={<Landmark className="h-4 w-4 text-primary" />}
-      />
-
-      <SectionCard
-        title="CheckAlt (FinCapture) Integration"
-        icon={<Banknote className="h-4 w-4 text-emerald-500" />}
-        accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
-        description="Remote Deposit Capture rail. When enabled, eligible checks can be deposited directly through CheckAlt."
-        headerActions={
-          <Badge variant={fullyConfigured ? "default" : "outline"} className={fullyConfigured ? "bg-emerald-600" : ""}>
-            {fullyConfigured ? (
-              <span className="flex items-center gap-1"><ShieldCheck className="h-3 w-3" /> Live</span>
-            ) : (
-              <span className="flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Not active</span>
-            )}
-          </Badge>
-        }
-      >
-        <div className="space-y-6 pt-4">
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Banknote className="h-4 w-4 text-primary" />
+                CheckAlt (FinCapture) Integration
+              </CardTitle>
+              <CardDescription>
+                Remote Deposit Capture rail. When enabled, eligible checks can be deposited
+                directly through CheckAlt instead of routing to a branch.
+              </CardDescription>
+            </div>
+            <Badge variant={fullyConfigured ? "default" : "outline"}>
+              {fullyConfigured ? (
+                <span className="flex items-center gap-1"><ShieldCheck className="h-3 w-3" /> Live</span>
+              ) : (
+                <span className="flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Not active</span>
+              )}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="base_url">Base URL</Label>
@@ -449,8 +447,8 @@ export function CheckAltSettings() {
               Save settings
             </Button>
           </div>
-        </div>
-      </SectionCard>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

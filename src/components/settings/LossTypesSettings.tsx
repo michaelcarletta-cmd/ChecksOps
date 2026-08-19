@@ -2,12 +2,11 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Trash2, Pencil, Check, X, FolderKanban } from "lucide-react";
+import { Plus, Trash2, Pencil, Check, X } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import { SectionCard } from "./SectionCard";
-import { SettingsHero } from "./SettingsHero";
 
 interface LossType {
   id: string;
@@ -266,108 +265,95 @@ export function LossTypesSettings({ embedded = false }: LossTypesSettingsProps) 
 
   return (
     <div className="space-y-6">
-      <SettingsHero
-        title="Loss Types"
-        description="Define the types of property damage and losses your claims handle."
-        badge="Classification"
-        icon={<FolderKanban className="h-4 w-4 text-primary" />}
-      />
-
-      <SectionCard
-        title="Manage Loss Types"
-        icon={<FolderKanban className="h-4 w-4 text-violet-500" />}
-        accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
-        description="Add and manage the categories of losses available for assignment to claims."
-      >
-        <div className="space-y-6 pt-4">
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <Label htmlFor="newType">Loss Type Name</Label>
-              <Input
-                id="newType"
-                value={newTypeName}
-                onChange={(e) => setNewTypeName(e.target.value)}
-                placeholder="Enter loss type name"
-                onKeyPress={(e) => e.key === "Enter" && handleAdd()}
-              />
-            </div>
-            <Button onClick={handleAdd} disabled={loading || !newTypeName.trim()} className="mt-auto">
-              <Plus className="h-4 w-4 mr-2" />
-              Add
-            </Button>
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-4">Add New Loss Type</h3>
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <Label htmlFor="newType">Loss Type Name</Label>
+            <Input
+              id="newType"
+              value={newTypeName}
+              onChange={(e) => setNewTypeName(e.target.value)}
+              placeholder="Enter loss type name"
+              onKeyPress={(e) => e.key === "Enter" && handleAdd()}
+            />
           </div>
-
-          <div className="space-y-3">
-            <Label className="text-sm font-medium">Existing Loss Types ({lossTypes.length})</Label>
-            <div className="grid gap-2">
-              {lossTypes.map((type) => (
-                <div
-                  key={type.id}
-                  className="flex items-center justify-between p-3 border border-border rounded-lg bg-muted/20"
-                >
-                  {editingId === type.id ? (
-                    <div className="flex items-center gap-2 flex-1">
-                      <Input
-                        value={editingName}
-                        onChange={(e) => setEditingName(e.target.value)}
-                        className="h-9"
-                        autoFocus
-                        onKeyPress={(e) => e.key === "Enter" && handleSaveEdit(type.id)}
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleSaveEdit(type.id)}
-                        className="text-green-600 hover:text-green-700"
-                      >
-                        <Check className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={handleCancelEdit}
-                        className="text-muted-foreground"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      <span className="text-foreground font-medium">{type.name}</span>
-                      <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor={`active-${type.id}`} className="text-sm cursor-pointer">Active</Label>
-                          <Switch
-                            id={`active-${type.id}`}
-                            checked={type.is_active}
-                            onCheckedChange={(checked) => handleToggleActive(type.id, checked)}
-                          />
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleStartEdit(type)}
-                          className="text-muted-foreground hover:text-foreground"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(type.id)}
-                          className="text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+          <Button onClick={handleAdd} disabled={loading || !newTypeName.trim()} className="mt-auto">
+            <Plus className="h-4 w-4 mr-2" />
+            Add
+          </Button>
         </div>
-      </SectionCard>
+      </Card>
+
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-4">Existing Loss Types</h3>
+        <div className="space-y-3">
+          {lossTypes.map((type) => (
+            <div
+              key={type.id}
+              className="flex items-center justify-between p-3 border border-border rounded-lg"
+            >
+              {editingId === type.id ? (
+                <div className="flex items-center gap-2 flex-1">
+                  <Input
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    className="h-9"
+                    autoFocus
+                    onKeyPress={(e) => e.key === "Enter" && handleSaveEdit(type.id)}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleSaveEdit(type.id)}
+                    className="text-green-600 hover:text-green-700"
+                  >
+                    <Check className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCancelEdit}
+                    className="text-muted-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <span className="text-foreground font-medium">{type.name}</span>
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor={`active-${type.id}`} className="text-sm">Active</Label>
+                      <Switch
+                        id={`active-${type.id}`}
+                        checked={type.is_active}
+                        onCheckedChange={(checked) => handleToggleActive(type.id, checked)}
+                      />
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleStartEdit(type)}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDelete(type.id)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }

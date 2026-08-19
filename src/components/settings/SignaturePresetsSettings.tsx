@@ -6,12 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2, FileSignature, ChevronDown, ChevronUp, Save } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { SectionCard } from "./SectionCard";
-import { SettingsHero } from "./SettingsHero";
 
 interface FieldMeta {
   display_label: string;
@@ -524,24 +523,19 @@ export function SignaturePresetsSettings({ embedded }: SignaturePresetsSettingsP
   );
 
   if (embedded) return content;
-  
-  return (
-    <div className="space-y-6">
-      <SettingsHero
-        title="Signature Presets"
-        description="Manage default labels and help text shown to signers for each document type."
-        badge="E-Signatures"
-        icon={<FileSignature className="h-4 w-4 text-primary" />}
-      />
 
-      <SectionCard
-        title="Document Presets"
-        icon={<FileSignature className="h-4 w-4 text-indigo-500" />}
-        accent="bg-gradient-to-r from-indigo-500/60 to-indigo-500/10"
-        description="Configure how document fields appear to homeowners and other signers."
-      >
-        <div className="pt-4">{content}</div>
-      </SectionCard>
-    </div>
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileSignature className="h-5 w-5" />
+          Signature Document Presets
+        </CardTitle>
+        <CardDescription>
+          Manage the default labels and help text shown to signers for each document type
+        </CardDescription>
+      </CardHeader>
+      <CardContent>{content}</CardContent>
+    </Card>
   );
 }

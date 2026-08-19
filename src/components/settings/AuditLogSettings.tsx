@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,8 +12,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { usePermissions } from "@/hooks/usePermissions";
-import { SectionCard } from "./SectionCard";
-import { SettingsHero } from "./SettingsHero";
 
 interface AuditLog {
   id: string;
@@ -139,45 +137,41 @@ export function AuditLogSettings() {
 
   return (
     <div className="space-y-6">
-      <SettingsHero
-        title="Audit Logs"
-        description="Security audit trail of all system actions and data modifications."
-        badge="Security"
-        icon={<Shield className="h-4 w-4 text-primary" />}
-      />
-
-      <SectionCard
-        title="Security Events"
-        icon={<Shield className="h-4 w-4 text-blue-500" />}
-        accent="bg-gradient-to-r from-blue-500/60 to-blue-500/10"
-        description="Monitor system activity and changes for compliance and security auditing."
-        headerActions={
-          <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => refetch()}
-              disabled={isRefetching}
-              className="h-8"
-            >
-              <RefreshCw className={`h-3 w-3 mr-2 ${isRefetching ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={handleExport}
-              disabled={filteredLogs.length === 0}
-              className="h-8"
-            >
-              <Download className="h-3 w-3 mr-2" />
-              Export
-            </Button>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Audit Logs
+              </CardTitle>
+              <CardDescription>
+                Security audit trail of all system actions
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => refetch()}
+                disabled={isRefetching}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${isRefetching ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleExport}
+                disabled={filteredLogs.length === 0}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export CSV
+              </Button>
+            </div>
           </div>
-        }
-      >
-        <div className="space-y-6 pt-4">
-        
+        </CardHeader>
+        <CardContent className="space-y-4">
           {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
@@ -217,14 +211,14 @@ export function AuditLogSettings() {
 
           {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card className="p-4 bg-muted/20 border-border/40">
+            <Card className="p-4">
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">Total Logs</span>
               </div>
               <p className="text-2xl font-bold mt-1">{logs.length}</p>
             </Card>
-            <Card className="p-4 bg-muted/20 border-border/40">
+            <Card className="p-4">
               <div className="flex items-center gap-2">
                 <Eye className="h-4 w-4 text-warning" />
                 <span className="text-sm text-muted-foreground">PII Reveals</span>
@@ -233,7 +227,7 @@ export function AuditLogSettings() {
                 {logs.filter(l => l.action === "reveal_pii").length}
               </p>
             </Card>
-            <Card className="p-4 bg-muted/20 border-border/40">
+            <Card className="p-4">
               <div className="flex items-center gap-2">
                 <User className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">Unique Users</span>
@@ -242,7 +236,7 @@ export function AuditLogSettings() {
                 {new Set(logs.map(l => l.user_id).filter(Boolean)).size}
               </p>
             </Card>
-            <Card className="p-4 bg-muted/20 border-border/40">
+            <Card className="p-4">
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">Last 24h</span>
@@ -311,8 +305,8 @@ export function AuditLogSettings() {
               </Table>
             </ScrollArea>
           )}
-        </div>
-      </SectionCard>
+        </CardContent>
+      </Card>
     </div>
   );
 }

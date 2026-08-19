@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,9 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Plus, Trash2, GripVertical, Loader2, Pencil, LayoutGrid } from "lucide-react";
-import { SectionCard } from "./SectionCard";
-import { SettingsHero } from "./SettingsHero";
+import { Plus, Trash2, GripVertical, Loader2, Pencil } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -537,44 +536,41 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
 
   return (
     <div className="space-y-6">
-      <SettingsHero
-        title="Custom Fields"
-        description="Add and manage custom data fields for your claims."
-        badge="Customization"
-        icon={<LayoutGrid className="h-4 w-4 text-primary" />}
-      />
-
-      <SectionCard
-        title="Claim Data Fields"
-        icon={<LayoutGrid className="h-4 w-4 text-pink-500" />}
-        accent="bg-gradient-to-r from-pink-500/60 to-pink-500/10"
-        description={`${customFields?.length || 0} custom field(s) configured — drag to reorder.`}
-        headerActions={
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="h-8">
-                <Plus className="h-4 w-4 mr-2" />
-                New Field
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">Custom Fields</h2>
+          <p className="text-muted-foreground">Add custom data fields to claim overview pages</p>
+        </div>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              New Field
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Create Custom Field</DialogTitle>
+              <DialogDescription>Add a new field that will appear on all claim overview pages</DialogDescription>
+            </DialogHeader>
+            {fieldFormContent}
+            <DialogFooter>
+              <Button onClick={() => createMutation.mutate()} disabled={!fieldForm.label || createMutation.isPending}>
+                {createMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Create Field
               </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Create Custom Field</DialogTitle>
-                <DialogDescription>Add a new field that will appear on claim overview pages</DialogDescription>
-              </DialogHeader>
-              {fieldFormContent}
-              <DialogFooter>
-                <Button onClick={() => createMutation.mutate()} disabled={!fieldForm.label || createMutation.isPending}>
-                  {createMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Create Field
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        }
-      >
-        <div className="pt-4">{tableContent}</div>
-      </SectionCard>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Custom Fields</CardTitle>
+          <CardDescription>{customFields?.length || 0} custom field(s) configured — drag to reorder</CardDescription>
+        </CardHeader>
+        <CardContent>{tableContent}</CardContent>
+      </Card>
 
       {dialogs}
     </div>

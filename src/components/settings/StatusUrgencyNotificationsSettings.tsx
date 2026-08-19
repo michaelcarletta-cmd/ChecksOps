@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,8 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Trash2, Plus, BellRing, Clock } from "lucide-react";
 import { toast } from "sonner";
-import { SectionCard } from "./SectionCard";
-import { SettingsHero } from "./SettingsHero";
 
 interface Recipient {
   id: string;
@@ -128,21 +127,19 @@ export default function StatusUrgencyNotificationsSettings() {
 
   return (
     <div className="space-y-6">
-      <SettingsHero
-        title="Urgency Notifications"
-        description="Configure SMS alerts for claim inactivity and status breaches."
-        badge="Alerts"
-        icon={<BellRing className="h-4 w-4 text-primary" />}
-      />
-
-      <SectionCard
-        title="Urgency SMS Recipients"
-        icon={<BellRing className="h-4 w-4 text-rose-500" />}
-        accent="bg-gradient-to-r from-rose-500/60 to-rose-500/10"
-        description="Workspace admins who will receive SMS alerts when claims breach inactivity thresholds."
-      >
-        <div className="space-y-6 pt-4">
-        
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BellRing className="h-5 w-5" />
+            Urgency SMS Recipients
+          </CardTitle>
+          <CardDescription>
+            Workspace admins who will receive SMS alerts when claims breach
+            status-based inactivity thresholds. Recipients receive at most one
+            SMS per claim per rule per 24 hours.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <Label htmlFor="rec-name">Name</Label>
@@ -210,21 +207,29 @@ export default function StatusUrgencyNotificationsSettings() {
               </TableBody>
             </Table>
           )}
-        </div>
-      </SectionCard>
+        </CardContent>
+      </Card>
 
-      <SectionCard
-        title="Status-Based Urgency Rules"
-        icon={<Clock className="h-4 w-4 text-amber-500" />}
-        accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
-        description="Each rule fires when a claim sits in the listed statuses with no activity beyond its threshold."
-        headerActions={
-          <Button variant="outline" size="sm" onClick={handleRunScanNow} disabled={scanning} className="h-8">
-            {scanning ? "Scanning…" : "Run scan now"}
-          </Button>
-        }
-      >
-        <div className="pt-4">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Status-Based Urgency Rules
+              </CardTitle>
+              <CardDescription>
+                Each rule fires when a claim sits in the listed statuses with no
+                activity beyond its threshold. Litigation claims are always
+                excluded.
+              </CardDescription>
+            </div>
+            <Button variant="outline" onClick={handleRunScanNow} disabled={scanning}>
+              {scanning ? "Scanning…" : "Run scan now"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
@@ -269,8 +274,8 @@ export default function StatusUrgencyNotificationsSettings() {
               ))}
             </TableBody>
           </Table>
-        </div>
-      </SectionCard>
+        </CardContent>
+      </Card>
     </div>
   );
 }

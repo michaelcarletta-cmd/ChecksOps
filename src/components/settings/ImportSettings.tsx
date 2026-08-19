@@ -2,13 +2,12 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Upload, Download, FileText, AlertCircle, CheckCircle2 } from "lucide-react";
-import { SectionCard } from "./SectionCard";
-import { SettingsHero } from "./SettingsHero";
 import * as XLSX from "xlsx";
 
 interface ImportResult {
@@ -255,32 +254,26 @@ export function ImportSettings() {
 
   return (
     <div className="space-y-6">
-      <SettingsHero
-        title="Bulk Import"
-        description="Upload Excel or CSV files to bulk import claims and data from your previous system."
-        badge="Data Migration"
-        icon={<Upload className="h-4 w-4 text-primary" />}
-      />
-
-      <SectionCard
-        title="Import Claims from Excel"
-        icon={<Upload className="h-4 w-4 text-sky-500" />}
-        accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
-        description="Select a file and map your columns to import data directly."
-      >
-        <div className="space-y-6 pt-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Import Claims from Excel</CardTitle>
+          <CardDescription>
+            Upload an Excel or CSV file from your previous system to bulk import claims
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
           {/* Template Download */}
-          <div className="flex items-center justify-between p-4 bg-muted/20 border border-border/60 rounded-lg">
+          <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
             <div className="flex items-center gap-3">
-              <FileText className="h-5 w-5 text-sky-500" />
+              <FileText className="h-5 w-5 text-muted-foreground" />
               <div>
-                <p className="font-medium text-sm">Download Template</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="font-medium">Download Template</p>
+                <p className="text-sm text-muted-foreground">
                   Get a sample Excel file with the correct format
                 </p>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={downloadTemplate}>
+            <Button variant="outline" onClick={downloadTemplate}>
               <Download className="h-4 w-4 mr-2" />
               Download
             </Button>
@@ -418,15 +411,15 @@ export function ImportSettings() {
               {importing ? "Importing..." : `Import ${data.length} Claims`}
             </Button>
           </div>
-        </div>
-      </SectionCard>
+        </CardContent>
+      </Card>
 
-      <SectionCard
-        title="Import Tips"
-        icon={<AlertCircle className="h-4 w-4 text-sky-500" />}
-        accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
-      >
-        <div className="space-y-3 text-sm pt-4">
+      {/* Import Tips */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Import Tips</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
           <div>
             <strong>Supported Formats:</strong> Excel (.xlsx, .xls) and CSV files are supported.
           </div>
@@ -445,8 +438,8 @@ export function ImportSettings() {
           <div>
             <strong>Large Imports:</strong> For files with more than 1000 records, consider breaking them into smaller batches.
           </div>
-        </div>
-      </SectionCard>
+        </CardContent>
+      </Card>
     </div>
   );
 }

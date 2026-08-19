@@ -1,12 +1,11 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, DollarSign, Clock, Mail, Save, RefreshCw } from "lucide-react";
-import { SectionCard } from "./SectionCard";
+import { Loader2, DollarSign, Clock, Mail, Save } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -122,14 +121,21 @@ export const RDAutomationSettings = () => {
 
   return (
     <div className="space-y-6">
-      <SectionCard
-        title="Recoverable Depreciation Automation"
-        icon={<RefreshCw className="h-4 w-4 text-amber-500" />}
-        accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
-        description="Configure global settings for RD tracking and follow-ups"
-      >
-        <div className="space-y-6 pt-4">
-        
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-500/10 rounded-lg">
+              <DollarSign className="h-5 w-5 text-amber-500" />
+            </div>
+            <div>
+              <CardTitle>Recoverable Depreciation Automation</CardTitle>
+              <CardDescription>
+                Configure global settings for RD tracking and follow-ups
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
           {/* RD Request Follow-ups Section */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
@@ -269,8 +275,8 @@ export const RDAutomationSettings = () => {
               Save Settings
             </Button>
           </div>
-        </div>
-      </SectionCard>
+        </CardContent>
+      </Card>
 
       <Card className="bg-muted/30">
         <CardContent className="pt-6">

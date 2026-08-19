@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature, ListTree, HelpCircle, Sparkles, TrendingUp, ShieldCheck, Cog, UserCog, Mail, Database, History, Bell, Activity, Cloud, Key, Share2, Receipt, Users, BarChart3, ListChecks, Zap, Phone } from "lucide-react";
+import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature, ListTree, HelpCircle, Sparkles, TrendingUp, ShieldCheck, Cog, UserCog, Mail, Database, History, Bell, Activity, Cloud, Key, Share2, Receipt, Users, BarChart3 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 import {
@@ -32,8 +32,6 @@ import { LossTypesSettings } from "@/components/settings/LossTypesSettings";
 import { AutomationsSettings } from "@/components/settings/AutomationsSettings";
 import { CustomFieldsSettings } from "@/components/settings/CustomFieldsSettings";
 import { SignaturePresetsSettings } from "@/components/settings/SignaturePresetsSettings";
-import { SectionCard } from "@/components/settings/SectionCard";
-import { SettingsHero } from "@/components/settings/SettingsHero";
 // Moov settings hidden
 import { usePaymentRail } from "@/hooks/usePaymentRail";
 import { ReferralSettings } from "@/components/settings/ReferralSettings";
@@ -723,8 +721,8 @@ export default function Settings() {
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="flex flex-row md:flex-wrap h-auto w-full bg-muted/20 p-1.5 gap-1 border-border/50">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="flex flex-row md:flex-wrap h-auto w-full bg-muted/20 p-1.5 gap-1 border-border/50">
           <TabsTrigger value="profile" className="gap-2 px-4 py-2 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <UserCog className="h-4 w-4" />
             My Profile
@@ -814,6 +812,8 @@ export default function Settings() {
           </TabsContent>
         )}
 
+        {/* ActumSettings hidden */}
+
         <TabsContent value="profile" className="w-full focus-visible:outline-none">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <ProfileSettings />
@@ -827,118 +827,177 @@ export default function Settings() {
           </div>
         </TabsContent>
 
-        <TabsContent value="workflow" className="w-full space-y-6">
-          <SettingsHero 
-            title="Workflow Configuration" 
-            description="Customize claim statuses and automation stages to match your operations."
-            badge="Operations"
-            icon={<ListChecks className="h-4 w-4 text-primary" />}
-          />
+        <TabsContent value="workflow" className="w-full space-y-4">
 
-          <div className="grid gap-6">
-            <SectionCard
-              title="Claim Statuses"
-              icon={<ListChecks className="h-4 w-4 text-sky-500" />}
-              accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
-              description={`Customize the status options available for claims (${statuses.length} statuses)`}
-            >
-              <div className="space-y-4 pt-4">
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Input
-                    placeholder="Status name"
-                    value={newStatusName}
-                    onChange={(e) => setNewStatusName(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && addStatus()}
-                    className="h-10 text-sm flex-1"
-                  />
-                  <div className="flex gap-2">
-                    <Input
-                      type="color"
-                      value={newStatusColor}
-                      onChange={(e) => setNewStatusColor(e.target.value)}
-                      className="w-14 h-10 p-1"
-                    />
-                    <Button onClick={addStatus} className="h-10 whitespace-nowrap">
-                      <Plus className="h-4 w-4 mr-1" />
-                      Add
-                    </Button>
+          {/* Claim Statuses - Collapsible */}
+          <Collapsible open={statusesOpen} onOpenChange={setStatusesOpen}>
+            <Card>
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Claim Statuses</CardTitle>
+                      <CardDescription>
+                        Customize the status options available for claims ({statuses.length} statuses)
+                      </CardDescription>
+                    </div>
+                    <ChevronDown className={`h-5 w-5 transition-transform ${statusesOpen ? 'rotate-180' : ''}`} />
                   </div>
-                </div>
-
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
-                >
-                  <SortableContext
-                    items={statuses.map(s => s.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {statuses.map((status) => (
-                      <SortableStatusRow
-                        key={status.id}
-                        status={status}
-                        onUpdateName={updateStatusName}
-                        onUpdateColor={updateStatusColor}
-                        onUpdateGradient={updateStatusGradient}
-                        onDelete={deleteStatus}
-                        onRefresh={fetchStatuses}
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Input
+                      placeholder="Status name"
+                      value={newStatusName}
+                      onChange={(e) => setNewStatusName(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && addStatus()}
+                      className="h-10 text-sm flex-1"
+                    />
+                    <div className="flex gap-2">
+                      <Input
+                        type="color"
+                        value={newStatusColor}
+                        onChange={(e) => setNewStatusColor(e.target.value)}
+                        className="w-14 h-10 p-1"
                       />
-                    ))}
-                  </SortableContext>
-                </DndContext>
-              </div>
-            </SectionCard>
+                      <Button onClick={addStatus} className="h-10 whitespace-nowrap">
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add
+                      </Button>
+                    </div>
+                  </div>
 
-            <SectionCard
-              title="Loss Types"
-              icon={<FolderKanban className="h-4 w-4 text-violet-500" />}
-              accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
-              description="Manage the types of losses available for claims"
-            >
-              <LossTypesSettings embedded />
-            </SectionCard>
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <SortableContext
+                      items={statuses.map(s => s.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {statuses.map((status) => (
+                        <SortableStatusRow
+                          key={status.id}
+                          status={status}
+                          onUpdateName={updateStatusName}
+                          onUpdateColor={updateStatusColor}
+                          onUpdateGradient={updateStatusGradient}
+                          onDelete={deleteStatus}
+                          onRefresh={fetchStatuses}
+                        />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
 
-            <SectionCard
-              title="Custom Fields"
-              icon={<ListTree className="h-4 w-4 text-emerald-500" />}
-              accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
-              description="Add custom data fields to claim overview pages"
-            >
-              <CustomFieldsSettings embedded />
-            </SectionCard>
+          {/* Loss Types - Collapsible */}
+          <Collapsible open={lossTypesOpen} onOpenChange={setLossTypesOpen}>
+            <Card>
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Loss Types</CardTitle>
+                      <CardDescription>
+                        Manage the types of losses available for claims
+                      </CardDescription>
+                    </div>
+                    <ChevronDown className={`h-5 w-5 transition-transform ${lossTypesOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent>
+                  <LossTypesSettings embedded />
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
 
-            <SectionCard
-              title="Signature Document Presets"
-              icon={<FileSignature className="h-4 w-4 text-amber-500" />}
-              accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
-              description="Default labels and help text shown to signers per document type"
-            >
-              <SignaturePresetsSettings embedded />
-            </SectionCard>
+          {/* Custom Fields - Collapsible */}
+          <Collapsible open={customFieldsOpen} onOpenChange={setCustomFieldsOpen}>
+            <Card>
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Custom Fields</CardTitle>
+                      <CardDescription>
+                        Add custom data fields to claim overview pages
+                      </CardDescription>
+                    </div>
+                    <ChevronDown className={`h-5 w-5 transition-transform ${customFieldsOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent>
+                  <CustomFieldsSettings embedded />
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
 
-            <SectionCard
-              title="SMS Commands"
-              icon={<Phone className="h-4 w-4 text-sky-500" />}
-              accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
-              description="Interact with Darwin AI via text message"
-            >
-              <PhoneVerificationSettings />
-            </SectionCard>
+          {/* Signature Document Presets - Collapsible */}
+          <Collapsible open={sigPresetsOpen} onOpenChange={setSigPresetsOpen}>
+            <Card>
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors" role="button">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <FileSignature className="h-5 w-5" />
+                        Signature Document Presets
+                      </CardTitle>
+                      <CardDescription>
+                        Default labels and help text shown to signers per document type
+                      </CardDescription>
+                    </div>
+                    <ChevronDown className={`h-5 w-5 transition-transform ${sigPresetsOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent>
+                  <SignaturePresetsSettings embedded />
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
 
-            <SectionCard
-              title="Third-Party Integrations"
-              icon={<Zap className="h-4 w-4 text-rose-500" />}
-              accent="bg-gradient-to-r from-rose-500/60 to-rose-500/10"
-              description="Configure external connections for your workflow"
-            >
-              <div className="space-y-6 pt-4">
-                <OutlookConnectionSettings embedded />
-                <ZapierIntegrationSettings embedded />
-                <QuickBooksSettings embedded />
-              </div>
-            </SectionCard>
-          </div>
+          <Collapsible open={integrationsOpen} onOpenChange={setIntegrationsOpen}>
+            <Card>
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Integrations</CardTitle>
+                      <CardDescription>
+                        Configure external integrations for your workflow
+                      </CardDescription>
+                    </div>
+                    <ChevronDown className={`h-5 w-5 transition-transform ${integrationsOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="space-y-6">
+                  <PhoneVerificationSettings />
+                  <OutlookConnectionSettings embedded />
+                  <ZapierIntegrationSettings embedded />
+                  <QuickBooksSettings embedded />
+                  {/* ActumSettings integration hidden */}
+                  
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
         </TabsContent>
 
         <TabsContent value="users" className="w-full space-y-6 focus-visible:outline-none">
@@ -980,14 +1039,32 @@ export default function Settings() {
             <EmailSenderSettings />
             <TenantEmailHealthPanel />
             
-            <SectionCard
-              title="Partner Workspaces"
-              icon={<FolderKanban className="h-4 w-4 text-blue-500" />}
-              accent="bg-gradient-to-r from-blue-500/60 to-blue-500/10"
-              description="Manage linked partner instances and cross-tenant collaboration"
-            >
-              <WorkspaceList embedded />
-            </SectionCard>
+            {/* Workspaces - Collapsible */}
+            <Collapsible open={workspacesOpen} onOpenChange={setWorkspacesOpen}>
+              <Card>
+                <CollapsibleTrigger asChild>
+                  <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FolderKanban className="h-5 w-5" />
+                        <div>
+                          <CardTitle>Partner Workspaces</CardTitle>
+                          <CardDescription>
+                            Manage linked partner instances and cross-tenant collaboration
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <ChevronDown className={`h-5 w-5 transition-transform ${workspacesOpen ? 'rotate-180' : ''}`} />
+                    </div>
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent>
+                    <WorkspaceList embedded />
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
           </div>
         </TabsContent>
 

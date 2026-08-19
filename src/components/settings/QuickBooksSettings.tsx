@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { CheckCircle, XCircle, Loader2, ExternalLink, Calculator } from "lucide-react";
-import { SectionCard } from "./SectionCard";
+import { CheckCircle, XCircle, Loader2, ExternalLink } from "lucide-react";
 
 const QUICKBOOKS_STORAGE_KEY = 'quickbooks_connection';
 
@@ -199,29 +199,30 @@ export function QuickBooksSettings({ embedded }: QuickBooksSettingsProps) {
   };
 
   return (
-    <SectionCard
-      title="QuickBooks Integration"
-      icon={<Calculator className="h-4 w-4 text-green-500" />}
-      accent="bg-gradient-to-r from-green-500/60 to-green-500/10"
-      description="Connect to QuickBooks to sync payments and financial data directly."
-      headerActions={
-        isConnected ? (
-          <Badge variant="default" className="bg-green-600">
-            <CheckCircle className="h-3 w-3 mr-1" />
-            Connected
-          </Badge>
-        ) : (
-          <Badge variant="secondary">
-            <XCircle className="h-3 w-3 mr-1" />
-            Not Connected
-          </Badge>
-        )
-      }
-    >
-      <div className="space-y-6 pt-4">
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          QuickBooks Integration
+          {isConnected ? (
+            <Badge variant="default" className="bg-green-600">
+              <CheckCircle className="h-3 w-3 mr-1" />
+              Connected
+            </Badge>
+          ) : (
+            <Badge variant="secondary">
+              <XCircle className="h-3 w-3 mr-1" />
+              Not Connected
+            </Badge>
+          )}
+        </CardTitle>
+        <CardDescription>
+          Connect to QuickBooks to send payments directly from the CRM
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
         {isConnected && connection ? (
-          <div className="space-y-6">
-            <div className="p-4 bg-muted/20 border border-border rounded-lg space-y-3">
+          <div className="space-y-4">
+            <div className="p-4 bg-muted/50 rounded-lg space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Company ID:</span>
                 <span className="font-medium">{connection.realmId}</span>
@@ -234,43 +235,37 @@ export function QuickBooksSettings({ embedded }: QuickBooksSettingsProps) {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Token Expires:</span>
-                <span className="font-medium text-amber-500">
+                <span className="font-medium">
                   {new Date(connection.expiresAt).toLocaleString()}
                 </span>
               </div>
             </div>
-            
-            <div className="flex justify-end">
-              <Button variant="outline" className="text-destructive hover:bg-destructive/10" onClick={handleDisconnect}>
-                Disconnect QuickBooks
-              </Button>
-            </div>
+            <Button variant="destructive" onClick={handleDisconnect}>
+              Disconnect QuickBooks
+            </Button>
           </div>
         ) : (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground leading-relaxed">
+            <p className="text-sm text-muted-foreground">
               Connect your QuickBooks account to enable direct payments to clients, 
               contractors, and employees from the Accounting tab and Sales dashboard.
-              All transactions will be synced automatically for seamless reconciliation.
             </p>
-            <div className="flex justify-center pt-2">
-              <Button onClick={handleConnect} disabled={isConnecting} size="lg" className="w-full sm:w-auto px-8">
-                {isConnecting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Connecting...
-                  </>
-                ) : (
-                  <>
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Connect to QuickBooks
-                  </>
-                )}
-              </Button>
-            </div>
+            <Button onClick={handleConnect} disabled={isConnecting}>
+              {isConnecting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Connecting...
+                </>
+              ) : (
+                <>
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Connect to QuickBooks
+                </>
+              )}
+            </Button>
           </div>
         )}
-      </div>
-    </SectionCard>
+      </CardContent>
+    </Card>
   );
 }
