@@ -8,7 +8,7 @@ import { PayrollTab } from "@/pages/payments/PayrollTab";
 import { InvoicesTab } from "@/pages/payments/InvoicesTab";
 import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 import { useAuth } from "@/hooks/useAuth";
-import { Receipt, FileText, Users, Wallet, Settings2, Landmark, FileSpreadsheet } from "lucide-react";
+import { Receipt, FileText, Users, Wallet, Landmark, FileSpreadsheet } from "lucide-react";
 
 export default function Payments() {
   const { userRole } = useAuth();
