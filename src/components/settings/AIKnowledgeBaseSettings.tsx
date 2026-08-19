@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Upload, Trash2, FileText, Video, Loader2, CheckCircle, XCircle, Clock, Brain, Image, Link, Globe, AlignLeft, RefreshCw } from "lucide-react";
+import { Upload, Trash2, FileText, Video, Loader2, CheckCircle, XCircle, Clock, Brain, Image, Link, Globe, AlignLeft, RefreshCw, Activity, ShieldCheck } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +22,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { SettingsHero } from "./SettingsHero";
+import { SectionCard } from "./SectionCard";
 
 const CATEGORIES = [
   { value: "insurance-regulations", label: "Insurance Regulations" },
@@ -674,18 +676,20 @@ export const AIKnowledgeBaseSettings = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Brain className="h-5 w-5 text-primary" />
-            AI Knowledge Base
-          </CardTitle>
-          <CardDescription>
-            Upload documents, images, videos, add URLs, or enter text to train the AI assistant.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <SettingsHero
+        title="AI Knowledge Base"
+        description="Upload documents, images, videos, add URLs, or enter text to train the AI assistant."
+        badge="AI Training"
+        icon={<Brain className="h-4 w-4 text-primary" />}
+      />
+      <SectionCard
+        title="Knowledge Sources"
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        icon={<Brain className="h-4 w-4 text-primary" />}
+        description="Add new content for the AI to learn from."
+      >
+
           <Tabs defaultValue="files" className="w-full">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="files" className="flex items-center gap-2">
@@ -910,21 +914,20 @@ export const AIKnowledgeBaseSettings = () => {
               </p>
             </TabsContent>
           </Tabs>
-        </CardContent>
-      </Card>
+      </SectionCard>
 
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-primary" />
-                Knowledge Validation
-              </CardTitle>
-              <CardDescription>
-                Verifies every uploaded document is processed, chunked, and embedded for reliable retrieval.
-              </CardDescription>
-            </div>
+      <SectionCard
+        title="Knowledge Validation"
+        accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
+        icon={<CheckCircle className="h-4 w-4 text-emerald-500" />}
+      >
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+          <div>
+            <p className="text-sm text-muted-foreground">
+              Verifies every uploaded document is processed, chunked, and embedded for reliable retrieval.
+            </p>
+          </div>
+
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
@@ -961,9 +964,9 @@ export const AIKnowledgeBaseSettings = () => {
                   : "Auto-fix issues"}
               </Button>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        </div>
+        <div className="space-y-4">
+
           {validationLoading ? (
             <div className="flex items-center justify-center py-6">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -1069,17 +1072,19 @@ export const AIKnowledgeBaseSettings = () => {
           ) : (
             <p className="text-sm text-muted-foreground">Validation data is unavailable right now.</p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
 
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle>Uploaded Documents</CardTitle>
-          <CardDescription>
-            {documents?.length || 0} documents in the knowledge base
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+
+
+      <SectionCard
+        title="Uploaded Documents"
+        accent="bg-gradient-to-r from-blue-500/60 to-blue-500/10"
+        icon={<FileText className="h-4 w-4 text-blue-500" />}
+        description={`${documents?.length || 0} documents in the knowledge base`}
+      >
+
+        <div>
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -1169,8 +1174,10 @@ export const AIKnowledgeBaseSettings = () => {
               <p className="text-sm">Upload documents to enhance the AI assistant's knowledge</p>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
+
+
 
       <AlertDialog open={!!deleteDocId} onOpenChange={() => setDeleteDocId(null)}>
         <AlertDialogContent>

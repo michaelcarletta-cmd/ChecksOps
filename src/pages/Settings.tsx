@@ -807,27 +807,33 @@ export default function Settings() {
 
 
         {SHOW_CHECKALT && (
-          <TabsContent value="checkalt" className="w-full">
-            <CheckAltSettings />
+          <TabsContent value="checkalt" className="w-full focus-visible:outline-none">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+              <CheckAltSettings />
+            </div>
           </TabsContent>
         )}
+
 
         {/* ActumSettings hidden */}
 
         <TabsContent value="profile" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+
             <ProfileSettings />
           </div>
         </TabsContent>
 
         <TabsContent value="referrals" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
             <ReferralSettings />
             <AdminReferralDashboard />
           </div>
         </TabsContent>
 
-        <TabsContent value="workflow" className="w-full space-y-4">
+        <TabsContent value="workflow" className="w-full space-y-6 focus-visible:outline-none">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
+
 
           {/* Claim Statuses - Collapsible */}
           <Collapsible open={statusesOpen} onOpenChange={setStatusesOpen}>
@@ -998,10 +1004,12 @@ export default function Settings() {
               </CollapsibleContent>
             </Card>
           </Collapsible>
+          </div>
         </TabsContent>
 
+
         <TabsContent value="users" className="w-full space-y-6 focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
             <UserManagementSettings />
             {tenant && (
               <TeamCapsSettings 
@@ -1016,24 +1024,34 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="usage" className="w-full focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+
             <UsageLogTab />
           </div>
         </TabsContent>
 
 
-        <TabsContent value="automations" className="w-full space-y-6">
+        <TabsContent value="automations" className="w-full space-y-6 focus-visible:outline-none">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
+
           <AutomationsSettings />
           <RDAutomationSettings />
+          </div>
         </TabsContent>
 
-        <TabsContent value="ai-knowledge" className="w-full space-y-6">
+
+        <TabsContent value="ai-knowledge" className="w-full space-y-6 focus-visible:outline-none">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
+
           <AIKnowledgeBaseSettings />
           <CounterArgumentsSettings />
+          </div>
         </TabsContent>
 
+
         <TabsContent value="organization" className="w-full space-y-6 focus-visible:outline-none">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
+
             <OrganizationSettings />
             <CompanyBrandingSettings />
             <EmailSenderSettings />
@@ -1069,44 +1087,65 @@ export default function Settings() {
         </TabsContent>
 
 
-        <TabsContent value="import" className="w-full">
-          <ImportSettings />
+        <TabsContent value="import" className="w-full focus-visible:outline-none">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+            <ImportSettings />
+          </div>
         </TabsContent>
 
 
+
         {isAdmin && (
-          <TabsContent value="audit-logs" className="w-full">
-            <AuditLogSettings />
+          <TabsContent value="audit-logs" className="w-full focus-visible:outline-none">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+              <AuditLogSettings />
+            </div>
           </TabsContent>
+
         )}
 
         {isAdmin && (
-          <TabsContent value="notification-logs" className="w-full">
-            <NotificationDeliveryLogView />
+          <TabsContent value="notification-logs" className="w-full focus-visible:outline-none">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+              <NotificationDeliveryLogView />
+            </div>
           </TabsContent>
+
         )}
 
         {isAdmin && (
-          <TabsContent value="urgency-alerts" className="w-full">
-            <StatusUrgencyNotificationsSettings />
+          <TabsContent value="urgency-alerts" className="w-full focus-visible:outline-none">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+              <StatusUrgencyNotificationsSettings />
+            </div>
           </TabsContent>
+
         )}
 
         {isAdmin && (
-          <TabsContent value="jn-diagnostics" className="w-full">
-            <JobNimbusSyncDiagnostics />
+          <TabsContent value="jn-diagnostics" className="w-full focus-visible:outline-none">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+              <JobNimbusSyncDiagnostics />
+            </div>
           </TabsContent>
+
         )}
 
         {isAdmin && (
-          <TabsContent value="backup" className="w-full">
-            <BackupStatusSettings />
+          <TabsContent value="backup" className="w-full focus-visible:outline-none">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+              <BackupStatusSettings />
+            </div>
           </TabsContent>
+
         )}
         {isAdmin && (
-          <TabsContent value="white-label" className="w-full">
-            <TenantManagement />
+          <TabsContent value="white-label" className="w-full focus-visible:outline-none">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+              <TenantManagement />
+            </div>
           </TabsContent>
+
         )}
       </Tabs>
     </div>

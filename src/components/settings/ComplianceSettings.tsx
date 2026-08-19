@@ -12,6 +12,8 @@ import { Separator } from "@/components/ui/separator";
 import { Loader2, Save, ShieldCheck, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { formatPhoneNumber } from "@/lib/utils";
+import { SettingsHero } from "./SettingsHero";
+import { SectionCard } from "./SectionCard";
 
 
 type AddressParts = { street: string; city: string; state: string; zip: string };
@@ -127,29 +129,31 @@ export function ComplianceSettings() {
   const kycDone = !!t?.kyc_completed_at;
 
   return (
-    <div className="space-y-6">
-      {/* Status summary */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <ShieldCheck className="h-4 w-4 text-primary" /> Compliance status
-          </CardTitle>
-          <CardDescription>KYC and vetting document posture for this tenant. All documents and identity records sync directly with Moov for compliance and identity verification.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <StatusPill label="KYC" done={kycDone} />
-        </CardContent>
-      </Card>
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <SettingsHero
+        title="Compliance & Identity"
+        description="Manage your KYC and vetting documents. All identity records sync directly with Moov for financial compliance."
+        badge="Trust & Safety"
+        icon={<ShieldCheck className="h-4 w-4 text-primary" />}
+      />
 
-      {/* KYC */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Know Your Customer (KYC)</CardTitle>
-          <CardDescription>
-            Required under our AML program before originating ACH payments. Last completed: {t?.kyc_completed_at ? format(new Date(t.kyc_completed_at), "PPp") : "Never"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <SectionCard
+        title="Compliance Status"
+        accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
+        icon={<ShieldCheck className="h-4 w-4 text-emerald-500" />}
+        description="KYC and vetting document posture for this tenant."
+      >
+        <StatusPill label="KYC (Know Your Customer)" done={kycDone} />
+      </SectionCard>
+
+      <SectionCard
+        title="Know Your Customer (KYC)"
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        icon={<ShieldCheck className="h-4 w-4 text-primary" />}
+        description={`Required under our AML program before originating ACH payments. Last completed: ${t?.kyc_completed_at ? format(new Date(t.kyc_completed_at), "PPp") : "Never"}`}
+      >
+        <div className="space-y-4">
+
           <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Legal business name" value={form.legal_business_name} onChange={(v) => setForm({ ...form, legal_business_name: v })} />
             <Field label="EIN" value={form.ein} onChange={(v) => setForm({ ...form, ein: v })} placeholder="00-0000000" />
@@ -186,10 +190,10 @@ export function ComplianceSettings() {
             {saveKyc.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
             Save KYC
           </Button>
-        </CardContent>
-      </Card>
-
+        </div>
+      </SectionCard>
     </div>
+
   );
 }
 
