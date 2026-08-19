@@ -53,6 +53,10 @@ import { useToast } from "@/hooks/use-toast";
 import { SWEEP_RAIL_HINT, SWEEP_RAIL_LABEL, type SweepPushRail } from "@/lib/payments/sweeps";
 import { WalletPanel } from "@/components/payments/WalletPanel";
 import { MoovTreasuryPanel } from "@/components/payments/MoovTreasuryPanel";
+import { PaymentAccountPanel } from "@/components/payments/PaymentAccountPanel";
+import { PaymentReadinessPanel } from "@/components/payments/PaymentReadinessPanel";
+import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
+
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 
 const money = (cents: number) =>
