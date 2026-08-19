@@ -151,7 +151,7 @@ export function TenantAIKeySettings() {
   );
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6">
       <SettingsHero
         title="AI Intelligence Engine"
         description="Configure your OpenAI API key to enable Darwin's document analysis and OCR intelligence."

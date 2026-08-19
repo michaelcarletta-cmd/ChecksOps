@@ -1050,7 +1050,9 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="ai-key" className="w-full focus-visible:outline-none">
-          <TenantAIKeySettings />
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <TenantAIKeySettings />
+          </div>
         </TabsContent>
 
 
