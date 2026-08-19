@@ -395,7 +395,7 @@ export const CounterArgumentsSettings = () => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </CardContent>
+        </div>
       </SectionCard>
     </div>
   );
