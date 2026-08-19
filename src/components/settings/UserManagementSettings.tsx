@@ -391,7 +391,7 @@ export function UserManagementSettings() {
             {pendingUsers.map((user) => (
               <div
                 key={user.id}
-                className="flex items-center justify-between p-4 border border-yellow-500/30 rounded-lg bg-background"
+                className="flex items-center justify-between p-4 border border-orange-500/20 rounded-lg bg-orange-500/5 backdrop-blur-sm"
               >
                 <div>
                   <p className="font-medium">{user.full_name || "Unnamed User"}</p>
@@ -445,7 +445,7 @@ export function UserManagementSettings() {
           {users.map((user) => (
             <div
               key={user.id}
-              className="flex items-start justify-between p-4 border border-border rounded-lg"
+              className="flex items-start justify-between p-4 border border-border/60 rounded-lg bg-muted/20 backdrop-blur-sm hover:border-sky-500/30 transition-colors"
             >
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
