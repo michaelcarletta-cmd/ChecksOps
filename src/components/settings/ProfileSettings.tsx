@@ -9,7 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Save, User, Bell, Mail, MessageSquare, ChevronDown, Loader2, Upload, Building2, X } from "lucide-react";
+import { Save, User, Bell, Mail, MessageSquare, ChevronDown, Loader2, Upload, Building2, X, ShieldCheck, Sparkles, Key } from "lucide-react";
+import { SectionCard } from "./SectionCard";
+import { SettingsHero } from "./SettingsHero";
 import { formatPhoneNumber } from "@/lib/utils";
 import { LicensesSettings } from "./LicensesSettings";
 import { ChangePasswordCard } from "./ChangePasswordCard";
@@ -248,16 +250,20 @@ export function ProfileSettings() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User className="h-5 w-5" />
-            Personal Information
-          </CardTitle>
-          <CardDescription>
-            Update your profile details and contact information
-          </CardDescription>
-        </CardHeader>
+      <SettingsHero
+        title="My Profile"
+        description="Manage your personal information, security, and notification preferences."
+        badge="Personal Settings"
+        icon={<User className="h-4 w-4 text-primary" />}
+      />
+
+      <div className="grid gap-6">
+        <SectionCard
+          title="Personal Information"
+          icon={<User className="h-4 w-4 text-sky-500" />}
+          accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
+          description="Update your profile details and contact information"
+        >
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -360,18 +366,17 @@ export function ProfileSettings() {
             </div>
           </div>
         </CardContent>
-      </Card>
+        </SectionCard>
 
-      {/* Full Licenses Management */}
-      <LicensesSettings />
+        {/* Full Licenses Management */}
+        <LicensesSettings />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Email Signature</CardTitle>
-          <CardDescription>
-            This signature will be appended to emails sent from the CRM
-          </CardDescription>
-        </CardHeader>
+        <SectionCard
+          title="Email Signature"
+          icon={<Mail className="h-4 w-4 text-emerald-500" />}
+          accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
+          description="This signature will be appended to emails sent from the CRM"
+        >
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email_signature">Signature</Label>
