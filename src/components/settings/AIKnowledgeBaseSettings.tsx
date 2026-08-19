@@ -1075,17 +1075,16 @@ export const AIKnowledgeBaseSettings = () => {
           ) : (
             <p className="text-sm text-muted-foreground">Validation data is unavailable right now.</p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
 
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle>Uploaded Documents</CardTitle>
-          <CardDescription>
-            {documents?.length || 0} documents in the knowledge base
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+      <SectionCard
+        title="Knowledge Inventory"
+        icon={<Brain className="h-4 w-4 text-primary" />}
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        description={`${documents?.length || 0} documents in the knowledge base`}
+      >
+        <div className="space-y-4 pt-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -1175,8 +1174,8 @@ export const AIKnowledgeBaseSettings = () => {
               <p className="text-sm">Upload documents to enhance the AI assistant's knowledge</p>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
 
       <AlertDialog open={!!deleteDocId} onOpenChange={() => setDeleteDocId(null)}>
         <AlertDialogContent>
