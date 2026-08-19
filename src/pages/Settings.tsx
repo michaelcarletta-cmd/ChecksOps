@@ -837,20 +837,16 @@ export default function Settings() {
 
           {/* Claim Statuses - Collapsible */}
           <Collapsible open={statusesOpen} onOpenChange={setStatusesOpen}>
-            <Card>
-              <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Claim Statuses</CardTitle>
-                      <CardDescription>
-                        Customize the status options available for claims ({statuses.length} statuses)
-                      </CardDescription>
-                    </div>
-                    <ChevronDown className={`h-5 w-5 transition-transform ${statusesOpen ? 'rotate-180' : ''}`} />
-                  </div>
-                </CardHeader>
-              </CollapsibleTrigger>
+            <SectionCard
+              title="Claim Statuses"
+              icon={<ListTree className="h-4 w-4 text-primary" />}
+              accent="bg-gradient-to-r from-primary/60 to-primary/10"
+              description={`Customize the status options available for claims (${statuses.length} statuses)`}
+              collapsible={{
+                open: statusesOpen,
+                onOpenChange: setStatusesOpen
+              }}
+            >
               <CollapsibleContent>
                 <CardContent className="space-y-4">
                   <div className="flex flex-col sm:flex-row gap-2">
@@ -899,99 +895,80 @@ export default function Settings() {
                   </DndContext>
                 </CardContent>
               </CollapsibleContent>
-            </Card>
+            </SectionCard>
           </Collapsible>
 
           {/* Loss Types - Collapsible */}
           <Collapsible open={lossTypesOpen} onOpenChange={setLossTypesOpen}>
-            <Card>
-              <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Loss Types</CardTitle>
-                      <CardDescription>
-                        Manage the types of losses available for claims
-                      </CardDescription>
-                    </div>
-                    <ChevronDown className={`h-5 w-5 transition-transform ${lossTypesOpen ? 'rotate-180' : ''}`} />
-                  </div>
-                </CardHeader>
-              </CollapsibleTrigger>
+            <SectionCard
+              title="Loss Types"
+              icon={<Database className="h-4 w-4 text-sky-500" />}
+              accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
+              description="Manage the types of losses available for claims"
+              collapsible={{
+                open: lossTypesOpen,
+                onOpenChange: setLossTypesOpen
+              }}
+            >
               <CollapsibleContent>
                 <CardContent>
                   <LossTypesSettings embedded />
                 </CardContent>
               </CollapsibleContent>
-            </Card>
+            </SectionCard>
           </Collapsible>
 
           {/* Custom Fields - Collapsible */}
           <Collapsible open={customFieldsOpen} onOpenChange={setCustomFieldsOpen}>
-            <Card>
-              <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Custom Fields</CardTitle>
-                      <CardDescription>
-                        Add custom data fields to claim overview pages
-                      </CardDescription>
-                    </div>
-                    <ChevronDown className={`h-5 w-5 transition-transform ${customFieldsOpen ? 'rotate-180' : ''}`} />
-                  </div>
-                </CardHeader>
-              </CollapsibleTrigger>
+            <SectionCard
+              title="Custom Fields"
+              icon={<Plus className="h-4 w-4 text-emerald-500" />}
+              accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
+              description="Add custom data fields to claim overview pages"
+              collapsible={{
+                open: customFieldsOpen,
+                onOpenChange: setCustomFieldsOpen
+              }}
+            >
               <CollapsibleContent>
                 <CardContent>
                   <CustomFieldsSettings embedded />
                 </CardContent>
               </CollapsibleContent>
-            </Card>
+            </SectionCard>
           </Collapsible>
 
           {/* Signature Document Presets - Collapsible */}
           <Collapsible open={sigPresetsOpen} onOpenChange={setSigPresetsOpen}>
-            <Card>
-              <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors" role="button">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="flex items-center gap-2">
-                        <FileSignature className="h-5 w-5" />
-                        Signature Document Presets
-                      </CardTitle>
-                      <CardDescription>
-                        Default labels and help text shown to signers per document type
-                      </CardDescription>
-                    </div>
-                    <ChevronDown className={`h-5 w-5 transition-transform ${sigPresetsOpen ? 'rotate-180' : ''}`} />
-                  </div>
-                </CardHeader>
-              </CollapsibleTrigger>
+            <SectionCard
+              title="Signature Document Presets"
+              icon={<FileSignature className="h-4 w-4 text-violet-500" />}
+              accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
+              description="Default labels and help text shown to signers per document type"
+              collapsible={{
+                open: sigPresetsOpen,
+                onOpenChange: setSigPresetsOpen
+              }}
+            >
               <CollapsibleContent>
                 <CardContent>
                   <SignaturePresetsSettings embedded />
                 </CardContent>
               </CollapsibleContent>
-            </Card>
+            </SectionCard>
           </Collapsible>
 
           <Collapsible open={integrationsOpen} onOpenChange={setIntegrationsOpen}>
-            <Card>
-              <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Integrations</CardTitle>
-                      <CardDescription>
-                        Configure external integrations for your workflow
-                      </CardDescription>
-                    </div>
-                    <ChevronDown className={`h-5 w-5 transition-transform ${integrationsOpen ? 'rotate-180' : ''}`} />
-                  </div>
-                </CardHeader>
-              </CollapsibleTrigger>
+            <SectionCard
+              title="Integrations"
+              icon={<Share2 className="h-4 w-4 text-primary" />}
+              accent="bg-gradient-to-r from-primary/60 to-primary/10"
+              description="Configure external integrations for your workflow"
+              collapsible={{
+                open: integrationsOpen,
+                onOpenChange: setIntegrationsOpen
+              }}
+            >
               <CollapsibleContent>
                 <CardContent className="space-y-6">
                   <PhoneVerificationSettings />
@@ -1002,7 +979,7 @@ export default function Settings() {
                   
                 </CardContent>
               </CollapsibleContent>
-            </Card>
+            </SectionCard>
           </Collapsible>
           </div>
         </TabsContent>
@@ -1059,29 +1036,22 @@ export default function Settings() {
             
             {/* Workspaces - Collapsible */}
             <Collapsible open={workspacesOpen} onOpenChange={setWorkspacesOpen}>
-              <Card>
-                <CollapsibleTrigger asChild>
-                  <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <FolderKanban className="h-5 w-5" />
-                        <div>
-                          <CardTitle>Partner Workspaces</CardTitle>
-                          <CardDescription>
-                            Manage linked partner instances and cross-tenant collaboration
-                          </CardDescription>
-                        </div>
-                      </div>
-                      <ChevronDown className={`h-5 w-5 transition-transform ${workspacesOpen ? 'rotate-180' : ''}`} />
-                    </div>
-                  </CardHeader>
-                </CollapsibleTrigger>
+              <SectionCard
+                title="Partner Workspaces"
+                icon={<FolderKanban className="h-4 w-4 text-orange-500" />}
+                accent="bg-gradient-to-r from-orange-500/60 to-orange-500/10"
+                description="Manage linked partner instances and cross-tenant collaboration"
+                collapsible={{
+                  open: workspacesOpen,
+                  onOpenChange: setWorkspacesOpen
+                }}
+              >
                 <CollapsibleContent>
                   <CardContent>
                     <WorkspaceList embedded />
                   </CardContent>
                 </CollapsibleContent>
-              </Card>
+              </SectionCard>
             </Collapsible>
           </div>
         </TabsContent>
