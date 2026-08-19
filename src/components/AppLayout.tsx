@@ -27,7 +27,6 @@ const AppLayoutContent = ({ children }: AppLayoutProps) => {
         <header className="h-14 border-b border-border/70 bg-background/95 backdrop-blur flex items-center gap-2 px-4 sticky top-0 z-10">
           <SidebarTrigger className="shrink-0" />
           <div className="ml-2 flex items-center gap-4 flex-1 min-w-0">
-            <span className="text-sm text-muted-foreground truncate">Freedom Claims CRM</span>
           </div>
           <UrgentAlertsBell />
           <QuickTaskBar />
