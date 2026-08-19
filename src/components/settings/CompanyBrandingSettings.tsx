@@ -213,6 +213,20 @@ export function CompanyBrandingSettings() {
         updated_at: new Date().toISOString()
       };
 
+      if (brandingId) {
+        await supabase
+          .from("company_branding" as any)
+          .update(brandingData)
+          .eq("id", brandingId);
+      } else {
+        const { data } = await supabase
+          .from("company_branding" as any)
+          .insert(brandingData)
+          .select()
+          .single();
+        if (data) setBrandingId((data as any).id);
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data: tenantUser } = await supabase
