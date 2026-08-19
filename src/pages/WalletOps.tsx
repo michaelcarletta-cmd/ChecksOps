@@ -138,6 +138,15 @@ export default function WalletOps() {
   } = useSweepConfig("operating");
   const { data: transferData, isLoading: transfersLoading } = useWalletOpsTransfers();
   const { data: readiness } = useWalletOpsReadiness();
+  const { data: runningData, isLoading: runningLoading } = useWalletRunningBalance("operating");
+  const { data: tenantBalances } = useAllTenantWalletBalances(userRole === "admin");
+
+  const runningPoints = runningData?.points ?? [];
+  const chartData = runningPoints.map((p) => ({
+    date: new Date(p.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+    balance: p.balance_cents / 100,
+  }));
+
 
   const [payoutRail, setPayoutRail] = useState<SweepPushRail | "">("");
 
