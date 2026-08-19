@@ -158,7 +158,7 @@ export function OrganizationSettings() {
 
     setIsCreating(true);
     try {
-      const { data: org, error: orgError } = await supabase
+      const { data: orgData, error: orgError } = await supabase
         .from("organizations" as any)
         .insert({
           name: newOrgName,
@@ -169,6 +169,7 @@ export function OrganizationSettings() {
         .single();
 
       if (orgError) throw orgError;
+      const org = orgData as any;
 
       // 2. Add current user as owner
       const { error: memberError } = await supabase
