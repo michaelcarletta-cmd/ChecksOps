@@ -1084,9 +1084,12 @@ export default function Settings() {
         </TabsContent>
 
 
-        <TabsContent value="import" className="w-full">
-          <ImportSettings />
+        <TabsContent value="import" className="w-full focus-visible:outline-none">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+            <ImportSettings />
+          </div>
         </TabsContent>
+
 
 
         {isAdmin && (
