@@ -1082,7 +1082,7 @@ export const AIKnowledgeBaseSettings = () => {
         description={`${documents?.length || 0} documents in the knowledge base`}
       >
 
-        <CardContent>
+        <div>
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
