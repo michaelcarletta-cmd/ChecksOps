@@ -55,6 +55,9 @@ import { NotificationDeliveryLogView } from "@/components/settings/NotificationD
 import StatusUrgencyNotificationsSettings from "@/components/settings/StatusUrgencyNotificationsSettings";
 import { JobNimbusSyncDiagnostics } from "@/components/settings/JobNimbusSyncDiagnostics";
 import { TenantManagement } from "@/components/settings/TenantManagement";
+import { TeamCapsSettings } from "@/components/settings/TeamCapsSettings";
+import { useTenant } from "@/contexts/TenantContext";
+
 
 import { useQuery } from "@tanstack/react-query";
 import { WorkspaceList } from "@/components/workspaces/WorkspaceList";
@@ -431,7 +434,8 @@ export default function Settings() {
   const [sigPresetsOpen, setSigPresetsOpen] = useState(false);
   
   const { toast } = useToast();
-  // isActumRail usage hidden/disabled globally.
+  const { tenant } = useTenant();
+
 
   // Check if current user is admin
   const { data: isAdmin, isLoading: isAdminLoading } = useQuery({
@@ -973,9 +977,20 @@ export default function Settings() {
           </Collapsible>
         </TabsContent>
 
-        <TabsContent value="users" className="w-full">
+        <TabsContent value="users" className="w-full space-y-6">
           <UserManagementSettings />
+          {tenant && (
+            <TeamCapsSettings 
+              vendorCap={tenant.vendor_cap ?? 5}
+              salesRepCap={tenant.sales_rep_cap ?? 5}
+              subcontractorCap={tenant.subcontractor_cap ?? 5}
+              tenantId={tenant.id}
+              onUpdate={() => {}} 
+            />
+          )}
+
         </TabsContent>
+
 
         <TabsContent value="automations" className="w-full space-y-6">
           <AutomationsSettings />

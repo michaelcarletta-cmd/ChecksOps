@@ -14,6 +14,10 @@ export interface Tenant {
   partner_code: string | null;
   is_system_tenant: boolean;
   max_checks_per_month: number;
+  vendor_cap?: number;
+  sales_rep_cap?: number;
+  subcontractor_cap?: number;
+
 }
 
 interface TenantContextType {

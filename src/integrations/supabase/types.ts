@@ -21669,6 +21669,51 @@ export type Database = {
           },
         ]
       }
+      tenant_usage_logs: {
+        Row: {
+          amount_cents: number | null
+          created_at: string | null
+          description: string | null
+          event_type: string
+          id: string
+          metadata: Json | null
+          tenant_id: string
+        }
+        Insert: {
+          amount_cents?: number | null
+          created_at?: string | null
+          description?: string | null
+          event_type: string
+          id?: string
+          metadata?: Json | null
+          tenant_id: string
+        }
+        Update: {
+          amount_cents?: number | null
+          created_at?: string | null
+          description?: string | null
+          event_type?: string
+          id?: string
+          metadata?: Json | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_usage_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_usage_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_users: {
         Row: {
           created_at: string
@@ -21787,11 +21832,14 @@ export type Database = {
           referral_code: string | null
           referral_discount_cents: number
           referred_by_tenant_id: string | null
+          sales_rep_cap: number | null
           secondary_color: string | null
           slug: string
           stripe_customer_id: string | null
+          subcontractor_cap: number | null
           subscription_status: string | null
           updated_at: string
+          vendor_cap: number | null
           verification_status: string | null
           wisp_acknowledged_at: string | null
           wisp_acknowledged_by: string | null
@@ -21871,11 +21919,14 @@ export type Database = {
           referral_code?: string | null
           referral_discount_cents?: number
           referred_by_tenant_id?: string | null
+          sales_rep_cap?: number | null
           secondary_color?: string | null
           slug: string
           stripe_customer_id?: string | null
+          subcontractor_cap?: number | null
           subscription_status?: string | null
           updated_at?: string
+          vendor_cap?: number | null
           verification_status?: string | null
           wisp_acknowledged_at?: string | null
           wisp_acknowledged_by?: string | null
@@ -21955,11 +22006,14 @@ export type Database = {
           referral_code?: string | null
           referral_discount_cents?: number
           referred_by_tenant_id?: string | null
+          sales_rep_cap?: number | null
           secondary_color?: string | null
           slug?: string
           stripe_customer_id?: string | null
+          subcontractor_cap?: number | null
           subscription_status?: string | null
           updated_at?: string
+          vendor_cap?: number | null
           verification_status?: string | null
           wisp_acknowledged_at?: string | null
           wisp_acknowledged_by?: string | null
@@ -23446,6 +23500,10 @@ export type Database = {
         Returns: undefined
       }
       can_manage_roles: { Args: { _user_id: string }; Returns: boolean }
+      check_team_member_cap: {
+        Args: { _role: string; _tenant_id: string }
+        Returns: boolean
+      }
       classify_payee_type: { Args: { _name: string }; Returns: string }
       cleanup_expired_ai_response_cache: { Args: never; Returns: number }
       compute_claim_last_activity: {
