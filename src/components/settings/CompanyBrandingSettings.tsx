@@ -7,6 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Upload, Building2, FileText, Loader2, Mail, Eye, EyeOff, Palette, FileCheck, Sparkles, Image as ImageIcon, Type, Layout, Users } from "lucide-react";
+import { TeamCapsSettings } from "./TeamCapsSettings";
+
 import { Badge } from "@/components/ui/badge";
 
 function SectionCard({
@@ -391,24 +393,13 @@ export function CompanyBrandingSettings() {
           </div>
         </SectionCard>
 
-        <SectionCard
-          title="Team Caps"
-          icon={<Users className="h-4 w-4 text-amber-500" />}
-          accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
-          description="Set the maximum number of team members allowed for specific roles."
-        >
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <Label>Vendor Cap</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={vendorCap}
-                  onChange={(e) => setVendorCap(parseInt(e.target.value) || 0)}
-                />
-              </div>
-              <div className="space-y-1.5">
+        <TeamCapsSettings 
+          vendorCap={vendorCap}
+          salesRepCap={salesRepCap}
+          subcontractorCap={subcontractorCap}
+          tenantId={brandingId || ""}
+          onUpdate={loadSettings}
+        />
                 <Label>Sales Rep Cap</Label>
                 <Input
                   type="number"
