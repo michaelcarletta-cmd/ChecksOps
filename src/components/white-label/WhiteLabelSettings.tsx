@@ -313,6 +313,7 @@ function ProfileSettings({ tenant }: { tenant: any }) {
     <SectionCard
       title="Company Profile"
       icon={<Building2 className="h-4 w-4 text-primary" />}
+      accent="bg-gradient-to-r from-primary/60 to-primary/10"
       description="Update your business information and workspace identification."
     >
       <div className="space-y-4 pt-4">
