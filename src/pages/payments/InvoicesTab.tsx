@@ -190,6 +190,17 @@ export function InvoicesTab() {
                   </DialogDescription>
                 </DialogHeader>
 
+                {branding?.invoice_letterhead_url && (
+                  <div className="mb-4 flex justify-center border-b pb-4">
+                    <img 
+                      src={branding.invoice_letterhead_url} 
+                      alt="Invoice Letterhead" 
+                      className="max-h-16 object-contain opacity-80" 
+                    />
+                  </div>
+                )}
+
+
                 <div className="space-y-4">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
