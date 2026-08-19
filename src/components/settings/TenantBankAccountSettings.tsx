@@ -16,6 +16,8 @@ import { AchAuthorizationForm } from "@/components/disbursement/AchAuthorization
 import { BankVerification } from "@/components/disbursement/BankVerification";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePaymentRail } from "@/hooks/usePaymentRail";
+import { SettingsHero } from "./SettingsHero";
+import { SectionCard } from "./SectionCard";
 
 
 export function TenantBankAccountSettings() {
