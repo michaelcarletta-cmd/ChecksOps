@@ -57,7 +57,9 @@ export function TeamCapsSettings({
   };
 
   return (
-    <SectionCard
+    <div className="max-w-7xl mx-auto">
+      <SectionCard
+
       title="Team Role Limits"
       accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
       icon={<Users className="h-4 w-4 text-amber-500" />}
