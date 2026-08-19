@@ -296,7 +296,6 @@ export function UserManagementSettings() {
         badge="Team Access"
         icon={<Users className="h-4 w-4 text-primary" />}
       />
-
       <div className="grid gap-6">
         {pendingUsers.length > 0 && (
           <SectionCard
