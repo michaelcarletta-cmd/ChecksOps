@@ -140,6 +140,11 @@ export function TenantAIKeySettings() {
 
   const hasKey = !!cred?.key_last_4;
   const status = cred?.status as "active" | "invalid" | "unverified" | undefined;
+  
+  const friendlyError = useMemo(() => 
+    formatFriendlyAIError(cred?.last_error), 
+    [cred?.last_error]
+  );
 
   return (
     <div className="space-y-6">
@@ -180,7 +185,20 @@ export function TenantAIKeySettings() {
                     </div>
                   )}
                   {cred.last_error && (
-                    <div className="text-xs text-destructive mt-1">{cred.last_error}</div>
+                    <div className="mt-3 p-2.5 rounded border border-amber-500/20 bg-amber-500/5">
+                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-400 mb-0.5">
+                        <Info className="h-3 w-3" />
+                        {friendlyError?.title || "AI Notice"}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground leading-relaxed">
+                        {friendlyError?.message}
+                      </div>
+                      {friendlyError?.tip && (
+                        <div className="mt-1.5 text-[10px] text-amber-200/60 italic">
+                          Tip: {friendlyError.tip}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
                 <div className="flex gap-2">
