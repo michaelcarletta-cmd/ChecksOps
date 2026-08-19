@@ -800,8 +800,7 @@ export function CompanyBrandingSettings() {
               </div>
             )}
           </div>
-        </CardContent>
-      </Card>
+        </SectionCard>
 
       {/* Online Check Writer */}
       <Card>
@@ -829,19 +828,14 @@ export function CompanyBrandingSettings() {
               </a>
             </p>
           </div>
-        </CardContent>
-      </Card>
+        </SectionCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Zapier Webhook Integration
-          </CardTitle>
-          <CardDescription>
-            Configure a Zapier webhook URL for external document signing or automation workflows
-          </CardDescription>
-        </CardHeader>
+        <SectionCard
+          title="Zapier Webhook Integration"
+          icon={<FileText className="h-4 w-4 text-orange-500" />}
+          accent="bg-gradient-to-r from-orange-500/60 to-orange-500/10"
+          description="Configure a Zapier webhook URL for external document signing or automation workflows."
+        >
         <CardContent className="space-y-4">
           <div>
             <Label>Zapier Webhook URL</Label>
@@ -882,10 +876,10 @@ export function CompanyBrandingSettings() {
               <div><Label className="text-xs">Height</Label><Input type="number" value={dateCoords.h} onChange={(e) => setDateCoords({...dateCoords, h: +e.target.value})} /></div>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </SectionCard>
+      </div>
 
-      <Button onClick={saveSettings} disabled={saving}>
+      <div className="flex justify-end pt-4">
         {saving ? "Saving..." : "Save Company Branding"}
       </Button>
     </div>
