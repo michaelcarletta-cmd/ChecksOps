@@ -1129,9 +1129,12 @@ export default function Settings() {
         )}
 
         {isAdmin && (
-          <TabsContent value="backup" className="w-full">
-            <BackupStatusSettings />
+          <TabsContent value="backup" className="w-full focus-visible:outline-none">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+              <BackupStatusSettings />
+            </div>
           </TabsContent>
+
         )}
         {isAdmin && (
           <TabsContent value="white-label" className="w-full">
