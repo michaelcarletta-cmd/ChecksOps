@@ -301,7 +301,7 @@ export function WorkspaceList({ embedded }: WorkspaceListProps = {}) {
   }
 
   return (
-    <div className={`space-y-6 ${embedded ? "" : ""}`}>
+    <div className="space-y-6">
       {!embedded && (
         <SettingsHero
           title="Partner Ecosystem"
@@ -310,6 +310,7 @@ export function WorkspaceList({ embedded }: WorkspaceListProps = {}) {
           icon={<Share2 className="h-4 w-4 text-primary" />}
         />
       )}
+
 
       <div className="grid gap-6 pb-12">
         {/* Pending Invites */}

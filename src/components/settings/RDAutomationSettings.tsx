@@ -129,6 +129,7 @@ export const RDAutomationSettings = () => {
         icon={<Zap className="h-4 w-4 text-primary" />}
       />
 
+
       <SectionCard
         title="Recoverable Depreciation Automation"
         accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"

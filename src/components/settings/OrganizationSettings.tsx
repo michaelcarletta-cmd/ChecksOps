@@ -335,6 +335,7 @@ export function OrganizationSettings() {
           icon={<Building2 className="h-4 w-4 text-primary" />}
         />
 
+
         <SectionCard
           title="Setup Organization"
           icon={<Building2 className="h-4 w-4 text-sky-500" />}
@@ -421,6 +422,7 @@ export function OrganizationSettings() {
         badge="Organization Settings"
         icon={<Building2 className="h-4 w-4 text-primary" />}
       />
+
 
       <div className="grid gap-6">
         <SectionCard
