@@ -5,184 +5,199 @@ import { RecipientReport } from "@/components/ledger/RecipientReport";
 import { TaxSummary } from "@/components/ledger/TaxSummary";
 import { RevenueSummary } from "@/components/ledger/RevenueSummary";
 import { PayrollTab } from "@/pages/payments/PayrollTab";
-
 import { InvoicesTab } from "@/pages/payments/InvoicesTab";
 import { UsageLogTab } from "@/components/payments/UsageLogTab";
+import { TenantEmailHealthPanel } from "@/components/settings/TenantEmailHealthPanel";
 import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 import { useAuth } from "@/hooks/useAuth";
-import { Receipt, FileText, Users, Wallet, Landmark, FileSpreadsheet, Sparkles, TrendingUp, ArrowUpRight, ArrowDownLeft, BarChart3 } from "lucide-react";
+import { 
+  Receipt, 
+  FileText, 
+  Users, 
+  Wallet, 
+  Landmark, 
+  FileSpreadsheet, 
+  Sparkles, 
+  TrendingUp, 
+  ArrowUpRight, 
+  ArrowDownLeft, 
+  BarChart3, 
+  Mail 
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
-function SectionCard({
-  title,
-  icon,
-  accent,
-  children,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  accent: string;
+const SectionCard = ({ 
+  title, 
+  icon, 
+  children, 
+  className,
+  accent 
+}: { 
+  title: string; 
+  icon: React.ReactNode; 
   children: React.ReactNode;
-}) {
+  className?: string;
+  accent?: string;
+}) => (
+  <Card className={cn("border-none bg-card/50 backdrop-blur-sm overflow-hidden", className)}>
+    <div className={cn("h-1 w-full", accent || "bg-primary/60")} />
+    <CardHeader className="pb-4">
+      <CardTitle className="text-xl font-semibold flex items-center gap-2">
+        {icon}
+        {title}
+      </CardTitle>
+    </CardHeader>
+    <CardContent>{children}</CardContent>
+  </Card>
+);
+
+const Payments = () => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+
   return (
-    <Card className="overflow-hidden border-border/60 shadow-sm">
-      <div className={`h-1.5 ${accent}`} />
-      <CardHeader className="flex flex-row items-center gap-3 p-4 pb-2">
-        <CardTitle className="flex items-center gap-2 text-base font-semibold">
-          {icon}
-          {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-4 pt-2">{children}</CardContent>
-    </Card>
-  );
-}
-
-
-export default function Payments() {
-  const { userRole } = useAuth();
-  const isAdmin = userRole === "admin";
-  
-  return (
-    <div className="space-y-6">
-      {/* Hero Section - WalletOps Style */}
-      <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/15 via-primary/5 to-background p-4 md:p-6">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
-        <div className="relative flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="space-y-2 min-w-0">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
-              <span className="text-xs font-bold uppercase tracking-widest text-primary">Financial Operations</span>
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Payments</h1>
-            <p className="text-sm text-muted-foreground max-w-md">
-              Track all incoming revenue and outbound payments to vendors, insureds, and partners
-            </p>
+    <div className="container mx-auto py-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      {/* Hero Section */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/20 via-background to-background border border-primary/10 p-8 mb-8">
+        <div className="absolute top-0 right-0 p-8 opacity-10">
+          <Wallet className="h-32 w-32 rotate-12" />
+        </div>
+        <div className="relative z-10 max-w-2xl">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-medium mb-4">
+            <Sparkles className="h-3 w-3" />
+            Financial Operations
           </div>
-
-          <div className="flex flex-wrap gap-3">
-            <div className="rounded-lg border border-primary/20 bg-background/40 backdrop-blur-sm p-3 min-w-[140px]">
-              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                <TrendingUp className="h-3 w-3" /> Volume
-              </div>
-              <div className="mt-1 text-xl font-semibold">Active</div>
-            </div>
-          </div>
+          <h1 className="text-4xl font-bold tracking-tight mb-4 bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">
+            Payments & Financials
+          </h1>
+          <p className="text-lg text-muted-foreground leading-relaxed">
+            Manage your organization's cash flow, track transaction history, and generate financial reports for tax and compliance.
+          </p>
         </div>
       </div>
 
-      <Tabs defaultValue="ledger">
-        <TabsList>
-          <TabsTrigger value="ledger" className="gap-2">
+      <Tabs defaultValue="ledger" className="w-full">
+        <TabsList className="bg-muted/50 p-1 mb-8 overflow-x-auto w-full justify-start sm:w-auto h-auto">
+          <TabsTrigger value="ledger" className="gap-2 py-2">
             <Receipt className="h-4 w-4" />
             Payment History
           </TabsTrigger>
-          <TabsTrigger value="usage" className="gap-2">
+          <TabsTrigger value="usage" className="gap-2 py-2">
             <BarChart3 className="h-4 w-4" />
             Usage Log
           </TabsTrigger>
-          <TabsTrigger value="invoices" className="gap-2">
+          <TabsTrigger value="invoices" className="gap-2 py-2">
             <FileSpreadsheet className="h-4 w-4" />
             Invoices
           </TabsTrigger>
-          <TabsTrigger value="deliverability" className="gap-2">
+          <TabsTrigger value="deliverability" className="gap-2 py-2">
             <Mail className="h-4 w-4" />
             Email Logs
           </TabsTrigger>
-          <TabsTrigger value="revenue" className="gap-2">
+          <TabsTrigger value="revenue" className="gap-2 py-2">
             <Landmark className="h-4 w-4" />
             Revenue & Profit
           </TabsTrigger>
-          <TabsTrigger value="recipients" className="gap-2">
+          <TabsTrigger value="recipients" className="gap-2 py-2">
             <Users className="h-4 w-4" />
             By Recipient
           </TabsTrigger>
-          <TabsTrigger value="tax" className="gap-2">
+          <TabsTrigger value="tax" className="gap-2 py-2">
             <FileText className="h-4 w-4" />
             Tax & 1099
           </TabsTrigger>
           {isAdmin && (
-            <TabsTrigger value="payroll" className="gap-2">
+            <TabsTrigger value="payroll" className="gap-2 py-2">
               <Wallet className="h-4 w-4" />
               Payroll
             </TabsTrigger>
           )}
         </TabsList>
-        <TabsContent value="ledger" className="mt-6">
-          <SectionCard
-            title="Payment History"
-            icon={<Receipt className="h-4 w-4 text-sky-500" />}
-            accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
+
+        <TabsContent value="ledger" className="mt-0">
+          <SectionCard 
+            title="Payment History" 
+            icon={<Receipt className="h-4 w-4 text-primary" />}
+            accent="bg-gradient-to-r from-primary/60 to-primary/10"
           >
             <PaymentLedger />
           </SectionCard>
         </TabsContent>
-        <TabsContent value="usage" className="mt-6">
-          <SectionCard
-            title="Usage Log"
-            icon={<BarChart3 className="h-4 w-4 text-primary" />}
-            accent="bg-gradient-to-r from-primary/60 to-primary/10"
+
+        <TabsContent value="usage" className="mt-0">
+          <SectionCard 
+            title="Usage Log" 
+            icon={<BarChart3 className="h-4 w-4 text-blue-500" />}
+            accent="bg-gradient-to-r from-blue-500/60 to-blue-500/10"
           >
             <UsageLogTab />
           </SectionCard>
         </TabsContent>
-        <TabsContent value="invoices" className="mt-6">
-          <SectionCard
-            title="Invoices"
+
+        <TabsContent value="invoices" className="mt-0">
+          <SectionCard 
+            title="Invoices" 
             icon={<FileSpreadsheet className="h-4 w-4 text-emerald-500" />}
             accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
           >
             <InvoicesTab />
           </SectionCard>
         </TabsContent>
-        <TabsContent value="deliverability" className="mt-6">
-          <SectionCard
-            title="Email Deliverability"
-            icon={<Mail className="h-4 w-4 text-primary" />}
-            accent="bg-gradient-to-r from-primary/60 to-primary/10"
+
+        <TabsContent value="deliverability" className="mt-0">
+          <SectionCard 
+            title="Email Deliverability" 
+            icon={<Mail className="h-4 w-4 text-indigo-500" />}
+            accent="bg-gradient-to-r from-indigo-500/60 to-indigo-500/10"
           >
             <TenantEmailHealthPanel />
           </SectionCard>
         </TabsContent>
-        <TabsContent value="revenue" className="mt-6">
-          <SectionCard
-            title="Revenue & Profit"
-            icon={<Landmark className="h-4 w-4 text-blue-500" />}
-            accent="bg-gradient-to-r from-blue-500/60 to-blue-500/10"
+
+        <TabsContent value="revenue" className="mt-0">
+          <SectionCard 
+            title="Revenue & Profit" 
+            icon={<TrendingUp className="h-4 w-4 text-amber-500" />}
+            accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
           >
             <RevenueSummary />
           </SectionCard>
         </TabsContent>
-        <TabsContent value="recipients" className="mt-6">
-          <SectionCard
-            title="Recipients"
-            icon={<Users className="h-4 w-4 text-violet-500" />}
-            accent="bg-gradient-to-r from-violet-500/60 to-violet-500/10"
+
+        <TabsContent value="recipients" className="mt-0">
+          <SectionCard 
+            title="Recipient Report" 
+            icon={<Users className="h-4 w-4 text-purple-500" />}
+            accent="bg-gradient-to-r from-purple-500/60 to-purple-500/10"
           >
             <RecipientReport />
           </SectionCard>
         </TabsContent>
-        <TabsContent value="tax" className="mt-6">
-          <SectionCard
-            title="Tax & 1099"
-            icon={<FileText className="h-4 w-4 text-orange-500" />}
-            accent="bg-gradient-to-r from-orange-500/60 to-orange-500/10"
+
+        <TabsContent value="tax" className="mt-0">
+          <SectionCard 
+            title="Tax & 1099 Summary" 
+            icon={<FileText className="h-4 w-4 text-rose-500" />}
+            accent="bg-gradient-to-r from-rose-500/60 to-rose-500/10"
           >
             <TaxSummary />
           </SectionCard>
         </TabsContent>
+
         {isAdmin && (
-          <TabsContent value="payroll" className="mt-6">
-            <SectionCard
-              title="Payroll"
-              icon={<Wallet className="h-4 w-4 text-amber-500" />}
-              accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
+          <TabsContent value="payroll" className="mt-0">
+            <SectionCard 
+              title="Payroll History" 
+              icon={<Wallet className="h-4 w-4 text-cyan-500" />}
+              accent="bg-gradient-to-r from-cyan-500/60 to-cyan-500/10"
             >
               <PayrollTab />
             </SectionCard>
           </TabsContent>
         )}
       </Tabs>
-
     </div>
   );
-}
+};
+
+export default Payments;
