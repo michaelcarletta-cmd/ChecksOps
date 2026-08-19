@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, Building2, FileText, Loader2, Mail, Eye, EyeOff, Palette, FileCheck, Sparkles, Image as ImageIcon, Type, Layout } from "lucide-react";
+import { Upload, Building2, FileText, Loader2, Mail, Eye, EyeOff, Palette, FileCheck, Sparkles, Image as ImageIcon, Type, Layout, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 function SectionCard({
