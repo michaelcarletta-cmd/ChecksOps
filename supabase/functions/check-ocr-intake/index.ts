@@ -117,11 +117,34 @@ function shouldFallbackTenantAiError(message: string): boolean {
   return lower.includes("ai 400") ||
     lower.includes("ai 401") ||
     lower.includes("ai 403") ||
+    lower.includes("ai 429") || // Add rate limit fallback
     lower.includes("invalid model") ||
     lower.includes("model id") ||
     lower.includes("model_not_found") ||
     lower.includes("incorrect api key") ||
-    lower.includes("invalid api key");
+    lower.includes("invalid api key") ||
+    lower.includes("failed to download image"); // Explicitly catch download errors
+}
+
+function getFriendlyOcrError(rawError: string): string {
+  const lower = rawError.toLowerCase();
+
+  // Strip technical details if possible
+  if (lower.includes("failed to download image")) {
+    return "The check image could not be downloaded for analysis. Please try re-uploading.";
+  }
+  if (lower.includes("ai 401") || lower.includes("ai 403") || lower.includes("incorrect api key") || lower.includes("invalid api key")) {
+    return "AI authentication failed. Please verify your OpenAI API key in Settings.";
+  }
+  if (lower.includes("ai 429")) {
+    return "AI processing limit reached. Please wait a moment before trying again.";
+  }
+  if (lower.includes("ai 400")) {
+    return "The check analysis failed due to an image issue. Ensure the photo is clear and try again.";
+  }
+  
+  // Strip common technical prefixes but keep some context
+  return rawError.replace(/^AI \d{3}: /i, "").slice(0, 200);
 }
 
 async function validateTenantKeyForOcrFallback(
