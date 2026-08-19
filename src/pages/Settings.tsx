@@ -1026,7 +1026,9 @@ export default function Settings() {
         </TabsContent>
 
 
-        <TabsContent value="automations" className="w-full space-y-6">
+        <TabsContent value="automations" className="w-full space-y-6 focus-visible:outline-none">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-12">
+
           <AutomationsSettings />
           <RDAutomationSettings />
         </TabsContent>
