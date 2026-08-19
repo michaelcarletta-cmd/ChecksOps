@@ -414,18 +414,20 @@ function BankingSettings({ tenantId }: { tenantId: string }) {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center justify-between">
-            <span>Bank Accounts</span>
-            {!showForm && (
-              <Button size="sm" variant="outline" onClick={() => setShowForm(true)}>
-                Add Account
-              </Button>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+      <SectionCard
+        title="Bank Accounts"
+        icon={<Banknote className="h-4 w-4 text-emerald-500" />}
+        accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
+        description="Bank account information for receiving digital deposits."
+        headerActions={
+          !showForm && (
+            <Button size="sm" variant="outline" onClick={() => setShowForm(true)} className="h-8">
+              Add Account
+            </Button>
+          )
+        }
+      >
+        <div className="space-y-4 pt-2">
           <p className="text-xs text-muted-foreground mb-4">
             Bank account information for receiving digital deposits. Full account numbers are never stored — only the last 4 digits are saved for identification.
           </p>
@@ -504,8 +506,8 @@ function BankingSettings({ tenantId }: { tenantId: string }) {
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
     </div>
   );
 }
@@ -569,11 +571,13 @@ function BrandingSettings({ tenant }: { tenant: any }) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm">Branding & Appearance</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <SectionCard
+      title="Branding & Appearance"
+      icon={<Palette className="h-4 w-4 text-primary" />}
+      accent="bg-gradient-to-r from-primary/60 to-primary/10"
+      description="Customize your workspace logo and color palette."
+    >
+      <div className="space-y-4 pt-4">
         <div className="space-y-2">
           <Label className="text-xs">Logo</Label>
           <div className="flex flex-wrap items-center gap-2">
@@ -633,7 +637,7 @@ function BrandingSettings({ tenant }: { tenant: any }) {
           {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
           Save Branding
         </Button>
-      </CardContent>
-    </Card>
+      </div>
+    </SectionCard>
   );
 }
