@@ -84,6 +84,10 @@ export default function Payments() {
             <FileSpreadsheet className="h-4 w-4" />
             Invoices
           </TabsTrigger>
+          <TabsTrigger value="deliverability" className="gap-2">
+            <Mail className="h-4 w-4" />
+            Email Logs
+          </TabsTrigger>
           <TabsTrigger value="revenue" className="gap-2">
             <Landmark className="h-4 w-4" />
             Revenue & Profit
@@ -128,6 +132,15 @@ export default function Payments() {
             accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
           >
             <InvoicesTab />
+          </SectionCard>
+        </TabsContent>
+        <TabsContent value="deliverability" className="mt-6">
+          <SectionCard
+            title="Email Deliverability"
+            icon={<Mail className="h-4 w-4 text-primary" />}
+            accent="bg-gradient-to-r from-primary/60 to-primary/10"
+          >
+            <TenantEmailHealthPanel />
           </SectionCard>
         </TabsContent>
         <TabsContent value="revenue" className="mt-6">
