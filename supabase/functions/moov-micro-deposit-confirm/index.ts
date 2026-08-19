@@ -39,8 +39,18 @@ serve(async (req) => {
       .maybeSingle();
     if (!verification) return json({ error: "Verification not found." }, 404);
     if (verification.status === "verified") {
-      return json({ success: true, already_verified: true, verification });
+      // Trust the provider, not the local row: re-run the confirmation when the
+      // bank itself is still unverified at Moov.
+      const { data: pm } = await supabase
+        .from("payment_provider_methods")
+        .select("verification_status")
+        .eq("id", verification.payment_method_id)
+        .maybeSingle();
+      if (pm?.verification_status === "verified") {
+        return json({ success: true, already_verified: true, verification });
+      }
     }
+
     if (verification.attempts >= verification.max_attempts) {
       await supabase.from("payment_method_verifications")
         .update({ status: "max_attempts_exceeded" }).eq("id", verification_id);
