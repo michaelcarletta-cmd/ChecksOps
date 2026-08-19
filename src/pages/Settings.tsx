@@ -842,7 +842,7 @@ export default function Settings() {
               accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
               description={`Customize the status options available for claims (${statuses.length} statuses)`}
             >
-              <div className="space-y-4">
+              <div className="space-y-4 pt-4">
                 <div className="flex flex-col sm:flex-row gap-2">
                   <Input
                     placeholder="Status name"
