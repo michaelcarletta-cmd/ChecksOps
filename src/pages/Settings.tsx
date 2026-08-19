@@ -849,7 +849,7 @@ export default function Settings() {
               }}
             >
               <CollapsibleContent>
-                <CardContent className="space-y-4">
+                <div className="space-y-4 pt-2">
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       placeholder="Status name"
@@ -894,7 +894,7 @@ export default function Settings() {
                       ))}
                     </SortableContext>
                   </DndContext>
-                </CardContent>
+                </div>
               </CollapsibleContent>
             </SectionCard>
           </Collapsible>
@@ -912,9 +912,9 @@ export default function Settings() {
               }}
             >
               <CollapsibleContent>
-                <CardContent>
+                <div className="pt-2">
                   <LossTypesSettings embedded />
-                </CardContent>
+                </div>
               </CollapsibleContent>
             </SectionCard>
           </Collapsible>
@@ -932,9 +932,9 @@ export default function Settings() {
               }}
             >
               <CollapsibleContent>
-                <CardContent>
+                <div className="pt-2">
                   <CustomFieldsSettings embedded />
-                </CardContent>
+                </div>
               </CollapsibleContent>
             </SectionCard>
           </Collapsible>
@@ -952,9 +952,9 @@ export default function Settings() {
               }}
             >
               <CollapsibleContent>
-                <CardContent>
+                <div className="pt-2">
                   <SignaturePresetsSettings embedded />
-                </CardContent>
+                </div>
               </CollapsibleContent>
             </SectionCard>
           </Collapsible>
@@ -971,14 +971,14 @@ export default function Settings() {
               }}
             >
               <CollapsibleContent>
-                <CardContent className="space-y-6">
+                <div className="space-y-6 pt-2">
                   <PhoneVerificationSettings />
                   <OutlookConnectionSettings embedded />
                   <ZapierIntegrationSettings embedded />
                   <QuickBooksSettings embedded />
                   {/* ActumSettings integration hidden */}
                   
-                </CardContent>
+                </div>
               </CollapsibleContent>
             </SectionCard>
           </Collapsible>
@@ -1048,9 +1048,9 @@ export default function Settings() {
                 }}
               >
                 <CollapsibleContent>
-                  <CardContent>
+                  <div className="pt-2">
                     <WorkspaceList embedded />
-                  </CardContent>
+                  </div>
                 </CollapsibleContent>
               </SectionCard>
             </Collapsible>
