@@ -112,15 +112,21 @@ export function TenantProBadgeManagement({ tenantId, tenantName, isOpen, onClose
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>OPS Badge — {tenantName}</DialogTitle>
-          <DialogDescription>
-            Contractors must pass every vetting requirement (docs, payments, reviews, tenure, disputes) before the OPS
-            badge can be approved. Revoke is available at any time.
-          </DialogDescription>
+      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col p-0 overflow-hidden border-border/50">
+        <div className="p-6 pb-2">
+          <DialogHeader>
+            <DialogTitle className="text-xl flex items-center gap-2">
+              <Crosshair className="h-5 w-5 text-primary" strokeWidth={2.5} />
+              OPS Badge — {tenantName}
+            </DialogTitle>
+            <DialogDescription className="mt-2 text-sm leading-relaxed">
+              Contractors must pass all vetting requirements (docs, payments, reviews, tenure) before the OPS
+              badge can be approved. Revoke access at any time.
+            </DialogDescription>
+          </DialogHeader>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 pb-6 pt-2">
 
-        </DialogHeader>
         {isLoading ? (
           <div className="flex justify-center py-8">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
