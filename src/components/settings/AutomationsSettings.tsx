@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Plus, Play, Trash2, Clock, Mail, MessageSquare, CheckSquare, AlertCircle, Zap, ListTodo, Pencil, Settings, Activity, Sparkles } from "lucide-react";
+import { Loader2, Plus, Play, Trash2, Clock, Mail, MessageSquare, CheckSquare, AlertCircle, Zap, ListTodo, Pencil, Settings, Activity, Sparkles, History as HistoryIcon } from "lucide-react";
 import { TaskAutomationsSettings } from "./TaskAutomationsSettings";
 import { AutomationGlobalSettings } from "./AutomationGlobalSettings";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
@@ -1497,7 +1497,8 @@ export const AutomationsSettings = () => {
         <TabsContent value="history" className="space-y-6">
           <SectionCard
             title="Execution History"
-            icon={<History className="h-4 w-4 text-muted-foreground" />}
+            icon={<HistoryIcon className="h-4 w-4 text-muted-foreground" />}
+            accent="bg-muted/50"
             description="Recent automation events and their results."
           >
             <div className="space-y-4">
