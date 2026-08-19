@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Receipt, Search, Calendar, ArrowRight } from "lucide-react";
+import { Loader2, Receipt, Search, Calendar, ArrowRight, BarChart3, TrendingUp, Activity, ShieldCheck, History } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 
 const money = (cents: number) =>
@@ -51,72 +51,87 @@ export function UsageLogTab() {
   });
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Receipt className="h-5 w-5 text-primary" />
-            Usage History
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            Monitor check processing and payment volume.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-muted-foreground" />
-          <Select value={month} onValueChange={setMonth}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Select month" />
-            </SelectTrigger>
-            <SelectContent>
-              {months.map((m) => (
-                <SelectItem key={m} value={m}>
-                  {format(new Date(m + "-01"), "MMMM yyyy")}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <SettingsHero
+        title="Usage History"
+        description="Monitor check processing and payment volume for your organization."
+        badge="Billing & Usage"
+        icon={<Receipt className="h-4 w-4 text-primary" />}
+      />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="bg-primary/5 border-primary/20">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Monthly Total</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-primary">{money(totalCents)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Events</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{logs?.length || 0}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Billing Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Badge variant="outline" className="border-emerald-500/50 text-emerald-500 bg-emerald-500/5">
-              Active
-            </Badge>
-          </CardContent>
-        </Card>
-      </div>
+      <SectionCard
+        title="Usage Overview"
+        accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
+        icon={<BarChart3 className="h-4 w-4 text-sky-500" />}
+        description="Summary of your processing volume and billing status"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+          <div className="text-sm text-muted-foreground">
+            View usage metrics and event logs for a specific month.
+          </div>
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <Select value={month} onValueChange={setMonth}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select month" />
+              </SelectTrigger>
+              <SelectContent>
+                {months.map((m) => (
+                  <SelectItem key={m} value={m}>
+                    {format(new Date(m + "-01"), "MMMM yyyy")}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
 
-      <Card>
-        <CardContent className="p-0">
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 shadow-sm backdrop-blur-sm">
+            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <TrendingUp className="h-3 w-3" /> Monthly Total
+            </div>
+            <div className="text-2xl font-bold tracking-tight text-primary">
+              {money(totalCents)}
+            </div>
+          </div>
+          
+          <div className="rounded-xl border border-border/50 bg-card/30 p-4 shadow-sm backdrop-blur-sm">
+            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <Activity className="h-3 w-3" /> Events
+            </div>
+            <div className="text-2xl font-bold tracking-tight">
+              {logs?.length || 0}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border/50 bg-card/30 p-4 shadow-sm backdrop-blur-sm">
+            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <ShieldCheck className="h-3 w-3" /> Billing Status
+            </div>
+            <div className="mt-1">
+              <Badge variant="outline" className="border-emerald-500/50 text-emerald-500 bg-emerald-500/5">
+                Active
+              </Badge>
+            </div>
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Event History"
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        icon={<History className="h-4 w-4 text-primary" />}
+        description="Detailed log of all billable processing events"
+      >
+        <div className="p-0 -mx-4">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
+                <TableHead className="pl-6">Date</TableHead>
                 <TableHead>Event Type</TableHead>
                 <TableHead>Description</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
+                <TableHead className="text-right pr-6">Amount</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -135,7 +150,7 @@ export function UsageLogTab() {
               ) : (
                 logs?.map((log) => (
                   <TableRow key={log.id}>
-                    <TableCell className="whitespace-nowrap">
+                    <TableCell className="whitespace-nowrap pl-6">
                       {format(new Date(log.created_at), "MMM d, yyyy HH:mm")}
                     </TableCell>
                     <TableCell>
@@ -144,14 +159,14 @@ export function UsageLogTab() {
                       </Badge>
                     </TableCell>
                     <TableCell>{log.description}</TableCell>
-                    <TableCell className="text-right font-medium">{money(log.amount_cents)}</TableCell>
+                    <TableCell className="text-right font-medium pr-6">{money(log.amount_cents)}</TableCell>
                   </TableRow>
                 ))
               )}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
     </div>
   );
 }
