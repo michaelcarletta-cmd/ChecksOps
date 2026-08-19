@@ -30,6 +30,7 @@ import { TenantDocumentLibrary } from "@/components/settings/TenantDocumentLibra
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { TenantAIKeySettings } from "./TenantAIKeySettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
+import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
 
 import { ContractorServiceAreaCard } from "@/components/networking/ContractorServiceAreaCard";
 import { ContractorLeadsCard } from "@/components/networking/ContractorLeadsCard";
@@ -208,7 +209,7 @@ export function WhiteLabelSettings() {
               </TabsContent>
 
               <TabsContent value="branding" className="space-y-6">
-                {tenant && <BrandingSettings tenant={tenant} />}
+                <CompanyBrandingSettings />
                 <EmailSenderSettings />
                 <TenantEmailHealthPanel />
               </TabsContent>

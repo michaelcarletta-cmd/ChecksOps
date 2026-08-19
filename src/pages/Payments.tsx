@@ -8,8 +8,9 @@ import { PayrollTab } from "@/pages/payments/PayrollTab";
 import { InvoicesTab } from "@/pages/payments/InvoicesTab";
 
 import { TenantEmailHealthPanel } from "@/components/settings/TenantEmailHealthPanel";
-import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 import { useAuth } from "@/hooks/useAuth";
+import { useSearchParams } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { 
   Receipt, 
   FileText, 
@@ -19,9 +20,6 @@ import {
   FileSpreadsheet, 
   Sparkles, 
   TrendingUp, 
-  ArrowUpRight, 
-  ArrowDownLeft, 
-  BarChart3, 
   Mail 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -54,6 +52,15 @@ const SectionCard = ({
 const Payments = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "ledger");
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
 
   return (
     <div className="container mx-auto py-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -76,7 +83,7 @@ const Payments = () => {
         </div>
       </div>
 
-      <Tabs defaultValue="ledger" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-muted/50 p-1 mb-8 overflow-x-auto w-full justify-start sm:w-auto h-auto">
           <TabsTrigger value="ledger" className="gap-2 py-2">
             <Receipt className="h-4 w-4" />
@@ -119,7 +126,6 @@ const Payments = () => {
             <PaymentLedger />
           </SectionCard>
         </TabsContent>
-
 
         <TabsContent value="invoices" className="mt-0">
           <SectionCard 

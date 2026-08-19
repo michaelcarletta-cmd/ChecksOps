@@ -443,11 +443,16 @@ export default function Settings() {
 
   useEffect(() => {
     const tab = searchParams.get("tab");
+    const section = searchParams.get("section");
+    
     if (tab) {
       setActiveTab(tab);
-      if (tab === "organization") {
+      if (tab === "organization" || section === "branding") {
         setCompanyBrandingOpen(true);
       }
+    } else if (section === "branding") {
+      setActiveTab("organization");
+      setCompanyBrandingOpen(true);
     }
   }, [searchParams]);
 
@@ -1055,7 +1060,7 @@ export default function Settings() {
           </Collapsible>
           
           {/* Company Branding - Collapsible */}
-          <Collapsible open={companyBrandingOpen} onOpenChange={setCompanyBrandingOpen}>
+          <Collapsible id="branding-collapsible" open={companyBrandingOpen} onOpenChange={setCompanyBrandingOpen}>
             <Card>
               <CollapsibleTrigger asChild>
                 <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
