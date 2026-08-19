@@ -8,33 +8,8 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Upload, Building2, Loader2, Sparkles, Image as ImageIcon, Layout } from "lucide-react";
 
-function SectionCard({
-  title,
-  icon,
-  accent,
-  description,
-  children,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  accent: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Card className="overflow-hidden border-border/60 shadow-sm">
-      <div className={`h-1.5 ${accent}`} />
-      <CardHeader className="flex flex-col gap-1 p-4 pb-2">
-        <CardTitle className="flex items-center gap-2 text-base font-semibold">
-          {icon}
-          {title}
-        </CardTitle>
-        {description && <CardDescription>{description}</CardDescription>}
-      </CardHeader>
-      <CardContent className="space-y-4 p-4 pt-2">{children}</CardContent>
-    </Card>
-  );
-}
+import { SectionCard } from "./SectionCard";
+import { SettingsHero } from "./SettingsHero";
 
 export function CompanyBrandingSettings() {
   const [companyName, setCompanyName] = useState("");
@@ -242,19 +217,11 @@ export function CompanyBrandingSettings() {
   return (
     <div className="space-y-6">
       {/* Hero Section */}
-      <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/15 via-primary/5 to-background p-4 md:p-6">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
-        <div className="relative flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <span className="text-xs font-bold uppercase tracking-widest text-primary">Identity & Branding</span>
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">Company Settings</h1>
-          <p className="text-sm text-muted-foreground max-w-2xl">
-            Configure your organization's visual identity, contact information, and invoice presentation.
-          </p>
-        </div>
-      </div>
+      <SettingsHero
+        title="Company Settings"
+        description="Configure your organization's visual identity, contact information, and invoice presentation."
+        badge="Identity & Branding"
+      />
 
       <div className="grid gap-6">
         <SectionCard

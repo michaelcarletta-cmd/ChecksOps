@@ -5,7 +5,9 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UserPlus, Trash2, Shield, UserX, CheckCircle, XCircle, Clock, KeyRound, Loader2 } from "lucide-react";
+import { UserPlus, Trash2, Shield, UserX, CheckCircle, XCircle, Clock, KeyRound, Loader2, Users, Sparkles } from "lucide-react";
+import { SectionCard } from "./SectionCard";
+import { SettingsHero } from "./SettingsHero";
 
 interface Profile {
   id: string;
@@ -369,20 +371,22 @@ export function UserManagementSettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold">User Management</h3>
-        <p className="text-sm text-muted-foreground mt-1">
-          Manage user roles and permissions for portal access
-        </p>
-      </div>
+      <SettingsHero
+        title="User Management"
+        description="Manage your team's access, roles, and pending approvals."
+        badge="Team Access"
+        icon={<Users className="h-4 w-4 text-primary" />}
+      />
 
-      {/* Pending Approvals Section */}
-      {pendingUsers.length > 0 && (
-        <Card className="p-6 border-yellow-500/50 bg-yellow-500/5">
-          <div className="flex items-center gap-2 mb-4">
-            <Clock className="h-5 w-5 text-yellow-500" />
-            <h4 className="font-semibold text-yellow-500">Pending Staff Approvals ({pendingUsers.length})</h4>
-          </div>
+      <div className="grid gap-6">
+        {/* Pending Approvals Section */}
+        {pendingUsers.length > 0 && (
+          <SectionCard
+            title={`Pending Staff Approvals (${pendingUsers.length})`}
+            icon={<Clock className="h-4 w-4 text-orange-500" />}
+            accent="bg-gradient-to-r from-orange-500/60 to-orange-500/10"
+            description="New staff members awaiting your approval to access the system"
+          >
           <div className="space-y-3">
             {pendingUsers.map((user) => (
               <div
@@ -428,10 +432,15 @@ export function UserManagementSettings() {
               </div>
             ))}
           </div>
-        </Card>
-      )}
+          </SectionCard>
+        )}
 
-      <Card className="p-6">
+        <SectionCard
+          title="System Users"
+          icon={<Shield className="h-4 w-4 text-sky-500" />}
+          accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
+          description="Manage roles and access for existing team members"
+        >
         <div className="space-y-4">
           {users.map((user) => (
             <div
@@ -548,23 +557,23 @@ export function UserManagementSettings() {
             </div>
           )}
         </div>
-      </Card>
-
-      <Card className="p-4 bg-muted/50 border-border">
-        <div className="flex gap-3">
-          <Shield className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
-          <div className="space-y-1 text-sm">
-            <p className="font-medium text-foreground">Role Descriptions</p>
-            <ul className="text-muted-foreground space-y-1 list-disc list-inside">
-              <li><strong>Admin:</strong> Full system access, can manage all settings and users</li>
-              <li><strong>Staff:</strong> Can manage claims, clients, and tasks (requires approval on signup)</li>
-            </ul>
-            <p className="text-muted-foreground mt-2 text-xs">
-              Clients, contractors, and referrers are managed on their respective pages.
-            </p>
+        <div className="mt-6 p-4 bg-muted/30 rounded-lg border border-border/50">
+          <div className="flex gap-3">
+            <Shield className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+            <div className="space-y-1 text-sm">
+              <p className="font-medium text-foreground">Role Descriptions</p>
+              <ul className="text-muted-foreground space-y-1 list-disc list-inside">
+                <li><strong>Admin:</strong> Full system access, can manage all settings and users</li>
+                <li><strong>Staff:</strong> Can manage claims, clients, and tasks (requires approval on signup)</li>
+              </ul>
+              <p className="text-muted-foreground mt-2 text-xs">
+                Clients, contractors, and referrers are managed on their respective pages.
+              </p>
+            </div>
           </div>
         </div>
-      </Card>
+      </SectionCard>
     </div>
+  </div>
   );
 }
