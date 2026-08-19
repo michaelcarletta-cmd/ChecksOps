@@ -57,7 +57,7 @@ export function TeamCapsSettings({
   };
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <>
       <SectionCard
 
       title="Team Role Limits"
@@ -118,7 +118,7 @@ export function TeamCapsSettings({
         </div>
       </div>
     </SectionCard>
-    </div>
+    </>
   );
 }
 
