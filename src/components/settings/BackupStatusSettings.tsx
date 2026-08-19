@@ -197,6 +197,7 @@ export function BackupStatusSettings() {
               ))}
             </div>
           )}
+        </div>
       </SectionCard>
 
       <SectionCard
@@ -206,26 +207,25 @@ export function BackupStatusSettings() {
         description="Dedicated storage buckets with automatic redundancy."
       >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[
-              { name: "claim-files", description: "Claim documents and uploads", isPublic: false },
-              { name: "document-templates", description: "Reusable document templates", isPublic: false },
-              { name: "ai-knowledge-base", description: "AI training documents", isPublic: false },
-            ].map((bucket) => (
-              <div
-                key={bucket.name}
-                className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg border"
-              >
-                <FolderOpen className="h-5 w-5 text-primary" />
-                <div className="flex-1">
-                  <p className="font-medium">{bucket.name}</p>
-                  <p className="text-sm text-muted-foreground">{bucket.description}</p>
-                </div>
-                <Badge variant="outline" className="text-green-600 border-green-600">
-                  Backed Up
-                </Badge>
+          {[
+            { name: "claim-files", description: "Claim documents and uploads", isPublic: false },
+            { name: "document-templates", description: "Reusable document templates", isPublic: false },
+            { name: "ai-knowledge-base", description: "AI training documents", isPublic: false },
+          ].map((bucket) => (
+            <div
+              key={bucket.name}
+              className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg border"
+            >
+              <FolderOpen className="h-5 w-5 text-primary" />
+              <div className="flex-1">
+                <p className="font-medium">{bucket.name}</p>
+                <p className="text-sm text-muted-foreground">{bucket.description}</p>
               </div>
-            ))}
-          </div>
+              <Badge variant="outline" className="text-green-600 border-green-600">
+                Backed Up
+              </Badge>
+            </div>
+          ))}
         </div>
       </SectionCard>
     </div>
