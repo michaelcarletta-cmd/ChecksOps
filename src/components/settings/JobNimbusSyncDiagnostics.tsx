@@ -268,6 +268,7 @@ export function JobNimbusSyncDiagnostics() {
                 </TableBody>
               </Table>
             </ScrollArea>
+          )}
         </div>
       </SectionCard>
     </div>
