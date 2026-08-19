@@ -6,7 +6,7 @@ import { TaxSummary } from "@/components/ledger/TaxSummary";
 import { RevenueSummary } from "@/components/ledger/RevenueSummary";
 import { PayrollTab } from "@/pages/payments/PayrollTab";
 import { InvoicesTab } from "@/pages/payments/InvoicesTab";
-import { UsageLogTab } from "@/components/payments/UsageLogTab";
+
 import { TenantEmailHealthPanel } from "@/components/settings/TenantEmailHealthPanel";
 import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 import { useAuth } from "@/hooks/useAuth";
@@ -82,10 +82,6 @@ const Payments = () => {
             <Receipt className="h-4 w-4" />
             Payment History
           </TabsTrigger>
-          <TabsTrigger value="usage" className="gap-2 py-2">
-            <BarChart3 className="h-4 w-4" />
-            Usage Log
-          </TabsTrigger>
           <TabsTrigger value="invoices" className="gap-2 py-2">
             <FileSpreadsheet className="h-4 w-4" />
             Invoices
@@ -124,15 +120,6 @@ const Payments = () => {
           </SectionCard>
         </TabsContent>
 
-        <TabsContent value="usage" className="mt-0">
-          <SectionCard 
-            title="Usage Log" 
-            icon={<BarChart3 className="h-4 w-4 text-blue-500" />}
-            accent="bg-gradient-to-r from-blue-500/60 to-blue-500/10"
-          >
-            <UsageLogTab />
-          </SectionCard>
-        </TabsContent>
 
         <TabsContent value="invoices" className="mt-0">
           <SectionCard 
