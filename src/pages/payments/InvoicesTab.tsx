@@ -41,6 +41,7 @@ const emptyItem = (): InvoiceLineItem => ({ name: "", unit_price: 0, quantity: 1
 export function InvoicesTab() {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const { invoices, createInvoice, sendInvoice, cancelInvoice, syncInvoices } = useMoovInvoices();
   const { account } = usePaymentAccount();
 
