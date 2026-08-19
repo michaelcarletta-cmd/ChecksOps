@@ -400,40 +400,6 @@ export default function WalletOps() {
           )}
         </SectionCard>
 
-        {/* Payment approvals */}
-        <SectionCard
-          title="Payment Approvals"
-          icon={<ShieldCheck className="h-4 w-4 text-rose-500" />}
-          accent="bg-gradient-to-r from-rose-500/60 to-rose-500/10"
-          action={
-            <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground">
-              Not enforced yet
-            </Badge>
-          }
-        >
-          <p className="text-sm text-muted-foreground">
-            Approval thresholds are being rolled out. Today, every payout is authorized by the person who
-            releases it in the disbursement console, and each release is recorded in the payment history.
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2 opacity-60">
-            <div className="space-y-1.5">
-              <Label>Manager approval over</Label>
-              <Input value="$5,000.00" readOnly disabled />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Dual approval over</Label>
-              <Input value="$25,000.00" readOnly disabled />
-            </div>
-            <div className="flex items-center justify-between rounded-md border p-3 sm:col-span-2">
-              <span className="text-sm">Require approval for instant payouts</span>
-              <Switch checked={false} disabled />
-            </div>
-          </div>
-          <Button variant="outline" asChild>
-            <Link to={`${tenantBase}/payments`}>Review payment history</Link>
-          </Button>
-        </SectionCard>
-
         {/* Readiness shortcut */}
         <SectionCard
           title="Payment Account"
