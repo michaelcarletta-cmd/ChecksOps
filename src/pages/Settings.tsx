@@ -677,22 +677,24 @@ export default function Settings() {
           </div>
         </div>
       </div>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-muted-foreground hover:text-primary"
-              aria-label="Open ChecksOps Guide"
-              title="ChecksOps Guide — Help"
-            >
-              <HelpCircle className="h-5 w-5" />
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
-            <CheckCenterHelpPanel />
-          </DialogContent>
-        </Dialog>
+        <div className="absolute top-4 right-4 md:top-6 md:right-6">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-primary bg-background/40 backdrop-blur-sm"
+                aria-label="Open ChecksOps Guide"
+                title="ChecksOps Guide — Help"
+              >
+                <HelpCircle className="h-5 w-5" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+              <CheckCenterHelpPanel />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <Tabs defaultValue="workflow" className="space-y-6">
