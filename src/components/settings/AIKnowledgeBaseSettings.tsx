@@ -914,21 +914,20 @@ export const AIKnowledgeBaseSettings = () => {
               </p>
             </TabsContent>
           </Tabs>
-        </CardContent>
-      </Card>
+      </SectionCard>
 
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-primary" />
-                Knowledge Validation
-              </CardTitle>
-              <CardDescription>
-                Verifies every uploaded document is processed, chunked, and embedded for reliable retrieval.
-              </CardDescription>
-            </div>
+      <SectionCard
+        title="Knowledge Validation"
+        accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
+        icon={<CheckCircle className="h-4 w-4 text-emerald-500" />}
+      >
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+          <div>
+            <p className="text-sm text-muted-foreground">
+              Verifies every uploaded document is processed, chunked, and embedded for reliable retrieval.
+            </p>
+          </div>
+
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
