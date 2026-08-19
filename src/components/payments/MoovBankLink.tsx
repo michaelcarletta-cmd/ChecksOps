@@ -81,35 +81,45 @@ export function MoovBankLink({ tenantId, onConnected, onExit }: Props) {
 
         mountRef.current.replaceChildren(el);
 
+        el.onCancel = () => {
+          onExit?.();
+        };
 
-    el.onCancel = () => {
-      onExit?.();
-    };
+        el.onSuccess = (bankAccount: any) => {
+          const id = bankAccount?.bankAccountID ?? bankAccount?.bankAccountId;
+          toast({
+            title: "Bank account linked",
+            description: "Your bank account has been securely attached. Verification may be required."
+          });
+          if (id) {
+            onConnected?.(id);
+          }
+        };
 
-    el.onSuccess = (bankAccount: any) => {
-      const id = bankAccount?.bankAccountID ?? bankAccount?.bankAccountId;
-      toast({
-        title: "Bank account linked",
-        description: "Your bank account has been securely attached. Verification may be required."
+        el.onError = (err: any) => {
+          toast({
+            title: "Bank link failed",
+            description: err?.message ?? "An unexpected error occurred.",
+            variant: "destructive"
+          });
+        };
+      })
+      .catch((err: any) => {
+        if (cancelled) return;
+        toast({
+          title: "Bank link failed",
+          description: err?.message ?? "Couldn't load the secure bank form.",
+          variant: "destructive"
+        });
       });
-      if (id) {
-        onConnected?.(id);
-      }
-    };
-
-    el.onError = (err: any) => {
-      toast({
-        title: "Bank link failed",
-        description: err?.message ?? "An unexpected error occurred.",
-        variant: "destructive"
-      });
-    };
 
     return () => {
       mounted = false;
+      cancelled = true;
       if (mountRef.current) mountRef.current.replaceChildren();
     };
   }, [token, toast, onConnected, onExit]);
+
 
   return (
     <div className="min-h-[300px] flex flex-col items-center justify-center p-4 border rounded-lg bg-card/50">
