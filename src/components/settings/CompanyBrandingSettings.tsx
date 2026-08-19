@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, Building2, FileText, Loader2, Mail, Eye, EyeOff, Palette, FileCheck, Sparkles, Image as ImageIcon, Type, Layout } from "lucide-react";
+import { Upload, Building2, FileText, Loader2, Mail, Eye, EyeOff, Palette, FileCheck, Sparkles, Image as ImageIcon, Type, Layout, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 function SectionCard({
@@ -81,6 +81,9 @@ export function CompanyBrandingSettings() {
   const [endorseReminderBody, setEndorseReminderBody] = useState("This is a reminder that your endorsement is still needed for the check below. Please take a moment to review and endorse.");
   const [endorseHeaderColor, setEndorseHeaderColor] = useState("#1e293b");
   const [endorseButtonColor, setEndorseButtonColor] = useState("#2563eb");
+  const [vendorCap, setVendorCap] = useState(5);
+  const [salesRepCap, setSalesRepCap] = useState(5);
+  const [subcontractorCap, setSubcontractorCap] = useState(5);
   const [showEndorsePreview, setShowEndorsePreview] = useState(false);
   const [sigCoords, setSigCoords] = useState({ page: 1, x: 100, y: 600, w: 200, h: 50 });
   const [ocwBankAccountId, setOcwBankAccountId] = useState("");
@@ -141,14 +144,18 @@ export function CompanyBrandingSettings() {
       if (tenantUser) {
         const { data: tenant } = await supabase
           .from("tenants")
-          .select("invoice_letterhead_url, invoice_footer_note, invoice_default_terms")
+          .select("invoice_letterhead_url, invoice_footer_note, invoice_default_terms, vendor_cap, sales_rep_cap, subcontractor_cap")
           .eq("id", tenantUser.tenant_id)
           .maybeSingle();
         
         if (tenant) {
-          setInvoiceLetterheadUrl(tenant.invoice_letterhead_url || null);
-          setInvoiceFooterNote(tenant.invoice_footer_note || "");
-          setInvoiceDefaultTerms(tenant.invoice_default_terms || "");
+          const t = tenant as any;
+          setInvoiceLetterheadUrl(t.invoice_letterhead_url || null);
+          setInvoiceFooterNote(t.invoice_footer_note || "");
+          setInvoiceDefaultTerms(t.invoice_default_terms || "");
+          setVendorCap(t.vendor_cap ?? 5);
+          setSalesRepCap(t.sales_rep_cap ?? 5);
+          setSubcontractorCap(t.subcontractor_cap ?? 5);
         }
       }
     }
@@ -271,6 +278,9 @@ export function CompanyBrandingSettings() {
               invoice_letterhead_url: invoiceLetterheadUrl,
               invoice_footer_note: invoiceFooterNote,
               invoice_default_terms: invoiceDefaultTerms,
+              vendor_cap: vendorCap,
+              sales_rep_cap: salesRepCap,
+              subcontractor_cap: subcontractorCap,
             })
             .eq("id", tenantUser.tenant_id);
         }
@@ -378,6 +388,48 @@ export function CompanyBrandingSettings() {
               />
             </div>
           </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard
+          title="Team Caps"
+          icon={<Users className="h-4 w-4 text-amber-500" />}
+          accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
+          description="Set the maximum number of team members allowed for specific roles."
+        >
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label>Vendor Cap</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={vendorCap}
+                  onChange={(e) => setVendorCap(parseInt(e.target.value) || 0)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Sales Rep Cap</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={salesRepCap}
+                  onChange={(e) => setSalesRepCap(parseInt(e.target.value) || 0)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Subcontractor Cap</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={subcontractorCap}
+                  onChange={(e) => setSubcontractorCap(parseInt(e.target.value) || 0)}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground italic">
+              Caps are enforced per tenant organization. Default is 5 members per role.
+            </p>
           </div>
         </SectionCard>
 
