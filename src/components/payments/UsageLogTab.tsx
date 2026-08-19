@@ -27,8 +27,9 @@ export function UsageLogTab() {
       const end = endOfMonth(date).toISOString();
 
       const { data, error } = await supabase
-        .from("tenant_usage_logs" as any)
+        .from("tenant_usage_logs")
         .select("*")
+
         .eq("tenant_id", tenant?.id)
         .gte("created_at", start)
         .lte("created_at", end)
