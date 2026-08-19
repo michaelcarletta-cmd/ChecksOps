@@ -65,7 +65,7 @@ export function TeamCapsSettings({
     >
       <div className="space-y-4 pt-2">
 
-      <CardContent className="space-y-4 p-4 pt-2">
+      <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="vendor-cap">Vendor Cap</Label>
