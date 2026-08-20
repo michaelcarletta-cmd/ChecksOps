@@ -25,7 +25,6 @@ import { CheckCenterHelpPanel } from "@/components/check-review/CheckCenterHelp"
 import { StakeholderAccountSettings } from "@/components/disbursement/StakeholderAccountSettings";
 import { TenantBankAccountSettings } from "@/components/settings/TenantBankAccountSettings";
 import { TenantUserManager } from "./TenantUserManager";
-import { TenantDocumentsManager } from "./TenantDocumentsManager";
 import { TenantDocumentLibrary } from "@/components/settings/TenantDocumentLibrary";
 import { TenantPartnerManager } from "./TenantPartnerManager";
 import { TenantAIKeySettings } from "./TenantAIKeySettings";
@@ -226,14 +225,6 @@ export function WhiteLabelSettings() {
           {canManageTenant && (
             <TabsContent value="compliance" className="space-y-8">
               <ComplianceSettings />
-              {tenant && (
-                <div className="pt-6 border-t border-border/60">
-                  <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
-                    <FileText className="h-4 w-4" /> Tenant Documents
-                  </h3>
-                  <TenantDocumentsManager tenantId={tenant.id} />
-                </div>
-              )}
               {tenant && (
                 <div className="pt-6 border-t border-border/60">
                   <TenantDocumentLibrary tenantId={tenant.id} />

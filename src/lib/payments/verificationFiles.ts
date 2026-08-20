@@ -13,6 +13,12 @@ export const FILE_PURPOSE_OPTIONS = [
   { value: "identity_verification", label: "Identity verification" },
   { value: "individual_verification", label: "Individual verification" },
   { value: "representative_verification", label: "Representative verification" },
+  { value: "w9", label: "W-9" },
+  { value: "license", label: "License" },
+  { value: "insurance", label: "Insurance" },
+  { value: "saas_agreement", label: "SaaS Agreement" },
+  { value: "terms_of_service", label: "Terms of Service" },
+  { value: "privacy_policy", label: "Privacy Policy" },
 ] as const;
 
 export type VerificationPurpose = (typeof FILE_PURPOSE_OPTIONS)[number]["value"];

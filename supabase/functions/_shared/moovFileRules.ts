@@ -1,15 +1,47 @@
 // Pure validation/normalization rules for tenant verification-document uploads
 // (Moov KYB/KYC account Files API). No network, no database — unit testable.
 
-/** Moov account file purposes ChecksOps supports during onboarding. */
+/**
+ * Document purposes ChecksOps supports during onboarding. The first four are
+ * native Moov account file purposes; the rest are ChecksOps compliance
+ * document types that are still streamed to Moov (mapped to the closest
+ * supported provider purpose) so everything lives in one place.
+ */
 export const FILE_PURPOSES = [
   "business_verification",
   "identity_verification",
   "individual_verification",
   "representative_verification",
+  "w9",
+  "license",
+  "insurance",
+  "saas_agreement",
+  "terms_of_service",
+  "privacy_policy",
 ] as const;
 
 export type FilePurpose = (typeof FILE_PURPOSES)[number];
+
+/** Native Moov account file purposes. */
+export type MoovFilePurpose =
+  | "business_verification"
+  | "identity_verification"
+  | "individual_verification"
+  | "representative_verification";
+
+const MOOV_PURPOSE_MAP: Record<string, MoovFilePurpose> = {
+  w9: "business_verification",
+  license: "business_verification",
+  insurance: "business_verification",
+  saas_agreement: "business_verification",
+  terms_of_service: "business_verification",
+  privacy_policy: "business_verification",
+};
+
+/** Maps a ChecksOps document type to the provider purpose Moov accepts. */
+export function moovPurposeFor(purpose: FilePurpose): MoovFilePurpose {
+  return MOOV_PURPOSE_MAP[purpose] ?? (purpose as MoovFilePurpose);
+}
 
 /** Purposes that must be tied to a specific business representative. */
 export const REPRESENTATIVE_PURPOSES: FilePurpose[] = ["representative_verification"];
