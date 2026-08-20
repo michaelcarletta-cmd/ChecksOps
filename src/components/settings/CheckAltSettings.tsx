@@ -1090,6 +1090,10 @@ export function CheckAltDepositHistory() {
                       <td className="px-3 py-2 truncate max-w-[200px]">
                         {it.payerName ?? it.makerName ?? it.payor ?? "—"}
                       </td>
+                      <td className="px-3 py-2 truncate max-w-[240px]" title={nameIndex?.[String(it.referenceNumber ?? it.reference ?? "")] ?? ""}>
+                        {nameIndex?.[String(it.referenceNumber ?? it.reference ?? "")] ?? "—"}
+                      </td>
+
                       <td className="px-3 py-2 whitespace-nowrap text-right">
                         {displayAmount > 0 ? (
                           `$${displayAmount.toLocaleString(undefined, {
