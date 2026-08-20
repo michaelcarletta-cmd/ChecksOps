@@ -205,6 +205,8 @@ export function CompanyBrandingSettings() {
               invoice_letterhead_url: invoiceLetterheadUrl,
               invoice_footer_note: invoiceFooterNote,
               invoice_default_terms: invoiceDefaultTerms,
+              invoice_accent_color: invoiceAccentColor,
+              invoice_theme: invoiceTheme,
             })
             .eq("id", tenantUser.tenant_id);
         }
