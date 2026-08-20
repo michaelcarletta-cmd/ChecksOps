@@ -170,9 +170,24 @@ Deno.serve(async (req) => {
       .eq("id", deposit.id);
     if (updateErr) throw updateErr;
 
-    if (deposit.check_intake_item_id) {
+    // When cancelling a duplicate, another deposit for the same check may still
+    // be live — in that case leave the check's own status alone.
+    let siblingActive = false;
+    if (deposit.check_intake_item_id && internalStatus === "rejected") {
+      const { data: siblings } = await supabase
+        .from("checkalt_deposits")
+        .select("id, status")
+        .eq("check_intake_item_id", deposit.check_intake_item_id)
+        .neq("id", deposit.id);
+      siblingActive = (siblings ?? []).some((s) =>
+        ["submitted", "pending", "processing", "cleared", "pending_approval"].includes(s.status ?? "")
+      );
+    }
+
+    if (deposit.check_intake_item_id && !siblingActive) {
       const approvedAtIso = String(updates.approved_at);
       const isApproved = internalStatus === "submitted";
+
 
       const { data: intake } = await supabase
         .from("check_intake_items")
