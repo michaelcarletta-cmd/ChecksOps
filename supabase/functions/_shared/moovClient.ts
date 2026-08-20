@@ -177,7 +177,9 @@ export async function moovFetch<T = any>(
     Origin: moovOrigin(),
     "x-moov-version": opts.apiVersion ?? Deno.env.get("MOOV_API_VERSION") ?? "v2024.01.00",
   };
-  if (opts.idempotencyKey) headers["X-Idempotency-Key"] = opts.idempotencyKey;
+  if (opts.idempotencyKey) {
+    headers["X-Idempotency-Key"] = await idempotencyUuid(opts.idempotencyKey);
+  }
   if (opts.onBehalfOf) headers["X-Account-ID"] = opts.onBehalfOf;
 
 
