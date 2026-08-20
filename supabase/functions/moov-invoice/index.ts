@@ -223,7 +223,8 @@ serve(async (req) => {
     }
 
     /* ------------------------------- send ------------------------------- */
-    if (action === "send") {
+    /* --------------------------- send / resend --------------------------- */
+    if (action === "send" || action === "resend") {
       const { data: row } = await supabase
         .from("moov_invoices")
         .select("*")
@@ -232,6 +233,10 @@ serve(async (req) => {
         .maybeSingle();
       if (!row) return json({ error: "Invoice not found" }, 404);
       if (!(row as any).moov_invoice_id) return json({ error: "Invoice is not linked to the payment provider" }, 400);
+      if (action === "resend") {
+        if ((row as any).status === "paid") return json({ error: "This invoice is already paid" }, 400);
+        if ((row as any).status === "canceled") return json({ error: "A canceled invoice cannot be resent" }, 400);
+      }
 
       const sent = await moovFetch<any>(
         `/accounts/${merchantAccountId}/invoices/${(row as any).moov_invoice_id}`,
@@ -242,6 +247,7 @@ serve(async (req) => {
           body: { status: "unpaid" },
         },
       );
+
 
       const { data: updated } = await supabase
         .from("moov_invoices")
@@ -259,12 +265,13 @@ serve(async (req) => {
 
       await logPaymentEvent(supabase, {
         tenant_id,
-        event_type: "invoice.sent",
+        event_type: action === "resend" ? "invoice.resent" : "invoice.sent",
         previous_status: (row as any).status,
         new_status: sent.status ?? "unpaid",
         environment,
         provider_metadata: { invoiceID: (row as any).moov_invoice_id },
       });
+
 
       return json({ success: true, invoice: updated });
     }

@@ -14,6 +14,8 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
+
 import { useMoovInvoices, type InvoiceLineItem } from "@/hooks/useMoovInvoices";
 import { usePaymentAccount } from "@/hooks/usePaymentAccount";
 import { supabase } from "@/integrations/supabase/client";
@@ -42,8 +44,10 @@ export function InvoicesTab() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
-  const { invoices, createInvoice, sendInvoice, cancelInvoice, syncInvoices } = useMoovInvoices();
+  const { invoices, createInvoice, sendInvoice, resendInvoice, cancelInvoice, syncInvoices } = useMoovInvoices();
   const { account } = usePaymentAccount();
+  const isMobile = useIsMobile();
+
 
   const [open, setOpen] = useState(false);
   const [customerName, setCustomerName] = useState("");
@@ -193,15 +197,16 @@ export function InvoicesTab() {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-          <div>
+        <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="min-w-0">
             <CardTitle className="text-base">Invoices</CardTitle>
-            <CardDescription>
+            <CardDescription className="break-words">
               Send an invoice with a secure payment link. Customers pay by bank transfer or card and funds
               land directly in your wallet.
             </CardDescription>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+
             <Button
               variant="outline"
               size="sm"
@@ -235,7 +240,7 @@ export function InvoicesTab() {
                   <span className="ml-2">New invoice</span>
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+              <DialogContent className="w-[95vw] max-w-2xl max-h-[85vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>New invoice</DialogTitle>
                   <DialogDescription>
@@ -293,7 +298,7 @@ export function InvoicesTab() {
                   <div className="space-y-2">
                     <Label>Line items</Label>
                     {items.map((item, idx) => (
-                      <div key={idx} className="grid grid-cols-12 gap-2">
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-center">
                         <Input
                           className="col-span-6"
                           placeholder="Description"
@@ -371,7 +376,45 @@ export function InvoicesTab() {
             <div className="py-10 text-center text-sm text-muted-foreground">
               No invoices yet. Create one to get paid directly into your wallet.
             </div>
+          ) : isMobile ? (
+            <div className="space-y-3">
+              {rows.map((inv) => (
+                <div key={inv.id} className="rounded-lg border border-border p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium">{inv.invoice_number ?? "Draft"}</div>
+                      <div className="break-words text-xs text-muted-foreground">{inv.customer_name}</div>
+                      <div className="break-all text-xs text-muted-foreground">{inv.customer_email}</div>
+                    </div>
+                    <InvoiceActions
+                      inv={inv}
+                      brandedInvoiceUrl={brandedInvoiceUrl}
+                      copyLink={copyLink}
+                      sendInvoice={sendInvoice}
+                      resendInvoice={resendInvoice}
+                      cancelInvoice={cancelInvoice}
+                    />
+                  </div>
+                  {inv.description && (
+                    <p className="mt-1 break-words text-xs text-muted-foreground">{inv.description}</p>
+                  )}
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary" className={STATUS_STYLES[inv.status] ?? ""}>
+                      {label(inv.status)}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      Due {inv.due_date ? new Date(inv.due_date).toLocaleDateString() : "—"}
+                    </span>
+                    <span className="ml-auto text-sm font-semibold">{currency(inv.total_amount)}</span>
+                  </div>
+                  {inv.paid_amount > 0 && (
+                    <div className="mt-1 text-xs text-muted-foreground">Paid {currency(inv.paid_amount)}</div>
+                  )}
+                </div>
+              ))}
+            </div>
           ) : (
+            <div className="w-full overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -394,58 +437,89 @@ export function InvoicesTab() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <div>{inv.customer_name}</div>
-                      <div className="text-xs text-muted-foreground">{inv.customer_email}</div>
+                      <div className="break-words">{inv.customer_name}</div>
+                      <div className="break-all text-xs text-muted-foreground">{inv.customer_email}</div>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {inv.due_date ? new Date(inv.due_date).toLocaleDateString() : "—"}
                     </TableCell>
-                    <TableCell className="text-right">{currency(inv.total_amount)}</TableCell>
-                    <TableCell className="text-right">{currency(inv.paid_amount)}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">{currency(inv.total_amount)}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">{currency(inv.paid_amount)}</TableCell>
                     <TableCell>
                       <Badge variant="secondary" className={STATUS_STYLES[inv.status] ?? ""}>
                         {label(inv.status)}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {inv.status === "draft" && (
-                            <DropdownMenuItem onClick={() => sendInvoice.mutate(inv.id)}>
-                              <Send className="mr-2 h-4 w-4" /> Send invoice
-                            </DropdownMenuItem>
-                          )}
-                          {(inv.public_token || inv.payment_link_url) && (
-                            <>
-                              <DropdownMenuItem onClick={() => copyLink(brandedInvoiceUrl(inv))}>
-                                <Link2 className="mr-2 h-4 w-4" /> Copy payment link
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => window.open(brandedInvoiceUrl(inv), "_blank", "noopener")}>
-                                <FileText className="mr-2 h-4 w-4" /> Open invoice page
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                          {inv.status !== "paid" && inv.status !== "canceled" && (
-                            <DropdownMenuItem className="text-destructive" onClick={() => cancelInvoice.mutate(inv.id)}>
-                              <Ban className="mr-2 h-4 w-4" /> Cancel invoice
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <InvoiceActions
+                        inv={inv}
+                        brandedInvoiceUrl={brandedInvoiceUrl}
+                        copyLink={copyLink}
+                        sendInvoice={sendInvoice}
+                        resendInvoice={resendInvoice}
+                        cancelInvoice={cancelInvoice}
+                      />
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
+
         </CardContent>
       </Card>
     </div>
   );
 }
+
+function InvoiceActions({
+  inv, brandedInvoiceUrl, copyLink, sendInvoice, resendInvoice, cancelInvoice,
+}: {
+  inv: any;
+  brandedInvoiceUrl: (inv: any) => string;
+  copyLink: (url: string) => void;
+  sendInvoice: { mutate: (id: string) => void };
+  resendInvoice: { mutate: (id: string) => void };
+  cancelInvoice: { mutate: (id: string) => void };
+}) {
+  const canResend = !["draft", "paid", "canceled"].includes(inv.status);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="z-50 bg-popover">
+        {inv.status === "draft" && (
+          <DropdownMenuItem onClick={() => sendInvoice.mutate(inv.id)}>
+            <Send className="mr-2 h-4 w-4" /> Send invoice
+          </DropdownMenuItem>
+        )}
+        {canResend && (
+          <DropdownMenuItem onClick={() => resendInvoice.mutate(inv.id)}>
+            <Send className="mr-2 h-4 w-4" /> Resend invoice
+          </DropdownMenuItem>
+        )}
+        {(inv.public_token || inv.payment_link_url) && (
+          <>
+            <DropdownMenuItem onClick={() => copyLink(brandedInvoiceUrl(inv))}>
+              <Link2 className="mr-2 h-4 w-4" /> Copy payment link
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => window.open(brandedInvoiceUrl(inv), "_blank", "noopener")}>
+              <FileText className="mr-2 h-4 w-4" /> Open invoice page
+            </DropdownMenuItem>
+          </>
+        )}
+        {inv.status !== "paid" && inv.status !== "canceled" && (
+          <DropdownMenuItem className="text-destructive" onClick={() => cancelInvoice.mutate(inv.id)}>
+            <Ban className="mr-2 h-4 w-4" /> Cancel invoice
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 
 function SummaryTile({
   icon: Icon, title, value, hint,

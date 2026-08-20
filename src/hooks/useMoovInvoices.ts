@@ -109,6 +109,16 @@ export function useMoovInvoices() {
     onError,
   });
 
+  const resendInvoice = useMutation({
+    mutationFn: (invoiceId: string) =>
+      callInvoiceFn({ action: "resend", tenant_id: tenantId, invoice_id: invoiceId }),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Invoice resent", description: "The payment link was emailed again." });
+    },
+    onError,
+  });
+
   const cancelInvoice = useMutation({
     mutationFn: (invoiceId: string) =>
       callInvoiceFn({ action: "cancel", tenant_id: tenantId, invoice_id: invoiceId }),
@@ -128,5 +138,6 @@ export function useMoovInvoices() {
     onError,
   });
 
-  return { tenantId, invoices, createInvoice, sendInvoice, cancelInvoice, syncInvoices };
+  return { tenantId, invoices, createInvoice, sendInvoice, resendInvoice, cancelInvoice, syncInvoices };
 }
+
