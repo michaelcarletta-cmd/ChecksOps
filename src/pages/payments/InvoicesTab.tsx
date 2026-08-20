@@ -197,15 +197,16 @@ export function InvoicesTab() {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-          <div>
+        <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="min-w-0">
             <CardTitle className="text-base">Invoices</CardTitle>
-            <CardDescription>
+            <CardDescription className="break-words">
               Send an invoice with a secure payment link. Customers pay by bank transfer or card and funds
               land directly in your wallet.
             </CardDescription>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+
             <Button
               variant="outline"
               size="sm"
