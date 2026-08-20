@@ -462,7 +462,9 @@ export default function MortgageOpsQueue() {
             <MortgageOpsDirectory />
           </TabsContent>
         </Tabs>
+        </SettingsPageShell>
       </main>
+
 
       <MortgageOpsRequestDetail
         requestId={detailId}
