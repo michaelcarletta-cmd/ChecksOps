@@ -14,7 +14,9 @@ export function useVerificationFiles(tenantIdOverride?: string) {
   const query = useQuery<VerificationFilesResponse>({
     queryKey: ["verification-files", tenantId],
     enabled: !!tenantId,
-    staleTime: 60 * 1000,
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
+    refetchOnWindowFocus: true,
     queryFn: () => listVerificationFiles(tenantId!),
   });
 
