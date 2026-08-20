@@ -1,6 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
+
 
 export type WalletOpsReadinessState = "ready" | "pending" | "action_required" | "not_started";
 
@@ -53,6 +54,30 @@ export function useWalletOpsTransfers(limit = 25) {
           .filter((r) => r.leg_role === "funding")
           .reduce((sum, r) => sum + Number(r.amount_cents || 0), 0),
       };
+    },
+  });
+}
+
+/**
+ * Asks the provider for the live status of every in-flight transfer and
+ * refreshes the local view with the answer.
+ */
+export function useRefreshTransferStatuses() {
+  const { tenantId } = usePaymentProviderEligibility();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("moov-transfer-status", {
+        body: { tenant_id: tenantId },
+      });
+      if (error) throw error;
+      if ((data as any)?.success === false) throw new Error((data as any)?.error ?? "Status check failed");
+      return data as { checked: number; updated: number; results: any[] };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["wallet-ops-transfers"] });
+      queryClient.invalidateQueries({ queryKey: ["wallet-running-balance"] });
     },
   });
 }
