@@ -17,7 +17,7 @@ import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
 
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { useRef } from "react";
-import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
+
 import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
 import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
@@ -321,9 +321,6 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           </TabsContent>
           <TabsContent value="compliance" className="mt-6 space-y-8">
             <ComplianceSettings />
-            <div className="pt-6 border-t border-border/60">
-              <VerificationDocumentsPanel tenantId={tenant.id} readOnly />
-            </div>
           </TabsContent>
           <TabsContent value="integrations" className="mt-6 space-y-6">
             <CheckAltSettings />
