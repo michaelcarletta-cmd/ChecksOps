@@ -269,27 +269,10 @@ async function handleEvent(
 
   await supabase.from("payment_transfers").update(patch).eq("id", (transfer as any).id);
 
-  // Wallet balances only move on a completed transfer, and each transfer can
-  // only ever post once (unique `reference`).
+  // Wallet balances only move on a terminal transfer, and each transfer can
+  // only ever post (and reverse) once — unique `reference`.
   const t = transfer as any;
-  if (newStatus === "completed" && t.wallet_id) {
-    const incoming = t.leg_role === "wallet_funding" || t.leg_role === "parent";
-    await writeLedgerEntry(supabase, {
-      wallet_id: t.wallet_id,
-      tenant_id: t.tenant_id,
-      direction: incoming ? "credit" : "debit",
-      entry_type: incoming
-        ? (t.leg_role === "parent" ? "settlement_received" : "funding")
-        : "payout",
-      amount_cents: Number(t.amount_cents),
-      transfer_id: t.id,
-      transfer_group_id: t.transfer_group_id,
-      claim_id: t.claim_id,
-      check_id: t.check_id,
-      provider_transfer_id: transferId,
-      reference: `transfer:${t.id}`,
-    });
-  }
+  await postTransferLedger(supabase, t, newStatus, transferId);
 
   // Roll the split's overall state up from its legs.
   if (t.transfer_group_id) {
