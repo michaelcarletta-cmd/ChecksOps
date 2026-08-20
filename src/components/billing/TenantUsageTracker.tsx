@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
@@ -5,19 +6,28 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { BarChart3, Receipt, Landmark, ArrowDownCircle, CheckCircle2 } from "lucide-react";
+import { BarChart3, Receipt, Landmark, ArrowDownCircle, CheckCircle2, Calendar } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { TenantAutoApproveCard } from "./TenantAutoApproveCard";
 
 
 export function TenantUsageTracker() {
   const { tenant } = useTenant();
-  const now = new Date();
+  const [month, setMonth] = useState(format(new Date(), "yyyy-MM"));
+  const now = new Date(month + "-01T00:00:00");
   const monthStart = startOfMonth(now).toISOString();
   const monthEnd = endOfMonth(now).toISOString();
 
+  const monthOptions = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - i);
+    return format(d, "yyyy-MM");
+  });
+
   const { data: usage, isLoading: usageLoading } = useQuery({
-    queryKey: ["tenant-usage", tenant?.id],
+    queryKey: ["tenant-usage", tenant?.id, month],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_tenant_check_usage", {
         _tenant_id: tenant!.id,
