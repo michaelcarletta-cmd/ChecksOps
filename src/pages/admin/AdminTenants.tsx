@@ -279,28 +279,28 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
 
   return (
     <TenantProvider slug={tenant.slug}>
-    <div className="min-h-screen bg-background">
-      <div className="border-b border-border bg-card">
-        <div className="max-w-5xl mx-auto px-6 py-5 flex items-center gap-4">
+    <div className="min-h-screen bg-background px-6">
+      <SettingsPageShell className="max-w-5xl">
+        <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={onBack}><ArrowLeft className="w-4 h-4 mr-1" /> All Tenants</Button>
           <Separator orientation="vertical" className="h-6" />
-          <div className="flex items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-md flex items-center justify-center text-white font-semibold text-sm"
-              style={{ backgroundColor: tenant.primary_color || "#3B82F6" }}
-            >
-              {tenant.name.slice(0, 2).toUpperCase()}
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold">{tenant.name}</h1>
-              <p className="text-xs text-muted-foreground">/{tenant.slug}</p>
-            </div>
+          <div
+            className="w-8 h-8 rounded-md flex items-center justify-center text-primary-foreground font-semibold text-xs"
+            style={{ backgroundColor: tenant.primary_color || "hsl(var(--primary))" }}
+          >
+            {tenant.name.slice(0, 2).toUpperCase()}
           </div>
         </div>
-      </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-8">
+        <SettingsHero
+          title={tenant.name}
+          description={`Configure company details, branding, compliance, billing and users for /${tenant.slug}.`}
+          badge="Tenant Settings"
+          icon={<Building2 className="h-4 w-4 text-primary" />}
+        />
+
         <Tabs defaultValue="company" className="w-full">
+
           <TabsList className="flex w-full flex-wrap h-auto justify-start gap-1 p-1">
             <TabsTrigger value="company" className="flex-1 min-w-[110px] whitespace-nowrap"><Building2 className="w-4 h-4 mr-1" /> Company</TabsTrigger>
             <TabsTrigger value="branding" className="flex-1 min-w-[150px] whitespace-nowrap"><Palette className="w-4 h-4 mr-1" /> Branding & Email</TabsTrigger>
