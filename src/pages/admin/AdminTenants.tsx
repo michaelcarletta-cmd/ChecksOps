@@ -1025,7 +1025,8 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const checkCount = events.filter((e) => e.event_type === "check_processing").length;
   const mortgageCount = data?.mortgage_count || events.filter((e) => e.event_type === "mortgage_handling").length;
   const sameDay = events.filter((e) => e.event_type === "moov_same_day").length;
-  const instant = events.filter((e) => e.event_type === "moov_instant").length;
+  const nextDay = events.filter((e) => e.event_type === "moov_next_day" || e.event_type === "moov_standard").length;
+
   const fmt = (cents: number) =>
     new Intl.NumberFormat("en-US", { style: "currency", currency: (data?.currency || "usd").toUpperCase() }).format((cents || 0) / 100);
   const maintenancePaidCents = maintenance
