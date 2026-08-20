@@ -413,6 +413,59 @@ export function CompanyBrandingSettings() {
               />
               <p className="text-xs text-muted-foreground mt-1">Default terms added to every new invoice</p>
             </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label>Invoice Accent Color</Label>
+                <div className="mt-2 flex items-center gap-3">
+                  <input
+                    type="color"
+                    aria-label="Invoice accent color"
+                    value={invoiceAccentColor}
+                    onChange={(e) => setInvoiceAccentColor(e.target.value)}
+                    className="h-10 w-14 cursor-pointer rounded-md border border-border bg-transparent p-1"
+                  />
+                  <Input
+                    value={invoiceAccentColor}
+                    onChange={(e) => setInvoiceAccentColor(e.target.value)}
+                    placeholder="#3B82F6"
+                    className="font-mono"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Used for headings, totals, and the Pay now button
+                </p>
+              </div>
+
+              <div>
+                <Label>Invoice Theme</Label>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {(["light", "dark"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setInvoiceTheme(mode)}
+                      className={`rounded-lg border p-3 text-left transition-colors ${
+                        invoiceTheme === mode
+                          ? "border-primary ring-1 ring-primary"
+                          : "border-border hover:bg-muted/50"
+                      }`}
+                    >
+                      <div
+                        className={`mb-2 h-10 rounded-md border ${
+                          mode === "light" ? "bg-white border-neutral-200" : "bg-neutral-900 border-neutral-700"
+                        }`}
+                        style={{ borderTopColor: invoiceAccentColor, borderTopWidth: 4 }}
+                      />
+                      <span className="text-sm capitalize">{mode}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Applies to the customer-facing invoice page
+                </p>
+              </div>
+            </div>
           </div>
         </SectionCard>
       </div>
