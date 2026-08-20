@@ -168,9 +168,14 @@ export function InvoicesTab() {
   };
 
   const brandedInvoiceUrl = (inv: typeof rows[number]) => {
+    // No custom domain configured → use the provider-hosted payment link so the
+    // customer still gets a working (Moov-branded) checkout page.
+    if (!customDomain) return inv.payment_link_url || (inv.public_token ? `${window.location.origin}/invoice/${inv.public_token}` : "");
     if (!inv.public_token) return inv.payment_link_url || "";
-    return `${window.location.origin}/invoice/${inv.public_token}`;
+    const host = customDomain.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+    return `https://${host}/invoice/${inv.public_token}`;
   };
+
 
   const canSubmit =
     customerName.trim().length > 1 &&
