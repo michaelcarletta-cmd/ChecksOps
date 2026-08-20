@@ -21,6 +21,8 @@ export function CompanyBrandingSettings() {
   const [invoiceLetterheadUrl, setInvoiceLetterheadUrl] = useState<string | null>(null);
   const [invoiceFooterNote, setInvoiceFooterNote] = useState("");
   const [invoiceDefaultTerms, setInvoiceDefaultTerms] = useState("");
+  const [invoiceAccentColor, setInvoiceAccentColor] = useState("#3B82F6");
+  const [invoiceTheme, setInvoiceTheme] = useState<"light" | "dark">("light");
   
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploading, setUploading] = useState(false);
