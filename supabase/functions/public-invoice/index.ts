@@ -12,8 +12,8 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const url = new URL(req.url);
-    const token = url.searchParams.get("token")?.trim();
+    const body = await req.json().catch(() => ({}));
+    const token = String(body?.token ?? "").trim();
     if (!token) return json({ error: "Invoice token is required" }, 400);
 
     const supabase = createClient(
