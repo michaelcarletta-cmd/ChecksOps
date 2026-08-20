@@ -331,22 +331,17 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <TenantUsageInlinePanel tenantId={tenant.id} tenantName={tenant.name} />
           </TabsContent>
           <TabsContent value="pro-badge" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Crosshair className="w-5 h-5 text-primary" strokeWidth={2.5} /> Contractor OPS Badge
-                </CardTitle>
-                <CardDescription>
-                  Approve or revoke the Find-a-Pro badge for contractor profiles in this tenant.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button onClick={() => setProOpen(true)}>
-                  <Crosshair className="w-4 h-4 mr-2" strokeWidth={2.5} /> Manage OPS Badge
+            <SectionCard
+              title="Contractor OPS Badge"
+              icon={<Crosshair className="h-4 w-4 text-primary" strokeWidth={2.5} />}
+              accent="bg-gradient-to-r from-primary to-primary/40"
+              description="Approve or revoke the Find-a-Pro badge for contractor profiles in this tenant."
+            >
+              <Button onClick={() => setProOpen(true)}>
+                <Crosshair className="w-4 h-4 mr-2" strokeWidth={2.5} /> Manage OPS Badge
+              </Button>
+            </SectionCard>
 
-                </Button>
-              </CardContent>
-            </Card>
           </TabsContent>
           <TabsContent value="users" className="mt-6">
             <UsersTab tenant={tenant} />
