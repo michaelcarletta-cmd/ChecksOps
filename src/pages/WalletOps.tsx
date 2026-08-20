@@ -143,6 +143,8 @@ export default function WalletOps() {
     save,
   } = useSweepConfig("operating");
   const { data: transferData, isLoading: transfersLoading } = useWalletOpsTransfers();
+  const refreshStatuses = useRefreshTransferStatuses();
+
   const { data: readiness } = useWalletOpsReadiness();
   const { data: runningData, isLoading: runningLoading } = useWalletRunningBalance("operating");
   const { data: tenantBalances } = useAllTenantWalletBalances(userRole === "admin");
