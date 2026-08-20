@@ -29,6 +29,15 @@ const STATUS_CLASS: Record<string, string> = {
   rejected: "border-destructive/40 text-destructive",
 };
 
+const VETTING_TYPES = [
+  "w9",
+  "license",
+  "insurance",
+  "saas_agreement",
+  "terms_of_service",
+  "privacy_policy",
+];
+
 const STATUS_LABEL: Record<string, string> = {
   pending: "In review",
   approved: "Approved",
