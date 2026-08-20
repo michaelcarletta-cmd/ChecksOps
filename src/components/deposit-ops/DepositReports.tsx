@@ -85,12 +85,12 @@ function DailyDepositLog({ logs }: { logs: Record<string, unknown>[] }) {
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <ScrollArea className="max-h-[500px]">
+        <div className="max-h-[560px] overflow-y-auto overflow-x-auto">
           {logs.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">No deposit activity</div>
           ) : (
             <Table>
-              <TableHeader>
+              <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Provider</TableHead>
@@ -107,10 +107,10 @@ function DailyDepositLog({ logs }: { logs: Record<string, unknown>[] }) {
                 ))}
               </TableBody>
             </Table>
-
           )}
-        </ScrollArea>
+        </div>
       </CardContent>
+
     </Card>
   );
 }
