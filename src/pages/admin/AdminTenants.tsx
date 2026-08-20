@@ -654,33 +654,33 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Invite User</CardTitle>
-          <CardDescription>Adds the user to this tenant and emails them a tenant-branded reset link to set their password.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="flex gap-2">
-            <Input placeholder="Full name (optional)" value={inviteName} onChange={(e) => setInviteName(e.target.value)} className="flex-1" />
-          </div>
-          <div className="flex gap-2">
-            <Input placeholder="user@example.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="flex-1" />
-            <Select value={inviteRole} onValueChange={setInviteRole}>
-              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-              <SelectContent>{TENANT_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-            </Select>
-            <Button onClick={invite} disabled={inviting}>
-              {inviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4 mr-1" />} Invite
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <SectionCard
+        title="Invite User"
+        icon={<Mail className="h-4 w-4 text-sky-500" />}
+        accent="bg-gradient-to-r from-sky-500 to-sky-500/30"
+        description="Adds the user to this tenant and emails them a tenant-branded reset link to set their password."
+      >
+        <div className="flex gap-2">
+          <Input placeholder="Full name (optional)" value={inviteName} onChange={(e) => setInviteName(e.target.value)} className="flex-1" />
+        </div>
+        <div className="flex gap-2">
+          <Input placeholder="user@example.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="flex-1" />
+          <Select value={inviteRole} onValueChange={setInviteRole}>
+            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+            <SelectContent>{TENANT_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+          </Select>
+          <Button onClick={invite} disabled={inviting}>
+            {inviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4 mr-1" />} Invite
+          </Button>
+        </div>
+      </SectionCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Tenant Members ({users.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <SectionCard
+        title={`Tenant Members (${users.length})`}
+        icon={<Users className="h-4 w-4 text-violet-500" />}
+        accent="bg-gradient-to-r from-violet-500 to-violet-500/30"
+      >
+
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin" /></div>
           ) : users.length === 0 ? (
