@@ -89,7 +89,7 @@ serve(async (req) => {
     const { data: files, error } = await supabase
       .from("payment_provider_files")
       .select(
-        "id, file_name, file_purpose, mime_type, file_size_bytes, requirement_id, provider_file_id, provider_representative_id, review_status, review_reason, created_at, last_synced_at",
+        "id, file_name, file_purpose, mime_type, file_size_bytes, requirement_id, provider_file_id, provider_representative_id, review_status, review_reason, created_at, last_synced_at, storage_path",
       )
       .eq("tenant_id", tenant_id)
       .eq("environment", environment)

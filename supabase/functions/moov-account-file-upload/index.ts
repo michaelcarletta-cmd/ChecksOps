@@ -131,6 +131,21 @@ serve(async (req) => {
       return json({ error: "The payment provider did not accept the document." }, 502);
     }
 
+    // Retain a private copy so administrators can review the exact document
+    // later (the provider offers no download endpoint).
+    let storagePath: string | null = null;
+    try {
+      const safeName = fileName.replace(/[^\w.\-]+/g, "_");
+      const candidate = `${tenantId}/verification/${uploaded.fileID}-${safeName}`;
+      const { error: storeErr } = await supabase.storage
+        .from("tenant-documents")
+        .upload(candidate, bytes, { contentType: mimeType, upsert: true });
+      if (storeErr) throw storeErr;
+      storagePath = candidate;
+    } catch (e) {
+      console.error("[moov-account-file-upload] retain copy", (e as Error).message);
+    }
+
     const { data: saved, error: saveErr } = await supabase
       .from("payment_provider_files")
       .upsert(
@@ -145,6 +160,7 @@ serve(async (req) => {
           file_name: uploaded.fileName ?? fileName,
           mime_type: mimeType,
           file_size_bytes: sizeBytes,
+          storage_path: storagePath,
           requirement_id: typeof requirementId === "string" && requirementId.trim() ? requirementId.trim() : null,
           review_status: reviewStatusOf(uploaded),
           review_reason: uploaded.decisionReason ?? null,
