@@ -3,6 +3,7 @@ import { corsHeaders, json, isResponse, logPaymentEvent, requireMoovCaller, sani
 import {
   MAX_FILE_BYTES,
   rateLimitExceeded,
+  moovPurposeFor,
   requiresRepresentative,
   UPLOAD_RATE_LIMIT,
   validateUpload,
@@ -117,7 +118,7 @@ serve(async (req) => {
 
     const uploaded = await uploadAccountFile({
       accountId,
-      purpose: filePurpose,
+      purpose: moovPurposeFor(filePurpose),
       fileName,
       mimeType,
       bytes,

@@ -33,6 +33,16 @@ serve(async (req) => {
     if (accountId && sync) {
       try {
         const remote = await listAccountFiles(accountId);
+        // Preserve ChecksOps document types (W9, license, etc.) — Moov only
+        // knows the mapped provider purpose, so never clobber our own label.
+        const { data: existingRows } = await supabase
+          .from("payment_provider_files")
+          .select("provider_file_id, file_purpose")
+          .eq("tenant_id", tenant_id)
+          .eq("provider_account_id", accountId);
+        const existingPurpose = new Map<string, string>(
+          ((existingRows as any[]) ?? []).map((r) => [r.provider_file_id, r.file_purpose]),
+        );
         for (const f of remote) {
           if (!f.fileID) continue;
           await supabase
@@ -44,7 +54,8 @@ serve(async (req) => {
                 environment,
                 provider_account_id: accountId,
                 provider_file_id: f.fileID,
-                file_purpose: f.filePurpose ?? "business_verification",
+                file_purpose:
+                  existingPurpose.get(f.fileID) ?? f.filePurpose ?? "business_verification",
                 file_name: f.fileName ?? "document",
                 file_size_bytes: f.fileSizeBytes ?? null,
                 review_status: reviewStatusOf(f),
