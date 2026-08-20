@@ -147,22 +147,16 @@ export default function AdminTenants() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="border-b border-border bg-card">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+    <div className="min-h-screen bg-background px-6">
+      <SettingsPageShell>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))}>
               <ArrowLeft className="w-4 h-4 mr-1" /> Back
             </Button>
             <Button variant="ghost" size="sm" onClick={() => goToChecksOpsHome(navigate)}>
               <Home className="w-4 h-4 mr-1" /> Home
             </Button>
-
-            <Building2 className="w-6 h-6 text-primary" />
-            <div>
-              <h1 className="text-xl font-semibold">Tenant Management</h1>
-              <p className="text-xs text-muted-foreground">Master merchant — {ALLOWED_EMAIL}</p>
-            </div>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate("/admin/mortgage-ops")}>
@@ -179,11 +173,17 @@ export default function AdminTenants() {
             </Dialog>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-[1400px] mx-auto px-6 py-8">
+        <SettingsHero
+          title="Tenant Management"
+          description={`Master merchant control panel — review, approve, and configure every tenant. Signed in as ${ALLOWED_EMAIL}.`}
+          badge="Administration"
+          icon={<Building2 className="h-4 w-4 text-primary" />}
+        />
+
         <Tabs defaultValue="tenants" className="w-full">
           <TabsList className="mb-6">
+
             <TabsTrigger value="tenants"><Building2 className="w-4 h-4 mr-1" /> Tenants</TabsTrigger>
             <TabsTrigger value="referrals"><Gift className="w-4 h-4 mr-1" /> Referral Dashboard</TabsTrigger>
             <TabsTrigger value="platform-billing"><Receipt className="w-4 h-4 mr-1" /> Platform Billing</TabsTrigger>
