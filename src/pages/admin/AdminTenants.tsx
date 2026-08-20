@@ -834,15 +834,33 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
 
   const pullNow = async () => {
     setCharging(true);
-    const { data, error } = await supabase.functions.invoke("charge-tenant-maintenance", {
-      body: { tenant_ids: [tenantId], dry_run: false },
+    const { data: t } = await supabase
+      .from("tenants")
+      .select("monthly_rate_cents, referral_discount_cents")
+      .eq("id", tenantId)
+      .maybeSingle();
+    const amount_cents = Math.max(
+      0,
+      (t?.monthly_rate_cents ?? 0) - (t?.referral_discount_cents ?? 0),
+    );
+    if (amount_cents <= 0) {
+      setCharging(false);
+      return sonnerToast.warning("No maintenance fee configured for this organization.");
+    }
+    const { data, error } = await supabase.functions.invoke("moov-tenant-fee-charge", {
+      body: {
+        tenant_id: tenantId,
+        amount_cents,
+        kind: "maintenance",
+        line_items: [{ label: "Monthly maintenance", amount_cents }],
+        send_invoice: true,
+      },
     });
     setCharging(false);
-    if (error) return sonnerToast.error(error.message);
+    const failure = (data as any)?.error ?? (error ? await readFnError(error) : null);
+    if (failure) return sonnerToast.error(failure);
     const r = (data as any)?.results?.[0];
-    if (r?.skipped) sonnerToast.warning(`Skipped: ${r.skipped}`);
-    else if (r?.error) sonnerToast.error(r.error);
-    else if (r?.status === "submitted") sonnerToast.success(`ACH debit submitted for $${(r.amount_cents / 100).toFixed(2)}`);
+    if (r?.status === "submitted") sonnerToast.success(`ACH debit submitted for $${(r.amount_cents / 100).toFixed(2)}`);
     else sonnerToast.info(JSON.stringify(r ?? data));
   };
 
