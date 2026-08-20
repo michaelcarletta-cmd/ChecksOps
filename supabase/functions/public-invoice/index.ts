@@ -53,7 +53,7 @@ serve(async (req) => {
 
     const { data: tenant, error: tenantErr } = await supabase
       .from("tenants")
-      .select("name, slug, logo_url, primary_color, secondary_color, custom_domain, invoice_letterhead_url, invoice_footer_note, invoice_default_terms")
+      .select("name, slug, logo_url, primary_color, secondary_color, custom_domain, invoice_letterhead_url, invoice_footer_note, invoice_default_terms, invoice_accent_color, invoice_theme")
       .eq("id", invoice.tenant_id)
       .maybeSingle();
 
