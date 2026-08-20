@@ -558,8 +558,8 @@ function BrandingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Ten
         <Button onClick={() => save({ logo_url: logoUrl || null, primary_color: primary, secondary_color: secondary })} disabled={saving || uploading}>
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Branding
         </Button>
-      </CardContent>
-    </Card>
+    </SectionCard>
+
   );
 }
 
