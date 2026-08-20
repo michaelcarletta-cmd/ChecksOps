@@ -89,11 +89,17 @@ Deno.serve(async (req) => {
     if (!deposit.checkalt_reference) {
       throw new Error("Deposit has no CheckAlt reference yet — cannot approve/reject");
     }
-    if (deposit.status !== "pending_approval") {
+    // Rejections may also be used to cancel/void a deposit that was already
+    // auto-approved by the provider (e.g. an accidental duplicate submission),
+    // as long as it has not cleared or already been returned/rejected.
+    const cancellable = action === "reject" &&
+      ["submitted", "pending", "processing"].includes(deposit.status ?? "");
+    if (deposit.status !== "pending_approval" && !cancellable) {
       return new Response(JSON.stringify({
         error: `Deposit is in '${deposit.status}' status, not pending_approval`,
       }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
 
     const cfg = await loadConfig(supabase);
     const fiKey = cfg.fi_key;
@@ -164,9 +170,24 @@ Deno.serve(async (req) => {
       .eq("id", deposit.id);
     if (updateErr) throw updateErr;
 
-    if (deposit.check_intake_item_id) {
+    // When cancelling a duplicate, another deposit for the same check may still
+    // be live — in that case leave the check's own status alone.
+    let siblingActive = false;
+    if (deposit.check_intake_item_id && internalStatus === "rejected") {
+      const { data: siblings } = await supabase
+        .from("checkalt_deposits")
+        .select("id, status")
+        .eq("check_intake_item_id", deposit.check_intake_item_id)
+        .neq("id", deposit.id);
+      siblingActive = (siblings ?? []).some((s) =>
+        ["submitted", "pending", "processing", "cleared", "pending_approval"].includes(s.status ?? "")
+      );
+    }
+
+    if (deposit.check_intake_item_id && !siblingActive) {
       const approvedAtIso = String(updates.approved_at);
       const isApproved = internalStatus === "submitted";
+
 
       const { data: intake } = await supabase
         .from("check_intake_items")
