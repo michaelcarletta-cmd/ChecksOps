@@ -117,6 +117,13 @@ serve(async (req) => {
       })
       .select().single();
     if (draftErr) return json({ error: draftErr.message }, 500);
+    const sourceMethodId = await resolveDebitSourceMethodId(supabase, source, account.provider_account_id);
+    if (!sourceMethodId) {
+      await supabase.from("payment_transfers")
+        .update({ status: "failed", failure_reason: "No ach-debit-fund method on the funding bank account." })
+        .eq("id", draft.id);
+      return json({ error: "Your bank account is not set up to fund your balance yet." }, 409);
+    }
 
     let created: any;
     try {
@@ -127,8 +134,9 @@ serve(async (req) => {
         onBehalfOf: account.provider_account_id,
         body: {
           source: {
-            paymentMethodID: source.provider_payment_method_id ?? source.provider_bank_account_id,
+            paymentMethodID: sourceMethodId,
           },
+
           destination: { paymentMethodID: wallet.provider_payment_method_id },
           amount: { currency: "USD", value: amount },
           description: (description ?? "ChecksOps balance funding").slice(0, 128),
