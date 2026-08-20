@@ -606,7 +606,43 @@ export default function WalletOps() {
         title="Recent Wallet Activity"
         icon={<Clock className="h-4 w-4 text-sky-500" />}
         accent="bg-gradient-to-r from-sky-500/60 to-transparent"
+        action={
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={refreshStatuses.isPending}
+            onClick={async () => {
+              try {
+                const res = await refreshStatuses.mutateAsync();
+                toast({
+                  title: res.checked
+                    ? `Checked ${res.checked} transfer${res.checked === 1 ? "" : "s"}`
+                    : "Nothing in flight",
+                  description: res.checked
+                    ? res.updated
+                      ? `${res.updated} updated with the bank's latest status.`
+                      : "Still processing at the bank — no change yet."
+                    : "All transfers have already settled.",
+                });
+              } catch (e) {
+                toast({
+                  title: "Could not check status",
+                  description: (e as Error).message,
+                  variant: "destructive",
+                });
+              }
+            }}
+          >
+            {refreshStatuses.isPending ? (
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-3.5 w-3.5" />
+            )}
+            Check status
+          </Button>
+        }
       >
+
         {ledger.length === 0 && (transferData?.transfers.length ?? 0) === 0 ? (
           <p className="text-sm text-muted-foreground">
             No wallet activity yet. Funding, payouts, and automatic payouts appear here.
