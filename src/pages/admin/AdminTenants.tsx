@@ -353,8 +353,9 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           isOpen={proOpen}
           onClose={() => setProOpen(false)}
         />
-      </div>
+      </SettingsPageShell>
     </div>
+
     </TenantProvider>
   );
 }
