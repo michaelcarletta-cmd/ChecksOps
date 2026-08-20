@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { moovFetch, scopes } from "../_shared/moovClient.ts";
+import { moovFetch, moovHost, moovOrigin, scopes } from "../_shared/moovClient.ts";
 import { corsHeaders, isResponse, json, requireMoovCaller } from "../_shared/moovGuard.ts";
 
 // Diagnostic only. Moves no money: uses /transfer-options, which validates the
@@ -101,11 +101,12 @@ serve(async (req) => {
     const rawToken = async (scopeList: string[]) => {
       const key = Deno.env.get("MOOV_PUBLIC_KEY")!;
       const secret = Deno.env.get("MOOV_SECRET_KEY")!;
-      const res = await fetch("https://api.sandbox.moov.io/oauth2/token", {
+      const res = await fetch(`${moovHost()}/oauth2/token`, {
         method: "POST",
         headers: {
           Authorization: `Basic ${btoa(`${key}:${secret}`)}`,
           "Content-Type": "application/x-www-form-urlencoded",
+          Origin: moovOrigin(),
         },
         body: new URLSearchParams({ grant_type: "client_credentials", scope: scopeList.join(" ") }),
       });
