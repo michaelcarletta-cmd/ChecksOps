@@ -120,7 +120,7 @@ serve(async (req) => {
 
     let created: any;
     try {
-      created = await moovFetch<any>("/transfers", {
+      created = await moovFetch<any>(`/accounts/${account.provider_account_id}/transfers`, {
         method: "POST",
         scopes: scopes.transfersWrite(account.provider_account_id),
         idempotencyKey: `checksops-wallet-fund-${draft.id}`,

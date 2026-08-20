@@ -165,6 +165,25 @@ export interface MoovRequestOptions {
 
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Moov requires X-Idempotency-Key to be a valid UUID. Our keys are readable
+ * seeds ("checksops-disb-split-<id>"), so they are hashed into a stable v4
+ * shaped UUID — same seed always yields the same key, which is the whole
+ * point of idempotency.
+ */
+export async function idempotencyUuid(seed: string): Promise<string> {
+  if (UUID_RE.test(seed)) return seed;
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(seed)),
+  ).slice(0, 16);
+  digest[6] = (digest[6] & 0x0f) | 0x40; // version 4
+  digest[8] = (digest[8] & 0x3f) | 0x80; // variant
+  const hex = Array.from(digest).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 export async function moovFetch<T = any>(
   path: string,
   opts: MoovRequestOptions,
@@ -177,7 +196,9 @@ export async function moovFetch<T = any>(
     Origin: moovOrigin(),
     "x-moov-version": opts.apiVersion ?? Deno.env.get("MOOV_API_VERSION") ?? "v2024.01.00",
   };
-  if (opts.idempotencyKey) headers["X-Idempotency-Key"] = opts.idempotencyKey;
+  if (opts.idempotencyKey) {
+    headers["X-Idempotency-Key"] = await idempotencyUuid(opts.idempotencyKey);
+  }
   if (opts.onBehalfOf) headers["X-Account-ID"] = opts.onBehalfOf;
 
 
@@ -325,4 +346,17 @@ export async function moovUpload<T = any>(path: string, opts: MoovUploadOptions)
     throw new MoovError(typeof msg === "string" ? msg : JSON.stringify(msg), res.status, json ?? text);
   }
   return json as T;
+}
+
+
+/**
+ * Capabilities that a payment account still needs approved before money can
+ * move. Used to turn the provider's bare 403 into an actionable message.
+ */
+export async function pendingCapabilities(accountId: string): Promise<string[]> {
+  const caps = await moovFetch<Array<{ capability: string; status: string }>>(
+    `/accounts/${accountId}/capabilities`,
+    { method: "GET", scopes: scopes.capabilitiesRead(accountId) },
+  );
+  return (caps ?? []).filter((c) => c.status !== "enabled").map((c) => c.capability);
 }

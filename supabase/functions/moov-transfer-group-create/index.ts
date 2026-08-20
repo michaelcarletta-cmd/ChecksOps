@@ -259,7 +259,7 @@ serve(async (req) => {
 
     let parent: any;
     try {
-      parent = await moovFetch<any>("/transfers", {
+      parent = await moovFetch<any>(`/accounts/${accountId}/transfers`, {
         method: "POST",
         scopes: scopes.transfersWrite(accountId),
         idempotencyKey: `checksops-group-parent-${group.id}`,
@@ -326,7 +326,7 @@ serve(async (req) => {
         .select().single();
 
       try {
-        const child = await moovFetch<any>("/transfers", {
+        const child = await moovFetch<any>(`/accounts/${accountId}/transfers`, {
           method: "POST",
           scopes: scopes.transfersWrite(accountId),
           idempotencyKey: `checksops-group-child-${childDraft!.id}`,

@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { moovFetch, normalizeTransferStatus, scopes } from "../_shared/moovClient.ts";
+import { moovFetch, normalizeTransferStatus, pendingCapabilities, scopes } from "../_shared/moovClient.ts";
 import { railDecisionMetadata, selectRail } from "../_shared/railRouter.ts";
 import { resolveRails, saveStakeholderRails } from "../_shared/moovRails.ts";
 import {
@@ -221,7 +221,7 @@ serve(async (req) => {
 
     for (const leg of resolved) {
       try {
-        const created = await moovFetch<any>("/transfers", {
+        const created = await moovFetch<any>(`/accounts/${accountId}/transfers`, {
           method: "POST",
           scopes: scopes.transfersWrite(accountId),
           idempotencyKey: `checksops-disb-split-${leg.split.id}`,
@@ -268,7 +268,13 @@ serve(async (req) => {
           downgrade_reason: leg.decision.downgraded ? leg.decision.reason : null,
         });
       } catch (e) {
-        const message = (e as Error).message;
+        let message = (e as Error).message;
+        if (/403|forbidden/i.test(message)) {
+          const pending = await pendingCapabilities(accountId).catch(() => [] as string[]);
+          message = pending.length
+            ? `Your payment account is not approved to move money yet. Pending approval: ${pending.join(", ")}. Finish the payment onboarding requirements, then retry.`
+            : "Your payment account is not approved to move money yet. Finish the payment onboarding requirements, then retry.";
+        }
         await supabase
           .from("disbursement_splits")
           .update({
