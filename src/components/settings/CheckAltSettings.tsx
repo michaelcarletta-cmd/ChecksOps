@@ -1041,6 +1041,8 @@ export function CheckAltDepositHistory() {
                   <th className="px-3 py-2 font-medium">Reference</th>
                   <th className="px-3 py-2 font-medium">Check #</th>
                   <th className="px-3 py-2 font-medium">Payer</th>
+                  <th className="px-3 py-2 font-medium">Insured / Payees</th>
+
                   <th className="px-3 py-2 font-medium text-right">Amount</th>
                   <th className="px-3 py-2 font-medium">Status</th>
                 </tr>
