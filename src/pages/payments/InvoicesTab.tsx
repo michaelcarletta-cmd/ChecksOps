@@ -42,8 +42,10 @@ export function InvoicesTab() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
-  const { invoices, createInvoice, sendInvoice, cancelInvoice, syncInvoices } = useMoovInvoices();
+  const { invoices, createInvoice, sendInvoice, resendInvoice, cancelInvoice, syncInvoices } = useMoovInvoices();
   const { account } = usePaymentAccount();
+  const isMobile = useIsMobile();
+
 
   const [open, setOpen] = useState(false);
   const [customerName, setCustomerName] = useState("");
