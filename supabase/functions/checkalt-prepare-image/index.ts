@@ -68,9 +68,16 @@ async function resolveRasterPath(
 }
 
 async function normalizeToBudget(bytes: Uint8Array, label: string): Promise<Uint8Array> {
-  if (bytes.length <= PER_IMAGE_BYTES_BUDGET) return bytes;
-
   let img = await Image.decode(bytes);
+
+  // Mitek IQA rejects sideways checks (reject 1680) — force landscape first.
+  const wasPortrait = img.height > img.width;
+  if (wasPortrait) img = img.rotate(90);
+
+  const withinBudget = bytes.length <= PER_IMAGE_BYTES_BUDGET;
+  const bigEnough = Math.max(img.width, img.height) >= MIN_DIM;
+  if (!wasPortrait && withinBudget && bigEnough) return bytes;
+
   let quality = TARGET_JPEG_QUALITY;
   const longest = Math.max(img.width, img.height);
   if (longest > TARGET_MAX_DIM) {
