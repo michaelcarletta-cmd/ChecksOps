@@ -322,19 +322,33 @@ serve(async (req) => {
       if (!row) return json({ error: "Invoice not found" }, 404);
       if ((row as any).status === "paid") return json({ error: "A paid invoice cannot be canceled" }, 400);
 
+      // Best-effort: the provider may not allow canceling drafts/already-canceled
+      // invoices. We still cancel locally so the UI never dead-ends on a 5xx.
+      let providerError: string | null = null;
       if ((row as any).moov_invoice_id) {
-        await moovFetch(
-          `/accounts/${merchantAccountId}/invoices/${(row as any).moov_invoice_id}`,
-          { method: "DELETE", scopes: invoiceScopes(merchantAccountId, true), apiVersion: INVOICE_API_VERSION },
-        );
+        try {
+          await moovFetch(
+            `/accounts/${merchantAccountId}/invoices/${(row as any).moov_invoice_id}`,
+            { method: "DELETE", scopes: invoiceScopes(merchantAccountId, true), apiVersion: INVOICE_API_VERSION },
+          );
+        } catch (e) {
+          providerError = (e as Error)?.message ?? "Provider cancel failed";
+          console.error("[moov-invoice] provider cancel failed (continuing)", providerError);
+        }
       }
 
-      const { data: updated } = await supabase
+
+      const { data: updated, error: updateErr } = await supabase
         .from("moov_invoices")
         .update({ status: "canceled", last_synced_at: new Date().toISOString() })
         .eq("id", (row as any).id)
         .select("*")
         .maybeSingle();
+
+      if (updateErr) {
+        console.error("[moov-invoice] cancel update failed", updateErr.message);
+        return json({ error: `Could not cancel invoice: ${updateErr.message}` }, 500);
+      }
 
       await logPaymentEvent(supabase, {
         tenant_id,
@@ -342,10 +356,11 @@ serve(async (req) => {
         previous_status: (row as any).status,
         new_status: "canceled",
         environment,
-        provider_metadata: { invoiceID: (row as any).moov_invoice_id },
+        provider_metadata: { invoiceID: (row as any).moov_invoice_id, providerError },
       });
 
-      return json({ success: true, invoice: updated });
+      return json({ success: true, invoice: updated, provider_warning: providerError });
+
     }
 
     return json({ error: `Unknown action "${action}"` }, 400);
