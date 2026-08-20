@@ -122,3 +122,56 @@ export async function resolveRails(opts: {
   if (opts.persist) await opts.persist(fresh).catch(() => {/* cache write is best-effort */});
   return fresh;
 }
+
+/**
+ * Resolves the payment method id to use as the SOURCE of a debit (pulling
+ * money out of a tenant's own bank account).
+ *
+ * Moov will not accept a bankAccountID here — it must be a payment method of
+ * type `ach-debit-fund` (wallet funding) or `ach-debit-collect`. Older rows
+ * only stored the bank account id, which made the transfer 404, so we look up
+ * (and cache) the real debit method when it is missing.
+ */
+export async function resolveDebitSourceMethodId(
+  supabase: any,
+  source: {
+    id: string;
+    provider_payment_method_id?: string | null;
+    provider_bank_account_id?: string | null;
+    rail_payment_method_ids?: unknown;
+    rails_synced_at?: string | null;
+  },
+  accountId: string,
+): Promise<string | null> {
+  const pick = (rails: RailMethodIds) => rails["ach-debit-fund"] ?? rails["ach-debit-collect"] ?? null;
+
+  const cached = (source.rail_payment_method_ids && typeof source.rail_payment_method_ids === "object"
+    ? source.rail_payment_method_ids
+    : {}) as RailMethodIds;
+  const fromCache = pick(cached);
+  if (fromCache) return fromCache;
+
+  const methods = await moovFetch<any[]>(`/accounts/${accountId}/payment-methods`, {
+    scopes: scopes.paymentMethodsRead(accountId),
+  }).catch(() => [] as any[]);
+
+  const fresh: RailMethodIds = { ...cached };
+  for (const m of methods ?? []) {
+    const type = String(m?.paymentMethodType ?? "");
+    const id = m?.paymentMethodID ?? m?.paymentMethodId;
+    if (!id) continue;
+    const owner = m?.bankAccount?.bankAccountID ?? m?.bankAccount?.bankAccountId ?? null;
+    if (source.provider_bank_account_id && owner && owner !== source.provider_bank_account_id) continue;
+    if (
+      CREDIT_RAIL_TYPES.includes(type) ||
+      FUNDING_RAIL_TYPES.includes(type) ||
+      type === "ach-debit-collect"
+    ) {
+      fresh[type] = id;
+    }
+  }
+
+  const resolved = pick(fresh);
+  if (resolved) await saveMethodRails(supabase, source.id, fresh).catch(() => {});
+  return resolved ?? source.provider_payment_method_id ?? null;
+}
