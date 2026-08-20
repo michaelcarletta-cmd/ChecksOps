@@ -58,6 +58,30 @@ export function InvoicesTab() {
     invoice_default_terms: string | null;
   } | null>(null);
 
+  const [customDomain, setCustomDomain] = useState<string | null>(null);
+
+  // Custom domain decides whether we can send a fully white-labeled invoice link.
+  // Without one we fall back to the provider-hosted (Moov-branded) payment link.
+  useEffect(() => {
+    const loadDomain = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: tenantUser } = await supabase
+        .from("tenant_users")
+        .select("tenant_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!tenantUser) return;
+      const { data: tenant } = await supabase
+        .from("tenants")
+        .select("custom_domain")
+        .eq("id", tenantUser.tenant_id)
+        .maybeSingle();
+      setCustomDomain((tenant as any)?.custom_domain?.trim() || null);
+    };
+    loadDomain();
+  }, []);
+
   useEffect(() => {
     if (open) {
       const loadBranding = async () => {
@@ -88,6 +112,7 @@ export function InvoicesTab() {
       loadBranding();
     }
   }, [open]);
+
 
   const rows = invoices.data ?? [];
 
@@ -143,9 +168,14 @@ export function InvoicesTab() {
   };
 
   const brandedInvoiceUrl = (inv: typeof rows[number]) => {
+    // No custom domain configured → use the provider-hosted payment link so the
+    // customer still gets a working (Moov-branded) checkout page.
+    if (!customDomain) return inv.payment_link_url || (inv.public_token ? `${window.location.origin}/invoice/${inv.public_token}` : "");
     if (!inv.public_token) return inv.payment_link_url || "";
-    return `${window.location.origin}/invoice/${inv.public_token}`;
+    const host = customDomain.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+    return `https://${host}/invoice/${inv.public_token}`;
   };
+
 
   const canSubmit =
     customerName.trim().length > 1 &&
