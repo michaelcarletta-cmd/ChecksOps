@@ -79,15 +79,29 @@ export function MortgageCompaniesDirectory({ searchQuery: externalSearch }: Prop
     );
   }, [companies, search]);
 
+  const missing = useMemo(() => {
+    const known = new Set(companies.map((c) => c.name.trim().toLowerCase()));
+    return detected.filter((n) => !known.has(n.trim().toLowerCase()));
+  }, [companies, detected]);
+
   const openNew = () => {
     setEditing(null);
+    setPrefillName(undefined);
+    setDialogOpen(true);
+  };
+
+  const openFromCheck = (name: string) => {
+    setEditing(null);
+    setPrefillName(name);
     setDialogOpen(true);
   };
 
   const openEdit = (c: MortgageCompanyRecord) => {
     setEditing(c);
+    setPrefillName(undefined);
     setDialogOpen(true);
   };
+
 
   return (
     <Card>
