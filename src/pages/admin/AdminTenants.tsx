@@ -1330,6 +1330,9 @@ function TenantManagementTable({
       ? { is_founding_partner: true, monthly_rate_cents: 7500 }
       : { is_founding_partner: false });
 
+  const toggleTestAccount = (t: Tenant, on: boolean) =>
+    updateTenant(t.id, { is_test_account: on });
+
   const fmtMoney = (cents?: number | null) =>
     cents == null ? "—" : `$${(cents / 100).toFixed(2)}`;
 
@@ -1353,6 +1356,7 @@ function TenantManagementTable({
               <TableHead>Status</TableHead>
               <TableHead>Active</TableHead>
               <TableHead>Founding</TableHead>
+              <TableHead>Test</TableHead>
               <TableHead>Monthly Rate</TableHead>
               <TableHead>Referral Code</TableHead>
               <TableHead>Referral Disc.</TableHead>
@@ -1411,6 +1415,14 @@ function TenantManagementTable({
                       disabled={busyId === t.id}
                     />
                   </TableCell>
+                  <TableCell>
+                    <Switch
+                      checked={!!t.is_test_account}
+                      onCheckedChange={(v) => toggleTestAccount(t, v)}
+                      disabled={busyId === t.id}
+                    />
+                  </TableCell>
+
                   <TableCell>
                     <InlineMoneyEditor
                       valueCents={t.monthly_rate_cents ?? null}
