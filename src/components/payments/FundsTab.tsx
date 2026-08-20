@@ -187,9 +187,14 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
     .filter((s: any) => s.status !== "failed" && s.status !== "cancelled" && s.status !== "returned")
     .reduce((sum: number, s: any) => sum + toCents(Number(s.amount || 0)), 0));
 
-  const receivedFromPayments = incomingPayments
-    .filter((p: any) => p.status === "settled")
-    .reduce((sum: number, p: any) => sum + Number(p.payment_amount), 0);
+  const receivedFromPayments = toCents(
+    incomingPayments
+      .filter((p: any) => p.status === "settled")
+      .reduce((sum: number, p: any) => sum + Number(p.payment_amount), 0)
+    + (incomingSplits as any[])
+      .filter((s: any) => s.status === "settled")
+      .reduce((sum: number, s: any) => sum + Number(s.amount || 0), 0)
+  );
 
   // Fallback: when there are no incoming PA→contractor payments, the check
   // amount itself represents the funds available on this check.
@@ -197,9 +202,14 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
     ? receivedFromPayments
     : Number(intakeItem?.amount || 0);
 
-  const totalInTransit = incomingPayments
-    .filter((p: any) => p.status === "submitted")
-    .reduce((sum: number, p: any) => sum + Number(p.payment_amount), 0);
+  const totalInTransit = toCents(
+    incomingPayments
+      .filter((p: any) => p.status === "submitted")
+      .reduce((sum: number, p: any) => sum + Number(p.payment_amount), 0)
+    + (incomingSplits as any[])
+      .filter((s: any) => s.status === "submitted" || s.status === "pending")
+      .reduce((sum: number, s: any) => sum + Number(s.amount || 0), 0)
+  );
 
   // PA fee math
   const [paFeeMode, setPaFeeMode] = useState<"pct" | "amount">("pct");
