@@ -1,7 +1,11 @@
-// Bills a completed mortgage_handling_request to the tenant via Stripe.
+// Bills a completed mortgage_handling_request to the tenant.
 // - Auth: only mortgage_agent / admin can invoke.
-// - Idempotent: skips if already billed; uses request id as Stripe idempotency key.
-// - Missing stripe_customer_id → billing_status = 'failed' + error, never silently drops.
+// - Primary rail: platform_fee_line_items (pulled end-of-month via Moov fee rollup).
+//   Handling fee ($10 first check / $5 additional) + any shipping label cost are
+//   recorded as separate unbilled line items.
+// - Stripe invoice item is best-effort only when the tenant has a stripe_customer_id.
+// - Idempotent: skips if already billed; uses request id as idempotency key.
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
