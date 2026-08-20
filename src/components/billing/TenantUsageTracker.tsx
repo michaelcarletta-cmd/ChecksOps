@@ -166,11 +166,31 @@ export function TenantUsageTracker() {
 
       <Card>
 
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <ArrowDownCircle className="h-4 w-4 text-primary" />
-            Usage & Processing Log
-          </CardTitle>
+        <CardHeader className="pb-3 flex flex-row items-center justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <ArrowDownCircle className="h-4 w-4 text-primary" />
+              Usage & Processing Log
+            </CardTitle>
+            <CardDescription className="text-[10px]">
+              Showing {format(now, "MMMM yyyy")}
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <Select value={month} onValueChange={setMonth}>
+              <SelectTrigger className="w-[170px] h-8 text-xs">
+                <SelectValue placeholder="Select month" />
+              </SelectTrigger>
+              <SelectContent>
+                {monthOptions.map((m) => (
+                  <SelectItem key={m} value={m} className="text-xs">
+                    {format(new Date(m + "-01T00:00:00"), "MMMM yyyy")}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <ScrollArea className="h-[400px]">
