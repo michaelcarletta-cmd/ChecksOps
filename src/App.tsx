@@ -154,7 +154,8 @@ function isPublicTokenRoute(pathname: string): boolean {
     pathname.startsWith("/payment-direction/") ||
     pathname.startsWith("/verify-account/") ||
     pathname.startsWith("/h/upload") ||
-    pathname.startsWith("/h/claim/")
+    pathname.startsWith("/h/claim/") ||
+    pathname.startsWith("/invoice/")
   );
 }
 
