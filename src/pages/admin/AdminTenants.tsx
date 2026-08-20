@@ -721,12 +721,13 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
   const { saving, save } = useTenantSave(tenant, onUpdated);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Per-Check Billing</CardTitle>
-        <CardDescription>Configure how much this tenant is billed per check processed.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <SectionCard
+      title="Per-Check Billing"
+      icon={<Receipt className="h-4 w-4 text-amber-500" />}
+      accent="bg-gradient-to-r from-amber-500 to-amber-500/30"
+      description="Configure how much this tenant is billed per check processed."
+    >
+
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <Label>Enable Per-Check Billing</Label>
