@@ -386,9 +386,67 @@ Deno.serve(async (req) => {
         // the manager approves it; the 48-hour release hold starts only after
         // that approval succeeds.
         const apiStatus = Number(submitJson?.status ?? submitJson?.statusCode);
+        const statusText = String(
+          submitJson?.statusDescription ?? submitJson?.message ?? "",
+        );
+
+        // 120 = rejected (image quality, MICR unreadable, duplicate, risk).
+        // CheckAlt never took the item, so the check must NOT move to
+        // Deposited — roll it back to Ready for Deposit so it can be
+        // re-imaged and resubmitted.
+        const isRejected =
+          apiStatus === 120 ||
+          /^\s*rejected/i.test(String(submitJson?.status ?? "")) ||
+          /\biqa\b|unreadable|rejected/i.test(statusText);
+
+        if (isRejected) {
+          const nowIso = new Date().toISOString();
+          const rejectCode =
+            String(statusText.match(/\b(\d{3,4})\b/)?.[1] ?? apiStatus ?? "");
+          await supabase
+            .from("checkalt_deposits")
+            .update({
+              checkalt_reference: reference ?? null,
+              status: "rejected",
+              submitted_at: nowIso,
+              reject_code: rejectCode || null,
+              reject_notes: statusText || "Rejected by CheckAlt",
+              last_status_payload: submitJson,
+            })
+            .eq("id", depositRow.id);
+
+          await supabase
+            .from("check_intake_items")
+            .update({
+              check_stage: "ready_for_deposit",
+              status: "approved_for_deposit",
+              deposit_recommendation: "ready_for_deposit",
+              deposited_at: null,
+              updated_at: nowIso,
+            })
+            .eq("id", check.id);
+
+          await supabase
+            .from("claim_checks")
+            .update({
+              deposit_method: "checkalt",
+              checkalt_deposit_id: depositRow.id,
+              deposit_status: "rejected",
+            })
+            .eq("check_intake_item_id", check.id);
+
+          console.warn(
+            "[checkalt-submit-deposit] rejected by CheckAlt",
+            reference,
+            statusText,
+          );
+          return;
+        }
+
         let isPendingApproval = apiStatus === 40;
         let internalStatus = isPendingApproval ? "pending_approval" : "submitted";
         let statusIso = new Date().toISOString();
+
 
         // --- Auto-approve pending_approval deposits if configured and clean ---
         // Skip auto-approve when CheckAlt returned any flags/exceptions or a
