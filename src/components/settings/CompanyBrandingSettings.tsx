@@ -66,7 +66,7 @@ export function CompanyBrandingSettings() {
       if (tenantUser) {
         const { data: tenant } = await supabase
           .from("tenants")
-          .select("invoice_letterhead_url, invoice_footer_note, invoice_default_terms")
+          .select("invoice_letterhead_url, invoice_footer_note, invoice_default_terms, invoice_accent_color, invoice_theme, primary_color")
           .eq("id", tenantUser.tenant_id)
           .maybeSingle();
         
@@ -75,6 +75,8 @@ export function CompanyBrandingSettings() {
           setInvoiceLetterheadUrl(t.invoice_letterhead_url || null);
           setInvoiceFooterNote(t.invoice_footer_note || "");
           setInvoiceDefaultTerms(t.invoice_default_terms || "");
+          setInvoiceAccentColor(t.invoice_accent_color || t.primary_color || "#3B82F6");
+          setInvoiceTheme(t.invoice_theme === "dark" ? "dark" : "light");
         }
       }
     }
