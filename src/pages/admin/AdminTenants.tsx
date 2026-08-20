@@ -1150,7 +1150,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
               <div className="rounded-lg border bg-card p-3">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Disbursement Usage</div>
                 <div className="text-2xl font-bold mt-1">{moov?.count ?? 0}</div>
-                <div className="text-[10px] text-muted-foreground mt-1">Same Day {sameDay} · Instant {instant}</div>
+                <div className="text-[10px] text-muted-foreground mt-1">Next Day {nextDay} · Same Day {sameDay}</div>
               </div>
               <div className="rounded-lg border bg-card p-3">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Paid to ChecksOps</div>
