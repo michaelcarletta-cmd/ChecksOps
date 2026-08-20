@@ -709,8 +709,8 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+      </SectionCard>
+
     </div>
   );
 }
