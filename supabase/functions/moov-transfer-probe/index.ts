@@ -160,6 +160,17 @@ serve(async (req) => {
         }));
     }
 
+    if (facilitatorId) {
+      await record("facilitator_account", () =>
+        moovFetch<any>(`/accounts/${facilitatorId}`, { method: "GET", scopes: scopes.accountRead(facilitatorId!) }));
+      await record("facilitator_capabilities", () =>
+        moovFetch<any>(`/accounts/${facilitatorId}/capabilities`, { method: "GET", scopes: scopes.capabilitiesRead(facilitatorId!) }));
+      await record("facilitator_payment_methods", () =>
+        moovFetch<any>(`/accounts/${facilitatorId}/payment-methods`, { method: "GET", scopes: scopes.paymentMethodsRead(facilitatorId!) }));
+    }
+    await record("account_detail", () =>
+      moovFetch<any>(`/accounts/${accountId}`, { method: "GET", scopes: scopes.accountRead(accountId) }));
+
     const paths = ["/transfer-options", `/accounts/${accountId}/transfer-options`];
     for (const path of paths) {
       for (const apiVersion of ["v2024.01.00", "v2025.01.00", undefined]) {
