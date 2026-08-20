@@ -26,8 +26,6 @@ import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
 import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
-import { BillingConfigPanel } from "@/components/billing/BillingConfigPanel";
-import { MaintenancePaymentsTracker } from "@/components/settings/MaintenancePaymentsTracker";
 import { TenantProBadgeManagement } from "@/components/settings/TenantProBadgeManagement";
 
 import { TenantProvider } from "@/contexts/TenantContext";
@@ -47,6 +45,7 @@ type Tenant = {
   custom_domain: string | null;
   subscription_status: string | null;
   plan_tier: string | null;
+  is_test_account?: boolean | null;
   max_checks_per_month: number | null;
   email_from_name: string | null;
   email_from_address: string | null;
@@ -74,7 +73,7 @@ type TenantUserRow = {
   full_name?: string;
 };
 
-const PLAN_TIERS = ["starter", "pro", "enterprise"] as const;
+
 const TENANT_ROLES = ["admin", "operator", "viewer"];
 
 export default function AdminTenants() {
@@ -190,7 +189,6 @@ export default function AdminTenants() {
 
             <TabsTrigger value="tenants"><Building2 className="w-4 h-4 mr-1" /> Tenants</TabsTrigger>
             <TabsTrigger value="referrals"><Gift className="w-4 h-4 mr-1" /> Referral Dashboard</TabsTrigger>
-            <TabsTrigger value="platform-billing"><Receipt className="w-4 h-4 mr-1" /> Platform Billing</TabsTrigger>
             
           </TabsList>
           <TabsContent value="tenants">
@@ -209,11 +207,8 @@ export default function AdminTenants() {
           <TabsContent value="referrals">
             <AdminReferralDashboard />
           </TabsContent>
-          <TabsContent value="platform-billing" className="space-y-6">
-            <BillingConfigPanel />
-            <MaintenancePaymentsTracker />
-          </TabsContent>
         </Tabs>
+
       </SettingsPageShell>
     </div>
 
@@ -393,17 +388,17 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
   const [name, setName] = useState(tenant.name);
   const [slug, setSlug] = useState(tenant.slug);
   const [customDomain, setCustomDomain] = useState(tenant.custom_domain || "");
-  const [planTier, setPlanTier] = useState(tenant.plan_tier || "starter");
   const [subStatus, setSubStatus] = useState(tenant.subscription_status || "inactive");
+  const [isTest, setIsTest] = useState(!!(tenant as any).is_test_account);
   const [maxChecks, setMaxChecks] = useState(tenant.max_checks_per_month ?? 100);
   const { saving, save } = useTenantSave(tenant, onUpdated);
 
   return (
     <SectionCard
-      title="Company & Plan"
+      title="Company"
       icon={<Building2 className="h-4 w-4 text-primary" />}
       accent="bg-gradient-to-r from-primary to-primary/40"
-      description="Core info, URL, billing plan, and usage limits."
+      description="Core info, URL, subscription status, and usage limits."
     >
 
         <div className="grid grid-cols-2 gap-4">
@@ -415,14 +410,7 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
           <Input value={customDomain} onChange={(e) => setCustomDomain(e.target.value)} placeholder="checks.acme.com" />
           <p className="text-xs text-muted-foreground">Optional. If set, the tenant's portal lives at this domain.</p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label>Plan Tier</Label>
-            <Select value={planTier} onValueChange={setPlanTier}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{PLAN_TIERS.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label>Subscription Status</Label>
             <Select value={subStatus} onValueChange={setSubStatus}>
@@ -438,6 +426,15 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
           </div>
           <div className="space-y-2"><Label>Max Checks / Month</Label><Input type="number" value={maxChecks} onChange={(e) => setMaxChecks(parseInt(e.target.value) || 0)} /></div>
         </div>
+        <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 p-3">
+          <div className="space-y-0.5">
+            <Label>Test Account</Label>
+            <p className="text-xs text-muted-foreground">
+              Marks this organization as a demo account so prospects can explore the platform before purchasing.
+            </p>
+          </div>
+          <Switch checked={isTest} onCheckedChange={setIsTest} />
+        </div>
         {tenant.partner_code && (
           <div className="space-y-2">
             <Label>Partner Code</Label>
@@ -449,9 +446,10 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
             </div>
           </div>
         )}
-        <Button onClick={() => save({ name, slug, custom_domain: customDomain || null, plan_tier: planTier as Tenant["plan_tier"], subscription_status: subStatus, max_checks_per_month: maxChecks } as any)} disabled={saving}>
+        <Button onClick={() => save({ name, slug, custom_domain: customDomain || null, subscription_status: subStatus, is_test_account: isTest, max_checks_per_month: maxChecks } as any)} disabled={saving}>
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Changes
         </Button>
+
     </SectionCard>
 
   );
@@ -1332,6 +1330,9 @@ function TenantManagementTable({
       ? { is_founding_partner: true, monthly_rate_cents: 7500 }
       : { is_founding_partner: false });
 
+  const toggleTestAccount = (t: Tenant, on: boolean) =>
+    updateTenant(t.id, { is_test_account: on });
+
   const fmtMoney = (cents?: number | null) =>
     cents == null ? "—" : `$${(cents / 100).toFixed(2)}`;
 
@@ -1355,6 +1356,7 @@ function TenantManagementTable({
               <TableHead>Status</TableHead>
               <TableHead>Active</TableHead>
               <TableHead>Founding</TableHead>
+              <TableHead>Test</TableHead>
               <TableHead>Monthly Rate</TableHead>
               <TableHead>Referral Code</TableHead>
               <TableHead>Referral Disc.</TableHead>
@@ -1413,6 +1415,14 @@ function TenantManagementTable({
                       disabled={busyId === t.id}
                     />
                   </TableCell>
+                  <TableCell>
+                    <Switch
+                      checked={!!t.is_test_account}
+                      onCheckedChange={(v) => toggleTestAccount(t, v)}
+                      disabled={busyId === t.id}
+                    />
+                  </TableCell>
+
                   <TableCell>
                     <InlineMoneyEditor
                       valueCents={t.monthly_rate_cents ?? null}
