@@ -102,6 +102,24 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
     },
   });
 
+  // Payments this tenant RECEIVED on this check that were recorded by the
+  // sender as a disbursement (external check, Moov, ACH — any method). These
+  // roll into the same Received totals; there is no separate external lane.
+  const { data: incomingSplits = [] } = useQuery({
+    queryKey: ["incoming-splits", checkIntakeItemId, tenant?.id],
+    enabled: !!checkIntakeItemId && !!tenant?.id,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("disbursement_splits")
+        .select("id, amount, status, created_at, method, external_check_number, recipient_name, disbursement_batches!inner(check_intake_item_id)")
+        .eq("recipient_tenant_id", tenant!.id)
+        .neq("tenant_id", tenant!.id)
+        .eq("disbursement_batches.check_intake_item_id", checkIntakeItemId);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   // Per-check PA fee
   const { data: intakeItem } = useQuery({
     queryKey: ["intake-pa-fee", checkIntakeItemId],
@@ -169,9 +187,14 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
     .filter((s: any) => s.status !== "failed" && s.status !== "cancelled" && s.status !== "returned")
     .reduce((sum: number, s: any) => sum + toCents(Number(s.amount || 0)), 0));
 
-  const receivedFromPayments = incomingPayments
-    .filter((p: any) => p.status === "settled")
-    .reduce((sum: number, p: any) => sum + Number(p.payment_amount), 0);
+  const receivedFromPayments = toCents(
+    incomingPayments
+      .filter((p: any) => p.status === "settled")
+      .reduce((sum: number, p: any) => sum + Number(p.payment_amount), 0)
+    + (incomingSplits as any[])
+      .filter((s: any) => s.status === "settled")
+      .reduce((sum: number, s: any) => sum + Number(s.amount || 0), 0)
+  );
 
   // Fallback: when there are no incoming PA→contractor payments, the check
   // amount itself represents the funds available on this check.
@@ -179,9 +202,14 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
     ? receivedFromPayments
     : Number(intakeItem?.amount || 0);
 
-  const totalInTransit = incomingPayments
-    .filter((p: any) => p.status === "submitted")
-    .reduce((sum: number, p: any) => sum + Number(p.payment_amount), 0);
+  const totalInTransit = toCents(
+    incomingPayments
+      .filter((p: any) => p.status === "submitted")
+      .reduce((sum: number, p: any) => sum + Number(p.payment_amount), 0)
+    + (incomingSplits as any[])
+      .filter((s: any) => s.status === "submitted" || s.status === "pending")
+      .reduce((sum: number, s: any) => sum + Number(s.amount || 0), 0)
+  );
 
   // PA fee math
   const [paFeeMode, setPaFeeMode] = useState<"pct" | "amount">("pct");

@@ -12320,6 +12320,7 @@ export type Database = {
           rail: string
           rail_downgrade_reason: string | null
           recipient_name: string | null
+          recipient_tenant_id: string | null
           recipient_type: string | null
           requested_speed: string | null
           return_code: string | null
@@ -12357,6 +12358,7 @@ export type Database = {
           rail?: string
           rail_downgrade_reason?: string | null
           recipient_name?: string | null
+          recipient_tenant_id?: string | null
           recipient_type?: string | null
           requested_speed?: string | null
           return_code?: string | null
@@ -12394,6 +12396,7 @@ export type Database = {
           rail?: string
           rail_downgrade_reason?: string | null
           recipient_name?: string | null
+          recipient_tenant_id?: string | null
           recipient_type?: string | null
           requested_speed?: string | null
           return_code?: string | null
@@ -12413,6 +12416,20 @@ export type Database = {
             columns: ["batch_id"]
             isOneToOne: false
             referencedRelation: "disbursement_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "disbursement_splits_recipient_tenant_id_fkey"
+            columns: ["recipient_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "disbursement_splits_recipient_tenant_id_fkey"
+            columns: ["recipient_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
             referencedColumns: ["id"]
           },
           {
@@ -13674,6 +13691,7 @@ export type Database = {
           provider_account_id: string | null
           provider_bank_name: string | null
           provider_last_four: string | null
+          recipient_tenant_id: string | null
           recipient_type: string
           relationship: string | null
           secure_token: string | null
@@ -13699,6 +13717,7 @@ export type Database = {
           provider_account_id?: string | null
           provider_bank_name?: string | null
           provider_last_four?: string | null
+          recipient_tenant_id?: string | null
           recipient_type?: string
           relationship?: string | null
           secure_token?: string | null
@@ -13724,6 +13743,7 @@ export type Database = {
           provider_account_id?: string | null
           provider_bank_name?: string | null
           provider_last_four?: string | null
+          recipient_tenant_id?: string | null
           recipient_type?: string
           relationship?: string | null
           secure_token?: string | null
@@ -13734,6 +13754,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "external_payment_recipients_recipient_tenant_id_fkey"
+            columns: ["recipient_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_payment_recipients_recipient_tenant_id_fkey"
+            columns: ["recipient_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "external_payment_recipients_stakeholder_account_id_fkey"
             columns: ["stakeholder_account_id"]
@@ -24382,6 +24416,7 @@ export type Database = {
         Args: { p_name: string }
         Returns: string
       }
+      normalize_org_name: { Args: { _name: string }; Returns: string }
       normalize_partner_check_status: {
         Args: {
           _check_stage: Database["public"]["Enums"]["check_stage"]
@@ -24520,6 +24555,10 @@ export type Database = {
           resolved_claim_id: string
           resolved_tenant_id: string
         }[]
+      }
+      resolve_recipient_tenant: {
+        Args: { _recipient_name: string; _stakeholder_account_id: string }
+        Returns: string
       }
       review_manager_approval: {
         Args: {
