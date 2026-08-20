@@ -168,7 +168,8 @@ export default function MortgageOpsQueue() {
       } else if ((bill as any)?.already_billed) {
         toast.success("Marked complete (already billed)");
       } else {
-        const dollars = ((bill as any).flat_fee_cents / 100).toFixed(2);
+        const totalCents = (bill as any).total_cents ?? (bill as any).flat_fee_cents;
+        const dollars = (totalCents / 100).toFixed(2);
         toast.success(`Marked complete — billed $${dollars} to ${(bill as any).tenant_name}`);
       }
     } else {
