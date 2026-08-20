@@ -775,8 +775,8 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
         >
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Billing Settings
         </Button>
-      </CardContent>
-    </Card>
+    </SectionCard>
+
   );
 }
 
