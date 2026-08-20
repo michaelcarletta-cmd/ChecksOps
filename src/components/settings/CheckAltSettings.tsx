@@ -909,7 +909,60 @@ export function CheckAltDepositHistory() {
     staleTime: 60_000,
   });
 
+  // Local lookup so each CheckAlt record can show who the check was written to.
+  const { data: nameIndex } = useQuery({
+    queryKey: ["checkalt-deposit-name-index"],
+    queryFn: async () => {
+      const { data: deposits, error: depErr } = await supabase
+        .from("checkalt_deposits")
+        .select("checkalt_reference, check_intake_item_id")
+        .order("created_at", { ascending: false })
+        .limit(1000);
+      if (depErr) throw depErr;
+
+      const itemIds = Array.from(
+        new Set((deposits ?? []).map((d: any) => d.check_intake_item_id).filter(Boolean)),
+      ) as string[];
+      if (itemIds.length === 0) return {} as Record<string, string>;
+
+      const [{ data: checks }, { data: endorsements }] = await Promise.all([
+        supabase
+          .from("check_intake_items")
+          .select("id, payee_line, check_number")
+          .in("id", itemIds),
+        supabase
+          .from("check_endorsements")
+          .select("check_id, payee_name, payee_type")
+          .in("check_id", itemIds),
+      ]);
+
+      const namesByItem = new Map<string, string[]>();
+      for (const e of (endorsements ?? []) as any[]) {
+        if (!e.payee_name) continue;
+        const list = namesByItem.get(e.check_id) ?? [];
+        if (!list.includes(e.payee_name)) list.push(e.payee_name);
+        namesByItem.set(e.check_id, list);
+      }
+
+      const labelByItem = new Map<string, string>();
+      for (const c of (checks ?? []) as any[]) {
+        const endorsed = namesByItem.get(c.id) ?? [];
+        const label = endorsed.length > 0 ? endorsed.join(", ") : (c.payee_line ?? "");
+        if (label) labelByItem.set(c.id, label);
+      }
+
+      const index: Record<string, string> = {};
+      for (const d of (deposits ?? []) as any[]) {
+        const label = d.check_intake_item_id ? labelByItem.get(d.check_intake_item_id) : undefined;
+        if (label && d.checkalt_reference) index[String(d.checkalt_reference)] = label;
+      }
+      return index;
+    },
+    staleTime: 60_000,
+  });
+
   const items = data?.items ?? [];
+
 
   return (
     <Card>
@@ -988,6 +1041,8 @@ export function CheckAltDepositHistory() {
                   <th className="px-3 py-2 font-medium">Reference</th>
                   <th className="px-3 py-2 font-medium">Check #</th>
                   <th className="px-3 py-2 font-medium">Payer</th>
+                  <th className="px-3 py-2 font-medium">Insured / Payees</th>
+
                   <th className="px-3 py-2 font-medium text-right">Amount</th>
                   <th className="px-3 py-2 font-medium">Status</th>
                 </tr>
@@ -1035,6 +1090,10 @@ export function CheckAltDepositHistory() {
                       <td className="px-3 py-2 truncate max-w-[200px]">
                         {it.payerName ?? it.makerName ?? it.payor ?? "—"}
                       </td>
+                      <td className="px-3 py-2 truncate max-w-[240px]" title={nameIndex?.[String(it.referenceNumber ?? it.reference ?? "")] ?? ""}>
+                        {nameIndex?.[String(it.referenceNumber ?? it.reference ?? "")] ?? "—"}
+                      </td>
+
                       <td className="px-3 py-2 whitespace-nowrap text-right">
                         {displayAmount > 0 ? (
                           `$${displayAmount.toLocaleString(undefined, {

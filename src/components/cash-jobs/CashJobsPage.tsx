@@ -13,6 +13,10 @@ import { Plus, Search, Home, DollarSign, Clock, CheckCircle2, AlertCircle, Hamme
 import { format } from "date-fns";
 import { CashJobDetail } from "./CashJobDetail";
 import { CashJobForm } from "./CashJobForm";
+import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
+import { SettingsHero } from "@/components/settings/SettingsHero";
+import { SectionCard } from "@/components/settings/SectionCard";
+
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
   estimate:          { label: "Estimate",           color: "text-muted-foreground border-border bg-muted/30",              icon: Clock },
@@ -99,85 +103,95 @@ export default function CashJobsPage() {
   }
 
   return (
-    <div className="space-y-4 p-4 max-w-5xl mx-auto">
+    <SettingsPageShell className="px-4">
+      <SettingsHero
+        title="Cash Jobs"
+        description="Track non-insurance work, contract amounts, and customer payments in one place."
+        badge="Direct Pay Work"
+        icon={<Hammer className="h-4 w-4 text-primary" />}
+      />
 
-      {/* Header */}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div>
-          <h1 className="text-lg font-semibold flex items-center gap-2">
-            <Hammer className="h-5 w-5 text-amber-400" />
-            Cash Jobs
-          </h1>
-          <p className="text-sm text-muted-foreground">Track non-insurance work and payments</p>
-        </div>
-        <Button onClick={() => setShowForm(true)}>
-          <Plus className="h-4 w-4 mr-1" />
-          New job
-        </Button>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        <Card>
-          <CardContent className="pt-3 pb-3">
-            <p className="text-xs text-muted-foreground mb-1">Active Jobs</p>
-            <p className="text-xl font-semibold">{activeJobs}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-3 pb-3">
-            <p className="text-xs text-muted-foreground mb-1">Outstanding</p>
-            <p className="text-xl font-semibold text-amber-500">
-              ${outstanding.toLocaleString("en-US", { minimumFractionDigits: 0 })}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-3 pb-3">
-            <p className="text-xs text-muted-foreground mb-1">Collected</p>
-            <p className="text-xl font-semibold text-emerald-500">
-              ${totalRevenue.toLocaleString("en-US", { minimumFractionDigits: 0 })}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters */}
-      <div className="flex gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            className="h-8 text-sm pl-8"
-            placeholder="Search customer, job, address..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="h-8 text-sm w-44"><SelectValue placeholder="All status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all" className="text-xs">All status</SelectItem>
-            {Object.entries(STATUS_CONFIG).map(([v, c]) => (
-              <SelectItem key={v} value={v} className="text-xs">{c.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Job list */}
-      {isLoading ? (
-        <div className="text-sm text-muted-foreground text-center py-8">Loading jobs...</div>
-      ) : filteredJobs.length === 0 ? (
-        <div className="text-center py-12 space-y-2">
-          <Hammer className="h-8 w-8 text-muted-foreground mx-auto" />
-          <p className="text-sm text-muted-foreground">No cash jobs yet.</p>
-          <Button variant="outline" size="sm" onClick={() => setShowForm(true)}>
-            <Plus className="h-3.5 w-3.5 mr-1" />
-            Add your first job
+      <SectionCard
+        title="Job Overview"
+        accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
+        icon={<Hammer className="h-4 w-4 text-amber-500" />}
+        description="Pipeline health across all cash jobs"
+      >
+        <div className="flex justify-end -mt-2 mb-2">
+          <Button size="sm" onClick={() => setShowForm(true)}>
+            <Plus className="h-4 w-4 mr-1" />
+            New job
           </Button>
         </div>
-      ) : (
-        <div className="space-y-2">
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 shadow-sm backdrop-blur-sm">
+            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <Hammer className="h-3 w-3" /> Active Jobs
+            </div>
+            <div className="text-2xl font-bold tracking-tight text-primary">{activeJobs}</div>
+          </div>
+          <div className="rounded-xl border border-border/50 bg-card/30 p-4 shadow-sm backdrop-blur-sm">
+            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <AlertCircle className="h-3 w-3" /> Outstanding
+            </div>
+            <div className="text-2xl font-bold tracking-tight text-amber-500">
+              ${outstanding.toLocaleString("en-US", { minimumFractionDigits: 0 })}
+            </div>
+          </div>
+          <div className="rounded-xl border border-border/50 bg-card/30 p-4 shadow-sm backdrop-blur-sm">
+            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <CheckCircle2 className="h-3 w-3" /> Collected
+            </div>
+            <div className="text-2xl font-bold tracking-tight text-emerald-500">
+              ${totalRevenue.toLocaleString("en-US", { minimumFractionDigits: 0 })}
+            </div>
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="All Jobs"
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        icon={<Home className="h-4 w-4 text-primary" />}
+        description="Search, filter and open any cash job"
+      >
+        {/* Filters */}
+        <div className="flex gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-48">
+            <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              className="h-8 text-sm pl-8"
+              placeholder="Search customer, job, address..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="h-8 text-sm w-44"><SelectValue placeholder="All status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">All status</SelectItem>
+              {Object.entries(STATUS_CONFIG).map(([v, c]) => (
+                <SelectItem key={v} value={v} className="text-xs">{c.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Job list */}
+        {isLoading ? (
+          <div className="text-sm text-muted-foreground text-center py-8">Loading jobs...</div>
+        ) : filteredJobs.length === 0 ? (
+          <div className="text-center py-12 space-y-2">
+            <Hammer className="h-8 w-8 text-muted-foreground mx-auto" />
+            <p className="text-sm text-muted-foreground">No cash jobs yet.</p>
+            <Button variant="outline" size="sm" onClick={() => setShowForm(true)}>
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              Add your first job
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+
           {filteredJobs.map((job: any) => {
             const cfg = STATUS_CONFIG[job.status] ?? STATUS_CONFIG.estimate;
             const StatusIcon = cfg.icon;
@@ -253,8 +267,10 @@ export default function CashJobsPage() {
               </Card>
             );
           })}
-        </div>
-      )}
-    </div>
+          </div>
+        )}
+      </SectionCard>
+    </SettingsPageShell>
   );
 }
+

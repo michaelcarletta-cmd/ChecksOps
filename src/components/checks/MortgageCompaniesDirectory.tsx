@@ -25,12 +25,29 @@ export function MortgageCompaniesDirectory({ searchQuery: externalSearch }: Prop
   const [localSearch, setLocalSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<MortgageCompanyRecord | null>(null);
+  const [prefillName, setPrefillName] = useState<string | undefined>(undefined);
+  const [detected, setDetected] = useState<string[]>([]);
 
   const search = (externalSearch ?? "") || localSearch;
 
   useEffect(() => {
     void fetchCompanies();
+    void fetchDetected();
   }, []);
+
+  const fetchDetected = async () => {
+    const { data } = await supabase
+      .from("check_endorsements")
+      .select("payee_name")
+      .eq("payee_type", "mortgage_company")
+      .not("payee_name", "is", null)
+      .limit(1000);
+    const names = Array.from(
+      new Set(((data ?? []) as any[]).map((r) => String(r.payee_name).trim()).filter(Boolean)),
+    ).sort((a, b) => a.localeCompare(b));
+    setDetected(names);
+  };
+
 
   const fetchCompanies = async () => {
     setLoading(true);
@@ -62,15 +79,29 @@ export function MortgageCompaniesDirectory({ searchQuery: externalSearch }: Prop
     );
   }, [companies, search]);
 
+  const missing = useMemo(() => {
+    const known = new Set(companies.map((c) => c.name.trim().toLowerCase()));
+    return detected.filter((n) => !known.has(n.trim().toLowerCase()));
+  }, [companies, detected]);
+
   const openNew = () => {
     setEditing(null);
+    setPrefillName(undefined);
+    setDialogOpen(true);
+  };
+
+  const openFromCheck = (name: string) => {
+    setEditing(null);
+    setPrefillName(name);
     setDialogOpen(true);
   };
 
   const openEdit = (c: MortgageCompanyRecord) => {
     setEditing(c);
+    setPrefillName(undefined);
     setDialogOpen(true);
   };
+
 
   return (
     <Card>
@@ -102,6 +133,30 @@ export function MortgageCompaniesDirectory({ searchQuery: externalSearch }: Prop
             />
           </div>
         )}
+
+        {missing.length > 0 && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+            <p className="text-xs font-medium text-amber-500 flex items-center gap-1.5">
+              <Building2 className="h-3.5 w-3.5" />
+              Found on checks but not in the directory ({missing.length})
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {missing.map((name) => (
+                <Button
+                  key={name}
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => openFromCheck(name)}
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  {name}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+
 
         {loading ? (
           <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
@@ -212,8 +267,13 @@ export function MortgageCompaniesDirectory({ searchQuery: externalSearch }: Prop
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         company={editing}
-        onSaved={() => void fetchCompanies()}
+        initialName={prefillName}
+        onSaved={() => {
+          void fetchCompanies();
+          void fetchDetected();
+        }}
       />
+
     </Card>
   );
 }
