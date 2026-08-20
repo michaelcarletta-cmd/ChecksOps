@@ -26,8 +26,6 @@ import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
 import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
-import { BillingConfigPanel } from "@/components/billing/BillingConfigPanel";
-import { MaintenancePaymentsTracker } from "@/components/settings/MaintenancePaymentsTracker";
 import { TenantProBadgeManagement } from "@/components/settings/TenantProBadgeManagement";
 
 import { TenantProvider } from "@/contexts/TenantContext";
