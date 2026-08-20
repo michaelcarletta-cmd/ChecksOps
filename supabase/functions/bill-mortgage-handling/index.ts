@@ -32,7 +32,7 @@ serve(async (req) => {
   const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
   const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-  if (!stripeKey) return json(500, { error: "STRIPE_SECRET_KEY not configured" });
+
 
   // Identify caller
   const userClient = createClient(SUPABASE_URL, ANON_KEY, {
