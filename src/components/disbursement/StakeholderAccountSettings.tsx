@@ -549,12 +549,12 @@ export function StakeholderAccountSettings() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-amber-500" />
-              {capLimitDialog ? ACCOUNT_TYPE_LABELS[capLimitDialog] : ""} limit reached
+              Stakeholder limit reached
             </DialogTitle>
             <DialogDescription>
-              All {capLimitDialog ? ACCOUNT_TYPE_LABELS[capLimitDialog].toLowerCase() : ""} account
-              slots for your tenant are in use
+              All additional stakeholder slots for your tenant are in use
               {capLimitDialog ? ` (${countForType(capLimitDialog)} of ${capForType(capLimitDialog)})` : ""}.
+              Vendors, sales reps and subcontractors share one limit.
               To add another, request more capacity from ChecksOps below.
             </DialogDescription>
           </DialogHeader>
