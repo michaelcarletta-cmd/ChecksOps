@@ -267,7 +267,7 @@ export function VerificationDocumentsPanel({
                   )}
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  {f.storage_path && (
+                  {f.storage_path ? (
                     <Button
                       size="sm"
                       variant="outline"
@@ -279,7 +279,12 @@ export function VerificationDocumentsPanel({
                         ? <Loader2 className="h-3 w-3 animate-spin" />
                         : <><Eye className="h-3 w-3 mr-1" /> View</>}
                     </Button>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                      Copy not retained
+                    </span>
                   )}
+
                   <Badge
                     variant="outline"
                     className={`text-[10px] ${STATUS_CLASS[f.review_status] ?? STATUS_CLASS.pending}`}
