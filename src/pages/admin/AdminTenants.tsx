@@ -758,14 +758,15 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
           <p className="text-xs text-muted-foreground">These fees are tracked for visibility. Tenants pay these directly to Moov.</p>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
+              <Label className="text-xs">Next Day Credit</Label>
+              <Input value="$0.75" disabled className="bg-muted/50" />
+            </div>
+            <div className="space-y-1">
               <Label className="text-xs">Same Day Credit</Label>
               <Input value="$1.00" disabled className="bg-muted/50" />
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Instant Credit</Label>
-              <Input value="$1.50" disabled className="bg-muted/50" />
-            </div>
           </div>
+
         </div>
 
         <Button 
@@ -1024,7 +1025,8 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const checkCount = events.filter((e) => e.event_type === "check_processing").length;
   const mortgageCount = data?.mortgage_count || events.filter((e) => e.event_type === "mortgage_handling").length;
   const sameDay = events.filter((e) => e.event_type === "moov_same_day").length;
-  const instant = events.filter((e) => e.event_type === "moov_instant").length;
+  const nextDay = events.filter((e) => e.event_type === "moov_next_day" || e.event_type === "moov_standard").length;
+
   const fmt = (cents: number) =>
     new Intl.NumberFormat("en-US", { style: "currency", currency: (data?.currency || "usd").toUpperCase() }).format((cents || 0) / 100);
   const maintenancePaidCents = maintenance
@@ -1148,7 +1150,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
               <div className="rounded-lg border bg-card p-3">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Disbursement Usage</div>
                 <div className="text-2xl font-bold mt-1">{moov?.count ?? 0}</div>
-                <div className="text-[10px] text-muted-foreground mt-1">Same Day {sameDay} · Instant {instant}</div>
+                <div className="text-[10px] text-muted-foreground mt-1">Next Day {nextDay} · Same Day {sameDay}</div>
               </div>
               <div className="rounded-lg border bg-card p-3">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Paid to ChecksOps</div>
