@@ -17337,6 +17337,7 @@ export type Database = {
           requirement_id: string | null
           review_reason: string | null
           review_status: string
+          storage_path: string | null
           tenant_id: string
           updated_at: string
           uploaded_by: string | null
@@ -17359,6 +17360,7 @@ export type Database = {
           requirement_id?: string | null
           review_reason?: string | null
           review_status?: string
+          storage_path?: string | null
           tenant_id: string
           updated_at?: string
           uploaded_by?: string | null
@@ -17381,6 +17383,7 @@ export type Database = {
           requirement_id?: string | null
           review_reason?: string | null
           review_status?: string
+          storage_path?: string | null
           tenant_id?: string
           updated_at?: string
           uploaded_by?: string | null

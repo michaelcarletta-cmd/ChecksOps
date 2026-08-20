@@ -1,0 +1,1 @@
+ALTER TABLE public.payment_provider_files ADD COLUMN IF NOT EXISTS storage_path text;
