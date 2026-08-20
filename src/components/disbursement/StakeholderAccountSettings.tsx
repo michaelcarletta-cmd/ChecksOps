@@ -99,11 +99,11 @@ export function StakeholderAccountSettings() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tenants")
-        .select("max_sales_reps, max_subcontractors, max_vendors")
+        .select("stakeholder_cap")
         .eq("id", tenant!.id)
         .maybeSingle();
       if (error) throw error;
-      return data as { max_sales_reps: number; max_subcontractors: number; max_vendors: number } | null;
+      return data as { stakeholder_cap: number | null } | null;
     },
   });
 
@@ -123,17 +123,20 @@ export function StakeholderAccountSettings() {
   });
   const canManageTenant = tenantRole === "owner" || tenantRole === "admin";
 
-  const capForType = (t: string): number | null => {
-    if (t === "sales_rep") return tenantCaps?.max_sales_reps ?? 5;
-    if (t === "subcontractor") return tenantCaps?.max_subcontractors ?? 10;
-    if (t === "vendor") return tenantCaps?.max_vendors ?? 5;
-    return null;
-  };
-  const countForType = (t: string) => accounts.filter((a: any) => a.account_type === t).length;
+  // One shared limit across vendors, sales reps and subcontractors.
+  const CAPPED_TYPES = ["sales_rep", "subcontractor", "vendor"];
+  const sharedCap = tenantCaps?.stakeholder_cap ?? 5;
+  const capForType = (t: string): number | null =>
+    CAPPED_TYPES.includes(t) ? sharedCap : null;
+  const countForType = (t: string) =>
+    CAPPED_TYPES.includes(t)
+      ? accounts.filter((a: any) => CAPPED_TYPES.includes(a.account_type)).length
+      : accounts.filter((a: any) => a.account_type === t).length;
   const isAtCap = (t: string) => {
     const max = capForType(t);
     return max !== null && countForType(t) >= max;
   };
+
 
 
 
