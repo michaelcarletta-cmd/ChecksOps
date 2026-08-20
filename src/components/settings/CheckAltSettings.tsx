@@ -1036,11 +1036,16 @@ export function CheckAltDepositHistory() {
                         {it.payerName ?? it.makerName ?? it.payor ?? "—"}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-right">
-                        $
-                        {displayAmount.toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
+                        {displayAmount > 0 ? (
+                          `$${displayAmount.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}`
+                        ) : (
+                          <span className="text-muted-foreground" title="CheckAlt could not read the amount (image rejected before OCR)">
+                            n/a
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <Badge variant="outline" className="text-[10px]">
