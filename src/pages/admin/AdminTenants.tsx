@@ -17,7 +17,7 @@ import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
 
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { useRef } from "react";
-import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
+
 import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
 import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
