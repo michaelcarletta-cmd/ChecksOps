@@ -72,8 +72,9 @@ export default function PublicInvoicePage() {
   const [invoice, setInvoice] = useState<PublicInvoice | null>(null);
   const [tenant, setTenant] = useState<TenantBranding | null>(null);
 
-  const primary = tenant?.primary_color || "#3B82F6";
+  const primary = tenant?.invoice_accent_color || tenant?.primary_color || "#3B82F6";
   const secondary = tenant?.secondary_color || "#1E293B";
+  const invoiceTheme = tenant?.invoice_theme === "dark" ? "dark" : "light";
 
   useEffect(() => {
     if (!token) {
