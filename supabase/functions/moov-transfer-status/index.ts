@@ -13,6 +13,7 @@ import {
   requireMoovCaller,
   sanitize,
 } from "../_shared/moovGuard.ts";
+import { postTransferLedger } from "../_shared/moovWallet.ts";
 
 /**
  * Re-reads the live status of a tenant's in-flight transfers from Moov and
@@ -38,7 +39,7 @@ serve(async (req) => {
 
     const { data: rows, error } = await supabase
       .from("payment_transfers")
-      .select("id, provider_transfer_id, status, amount_cents, description")
+      .select("id, tenant_id, provider_transfer_id, status, amount_cents, description, wallet_id, leg_role, transfer_group_id, claim_id, check_id")
       .eq("tenant_id", tenantId)
       .in("status", IN_FLIGHT)
       .not("provider_transfer_id", "is", null)
@@ -88,6 +89,10 @@ serve(async (req) => {
           })
           .eq("id", row.id);
         updated++;
+
+        // Keep the local ledger in step with the provider's answer, so a
+        // missed webhook never leaves the balance history with a hole.
+        await postTransferLedger(supabase, row as any, status, row.provider_transfer_id);
 
         await logPaymentEvent(supabase, {
           tenant_id: tenantId,

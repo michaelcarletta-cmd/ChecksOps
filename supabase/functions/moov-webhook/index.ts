@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { normalizeTransferStatus } from "../_shared/moovClient.ts";
 import { corsHeaders, json, sanitize, serviceClient } from "../_shared/moovGuard.ts";
-import { writeLedgerEntry } from "../_shared/moovWallet.ts";
+import { postTransferLedger } from "../_shared/moovWallet.ts";
 
 // Secure provider webhook endpoint.
 //
