@@ -1,10 +1,6 @@
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { Users, Loader2 } from "lucide-react";
+import { Users } from "lucide-react";
 import { SectionCard } from "./SectionCard";
 
 interface TeamCapsSettingsProps {
@@ -13,38 +9,7 @@ interface TeamCapsSettingsProps {
   onUpdate: () => void;
 }
 
-export function TeamCapsSettings({
-  stakeholderCap: initialCap,
-  tenantId,
-  onUpdate,
-}: TeamCapsSettingsProps) {
-  const [stakeholderCap, setStakeholderCap] = useState(initialCap);
-  const [saving, setSaving] = useState(false);
-  const { toast } = useToast();
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const { error } = await supabase
-        .from("tenants")
-        .update({ stakeholder_cap: stakeholderCap } as any)
-        .eq("id", tenantId);
-
-      if (error) throw error;
-
-      toast({ title: "Stakeholder limit updated" });
-      onUpdate();
-    } catch (error: any) {
-      toast({
-        title: "Failed to update limit",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
+export function TeamCapsSettings({ stakeholderCap }: TeamCapsSettingsProps) {
   return (
     <SectionCard
       title="Additional Stakeholders"
