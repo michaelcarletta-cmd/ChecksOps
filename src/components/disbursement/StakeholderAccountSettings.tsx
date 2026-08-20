@@ -18,7 +18,6 @@ import { AchAuthorizationForm } from "./AchAuthorizationForm";
 import { BankVerification } from "./BankVerification";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePaymentRail } from "@/hooks/usePaymentRail";
-import { RequestStakeholderLimitDialog } from "./RequestStakeholderLimitDialog";
 
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
@@ -72,7 +71,6 @@ export function StakeholderAccountSettings() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [capLimitDialog, setCapLimitDialog] = useState<null | "sales_rep" | "subcontractor" | "vendor">(null);
-  const [requestLimitDialog, setRequestLimitDialog] = useState<null | "sales_rep" | "subcontractor" | "vendor">(null);
 
   const { data: accounts = [], isLoading } = useQuery({
     queryKey: ["stakeholder-accounts", tenant?.id],
@@ -554,52 +552,25 @@ export function StakeholderAccountSettings() {
             <DialogDescription>
               All additional stakeholder slots for your tenant are in use
               {capLimitDialog ? ` (${countForType(capLimitDialog)} of ${capForType(capLimitDialog)})` : ""}.
-              Vendors, sales reps and subcontractors share one limit.
-              To add another, request more capacity from ChecksOps below.
+              Vendors, sales reps and subcontractors share one limit. Remove an existing
+              stakeholder to free up a slot.
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" size="sm" onClick={() => setCapLimitDialog(null)}>Close</Button>
-            {canManageTenant ? (
-              <Button
-                size="sm"
-                onClick={() => {
-                  const cat = capLimitDialog;
-                  setCapLimitDialog(null);
-                  if (cat) setRequestLimitDialog(cat);
-                }}
-              >
-                Request more
-              </Button>
-            ) : (
-              <span className="text-[11px] text-muted-foreground italic self-center">
-                Ask an owner/admin to request more
-              </span>
-            )}
           </div>
         </DialogContent>
       </Dialog>
 
-      {requestLimitDialog && (
-        <RequestStakeholderLimitDialog
-          open={!!requestLimitDialog}
-          onOpenChange={(o) => !o && setRequestLimitDialog(null)}
-          category={requestLimitDialog}
-          currentLimit={capForType(requestLimitDialog) ?? 0}
-        />
-      )}
     </div>
   );
 }
 
 
 // ---------------------------------------------------------------------------
-// Shared additional-stakeholder cap counter with "Request more" button
+// Shared additional-stakeholder cap counter (fixed limit, no self-service raise)
 // ---------------------------------------------------------------------------
 function StakeholderCapsBar({ accounts, tenantId }: { accounts: any[]; tenantId?: string }) {
-  const { user } = useAuth();
-  const [openDialog, setOpenDialog] = useState(false);
-
   const { data: tenantLimits } = useQuery({
     queryKey: ["tenant-stakeholder-caps", tenantId],
     enabled: !!tenantId,
@@ -614,23 +585,6 @@ function StakeholderCapsBar({ accounts, tenantId }: { accounts: any[]; tenantId?
     },
   });
 
-  // Only tenant owners/admins may request more capacity.
-  const { data: tenantRole } = useQuery({
-    queryKey: ["tenant-user-role", tenantId, user?.id],
-    enabled: !!tenantId && !!user?.id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tenant_users")
-        .select("role")
-        .eq("tenant_id", tenantId!)
-        .eq("user_id", user!.id)
-        .maybeSingle();
-      if (error) throw error;
-      return (data?.role ?? null) as string | null;
-    },
-  });
-  const canManageTenant = tenantRole === "owner" || tenantRole === "admin";
-
   const maxStakeholders = tenantLimits?.stakeholder_cap ?? 5;
   const used = accounts.filter((a: any) =>
     ["sales_rep", "subcontractor", "vendor"].includes(a.account_type),
@@ -638,39 +592,24 @@ function StakeholderCapsBar({ accounts, tenantId }: { accounts: any[]; tenantId?
   const nearCap = used >= maxStakeholders;
 
   return (
-    <>
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-xs text-muted-foreground">Additional stakeholders</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-1.5">
-          <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">Vendors, sales reps & subcontractors</span>
-              <Badge variant="outline" className={nearCap ? "border-amber-500/40 text-amber-700 bg-amber-500/10" : ""}>
-                {used} / {maxStakeholders}
-              </Badge>
-            </div>
-            {canManageTenant ? (
-              <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => setOpenDialog(true)}>
-                Request more
-              </Button>
-            ) : (
-              <span className="text-[10px] text-muted-foreground italic">Ask an owner to request more</span>
-            )}
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-xs text-muted-foreground">Additional stakeholders</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-1.5">
+        <div className="flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground">Vendors, sales reps &amp; subcontractors</span>
+            <Badge variant="outline" className={nearCap ? "border-amber-500/40 text-amber-700 bg-amber-500/10" : ""}>
+              {used} / {maxStakeholders}
+            </Badge>
           </div>
-        </CardContent>
-      </Card>
-      {openDialog && (
-        <RequestStakeholderLimitDialog
-          open={openDialog}
-          onOpenChange={(o) => !o && setOpenDialog(false)}
-          category="vendor"
-          currentLimit={maxStakeholders}
-        />
-      )}
-    </>
+          <span className="text-[10px] text-muted-foreground italic">Fixed limit</span>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
+
 
 
