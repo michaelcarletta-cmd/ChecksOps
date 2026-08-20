@@ -210,9 +210,9 @@ export default function AdminTenants() {
             <MaintenancePaymentsTracker />
           </TabsContent>
         </Tabs>
-      </div>
-
+      </SettingsPageShell>
     </div>
+
   );
 }
 
