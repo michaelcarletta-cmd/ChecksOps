@@ -41,6 +41,7 @@ const FindAPro = lazy(() => import("./pages/FindAPro"));
 const HomeownerCheckUpload = lazy(() => import("./pages/HomeownerCheckUpload"));
 const HomeownerClaimPortal = lazy(() => import("./pages/HomeownerClaimPortal"));
 const HomeownerLedger = lazy(() => import("./pages/HomeownerLedger"));
+const PublicInvoicePage = lazy(() => import("./pages/PublicInvoicePage"));
 const MortgageOpsLogin = lazy(() => import("./pages/mortgage-ops/MortgageOpsLogin"));
 const MortgageOpsQueue = lazy(() => import("./pages/mortgage-ops/MortgageOpsQueue"));
 
