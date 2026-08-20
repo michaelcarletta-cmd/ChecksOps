@@ -890,7 +890,7 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
               Moov-verified account we pull maintenance fees from for {tenantName}.
             </CardDescription>
           </div>
-          <Button size="sm" onClick={pullNow} disabled={charging || !bank || !billing?.auto_debit_enabled}>
+          <Button size="sm" onClick={pullNow} disabled={charging}>
             {charging ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
             Pull maintenance fee now
           </Button>
