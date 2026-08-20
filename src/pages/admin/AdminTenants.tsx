@@ -779,6 +779,18 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
   );
 }
 
+/** Reads the JSON error body an edge function returned with a non-2xx status. */
+async function readFnError(error: any): Promise<string> {
+  try {
+    const parsed = await error?.context?.json?.();
+    if (parsed?.error) return parsed.error;
+    if (parsed?.message) return parsed.message;
+  } catch {
+    /* fall through to the generic message */
+  }
+  return error?.message ?? "Request failed";
+}
+
 /* ---------------- Bank Account (for pulling maintenance fees) ---------------- */
 
 function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
