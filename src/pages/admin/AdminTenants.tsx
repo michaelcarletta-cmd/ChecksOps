@@ -758,14 +758,15 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
           <p className="text-xs text-muted-foreground">These fees are tracked for visibility. Tenants pay these directly to Moov.</p>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
+              <Label className="text-xs">Next Day Credit</Label>
+              <Input value="$0.75" disabled className="bg-muted/50" />
+            </div>
+            <div className="space-y-1">
               <Label className="text-xs">Same Day Credit</Label>
               <Input value="$1.00" disabled className="bg-muted/50" />
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Instant Credit</Label>
-              <Input value="$1.50" disabled className="bg-muted/50" />
-            </div>
           </div>
+
         </div>
 
         <Button 
