@@ -882,22 +882,19 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>Billing Bank Account</CardTitle>
-            <CardDescription>
-              Moov-verified account we pull maintenance fees from for {tenantName}.
-            </CardDescription>
-          </div>
-          <Button size="sm" onClick={pullNow} disabled={charging}>
-            {charging ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-            Pull maintenance fee now
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
+    <SectionCard
+      title="Billing Bank Account"
+      icon={<ShieldCheck className="h-4 w-4 text-sky-500" />}
+      accent="bg-gradient-to-r from-sky-500 to-sky-500/30"
+      description={`Moov-verified account we pull maintenance fees from for ${tenantName}.`}
+    >
+      <div className="flex justify-end">
+        <Button size="sm" onClick={pullNow} disabled={charging}>
+          {charging ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+          Pull maintenance fee now
+        </Button>
+      </div>
+
         {loading ? (
           <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
         ) : !bank ? (
