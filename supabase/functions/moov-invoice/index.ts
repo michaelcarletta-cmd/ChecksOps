@@ -322,12 +322,21 @@ serve(async (req) => {
       if (!row) return json({ error: "Invoice not found" }, 404);
       if ((row as any).status === "paid") return json({ error: "A paid invoice cannot be canceled" }, 400);
 
+      // Best-effort: the provider may not allow canceling drafts/already-canceled
+      // invoices. We still cancel locally so the UI never dead-ends on a 5xx.
+      let providerError: string | null = null;
       if ((row as any).moov_invoice_id) {
-        await moovFetch(
-          `/accounts/${merchantAccountId}/invoices/${(row as any).moov_invoice_id}`,
-          { method: "DELETE", scopes: invoiceScopes(merchantAccountId, true), apiVersion: INVOICE_API_VERSION },
-        );
+        try {
+          await moovFetch(
+            `/accounts/${merchantAccountId}/invoices/${(row as any).moov_invoice_id}`,
+            { method: "DELETE", scopes: invoiceScopes(merchantAccountId, true), apiVersion: INVOICE_API_VERSION },
+          );
+        } catch (e) {
+          providerError = (e as Error)?.message ?? "Provider cancel failed";
+          console.error("[moov-invoice] provider cancel failed (continuing)", providerError);
+        }
       }
+
 
       const { data: updated } = await supabase
         .from("moov_invoices")
