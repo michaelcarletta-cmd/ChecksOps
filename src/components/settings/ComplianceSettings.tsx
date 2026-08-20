@@ -14,6 +14,8 @@ import { format } from "date-fns";
 import { formatPhoneNumber } from "@/lib/utils";
 import { SettingsHero } from "./SettingsHero";
 import { SectionCard } from "./SectionCard";
+import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
+
 
 
 type AddressParts = { street: string; city: string; state: string; zip: string };
