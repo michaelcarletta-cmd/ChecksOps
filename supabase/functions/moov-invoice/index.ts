@@ -265,12 +265,13 @@ serve(async (req) => {
 
       await logPaymentEvent(supabase, {
         tenant_id,
-        event_type: "invoice.sent",
+        event_type: action === "resend" ? "invoice.resent" : "invoice.sent",
         previous_status: (row as any).status,
         new_status: sent.status ?? "unpaid",
         environment,
         provider_metadata: { invoiceID: (row as any).moov_invoice_id },
       });
+
 
       return json({ success: true, invoice: updated });
     }
