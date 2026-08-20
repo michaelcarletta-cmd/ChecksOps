@@ -85,36 +85,29 @@ export function MortgageOpsDirectory() {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Building2 className="h-5 w-5" />
-                Mortgage Directory
-                <Badge variant="secondary" className="ml-1">{companies.length}</Badge>
-              </CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">
-                Phone numbers, emails, mailing addresses, and online claim check portals for mortgage servicers.
-              </p>
-            </div>
-            <Button size="sm" onClick={openNew}>
-              <Plus className="h-4 w-4 mr-1" /> Add Company
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by company, contact, phone, email, or address…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-        </CardContent>
-      </Card>
+      <SectionCard
+        title="Mortgage Directory"
+        icon={<Building2 className="h-4 w-4 text-sky-400" />}
+        accent="bg-sky-500"
+        description="Phone numbers, emails, mailing addresses, and online claim check portals for mortgage servicers."
+      >
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <Badge variant="secondary">{companies.length} companies</Badge>
+          <Button size="sm" onClick={openNew}>
+            <Plus className="h-4 w-4 mr-1" /> Add Company
+          </Button>
+        </div>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by company, contact, phone, email, or address…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+      </SectionCard>
+
 
       {loading ? (
         <div className="flex items-center justify-center py-10">
