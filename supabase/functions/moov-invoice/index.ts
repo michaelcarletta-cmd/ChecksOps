@@ -338,12 +338,17 @@ serve(async (req) => {
       }
 
 
-      const { data: updated } = await supabase
+      const { data: updated, error: updateErr } = await supabase
         .from("moov_invoices")
         .update({ status: "canceled", last_synced_at: new Date().toISOString() })
         .eq("id", (row as any).id)
         .select("*")
         .maybeSingle();
+
+      if (updateErr) {
+        console.error("[moov-invoice] cancel update failed", updateErr.message);
+        return json({ error: `Could not cancel invoice: ${updateErr.message}` }, 500);
+      }
 
       await logPaymentEvent(supabase, {
         tenant_id,
@@ -351,10 +356,11 @@ serve(async (req) => {
         previous_status: (row as any).status,
         new_status: "canceled",
         environment,
-        provider_metadata: { invoiceID: (row as any).moov_invoice_id },
+        provider_metadata: { invoiceID: (row as any).moov_invoice_id, providerError },
       });
 
-      return json({ success: true, invoice: updated });
+      return json({ success: true, invoice: updated, provider_warning: providerError });
+
     }
 
     return json({ error: `Unknown action "${action}"` }, 400);
