@@ -42,10 +42,12 @@ import { useWallet } from "@/hooks/useWallet";
 import { useSweepConfig } from "@/hooks/useSweepConfig";
 import {
   useAllTenantWalletBalances,
+  useRefreshTransferStatuses,
   useWalletOpsReadiness,
   useWalletOpsTransfers,
   useWalletRunningBalance,
 } from "@/hooks/useWalletOps";
+
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
