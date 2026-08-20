@@ -212,3 +212,78 @@ export async function writeLedgerEntry(
   if (error.code === "23505") return { applied: false };
   return { applied: false, error: error.message };
 }
+
+/**
+ * Posts (or reverses) the wallet ledger entry for a transfer whose status just
+ * became terminal. Safe to call repeatedly: `reference` is unique, so a replay
+ * from the webhook AND the status poller can never double-count a balance.
+ */
+export async function postTransferLedger(
+  supabase: SupabaseClient,
+  transfer: {
+    id: string;
+    tenant_id: string;
+    wallet_id: string | null;
+    amount_cents: number | string;
+    leg_role?: string | null;
+    transfer_group_id?: string | null;
+    claim_id?: string | null;
+    check_id?: string | null;
+    description?: string | null;
+  },
+  status: string,
+  providerTransferId?: string | null,
+): Promise<void> {
+  if (!transfer.wallet_id) return;
+
+  const amount = Number(transfer.amount_cents || 0);
+  if (!Number.isFinite(amount) || amount <= 0) return;
+
+  const incoming = transfer.leg_role === "wallet_funding" || transfer.leg_role === "parent";
+
+  if (status === "completed") {
+    await writeLedgerEntry(supabase, {
+      wallet_id: transfer.wallet_id,
+      tenant_id: transfer.tenant_id,
+      direction: incoming ? "credit" : "debit",
+      entry_type: incoming
+        ? (transfer.leg_role === "parent" ? "settlement_received" : "funding")
+        : "payout",
+      amount_cents: amount,
+      transfer_id: transfer.id,
+      transfer_group_id: transfer.transfer_group_id ?? null,
+      claim_id: transfer.claim_id ?? null,
+      check_id: transfer.check_id ?? null,
+      provider_transfer_id: providerTransferId ?? null,
+      reference: `transfer:${transfer.id}`,
+      memo: transfer.description ?? null,
+    });
+    return;
+  }
+
+  // A transfer that already posted and then failed/returned must be undone so
+  // the local balance keeps matching the provider.
+  if (["failed", "returned", "reversed", "canceled", "cancelled"].includes(status)) {
+    const { data: posted } = await supabase
+      .from("payment_wallet_ledger")
+      .select("id")
+      .eq("reference", `transfer:${transfer.id}`)
+      .maybeSingle();
+    if (!posted) return;
+
+    await writeLedgerEntry(supabase, {
+      wallet_id: transfer.wallet_id,
+      tenant_id: transfer.tenant_id,
+      direction: incoming ? "debit" : "credit",
+      entry_type: "reversal",
+      amount_cents: amount,
+      transfer_id: transfer.id,
+      transfer_group_id: transfer.transfer_group_id ?? null,
+      claim_id: transfer.claim_id ?? null,
+      check_id: transfer.check_id ?? null,
+      provider_transfer_id: providerTransferId ?? null,
+      reference: `transfer:${transfer.id}:reversal`,
+      memo: `Reversed (${status})${transfer.description ? ` — ${transfer.description}` : ""}`,
+    });
+  }
+}
