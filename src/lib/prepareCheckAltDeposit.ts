@@ -1,17 +1,23 @@
 import { supabase } from "@/integrations/supabase/client";
 import imageCompression from "browser-image-compression";
 import { CHECK_IMAGES_BUCKET } from "@/lib/storageBuckets";
+import { ensureLandscape } from "@/lib/checkImageOrient";
 
+// CheckAlt/Mitek needs ~200 DPI across a 6" check, i.e. ≥ ~1200px on the long
+// edge. We target 1600px so compression never lands under the readable floor.
 const PER_IMAGE_BYTES_BUDGET = 450_000;
-const TARGET_MAX_DIM = 1200;
+const TARGET_MAX_DIM = 1600;
+const MIN_ACCEPTABLE_DIM = 1300;
 
 const isRasterPath = (path: string | null | undefined) =>
   !!path && /\.(jpe?g|png|webp)(\?|$)/i.test(path);
 
+// v2 suffix: legacy ".deposit.jpg" variants were capped at 1200px and could be
+// sideways, so they must not be reused.
 const toDepositPath = (path: string) =>
   /\.(jpe?g|png|webp|svg)$/i.test(path)
-    ? path.replace(/\.(jpe?g|png|webp|svg)$/i, ".deposit.jpg")
-    : `${path}.deposit.jpg`;
+    ? path.replace(/\.(jpe?g|png|webp|svg)$/i, ".deposit2.jpg")
+    : `${path}.deposit2.jpg`;
 
 async function downloadBlob(path: string) {
   const { data, error } = await supabase.storage.from(CHECK_IMAGES_BUCKET).download(path);
@@ -19,35 +25,54 @@ async function downloadBlob(path: string) {
   return data;
 }
 
+async function measure(blob: Blob): Promise<{ width: number; height: number } | null> {
+  try {
+    const bmp = await createImageBitmap(blob);
+    const dims = { width: bmp.width, height: bmp.height };
+    bmp.close?.();
+    return dims;
+  } catch {
+    return null;
+  }
+}
+
 async function cachedPreparedPath(path: string) {
   const preparedPath = toDepositPath(path);
   const { data } = await supabase.storage.from(CHECK_IMAGES_BUCKET).download(preparedPath);
-  if (data && data.size > 0 && data.size <= PER_IMAGE_BYTES_BUDGET) return preparedPath;
-  return null;
+  if (!data || data.size === 0 || data.size > PER_IMAGE_BYTES_BUDGET) return null;
+  const dims = await measure(data);
+  if (!dims) return null;
+  if (dims.width < dims.height) return null; // sideways cache, redo
+  if (Math.max(dims.width, dims.height) < MIN_ACCEPTABLE_DIM) return null;
+  return preparedPath;
 }
 
 async function compressForDeposit(blob: Blob, side: "front" | "back") {
-  const file = new File([blob], `${side}.jpg`, {
-    type: blob.type || "image/jpeg",
+  const upright = await ensureLandscape(blob);
+  const file = new File([upright], `${side}.jpg`, {
+    type: "image/jpeg",
     lastModified: Date.now(),
   });
 
   let compressed = await imageCompression(file, {
-    maxSizeMB: 0.42,
+    maxSizeMB: PER_IMAGE_BYTES_BUDGET / 1_000_000,
     maxWidthOrHeight: TARGET_MAX_DIM,
     useWebWorker: true,
-    initialQuality: 0.68,
+    initialQuality: 0.8,
     fileType: "image/jpeg",
   });
 
-  if (compressed.size > PER_IMAGE_BYTES_BUDGET) {
-    compressed = await imageCompression(new File([compressed], `${side}.jpg`, { type: "image/jpeg" }), {
-      maxSizeMB: 0.34,
-      maxWidthOrHeight: 1000,
+  // Only step quality down — never dimensions — so we stay above the DPI floor.
+  let quality = 0.62;
+  while (compressed.size > PER_IMAGE_BYTES_BUDGET && quality >= 0.35) {
+    compressed = await imageCompression(new File([upright], `${side}.jpg`, { type: "image/jpeg" }), {
+      maxSizeMB: PER_IMAGE_BYTES_BUDGET / 1_000_000,
+      maxWidthOrHeight: TARGET_MAX_DIM,
       useWebWorker: true,
-      initialQuality: 0.55,
+      initialQuality: quality,
       fileType: "image/jpeg",
     });
+    quality -= 0.12;
   }
 
   if (compressed.size > PER_IMAGE_BYTES_BUDGET) {
@@ -62,8 +87,15 @@ async function prepareRasterInBrowser(path: string, side: "front" | "back") {
   if (cached) return cached;
 
   const source = await downloadBlob(path);
-  const isJpeg = /\.jpe?g(\?|$)/i.test(path) || /jpeg/i.test(source.type);
-  if (isJpeg && source.size > 0 && source.size <= PER_IMAGE_BYTES_BUDGET) return path;
+  const dims = await measure(source);
+  const alreadyGood =
+    /\.jpe?g(\?|$)/i.test(path) &&
+    source.size > 0 &&
+    source.size <= PER_IMAGE_BYTES_BUDGET &&
+    !!dims &&
+    dims.width >= dims.height &&
+    Math.max(dims.width, dims.height) >= MIN_ACCEPTABLE_DIM;
+  if (alreadyGood) return path;
 
   const compressed = await compressForDeposit(source, side);
   const preparedPath = toDepositPath(path);
@@ -75,6 +107,7 @@ async function prepareRasterInBrowser(path: string, side: "front" | "back") {
   if (error) throw new Error(`${side} prepared image upload failed: ${error.message}`);
   return preparedPath;
 }
+
 
 /**
  * Pre-normalize a check's front + back images via dedicated edge functions
