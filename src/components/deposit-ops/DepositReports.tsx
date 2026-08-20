@@ -166,18 +166,6 @@ export function DepositReports() {
     return Array.from(grouped.values()).sort((a, b) => String(b.deposit_date).localeCompare(String(a.deposit_date)));
   }, [depositItems]);
 
-  return (
-    <Tabs defaultValue="daily" className="space-y-4">
-      <TabsList>
-        <TabsTrigger value="daily" className="text-xs">Daily Log</TabsTrigger>
-        <TabsTrigger value="unreconciled" className="text-xs">Unreconciled</TabsTrigger>
-        <TabsTrigger value="nsf" className="text-xs">NSF/Returns</TabsTrigger>
-        <TabsTrigger value="variance" className="text-xs">Variances</TabsTrigger>
-      </TabsList>
-      <TabsContent value="daily"><DailyDepositLog logs={dailyLogs} /></TabsContent>
-      <TabsContent value="unreconciled"><UnreconciledCashReport items={depositItems} /></TabsContent>
-      <TabsContent value="nsf"><NSFReturnReport items={depositItems} /></TabsContent>
-      <TabsContent value="variance"><VarianceReport items={depositItems} /></TabsContent>
-    </Tabs>
-  );
+  return <DailyDepositLog logs={dailyLogs} />;
 }
+
