@@ -13,6 +13,10 @@ import { Plus, Search, Home, DollarSign, Clock, CheckCircle2, AlertCircle, Hamme
 import { format } from "date-fns";
 import { CashJobDetail } from "./CashJobDetail";
 import { CashJobForm } from "./CashJobForm";
+import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
+import { SettingsHero } from "@/components/settings/SettingsHero";
+import { SectionCard } from "@/components/settings/SectionCard";
+
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
   estimate:          { label: "Estimate",           color: "text-muted-foreground border-border bg-muted/30",              icon: Clock },
