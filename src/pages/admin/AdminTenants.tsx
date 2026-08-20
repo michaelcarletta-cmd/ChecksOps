@@ -1360,7 +1360,7 @@ function TenantManagementTable({
               <TableHead className="w-[9%] min-w-[80px]">Ref. Code</TableHead>
               <TableHead className="w-[8%] min-w-[70px]">Ref. Disc.</TableHead>
               <TableHead className="w-[8%] min-w-[80px]">KYC</TableHead>
-              <TableHead className="w-[13%] min-w-[140px] text-right">Actions</TableHead>
+              <TableHead className="w-[8%] min-w-[90px] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
