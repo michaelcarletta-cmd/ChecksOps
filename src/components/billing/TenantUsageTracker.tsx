@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
@@ -5,19 +6,28 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { BarChart3, Receipt, Landmark, ArrowDownCircle, CheckCircle2 } from "lucide-react";
+import { BarChart3, Receipt, Landmark, ArrowDownCircle, CheckCircle2, Calendar } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { TenantAutoApproveCard } from "./TenantAutoApproveCard";
 
 
 export function TenantUsageTracker() {
   const { tenant } = useTenant();
-  const now = new Date();
+  const [month, setMonth] = useState(format(new Date(), "yyyy-MM"));
+  const now = new Date(month + "-01T00:00:00");
   const monthStart = startOfMonth(now).toISOString();
   const monthEnd = endOfMonth(now).toISOString();
 
+  const monthOptions = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - i);
+    return format(d, "yyyy-MM");
+  });
+
   const { data: usage, isLoading: usageLoading } = useQuery({
-    queryKey: ["tenant-usage", tenant?.id],
+    queryKey: ["tenant-usage", tenant?.id, month],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_tenant_check_usage", {
         _tenant_id: tenant!.id,
@@ -156,11 +166,31 @@ export function TenantUsageTracker() {
 
       <Card>
 
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <ArrowDownCircle className="h-4 w-4 text-primary" />
-            Usage & Processing Log
-          </CardTitle>
+        <CardHeader className="pb-3 flex flex-row items-center justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <ArrowDownCircle className="h-4 w-4 text-primary" />
+              Usage & Processing Log
+            </CardTitle>
+            <CardDescription className="text-[10px]">
+              Showing {format(now, "MMMM yyyy")}
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <Select value={month} onValueChange={setMonth}>
+              <SelectTrigger className="w-[170px] h-8 text-xs">
+                <SelectValue placeholder="Select month" />
+              </SelectTrigger>
+              <SelectContent>
+                {monthOptions.map((m) => (
+                  <SelectItem key={m} value={m} className="text-xs">
+                    {format(new Date(m + "-01T00:00:00"), "MMMM yyyy")}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <ScrollArea className="h-[400px]">
