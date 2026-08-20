@@ -195,6 +195,28 @@ export function VerificationDocumentsPanel({
           </div>
         )}
 
+        <div className="rounded-md border border-border p-3">
+          <div className="text-xs font-medium mb-2">Vetting checklist</div>
+          <div className="grid gap-1.5 sm:grid-cols-2">
+            {VETTING_TYPES.map((t) => {
+              const match = files.find((f) => f.file_purpose === t);
+              return (
+                <div key={t} className="flex items-center justify-between gap-2 text-[11px]">
+                  <span className="truncate">{PURPOSE_LABEL[t] ?? t}</span>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] shrink-0 ${
+                      match ? STATUS_CLASS[match.review_status] ?? STATUS_CLASS.pending : "text-muted-foreground"
+                    }`}
+                  >
+                    {match ? STATUS_LABEL[match.review_status] ?? "In review" : "Missing"}
+                  </Badge>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="space-y-2">
           {isLoading ? (
             <div className="py-6 flex justify-center">
