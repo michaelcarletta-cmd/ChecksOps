@@ -161,7 +161,7 @@ Deno.serve(async (req) => {
       : rawPath;
 
     // Skip re-preparing if a prior deposit-ready variant is already present.
-    const preparedPath = `${sourcePath.replace(/\.(jpe?g|png|webp|svg)$/i, "")}.deposit.jpg`;
+    const preparedPath = `${sourcePath.replace(/\.(jpe?g|png|webp|svg)$/i, "")}.deposit2.jpg`;
     const { data: existing } = await supabase.storage.from(BUCKET).createSignedUrl(preparedPath, 60);
     if (existing?.signedUrl) {
       // Cheap HEAD check by re-signing; presence of a signed URL doesn't guarantee bytes exist.
