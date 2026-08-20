@@ -13,6 +13,8 @@ import { formatDistanceToNow } from "date-fns";
 import { MortgageOpsRequestDetail } from "./MortgageOpsRequestDetail";
 import { MortgageOpsDirectory } from "./MortgageOpsDirectory";
 import mortgageOpsLogo from "@/assets/mortgage-ops-logo.png";
+import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
+import { SettingsHero } from "@/components/settings/SettingsHero";
 
 interface Request {
   id: string;
