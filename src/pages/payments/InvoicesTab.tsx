@@ -472,6 +472,54 @@ export function InvoicesTab() {
   );
 }
 
+function InvoiceActions({
+  inv, brandedInvoiceUrl, copyLink, sendInvoice, resendInvoice, cancelInvoice,
+}: {
+  inv: any;
+  brandedInvoiceUrl: (inv: any) => string;
+  copyLink: (url: string) => void;
+  sendInvoice: { mutate: (id: string) => void };
+  resendInvoice: { mutate: (id: string) => void };
+  cancelInvoice: { mutate: (id: string) => void };
+}) {
+  const canResend = !["draft", "paid", "canceled"].includes(inv.status);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="z-50 bg-popover">
+        {inv.status === "draft" && (
+          <DropdownMenuItem onClick={() => sendInvoice.mutate(inv.id)}>
+            <Send className="mr-2 h-4 w-4" /> Send invoice
+          </DropdownMenuItem>
+        )}
+        {canResend && (
+          <DropdownMenuItem onClick={() => resendInvoice.mutate(inv.id)}>
+            <Send className="mr-2 h-4 w-4" /> Resend invoice
+          </DropdownMenuItem>
+        )}
+        {(inv.public_token || inv.payment_link_url) && (
+          <>
+            <DropdownMenuItem onClick={() => copyLink(brandedInvoiceUrl(inv))}>
+              <Link2 className="mr-2 h-4 w-4" /> Copy payment link
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => window.open(brandedInvoiceUrl(inv), "_blank", "noopener")}>
+              <FileText className="mr-2 h-4 w-4" /> Open invoice page
+            </DropdownMenuItem>
+          </>
+        )}
+        {inv.status !== "paid" && inv.status !== "canceled" && (
+          <DropdownMenuItem className="text-destructive" onClick={() => cancelInvoice.mutate(inv.id)}>
+            <Ban className="mr-2 h-4 w-4" /> Cancel invoice
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+
 function SummaryTile({
   icon: Icon, title, value, hint,
 }: { icon: React.ElementType; title: string; value: string; hint: string }) {
