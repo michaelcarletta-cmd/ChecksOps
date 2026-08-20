@@ -106,6 +106,7 @@ function CheckOpsRoutes() {
       <Route path="/mortgage-ops/login" element={<Suspense fallback={<PageLoader />}><MortgageOpsLogin /></Suspense>} />
       <Route path="/mortgage-ops/queue" element={<Suspense fallback={<PageLoader />}><MortgageOpsQueue /></Suspense>} />
       <Route path="/mortgage-ops" element={<Navigate to="/mortgage-ops/login" replace />} />
+      <Route path="/invoice/:token" element={<Suspense fallback={<PageLoader />}><PublicInvoicePage /></Suspense>} />
       <Route path="/wl/:slug/*" element={<LegacyWlRedirect />} />
       <Route path="/:slug/*" element={<Suspense fallback={<PageLoader />}><WhiteLabelApp /></Suspense>} />
       <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFound /></Suspense>} />
