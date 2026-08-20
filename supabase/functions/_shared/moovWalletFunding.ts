@@ -129,7 +129,7 @@ export async function fundWalletFromBank(
 
   let created: Record<string, unknown>;
   try {
-    created = await moovFetch<Record<string, unknown>>("/transfers", {
+    created = await moovFetch<Record<string, unknown>>(`/accounts/${account.provider_account_id}/transfers`, {
       method: "POST",
       scopes: scopes.transfersWrite(account.provider_account_id),
       idempotencyKey: `checksops-wallet-fund-${draft.id}`,

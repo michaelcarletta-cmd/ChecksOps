@@ -221,7 +221,7 @@ serve(async (req) => {
 
     for (const leg of resolved) {
       try {
-        const created = await moovFetch<any>("/transfers", {
+        const created = await moovFetch<any>(`/accounts/${accountId}/transfers`, {
           method: "POST",
           scopes: scopes.transfersWrite(accountId),
           idempotencyKey: `checksops-disb-split-${leg.split.id}`,
