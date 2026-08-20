@@ -25,12 +25,29 @@ export function MortgageCompaniesDirectory({ searchQuery: externalSearch }: Prop
   const [localSearch, setLocalSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<MortgageCompanyRecord | null>(null);
+  const [prefillName, setPrefillName] = useState<string | undefined>(undefined);
+  const [detected, setDetected] = useState<string[]>([]);
 
   const search = (externalSearch ?? "") || localSearch;
 
   useEffect(() => {
     void fetchCompanies();
+    void fetchDetected();
   }, []);
+
+  const fetchDetected = async () => {
+    const { data } = await supabase
+      .from("check_endorsements")
+      .select("payee_name")
+      .eq("payee_type", "mortgage_company")
+      .not("payee_name", "is", null)
+      .limit(1000);
+    const names = Array.from(
+      new Set(((data ?? []) as any[]).map((r) => String(r.payee_name).trim()).filter(Boolean)),
+    ).sort((a, b) => a.localeCompare(b));
+    setDetected(names);
+  };
+
 
   const fetchCompanies = async () => {
     setLoading(true);
