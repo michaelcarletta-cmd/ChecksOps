@@ -7,7 +7,6 @@ import { RevenueSummary } from "@/components/ledger/RevenueSummary";
 import { PayrollTab } from "@/pages/payments/PayrollTab";
 import { InvoicesTab } from "@/pages/payments/InvoicesTab";
 
-import { TenantEmailHealthPanel } from "@/components/settings/TenantEmailHealthPanel";
 import { useAuth } from "@/hooks/useAuth";
 import { useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
@@ -143,7 +142,6 @@ const Payments = () => {
             icon={<Mail className="h-4 w-4 text-indigo-500" />}
             accent="bg-gradient-to-r from-indigo-500/60 to-indigo-500/10"
           >
-            <TenantEmailHealthPanel />
           </SectionCard>
         </TabsContent>
 

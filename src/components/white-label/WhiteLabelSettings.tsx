@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 import { ReferralSettings } from "@/components/settings/ReferralSettings";
 import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
-import { TenantEmailHealthPanel } from "@/components/settings/TenantEmailHealthPanel";
 import { Mail } from "lucide-react";
 import { CheckCenterHelpPanel } from "@/components/check-review/CheckCenterHelp";
 import { StakeholderAccountSettings } from "@/components/disbursement/StakeholderAccountSettings";
@@ -212,7 +211,6 @@ export function WhiteLabelSettings() {
               <TabsContent value="branding" className="space-y-6">
                 <CompanyBrandingSettings />
                 <EmailSenderSettings />
-                <TenantEmailHealthPanel />
               </TabsContent>
             </>
           )}
