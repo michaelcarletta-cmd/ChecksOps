@@ -150,8 +150,8 @@ export default function AdminTenants() {
   }
 
   return (
-    <div className="min-h-screen bg-background px-6">
-      <SettingsPageShell>
+    <div className="min-h-screen bg-background px-4 sm:px-6">
+      <SettingsPageShell className="max-w-[1600px]">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))}>
