@@ -1432,32 +1432,35 @@ function TenantManagementTable({
                     </Select>
                   </TableCell>
                   <TableCell className="text-right align-top">
-                    <div className="flex flex-wrap justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        title="Preview as this tenant (opens their portal in a new tab)"
-                        onClick={() => {
-                          const url = (typeof window !== "undefined" && isCheckOpsHost(window.location.hostname))
-                            ? `${window.location.origin}/${t.slug}/checks`
-                            : `/wl/${t.slug}/checks`;
-                          window.open(url, "_blank", "noopener,noreferrer");
-                          toast({ title: `Previewing as ${t.name}`, description: "Opened tenant portal in a new tab." });
-                        }}
-                      >
-                        <Eye className="w-3.5 h-3.5 mr-1 text-blue-400" /> Preview
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setNotesTenant(t)}>
-                        Notes
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setProTenant(t)}>
-                        <Crosshair className="w-3.5 h-3.5 mr-1 text-primary" strokeWidth={2.5} /> OPS
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => onOpen(t)}>
-                        Manage →
-                      </Button>
-                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
+                          Actions
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuItem
+                          onClick={() => {
+                            const url = (typeof window !== "undefined" && isCheckOpsHost(window.location.hostname))
+                              ? `${window.location.origin}/${t.slug}/checks`
+                              : `/wl/${t.slug}/checks`;
+                            window.open(url, "_blank", "noopener,noreferrer");
+                            toast({ title: `Previewing as ${t.name}`, description: "Opened tenant portal in a new tab." });
+                          }}
+                        >
+                          <Eye className="w-4 h-4 mr-2 text-blue-400" /> Preview portal
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setNotesTenant(t)}>
+                          <FileText className="w-4 h-4 mr-2" /> Notes
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setProTenant(t)}>
+                          <Crosshair className="w-4 h-4 mr-2 text-primary" strokeWidth={2.5} /> OPS Badge
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onOpen(t)}>
+                          <Settings className="w-4 h-4 mr-2" /> Manage tenant
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               );
