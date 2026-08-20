@@ -12,9 +12,9 @@ import { z } from "https://esm.sh/zod@3.23.8";
 import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
 import { getServiceClient } from "../_shared/checkalt.ts";
 
-const TARGET_MAX_DIM = 1200;
-const TARGET_JPEG_QUALITY = 68;
-const MIN_DIM = 600;
+const TARGET_MAX_DIM = 1600;
+const TARGET_JPEG_QUALITY = 78;
+const MIN_DIM = 1300;
 const MIN_QUALITY = 35;
 const PER_IMAGE_BYTES_BUDGET = 450_000;
 
