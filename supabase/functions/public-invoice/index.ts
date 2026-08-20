@@ -92,6 +92,8 @@ serve(async (req) => {
         invoice_letterhead_url: tenant.invoice_letterhead_url,
         invoice_footer_note: tenant.invoice_footer_note,
         invoice_default_terms: tenant.invoice_default_terms,
+        invoice_accent_color: tenant.invoice_accent_color,
+        invoice_theme: tenant.invoice_theme,
       },
     });
   } catch (e) {
