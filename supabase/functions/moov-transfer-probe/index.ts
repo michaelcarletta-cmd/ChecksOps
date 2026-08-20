@@ -132,6 +132,34 @@ serve(async (req) => {
         },
       }));
 
+    await record("opts_account_path_plain", () =>
+      moovFetch<any>(`/accounts/${accountId}/transfer-options`, {
+        method: "POST",
+        scopes: scopes.transfersWrite(accountId),
+        body,
+      }));
+
+    for (const combo of [
+      { name: "acct_scope_no_header", path: `/accounts/${accountId}/transfers`, sc: scopes.transfersWrite(accountId), obo: undefined as string | undefined },
+      { name: "acct_scope_facilitator_header", path: `/accounts/${accountId}/transfers`, sc: scopes.transfersWrite(accountId), obo: facilitatorId ?? undefined },
+      { name: "facilitator_path", path: `/accounts/${facilitatorId}/transfers`, sc: scopes.transfersWrite(facilitatorId ?? accountId), obo: undefined },
+      { name: "both_scopes_acct_path", path: `/accounts/${accountId}/transfers`, sc: [...scopes.transfersWrite(accountId), ...scopes.transfersWrite(facilitatorId ?? accountId)], obo: undefined },
+    ]) {
+      await record(`live2 ${combo.name}`, () =>
+        moovFetch<any>(combo.path, {
+          method: "POST",
+          scopes: combo.sc,
+          idempotencyKey: `checksops-probe2-${combo.name}`,
+          onBehalfOf: combo.obo,
+          body: {
+            source: { paymentMethodID: src },
+            destination: { paymentMethodID: dst },
+            amount: { currency: "USD", value: 1 },
+            description: "ChecksOps probe",
+          },
+        }));
+    }
+
     const paths = ["/transfer-options", `/accounts/${accountId}/transfer-options`];
     for (const path of paths) {
       for (const apiVersion of ["v2024.01.00", "v2025.01.00", undefined]) {
