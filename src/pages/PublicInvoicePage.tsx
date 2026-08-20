@@ -50,6 +50,7 @@ const currency = (n: number) =>
 const STATUS_META: Record<string, { label: string; icon: React.ElementType; className: string }> = {
   draft: { label: "Draft", icon: FileText, className: "bg-muted text-muted-foreground" },
   unpaid: { label: "Unpaid", icon: Clock, className: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
+  sent: { label: "Awaiting Payment", icon: Clock, className: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
   partially_paid: { label: "Partially Paid", icon: Clock, className: "bg-blue-500/15 text-blue-600 dark:text-blue-400" },
   paid: { label: "Paid", icon: CheckCircle2, className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" },
   overdue: { label: "Overdue", icon: AlertCircle, className: "bg-destructive/15 text-destructive" },
