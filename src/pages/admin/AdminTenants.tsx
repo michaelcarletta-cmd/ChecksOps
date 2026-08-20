@@ -490,12 +490,13 @@ function BrandingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Ten
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Branding</CardTitle>
-        <CardDescription>Logo and color theme used on the tenant's portal and emails.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <SectionCard
+      title="Branding"
+      icon={<Palette className="h-4 w-4 text-pink-500" />}
+      accent="bg-gradient-to-r from-pink-500 to-pink-500/30"
+      description="Logo and color theme used on the tenant's portal and emails."
+    >
+
         <div className="space-y-2">
           <Label>Logo</Label>
           <input
