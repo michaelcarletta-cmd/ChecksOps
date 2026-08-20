@@ -13,6 +13,8 @@ import { formatDistanceToNow } from "date-fns";
 import { MortgageOpsRequestDetail } from "./MortgageOpsRequestDetail";
 import { MortgageOpsDirectory } from "./MortgageOpsDirectory";
 import mortgageOpsLogo from "@/assets/mortgage-ops-logo.png";
+import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
+import { SettingsHero } from "@/components/settings/SettingsHero";
 
 interface Request {
   id: string;
@@ -230,8 +232,16 @@ export default function MortgageOpsQueue() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto p-4">
+      <main className="px-4">
+        <SettingsPageShell className="max-w-6xl">
+        <SettingsHero
+          title="Mortgage Ops Desk"
+          description="Accept queued loss draft tasks, track work in progress, and look up mortgage servicer contacts — all in one place."
+          badge="Mortgage Ops"
+          icon={<Building2 className="h-4 w-4 text-primary" />}
+        />
         <Tabs defaultValue="available">
+
           <TabsList>
             <TabsTrigger value="available" className="gap-2">
               <Inbox className="h-4 w-4" /> Queued
@@ -454,7 +464,9 @@ export default function MortgageOpsQueue() {
             <MortgageOpsDirectory />
           </TabsContent>
         </Tabs>
+        </SettingsPageShell>
       </main>
+
 
       <MortgageOpsRequestDetail
         requestId={detailId}
