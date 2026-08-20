@@ -263,8 +263,10 @@ export default function CashJobsPage() {
               </Card>
             );
           })}
-        </div>
-      )}
-    </div>
+          </div>
+        )}
+      </SectionCard>
+    </SettingsPageShell>
   );
 }
+
