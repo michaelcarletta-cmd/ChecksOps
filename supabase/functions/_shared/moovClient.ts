@@ -347,3 +347,16 @@ export async function moovUpload<T = any>(path: string, opts: MoovUploadOptions)
   }
   return json as T;
 }
+
+
+/**
+ * Capabilities that a payment account still needs approved before money can
+ * move. Used to turn the provider's bare 403 into an actionable message.
+ */
+export async function pendingCapabilities(accountId: string): Promise<string[]> {
+  const caps = await moovFetch<Array<{ capability: string; status: string }>>(
+    `/accounts/${accountId}/capabilities`,
+    { method: "GET", scopes: scopes.capabilitiesRead(accountId) },
+  );
+  return (caps ?? []).filter((c) => c.status !== "enabled").map((c) => c.capability);
+}

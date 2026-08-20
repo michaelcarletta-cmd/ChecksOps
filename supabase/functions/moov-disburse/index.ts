@@ -268,7 +268,13 @@ serve(async (req) => {
           downgrade_reason: leg.decision.downgraded ? leg.decision.reason : null,
         });
       } catch (e) {
-        const message = (e as Error).message;
+        let message = (e as Error).message;
+        if (/403|forbidden/i.test(message)) {
+          const pending = await pendingCapabilities(accountId).catch(() => [] as string[]);
+          message = pending.length
+            ? `Your payment account is not approved to move money yet. Pending approval: ${pending.join(", ")}. Finish the payment onboarding requirements, then retry.`
+            : "Your payment account is not approved to move money yet. Finish the payment onboarding requirements, then retry.";
+        }
         await supabase
           .from("disbursement_splits")
           .update({
