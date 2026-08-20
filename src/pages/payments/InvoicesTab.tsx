@@ -240,7 +240,7 @@ export function InvoicesTab() {
                   <span className="ml-2">New invoice</span>
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+              <DialogContent className="w-[95vw] max-w-2xl max-h-[85vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>New invoice</DialogTitle>
                   <DialogDescription>
@@ -298,7 +298,7 @@ export function InvoicesTab() {
                   <div className="space-y-2">
                     <Label>Line items</Label>
                     {items.map((item, idx) => (
-                      <div key={idx} className="grid grid-cols-12 gap-2">
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-center">
                         <Input
                           className="col-span-6"
                           placeholder="Description"
