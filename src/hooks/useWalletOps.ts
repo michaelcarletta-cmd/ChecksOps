@@ -58,6 +58,30 @@ export function useWalletOpsTransfers(limit = 25) {
   });
 }
 
+/**
+ * Asks the provider for the live status of every in-flight transfer and
+ * refreshes the local view with the answer.
+ */
+export function useRefreshTransferStatuses() {
+  const { tenantId } = usePaymentProviderEligibility();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("moov-transfer-status", {
+        body: { tenant_id: tenantId },
+      });
+      if (error) throw error;
+      if ((data as any)?.success === false) throw new Error((data as any)?.error ?? "Status check failed");
+      return data as { checked: number; updated: number; results: any[] };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["wallet-ops-transfers"] });
+      queryClient.invalidateQueries({ queryKey: ["wallet-running-balance"] });
+    },
+  });
+}
+
 export interface WalletOpsReadiness {
   overall: WalletOpsReadinessState;
   canMoveMoney: boolean;
