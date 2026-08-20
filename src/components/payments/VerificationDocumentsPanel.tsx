@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileCheck2, Loader2, RefreshCw, ShieldCheck, Upload } from "lucide-react";
+import { Eye, FileCheck2, Loader2, RefreshCw, ShieldCheck, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useVerificationFiles } from "@/hooks/useVerificationFiles";
 import {
@@ -19,6 +19,7 @@ import {
   FILE_PURPOSE_OPTIONS,
   MAX_UPLOAD_BYTES,
   PURPOSE_LABEL,
+  getVerificationFileUrl,
   uploadVerificationFile,
   type VerificationPurpose,
 } from "@/lib/payments/verificationFiles";
@@ -64,6 +65,20 @@ export function VerificationDocumentsPanel({
   const [representativeId, setRepresentativeId] = useState<string>("");
   const [progress, setProgress] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+
+  async function handleView(fileId: string) {
+    if (!tenantId) return;
+    setOpeningId(fileId);
+    try {
+      const url = await getVerificationFileUrl(tenantId, fileId);
+      window.open(url, "_blank", "noopener");
+    } catch (e: any) {
+      toast({ title: "Could not open document", description: e.message, variant: "destructive" });
+    } finally {
+      setOpeningId(null);
+    }
+  }
 
   const needsRepresentative = purpose === "representative_verification";
 
@@ -251,12 +266,27 @@ export function VerificationDocumentsPanel({
                     <div className="text-[11px] text-destructive mt-0.5">{f.review_reason}</div>
                   )}
                 </div>
-                <Badge
-                  variant="outline"
-                  className={`text-[10px] shrink-0 ${STATUS_CLASS[f.review_status] ?? STATUS_CLASS.pending}`}
-                >
-                  {STATUS_LABEL[f.review_status] ?? "In review"}
-                </Badge>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {f.storage_path && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-[11px] px-2"
+                      onClick={() => handleView(f.id)}
+                      disabled={openingId === f.id}
+                    >
+                      {openingId === f.id
+                        ? <Loader2 className="h-3 w-3 animate-spin" />
+                        : <><Eye className="h-3 w-3 mr-1" /> View</>}
+                    </Button>
+                  )}
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] ${STATUS_CLASS[f.review_status] ?? STATUS_CLASS.pending}`}
+                  >
+                    {STATUS_LABEL[f.review_status] ?? "In review"}
+                  </Badge>
+                </div>
               </div>
             ))
           )}
