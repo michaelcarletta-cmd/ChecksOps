@@ -42,6 +42,8 @@ interface TenantBranding {
   invoice_letterhead_url: string | null;
   invoice_footer_note: string | null;
   invoice_default_terms: string | null;
+  invoice_accent_color?: string | null;
+  invoice_theme?: string | null;
 }
 
 const currency = (n: number) =>
