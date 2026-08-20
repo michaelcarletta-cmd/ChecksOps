@@ -1339,14 +1339,15 @@ function TenantManagementTable({
     cents == null ? "—" : `$${(cents / 100).toFixed(2)}`;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Tenant Management</CardTitle>
-        <CardDescription>
-          Master owner control panel — review, approve, and configure every tenant. Not visible to tenant or staff users.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="p-0">
+    <SectionCard
+      title="Tenant Management"
+      icon={<Building2 className="h-4 w-4 text-primary" />}
+      accent="bg-gradient-to-r from-primary to-primary/40"
+      description="Master owner control panel — review, approve, and configure every tenant. Not visible to tenant or staff users."
+      className="[&>div:last-child]:p-0"
+    >
+      <div className="-mx-4 -mt-2">
+
         <Table>
           <TableHeader>
             <TableRow>
