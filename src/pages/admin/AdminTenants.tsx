@@ -1037,22 +1037,21 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
       discount > 0 && { label: "Referral discount", detail: "applied to maintenance", amount_cents: -discount },
     ].filter(Boolean);
 
-    const { data: resp, error } = await supabase.functions.invoke("charge-tenant-maintenance", {
+    const { data: resp, error } = await supabase.functions.invoke("moov-tenant-fee-charge", {
       body: {
-        tenant_ids: [tenantId],
-        override_amount_cents: consolidatedTotalCents,
-        override_kind: "consolidated",
+        tenant_id: tenantId,
+        amount_cents: consolidatedTotalCents,
+        kind: "consolidated",
         line_items,
         period_label: range.label,
         send_invoice: true,
       },
     });
     setPulling(false);
-    if (error) return sonnerToast.error(error.message);
+    const failure = (resp as any)?.error ?? (error ? await readFnError(error) : null);
+    if (failure) return sonnerToast.error(failure);
     const r = (resp as any)?.results?.[0];
-    if (r?.skipped) sonnerToast.warning(`Skipped: ${r.skipped}`);
-    else if (r?.error) sonnerToast.error(r.error);
-    else if (r?.status === "submitted") {
+    if (r?.status === "submitted") {
       sonnerToast.success(
         `ACH debit for $${(r.amount_cents / 100).toFixed(2)} submitted${r.invoice_sent ? " · invoice emailed" : r.invoice_error ? ` · invoice: ${r.invoice_error}` : ""}`
       );
