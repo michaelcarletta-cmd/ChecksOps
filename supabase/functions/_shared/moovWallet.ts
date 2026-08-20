@@ -33,6 +33,7 @@ async function ensureProviderWallet(
   accountId: string,
   walletType: WalletType,
   name: string,
+  knownWalletId?: string | null,
 ): Promise<{ walletID: string; availableCents: number; pendingCents: number }> {
   let list: any[] = [];
   try {
@@ -45,7 +46,16 @@ async function ensureProviderWallet(
     if ((e as any).status !== 403) throw e;
   }
 
-  const wanted = (list ?? []).find((w: any) =>
+  console.log("[ensureProviderWallet] provider wallets", JSON.stringify(list ?? []));
+
+  // Always prefer the wallet we already synced before — provider list order is
+  // not stable, and picking a different wallet makes the balance look like it
+  // vanished.
+  const pinned = knownWalletId
+    ? (list ?? []).find((w: any) => (w?.walletID ?? w?.walletId) === knownWalletId)
+    : null;
+
+  const wanted = pinned ?? (list ?? []).find((w: any) =>
     walletType === "trust"
       ? String(w?.name ?? w?.metadata?.walletType ?? "").toLowerCase().includes("trust")
       : !String(w?.name ?? "").toLowerCase().includes("trust")
@@ -118,7 +128,7 @@ export async function syncWallet(
   let pendingCents = existing?.pending_cents ?? 0;
 
   if (!args.skipProviderFetch || !providerWalletId) {
-    const provider = await ensureProviderWallet(args.accountId, walletType, name);
+    const provider = await ensureProviderWallet(args.accountId, walletType, name, providerWalletId);
     providerWalletId = provider.walletID;
     availableCents = provider.availableCents;
     pendingCents = provider.pendingCents;

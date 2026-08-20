@@ -60,6 +60,21 @@ serve(async (req) => {
       wallet = { ...local, status: "sync_failed" };
     }
 
+    // Diagnostic: log provider-side wallet transactions so a balance change can
+    // always be explained from the provider's own record.
+    try {
+      const { moovFetch } = await import("../_shared/moovClient.ts");
+      if (wallet?.provider_wallet_id) {
+        const txns = await moovFetch<any[]>(
+          `/accounts/${account.provider_account_id}/wallets/${wallet.provider_wallet_id}/transactions?count=50`,
+          { scopes: [`/accounts/${account.provider_account_id}/wallets.read`] },
+        );
+        console.log("[moov-wallet-sync] wallet txns", JSON.stringify(txns ?? []));
+      }
+    } catch (e) {
+      console.warn("[moov-wallet-sync] txn fetch failed", (e as Error).message);
+    }
+
     const { data: ledger } = await supabase
       .from("payment_wallet_ledger")
       .select("*")
