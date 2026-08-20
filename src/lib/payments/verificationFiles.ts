@@ -43,6 +43,17 @@ export interface VerificationFile {
   review_reason: string | null;
   created_at: string;
   last_synced_at: string | null;
+  storage_path?: string | null;
+}
+
+export async function getVerificationFileUrl(
+  tenantId: string,
+  fileId: string,
+): Promise<string> {
+  const { data, error } = await supabase.functions.invoke("moov-account-file-view", {
+    body: { tenant_id: tenantId, file_id: fileId },
+  });
+  return (unwrap(error, data) as { url: string }).url;
 }
 
 export interface VerificationFilesResponse {
