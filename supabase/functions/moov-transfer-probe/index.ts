@@ -118,6 +118,19 @@ serve(async (req) => {
       await record("granted_scope_facilitator", () => rawToken(scopes.transfersWrite(facilitatorId!)));
     }
 
+    const paths = ["/transfer-options", `/accounts/${accountId}/transfer-options`];
+    for (const path of paths) {
+      for (const apiVersion of ["v2024.01.00", "v2025.01.00", undefined]) {
+        await record(`opts ${path} ${apiVersion ?? "default"}`, () =>
+          moovFetch<any>(path, {
+            method: "POST",
+            scopes: scopes.transfersWrite(accountId),
+            apiVersion,
+            body: bodyWithAccounts,
+          }));
+      }
+    }
+
     for (const v of variants) {
       await record(`transfer_options:${v.name}`, () =>
         moovFetch<any>("/transfer-options", {
