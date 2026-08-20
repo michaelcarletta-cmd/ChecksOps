@@ -55,29 +55,13 @@ export function TeamCapsSettings({
       <div className="space-y-4">
         <div className="max-w-xs space-y-1.5">
           <Label htmlFor="stakeholder-cap">Total stakeholder limit</Label>
-          <Input
-            id="stakeholder-cap"
-            type="number"
-            min={0}
-            value={stakeholderCap}
-            onChange={(e) => setStakeholderCap(parseInt(e.target.value) || 0)}
-          />
+          <Input id="stakeholder-cap" type="number" value={stakeholderCap} readOnly disabled />
           <p className="text-xs text-muted-foreground">
             Counts every vendor, sales rep, and subcontractor together against one shared limit.
+            This limit is fixed and can only be raised by ChecksOps on request.
           </p>
         </div>
-        <div className="flex justify-end pt-2">
-          <Button onClick={handleSave} disabled={saving} size="sm">
-            {saving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              "Save Limit"
-            )}
-          </Button>
-        </div>
+
       </div>
     </SectionCard>
   );
