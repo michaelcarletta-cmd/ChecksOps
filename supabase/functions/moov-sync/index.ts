@@ -98,9 +98,22 @@ serve(async (req) => {
         }
       }
 
-      const status = (verification?.status ?? b.status ?? "pending").toLowerCase();
+      // Bank account status is authoritative. The verification object only
+      // describes the in-flight micro-deposit attempt and uses its own
+      // vocabulary ("successful", "sent-credit", "max-attempts-exceeded"),
+      // so it must never downgrade a bank Moov already marks verified.
+      const bankStatus = String(b.status ?? "").toLowerCase();
+      const verifStatus = String(verification?.status ?? "").toLowerCase();
+      const verifSucceeded = ["successful", "completed", "verified"].includes(verifStatus);
+      const status = bankStatus === "verified" || verifSucceeded
+        ? "verified"
+        : bankStatus === "errored" || bankStatus === "verificationfailed" ||
+            ["failed", "expired", "max-attempts-exceeded"].includes(verifStatus)
+        ? "errored"
+        : (bankStatus || verifStatus || "pending");
       const lastFour = b.lastFourAccountNumber ?? safeLastFour(b.accountNumber);
       const connection = status === "verified" ? "connected" : status === "errored" ? "failed" : "pending";
+
 
       await supabase.from("payment_provider_methods").upsert(
         {
