@@ -12,6 +12,7 @@ import {
   serviceClient,
 } from "../_shared/moovGuard.ts";
 import { readWallet, syncWallet } from "../_shared/moovWallet.ts";
+import { facilitatorAccountId } from "../_shared/moovClient.ts";
 
 /**
  * Pays out a disbursement batch on the platform payment rail (Moov).
@@ -221,11 +222,10 @@ serve(async (req) => {
 
     for (const leg of resolved) {
       try {
-        const created = await moovFetch<any>(`/accounts/${accountId}/transfers`, {
+        const created = await moovFetch<any>(`/accounts/${await facilitatorAccountId(accountId)}/transfers`, {
           method: "POST",
-          scopes: scopes.transfersWrite(accountId),
+          scopes: scopes.transfersWrite(await facilitatorAccountId(accountId)),
           idempotencyKey: `checksops-disb-split-${leg.split.id}`,
-          onBehalfOf: accountId,
           body: {
             source: { paymentMethodID: sourcePaymentMethodId },
             destination: { paymentMethodID: leg.methodId },

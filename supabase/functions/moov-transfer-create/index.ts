@@ -2,7 +2,10 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { moovFetch, normalizeTransferStatus, scopes } from "../_shared/moovClient.ts";
 import { railDecisionMetadata, selectRail } from "../_shared/railRouter.ts";
 import { resolveRails, saveMethodRails } from "../_shared/moovRails.ts";
+import { resolveDebitSourceMethodId } from "../_shared/moovRails.ts";
+
 import { corsHeaders, json, isResponse, logPaymentEvent, requireMoovCaller, sanitize } from "../_shared/moovGuard.ts";
+import { facilitatorAccountId } from "../_shared/moovClient.ts";
 
 // Creates a sandbox transfer on behalf of the INITIATING tenant.
 //
@@ -232,17 +235,26 @@ serve(async (req) => {
 
     /* ---------- Create the transfer ---------- */
 
+    const sourceMethodId = await resolveDebitSourceMethodId(supabase, source, payer.provider_account_id);
+    if (!sourceMethodId) {
+      await supabase.from("payment_transfers")
+        .update({ status: "failed", failure_reason: "No debit-capable payment method on the funding bank account." })
+        .eq("id", draft.id);
+      return json({ error: "Your funding bank account is not set up to send money yet." }, 409);
+    }
+
     let created: any;
     try {
-      created = await moovFetch<any>(`/accounts/${payer.provider_account_id}/transfers`, {
+      const facilitatorId = await facilitatorAccountId(payer.provider_account_id);
+      created = await moovFetch<any>(`/accounts/${facilitatorId}/transfers`, {
         method: "POST",
-        scopes: scopes.transfersWrite(payer.provider_account_id),
+        scopes: scopes.transfersWrite(facilitatorId),
         idempotencyKey: `checksops-transfer-${draft.id}`,
-        onBehalfOf: payer.provider_account_id,
         body: {
           source: {
-            paymentMethodID: source.provider_payment_method_id ?? source.provider_bank_account_id,
+            paymentMethodID: sourceMethodId,
           },
+
           destination: {
             paymentMethodID: railDecision.paymentMethodId ?? legacyDestinationMethodId,
           },

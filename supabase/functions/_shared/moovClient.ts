@@ -147,6 +147,36 @@ export const scopes = {
 
 };
 
+/* ---------------- Facilitator account ---------------- */
+
+let facilitatorCache: string | null = null;
+
+/**
+ * Moov creates transfers under the FACILITATOR (platform) account, not under
+ * the tenant account that owns the funding bank. Posting to the tenant path
+ * returns a bare 403, so every transfer call must resolve this first.
+ *
+ * Resolution order: env override -> the partner account id exposed on the
+ * tenant's `moov-wallet` payment method -> the tenant account itself.
+ */
+export async function facilitatorAccountId(hintAccountId?: string): Promise<string> {
+  const fromEnv = Deno.env.get("MOOV_PLATFORM_ACCOUNT_ID");
+  if (fromEnv) return fromEnv;
+  if (facilitatorCache) return facilitatorCache;
+  if (!hintAccountId) throw new Error("Facilitator account id is not configured.");
+
+  const methods = await moovFetch<any[]>(`/accounts/${hintAccountId}/payment-methods`, {
+    scopes: scopes.paymentMethodsRead(hintAccountId),
+  }).catch(() => [] as any[]);
+  const partner = (methods ?? [])
+    .map((m: any) => m?.wallet?.partnerAccountID ?? m?.wallet?.partnerAccountId)
+    .find(Boolean) as string | undefined;
+
+  facilitatorCache = partner ?? hintAccountId;
+  return facilitatorCache;
+}
+
+
 /* ---------------- REST ---------------- */
 
 export interface MoovRequestOptions {

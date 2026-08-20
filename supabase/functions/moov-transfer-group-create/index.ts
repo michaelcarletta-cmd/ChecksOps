@@ -9,6 +9,7 @@ import {
   sanitize,
 } from "../_shared/moovGuard.ts";
 import { readWallet, syncWallet, writeLedgerEntry } from "../_shared/moovWallet.ts";
+import { facilitatorAccountId } from "../_shared/moovClient.ts";
 
 /**
  * Splits ONE settlement across several parties in a single call.
@@ -259,11 +260,10 @@ serve(async (req) => {
 
     let parent: any;
     try {
-      parent = await moovFetch<any>(`/accounts/${accountId}/transfers`, {
+      parent = await moovFetch<any>(`/accounts/${await facilitatorAccountId(accountId)}/transfers`, {
         method: "POST",
-        scopes: scopes.transfersWrite(accountId),
+        scopes: scopes.transfersWrite(await facilitatorAccountId(accountId)),
         idempotencyKey: `checksops-group-parent-${group.id}`,
-        onBehalfOf: accountId,
         body: {
           source: { paymentMethodID: sourcePaymentMethodId },
           destination: { paymentMethodID: wallet.provider_payment_method_id },
@@ -326,11 +326,10 @@ serve(async (req) => {
         .select().single();
 
       try {
-        const child = await moovFetch<any>(`/accounts/${accountId}/transfers`, {
+        const child = await moovFetch<any>(`/accounts/${await facilitatorAccountId(accountId)}/transfers`, {
           method: "POST",
-          scopes: scopes.transfersWrite(accountId),
+          scopes: scopes.transfersWrite(await facilitatorAccountId(accountId)),
           idempotencyKey: `checksops-group-child-${childDraft!.id}`,
-          onBehalfOf: accountId,
           body: {
             source: { transferID: parentTransferId },
             destination: { paymentMethodID: leg.methodId },

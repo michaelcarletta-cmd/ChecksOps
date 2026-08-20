@@ -9,6 +9,9 @@ import {
   sanitize,
 } from "../_shared/moovGuard.ts";
 import { syncWallet, writeLedgerEntry } from "../_shared/moovWallet.ts";
+import { resolveDebitSourceMethodId } from "../_shared/moovRails.ts";
+import { facilitatorAccountId } from "../_shared/moovClient.ts";
+
 
 // Funds a tenant's wallet from that tenant's own connected bank account.
 //
@@ -117,18 +120,26 @@ serve(async (req) => {
       })
       .select().single();
     if (draftErr) return json({ error: draftErr.message }, 500);
+    const sourceMethodId = await resolveDebitSourceMethodId(supabase, source, account.provider_account_id);
+    if (!sourceMethodId) {
+      await supabase.from("payment_transfers")
+        .update({ status: "failed", failure_reason: "No ach-debit-fund method on the funding bank account." })
+        .eq("id", draft.id);
+      return json({ error: "Your bank account is not set up to fund your balance yet." }, 409);
+    }
 
     let created: any;
     try {
-      created = await moovFetch<any>(`/accounts/${account.provider_account_id}/transfers`, {
+      const facilitatorId = await facilitatorAccountId(account.provider_account_id);
+      created = await moovFetch<any>(`/accounts/${facilitatorId}/transfers`, {
         method: "POST",
-        scopes: scopes.transfersWrite(account.provider_account_id),
+        scopes: scopes.transfersWrite(facilitatorId),
         idempotencyKey: `checksops-wallet-fund-${draft.id}`,
-        onBehalfOf: account.provider_account_id,
         body: {
           source: {
-            paymentMethodID: source.provider_payment_method_id ?? source.provider_bank_account_id,
+            paymentMethodID: sourceMethodId,
           },
+
           destination: { paymentMethodID: wallet.provider_payment_method_id },
           amount: { currency: "USD", value: amount },
           description: (description ?? "ChecksOps balance funding").slice(0, 128),
