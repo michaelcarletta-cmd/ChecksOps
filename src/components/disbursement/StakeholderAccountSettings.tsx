@@ -554,40 +554,16 @@ export function StakeholderAccountSettings() {
             <DialogDescription>
               All additional stakeholder slots for your tenant are in use
               {capLimitDialog ? ` (${countForType(capLimitDialog)} of ${capForType(capLimitDialog)})` : ""}.
-              Vendors, sales reps and subcontractors share one limit.
-              To add another, request more capacity from ChecksOps below.
+              Vendors, sales reps and subcontractors share one limit. Remove an existing
+              stakeholder to free up a slot.
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" size="sm" onClick={() => setCapLimitDialog(null)}>Close</Button>
-            {canManageTenant ? (
-              <Button
-                size="sm"
-                onClick={() => {
-                  const cat = capLimitDialog;
-                  setCapLimitDialog(null);
-                  if (cat) setRequestLimitDialog(cat);
-                }}
-              >
-                Request more
-              </Button>
-            ) : (
-              <span className="text-[11px] text-muted-foreground italic self-center">
-                Ask an owner/admin to request more
-              </span>
-            )}
           </div>
         </DialogContent>
       </Dialog>
 
-      {requestLimitDialog && (
-        <RequestStakeholderLimitDialog
-          open={!!requestLimitDialog}
-          onOpenChange={(o) => !o && setRequestLimitDialog(null)}
-          category={requestLimitDialog}
-          currentLimit={capForType(requestLimitDialog) ?? 0}
-        />
-      )}
     </div>
   );
 }
