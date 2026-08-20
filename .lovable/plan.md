@@ -1,42 +1,70 @@
-# Plan - Visual Consistency for ChecksOps Settings
+# Plan: White-Label Moov Invoice Links
 
-Finish the visual styling pass for the **Profile**, **Users**, and **Partners** tabs in the ChecksOps settings (`/freedom/settings`) to ensure they match the design system used in **Company Settings** and **Compliance & Identity** (SettingsHero + SectionCard with semantic tokens).
+## Goal
+Replace Moov-branded invoice payment links with branded, tenant-hosted invoice pages so customers see the restoration contractor's identity instead of Moov on both the URL and the invoice page.
 
-## User Review Required
-
-> [!IMPORTANT]
-> This is a styling-only update. No functionality, permissions, or database logic will be changed.
+## Scope & Limitation
+- The invoice landing page and link will be fully branded (tenant logo, colors, letterhead, footer, line items).
+- The **final card/bank checkout step** will still be handled by Moov's secure hosted page unless we later add embedded tokenization. This plan hides Moov from the link preview, email, and invoice detail page; the actual payment form remains Moov-hosted for PCI/security compliance.
 
 ## Proposed Changes
 
-### Styling & Layout Consistency
+### 1. Database Migration
+- Add `public_token uuid unique` to `moov_invoices`.
+- Add `GRANT` for authenticated/service_role.
+- Backfill existing invoices with generated tokens.
 
-#### Profile Tab
-- Refactor the profile tab in `WhiteLabelSettings.tsx` to use `SettingsHero` and `SectionCard`.
-- Group Personal Info into a sky-accented card.
-- Group Signature and Security (Change Password) into their own themed cards.
-- Ensure the logo display uses themed borders instead of hardcoded white backgrounds.
+### 2. Edge Function: `public-invoice`
+- Public endpoint (no JWT required) that accepts `token`.
+- Looks up `moov_invoices` by `public_token`.
+- Joins `tenants` to return:
+  - Invoice: number, dates, line items, total, paid, status, Moov `payment_link_url`.
+  - Tenant: name, logo_url, primary/secondary colors, invoice letterhead URL, invoice footer note.
+- Returns 404 for unknown/revoked tokens.
 
-#### Users Tab (`TenantUserManager.tsx`)
-- Update the layout to match the unified vertical rhythm.
-- Use `SectionCard` for "Add Team Member" (Orange accent) and "Active Team Members" (Sky accent).
-- Replace any remaining hardcoded colors (like `bg-sky-500/20`) with semantic theme tokens if applicable, while maintaining the intended visual distinction.
+### 3. Frontend: `PublicInvoicePage.tsx`
+- Public route, no login required.
+- Fetches invoice via `public-invoice` edge function.
+- Renders:
+  - Tenant logo / letterhead.
+  - Branded invoice header with invoice number, dates, status.
+  - Line-item table, totals, paid amount, balance due.
+  - Footer note / terms.
+  - "Pay now" CTA that opens the Moov payment link.
+  - Paid/canceled/expired states.
+- Uses tenant primary/secondary colors for theming.
+- Mobile-first, no horizontal scroll.
 
-#### Partners Tab (`TenantPartnerManager.tsx`)
-- Standardize the "Your Partner Code" section with a themed `SectionCard` (Amber accent).
-- Standardize "Connect with a Partner" (Sky accent) and "Active Partners" (Violet accent) cards.
-- Ensure consistent spacing and hover effects on partner list items.
+### 4. Routing
+- Add `/invoice/:token` to `isPublicTokenRoute` in `App.tsx`.
+- Add `<Route path="/invoice/:token" element={<PublicInvoicePage />} />` to `CheckOpsRoutes`.
+- Ensure custom-domain tenants can also serve `/invoice/:token` (add route in `CustomDomainWhiteLabelApp` or rely on `isPublicTokenRoute` fallback).
 
-### Technical Implementation
-- Standardize the `main` container in `WhiteLabelSettings.tsx` to align with the generic `SettingsPageShell` properties (max-width, padding).
-- Audit all three components for hardcoded `bg-white`, `text-black`, or specific hex codes, replacing them with `bg-card`, `text-foreground`, `border-border`, etc.
-- Verify production build to ensure no JSX tags are left orphaned.
+### 5. Update `moov-invoice` Edge Function
+- On create/send, generate a `public_token` (crypto-random UUID) and store it in `moov_invoices`.
+- Return the token in the response so the UI can build the branded link.
 
-## Verification Plan
+### 6. Update `InvoicesTab.tsx`
+- Replace "Copy Moov payment link" with "Copy branded payment link".
+- Build link using `window.location.origin + "/invoice/" + public_token`.
+- Fall back to Moov link if no public token exists.
+- Show a small "Open branded invoice" preview option.
 
-### Automated Tests
-- Run `npx tsgo --noEmit` to verify TypeScript integrity and JSX structure.
+### 7. Email Sending (if applicable)
+- Where the app sends invoice emails, use the branded link instead of `payment_link_url`.
 
-### Manual Verification
-- Capture screenshots of the updated Profile, Users, and Partners tabs in the preview.
-- Compare them side-by-side with the Company Settings tab to confirm identical vertical rhythm, card styling, and typography.
+## Verification
+- Create a test invoice.
+- Confirm the copied link points to `https://<domain>/invoice/<token>`.
+- Open the link in an incognito window and confirm tenant branding renders.
+- Click "Pay now" and confirm it reaches Moov checkout.
+- Confirm paid/canceled invoices show the correct status on the branded page.
+
+## Files to Modify
+- `supabase/migrations/..._moov_invoice_public_token.sql`
+- `supabase/functions/public-invoice/index.ts` (new)
+- `supabase/functions/moov-invoice/index.ts`
+- `src/pages/PublicInvoicePage.tsx` (new)
+- `src/App.tsx`
+- `src/components/white-label/CustomDomainWhiteLabelApp.tsx`
+- `src/pages/payments/InvoicesTab.tsx`
