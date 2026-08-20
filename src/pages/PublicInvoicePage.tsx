@@ -137,7 +137,7 @@ export default function PublicInvoicePage() {
   const canPay = !isPaid && !isCanceled && invoice.payment_link_url;
 
   return (
-    <div className="min-h-screen bg-background py-6 px-4 sm:py-12">
+    <div className={`${invoiceTheme} min-h-screen bg-background py-6 px-4 sm:py-12`}>
       <style>{`
         .invoice-accent { color: ${primary}; }
         .invoice-accent-bg { background-color: ${primary}; }
