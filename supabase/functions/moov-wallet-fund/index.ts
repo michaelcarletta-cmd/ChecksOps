@@ -10,6 +10,7 @@ import {
 } from "../_shared/moovGuard.ts";
 import { syncWallet, writeLedgerEntry } from "../_shared/moovWallet.ts";
 import { resolveDebitSourceMethodId } from "../_shared/moovRails.ts";
+import { facilitatorAccountId } from "../_shared/moovClient.ts";
 
 
 // Funds a tenant's wallet from that tenant's own connected bank account.
@@ -129,11 +130,11 @@ serve(async (req) => {
 
     let created: any;
     try {
-      created = await moovFetch<any>(`/accounts/${account.provider_account_id}/transfers`, {
+      const facilitatorId = await facilitatorAccountId(account.provider_account_id);
+      created = await moovFetch<any>(`/accounts/${facilitatorId}/transfers`, {
         method: "POST",
-        scopes: scopes.transfersWrite(account.provider_account_id),
+        scopes: scopes.transfersWrite(facilitatorId),
         idempotencyKey: `checksops-wallet-fund-${draft.id}`,
-        onBehalfOf: account.provider_account_id,
         body: {
           source: {
             paymentMethodID: sourceMethodId,

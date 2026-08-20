@@ -8,6 +8,8 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { moovFetch, normalizeTransferStatus, scopes } from "./moovClient.ts";
 import { logPaymentEvent, sanitize } from "./moovGuard.ts";
 import { syncWallet, writeLedgerEntry } from "./moovWallet.ts";
+import { facilitatorAccountId } from "./moovClient.ts";
+import { resolveDebitSourceMethodId } from "./moovRails.ts";
 
 export interface FundWalletArgs {
   tenantId: string;
@@ -129,15 +131,15 @@ export async function fundWalletFromBank(
 
   let created: Record<string, unknown>;
   try {
-    created = await moovFetch<Record<string, unknown>>(`/accounts/${account.provider_account_id}/transfers`, {
+    const facilitatorId = await facilitatorAccountId(account.provider_account_id);
+    const sourceMethodId = await resolveDebitSourceMethodId(supabase, source, account.provider_account_id);
+    created = await moovFetch<Record<string, unknown>>(`/accounts/${facilitatorId}/transfers`, {
       method: "POST",
-      scopes: scopes.transfersWrite(account.provider_account_id),
+      scopes: scopes.transfersWrite(facilitatorId),
       idempotencyKey: `checksops-wallet-fund-${draft.id}`,
-      onBehalfOf: account.provider_account_id,
       body: {
         source: {
-          paymentMethodID:
-            source.provider_payment_method_id ?? source.provider_bank_account_id,
+          paymentMethodID: sourceMethodId,
         },
         destination: { paymentMethodID: wallet.provider_payment_method_id },
         amount: { currency: "USD", value: amount },

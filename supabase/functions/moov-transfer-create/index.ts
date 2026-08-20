@@ -5,6 +5,7 @@ import { resolveRails, saveMethodRails } from "../_shared/moovRails.ts";
 import { resolveDebitSourceMethodId } from "../_shared/moovRails.ts";
 
 import { corsHeaders, json, isResponse, logPaymentEvent, requireMoovCaller, sanitize } from "../_shared/moovGuard.ts";
+import { facilitatorAccountId } from "../_shared/moovClient.ts";
 
 // Creates a sandbox transfer on behalf of the INITIATING tenant.
 //
@@ -244,11 +245,11 @@ serve(async (req) => {
 
     let created: any;
     try {
-      created = await moovFetch<any>(`/accounts/${payer.provider_account_id}/transfers`, {
+      const facilitatorId = await facilitatorAccountId(payer.provider_account_id);
+      created = await moovFetch<any>(`/accounts/${facilitatorId}/transfers`, {
         method: "POST",
-        scopes: scopes.transfersWrite(payer.provider_account_id),
+        scopes: scopes.transfersWrite(facilitatorId),
         idempotencyKey: `checksops-transfer-${draft.id}`,
-        onBehalfOf: payer.provider_account_id,
         body: {
           source: {
             paymentMethodID: sourceMethodId,
