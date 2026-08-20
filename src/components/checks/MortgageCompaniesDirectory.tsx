@@ -267,8 +267,13 @@ export function MortgageCompaniesDirectory({ searchQuery: externalSearch }: Prop
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         company={editing}
-        onSaved={() => void fetchCompanies()}
+        initialName={prefillName}
+        onSaved={() => {
+          void fetchCompanies();
+          void fetchDetected();
+        }}
       />
+
     </Card>
   );
 }
