@@ -1289,8 +1289,9 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
             </div>
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </SectionCard>
+
   );
 }
 
