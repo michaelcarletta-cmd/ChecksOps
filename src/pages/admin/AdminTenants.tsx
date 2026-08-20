@@ -1467,7 +1467,7 @@ function TenantManagementTable({
             })}
           </TableBody>
         </Table>
-      </CardContent>
+      </div>
 
       {notesTenant && (
         <TenantNotesDialog
@@ -1484,7 +1484,8 @@ function TenantManagementTable({
           onClose={() => setProTenant(null)}
         />
       )}
-    </Card>
+    </SectionCard>
+
   );
 }
 
