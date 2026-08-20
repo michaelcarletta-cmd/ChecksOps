@@ -134,6 +134,30 @@ export function MortgageCompaniesDirectory({ searchQuery: externalSearch }: Prop
           </div>
         )}
 
+        {missing.length > 0 && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+            <p className="text-xs font-medium text-amber-500 flex items-center gap-1.5">
+              <Building2 className="h-3.5 w-3.5" />
+              Found on checks but not in the directory ({missing.length})
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {missing.map((name) => (
+                <Button
+                  key={name}
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => openFromCheck(name)}
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  {name}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+
+
         {loading ? (
           <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
         ) : filtered.length === 0 ? (
