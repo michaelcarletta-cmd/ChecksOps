@@ -125,7 +125,7 @@ export function MortgageOpsDirectory() {
           {filtered.map((c) => {
             const address = formatAddress(c);
             return (
-              <Card key={c.id}>
+              <Card key={c.id} className="overflow-hidden border-border/60 shadow-sm">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-2">
                     <CardTitle className="text-base flex items-center gap-2">
