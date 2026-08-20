@@ -42,6 +42,8 @@ interface TenantBranding {
   invoice_letterhead_url: string | null;
   invoice_footer_note: string | null;
   invoice_default_terms: string | null;
+  invoice_accent_color?: string | null;
+  invoice_theme?: string | null;
 }
 
 const currency = (n: number) =>
@@ -70,8 +72,9 @@ export default function PublicInvoicePage() {
   const [invoice, setInvoice] = useState<PublicInvoice | null>(null);
   const [tenant, setTenant] = useState<TenantBranding | null>(null);
 
-  const primary = tenant?.primary_color || "#3B82F6";
+  const primary = tenant?.invoice_accent_color || tenant?.primary_color || "#3B82F6";
   const secondary = tenant?.secondary_color || "#1E293B";
+  const invoiceTheme = tenant?.invoice_theme === "dark" ? "dark" : "light";
 
   useEffect(() => {
     if (!token) {
@@ -134,7 +137,7 @@ export default function PublicInvoicePage() {
   const canPay = !isPaid && !isCanceled && invoice.payment_link_url;
 
   return (
-    <div className="min-h-screen bg-background py-6 px-4 sm:py-12">
+    <div className={`${invoiceTheme} min-h-screen bg-background py-6 px-4 sm:py-12`}>
       <style>{`
         .invoice-accent { color: ${primary}; }
         .invoice-accent-bg { background-color: ${primary}; }
