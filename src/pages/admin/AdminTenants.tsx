@@ -323,12 +323,6 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           <TabsContent value="compliance" className="mt-6 space-y-8">
             <ComplianceSettings />
             <div className="pt-6 border-t border-border/60">
-              <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
-                <FileText className="w-4 h-4" /> Tenant Documents
-              </h3>
-              <TenantDocumentsManager tenantId={tenant.id} />
-            </div>
-            <div className="pt-6 border-t border-border/60">
               <VerificationDocumentsPanel tenantId={tenant.id} readOnly />
             </div>
           </TabsContent>
