@@ -399,12 +399,13 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
   const { saving, save } = useTenantSave(tenant, onUpdated);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Company & Plan</CardTitle>
-        <CardDescription>Core info, URL, billing plan, and usage limits.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <SectionCard
+      title="Company & Plan"
+      icon={<Building2 className="h-4 w-4 text-primary" />}
+      accent="bg-gradient-to-r from-primary to-primary/40"
+      description="Core info, URL, billing plan, and usage limits."
+    >
+
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2"><Label>Company Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
           <div className="space-y-2"><Label>Slug</Label><Input value={slug} onChange={(e) => setSlug(e.target.value)} /></div>
