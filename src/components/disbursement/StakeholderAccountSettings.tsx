@@ -18,7 +18,6 @@ import { AchAuthorizationForm } from "./AchAuthorizationForm";
 import { BankVerification } from "./BankVerification";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePaymentRail } from "@/hooks/usePaymentRail";
-import { RequestStakeholderLimitDialog } from "./RequestStakeholderLimitDialog";
 
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
@@ -72,7 +71,6 @@ export function StakeholderAccountSettings() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [capLimitDialog, setCapLimitDialog] = useState<null | "sales_rep" | "subcontractor" | "vendor">(null);
-  const [requestLimitDialog, setRequestLimitDialog] = useState<null | "sales_rep" | "subcontractor" | "vendor">(null);
 
   const { data: accounts = [], isLoading } = useQuery({
     queryKey: ["stakeholder-accounts", tenant?.id],
