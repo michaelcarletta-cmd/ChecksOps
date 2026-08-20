@@ -190,7 +190,6 @@ export default function AdminTenants() {
 
             <TabsTrigger value="tenants"><Building2 className="w-4 h-4 mr-1" /> Tenants</TabsTrigger>
             <TabsTrigger value="referrals"><Gift className="w-4 h-4 mr-1" /> Referral Dashboard</TabsTrigger>
-            <TabsTrigger value="platform-billing"><Receipt className="w-4 h-4 mr-1" /> Platform Billing</TabsTrigger>
             
           </TabsList>
           <TabsContent value="tenants">
@@ -209,11 +208,8 @@ export default function AdminTenants() {
           <TabsContent value="referrals">
             <AdminReferralDashboard />
           </TabsContent>
-          <TabsContent value="platform-billing" className="space-y-6">
-            <BillingConfigPanel />
-            <MaintenancePaymentsTracker />
-          </TabsContent>
         </Tabs>
+
       </SettingsPageShell>
     </div>
 
