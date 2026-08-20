@@ -21804,6 +21804,7 @@ export type Database = {
           invoice_letterhead_url: string | null
           is_founding_partner: boolean
           is_system_tenant: boolean | null
+          is_test_account: boolean
           kyc_completed_at: string | null
           kyc_completed_by: string | null
           kyc_notes: string | null
@@ -21892,6 +21893,7 @@ export type Database = {
           invoice_letterhead_url?: string | null
           is_founding_partner?: boolean
           is_system_tenant?: boolean | null
+          is_test_account?: boolean
           kyc_completed_at?: string | null
           kyc_completed_by?: string | null
           kyc_notes?: string | null
@@ -21980,6 +21982,7 @@ export type Database = {
           invoice_letterhead_url?: string | null
           is_founding_partner?: boolean
           is_system_tenant?: boolean | null
+          is_test_account?: boolean
           kyc_completed_at?: string | null
           kyc_completed_by?: string | null
           kyc_notes?: string | null
