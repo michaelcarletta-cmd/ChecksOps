@@ -53,7 +53,13 @@ serve(async (req) => {
   const authorized = roleNames.includes("admin") || roleNames.includes("mortgage_agent");
   if (!authorized) return json(403, { error: "not_authorized" });
 
-  let payload: { request_id?: string; flat_fee_cents?: number; charge_immediately?: boolean };
+  let payload: {
+    request_id?: string;
+    flat_fee_cents?: number;
+    shipping_cents?: number;
+    charge_immediately?: boolean;
+  };
+
   try {
     payload = await req.json();
   } catch {
