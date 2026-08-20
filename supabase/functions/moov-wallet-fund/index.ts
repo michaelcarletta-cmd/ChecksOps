@@ -9,6 +9,8 @@ import {
   sanitize,
 } from "../_shared/moovGuard.ts";
 import { syncWallet, writeLedgerEntry } from "../_shared/moovWallet.ts";
+import { resolveDebitSourceMethodId } from "../_shared/moovRails.ts";
+
 
 // Funds a tenant's wallet from that tenant's own connected bank account.
 //
