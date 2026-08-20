@@ -45,6 +45,7 @@ type Tenant = {
   custom_domain: string | null;
   subscription_status: string | null;
   plan_tier: string | null;
+  is_test_account?: boolean | null;
   max_checks_per_month: number | null;
   email_from_name: string | null;
   email_from_address: string | null;
@@ -72,7 +73,7 @@ type TenantUserRow = {
   full_name?: string;
 };
 
-const PLAN_TIERS = ["starter", "pro", "enterprise"] as const;
+
 const TENANT_ROLES = ["admin", "operator", "viewer"];
 
 export default function AdminTenants() {
