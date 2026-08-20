@@ -1092,44 +1092,40 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <CardTitle>Usage & Payments — {range.label}</CardTitle>
-            <CardDescription>
-              Checks processed, CheckAlt deposits, Moov disbursements & maintenance fees paid to ChecksOps.
-            </CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            <Select value={scope} onValueChange={(v) => setScope(v as any)}>
-              <SelectTrigger className="w-[110px] h-8"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="month">Month</SelectItem>
-                <SelectItem value="year">Year</SelectItem>
-              </SelectContent>
-            </Select>
-            {scope === "month" && (
-              <Select value={String(month)} onValueChange={(v) => setMonth(parseInt(v))}>
-                <SelectTrigger className="w-[130px] h-8"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {months.map((m) => <SelectItem key={m.v} value={String(m.v)}>{m.l}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            )}
-            <Select value={String(year)} onValueChange={(v) => setYear(parseInt(v))}>
-              <SelectTrigger className="w-[90px] h-8"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
-              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <SectionCard
+      title={`Usage & Payments — ${range.label}`}
+      icon={<Receipt className="h-4 w-4 text-emerald-500" />}
+      accent="bg-gradient-to-r from-emerald-500 to-emerald-500/30"
+      description="Checks processed, CheckAlt deposits, Moov disbursements & maintenance fees paid to ChecksOps."
+    >
+      <div className="flex items-center gap-2 flex-wrap">
+        <Select value={scope} onValueChange={(v) => setScope(v as any)}>
+          <SelectTrigger className="w-[110px] h-8"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="month">Month</SelectItem>
+            <SelectItem value="year">Year</SelectItem>
+          </SelectContent>
+        </Select>
+        {scope === "month" && (
+          <Select value={String(month)} onValueChange={(v) => setMonth(parseInt(v))}>
+            <SelectTrigger className="w-[130px] h-8"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {months.map((m) => <SelectItem key={m.v} value={String(m.v)}>{m.l}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
+        <Select value={String(year)} onValueChange={(v) => setYear(parseInt(v))}>
+          <SelectTrigger className="w-[90px] h-8"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
+          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+        </Button>
+      </div>
+      <div className="space-y-6">
+
         {error ? (
           <div className="text-sm text-destructive">{error}</div>
         ) : loading ? (
