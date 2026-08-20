@@ -196,6 +196,7 @@ serve(async (req) => {
           invoice_date: body.invoice_date ?? null,
           due_date: body.due_date ?? null,
           payment_link_url: finalInvoice.paymentLinkURL ?? null,
+          public_token: crypto.randomUUID(),
           sent_at: finalInvoice.sentOn ?? (action === "create_and_send" ? new Date().toISOString() : null),
           claim_id: body.claim_id ?? null,
           last_synced_at: new Date().toISOString(),
