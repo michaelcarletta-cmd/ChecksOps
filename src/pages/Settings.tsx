@@ -851,9 +851,7 @@ export default function Settings() {
             <UserManagementSettings />
             {tenant && (
               <TeamCapsSettings 
-                vendorCap={tenant.vendor_cap ?? 5}
-                salesRepCap={tenant.sales_rep_cap ?? 5}
-                subcontractorCap={tenant.subcontractor_cap ?? 5}
+                stakeholderCap={(tenant as any).stakeholder_cap ?? 5}
                 tenantId={tenant.id}
                 onUpdate={() => {}} 
               />
