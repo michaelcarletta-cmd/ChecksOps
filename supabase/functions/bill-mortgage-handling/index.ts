@@ -100,7 +100,65 @@ serve(async (req) => {
     request.flat_fee_cents ??
     defaultFee;
 
-  // Resolve tenant Stripe customer
+  const shippingCents =
+    typeof payload.shipping_cents === "number" && payload.shipping_cents > 0
+      ? payload.shipping_cents
+      : Number(request.invoice_shipping_cents ?? 0) || 0;
+
+  const tenantName = (request as any).tenants?.name ?? request.tenant_id.slice(0, 8);
+  const companyLabel = request.mortgage_company || request.mortgage_servicer || "mortgage company";
+  const description = `Mortgage handling — ${companyLabel} (tenant ${tenantName})`;
+  const shippingDescription =
+    request.invoice_shipping_description || "Overnight shipping label";
+
+  // 1) Record usage line items — these are pulled end-of-month via the Moov fee rollup.
+  const lineItems: Record<string, unknown>[] = [
+    {
+      tenant_id: request.tenant_id,
+      fee_code: "mortgage_handling",
+      description,
+      quantity: 1,
+      unit_cents: feeCents,
+      amount_cents: feeCents,
+      claim_id: request.claim_id ?? null,
+      status: "unbilled",
+      source_reference: `mortgage_handling:${requestId}`,
+      metadata: { request_id: requestId, mortgage_company: request.mortgage_company ?? null },
+    },
+  ];
+  if (shippingCents > 0) {
+    lineItems.push({
+      tenant_id: request.tenant_id,
+      fee_code: "mortgage_shipping_label",
+      description: `${shippingDescription} — ${companyLabel}`,
+      quantity: 1,
+      unit_cents: shippingCents,
+      amount_cents: shippingCents,
+      claim_id: request.claim_id ?? null,
+      status: "unbilled",
+      source_reference: `mortgage_shipping:${requestId}`,
+      metadata: { request_id: requestId },
+    });
+  }
+
+  const { error: lineErr } = await admin
+    .from("platform_fee_line_items")
+    .upsert(lineItems, { onConflict: "tenant_id,source_reference" });
+
+  if (lineErr) {
+    console.error("usage line item insert failed", requestId, lineErr.message);
+    await admin
+      .from("mortgage_handling_requests")
+      .update({
+        billing_status: "failed",
+        billing_error: lineErr.message,
+        flat_fee_cents: feeCents,
+      })
+      .eq("id", requestId);
+    return json(500, { error: "usage_record_failed", details: lineErr.message });
+  }
+
+  // 2) Best-effort Stripe invoice item (only when the tenant has a Stripe customer).
   const { data: balance } = await admin
     .from("tenant_credit_balances")
     .select("stripe_customer_id")
@@ -109,74 +167,54 @@ serve(async (req) => {
 
   const customerId = balance?.stripe_customer_id ?? null;
 
-  if (!customerId) {
-    await admin
-      .from("mortgage_handling_requests")
-      .update({
-        billing_status: "failed",
-        billing_error: "no stripe_customer_id for tenant",
-        flat_fee_cents: feeCents,
-      })
-      .eq("id", requestId);
-    return json(422, { error: "no_stripe_customer_for_tenant", tenant_id: request.tenant_id });
-  }
-
-  const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-
-  const tenantName = (request as any).tenants?.name ?? request.tenant_id.slice(0, 8);
-  const companyLabel = request.mortgage_company || request.mortgage_servicer || "mortgage company";
-  const description = `Mortgage handling — ${companyLabel} (tenant ${tenantName})`;
-
   let invoiceItemId: string | null = null;
   let invoiceId: string | null = null;
+  let stripeWarning: string | null = null;
 
-  try {
-    const invoiceItem = await stripe.invoiceItems.create(
-      {
-        customer: customerId,
-        amount: feeCents,
-        currency: "usd",
-        description,
-        metadata: {
-          source: "mortgage_handling",
-          request_id: requestId,
-          tenant_id: request.tenant_id,
-        },
-      },
-      { idempotencyKey: `mortgage_handling:${requestId}` },
-    );
-    invoiceItemId = invoiceItem.id;
-
-    if (payload.charge_immediately) {
-      const invoice = await stripe.invoices.create(
+  if (customerId && stripeKey) {
+    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+    try {
+      const invoiceItem = await stripe.invoiceItems.create(
         {
           customer: customerId,
-          collection_method: "charge_automatically",
-          auto_advance: true,
-          metadata: { source: "mortgage_handling", request_id: requestId },
+          amount: feeCents + shippingCents,
+          currency: "usd",
+          description: shippingCents > 0 ? `${description} + ${shippingDescription}` : description,
+          metadata: {
+            source: "mortgage_handling",
+            request_id: requestId,
+            tenant_id: request.tenant_id,
+            shipping_cents: String(shippingCents),
+          },
         },
-        { idempotencyKey: `mortgage_handling_inv:${requestId}` },
+        { idempotencyKey: `mortgage_handling:${requestId}` },
       );
-      const finalized = await stripe.invoices.finalizeInvoice(invoice.id);
-      invoiceId = finalized.id;
-      try {
-        await stripe.invoices.pay(finalized.id);
-      } catch (payErr) {
-        console.error("invoice pay failed", requestId, (payErr as Error).message);
+      invoiceItemId = invoiceItem.id;
+
+      if (payload.charge_immediately) {
+        const invoice = await stripe.invoices.create(
+          {
+            customer: customerId,
+            collection_method: "charge_automatically",
+            auto_advance: true,
+            metadata: { source: "mortgage_handling", request_id: requestId },
+          },
+          { idempotencyKey: `mortgage_handling_inv:${requestId}` },
+        );
+        const finalized = await stripe.invoices.finalizeInvoice(invoice.id);
+        invoiceId = finalized.id;
+        try {
+          await stripe.invoices.pay(finalized.id);
+        } catch (payErr) {
+          console.error("invoice pay failed", requestId, (payErr as Error).message);
+        }
       }
+    } catch (e) {
+      stripeWarning = (e as Error).message || "stripe_error";
+      console.error("stripe error (non-fatal)", requestId, stripeWarning);
     }
-  } catch (e) {
-    const msg = (e as Error).message || "stripe_error";
-    console.error("stripe error", requestId, msg);
-    await admin
-      .from("mortgage_handling_requests")
-      .update({
-        billing_status: "failed",
-        billing_error: msg,
-        flat_fee_cents: feeCents,
-      })
-      .eq("id", requestId);
-    return json(502, { error: "stripe_error", details: msg });
+  } else {
+    stripeWarning = customerId ? "stripe not configured" : "no stripe customer — usage-billed only";
   }
 
   const { error: updateErr } = await admin
@@ -185,6 +223,7 @@ serve(async (req) => {
       billing_status: "billed",
       billed_at: new Date().toISOString(),
       flat_fee_cents: feeCents,
+      invoice_shipping_cents: shippingCents || request.invoice_shipping_cents || null,
       stripe_invoice_item_id: invoiceItemId,
       stripe_invoice_id: invoiceId,
       billing_error: null,
@@ -199,8 +238,12 @@ serve(async (req) => {
     ok: true,
     request_id: requestId,
     flat_fee_cents: feeCents,
+    shipping_cents: shippingCents,
+    total_cents: feeCents + shippingCents,
     stripe_invoice_item_id: invoiceItemId,
     stripe_invoice_id: invoiceId,
+    stripe_warning: stripeWarning,
     tenant_name: tenantName,
   });
+
 });
