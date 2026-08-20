@@ -118,6 +118,20 @@ serve(async (req) => {
       await record("granted_scope_facilitator", () => rawToken(scopes.transfersWrite(facilitatorId!)));
     }
 
+    await record("live_transfer_0.01", () =>
+      moovFetch<any>(`/accounts/${accountId}/transfers`, {
+        method: "POST",
+        scopes: scopes.transfersWrite(accountId),
+        idempotencyKey: `checksops-probe-${accountId}-1`,
+        onBehalfOf: accountId,
+        body: {
+          source: { paymentMethodID: src },
+          destination: { paymentMethodID: dst },
+          amount: { currency: "USD", value: 1 },
+          description: "ChecksOps probe",
+        },
+      }));
+
     const paths = ["/transfer-options", `/accounts/${accountId}/transfer-options`];
     for (const path of paths) {
       for (const apiVersion of ["v2024.01.00", "v2025.01.00", undefined]) {
