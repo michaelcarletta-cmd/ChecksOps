@@ -14,6 +14,10 @@ import { toast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
 import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Palette, Briefcase, Home } from "lucide-react";
 import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
+import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
+import { SettingsHero } from "@/components/settings/SettingsHero";
+import { SectionCard } from "@/components/settings/SectionCard";
+
 
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { useRef } from "react";
@@ -147,22 +151,16 @@ export default function AdminTenants() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="border-b border-border bg-card">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+    <div className="min-h-screen bg-background px-6">
+      <SettingsPageShell>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))}>
               <ArrowLeft className="w-4 h-4 mr-1" /> Back
             </Button>
             <Button variant="ghost" size="sm" onClick={() => goToChecksOpsHome(navigate)}>
               <Home className="w-4 h-4 mr-1" /> Home
             </Button>
-
-            <Building2 className="w-6 h-6 text-primary" />
-            <div>
-              <h1 className="text-xl font-semibold">Tenant Management</h1>
-              <p className="text-xs text-muted-foreground">Master merchant — {ALLOWED_EMAIL}</p>
-            </div>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate("/admin/mortgage-ops")}>
@@ -179,11 +177,17 @@ export default function AdminTenants() {
             </Dialog>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-[1400px] mx-auto px-6 py-8">
+        <SettingsHero
+          title="Tenant Management"
+          description={`Master merchant control panel — review, approve, and configure every tenant. Signed in as ${ALLOWED_EMAIL}.`}
+          badge="Administration"
+          icon={<Building2 className="h-4 w-4 text-primary" />}
+        />
+
         <Tabs defaultValue="tenants" className="w-full">
           <TabsList className="mb-6">
+
             <TabsTrigger value="tenants"><Building2 className="w-4 h-4 mr-1" /> Tenants</TabsTrigger>
             <TabsTrigger value="referrals"><Gift className="w-4 h-4 mr-1" /> Referral Dashboard</TabsTrigger>
             <TabsTrigger value="platform-billing"><Receipt className="w-4 h-4 mr-1" /> Platform Billing</TabsTrigger>
@@ -210,9 +214,9 @@ export default function AdminTenants() {
             <MaintenancePaymentsTracker />
           </TabsContent>
         </Tabs>
-      </div>
-
+      </SettingsPageShell>
     </div>
+
   );
 }
 
@@ -279,28 +283,28 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
 
   return (
     <TenantProvider slug={tenant.slug}>
-    <div className="min-h-screen bg-background">
-      <div className="border-b border-border bg-card">
-        <div className="max-w-5xl mx-auto px-6 py-5 flex items-center gap-4">
+    <div className="min-h-screen bg-background px-6">
+      <SettingsPageShell className="max-w-5xl">
+        <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={onBack}><ArrowLeft className="w-4 h-4 mr-1" /> All Tenants</Button>
           <Separator orientation="vertical" className="h-6" />
-          <div className="flex items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-md flex items-center justify-center text-white font-semibold text-sm"
-              style={{ backgroundColor: tenant.primary_color || "#3B82F6" }}
-            >
-              {tenant.name.slice(0, 2).toUpperCase()}
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold">{tenant.name}</h1>
-              <p className="text-xs text-muted-foreground">/{tenant.slug}</p>
-            </div>
+          <div
+            className="w-8 h-8 rounded-md flex items-center justify-center text-primary-foreground font-semibold text-xs"
+            style={{ backgroundColor: tenant.primary_color || "hsl(var(--primary))" }}
+          >
+            {tenant.name.slice(0, 2).toUpperCase()}
           </div>
         </div>
-      </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-8">
+        <SettingsHero
+          title={tenant.name}
+          description={`Configure company details, branding, compliance, billing and users for /${tenant.slug}.`}
+          badge="Tenant Settings"
+          icon={<Building2 className="h-4 w-4 text-primary" />}
+        />
+
         <Tabs defaultValue="company" className="w-full">
+
           <TabsList className="flex w-full flex-wrap h-auto justify-start gap-1 p-1">
             <TabsTrigger value="company" className="flex-1 min-w-[110px] whitespace-nowrap"><Building2 className="w-4 h-4 mr-1" /> Company</TabsTrigger>
             <TabsTrigger value="branding" className="flex-1 min-w-[150px] whitespace-nowrap"><Palette className="w-4 h-4 mr-1" /> Branding & Email</TabsTrigger>
@@ -331,22 +335,17 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <TenantUsageInlinePanel tenantId={tenant.id} tenantName={tenant.name} />
           </TabsContent>
           <TabsContent value="pro-badge" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Crosshair className="w-5 h-5 text-primary" strokeWidth={2.5} /> Contractor OPS Badge
-                </CardTitle>
-                <CardDescription>
-                  Approve or revoke the Find-a-Pro badge for contractor profiles in this tenant.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button onClick={() => setProOpen(true)}>
-                  <Crosshair className="w-4 h-4 mr-2" strokeWidth={2.5} /> Manage OPS Badge
+            <SectionCard
+              title="Contractor OPS Badge"
+              icon={<Crosshair className="h-4 w-4 text-primary" strokeWidth={2.5} />}
+              accent="bg-gradient-to-r from-primary to-primary/40"
+              description="Approve or revoke the Find-a-Pro badge for contractor profiles in this tenant."
+            >
+              <Button onClick={() => setProOpen(true)}>
+                <Crosshair className="w-4 h-4 mr-2" strokeWidth={2.5} /> Manage OPS Badge
+              </Button>
+            </SectionCard>
 
-                </Button>
-              </CardContent>
-            </Card>
           </TabsContent>
           <TabsContent value="users" className="mt-6">
             <UsersTab tenant={tenant} />
@@ -358,8 +357,9 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           isOpen={proOpen}
           onClose={() => setProOpen(false)}
         />
-      </div>
+      </SettingsPageShell>
     </div>
+
     </TenantProvider>
   );
 }
@@ -399,12 +399,13 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
   const { saving, save } = useTenantSave(tenant, onUpdated);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Company & Plan</CardTitle>
-        <CardDescription>Core info, URL, billing plan, and usage limits.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <SectionCard
+      title="Company & Plan"
+      icon={<Building2 className="h-4 w-4 text-primary" />}
+      accent="bg-gradient-to-r from-primary to-primary/40"
+      description="Core info, URL, billing plan, and usage limits."
+    >
+
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2"><Label>Company Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
           <div className="space-y-2"><Label>Slug</Label><Input value={slug} onChange={(e) => setSlug(e.target.value)} /></div>
@@ -451,8 +452,8 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
         <Button onClick={() => save({ name, slug, custom_domain: customDomain || null, plan_tier: planTier as Tenant["plan_tier"], subscription_status: subStatus, max_checks_per_month: maxChecks } as any)} disabled={saving}>
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Changes
         </Button>
-      </CardContent>
-    </Card>
+    </SectionCard>
+
   );
 }
 
@@ -490,12 +491,13 @@ function BrandingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Ten
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Branding</CardTitle>
-        <CardDescription>Logo and color theme used on the tenant's portal and emails.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <SectionCard
+      title="Branding"
+      icon={<Palette className="h-4 w-4 text-pink-500" />}
+      accent="bg-gradient-to-r from-pink-500 to-pink-500/30"
+      description="Logo and color theme used on the tenant's portal and emails."
+    >
+
         <div className="space-y-2">
           <Label>Logo</Label>
           <input
@@ -558,8 +560,8 @@ function BrandingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Ten
         <Button onClick={() => save({ logo_url: logoUrl || null, primary_color: primary, secondary_color: secondary })} disabled={saving || uploading}>
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Branding
         </Button>
-      </CardContent>
-    </Card>
+    </SectionCard>
+
   );
 }
 
@@ -654,33 +656,33 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Invite User</CardTitle>
-          <CardDescription>Adds the user to this tenant and emails them a tenant-branded reset link to set their password.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="flex gap-2">
-            <Input placeholder="Full name (optional)" value={inviteName} onChange={(e) => setInviteName(e.target.value)} className="flex-1" />
-          </div>
-          <div className="flex gap-2">
-            <Input placeholder="user@example.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="flex-1" />
-            <Select value={inviteRole} onValueChange={setInviteRole}>
-              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-              <SelectContent>{TENANT_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-            </Select>
-            <Button onClick={invite} disabled={inviting}>
-              {inviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4 mr-1" />} Invite
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <SectionCard
+        title="Invite User"
+        icon={<Mail className="h-4 w-4 text-sky-500" />}
+        accent="bg-gradient-to-r from-sky-500 to-sky-500/30"
+        description="Adds the user to this tenant and emails them a tenant-branded reset link to set their password."
+      >
+        <div className="flex gap-2">
+          <Input placeholder="Full name (optional)" value={inviteName} onChange={(e) => setInviteName(e.target.value)} className="flex-1" />
+        </div>
+        <div className="flex gap-2">
+          <Input placeholder="user@example.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="flex-1" />
+          <Select value={inviteRole} onValueChange={setInviteRole}>
+            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+            <SelectContent>{TENANT_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+          </Select>
+          <Button onClick={invite} disabled={inviting}>
+            {inviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4 mr-1" />} Invite
+          </Button>
+        </div>
+      </SectionCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Tenant Members ({users.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <SectionCard
+        title={`Tenant Members (${users.length})`}
+        icon={<Users className="h-4 w-4 text-violet-500" />}
+        accent="bg-gradient-to-r from-violet-500 to-violet-500/30"
+      >
+
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin" /></div>
           ) : users.length === 0 ? (
@@ -709,8 +711,8 @@ function UsersTab({ tenant }: { tenant: Tenant }) {
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+      </SectionCard>
+
     </div>
   );
 }
@@ -721,12 +723,13 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
   const { saving, save } = useTenantSave(tenant, onUpdated);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Per-Check Billing</CardTitle>
-        <CardDescription>Configure how much this tenant is billed per check processed.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <SectionCard
+      title="Per-Check Billing"
+      icon={<Receipt className="h-4 w-4 text-amber-500" />}
+      accent="bg-gradient-to-r from-amber-500 to-amber-500/30"
+      description="Configure how much this tenant is billed per check processed."
+    >
+
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <Label>Enable Per-Check Billing</Label>
@@ -775,8 +778,8 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
         >
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Billing Settings
         </Button>
-      </CardContent>
-    </Card>
+    </SectionCard>
+
   );
 }
 
@@ -882,22 +885,19 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>Billing Bank Account</CardTitle>
-            <CardDescription>
-              Moov-verified account we pull maintenance fees from for {tenantName}.
-            </CardDescription>
-          </div>
-          <Button size="sm" onClick={pullNow} disabled={charging}>
-            {charging ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-            Pull maintenance fee now
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
+    <SectionCard
+      title="Billing Bank Account"
+      icon={<ShieldCheck className="h-4 w-4 text-sky-500" />}
+      accent="bg-gradient-to-r from-sky-500 to-sky-500/30"
+      description={`Moov-verified account we pull maintenance fees from for ${tenantName}.`}
+    >
+      <div className="flex justify-end">
+        <Button size="sm" onClick={pullNow} disabled={charging}>
+          {charging ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+          Pull maintenance fee now
+        </Button>
+      </div>
+
         {loading ? (
           <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
         ) : !bank ? (
@@ -929,8 +929,8 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+    </SectionCard>
+
   );
 }
 
@@ -1092,44 +1092,40 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <CardTitle>Usage & Payments — {range.label}</CardTitle>
-            <CardDescription>
-              Checks processed, CheckAlt deposits, Moov disbursements & maintenance fees paid to ChecksOps.
-            </CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            <Select value={scope} onValueChange={(v) => setScope(v as any)}>
-              <SelectTrigger className="w-[110px] h-8"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="month">Month</SelectItem>
-                <SelectItem value="year">Year</SelectItem>
-              </SelectContent>
-            </Select>
-            {scope === "month" && (
-              <Select value={String(month)} onValueChange={(v) => setMonth(parseInt(v))}>
-                <SelectTrigger className="w-[130px] h-8"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {months.map((m) => <SelectItem key={m.v} value={String(m.v)}>{m.l}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            )}
-            <Select value={String(year)} onValueChange={(v) => setYear(parseInt(v))}>
-              <SelectTrigger className="w-[90px] h-8"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
-              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <SectionCard
+      title={`Usage & Payments — ${range.label}`}
+      icon={<Receipt className="h-4 w-4 text-emerald-500" />}
+      accent="bg-gradient-to-r from-emerald-500 to-emerald-500/30"
+      description="Checks processed, CheckAlt deposits, Moov disbursements & maintenance fees paid to ChecksOps."
+    >
+      <div className="flex items-center gap-2 flex-wrap">
+        <Select value={scope} onValueChange={(v) => setScope(v as any)}>
+          <SelectTrigger className="w-[110px] h-8"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="month">Month</SelectItem>
+            <SelectItem value="year">Year</SelectItem>
+          </SelectContent>
+        </Select>
+        {scope === "month" && (
+          <Select value={String(month)} onValueChange={(v) => setMonth(parseInt(v))}>
+            <SelectTrigger className="w-[130px] h-8"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {months.map((m) => <SelectItem key={m.v} value={String(m.v)}>{m.l}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
+        <Select value={String(year)} onValueChange={(v) => setYear(parseInt(v))}>
+          <SelectTrigger className="w-[90px] h-8"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
+          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+        </Button>
+      </div>
+      <div className="space-y-6">
+
         {error ? (
           <div className="text-sm text-destructive">{error}</div>
         ) : loading ? (
@@ -1293,8 +1289,9 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
             </div>
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </SectionCard>
+
   );
 }
 
@@ -1339,14 +1336,16 @@ function TenantManagementTable({
     cents == null ? "—" : `$${(cents / 100).toFixed(2)}`;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Tenant Management</CardTitle>
-        <CardDescription>
-          Master owner control panel — review, approve, and configure every tenant. Not visible to tenant or staff users.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="p-0">
+    <SectionCard
+      title="All Tenants"
+      icon={<Building2 className="h-4 w-4 text-primary" />}
+      accent="bg-gradient-to-r from-primary to-primary/40"
+      description="Review, approve, and configure every tenant. Not visible to tenant or staff users."
+
+      className="[&>div:last-child]:p-0"
+    >
+      <div className="-mx-4 -mt-2">
+
         <Table>
           <TableHeader>
             <TableRow>
@@ -1467,7 +1466,7 @@ function TenantManagementTable({
             })}
           </TableBody>
         </Table>
-      </CardContent>
+      </div>
 
       {notesTenant && (
         <TenantNotesDialog
@@ -1484,7 +1483,8 @@ function TenantManagementTable({
           onClose={() => setProTenant(null)}
         />
       )}
-    </Card>
+    </SectionCard>
+
   );
 }
 
