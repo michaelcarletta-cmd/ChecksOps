@@ -929,8 +929,8 @@ function TenantBillingBankPanel({ tenantId, tenantName }: { tenantId: string; te
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+    </SectionCard>
+
   );
 }
 
