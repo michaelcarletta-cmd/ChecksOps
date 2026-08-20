@@ -89,11 +89,17 @@ Deno.serve(async (req) => {
     if (!deposit.checkalt_reference) {
       throw new Error("Deposit has no CheckAlt reference yet — cannot approve/reject");
     }
-    if (deposit.status !== "pending_approval") {
+    // Rejections may also be used to cancel/void a deposit that was already
+    // auto-approved by the provider (e.g. an accidental duplicate submission),
+    // as long as it has not cleared or already been returned/rejected.
+    const cancellable = action === "reject" &&
+      ["submitted", "pending", "processing"].includes(deposit.status ?? "");
+    if (deposit.status !== "pending_approval" && !cancellable) {
       return new Response(JSON.stringify({
         error: `Deposit is in '${deposit.status}' status, not pending_approval`,
       }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
 
     const cfg = await loadConfig(supabase);
     const fiKey = cfg.fi_key;
