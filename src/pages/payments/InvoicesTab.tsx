@@ -142,6 +142,11 @@ export function InvoicesTab() {
     toast({ title: "Payment link copied", description: "Share it with your customer to get paid." });
   };
 
+  const brandedInvoiceUrl = (inv: typeof rows[number]) => {
+    if (!inv.public_token) return inv.payment_link_url || "";
+    return `${window.location.origin}/invoice/${inv.public_token}`;
+  };
+
   const canSubmit =
     customerName.trim().length > 1 &&
     /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(customerEmail.trim()) &&
@@ -383,13 +388,13 @@ export function InvoicesTab() {
                               <Send className="mr-2 h-4 w-4" /> Send invoice
                             </DropdownMenuItem>
                           )}
-                          {inv.payment_link_url && (
+                          {(inv.public_token || inv.payment_link_url) && (
                             <>
-                              <DropdownMenuItem onClick={() => copyLink(inv.payment_link_url!)}>
+                              <DropdownMenuItem onClick={() => copyLink(brandedInvoiceUrl(inv))}>
                                 <Link2 className="mr-2 h-4 w-4" /> Copy payment link
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => window.open(inv.payment_link_url!, "_blank", "noopener")}>
-                                <FileText className="mr-2 h-4 w-4" /> Open payment page
+                              <DropdownMenuItem onClick={() => window.open(brandedInvoiceUrl(inv), "_blank", "noopener")}>
+                                <FileText className="mr-2 h-4 w-4" /> Open invoice page
                               </DropdownMenuItem>
                             </>
                           )}

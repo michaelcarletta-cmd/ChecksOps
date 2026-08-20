@@ -41,6 +41,7 @@ const FindAPro = lazy(() => import("./pages/FindAPro"));
 const HomeownerCheckUpload = lazy(() => import("./pages/HomeownerCheckUpload"));
 const HomeownerClaimPortal = lazy(() => import("./pages/HomeownerClaimPortal"));
 const HomeownerLedger = lazy(() => import("./pages/HomeownerLedger"));
+const PublicInvoicePage = lazy(() => import("./pages/PublicInvoicePage"));
 const MortgageOpsLogin = lazy(() => import("./pages/mortgage-ops/MortgageOpsLogin"));
 const MortgageOpsQueue = lazy(() => import("./pages/mortgage-ops/MortgageOpsQueue"));
 
@@ -105,6 +106,7 @@ function CheckOpsRoutes() {
       <Route path="/mortgage-ops/login" element={<Suspense fallback={<PageLoader />}><MortgageOpsLogin /></Suspense>} />
       <Route path="/mortgage-ops/queue" element={<Suspense fallback={<PageLoader />}><MortgageOpsQueue /></Suspense>} />
       <Route path="/mortgage-ops" element={<Navigate to="/mortgage-ops/login" replace />} />
+      <Route path="/invoice/:token" element={<Suspense fallback={<PageLoader />}><PublicInvoicePage /></Suspense>} />
       <Route path="/wl/:slug/*" element={<LegacyWlRedirect />} />
       <Route path="/:slug/*" element={<Suspense fallback={<PageLoader />}><WhiteLabelApp /></Suspense>} />
       <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFound /></Suspense>} />
@@ -152,7 +154,8 @@ function isPublicTokenRoute(pathname: string): boolean {
     pathname.startsWith("/payment-direction/") ||
     pathname.startsWith("/verify-account/") ||
     pathname.startsWith("/h/upload") ||
-    pathname.startsWith("/h/claim/")
+    pathname.startsWith("/h/claim/") ||
+    pathname.startsWith("/invoice/")
   );
 }
 

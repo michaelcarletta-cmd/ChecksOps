@@ -24,6 +24,7 @@ export interface MoovInvoice {
   invoice_date: string | null;
   due_date: string | null;
   payment_link_url: string | null;
+  public_token: string | null;
   sent_at: string | null;
   paid_at: string | null;
   created_at: string;
