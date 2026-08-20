@@ -14,6 +14,8 @@ import { format } from "date-fns";
 import { formatPhoneNumber } from "@/lib/utils";
 import { SettingsHero } from "./SettingsHero";
 import { SectionCard } from "./SectionCard";
+import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
+
 
 
 type AddressParts = { street: string; city: string; state: string; zip: string };
@@ -192,7 +194,17 @@ export function ComplianceSettings() {
           </Button>
         </div>
       </SectionCard>
+
+      <SectionCard
+        title="Vetted Documents"
+        accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
+        icon={<ShieldCheck className="h-4 w-4 text-sky-500" />}
+        description="Upload business and identity verification documents. Files stream directly to the payment provider and are never stored here."
+      >
+        <VerificationDocumentsPanel />
+      </SectionCard>
     </div>
+
 
   );
 }
