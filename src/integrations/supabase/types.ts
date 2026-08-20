@@ -16122,6 +16122,7 @@ export type Database = {
           paid_at: string | null
           payment_link_url: string | null
           provider_metadata: Json
+          public_token: string | null
           sent_at: string | null
           status: string
           tenant_id: string
@@ -16150,6 +16151,7 @@ export type Database = {
           paid_at?: string | null
           payment_link_url?: string | null
           provider_metadata?: Json
+          public_token?: string | null
           sent_at?: string | null
           status?: string
           tenant_id: string
@@ -16178,6 +16180,7 @@ export type Database = {
           paid_at?: string | null
           payment_link_url?: string | null
           provider_metadata?: Json
+          public_token?: string | null
           sent_at?: string | null
           status?: string
           tenant_id?: string
