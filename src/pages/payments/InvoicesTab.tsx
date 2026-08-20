@@ -142,6 +142,11 @@ export function InvoicesTab() {
     toast({ title: "Payment link copied", description: "Share it with your customer to get paid." });
   };
 
+  const brandedInvoiceUrl = (inv: typeof rows[number]) => {
+    if (!inv.public_token) return inv.payment_link_url || "";
+    return `${window.location.origin}/invoice/${inv.public_token}`;
+  };
+
   const canSubmit =
     customerName.trim().length > 1 &&
     /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(customerEmail.trim()) &&
