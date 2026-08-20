@@ -8,23 +8,17 @@ import { Users, Loader2 } from "lucide-react";
 import { SectionCard } from "./SectionCard";
 
 interface TeamCapsSettingsProps {
-  vendorCap: number;
-  salesRepCap: number;
-  subcontractorCap: number;
+  stakeholderCap: number;
   tenantId: string;
   onUpdate: () => void;
 }
 
-export function TeamCapsSettings({ 
-  vendorCap: initialVendorCap, 
-  salesRepCap: initialSalesRepCap, 
-  subcontractorCap: initialSubcontractorCap,
+export function TeamCapsSettings({
+  stakeholderCap: initialCap,
   tenantId,
-  onUpdate
+  onUpdate,
 }: TeamCapsSettingsProps) {
-  const [vendorCap, setVendorCap] = useState(initialVendorCap);
-  const [salesRepCap, setSalesRepCap] = useState(initialSalesRepCap);
-  const [subcontractorCap, setSubcontractorCap] = useState(initialSubcontractorCap);
+  const [stakeholderCap, setStakeholderCap] = useState(initialCap);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
@@ -33,22 +27,18 @@ export function TeamCapsSettings({
     try {
       const { error } = await supabase
         .from("tenants")
-        .update({
-          vendor_cap: vendorCap,
-          sales_rep_cap: salesRepCap,
-          subcontractor_cap: subcontractorCap,
-        })
+        .update({ stakeholder_cap: stakeholderCap } as any)
         .eq("id", tenantId);
 
       if (error) throw error;
-      
-      toast({ title: "Team caps updated successfully" });
+
+      toast({ title: "Stakeholder limit updated" });
       onUpdate();
     } catch (error: any) {
-      toast({ 
-        title: "Failed to update caps", 
-        description: error.message, 
-        variant: "destructive" 
+      toast({
+        title: "Failed to update limit",
+        description: error.message,
+        variant: "destructive",
       });
     } finally {
       setSaving(false);
@@ -57,57 +47,34 @@ export function TeamCapsSettings({
 
   return (
     <SectionCard
-      title="Team Role Limits"
+      title="Additional Stakeholders"
       accent="bg-gradient-to-r from-amber-500/60 to-amber-500/10"
       icon={<Users className="h-4 w-4 text-amber-500" />}
-      description="Set the maximum number of team members allowed for specific roles."
+      description="Total number of additional stakeholders allowed — vendors, sales reps, and subcontractors combined."
     >
       <div className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="vendor-cap">Vendor Cap</Label>
-            <Input
-              id="vendor-cap"
-              type="number"
-              min={0}
-              value={vendorCap}
-              onChange={(e) => setVendorCap(parseInt(e.target.value) || 0)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="sales-rep-cap">Sales Rep Cap</Label>
-            <Input
-              id="sales-rep-cap"
-              type="number"
-              min={0}
-              value={salesRepCap}
-              onChange={(e) => setSalesRepCap(parseInt(e.target.value) || 0)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="subcontractor-cap">Sub Contractor Cap</Label>
-            <Input
-              id="subcontractor-cap"
-              type="number"
-              min={0}
-              value={subcontractorCap}
-              onChange={(e) => setSubcontractorCap(parseInt(e.target.value) || 0)}
-            />
-          </div>
+        <div className="max-w-xs space-y-1.5">
+          <Label htmlFor="stakeholder-cap">Total stakeholder limit</Label>
+          <Input
+            id="stakeholder-cap"
+            type="number"
+            min={0}
+            value={stakeholderCap}
+            onChange={(e) => setStakeholderCap(parseInt(e.target.value) || 0)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Counts every vendor, sales rep, and subcontractor together against one shared limit.
+          </p>
         </div>
         <div className="flex justify-end pt-2">
-          <Button 
-            onClick={handleSave} 
-            disabled={saving}
-            size="sm"
-          >
+          <Button onClick={handleSave} disabled={saving} size="sm">
             {saving ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Saving...
               </>
             ) : (
-              "Save Caps"
+              "Save Limit"
             )}
           </Button>
         </div>

@@ -7,7 +7,6 @@ import { RevenueSummary } from "@/components/ledger/RevenueSummary";
 import { PayrollTab } from "@/pages/payments/PayrollTab";
 import { InvoicesTab } from "@/pages/payments/InvoicesTab";
 
-import { TenantEmailHealthPanel } from "@/components/settings/TenantEmailHealthPanel";
 import { useAuth } from "@/hooks/useAuth";
 import { useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
@@ -93,10 +92,6 @@ const Payments = () => {
             <FileSpreadsheet className="h-4 w-4" />
             Invoices
           </TabsTrigger>
-          <TabsTrigger value="deliverability" className="gap-2 py-2">
-            <Mail className="h-4 w-4" />
-            Email Logs
-          </TabsTrigger>
           <TabsTrigger value="revenue" className="gap-2 py-2">
             <Landmark className="h-4 w-4" />
             Revenue & Profit
@@ -134,16 +129,6 @@ const Payments = () => {
             accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
           >
             <InvoicesTab />
-          </SectionCard>
-        </TabsContent>
-
-        <TabsContent value="deliverability" className="mt-0">
-          <SectionCard 
-            title="Email Deliverability" 
-            icon={<Mail className="h-4 w-4 text-indigo-500" />}
-            accent="bg-gradient-to-r from-indigo-500/60 to-indigo-500/10"
-          >
-            <TenantEmailHealthPanel />
           </SectionCard>
         </TabsContent>
 

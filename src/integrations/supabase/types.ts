@@ -21838,6 +21838,7 @@ export type Database = {
           sales_rep_cap: number | null
           secondary_color: string | null
           slug: string
+          stakeholder_cap: number | null
           stripe_customer_id: string | null
           subcontractor_cap: number | null
           subscription_status: string | null
@@ -21925,6 +21926,7 @@ export type Database = {
           sales_rep_cap?: number | null
           secondary_color?: string | null
           slug: string
+          stakeholder_cap?: number | null
           stripe_customer_id?: string | null
           subcontractor_cap?: number | null
           subscription_status?: string | null
@@ -22012,6 +22014,7 @@ export type Database = {
           sales_rep_cap?: number | null
           secondary_color?: string | null
           slug?: string
+          stakeholder_cap?: number | null
           stripe_customer_id?: string | null
           subcontractor_cap?: number | null
           subscription_status?: string | null
