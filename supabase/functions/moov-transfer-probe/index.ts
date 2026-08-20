@@ -74,6 +74,11 @@ serve(async (req) => {
       destination: { paymentMethodID: dst },
       amount: { currency: "USD", value: 1 },
     };
+    const bodyWithAccounts = {
+      source: { accountID: accountId, paymentMethodID: src },
+      destination: { accountID: accountId, paymentMethodID: dst },
+      amount: { currency: "USD", value: 1 },
+    };
 
     const variants: Array<{ name: string; scopes: string[]; onBehalfOf?: string }> = [
       { name: "account_scope_no_header", scopes: scopes.transfersWrite(accountId) },
@@ -92,6 +97,26 @@ serve(async (req) => {
       });
     }
 
+    // What the provider actually grants for each requested scope set.
+    const rawToken = async (scopeList: string[]) => {
+      const key = Deno.env.get("MOOV_PUBLIC_KEY")!;
+      const secret = Deno.env.get("MOOV_SECRET_KEY")!;
+      const res = await fetch("https://api.sandbox.moov.io/oauth2/token", {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${btoa(`${key}:${secret}`)}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ grant_type: "client_credentials", scope: scopeList.join(" ") }),
+      });
+      const body = await res.json().catch(() => null);
+      return { status: res.status, granted: body?.scope ?? null, error: body?.error ?? null };
+    };
+    await record("granted_scope_account", () => rawToken(scopes.transfersWrite(accountId)));
+    if (facilitatorId) {
+      await record("granted_scope_facilitator", () => rawToken(scopes.transfersWrite(facilitatorId!)));
+    }
+
     for (const v of variants) {
       await record(`transfer_options:${v.name}`, () =>
         moovFetch<any>("/transfer-options", {
@@ -99,6 +124,13 @@ serve(async (req) => {
           scopes: v.scopes,
           onBehalfOf: v.onBehalfOf,
           body,
+        }));
+      await record(`transfer_options_with_ids:${v.name}`, () =>
+        moovFetch<any>("/transfer-options", {
+          method: "POST",
+          scopes: v.scopes,
+          onBehalfOf: v.onBehalfOf,
+          body: bodyWithAccounts,
         }));
     }
 
