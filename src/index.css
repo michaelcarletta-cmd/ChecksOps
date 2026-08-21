@@ -335,7 +335,31 @@ All colors MUST be HSL.
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
     gap: clamp(0.5rem, 1.2vw, 1.5rem);
   }
+
+  /* Sticky bars (bulk actions, mobile detail headers) clear the iOS home indicator */
+  .safe-bottom {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+  .safe-top {
+    padding-top: max(0.5rem, env(safe-area-inset-top));
+  }
+
+  /* Comfortable touch targets on coarse pointers without changing desktop density */
+  @media (pointer: coarse) {
+    .touch-target,
+    [role="menuitem"],
+    [role="option"] {
+      min-height: 40px;
+    }
+  }
+
+  /* Tabular figures for money, check numbers and counts */
+  .num {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
 }
+
 
 
 /* Thin subtle scrollbars for data sections */
