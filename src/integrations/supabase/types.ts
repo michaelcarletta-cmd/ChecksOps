@@ -23513,6 +23513,10 @@ export type Database = {
         Args: { p_approve: boolean; p_contractor_id: string }
         Returns: Json
       }
+      apply_check_contact_carryover: {
+        Args: { p_check_id: string }
+        Returns: undefined
+      }
       apply_referral_code: {
         Args: {
           p_new_tenant_id: string
@@ -24433,6 +24437,7 @@ export type Database = {
         }
         Returns: string
       }
+      normalize_payee_key: { Args: { p_name: string }; Returns: string }
       ocr_commit_results: {
         Args: {
           p_amount: number
