@@ -30,7 +30,8 @@ async function sendResendEmail(
   htmlContent: string,
   attachments?: ResendAttachment[],
   ccEmails?: string[],
-  replyTo?: string
+  replyTo?: string,
+  headers?: Record<string, string>
 ) {
 const payload: any = {
     from: fromAddress,
@@ -41,6 +42,12 @@ const payload: any = {
 
   if (replyTo) {
     payload.reply_to = replyTo;
+  }
+
+  // Custom headers (e.g. a unique X-Entity-Ref-ID per recipient) keep otherwise
+  // near-identical messages from being collapsed/deduped by mailbox providers.
+  if (headers && Object.keys(headers).length > 0) {
+    payload.headers = headers;
   }
 
   if (ccEmails && ccEmails.length > 0) {
@@ -102,7 +109,7 @@ Deno.serve(async (req) => {
       }];
     }
     
-    const { subject, body, claimId, attachments, claimEmailCc, cc, tenantId, checkId } = requestBody;
+    const { subject, body, claimId, attachments, claimEmailCc, cc, tenantId, checkId, headers: customHeaders } = requestBody;
 
     if (recipients.length === 0 || !subject || !body) {
       throw new Error("Missing required fields: recipients, subject, and body are required");
@@ -399,7 +406,8 @@ Deno.serve(async (req) => {
         htmlContent,
         emailAttachments.length > 0 ? emailAttachments : undefined,
         ccList.length > 0 ? ccList : undefined,
-        replyToAddress
+        replyToAddress,
+        customHeaders && typeof customHeaders === 'object' ? customHeaders : undefined
       );
     } catch (sendErr) {
       const msg = sendErr instanceof Error ? sendErr.message : String(sendErr);
@@ -421,7 +429,8 @@ Deno.serve(async (req) => {
         htmlContent,
         emailAttachments.length > 0 ? emailAttachments : undefined,
         ccList.length > 0 ? ccList : undefined,
-        fallbackReplyTo
+        fallbackReplyTo,
+        customHeaders && typeof customHeaders === 'object' ? customHeaders : undefined
       );
     }
 

@@ -1022,13 +1022,25 @@ Deno.serve(async (req) => {
               }
             } catch (_) { /* CC hydration is best-effort */ }
 
+            // Two payees on the same check can legitimately share one email
+            // address (spouses, co-owners). Identical subject lines cause
+            // mailbox providers to collapse/suppress the second message, so
+            // make each request uniquely identifiable per payee.
+            const subjectWithPayee = finalSubject.includes(endorsement.payee_name)
+              ? finalSubject
+              : `${finalSubject} — ${endorsement.payee_name}`;
+
             await invokeSendEmail(supabaseUrl, authToken, {
               to: endorsement.contact_email,
-              subject: finalSubject,
+              subject: subjectWithPayee,
               body: finalBody,
               checkId: endorsement.check_id,
               tenantId: tenantId,
               cc: ccArray.length > 0 ? ccArray : undefined,
+              headers: {
+                "X-Entity-Ref-ID": endorsementId,
+                "X-Endorsement-Payee": endorsement.payee_name,
+              },
             });
             emailSent = true;
           } catch (e) {
