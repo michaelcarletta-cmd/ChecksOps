@@ -64,10 +64,10 @@ export function ClaimFundsSummary({ settlement, checks }: ClaimFundsSummaryProps
 
   const categories: FundCategory[] = [
     {
-      label: "Dwelling ACV",
+      label: "Dwelling",
       checkTypes: ["initial"],
-      expected: dwellingAcv,
-      description: "RCV − Rec. Dep. − Non-Rec. Dep. − Deductible",
+      expected: dwellingExpected,
+      description: "RCV less recoverable depreciation (tracked separately)",
     },
     {
       label: "Recoverable Depreciation",
@@ -78,27 +78,28 @@ export function ClaimFundsSummary({ settlement, checks }: ClaimFundsSummaryProps
     {
       label: "Other Structures",
       checkTypes: ["other_structures"],
-      expected: otherStructuresAcv,
+      expected: otherStructuresExpected,
       description: "Detached garage, fence, shed, etc.",
     },
     {
       label: "Ordinance & Law",
       checkTypes: ["ordinance_law"],
-      expected: ordinanceLawNet,
+      expected: ordinanceLawExpected,
       description: "Code-required upgrades (Paid When Incurred)",
     },
     {
       label: "Personal Property / Contents",
       checkTypes: ["contents"],
-      expected: personalPropertyAcv,
+      expected: personalPropertyExpected,
       description: "Furniture, appliances, personal belongings",
     },
     {
       label: "Additional Living Expenses",
       checkTypes: ["ale"],
-      expected: aleAcv,
+      expected: aleExpected,
       description: "Temporary housing & living costs",
     },
+
     {
       label: "Supplemental Payments",
       checkTypes: ["supplemental"],
