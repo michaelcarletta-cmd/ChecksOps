@@ -32,6 +32,7 @@ import { TenantProBadgeManagement } from "@/components/settings/TenantProBadgeMa
 import { TenantProvider } from "@/contexts/TenantContext";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DataView, FilterBar, type DataColumn } from "@/components/shell";
 
 
 const ALLOWED_EMAIL = "mcarletta@freedomadj.com";
@@ -1309,6 +1310,7 @@ function TenantManagementTable({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notesTenant, setNotesTenant] = useState<Tenant | null>(null);
   const [proTenant, setProTenant] = useState<Tenant | null>(null);
+  const [search, setSearch] = useState("");
 
   const updateTenant = async (id: string, patch: Record<string, any>, silent = false) => {
     setBusyId(id);
@@ -1337,137 +1339,226 @@ function TenantManagementTable({
   const fmtMoney = (cents?: number | null) =>
     cents == null ? "—" : `$${(cents / 100).toFixed(2)}`;
 
+  const columns: DataColumn<Tenant>[] = [
+    {
+      id: "name",
+      header: "Name",
+      primary: true,
+      headerClassName: "w-[18%] min-w-[160px]",
+      className: "font-medium",
+      cell: (t) => (
+        <div className="flex items-start gap-1">
+          <button
+            className="break-anywhere text-left leading-tight hover:underline"
+            onClick={() => onOpen(t)}
+          >
+            {t.name}
+          </button>
+          {t.is_system_tenant && (
+            <Badge variant="outline" className="shrink-0 text-[10px]">
+              System
+            </Badge>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: "slug",
+      header: "Slug",
+      headerClassName: "w-[10%] min-w-[90px]",
+      className: "font-mono text-[11px] text-muted-foreground break-all",
+      cell: (t) => `/${t.slug}`,
+    },
+    {
+      id: "created",
+      header: "Created",
+      headerClassName: "w-[9%] min-w-[80px]",
+      className: "text-[11px] text-muted-foreground",
+      cell: (t) => new Date(t.created_at).toLocaleDateString(),
+    },
+    {
+      id: "status",
+      header: "Status",
+      headerClassName: "w-[8%] min-w-[70px]",
+      cell: (t) => (
+        <Badge
+          variant={t.subscription_status === "active" ? "default" : "secondary"}
+          className="text-[10px]"
+        >
+          {t.subscription_status || "inactive"}
+        </Badge>
+      ),
+    },
+    {
+      id: "active",
+      header: "Active",
+      headerClassName: "w-[6%] min-w-[55px] text-center",
+      className: "text-center",
+      cell: (t) => (
+        <Switch
+          checked={t.subscription_status === "active"}
+          onCheckedChange={(v) => toggleActive(t, v)}
+          disabled={busyId === t.id}
+          aria-label={`Active for ${t.name}`}
+        />
+      ),
+    },
+    {
+      id: "founding",
+      header: "Founding",
+      headerClassName: "w-[7%] min-w-[60px] text-center",
+      className: "text-center",
+      cell: (t) => (
+        <Switch
+          checked={!!t.is_founding_partner}
+          onCheckedChange={(v) => toggleFoundingPartner(t, v)}
+          disabled={busyId === t.id}
+          aria-label={`Founding partner for ${t.name}`}
+        />
+      ),
+    },
+    {
+      id: "test",
+      header: "Test",
+      headerClassName: "w-[5%] min-w-[45px] text-center",
+      className: "text-center",
+      cell: (t) => (
+        <Switch
+          checked={!!t.is_test_account}
+          onCheckedChange={(v) => toggleTestAccount(t, v)}
+          disabled={busyId === t.id}
+          aria-label={`Test account for ${t.name}`}
+        />
+      ),
+    },
+    {
+      id: "rate",
+      header: "Rate",
+      headerClassName: "w-[9%] min-w-[80px]",
+      cell: (t) => (
+        <InlineMoneyEditor
+          valueCents={t.monthly_rate_cents ?? null}
+          onSave={(cents) => updateTenant(t.id, { monthly_rate_cents: cents })}
+        />
+      ),
+    },
+    {
+      id: "ref_code",
+      header: "Ref. Code",
+      mobileLabel: "Referral code",
+      headerClassName: "w-[9%] min-w-[80px]",
+      className: "font-mono text-[11px] break-all",
+      cell: (t) => t.referral_code || "—",
+    },
+    {
+      id: "ref_disc",
+      header: "Ref. Disc.",
+      mobileLabel: "Referral discount",
+      headerClassName: "w-[8%] min-w-[70px]",
+      className: "text-[11px]",
+      cell: (t) => fmtMoney(t.referral_discount_cents),
+    },
+    {
+      id: "kyc",
+      header: "KYC",
+      headerClassName: "w-[8%] min-w-[80px]",
+      cell: (t) => (
+        <Select
+          value={t.kyc_status || "pending"}
+          onValueChange={(v) => updateTenant(t.id, { kyc_status: v })}
+        >
+          <SelectTrigger className="h-7 w-full min-w-[70px] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="rejected">Rejected</SelectItem>
+          </SelectContent>
+        </Select>
+      ),
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      action: true,
+      headerClassName: "w-[8%] min-w-[90px] text-right",
+      className: "text-right",
+      cell: (t) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
+              Actions
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem
+              onClick={() => {
+                const url =
+                  typeof window !== "undefined" && isCheckOpsHost(window.location.hostname)
+                    ? `${window.location.origin}/${t.slug}/checks`
+                    : `/wl/${t.slug}/checks`;
+                window.open(url, "_blank", "noopener,noreferrer");
+                toast({
+                  title: `Previewing as ${t.name}`,
+                  description: "Opened tenant portal in a new tab.",
+                });
+              }}
+            >
+              <Eye className="w-4 h-4 mr-2 text-blue-400" /> Preview portal
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setNotesTenant(t)}>
+              <FileText className="w-4 h-4 mr-2" /> Notes
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setProTenant(t)}>
+              <Crosshair className="w-4 h-4 mr-2 text-primary" strokeWidth={2.5} /> OPS Badge
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onOpen(t)}>
+              <Settings className="w-4 h-4 mr-2" /> Manage tenant
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+  ];
+
+  const q = search.trim().toLowerCase();
+  const visibleTenants = q
+    ? tenants.filter(
+        (t) =>
+          t.name?.toLowerCase().includes(q) ||
+          t.slug?.toLowerCase().includes(q) ||
+          (t.referral_code || "").toLowerCase().includes(q),
+      )
+    : tenants;
+
   return (
     <SectionCard
       title="All Tenants"
       icon={<Building2 className="h-4 w-4 text-primary" />}
       accent="bg-gradient-to-r from-primary to-primary/40"
       description="Review, approve, and configure every tenant. Not visible to tenant or staff users."
-      className="[&>div:last-child]:p-0"
     >
-      <div className="overflow-x-auto">
-        <Table className="w-full table-fixed text-xs">
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[18%] min-w-[160px]">Name</TableHead>
-              <TableHead className="w-[10%] min-w-[90px]">Slug</TableHead>
-              <TableHead className="w-[9%] min-w-[80px]">Created</TableHead>
-              <TableHead className="w-[8%] min-w-[70px]">Status</TableHead>
-              <TableHead className="w-[6%] min-w-[55px] text-center">Active</TableHead>
-              <TableHead className="w-[7%] min-w-[60px] text-center">Founding</TableHead>
-              <TableHead className="w-[5%] min-w-[45px] text-center">Test</TableHead>
-              <TableHead className="w-[9%] min-w-[80px]">Rate</TableHead>
-              <TableHead className="w-[9%] min-w-[80px]">Ref. Code</TableHead>
-              <TableHead className="w-[8%] min-w-[70px]">Ref. Disc.</TableHead>
-              <TableHead className="w-[8%] min-w-[80px]">KYC</TableHead>
-              <TableHead className="w-[8%] min-w-[90px] text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tenants.map((t) => {
-              const isActive = t.subscription_status === "active";
-              return (
-                <TableRow key={t.id} className={busyId === t.id ? "opacity-60" : ""}>
-                  <TableCell className="font-medium align-top">
-                    <div className="flex items-start gap-1">
-                      <button className="hover:underline text-left break-words leading-tight" onClick={() => onOpen(t)}>
-                        {t.name}
-                      </button>
-                      {t.is_system_tenant && <Badge variant="outline" className="text-[10px] shrink-0">System</Badge>}
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-mono text-[11px] text-muted-foreground align-top break-all">
-                    /{t.slug}
-                  </TableCell>
-                  <TableCell className="text-[11px] text-muted-foreground align-top">
-                    {new Date(t.created_at).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <Badge variant={isActive ? "default" : "secondary"} className="text-[10px]">
-                      {t.subscription_status || "inactive"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-center align-top">
-                    <Switch
-                      checked={isActive}
-                      onCheckedChange={(v) => toggleActive(t, v)}
-                      disabled={busyId === t.id}
-                    />
-                  </TableCell>
-                  <TableCell className="text-center align-top">
-                    <Switch
-                      checked={!!t.is_founding_partner}
-                      onCheckedChange={(v) => toggleFoundingPartner(t, v)}
-                      disabled={busyId === t.id}
-                    />
-                  </TableCell>
-                  <TableCell className="text-center align-top">
-                    <Switch
-                      checked={!!t.is_test_account}
-                      onCheckedChange={(v) => toggleTestAccount(t, v)}
-                      disabled={busyId === t.id}
-                    />
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <InlineMoneyEditor
-                      valueCents={t.monthly_rate_cents ?? null}
-                      onSave={(cents) => updateTenant(t.id, { monthly_rate_cents: cents })}
-                    />
-                  </TableCell>
-                  <TableCell className="font-mono text-[11px] align-top break-all">{t.referral_code || "—"}</TableCell>
-                  <TableCell className="text-[11px] align-top">{fmtMoney(t.referral_discount_cents)}</TableCell>
-                  <TableCell className="align-top">
-                    <Select
-                      value={t.kyc_status || "pending"}
-                      onValueChange={(v) => updateTenant(t.id, { kyc_status: v })}
-                    >
-                      <SelectTrigger className="h-7 text-xs w-full min-w-[70px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="approved">Approved</SelectItem>
-                        <SelectItem value="rejected">Rejected</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell className="text-right align-top">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
-                          Actions
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-44">
-                        <DropdownMenuItem
-                          onClick={() => {
-                            const url = (typeof window !== "undefined" && isCheckOpsHost(window.location.hostname))
-                              ? `${window.location.origin}/${t.slug}/checks`
-                              : `/wl/${t.slug}/checks`;
-                            window.open(url, "_blank", "noopener,noreferrer");
-                            toast({ title: `Previewing as ${t.name}`, description: "Opened tenant portal in a new tab." });
-                          }}
-                        >
-                          <Eye className="w-4 h-4 mr-2 text-blue-400" /> Preview portal
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setNotesTenant(t)}>
-                          <FileText className="w-4 h-4 mr-2" /> Notes
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setProTenant(t)}>
-                          <Crosshair className="w-4 h-4 mr-2 text-primary" strokeWidth={2.5} /> OPS Badge
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onOpen(t)}>
-                          <Settings className="w-4 h-4 mr-2" /> Manage tenant
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="Search tenants by name, slug or referral code…"
+        actions={
+          <Badge variant="secondary" className="text-[11px]">
+            {visibleTenants.length} of {tenants.length}
+          </Badge>
+        }
+      />
+
+      <DataView
+        rows={visibleTenants}
+        columns={columns}
+        getRowId={(t) => t.id}
+        empty="No tenants match your search."
+        rowClassName={(t) => (busyId === t.id ? "opacity-60" : undefined)}
+        className="mt-3"
+      />
+
 
 
       {notesTenant && (
