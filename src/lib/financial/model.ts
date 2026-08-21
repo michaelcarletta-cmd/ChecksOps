@@ -323,7 +323,10 @@ export function bestIinkPlan(checks: number): IinkPlan {
 
 export interface ComparisonInputs {
   checksPerMonth: number;
-  disbursementsPerCheck: number;
+  /** Same-day disbursements per month (billed at the $1.00 rate). */
+  sameDayDisbursementsPerMonth: number;
+  /** Next-day disbursements per month (billed at the $0.75 rate). */
+  nextDayDisbursementsPerMonth: number;
   mortgageChecksPerMonth: number; // checks requiring mortgage-company endorsement handling
   avgCheckAmount: number; // drives iink's capped 1% mortgage-payee fee
 
@@ -332,7 +335,6 @@ export interface ComparisonInputs {
   coPerCheckFee: number;
   coSameDayDisbursementFee: number;
   coNextDayDisbursementFee: number;
-  coSameDayMixPct: number; // share of disbursements sent same day; remainder next day
   coMortgageFee: number; // MortgageOps handling per mortgage check (pass-through)
   coReferrals: number; // active referrals — $5 off each, capped
   coReferralCreditPerReferral: number;
@@ -351,7 +353,8 @@ export interface ComparisonInputs {
 
 export const DEFAULT_COMPARISON: ComparisonInputs = {
   checksPerMonth: 50,
-  disbursementsPerCheck: 2,
+  sameDayDisbursementsPerMonth: 25,
+  nextDayDisbursementsPerMonth: 75,
   mortgageChecksPerMonth: 10,
   avgCheckAmount: 25000,
 
@@ -359,7 +362,6 @@ export const DEFAULT_COMPARISON: ComparisonInputs = {
   coPerCheckFee: 4,
   coSameDayDisbursementFee: 1,
   coNextDayDisbursementFee: 0.75,
-  coSameDayMixPct: 50,
   coMortgageFee: 10,
   coReferrals: 0,
   coReferralCreditPerReferral: 5,
