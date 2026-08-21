@@ -138,6 +138,7 @@ export function MortgageOpsDirectory() {
                         size="icon"
                         className="h-7 w-7"
                         onClick={() => openEdit(c)}
+                        aria-label="Edit company"
                         title="Edit company"
                       >
                         <Pencil className="h-3.5 w-3.5" />
@@ -147,6 +148,7 @@ export function MortgageOpsDirectory() {
                         size="icon"
                         className="h-7 w-7 text-destructive hover:text-destructive"
                         onClick={() => setDeactivateTarget(c)}
+                        aria-label="Remove company from directory"
                         title="Remove from directory"
                       >
                         <Trash2 className="h-3.5 w-3.5" />

@@ -1218,6 +1218,7 @@ export default function CheckCommandCenter() {
             size="icon"
             className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
             onClick={() => setSearchQuery("")}
+            aria-label="Clear search"
             title="Clear search"
           >
             <XIcon className="h-4 w-4" />
@@ -2224,6 +2225,7 @@ export default function CheckCommandCenter() {
                                       e.stopPropagation();
                                       setShareCheckId(check.id);
                                     }}
+                                    aria-label="Share check with partner"
                                     title="Share with partner"
                                   >
                                     <Share2 className="h-3.5 w-3.5" />
@@ -2727,6 +2729,7 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
               size="icon"
               className="h-8 w-8 shrink-0"
               onClick={() => { setMortgagee2(""); setShowSecondMortgagee(false); }}
+              aria-label="Remove second mortgagee"
               title="Remove second mortgagee"
             >
               <XIcon className="h-3.5 w-3.5" />
@@ -4951,10 +4954,10 @@ function EditableAmount({ checkId, currentAmount, onSave, readOnly = false }: { 
           autoFocus
           onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") setEditing(false); }}
         />
-        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleSave} disabled={saving}>
+        <Button size="icon" variant="ghost" className="h-7 w-7" aria-label="Save amount" onClick={handleSave} disabled={saving}>
           <CheckIcon className="h-4 w-4 text-emerald-400" />
         </Button>
-        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditing(false)}>
+        <Button size="icon" variant="ghost" className="h-7 w-7" aria-label="Cancel editing" onClick={() => setEditing(false)}>
           <X className="h-4 w-4 text-muted-foreground" />
         </Button>
       </div>
@@ -4974,6 +4977,7 @@ function EditableAmount({ checkId, currentAmount, onSave, readOnly = false }: { 
           size="icon"
           variant="ghost"
           className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+          aria-label="Edit amount"
           onClick={() => { setValue(currentAmount?.toString() ?? ""); setEditing(true); }}
         >
           <Pencil className="h-3 w-3" />
@@ -5084,10 +5088,10 @@ function EditableField({
               }}
             />
           )}
-          <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={persist} disabled={saving}>
+          <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" aria-label="Save field" onClick={persist} disabled={saving}>
             <CheckIcon className="h-4 w-4 text-emerald-400" />
           </Button>
-          <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={() => { setDraft(value ?? ""); setEditing(false); }}>
+          <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" aria-label="Cancel editing" onClick={() => { setDraft(value ?? ""); setEditing(false); }}>
             <X className="h-4 w-4 text-muted-foreground" />
           </Button>
         </div>
@@ -5107,6 +5111,7 @@ function EditableField({
             size="icon"
             variant="ghost"
             className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+            aria-label={`Edit ${label}`}
             onClick={() => setEditing(true)}
           >
             <Pencil className="h-3 w-3" />
@@ -5396,10 +5401,10 @@ function EditablePayeeCard({
 
           {!editing && !readOnly && (
             <>
-              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditing(true)}>
+              <Button size="icon" variant="ghost" className="h-6 w-6" aria-label="Edit payee" onClick={() => setEditing(true)}>
                 <Pencil className="h-3 w-3" />
               </Button>
-              <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive" onClick={onRemove}>
+              <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive" aria-label="Remove payee" onClick={onRemove}>
                 <Trash2 className="h-3 w-3" />
               </Button>
             </>
