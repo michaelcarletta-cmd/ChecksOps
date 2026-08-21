@@ -49,7 +49,8 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
   const revenueBars = [
     { name: "Maintenance", value: result.maintenanceRevenue, annual: result.maintenanceRevenue * 12 },
     { name: "Per-check", value: result.perCheckRevenue, annual: result.perCheckRevenue * 12 },
-    { name: "Disbursements", value: result.disbursementRevenue, annual: result.disbursementRevenue * 12 },
+    { name: "Same-day disbursements", value: result.sameDayRevenue, annual: result.sameDayRevenue * 12 },
+    { name: "Next-day disbursements", value: result.nextDayRevenue, annual: result.nextDayRevenue * 12 },
     {
       name: "Setup fees (one-time, all tenants)",
       value: result.setupRevenueAllTenants,
@@ -64,7 +65,8 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
 
   const costBars = [
     { name: "Deposit (RDC)", value: result.depositCost },
-    { name: "Disbursement rails", value: result.disbursementCost },
+    { name: "Same-day rail cost", value: result.sameDayCost },
+    { name: "Next-day rail cost", value: result.nextDayCost },
     { name: "Wallet / tenant", value: result.walletCost },
     { name: "Fixed overhead", value: result.fixedOverhead },
   ].filter((r) => r.value > 0);
@@ -162,10 +164,10 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
                 <NumberField label="Tenants" value={a.tenants} onChange={set("tenants")} />
                 <NumberField label="Checks / tenant / mo" value={a.checksPerTenantPerMonth} onChange={set("checksPerTenantPerMonth")} />
                 <NumberField label="Per-check fee" prefix="$" step={0.25} value={a.perCheckFee} onChange={set("perCheckFee")} />
-                <NumberField label="Disbursements / check" step={0.1} value={a.disbursementsPerCheck} onChange={set("disbursementsPerCheck")} />
+                <NumberField label="Same-day disbursements / tenant / mo" value={a.sameDayDisbursementsPerTenant} onChange={set("sameDayDisbursementsPerTenant")} hint="Billed at the same-day rate." />
+                <NumberField label="Next-day disbursements / tenant / mo" value={a.nextDayDisbursementsPerTenant} onChange={set("nextDayDisbursementsPerTenant")} hint="Billed at the next-day rate." />
                 <NumberField label="Disbursement fee (high)" prefix="$" step={0.05} value={a.disbursementFeeHigh} onChange={set("disbursementFeeHigh")} hint="$1.00 tier." />
                 <NumberField label="Disbursement fee (low)" prefix="$" step={0.05} value={a.disbursementFeeLow} onChange={set("disbursementFeeLow")} hint="$0.75 tier." />
-                <NumberField label="% at $1.00 rate" suffix="%" max={100} value={a.disbursementsAtHighRatePct} onChange={set("disbursementsAtHighRatePct")} hint="Remainder billed at the $0.75 rate." />
                 <NumberField label="Monthly maintenance fee" prefix="$" value={a.monthlyMaintenanceFee} onChange={set("monthlyMaintenanceFee")} />
                 <NumberField label="Setup fee (one-time)" prefix="$" step={250} value={a.setupFee} onChange={set("setupFee")} />
                 <NumberField label="New tenants / mo" value={a.newTenantsPerMonth} onChange={set("newTenantsPerMonth")} hint="Used for the 12-month growth projection only; setup fees bill per tenant." />
@@ -180,9 +182,6 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
                 <NumberField label="Deposit cost / check" prefix="$" step={0.01} value={a.checkDepositCost} onChange={set("checkDepositCost")} hint="CheckAlt FinCapture RDC." />
                 <NumberField label="Next day disbursement" prefix="$" step={0.05} value={a.nextDayDisbursementCost} onChange={set("nextDayDisbursementCost")} />
                 <NumberField label="Same day disbursement" prefix="$" step={0.05} value={a.sameDayDisbursementCost} onChange={set("sameDayDisbursementCost")} />
-                <NumberField label="RTP" prefix="$" step={0.05} value={a.rtpCost} onChange={set("rtpCost")} />
-                <NumberField label="Next day mix" suffix="%" max={100} value={a.nextDayMixPct} onChange={set("nextDayMixPct")} hint="Share of disbursements sent on the next-day ACH rail." />
-                <NumberField label="Same day mix" suffix="%" max={100} value={a.sameDayMixPct} onChange={set("sameDayMixPct")} hint="Share sent same-day ACH. Whatever is left of the two goes out on RTP." />
                 <NumberField label="Wallet / tenant" prefix="$" value={a.walletPerTenantMonthly} onChange={set("walletPerTenantMonthly")} />
               </CardContent>
             </Card>
@@ -206,7 +205,8 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Monthly P&amp;L</CardTitle>
               <CardDescription className="text-xs">
-                {result.checks.toLocaleString()} checks · {result.disbursements.toLocaleString()} disbursements
+                {result.checks.toLocaleString()} checks · {result.sameDayDisbursements.toLocaleString()} same-day +{" "}
+                {result.nextDayDisbursements.toLocaleString()} next-day disbursements
               </CardDescription>
             </CardHeader>
 
