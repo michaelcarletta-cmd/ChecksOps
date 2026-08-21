@@ -3595,7 +3595,9 @@ function CheckDetailPanel({
       qc.invalidateQueries({ queryKey: ["deposit-recon-summary"] });
       onRefresh();
     } catch (e: any) {
+      rollbackStage();
       toast({ title: "Failed to move check", description: e.message, variant: "destructive" });
+
     } finally {
       setMovingToDeposited(false);
     }
