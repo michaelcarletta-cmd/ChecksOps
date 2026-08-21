@@ -164,7 +164,10 @@ export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResul
     perCheckRevenue,
     disbursementRevenue,
     setupRevenue,
+    setupRevenueAllTenants,
     grossRevenue,
+    recurringRevenue,
+
     depositCost,
     disbursementCost,
     walletCost,
