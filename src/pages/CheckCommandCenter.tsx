@@ -447,69 +447,8 @@ export default function CheckCommandCenter() {
     }
   }, [selectedCheck, reviewCheckId, isMobile]);
 
-  // Realtime: reflect check status/stage changes immediately without manual refresh.
-  // Phase 6: Debounce invalidations so bursts of events (bulk decisions,
-  // webhook fan-out, endorsement composites) coalesce into a single refetch
-  // instead of hammering the queue query.
-  useEffect(() => {
-    if (!tenantId) return;
-
-    const pending = new Set<string>();
-    const pendingDetailIds = new Set<string>();
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const flush = () => {
-      timer = null;
-      const keys = Array.from(pending);
-      pending.clear();
-      const ids = Array.from(pendingDetailIds);
-      pendingDetailIds.clear();
-      for (const k of keys) {
-        if (k === "loss-draft-counts") {
-          qc.invalidateQueries({ queryKey: ["loss-draft-counts", tenantId] });
-        } else {
-          qc.invalidateQueries({ queryKey: [k] });
-        }
-      }
-      for (const id of ids) {
-        qc.invalidateQueries({ queryKey: ["check-detail", id] });
-      }
-    };
-    const schedule = (keys: string[], detailId?: string | null) => {
-      for (const k of keys) pending.add(k);
-      if (detailId) pendingDetailIds.add(detailId);
-      if (timer) return;
-      timer = setTimeout(flush, 250);
-    };
-
-    const channel = supabase
-      .channel(`check-command-center-${tenantId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "check_intake_items", filter: `tenant_id=eq.${tenantId}` },
-        (payload: any) => {
-          const id = payload?.new?.id ?? payload?.old?.id;
-          schedule(
-            ["check-intake-items", "check-review-queue", "check-dashboard-counts", "loss-draft-counts"],
-            id,
-          );
-        }
-      )
-      // NOTE: check_endorsements has no tenant_id, so we don't subscribe here.
-      // The per-check detail view (CheckDetailPanel) subscribes scoped by check_id.
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "check_files", filter: `tenant_id=eq.${tenantId}` },
-        () => {
-          schedule(["check-intake-items", "check-review-queue", "check-dashboard-counts"]);
-        }
-      )
-      .subscribe();
-    return () => {
-      if (timer) clearTimeout(timer);
-      supabase.removeChannel(channel);
-    };
-  }, [tenantId, qc]);
+  // Realtime: consolidated in useCheckCommandRealtime (debounced invalidations).
+  useCheckCommandRealtime(tenantId);
 
   const { data: tenantMembershipRole } = useQuery({
     queryKey: ["check-command-center-tenant-role", tenantId, user?.id],
