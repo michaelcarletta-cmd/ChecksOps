@@ -82,6 +82,7 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
       ["Revenue per tenant", result.revenuePerTenant, result.revenuePerTenant * 12],
       ["Profit per tenant", result.profitPerTenant, result.profitPerTenant * 12],
       ["Break-even tenants", result.breakEvenTenants, ""],
+      ["One-time setup fees (all tenants)", result.setupRevenueAllTenants, ""],
       [],
       ["Month", "Tenants", "Revenue", "Cost", "Net profit"],
       ...projection.map((p) => [p.label, p.tenants, p.revenue, p.cost, p.netProfit]),
@@ -127,10 +128,12 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
           tone={result.netProfit >= 0 ? "positive" : "negative"}
         />
         <StatTile
-          label="Break-even tenants"
-          value={result.breakEvenTenants > 0 ? String(result.breakEvenTenants) : "—"}
-          sub={`${money(result.contributionPerTenant)} contribution / tenant`}
+          label="One-time setup fees"
+          value={money(result.setupRevenueAllTenants)}
+          sub={`${a.tenants} tenants × ${money(a.setupFee)}`}
+          tone="positive"
         />
+
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
@@ -230,6 +233,25 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
                       {money(result.netProfit * 12)}
                     </TableCell>
                   </TableRow>
+                  <TableRow>
+                    <TableCell className="text-muted-foreground">
+                      One-time setup fees ({a.tenants} × {money(a.setupFee)})
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-emerald-500">
+                      {money(result.setupRevenueAllTenants)}
+                    </TableCell>
+                    <TableCell className="text-right text-xs text-muted-foreground">billed once</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="text-muted-foreground">Break-even tenants</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {result.breakEvenTenants > 0 ? result.breakEvenTenants : "—"}
+                    </TableCell>
+                    <TableCell className="text-right text-xs text-muted-foreground">
+                      {money(result.contributionPerTenant)} / tenant contribution
+                    </TableCell>
+                  </TableRow>
+
                 </TableBody>
               </Table>
             </CardContent>

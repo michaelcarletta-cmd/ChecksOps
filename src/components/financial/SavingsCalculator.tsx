@@ -14,18 +14,22 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertTriangle, Download, RotateCcw } from "lucide-react";
 import { NumberField, StatTile } from "./NumberField";
 import {
   ComparisonInputs,
   DEFAULT_COMPARISON,
+  IINK_PLANS,
   SENSITIVITY_VOLUMES,
   compareCosts,
   money,
   pct,
 } from "@/lib/financial/model";
 import { downloadCsv } from "@/lib/financial/csv";
+
 
 const CHART_AXIS = "hsl(var(--muted-foreground))";
 
@@ -53,14 +57,14 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
 
   const compareBars = [
     { name: "ChecksOps", value: r.checksOps.total },
-    { name: "iink (est.)", value: r.iink.total },
+    { name: "iink", value: r.iink.total },
   ];
 
   const exportCsv = () =>
     downloadCsv("checksops-vs-iink.csv", [
-      ["Line", "ChecksOps", "iink (estimated)"],
+      ["Line", "ChecksOps", "iink"],
       ["Monthly platform fee", r.checksOps.monthlyFee, r.iink.monthlyFee],
-      ["Per-check fees", r.checksOps.perCheck, r.iink.perCheck],
+      ["Per-check fees (over allowance)", r.checksOps.perCheck, r.iink.perCheck],
       ["Disbursement fees", r.checksOps.perDisbursement, r.iink.perDisbursement],
       ["MortgageOps handling", r.checksOps.mortgageFee, r.iink.mortgageFee],
       ["Referral credit", -r.checksOps.referralCredit, 0],
@@ -71,7 +75,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
       ["Annual savings", r.annualSavings],
       ["Savings %", r.savingsPct.toFixed(1)],
       [],
-      ["Checks / mo", "ChecksOps", "iink (est.)", "Savings"],
+      ["Checks / mo", "ChecksOps", "iink", "Savings"],
       ...sensitivity.map((s) => [s.checks, s.ChecksOps, s.iink, s.savings]),
     ]);
 
@@ -79,12 +83,14 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
     <div className="space-y-4">
       <Alert>
         <AlertTriangle className="h-4 w-4" />
-        <AlertTitle className="text-sm">iink pricing is an editable assumption</AlertTitle>
+        <AlertTitle className="text-sm">iink pricing source: iink.com/pricing (monthly term)</AlertTitle>
         <AlertDescription className="text-xs">
-          The iink figures below are not published contract rates. Confirm current iink pricing before
-          presenting these numbers to a client or investor.
+          Plans include a set number of check submissions; additional checks bill at the plan's overage
+          rate. Checks with a mortgage-company payee carry a capped 1% fee. Confirm the client's actual
+          plan before presenting.
         </AlertDescription>
       </Alert>
+
 
       <div className="flex flex-wrap items-center gap-2 print:hidden">
         <Button size="sm" variant="ghost" onClick={() => setI(DEFAULT_COMPARISON)}>
@@ -97,7 +103,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label="ChecksOps / mo" value={money(r.checksOps.total)} sub={`${money(r.checksOps.costPerCheck, 2)} per check`} />
-        <StatTile label="iink (est.) / mo" value={money(r.iink.total)} sub={`${money(r.iink.costPerCheck, 2)} per check`} />
+        <StatTile label="iink / mo" value={money(r.iink.total)} sub={`${money(r.iink.costPerCheck, 2)} per check`} />
         <StatTile
           label="Monthly savings"
           value={money(r.monthlySavings)}
@@ -123,6 +129,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                 <NumberField label="Checks / month" value={i.checksPerMonth} onChange={set("checksPerMonth")} />
                 <NumberField label="Disbursements / check" step={0.1} value={i.disbursementsPerCheck} onChange={set("disbursementsPerCheck")} />
                 <NumberField label="Mortgage checks / month" value={i.mortgageChecksPerMonth} onChange={set("mortgageChecksPerMonth")} hint="Checks needing mortgage-company endorsement handling." />
+                <NumberField label="Avg check amount" prefix="$" step={1000} value={i.avgCheckAmount} onChange={set("avgCheckAmount")} hint="Drives iink's capped 1% mortgage-payee fee." />
               </CardContent>
             </Card>
 
@@ -137,21 +144,45 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                 <NumberField label="Next day disbursement" prefix="$" step={0.05} value={i.coNextDayDisbursementFee} onChange={set("coNextDayDisbursementFee")} />
                 <NumberField label="Same day mix" suffix="%" max={100} value={i.coSameDayMixPct} onChange={set("coSameDayMixPct")} hint="Remainder is sent next day." />
                 <NumberField label="MortgageOps handling" prefix="$" step={1} value={i.coMortgageFee} onChange={set("coMortgageFee")} hint="Per mortgage check, billed at cost." />
-                <NumberField label="Referrals" value={i.coReferrals} onChange={set("coReferrals")} hint={`$${i.coReferralCreditPerReferral} off each, up to $${i.coReferralCreditCap}/mo.`} />
+                <NumberField label="Referrals" value={i.coReferrals} onChange={set("coReferrals")} hint={`$${i.coReferralCreditPerReferral} credit each toward the monthly fee, max $${i.coReferralCreditCap}/mo (${Math.ceil(i.coReferralCreditCap / Math.max(1, i.coReferralCreditPerReferral))} referrals).`} />
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">iink assumptions</CardTitle>
-                <CardDescription className="text-xs">Unverified — edit to match the client's quote.</CardDescription>
+                <CardTitle className="text-base">iink pricing</CardTitle>
+                <CardDescription className="text-xs">
+                  Published plans from iink.com/pricing. Per-check fees apply only above the included allowance.
+                </CardDescription>
               </CardHeader>
-              <CardContent className="grid grid-cols-2 gap-3">
-                <NumberField label="Monthly fee" prefix="$" value={i.iinkMonthlyFee} onChange={set("iinkMonthlyFee")} />
-                <NumberField label="Per check" prefix="$" step={0.25} value={i.iinkPerCheckFee} onChange={set("iinkPerCheckFee")} />
-                <NumberField label="Mortgage check fee" prefix="$" step={1} value={i.iinkMortgageFee} onChange={set("iinkMortgageFee")} />
+              <CardContent className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Plan</Label>
+                  <Select
+                    value={i.iinkPlan}
+                    onValueChange={(v) => setI((prev) => ({ ...prev, iinkPlan: v as ComparisonInputs["iinkPlan"] }))}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Auto — cheapest for volume</SelectItem>
+                      {IINK_PLANS.map((p) => (
+                        <SelectItem key={p.key} value={p.key}>{p.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    {r.iinkPlan.label} · {r.iinkOverageChecks.toLocaleString()} checks over the allowance at {money(r.iinkPlan.overageFee, 2)} each
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <NumberField label="Mortgage payee fee" suffix="%" step={0.25} value={i.iinkMortgageFeePct} onChange={set("iinkMortgageFeePct")} hint="Of the check amount." />
+                  <NumberField label="Mortgage fee cap" prefix="$" step={25} value={i.iinkMortgageFeeCap} onChange={set("iinkMortgageFeeCap")} hint="Per check submission." />
+                </div>
               </CardContent>
             </Card>
+
           </div>
         )}
 
@@ -169,13 +200,13 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                   <TableRow>
                     <TableHead>Cost line</TableHead>
                     <TableHead className="text-right">ChecksOps</TableHead>
-                    <TableHead className="text-right">iink (est.)</TableHead>
+                    <TableHead className="text-right">iink</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {[
                     ["Monthly platform fee", r.checksOps.monthlyFee, r.iink.monthlyFee],
-                    ["Per-check fees", r.checksOps.perCheck, r.iink.perCheck],
+                    ["Per-check fees (over allowance)", r.checksOps.perCheck, r.iink.perCheck],
                     ["Disbursement fees", r.checksOps.perDisbursement, r.iink.perDisbursement],
                     ["MortgageOps handling", r.checksOps.mortgageFee, r.iink.mortgageFee],
                     ["Referral credit", -r.checksOps.referralCredit, 0],
@@ -250,7 +281,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                   <TableRow>
                     <TableHead>Checks / mo</TableHead>
                     <TableHead className="text-right">ChecksOps</TableHead>
-                    <TableHead className="text-right">iink (est.)</TableHead>
+                    <TableHead className="text-right">iink</TableHead>
                     <TableHead className="text-right">Savings / mo</TableHead>
                     <TableHead className="text-right">Savings / yr</TableHead>
                   </TableRow>
