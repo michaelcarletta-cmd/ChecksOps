@@ -309,6 +309,8 @@ export interface ComparisonInputs {
   coReferrals: number; // active referrals — $5 off each, capped
   coReferralCreditPerReferral: number;
   coReferralCreditCap: number;
+  coSetupFee: number; // one-time onboarding / implementation fee
+
 
   // iink pricing (iink.com/pricing)
   iinkPlan: IinkPlanKey | "auto";
