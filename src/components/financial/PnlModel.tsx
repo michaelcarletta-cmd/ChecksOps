@@ -249,7 +249,7 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
                     <TableRow key={r.name}>
                       <TableCell className="text-muted-foreground">{r.name}</TableCell>
                       <TableCell className="text-right tabular-nums text-destructive">({money(r.value)})</TableCell>
-                      <TableCell className="text-right tabular-nums text-destructive">({money(r.value * 12)})</TableCell>
+                      <TableCell className="text-right tabular-nums text-destructive">({money(r.annual)})</TableCell>
                     </TableRow>
                   ))}
                   <TableRow className="font-semibold">
