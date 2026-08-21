@@ -83,12 +83,14 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
     <div className="space-y-4">
       <Alert>
         <AlertTriangle className="h-4 w-4" />
-        <AlertTitle className="text-sm">iink pricing is an editable assumption</AlertTitle>
+        <AlertTitle className="text-sm">iink pricing source: iink.com/pricing (monthly term)</AlertTitle>
         <AlertDescription className="text-xs">
-          The iink figures below are not published contract rates. Confirm current iink pricing before
-          presenting these numbers to a client or investor.
+          Plans include a set number of check submissions; additional checks bill at the plan's overage
+          rate. Checks with a mortgage-company payee carry a capped 1% fee. Confirm the client's actual
+          plan before presenting.
         </AlertDescription>
       </Alert>
+
 
       <div className="flex flex-wrap items-center gap-2 print:hidden">
         <Button size="sm" variant="ghost" onClick={() => setI(DEFAULT_COMPARISON)}>
