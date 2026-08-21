@@ -47,11 +47,20 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
   const projection = useMemo(() => projectTwelveMonths(a, growth), [a, growth]);
 
   const revenueBars = [
-    { name: "Maintenance", value: result.maintenanceRevenue },
-    { name: "Per-check", value: result.perCheckRevenue },
-    { name: "Disbursements", value: result.disbursementRevenue },
-    { name: "Setup fees", value: result.setupRevenue },
+    { name: "Maintenance", value: result.maintenanceRevenue, annual: result.maintenanceRevenue * 12 },
+    { name: "Per-check", value: result.perCheckRevenue, annual: result.perCheckRevenue * 12 },
+    { name: "Disbursements", value: result.disbursementRevenue, annual: result.disbursementRevenue * 12 },
+    {
+      name: "Setup fees (one-time, all tenants)",
+      value: result.setupRevenueAllTenants,
+      annual: result.setupRevenueAllTenants,
+    },
   ].filter((r) => r.value > 0);
+
+  // Setup fees are billed once, so the annual view is recurring × 12 + one-time setup.
+  const annualGrossRevenue = result.recurringRevenue * 12 + result.setupRevenueAllTenants;
+  const annualNetProfit =
+    (result.recurringRevenue - result.variableCost - result.fixedOverhead) * 12 + result.setupRevenueAllTenants;
 
   const costBars = [
     { name: "Deposit (RDC)", value: result.depositCost },
@@ -69,11 +78,13 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
   const exportCsv = () => {
     downloadCsv("checksops-pnl-model.csv", [
       ["Metric", "Monthly", "Annual"],
-      ["Gross revenue", result.grossRevenue, result.grossRevenue * 12],
+      ["Recurring revenue", result.recurringRevenue, result.recurringRevenue * 12],
+      ["Setup fees (one-time, all tenants)", result.setupRevenueAllTenants, result.setupRevenueAllTenants],
+      ["Gross revenue", result.grossRevenue, annualGrossRevenue],
       ["Variable cost", result.variableCost, result.variableCost * 12],
       ["Gross profit", result.grossProfit, result.grossProfit * 12],
       ["Fixed overhead", result.fixedOverhead, result.fixedOverhead * 12],
-      ["Net profit", result.netProfit, result.netProfit * 12],
+      ["Net profit", result.netProfit, annualNetProfit],
       ["Gross margin %", result.grossMarginPct.toFixed(1), ""],
       ["Net margin %", result.netMarginPct.toFixed(1), ""],
       ["Tenants", result.checks > 0 ? a.tenants : 0, ""],
@@ -114,7 +125,11 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="Gross revenue / mo" value={money(result.grossRevenue)} sub={`${money(result.grossRevenue * 12)} annual`} />
+        <StatTile
+          label="Gross revenue / mo"
+          value={money(result.grossRevenue)}
+          sub={`incl. ${money(result.setupRevenueAllTenants)} setup · ${money(annualGrossRevenue)} yr 1`}
+        />
         <StatTile
           label="Gross profit / mo"
           value={money(result.grossProfit)}
@@ -153,7 +168,7 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
                 <NumberField label="% at $1.00 rate" suffix="%" max={100} value={a.disbursementsAtHighRatePct} onChange={set("disbursementsAtHighRatePct")} hint="Remainder billed at the $0.75 rate." />
                 <NumberField label="Monthly maintenance fee" prefix="$" value={a.monthlyMaintenanceFee} onChange={set("monthlyMaintenanceFee")} />
                 <NumberField label="Setup fee (one-time)" prefix="$" step={250} value={a.setupFee} onChange={set("setupFee")} />
-                <NumberField label="New tenants / mo" value={a.newTenantsPerMonth} onChange={set("newTenantsPerMonth")} hint="Drives setup fee revenue." />
+                <NumberField label="New tenants / mo" value={a.newTenantsPerMonth} onChange={set("newTenantsPerMonth")} hint="Used for the 12-month growth projection only; setup fees bill per tenant." />
               </CardContent>
             </Card>
 
@@ -207,15 +222,19 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
                 <TableBody>
                   {revenueBars.map((r) => (
                     <TableRow key={r.name}>
-                      <TableCell className="text-muted-foreground">{r.name}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {r.name === "Setup fees (one-time, all tenants)"
+                          ? `Setup fees (${a.tenants} × ${money(a.setupFee)}, one-time)`
+                          : r.name}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">{money(r.value)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{money(r.value * 12)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{money(r.annual)}</TableCell>
                     </TableRow>
                   ))}
                   <TableRow className="font-medium">
                     <TableCell>Gross revenue</TableCell>
                     <TableCell className="text-right tabular-nums">{money(result.grossRevenue)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{money(result.grossRevenue * 12)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{money(annualGrossRevenue)}</TableCell>
                   </TableRow>
                   {costBars.map((r) => (
                     <TableRow key={r.name}>
@@ -229,19 +248,11 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
                     <TableCell className={`text-right tabular-nums ${result.netProfit >= 0 ? "text-emerald-500" : "text-destructive"}`}>
                       {money(result.netProfit)}
                     </TableCell>
-                    <TableCell className={`text-right tabular-nums ${result.netProfit >= 0 ? "text-emerald-500" : "text-destructive"}`}>
-                      {money(result.netProfit * 12)}
+                    <TableCell className={`text-right tabular-nums ${annualNetProfit >= 0 ? "text-emerald-500" : "text-destructive"}`}>
+                      {money(annualNetProfit)}
                     </TableCell>
                   </TableRow>
-                  <TableRow>
-                    <TableCell className="text-muted-foreground">
-                      One-time setup fees ({a.tenants} × {money(a.setupFee)})
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-emerald-500">
-                      {money(result.setupRevenueAllTenants)}
-                    </TableCell>
-                    <TableCell className="text-right text-xs text-muted-foreground">billed once</TableCell>
-                  </TableRow>
+
                   <TableRow>
                     <TableCell className="text-muted-foreground">Break-even tenants</TableCell>
                     <TableCell className="text-right tabular-nums">
