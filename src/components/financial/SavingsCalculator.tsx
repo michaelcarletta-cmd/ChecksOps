@@ -204,7 +204,9 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                   <TableRow>
                     <TableHead>Cost line</TableHead>
                     <TableHead className="text-right">ChecksOps</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">CO / check</TableHead>
                     <TableHead className="text-right">iink</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">iink / check</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -218,22 +220,31 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                     <TableRow key={String(label)}>
                       <TableCell className="text-muted-foreground">{label}</TableCell>
                       <TableCell className="text-right tabular-nums">{money(Number(co))}</TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">{money(perCheck(Number(co)), 2)}</TableCell>
                       <TableCell className="text-right tabular-nums">{money(Number(ii))}</TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">{money(perCheck(Number(ii)), 2)}</TableCell>
                     </TableRow>
                   ))}
                   <TableRow className="font-semibold">
                     <TableCell>Total per month</TableCell>
                     <TableCell className="text-right tabular-nums text-emerald-500">{money(r.checksOps.total)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-emerald-500">{money(r.checksOps.costPerCheck, 2)}</TableCell>
                     <TableCell className="text-right tabular-nums">{money(r.iink.total)}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="text-muted-foreground">Cost per check</TableCell>
-                    <TableCell className="text-right tabular-nums">{money(r.checksOps.costPerCheck, 2)}</TableCell>
                     <TableCell className="text-right tabular-nums">{money(r.iink.costPerCheck, 2)}</TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
+              <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+                Cost per check is the total monthly cost divided by {i.checksPerMonth.toLocaleString()} checks. For
+                ChecksOps that is {money(perCheck(r.checksOps.monthlyFee), 2)} monthly fee +{" "}
+                {money(perCheck(r.checksOps.perCheck), 2)} per-check + {money(perCheck(r.checksOps.perDisbursement), 2)}{" "}
+                disbursements ({i.disbursementsPerCheck} per check) +{" "}
+                {money(perCheck(r.checksOps.mortgageFee), 2)} MortgageOps handling −{" "}
+                {money(perCheck(r.checksOps.referralCredit), 2)} referral credit ={" "}
+                <span className="font-medium text-foreground">{money(r.checksOps.costPerCheck, 2)}</span> per check.
+              </p>
             </CardContent>
+
           </Card>
 
           <div className="grid gap-4 lg:grid-cols-2">
