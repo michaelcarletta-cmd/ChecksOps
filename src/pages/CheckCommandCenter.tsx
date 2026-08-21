@@ -3415,7 +3415,10 @@ function CheckDetailPanel({
   const handleBypassEndorsements = async () => {
     if (!user?.id || !check) return;
     setBypassingEndorsements(true);
+    // Phase 4: reflect the stage move in the queue instantly.
+    const rollbackStage = optimisticStage(qc, [checkId], "branch_deposit_required");
     try {
+
       const now = new Date().toISOString();
 
       const { error: endorsementErr } = await supabase
