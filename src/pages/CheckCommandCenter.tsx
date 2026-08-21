@@ -501,16 +501,24 @@ export default function CheckCommandCenter() {
       const { error } = await supabase.from("check_intake_items").delete().eq("id", checkId);
       if (error) throw new Error(`Failed to delete check: ${error.message}`);
     },
+    // Phase 4: drop the row from the queue immediately, restore it if the
+    // delete fails server-side.
+    onMutate: (checkId: string) => {
+      const rollback = optimisticRemove(qc, [checkId]);
+      return { rollback };
+    },
     onSuccess: () => {
       toast({ title: "Check deleted" });
       setSelectedCheck(null);
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
       qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
     },
-    onError: (e) => {
+    onError: (e, _vars, ctx) => {
+      ctx?.rollback?.();
       toast({ title: "Delete failed", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
     },
   });
+
 
   const { data: checks = [], isLoading } = useQuery({
     queryKey: ["check-intake-items", tenantId],
