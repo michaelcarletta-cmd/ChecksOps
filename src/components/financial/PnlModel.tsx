@@ -82,6 +82,7 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
       ["Revenue per tenant", result.revenuePerTenant, result.revenuePerTenant * 12],
       ["Profit per tenant", result.profitPerTenant, result.profitPerTenant * 12],
       ["Break-even tenants", result.breakEvenTenants, ""],
+      ["One-time setup fees (all tenants)", result.setupRevenueAllTenants, ""],
       [],
       ["Month", "Tenants", "Revenue", "Cost", "Net profit"],
       ...projection.map((p) => [p.label, p.tenants, p.revenue, p.cost, p.netProfit]),
