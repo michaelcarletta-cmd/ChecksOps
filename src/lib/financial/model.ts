@@ -20,13 +20,15 @@ export interface PnlAssumptions {
   // Volume
   tenants: number;
   checksPerTenantPerMonth: number;
-  disbursementsPerCheck: number;
-  disbursementsAtHighRatePct: number; // share of disbursements billed at the $1.00 rate
+  /** Same-day disbursements per tenant per month — billed at the $1.00 rate. */
+  sameDayDisbursementsPerTenant: number;
+  /** Next-day disbursements per tenant per month — billed at the $0.75 rate. */
+  nextDayDisbursementsPerTenant: number;
 
   // Revenue (charged to tenant)
   perCheckFee: number;
-  disbursementFeeHigh: number; // $1.00
-  disbursementFeeLow: number; // $0.75
+  disbursementFeeHigh: number; // $1.00 — same day
+  disbursementFeeLow: number; // $0.75 — next day
   monthlyMaintenanceFee: number;
   setupFee: number;
   newTenantsPerMonth: number;
@@ -35,9 +37,6 @@ export interface PnlAssumptions {
   checkDepositCost: number; // CheckAlt / RDC per check
   nextDayDisbursementCost: number;
   sameDayDisbursementCost: number;
-  rtpCost: number;
-  nextDayMixPct: number;
-  sameDayMixPct: number; // remainder of the two is RTP
   walletPerTenantMonthly: number;
 
   // Fixed overhead (monthly)
@@ -50,8 +49,8 @@ export interface PnlAssumptions {
 export const DEFAULT_PNL: PnlAssumptions = {
   tenants: 5,
   checksPerTenantPerMonth: 40,
-  disbursementsPerCheck: 2,
-  disbursementsAtHighRatePct: 100,
+  sameDayDisbursementsPerTenant: 20,
+  nextDayDisbursementsPerTenant: 60,
 
   perCheckFee: 4,
   disbursementFeeHigh: 1,
@@ -63,9 +62,6 @@ export const DEFAULT_PNL: PnlAssumptions = {
   checkDepositCost: 0.68,
   nextDayDisbursementCost: 0.5,
   sameDayDisbursementCost: 1,
-  rtpCost: 0.5,
-  nextDayMixPct: 80,
-  sameDayMixPct: 15,
   walletPerTenantMonthly: 0,
 
   checkAltMonthlyFee: 0,
