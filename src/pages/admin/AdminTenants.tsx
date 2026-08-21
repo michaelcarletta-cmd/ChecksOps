@@ -32,6 +32,7 @@ import { TenantProBadgeManagement } from "@/components/settings/TenantProBadgeMa
 import { TenantProvider } from "@/contexts/TenantContext";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DataView, FilterBar, type DataColumn } from "@/components/shell";
 
 
 const ALLOWED_EMAIL = "mcarletta@freedomadj.com";
@@ -1309,6 +1310,7 @@ function TenantManagementTable({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notesTenant, setNotesTenant] = useState<Tenant | null>(null);
   const [proTenant, setProTenant] = useState<Tenant | null>(null);
+  const [search, setSearch] = useState("");
 
   const updateTenant = async (id: string, patch: Record<string, any>, silent = false) => {
     setBusyId(id);
