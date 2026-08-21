@@ -1260,7 +1260,6 @@ export default function CheckCommandCenter() {
 
             // Reissue moved into Manager → Reissue sub-tab.
             { key: "fundsreleased", label: "Funds Released",   count: filteredFundsReleased.length,       icon: Banknote,       gradient: "from-emerald-500/20 to-teal-500/10",  accent: "text-emerald-400", ring: "ring-emerald-500/30" },
-            { key: "external_disbursements", label: "External Payments", count: laneCount("disbursed_externally", allChecks.filter(c => c.check_stage === "disbursed_externally")), icon: Banknote, gradient: "from-slate-500/20 to-gray-500/10", accent: "text-slate-400", ring: "ring-slate-500/30" },
             { key: "fundsreceived", label: "Funds Received",   count: filteredFundsReceived.length,       icon: Banknote,       gradient: "from-sky-500/20 to-blue-500/10",      accent: "text-sky-400",     ring: "ring-sky-500/30" },
             // Partners moved into Manager → Partners sub-tab (2026-07-07).
             ...(canAccessManager ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield, gradient: "from-indigo-500/20 to-blue-500/10", accent: "text-indigo-400", ring: "ring-indigo-500/30" }] : []),
