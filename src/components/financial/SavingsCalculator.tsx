@@ -41,6 +41,9 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
     setI((prev) => ({ ...prev, [key]: v }));
 
   const r = useMemo(() => compareCosts(i), [i]);
+  const payback = useMemo(() => computePayback(i, 24), [i]);
+  const perCheck = (v: number) => (i.checksPerMonth > 0 ? v / i.checksPerMonth : 0);
+
   const sensitivity = useMemo(
     () =>
       SENSITIVITY_VOLUMES.map((n) => {
