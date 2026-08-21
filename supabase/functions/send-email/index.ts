@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
       }];
     }
     
-    const { subject, body, claimId, attachments, claimEmailCc, cc, tenantId, checkId } = requestBody;
+    const { subject, body, claimId, attachments, claimEmailCc, cc, tenantId, checkId, headers: customHeaders } = requestBody;
 
     if (recipients.length === 0 || !subject || !body) {
       throw new Error("Missing required fields: recipients, subject, and body are required");
