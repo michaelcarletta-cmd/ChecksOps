@@ -31,7 +31,7 @@ const AppLayoutContent = ({ children }: AppLayoutProps) => {
           <UrgentAlertsBell />
           <QuickTaskBar />
         </header>
-        <main className="flex-1 min-w-0 max-w-full overflow-x-clip px-fluid py-3 md:py-6 animate-fade-in [&_*]:min-w-0-safe">
+        <main className="flex-1 min-w-0 max-w-full overflow-x-clip px-fluid py-3 md:py-6 animate-fade-in">
           {children}
         </main>
       </div>
