@@ -46,6 +46,8 @@ import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
 import { EndorsementOverride } from "@/lib/endorsementLayout";
 import { LossDraftDetailPanel } from "@/components/loss-draft/LossDraftDetailPanel";
 import { ArrowDownToLine, FileBarChart, Loader2 } from "lucide-react";
+import { ListSkeleton } from "@/components/shell";
+
 // Help moved to Settings → ChecksOps Guide
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
@@ -129,12 +131,13 @@ const SharedCheckThread = lazy(() =>
   import("@/components/check-review/SharedCheckThread").then(m => ({ default: m.SharedCheckThread }))
 );
 
-/** Spinner shown while a lazy tab/section loads. */
+/** Skeleton shown while a lazy tab/section loads — keeps layout stable vs. a spinner. */
 const TabLoader = () => (
-  <div className="flex items-center justify-center py-12">
-    <Loader2Icon className="h-5 w-5 animate-spin text-muted-foreground" />
+  <div className="py-2">
+    <ListSkeleton rows={6} />
   </div>
 );
+
 
 
 
