@@ -259,6 +259,22 @@ export function CheckImageCropper({ file, open, onCancel, onConfirm, title = "Cr
           </div>
         )}
 
+        {!passthrough && rect && Math.max(rect.w, rect.h) < 1300 && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            Low resolution ({Math.round(rect.w)}×{Math.round(rect.h)} px). Deposits need roughly
+            1300 px across the long edge — widen the crop or retake the photo closer and sharper,
+            otherwise the bank may reject the image.
+          </div>
+        )}
+        {!passthrough && rect && (
+          <p className="text-xs text-muted-foreground">
+            Keep a thin margin of background visible on all four sides — a crop that touches the
+            check border can cut off the right edge at the bank.
+          </p>
+        )}
+
+
+
         <DialogFooter className="gap-2 sm:gap-2">
           {!passthrough && (
             <>
