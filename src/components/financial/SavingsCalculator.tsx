@@ -274,7 +274,8 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
               <CardTitle className="text-base">Setup fee payback — 24 months</CardTitle>
               <CardDescription className="text-xs">
                 Cumulative spend including the one-time {money(payback.setupFee)} ChecksOps setup fee, against iink's
-                ongoing subscription.
+                tiered subscription — {r.iinkPlan.label}, {r.iinkOverageChecks.toLocaleString()} checks over the
+                allowance at {money(r.iinkPlan.overageFee, 2)} each ({money(r.iink.total)} / mo).
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
