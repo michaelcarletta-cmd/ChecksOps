@@ -1,0 +1,322 @@
+import { useMemo, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip as RTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Slider } from "@/components/ui/slider";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Download, RotateCcw } from "lucide-react";
+import { NumberField, StatTile } from "./NumberField";
+import {
+  DEFAULT_PNL,
+  PnlAssumptions,
+  SCENARIOS,
+  ScenarioKey,
+  computePnl,
+  money,
+  pct,
+  projectTwelveMonths,
+} from "@/lib/financial/model";
+import { downloadCsv } from "@/lib/financial/csv";
+
+const CHART_AXIS = "hsl(var(--muted-foreground))";
+
+export function PnlModel({ presentation }: { presentation: boolean }) {
+  const [a, setA] = useState<PnlAssumptions>(DEFAULT_PNL);
+  const [scenario, setScenario] = useState<ScenarioKey | "custom">("custom");
+  const [growth, setGrowth] = useState(1);
+
+  const set = <K extends keyof PnlAssumptions>(key: K) => (v: number) => {
+    setScenario("custom");
+    setA((prev) => ({ ...prev, [key]: v }));
+  };
+
+  const result = useMemo(() => computePnl(a), [a]);
+  const projection = useMemo(() => projectTwelveMonths(a, growth), [a, growth]);
+
+  const revenueBars = [
+    { name: "Subscriptions", value: result.subscriptionRevenue },
+    { name: "Per-check", value: result.perCheckRevenue },
+    { name: "Disbursements", value: result.disbursementRevenue },
+    { name: "% of volume", value: result.percentFeeRevenue },
+    { name: "Mortgage ops", value: result.mortgageRevenue },
+    { name: "Setup fees", value: result.setupRevenue },
+  ].filter((r) => r.value > 0);
+
+  const costBars = [
+    { name: "Deposit (RDC)", value: result.depositCost },
+    { name: "Disbursement rails", value: result.disbursementCost },
+    { name: "OCR / AI", value: result.ocrCostTotal },
+    { name: "Mortgage shipping", value: result.mortgageCostTotal },
+    { name: "Per-tenant ops", value: result.perTenantCost },
+    { name: "Fixed overhead", value: result.fixedOverhead },
+  ].filter((r) => r.value > 0);
+
+  const applyScenario = (key: ScenarioKey) => {
+    setScenario(key);
+    setA((prev) => ({ ...prev, ...SCENARIOS[key].patch }));
+  };
+
+  const exportCsv = () => {
+    downloadCsv("checksops-pnl-model.csv", [
+      ["Metric", "Monthly", "Annual"],
+      ["Gross revenue", result.grossRevenue, result.grossRevenue * 12],
+      ["Variable cost", result.variableCost, result.variableCost * 12],
+      ["Gross profit", result.grossProfit, result.grossProfit * 12],
+      ["Fixed overhead", result.fixedOverhead, result.fixedOverhead * 12],
+      ["Net profit", result.netProfit, result.netProfit * 12],
+      ["Gross margin %", result.grossMarginPct.toFixed(1), ""],
+      ["Net margin %", result.netMarginPct.toFixed(1), ""],
+      ["Tenants", result.checks > 0 ? a.tenants : 0, ""],
+      ["Checks / month", result.checks, result.checks * 12],
+      ["Payment volume", result.paymentVolume, result.paymentVolume * 12],
+      ["Revenue per tenant", result.revenuePerTenant, result.revenuePerTenant * 12],
+      ["Profit per tenant", result.profitPerTenant, result.profitPerTenant * 12],
+      ["Break-even tenants", result.breakEvenTenants, ""],
+      [],
+      ["Month", "Tenants", "Revenue", "Cost", "Net profit"],
+      ...projection.map((p) => [p.label, p.tenants, p.revenue, p.cost, p.netProfit]),
+    ]);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2 print:hidden">
+        {(Object.keys(SCENARIOS) as ScenarioKey[]).map((key) => (
+          <Button
+            key={key}
+            size="sm"
+            variant={scenario === key ? "default" : "outline"}
+            onClick={() => applyScenario(key)}
+          >
+            {SCENARIOS[key].label}
+          </Button>
+        ))}
+        {scenario === "custom" && <Badge variant="secondary">Custom</Badge>}
+        <div className="ml-auto flex gap-2">
+          <Button size="sm" variant="ghost" onClick={() => { setA(DEFAULT_PNL); setScenario("custom"); }}>
+            <RotateCcw className="mr-1 h-4 w-4" /> Reset
+          </Button>
+          <Button size="sm" variant="outline" onClick={exportCsv}>
+            <Download className="mr-1 h-4 w-4" /> Export CSV
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile label="Gross revenue / mo" value={money(result.grossRevenue)} sub={`${money(result.grossRevenue * 12)} annual`} />
+        <StatTile
+          label="Gross profit / mo"
+          value={money(result.grossProfit)}
+          sub={`${pct(result.grossMarginPct)} margin`}
+          tone={result.grossProfit >= 0 ? "positive" : "negative"}
+        />
+        <StatTile
+          label="Net profit / mo"
+          value={money(result.netProfit)}
+          sub={`${pct(result.netMarginPct)} net margin`}
+          tone={result.netProfit >= 0 ? "positive" : "negative"}
+        />
+        <StatTile
+          label="Break-even tenants"
+          value={result.breakEvenTenants > 0 ? String(result.breakEvenTenants) : "—"}
+          sub={`${money(result.contributionPerTenant)} contribution / tenant`}
+        />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+        {!presentation && (
+          <div className="space-y-4 print:hidden">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Volume assumptions</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-3">
+                <NumberField label="Tenants" value={a.tenants} onChange={set("tenants")} />
+                <NumberField label="Checks / tenant / mo" value={a.checksPerTenantPerMonth} onChange={set("checksPerTenantPerMonth")} />
+                <NumberField label="Avg check value" prefix="$" step={500} value={a.avgCheckValue} onChange={set("avgCheckValue")} />
+                <NumberField label="Disbursements / check" step={0.1} value={a.disbursementsPerCheck} onChange={set("disbursementsPerCheck")} />
+                <NumberField label="ACH mix" suffix="%" max={100} value={a.achMixPct} onChange={set("achMixPct")} hint="Remainder is instant / RTP push." />
+                <NumberField label="New tenants / mo" value={a.newTenantsPerMonth} onChange={set("newTenantsPerMonth")} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Revenue levers</CardTitle>
+                <CardDescription className="text-xs">Seeded from live tenant billing config.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-3">
+                <NumberField label="Monthly platform fee" prefix="$" value={a.monthlyPlatformFee} onChange={set("monthlyPlatformFee")} />
+                <NumberField label="Per-check fee" prefix="$" step={0.25} value={a.perCheckFee} onChange={set("perCheckFee")} />
+                <NumberField label="Per-disbursement fee" prefix="$" step={0.25} value={a.perDisbursementFee} onChange={set("perDisbursementFee")} hint="Currently a $1 pass-through with no margin." />
+                <NumberField label="% of payment volume" suffix="%" step={0.1} max={100} value={a.percentFeePct} onChange={set("percentFeePct")} />
+                <NumberField label="Mortgage handling fee" prefix="$" value={a.mortgageHandlingFee} onChange={set("mortgageHandlingFee")} hint="$10 first check, $5 additional." />
+                <NumberField label="Mortgage checks / tenant" value={a.mortgageChecksPerTenantPerMonth} onChange={set("mortgageChecksPerTenantPerMonth")} />
+                <NumberField label="Setup fee" prefix="$" step={250} value={a.setupFee} onChange={set("setupFee")} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Cost structure</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-3">
+                <NumberField label="Deposit cost / check" prefix="$" step={0.01} value={a.checkDepositCost} onChange={set("checkDepositCost")} hint="CheckAlt FinCapture RDC." />
+                <NumberField label="ACH cost" prefix="$" step={0.05} value={a.achCost} onChange={set("achCost")} />
+                <NumberField label="Instant / RTP cost" prefix="$" step={0.05} value={a.instantCost} onChange={set("instantCost")} />
+                <NumberField label="OCR + storage / check" prefix="$" step={0.01} value={a.ocrCost} onChange={set("ocrCost")} />
+                <NumberField label="Shipping label cost" prefix="$" value={a.mortgageShippingCost} onChange={set("mortgageShippingCost")} />
+                <NumberField label="Support / tenant" prefix="$" value={a.supportPerTenantMonthly} onChange={set("supportPerTenantMonthly")} />
+                <NumberField label="KYC / tenant" prefix="$" value={a.kycPerTenantMonthly} onChange={set("kycPerTenantMonthly")} />
+                <NumberField label="Wallet / tenant" prefix="$" value={a.walletPerTenantMonthly} onChange={set("walletPerTenantMonthly")} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Fixed overhead / mo</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-3">
+                <NumberField label="Payroll" prefix="$" step={500} value={a.payroll} onChange={set("payroll")} />
+                <NumberField label="Software" prefix="$" step={50} value={a.software} onChange={set("software")} />
+                <NumberField label="Compliance" prefix="$" step={50} value={a.compliance} onChange={set("compliance")} />
+                <NumberField label="Other" prefix="$" step={50} value={a.otherOverhead} onChange={set("otherOverhead")} />
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        <div className="min-w-0 space-y-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Monthly P&amp;L</CardTitle>
+              <CardDescription className="text-xs">
+                {result.checks.toLocaleString()} checks · {money(result.paymentVolume)} payment volume
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Line</TableHead>
+                    <TableHead className="text-right">Monthly</TableHead>
+                    <TableHead className="text-right">Annual</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {revenueBars.map((r) => (
+                    <TableRow key={r.name}>
+                      <TableCell className="text-muted-foreground">{r.name}</TableCell>
+                      <TableCell className="text-right tabular-nums">{money(r.value)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{money(r.value * 12)}</TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow className="font-medium">
+                    <TableCell>Gross revenue</TableCell>
+                    <TableCell className="text-right tabular-nums">{money(result.grossRevenue)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{money(result.grossRevenue * 12)}</TableCell>
+                  </TableRow>
+                  {costBars.map((r) => (
+                    <TableRow key={r.name}>
+                      <TableCell className="text-muted-foreground">{r.name}</TableCell>
+                      <TableCell className="text-right tabular-nums text-destructive">({money(r.value)})</TableCell>
+                      <TableCell className="text-right tabular-nums text-destructive">({money(r.value * 12)})</TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow className="font-semibold">
+                    <TableCell>Net profit</TableCell>
+                    <TableCell className={`text-right tabular-nums ${result.netProfit >= 0 ? "text-emerald-500" : "text-destructive"}`}>
+                      {money(result.netProfit)}
+                    </TableCell>
+                    <TableCell className={`text-right tabular-nums ${result.netProfit >= 0 ? "text-emerald-500" : "text-destructive"}`}>
+                      {money(result.netProfit * 12)}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Revenue mix</CardTitle>
+              </CardHeader>
+              <CardContent className="h-[240px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={revenueBars} margin={{ left: -12, right: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: CHART_AXIS }} interval={0} angle={-20} textAnchor="end" height={54} />
+                    <YAxis tick={{ fontSize: 10, fill: CHART_AXIS }} tickFormatter={(v) => money(Number(v))} width={70} />
+                    <RTooltip formatter={(v: number) => money(v)} contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                      {revenueBars.map((_, i) => (
+                        <Cell key={i} fill="hsl(var(--primary))" fillOpacity={1 - i * 0.12} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Cost breakdown</CardTitle>
+              </CardHeader>
+              <CardContent className="h-[240px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={costBars} margin={{ left: -12, right: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: CHART_AXIS }} interval={0} angle={-20} textAnchor="end" height={54} />
+                    <YAxis tick={{ fontSize: 10, fill: CHART_AXIS }} tickFormatter={(v) => money(Number(v))} width={70} />
+                    <RTooltip formatter={(v: number) => money(v)} contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]} fill="hsl(var(--destructive))" fillOpacity={0.75} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">12-month projection</CardTitle>
+              <CardDescription className="text-xs">Net new tenants per month: {growth}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="max-w-xs print:hidden">
+                <Slider value={[growth]} min={0} max={10} step={1} onValueChange={([v]) => setGrowth(v)} aria-label="Net new tenants per month" />
+              </div>
+              <div className="h-[260px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={projection} margin={{ left: -12, right: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: CHART_AXIS }} />
+                    <YAxis tick={{ fontSize: 10, fill: CHART_AXIS }} tickFormatter={(v) => money(Number(v))} width={70} />
+                    <RTooltip formatter={(v: number) => money(v)} contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Line type="monotone" dataKey="revenue" name="Revenue" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="cost" name="Total cost" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="netProfit" name="Net profit" stroke="hsl(var(--chart-2, var(--primary)))" strokeWidth={2} strokeDasharray="4 3" dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}

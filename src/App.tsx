@@ -33,6 +33,7 @@ const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
 const RecipientPaymentSetup = lazy(() => import("./pages/RecipientPaymentSetup"));
 const AdminTenants = lazy(() => import("./pages/admin/AdminTenants"));
 const AdminMortgageOps = lazy(() => import("./pages/admin/AdminMortgageOps"));
+const AdminFinancialModel = lazy(() => import("./pages/admin/AdminFinancialModel"));
 const VerifyAccount = lazy(() => import("./pages/VerifyAccount"));
 const VerifyAccountStart = lazy(() => import("./pages/VerifyAccountStart"));
 const PrivacyNotice = lazy(() => import("./pages/PrivacyNotice"));
@@ -97,7 +98,9 @@ function CheckOpsRoutes() {
       <Route path="/terms-of-service" element={<Navigate to="/terms" replace />} />
       <Route path="/admin/tenants" element={<Suspense fallback={<PageLoader />}><AdminTenants /></Suspense>} />
       <Route path="/admin/mortgage-ops" element={<Suspense fallback={<PageLoader />}><AdminMortgageOps /></Suspense>} />
+      <Route path="/admin/financial-model" element={<Suspense fallback={<PageLoader />}><AdminFinancialModel /></Suspense>} />
       <Route path="/find-a-pro" element={<Suspense fallback={<PageLoader />}><FindAPro /></Suspense>} />
+
       <Route path="/pros" element={<Navigate to="/find-a-pro" replace />} />
       <Route path="/h/upload" element={<Suspense fallback={<PageLoader />}><HomeownerCheckUpload /></Suspense>} />
       <Route path="/h/claim/:token" element={<Suspense fallback={<PageLoader />}><HomeownerClaimPortal /></Suspense>} />
