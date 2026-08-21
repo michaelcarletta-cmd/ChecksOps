@@ -220,20 +220,29 @@ export function projectTwelveMonths(a: PnlAssumptions, netNewTenantsPerMonth: nu
   let tenants = nn(a.tenants);
   for (let m = 1; m <= 12; m++) {
     if (m > 1) tenants += nn(netNewTenantsPerMonth);
-    const r = computePnl({ ...a, newTenantsPerMonth: m === 1 ? a.newTenantsPerMonth : netNewTenantsPerMonth }, tenants);
+    const r = computePnl(a, tenants);
+    // Setup fee is one-time: month 1 bills the whole existing base, later months
+    // only bill the tenants added that month.
+    const setupThisMonth =
+      m === 1 ? tenants * nn(a.setupFee) : nn(netNewTenantsPerMonth) * nn(a.setupFee);
+    const revenue = r.recurringRevenue + setupThisMonth;
+    const cost = r.variableCost + r.fixedOverhead;
+    const grossProfit = revenue - r.variableCost;
+    const netProfit = revenue - cost;
     rows.push({
       month: m,
       label: `M${m}`,
       tenants: Math.round(tenants),
-      revenue: r.grossRevenue,
-      cost: r.variableCost + r.fixedOverhead,
-      grossProfit: r.grossProfit,
-      netProfit: r.netProfit,
-      netMarginPct: r.netMarginPct,
+      revenue,
+      cost,
+      grossProfit,
+      netProfit,
+      netMarginPct: revenue > 0 ? (netProfit / revenue) * 100 : 0,
     });
   }
   return rows;
 }
+
 
 export type ScenarioKey = "low" | "expected" | "high";
 
