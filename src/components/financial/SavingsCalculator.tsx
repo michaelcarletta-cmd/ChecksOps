@@ -81,7 +81,15 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
       [],
       ["Checks / mo", "ChecksOps", "iink", "Savings"],
       ...sensitivity.map((s) => [s.checks, s.ChecksOps, s.iink, s.savings]),
+      [],
+      ["One-time setup fee", payback.setupFee],
+      ["Payback month", payback.paybackMonth ?? "Not within 24 months"],
+      ["2-year net savings after setup fee", payback.twoYearNetSavings],
+      [],
+      ["Month", "ChecksOps cumulative (incl. setup)", "iink cumulative", "Net position"],
+      ...payback.rows.map((row) => [row.month, row.checksOpsCumulative, row.iinkCumulative, row.cumulativeSavings]),
     ]);
+
 
   return (
     <div className="space-y-4">
