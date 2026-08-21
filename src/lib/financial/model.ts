@@ -256,10 +256,48 @@ export const SCENARIOS: Record<ScenarioKey, { label: string; patch: Partial<PnlA
 /* ChecksOps vs iink comparison                                        */
 /* ------------------------------------------------------------------ */
 
+/**
+ * iink published pricing (iink.com/pricing, monthly term). Each plan is a flat
+ * monthly fee that includes a set number of check submissions; anything beyond
+ * that is charged per additional check. Checks with a mortgage-company payee
+ * carry a capped 1% fee on the check amount.
+ */
+export type IinkPlanKey = "starter" | "essentials" | "professional" | "premier";
+
+export interface IinkPlan {
+  key: IinkPlanKey;
+  label: string;
+  monthlyFee: number;
+  includedChecks: number;
+  overageFee: number;
+}
+
+export const IINK_PLANS: IinkPlan[] = [
+  { key: "starter", label: "Starter — $45 / 2 checks", monthlyFee: 45, includedChecks: 2, overageFee: 22.5 },
+  { key: "essentials", label: "Essentials — $96 / 8 checks", monthlyFee: 96, includedChecks: 8, overageFee: 12 },
+  { key: "professional", label: "Professional — $225 / 25 checks", monthlyFee: 225, includedChecks: 25, overageFee: 9 },
+  { key: "premier", label: "Premier — $375 / 50 checks", monthlyFee: 375, includedChecks: 50, overageFee: 7.5 },
+];
+
+/** Cheapest published iink plan for a given monthly check volume. */
+export function bestIinkPlan(checks: number): IinkPlan {
+  let best = IINK_PLANS[0];
+  let bestCost = Infinity;
+  for (const p of IINK_PLANS) {
+    const cost = p.monthlyFee + Math.max(0, checks - p.includedChecks) * p.overageFee;
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = p;
+    }
+  }
+  return best;
+}
+
 export interface ComparisonInputs {
   checksPerMonth: number;
   disbursementsPerCheck: number;
   mortgageChecksPerMonth: number; // checks requiring mortgage-company endorsement handling
+  avgCheckAmount: number; // drives iink's capped 1% mortgage-payee fee
 
   // ChecksOps pricing
   coMonthlyFee: number;
@@ -272,16 +310,20 @@ export interface ComparisonInputs {
   coReferralCreditPerReferral: number;
   coReferralCreditCap: number;
 
-  // iink comparison assumptions — CONFIRM against current iink pricing
+  // iink pricing (iink.com/pricing)
+  iinkPlan: IinkPlanKey | "auto";
   iinkMonthlyFee: number;
-  iinkPerCheckFee: number;
-  iinkMortgageFee: number; // mortgage endorsement handling per check
+  iinkIncludedChecks: number;
+  iinkOverageFee: number; // charged only on checks above the included allowance
+  iinkMortgageFeePct: number; // 1% of the check amount
+  iinkMortgageFeeCap: number; // per-check cap on that 1% fee
 }
 
 export const DEFAULT_COMPARISON: ComparisonInputs = {
   checksPerMonth: 50,
   disbursementsPerCheck: 2,
   mortgageChecksPerMonth: 10,
+  avgCheckAmount: 25000,
 
   coMonthlyFee: 100,
   coPerCheckFee: 4,
@@ -293,9 +335,12 @@ export const DEFAULT_COMPARISON: ComparisonInputs = {
   coReferralCreditPerReferral: 5,
   coReferralCreditCap: 25,
 
-  iinkMonthlyFee: 0,
-  iinkPerCheckFee: 0,
-  iinkMortgageFee: 0,
+  iinkPlan: "auto",
+  iinkMonthlyFee: 375,
+  iinkIncludedChecks: 50,
+  iinkOverageFee: 7.5,
+  iinkMortgageFeePct: 1,
+  iinkMortgageFeeCap: 299,
 };
 
 export interface SideCost {
@@ -312,6 +357,8 @@ export interface ComparisonResult {
   disbursements: number;
   checksOps: SideCost;
   iink: SideCost;
+  iinkPlan: IinkPlan;
+  iinkOverageChecks: number;
   monthlySavings: number;
   annualSavings: number;
   savingsPct: number;
@@ -329,9 +376,10 @@ function sideTotals(
   return { ...parts, total, costPerCheck: checks > 0 ? total / checks : 0 };
 }
 
-/** Referral credit applied to the ChecksOps monthly fee ($5 each, capped). */
+/** Referral credit applied to the ChecksOps monthly fee ($5 each, capped, never more than the fee). */
 export function referralCredit(i: ComparisonInputs): number {
   return Math.min(
+    nn(i.coMonthlyFee),
     nn(i.coReferralCreditCap),
     nn(i.coReferrals) * nn(i.coReferralCreditPerReferral),
   );
@@ -343,27 +391,68 @@ function coDisbursementFee(i: ComparisonInputs): number {
   return sameDay * nn(i.coSameDayDisbursementFee) + (1 - sameDay) * nn(i.coNextDayDisbursementFee);
 }
 
+/** Resolve the iink plan in play — either the picked plan or the cheapest for the volume. */
+export function resolveIinkPlan(i: ComparisonInputs, checks: number): IinkPlan {
+  if (i.iinkPlan === "auto") return bestIinkPlan(checks);
+  const found = IINK_PLANS.find((p) => p.key === i.iinkPlan);
+  if (found) return found;
+  return {
+    key: "premier",
+    label: "Custom",
+    monthlyFee: nn(i.iinkMonthlyFee),
+    includedChecks: nn(i.iinkIncludedChecks),
+    overageFee: nn(i.iinkOverageFee),
+  };
+}
+
+/** iink's capped 1% fee on checks with a mortgage-company payee. */
+function iinkMortgageCost(i: ComparisonInputs, mortgageChecks: number): number {
+  const perCheck = Math.min(
+    nn(i.iinkMortgageFeeCap),
+    nn(i.avgCheckAmount) * (nn(i.iinkMortgageFeePct) / 100),
+  );
+  return mortgageChecks * perCheck;
+}
+
+function iinkSide(i: ComparisonInputs, checks: number, mortgageChecks: number) {
+  const plan = resolveIinkPlan(i, checks);
+  const overageChecks = Math.max(0, checks - nn(plan.includedChecks));
+  return {
+    plan,
+    overageChecks,
+    monthlyFee: nn(plan.monthlyFee),
+    perCheck: overageChecks * nn(plan.overageFee),
+    mortgageFee: iinkMortgageCost(i, mortgageChecks),
+  };
+}
+
 export function compareCosts(i: ComparisonInputs, checksOverride?: number): ComparisonResult {
   const checks = nn(checksOverride ?? i.checksPerMonth);
   const disbursements = checks * nn(i.disbursementsPerCheck);
+  // Scale mortgage checks with volume when sweeping the sensitivity table.
+  const mortgageChecks =
+    checksOverride !== undefined && nn(i.checksPerMonth) > 0
+      ? (nn(i.mortgageChecksPerMonth) / nn(i.checksPerMonth)) * checks
+      : nn(i.mortgageChecksPerMonth);
 
   const checksOps = sideTotals(
     {
       monthlyFee: nn(i.coMonthlyFee),
       perCheck: checks * nn(i.coPerCheckFee),
       perDisbursement: disbursements * coDisbursementFee(i),
-      mortgageFee: nn(i.mortgageChecksPerMonth) * nn(i.coMortgageFee),
+      mortgageFee: mortgageChecks * nn(i.coMortgageFee),
       referralCredit: referralCredit(i),
     },
     checks,
   );
 
+  const ii = iinkSide(i, checks, mortgageChecks);
   const iink = sideTotals(
     {
-      monthlyFee: nn(i.iinkMonthlyFee),
-      perCheck: checks * nn(i.iinkPerCheckFee),
+      monthlyFee: ii.monthlyFee,
+      perCheck: ii.perCheck,
       perDisbursement: 0,
-      mortgageFee: nn(i.mortgageChecksPerMonth) * nn(i.iinkMortgageFee),
+      mortgageFee: ii.mortgageFee,
       referralCredit: 0,
     },
     checks,
@@ -375,6 +464,8 @@ export function compareCosts(i: ComparisonInputs, checksOverride?: number): Comp
     disbursements,
     checksOps,
     iink,
+    iinkPlan: ii.plan,
+    iinkOverageChecks: ii.overageChecks,
     monthlySavings,
     annualSavings: monthlySavings * 12,
     savingsPct: iink.total > 0 ? (monthlySavings / iink.total) * 100 : 0,
@@ -385,22 +476,20 @@ export function compareCosts(i: ComparisonInputs, checksOverride?: number): Comp
 /** Monthly savings at a given check count, without recursing into break-even search. */
 function savingsAt(i: ComparisonInputs, checks: number): number {
   const disbursements = checks * nn(i.disbursementsPerCheck);
+  const mortgageChecks =
+    nn(i.checksPerMonth) > 0 ? (nn(i.mortgageChecksPerMonth) / nn(i.checksPerMonth)) * checks : 0;
 
   const co = Math.max(
     0,
     nn(i.coMonthlyFee) +
       checks * nn(i.coPerCheckFee) +
       disbursements * coDisbursementFee(i) +
-      nn(i.mortgageChecksPerMonth) * nn(i.coMortgageFee) -
+      mortgageChecks * nn(i.coMortgageFee) -
       referralCredit(i),
   );
 
-  const ii =
-    nn(i.iinkMonthlyFee) +
-    checks * nn(i.iinkPerCheckFee) +
-    nn(i.mortgageChecksPerMonth) * nn(i.iinkMortgageFee);
-
-  return ii - co;
+  const s = iinkSide(i, checks, mortgageChecks);
+  return s.monthlyFee + s.perCheck + s.mortgageFee - co;
 }
 
 /** Smallest whole check count where ChecksOps becomes cheaper than iink. */
@@ -410,6 +499,7 @@ export function findBreakEvenChecks(i: ComparisonInputs): number | null {
   }
   return null;
 }
+
 
 export const SENSITIVITY_VOLUMES = [25, 50, 100, 250, 500, 1000];
 
