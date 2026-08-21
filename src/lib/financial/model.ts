@@ -375,11 +375,33 @@ export function compareCosts(i: ComparisonInputs, checksOverride?: number): Comp
   };
 }
 
+/** Monthly savings at a given check count, without recursing into break-even search. */
+function savingsAt(i: ComparisonInputs, checks: number): number {
+  const volume = checks * nn(i.avgCheckAmount);
+  const disbursements = checks * nn(i.disbursementsPerCheck);
+  const instantShare = clampPct(i.instantMixPct) / 100;
+
+  const co =
+    nn(i.coMonthlyFee) +
+    checks * nn(i.coPerCheckFee) +
+    disbursements * nn(i.coPerDisbursementFee) +
+    volume * (clampPct(i.coPercentFeePct) / 100) +
+    disbursements * instantShare * nn(i.coInstantSurcharge);
+
+  const ii =
+    nn(i.iinkMonthlyFee) +
+    checks * nn(i.iinkPerCheckFee) +
+    disbursements * nn(i.iinkPerDisbursementFee) +
+    volume * (clampPct(i.iinkPercentFeePct) / 100) +
+    volume * instantShare * (clampPct(i.iinkInstantFeePct) / 100);
+
+  return ii - co;
+}
+
 /** Smallest whole check count where ChecksOps becomes cheaper than iink. */
 export function findBreakEvenChecks(i: ComparisonInputs): number | null {
   for (let n = 1; n <= 2000; n++) {
-    const r = compareCosts(i, n);
-    if (r.monthlySavings > 0) return n;
+    if (savingsAt(i, n) > 0) return n;
   }
   return null;
 }
