@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { detectDocumentType } from "@/lib/signer-display-templates";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { FileSignature, Plus, Loader2, Mail, Check, Clock, X, ChevronRight, ChevronLeft, ExternalLink, Link2, RefreshCw, AlertTriangle, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { FieldPlacementEditor } from "./FieldPlacementEditor";
+const FieldPlacementEditor = lazy(() => import("./FieldPlacementEditor").then((m) => ({ default: m.FieldPlacementEditor })));
 import { SignatureDiagnostics } from "./SignatureDiagnostics";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 
@@ -585,12 +585,14 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
 
             {/* Step 2: Field Placement */}
             {currentStep === 2 && (generatedDocUrl || generatedDocxData) && (
+              <Suspense fallback={<div className="py-10 text-center text-sm text-muted-foreground">Loading document editor…</div>}>
               <FieldPlacementEditor
                 documentUrl={generatedDocUrl || undefined}
                 docxData={generatedDocxData || undefined}
                 onFieldsChange={setPlacedFields}
                 signerCount={signers.length}
               />
+              </Suspense>
             )}
 
             {/* Step 3: Signer Configuration */}

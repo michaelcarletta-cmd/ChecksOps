@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, lazy, Suspense } from "react";
 import { mortgageSupabase as supabase } from "@/integrations/supabase/mortgageClient";
 import { useMortgageAuth } from "@/hooks/useMortgageAuth";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { FieldPlacementEditor } from "@/components/claim-detail/FieldPlacementEditor";
+const FieldPlacementEditor = lazy(() => import("@/components/claim-detail/FieldPlacementEditor").then((m) => ({ default: m.FieldPlacementEditor })));
 import { toast } from "sonner";
 import {
   Loader2,
@@ -1298,11 +1298,13 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
           </DialogDescription>
         </DialogHeader>
         {pendingDoc && (
+          <Suspense fallback={<div className="py-10 text-center text-sm text-muted-foreground">Loading document editor…</div>}>
           <FieldPlacementEditor
             documentUrl={pendingDoc.url}
             onFieldsChange={setPlacedFields}
             signerCount={1}
           />
+          </Suspense>
         )}
         <DialogFooter className="gap-2">
           <Button

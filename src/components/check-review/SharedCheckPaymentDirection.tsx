@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import jsPDF from "jspdf";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -49,12 +48,13 @@ function pctRect(box: { x: number; y: number; w: number; h: number }) {
   };
 }
 
-function buildDtpPdf(opts: {
+async function buildDtpPdf(opts: {
   recipientName: string;
   insuredName: string;
   insuredEmail: string;
   checkNumber?: string | null;
-}): Blob {
+}): Promise<Blob> {
+  const { default: jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const margin = 54;
   let y = margin;
@@ -189,7 +189,7 @@ export function SharedCheckPaymentDirection({
       const docPath = `check-intake/${checkIntakeItemId}/payment-direction-${crypto.randomUUID()}.pdf`;
 
       // 1. Generate and upload the DTP PDF so the signing page has a real document.
-      const pdfBlob = buildDtpPdf({
+      const pdfBlob = await buildDtpPdf({
         recipientName: recipient,
         insuredName: name,
         insuredEmail: email,
