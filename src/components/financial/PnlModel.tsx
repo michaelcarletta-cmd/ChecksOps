@@ -139,31 +139,21 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
           <div className="space-y-4 print:hidden">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Volume assumptions</CardTitle>
+                <CardTitle className="text-base">Volume &amp; revenue</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-3">
                 <NumberField label="Tenants" value={a.tenants} onChange={set("tenants")} />
                 <NumberField label="Checks / tenant / mo" value={a.checksPerTenantPerMonth} onChange={set("checksPerTenantPerMonth")} />
-                <NumberField label="Avg check value" prefix="$" step={500} value={a.avgCheckValue} onChange={set("avgCheckValue")} />
-                <NumberField label="Disbursements / check" step={0.1} value={a.disbursementsPerCheck} onChange={set("disbursementsPerCheck")} />
-                <NumberField label="ACH mix" suffix="%" max={100} value={a.achMixPct} onChange={set("achMixPct")} hint="Remainder is instant / RTP push." />
-                <NumberField label="New tenants / mo" value={a.newTenantsPerMonth} onChange={set("newTenantsPerMonth")} />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Revenue levers</CardTitle>
-                <CardDescription className="text-xs">Seeded from live tenant billing config.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid grid-cols-2 gap-3">
-                <NumberField label="Monthly platform fee" prefix="$" value={a.monthlyPlatformFee} onChange={set("monthlyPlatformFee")} />
                 <NumberField label="Per-check fee" prefix="$" step={0.25} value={a.perCheckFee} onChange={set("perCheckFee")} />
-                <NumberField label="Per-disbursement fee" prefix="$" step={0.25} value={a.perDisbursementFee} onChange={set("perDisbursementFee")} hint="Currently a $1 pass-through with no margin." />
-                <NumberField label="% of payment volume" suffix="%" step={0.1} max={100} value={a.percentFeePct} onChange={set("percentFeePct")} />
-                <NumberField label="Mortgage handling fee" prefix="$" value={a.mortgageHandlingFee} onChange={set("mortgageHandlingFee")} hint="$10 first check, $5 additional." />
-                <NumberField label="Mortgage checks / tenant" value={a.mortgageChecksPerTenantPerMonth} onChange={set("mortgageChecksPerTenantPerMonth")} />
-                <NumberField label="Setup fee" prefix="$" step={250} value={a.setupFee} onChange={set("setupFee")} />
+                <NumberField label="Disbursements / check" step={0.1} value={a.disbursementsPerCheck} onChange={set("disbursementsPerCheck")} />
+                <NumberField label="Disbursement fee (high)" prefix="$" step={0.05} value={a.disbursementFeeHigh} onChange={set("disbursementFeeHigh")} hint="$1.00 tier." />
+                <NumberField label="Disbursement fee (low)" prefix="$" step={0.05} value={a.disbursementFeeLow} onChange={set("disbursementFeeLow")} hint="$0.75 tier." />
+                <NumberField label="% at $1.00 rate" suffix="%" max={100} value={a.disbursementsAtHighRatePct} onChange={set("disbursementsAtHighRatePct")} hint="Remainder billed at the $0.75 rate." />
+                <NumberField label="Monthly maintenance fee" prefix="$" value={a.monthlyMaintenanceFee} onChange={set("monthlyMaintenanceFee")} />
+                <NumberField label="MortgageOps fee" prefix="$" value={a.mortgageHandlingFee} onChange={set("mortgageHandlingFee")} hint="$10 first check, $5 additional." />
+                <NumberField label="MortgageOps checks / tenant" value={a.mortgageChecksPerTenantPerMonth} onChange={set("mortgageChecksPerTenantPerMonth")} />
+                <NumberField label="Setup fee (one-time)" prefix="$" step={250} value={a.setupFee} onChange={set("setupFee")} />
+                <NumberField label="New tenants / mo" value={a.newTenantsPerMonth} onChange={set("newTenantsPerMonth")} hint="Drives setup fee revenue." />
               </CardContent>
             </Card>
 
@@ -173,12 +163,11 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-3">
                 <NumberField label="Deposit cost / check" prefix="$" step={0.01} value={a.checkDepositCost} onChange={set("checkDepositCost")} hint="CheckAlt FinCapture RDC." />
-                <NumberField label="ACH cost" prefix="$" step={0.05} value={a.achCost} onChange={set("achCost")} />
-                <NumberField label="Instant / RTP cost" prefix="$" step={0.05} value={a.instantCost} onChange={set("instantCost")} />
-                <NumberField label="OCR + storage / check" prefix="$" step={0.01} value={a.ocrCost} onChange={set("ocrCost")} />
-                <NumberField label="Shipping label cost" prefix="$" value={a.mortgageShippingCost} onChange={set("mortgageShippingCost")} />
-                <NumberField label="Support / tenant" prefix="$" value={a.supportPerTenantMonthly} onChange={set("supportPerTenantMonthly")} />
-                <NumberField label="KYC / tenant" prefix="$" value={a.kycPerTenantMonthly} onChange={set("kycPerTenantMonthly")} />
+                <NumberField label="Next day disbursement" prefix="$" step={0.05} value={a.nextDayDisbursementCost} onChange={set("nextDayDisbursementCost")} />
+                <NumberField label="Same day disbursement" prefix="$" step={0.05} value={a.sameDayDisbursementCost} onChange={set("sameDayDisbursementCost")} />
+                <NumberField label="RTP" prefix="$" step={0.05} value={a.rtpCost} onChange={set("rtpCost")} />
+                <NumberField label="Next day mix" suffix="%" max={100} value={a.nextDayMixPct} onChange={set("nextDayMixPct")} />
+                <NumberField label="Same day mix" suffix="%" max={100} value={a.sameDayMixPct} onChange={set("sameDayMixPct")} hint="Remainder of the mix is RTP." />
                 <NumberField label="Wallet / tenant" prefix="$" value={a.walletPerTenantMonthly} onChange={set("walletPerTenantMonthly")} />
               </CardContent>
             </Card>
@@ -188,10 +177,10 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
                 <CardTitle className="text-base">Fixed overhead / mo</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-3">
-                <NumberField label="Payroll" prefix="$" step={500} value={a.payroll} onChange={set("payroll")} />
-                <NumberField label="Software" prefix="$" step={50} value={a.software} onChange={set("software")} />
-                <NumberField label="Compliance" prefix="$" step={50} value={a.compliance} onChange={set("compliance")} />
-                <NumberField label="Other" prefix="$" step={50} value={a.otherOverhead} onChange={set("otherOverhead")} />
+                <NumberField label="CheckAlt monthly fee" prefix="$" step={50} value={a.checkAltMonthlyFee} onChange={set("checkAltMonthlyFee")} />
+                <NumberField label="Moov monthly minimum" prefix="$" step={50} value={a.moovMonthlyMinimumFee} onChange={set("moovMonthlyMinimumFee")} />
+                <NumberField label="KYB / KYC setup" prefix="$" step={50} value={a.kybKycSetupCost} onChange={set("kybKycSetupCost")} />
+                <NumberField label="CheckAlt onboarding fee" prefix="$" step={50} value={a.checkAltOnboardingFee} onChange={set("checkAltOnboardingFee")} />
               </CardContent>
             </Card>
           </div>
@@ -202,9 +191,10 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Monthly P&amp;L</CardTitle>
               <CardDescription className="text-xs">
-                {result.checks.toLocaleString()} checks · {money(result.paymentVolume)} payment volume
+                {result.checks.toLocaleString()} checks · {result.disbursements.toLocaleString()} disbursements
               </CardDescription>
             </CardHeader>
+
             <CardContent className="overflow-x-auto">
               <Table>
                 <TableHeader>
