@@ -57,14 +57,14 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
 
   const compareBars = [
     { name: "ChecksOps", value: r.checksOps.total },
-    { name: "iink (est.)", value: r.iink.total },
+    { name: "iink", value: r.iink.total },
   ];
 
   const exportCsv = () =>
     downloadCsv("checksops-vs-iink.csv", [
-      ["Line", "ChecksOps", "iink (estimated)"],
+      ["Line", "ChecksOps", "iink"],
       ["Monthly platform fee", r.checksOps.monthlyFee, r.iink.monthlyFee],
-      ["Per-check fees", r.checksOps.perCheck, r.iink.perCheck],
+      ["Per-check fees (over allowance)", r.checksOps.perCheck, r.iink.perCheck],
       ["Disbursement fees", r.checksOps.perDisbursement, r.iink.perDisbursement],
       ["MortgageOps handling", r.checksOps.mortgageFee, r.iink.mortgageFee],
       ["Referral credit", -r.checksOps.referralCredit, 0],
@@ -75,7 +75,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
       ["Annual savings", r.annualSavings],
       ["Savings %", r.savingsPct.toFixed(1)],
       [],
-      ["Checks / mo", "ChecksOps", "iink (est.)", "Savings"],
+      ["Checks / mo", "ChecksOps", "iink", "Savings"],
       ...sensitivity.map((s) => [s.checks, s.ChecksOps, s.iink, s.savings]),
     ]);
 
@@ -103,7 +103,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label="ChecksOps / mo" value={money(r.checksOps.total)} sub={`${money(r.checksOps.costPerCheck, 2)} per check`} />
-        <StatTile label="iink (est.) / mo" value={money(r.iink.total)} sub={`${money(r.iink.costPerCheck, 2)} per check`} />
+        <StatTile label="iink / mo" value={money(r.iink.total)} sub={`${money(r.iink.costPerCheck, 2)} per check`} />
         <StatTile
           label="Monthly savings"
           value={money(r.monthlySavings)}
@@ -200,13 +200,13 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                   <TableRow>
                     <TableHead>Cost line</TableHead>
                     <TableHead className="text-right">ChecksOps</TableHead>
-                    <TableHead className="text-right">iink (est.)</TableHead>
+                    <TableHead className="text-right">iink</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {[
                     ["Monthly platform fee", r.checksOps.monthlyFee, r.iink.monthlyFee],
-                    ["Per-check fees", r.checksOps.perCheck, r.iink.perCheck],
+                    ["Per-check fees (over allowance)", r.checksOps.perCheck, r.iink.perCheck],
                     ["Disbursement fees", r.checksOps.perDisbursement, r.iink.perDisbursement],
                     ["MortgageOps handling", r.checksOps.mortgageFee, r.iink.mortgageFee],
                     ["Referral credit", -r.checksOps.referralCredit, 0],
@@ -281,7 +281,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                   <TableRow>
                     <TableHead>Checks / mo</TableHead>
                     <TableHead className="text-right">ChecksOps</TableHead>
-                    <TableHead className="text-right">iink (est.)</TableHead>
+                    <TableHead className="text-right">iink</TableHead>
                     <TableHead className="text-right">Savings / mo</TableHead>
                     <TableHead className="text-right">Savings / yr</TableHead>
                   </TableRow>
