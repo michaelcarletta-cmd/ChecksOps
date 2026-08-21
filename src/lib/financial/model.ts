@@ -249,15 +249,33 @@ export type ScenarioKey = "low" | "expected" | "high";
 export const SCENARIOS: Record<ScenarioKey, { label: string; patch: Partial<PnlAssumptions> }> = {
   low: {
     label: "Low volume",
-    patch: { tenants: 3, checksPerTenantPerMonth: 20, disbursementsPerCheck: 2, newTenantsPerMonth: 0 },
+    patch: {
+      tenants: 3,
+      checksPerTenantPerMonth: 20,
+      sameDayDisbursementsPerTenant: 10,
+      nextDayDisbursementsPerTenant: 30,
+      newTenantsPerMonth: 0,
+    },
   },
   expected: {
     label: "Expected",
-    patch: { tenants: 10, checksPerTenantPerMonth: 40, disbursementsPerCheck: 2, newTenantsPerMonth: 1 },
+    patch: {
+      tenants: 10,
+      checksPerTenantPerMonth: 40,
+      sameDayDisbursementsPerTenant: 20,
+      nextDayDisbursementsPerTenant: 60,
+      newTenantsPerMonth: 1,
+    },
   },
   high: {
     label: "High volume",
-    patch: { tenants: 30, checksPerTenantPerMonth: 100, disbursementsPerCheck: 3, newTenantsPerMonth: 3 },
+    patch: {
+      tenants: 30,
+      checksPerTenantPerMonth: 100,
+      sameDayDisbursementsPerTenant: 60,
+      nextDayDisbursementsPerTenant: 240,
+      newTenantsPerMonth: 3,
+    },
   },
 };
 
