@@ -1113,7 +1113,6 @@ export default function CheckCommandCenter() {
       { tab: "reissue", count: reissueRequested.length },
       { tab: "deposited", count: depositedChecks.length },
       { tab: "fundsreleased", count: filteredFundsReleased.length },
-      { tab: "external_disbursements", count: getLaneCount("disbursed_externally", allChecks.filter(c => c.check_stage === "disbursed_externally")) },
       { tab: "fundsreceived", count: filteredFundsReceived.length },
     ];
     const currentCount = buckets.find((b) => b.tab === activeTab)?.count ?? 0;
