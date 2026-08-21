@@ -318,7 +318,7 @@ export function InvoicesTab() {
                           onChange={(e) => setItems((prev) => prev.map((p, i) => i === idx ? { ...p, quantity: Number(e.target.value) } : p))}
                         />
                         <Button
-                          variant="ghost" size="icon" className="col-span-1"
+                          variant="ghost" size="icon" className="col-span-1" aria-label="Remove line item"
                           onClick={() => setItems((prev) => prev.length === 1 ? prev : prev.filter((_, i) => i !== idx))}
                           disabled={items.length === 1}
                         >
@@ -487,7 +487,7 @@ function InvoiceActions({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" aria-label="Invoice actions"><MoreHorizontal className="h-4 w-4" /></Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="z-50 bg-popover">
         {inv.status === "draft" && (
