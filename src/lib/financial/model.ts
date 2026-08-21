@@ -42,6 +42,8 @@ export interface PnlAssumptions {
   // Fixed overhead (monthly)
   checkAltMonthlyFee: number;
   moovMonthlyMinimumFee: number;
+
+  // One-time onboarding cost, charged per tenant (not monthly)
   kybKycSetupCost: number;
   checkAltOnboardingFee: number;
 }
