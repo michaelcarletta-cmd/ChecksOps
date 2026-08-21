@@ -66,7 +66,11 @@ export function DataView<T>({
   const asCards = variant === "cards" || (variant === "auto" && isMobile);
 
   if (loading) {
-    return asCards ? <ListSkeleton rows={4} /> : <TableSkeleton rows={6} cols={columns.length} />;
+    return asCards ? (
+      <ListSkeleton rows={4} />
+    ) : (
+      <TableSkeleton rows={6} columns={columns.length} />
+    );
   }
 
   if (rows.length === 0) {
