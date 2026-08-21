@@ -167,6 +167,9 @@ export default function AdminTenants() {
             <Button variant="outline" size="sm" onClick={() => navigate("/admin/mortgage-ops")}>
               <Briefcase className="w-4 h-4 mr-1" /> Mortgage Ops
             </Button>
+            <Button variant="outline" size="sm" onClick={() => navigate("/admin/financial-model")}>
+              <Calculator className="w-4 h-4 mr-1" /> Financial Model
+            </Button>
             <Button variant="ghost" size="sm" onClick={loadTenants}>
               <RefreshCw className="w-4 h-4 mr-1" /> Refresh
             </Button>
