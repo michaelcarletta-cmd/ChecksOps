@@ -222,15 +222,19 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
                 <TableBody>
                   {revenueBars.map((r) => (
                     <TableRow key={r.name}>
-                      <TableCell className="text-muted-foreground">{r.name}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {r.name === "Setup fees (one-time, all tenants)"
+                          ? `Setup fees (${a.tenants} × ${money(a.setupFee)}, one-time)`
+                          : r.name}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">{money(r.value)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{money(r.value * 12)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{money(r.annual)}</TableCell>
                     </TableRow>
                   ))}
                   <TableRow className="font-medium">
                     <TableCell>Gross revenue</TableCell>
                     <TableCell className="text-right tabular-nums">{money(result.grossRevenue)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{money(result.grossRevenue * 12)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{money(annualGrossRevenue)}</TableCell>
                   </TableRow>
                   {costBars.map((r) => (
                     <TableRow key={r.name}>
@@ -244,19 +248,11 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
                     <TableCell className={`text-right tabular-nums ${result.netProfit >= 0 ? "text-emerald-500" : "text-destructive"}`}>
                       {money(result.netProfit)}
                     </TableCell>
-                    <TableCell className={`text-right tabular-nums ${result.netProfit >= 0 ? "text-emerald-500" : "text-destructive"}`}>
-                      {money(result.netProfit * 12)}
+                    <TableCell className={`text-right tabular-nums ${annualNetProfit >= 0 ? "text-emerald-500" : "text-destructive"}`}>
+                      {money(annualNetProfit)}
                     </TableCell>
                   </TableRow>
-                  <TableRow>
-                    <TableCell className="text-muted-foreground">
-                      One-time setup fees ({a.tenants} × {money(a.setupFee)})
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-emerald-500">
-                      {money(result.setupRevenueAllTenants)}
-                    </TableCell>
-                    <TableCell className="text-right text-xs text-muted-foreground">billed once</TableCell>
-                  </TableRow>
+
                   <TableRow>
                     <TableCell className="text-muted-foreground">Break-even tenants</TableCell>
                     <TableCell className="text-right tabular-nums">
