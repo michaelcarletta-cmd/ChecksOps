@@ -3469,6 +3469,7 @@ function CheckDetailPanel({
       qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
       onRefresh();
     } catch (e: any) {
+      rollbackStage();
       toast({ title: "Move failed", description: e.message, variant: "destructive" });
     } finally {
       setBypassingEndorsements(false);
@@ -3478,6 +3479,7 @@ function CheckDetailPanel({
   const handleUndoDecision = async () => {
     if (!user?.id || !check) return;
     setUndoing(true);
+    const rollbackStage = optimisticStage(qc, [checkId], "needs_review");
     try {
       const { data, error } = await supabase.rpc("submit_check_review_decision_safe", {
         p_check_id: checkId,
@@ -3489,13 +3491,16 @@ function CheckDetailPanel({
       toast({ title: "Decision reverted", description: "Check returned to review queue." });
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
       qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
       onRefresh();
     } catch (e: any) {
+      rollbackStage();
       toast({ title: "Error", description: e.message, variant: "destructive" });
     } finally {
       setUndoing(false);
     }
   };
+
 
   // Branch deposit → Deposited transition
   // Routes through the deposit pipeline so the check appears in Deposit Operations
