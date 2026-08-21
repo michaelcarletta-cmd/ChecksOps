@@ -168,7 +168,7 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
                 <NumberField label="% at $1.00 rate" suffix="%" max={100} value={a.disbursementsAtHighRatePct} onChange={set("disbursementsAtHighRatePct")} hint="Remainder billed at the $0.75 rate." />
                 <NumberField label="Monthly maintenance fee" prefix="$" value={a.monthlyMaintenanceFee} onChange={set("monthlyMaintenanceFee")} />
                 <NumberField label="Setup fee (one-time)" prefix="$" step={250} value={a.setupFee} onChange={set("setupFee")} />
-                <NumberField label="New tenants / mo" value={a.newTenantsPerMonth} onChange={set("newTenantsPerMonth")} hint="Drives setup fee revenue." />
+                <NumberField label="New tenants / mo" value={a.newTenantsPerMonth} onChange={set("newTenantsPerMonth")} hint="Used for the 12-month growth projection only; setup fees bill per tenant." />
               </CardContent>
             </Card>
 
