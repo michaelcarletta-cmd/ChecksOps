@@ -125,7 +125,11 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="Gross revenue / mo" value={money(result.grossRevenue)} sub={`${money(result.grossRevenue * 12)} annual`} />
+        <StatTile
+          label="Gross revenue / mo"
+          value={money(result.grossRevenue)}
+          sub={`incl. ${money(result.setupRevenueAllTenants)} setup · ${money(annualGrossRevenue)} yr 1`}
+        />
         <StatTile
           label="Gross profit / mo"
           value={money(result.grossProfit)}
