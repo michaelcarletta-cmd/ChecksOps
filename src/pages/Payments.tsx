@@ -22,6 +22,8 @@ import {
   Mail 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PageShell } from "@/components/shell";
+
 
 const SectionCard = ({ 
   title, 
@@ -175,7 +177,8 @@ const Payments = () => {
           </TabsContent>
         )}
       </Tabs>
-    </div>
+    </PageShell>
+
   );
 };
 
