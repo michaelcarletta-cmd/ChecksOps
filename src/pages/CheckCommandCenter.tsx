@@ -2822,14 +2822,6 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 /*  Admin Status Override — manually move a check between stages       */
 /* ------------------------------------------------------------------ */
 
-const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "needs_review", label: "Review" },
-  { value: "endorsements_in_progress", label: "Endorsing" },
-  { value: "approved_for_deposit", label: "Ready for Deposit" },
-  { value: "loss_draft_required", label: "Loss Draft" },
-  { value: "reissue_requested", label: "Reissue" },
-  { value: "voided", label: "Void" },
-];
 
 function StatusOverride({
   checkId,
@@ -5173,17 +5165,6 @@ function EditableField({
   );
 }
 
-const FUNDS_TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: "acv", label: "ACV (Actual Cash Value)" },
-  { value: "rcv", label: "RCV (Replacement Cost Value)" },
-  { value: "recoverable_depreciation", label: "Recoverable Depreciation" },
-  { value: "supplement", label: "Supplement" },
-  { value: "overhead_and_profit", label: "Overhead & Profit (O&P)" },
-  { value: "deductible", label: "Deductible" },
-  { value: "other_structures", label: "Other Structures" },
-  { value: "personal_property", label: "Personal Property" },
-  { value: "additional_living_expenses", label: "Additional Living Expenses (ALE)" },
-];
 
 function FundsTypeField({
   checkId,
