@@ -14,18 +14,22 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertTriangle, Download, RotateCcw } from "lucide-react";
 import { NumberField, StatTile } from "./NumberField";
 import {
   ComparisonInputs,
   DEFAULT_COMPARISON,
+  IINK_PLANS,
   SENSITIVITY_VOLUMES,
   compareCosts,
   money,
   pct,
 } from "@/lib/financial/model";
 import { downloadCsv } from "@/lib/financial/csv";
+
 
 const CHART_AXIS = "hsl(var(--muted-foreground))";
 
