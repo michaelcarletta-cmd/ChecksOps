@@ -419,10 +419,18 @@ export function referralCredit(i: ComparisonInputs): number {
   );
 }
 
-/** Blended ChecksOps price per disbursement across same-day / next-day. */
-function coDisbursementFee(i: ComparisonInputs): number {
-  const sameDay = clampPct(i.coSameDayMixPct) / 100;
-  return sameDay * nn(i.coSameDayDisbursementFee) + (1 - sameDay) * nn(i.coNextDayDisbursementFee);
+/** Disbursement counts, scaled proportionally when sweeping check volume. */
+function disbursementCounts(i: ComparisonInputs, checks: number) {
+  const base = nn(i.checksPerMonth);
+  const scale = base > 0 ? checks / base : 0;
+  const sameDay = nn(i.sameDayDisbursementsPerMonth) * scale;
+  const nextDay = nn(i.nextDayDisbursementsPerMonth) * scale;
+  return {
+    sameDay,
+    nextDay,
+    count: sameDay + nextDay,
+    cost: sameDay * nn(i.coSameDayDisbursementFee) + nextDay * nn(i.coNextDayDisbursementFee),
+  };
 }
 
 /** Resolve the iink plan in play — either the picked plan or the cheapest for the volume. */
