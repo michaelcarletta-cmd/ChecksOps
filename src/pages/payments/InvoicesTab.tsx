@@ -44,7 +44,7 @@ export function InvoicesTab() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
-  const { invoices, createInvoice, sendInvoice, resendInvoice, cancelInvoice, syncInvoices } = useMoovInvoices();
+  const { invoices, createInvoice, sendInvoice, resendInvoice, cancelInvoice, deleteInvoice, syncInvoices } = useMoovInvoices();
   const { account } = usePaymentAccount();
   const isMobile = useIsMobile();
 
@@ -393,6 +393,7 @@ export function InvoicesTab() {
                       sendInvoice={sendInvoice}
                       resendInvoice={resendInvoice}
                       cancelInvoice={cancelInvoice}
+                      deleteInvoice={deleteInvoice}
                     />
                   </div>
                   {inv.description && (
@@ -458,6 +459,7 @@ export function InvoicesTab() {
                         sendInvoice={sendInvoice}
                         resendInvoice={resendInvoice}
                         cancelInvoice={cancelInvoice}
+                        deleteInvoice={deleteInvoice}
                       />
                     </TableCell>
                   </TableRow>
@@ -474,7 +476,7 @@ export function InvoicesTab() {
 }
 
 function InvoiceActions({
-  inv, brandedInvoiceUrl, copyLink, sendInvoice, resendInvoice, cancelInvoice,
+  inv, brandedInvoiceUrl, copyLink, sendInvoice, resendInvoice, cancelInvoice, deleteInvoice,
 }: {
   inv: any;
   brandedInvoiceUrl: (inv: any) => string;
@@ -482,8 +484,10 @@ function InvoiceActions({
   sendInvoice: { mutate: (id: string) => void };
   resendInvoice: { mutate: (id: string) => void };
   cancelInvoice: { mutate: (id: string) => void };
+  deleteInvoice: { mutate: (id: string) => void };
 }) {
-  const canResend = !["draft", "paid", "canceled"].includes(inv.status);
+  const canResend = !["draft", "paid"].includes(inv.status);
+  const canDelete = inv.status === "canceled" || inv.status === "draft";
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -513,6 +517,18 @@ function InvoiceActions({
         {inv.status !== "paid" && inv.status !== "canceled" && (
           <DropdownMenuItem className="text-destructive" onClick={() => cancelInvoice.mutate(inv.id)}>
             <Ban className="mr-2 h-4 w-4" /> Cancel invoice
+          </DropdownMenuItem>
+        )}
+        {canDelete && (
+          <DropdownMenuItem
+            className="text-destructive"
+            onClick={() => {
+              if (window.confirm("Delete this invoice permanently? This cannot be undone.")) {
+                deleteInvoice.mutate(inv.id);
+              }
+            }}
+          >
+            <Trash2 className="mr-2 h-4 w-4" /> Delete invoice
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>
