@@ -62,25 +62,26 @@ const Payments = () => {
   }, [searchParams]);
 
   return (
-    <div className="container mx-auto py-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <PageShell width="wide" className="animate-in fade-in slide-in-from-bottom-2 duration-200">
       {/* Hero Section */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/20 via-background to-background border border-primary/10 p-8 mb-8">
-        <div className="absolute top-0 right-0 p-8 opacity-10">
+      <div className="relative overflow-hidden rounded-3xl border border-primary/10 bg-gradient-to-br from-primary/20 via-background to-background p-6 sm:p-8">
+        <div className="pointer-events-none absolute right-0 top-0 p-8 opacity-10">
           <Wallet className="h-32 w-32 rotate-12" />
         </div>
-        <div className="relative z-10 max-w-2xl">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-medium mb-4">
+        <div className="relative z-10 min-w-0 max-w-2xl">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
             <Sparkles className="h-3 w-3" />
             Financial Operations
           </div>
-          <h1 className="text-4xl font-bold tracking-tight mb-4 bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">
-            Payments & Financials
+          <h1 className="text-fluid-2xl mb-3 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text font-bold tracking-tight text-transparent">
+            Payments &amp; Financials
           </h1>
-          <p className="text-lg text-muted-foreground leading-relaxed">
+          <p className="text-fluid-base leading-relaxed text-muted-foreground">
             Manage your organization's cash flow, track transaction history, and generate financial reports for tax and compliance.
           </p>
         </div>
       </div>
+
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-muted/50 p-1 mb-8 overflow-x-auto w-full justify-start sm:w-auto h-auto">
