@@ -247,6 +247,82 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
 
           </Card>
 
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Setup fee payback — 24 months</CardTitle>
+              <CardDescription className="text-xs">
+                Cumulative spend including the one-time {money(payback.setupFee)} ChecksOps setup fee, against iink's
+                ongoing subscription.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <StatTile label="One-time setup" value={money(payback.setupFee)} sub="Charged once, month 1" />
+                <StatTile label="Monthly savings" value={money(payback.monthlySavings)} tone={payback.monthlySavings >= 0 ? "positive" : "negative"} />
+                <StatTile
+                  label="Pays for itself"
+                  value={payback.paybackMonth ? `Month ${payback.paybackMonth}` : "Not within 24 mo"}
+                  sub={payback.paybackMonth ? `${(payback.paybackMonth / 12).toFixed(1)} years` : "At these rates"}
+                  tone={payback.paybackMonth && payback.paybackMonth <= 24 ? "positive" : "negative"}
+                />
+                <StatTile
+                  label="2-year net savings"
+                  value={money(payback.twoYearNetSavings)}
+                  sub="After the setup fee"
+                  tone={payback.twoYearNetSavings >= 0 ? "positive" : "negative"}
+                />
+              </div>
+
+              <div className="h-[240px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={payback.rows} margin={{ left: -12, right: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: CHART_AXIS }} interval={1} />
+                    <YAxis tick={{ fontSize: 10, fill: CHART_AXIS }} tickFormatter={(v) => money(Number(v))} width={70} />
+                    <RTooltip formatter={(v: number) => money(v)} contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Line type="monotone" name="ChecksOps (incl. setup)" dataKey="checksOpsCumulative" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                    <Line type="monotone" name="iink cumulative" dataKey="iinkCumulative" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Month</TableHead>
+                      <TableHead className="text-right">ChecksOps cumulative</TableHead>
+                      <TableHead className="text-right">iink cumulative</TableHead>
+                      <TableHead className="text-right">Net position</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {payback.rows
+                      .filter((row) => row.month % 3 === 0 || row.month === 1 || row.month === payback.paybackMonth)
+                      .map((row) => (
+                        <TableRow key={row.month}>
+                          <TableCell className="whitespace-nowrap">
+                            M{row.month}
+                            {row.month === payback.paybackMonth && (
+                              <span className="ml-2 text-[11px] text-emerald-500">break-even</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">{money(row.checksOpsCumulative)}</TableCell>
+                          <TableCell className="text-right tabular-nums">{money(row.iinkCumulative)}</TableCell>
+                          <TableCell className={`text-right tabular-nums ${row.cumulativeSavings >= 0 ? "text-emerald-500" : "text-destructive"}`}>
+                            {money(row.cumulativeSavings)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+
+
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader className="pb-2">
