@@ -79,7 +79,7 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
       ["Net margin %", result.netMarginPct.toFixed(1), ""],
       ["Tenants", result.checks > 0 ? a.tenants : 0, ""],
       ["Checks / month", result.checks, result.checks * 12],
-      ["Payment volume", result.paymentVolume, result.paymentVolume * 12],
+      ["Disbursements / month", result.disbursements, result.disbursements * 12],
       ["Revenue per tenant", result.revenuePerTenant, result.revenuePerTenant * 12],
       ["Profit per tenant", result.profitPerTenant, result.profitPerTenant * 12],
       ["Break-even tenants", result.breakEvenTenants, ""],
