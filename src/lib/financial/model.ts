@@ -227,13 +227,16 @@ export function projectTwelveMonths(a: PnlAssumptions, netNewTenantsPerMonth: nu
   for (let m = 1; m <= 12; m++) {
     if (m > 1) tenants += nn(netNewTenantsPerMonth);
     const r = computePnl(a, tenants);
-    // Setup fee is one-time: month 1 bills the whole existing base, later months
-    // only bill the tenants added that month.
-    const setupThisMonth =
-      m === 1 ? tenants * nn(a.setupFee) : nn(netNewTenantsPerMonth) * nn(a.setupFee);
+    // Setup fee and onboarding cost are one-time per tenant: month 1 covers the
+    // whole existing base, later months only the tenants added that month.
+    const newThisMonth = m === 1 ? tenants : nn(netNewTenantsPerMonth);
+    const setupThisMonth = newThisMonth * nn(a.setupFee);
+    const onboardingThisMonth = newThisMonth * r.onboardingCostPerTenant;
     const revenue = r.recurringRevenue + setupThisMonth;
-    const cost = r.variableCost + r.fixedOverhead;
-    const grossProfit = revenue - r.variableCost;
+    const recurringVariableCost = r.variableCost - r.onboardingCostAllTenants;
+    const variable = recurringVariableCost + onboardingThisMonth;
+    const cost = variable + r.fixedOverhead;
+    const grossProfit = revenue - variable;
     const netProfit = revenue - cost;
     rows.push({
       month: m,
