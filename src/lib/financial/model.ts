@@ -20,13 +20,15 @@ export interface PnlAssumptions {
   // Volume
   tenants: number;
   checksPerTenantPerMonth: number;
-  disbursementsPerCheck: number;
-  disbursementsAtHighRatePct: number; // share of disbursements billed at the $1.00 rate
+  /** Same-day disbursements per tenant per month — billed at the $1.00 rate. */
+  sameDayDisbursementsPerTenant: number;
+  /** Next-day disbursements per tenant per month — billed at the $0.75 rate. */
+  nextDayDisbursementsPerTenant: number;
 
   // Revenue (charged to tenant)
   perCheckFee: number;
-  disbursementFeeHigh: number; // $1.00
-  disbursementFeeLow: number; // $0.75
+  disbursementFeeHigh: number; // $1.00 — same day
+  disbursementFeeLow: number; // $0.75 — next day
   monthlyMaintenanceFee: number;
   setupFee: number;
   newTenantsPerMonth: number;
@@ -35,9 +37,6 @@ export interface PnlAssumptions {
   checkDepositCost: number; // CheckAlt / RDC per check
   nextDayDisbursementCost: number;
   sameDayDisbursementCost: number;
-  rtpCost: number;
-  nextDayMixPct: number;
-  sameDayMixPct: number; // remainder of the two is RTP
   walletPerTenantMonthly: number;
 
   // Fixed overhead (monthly)
@@ -50,8 +49,8 @@ export interface PnlAssumptions {
 export const DEFAULT_PNL: PnlAssumptions = {
   tenants: 5,
   checksPerTenantPerMonth: 40,
-  disbursementsPerCheck: 2,
-  disbursementsAtHighRatePct: 100,
+  sameDayDisbursementsPerTenant: 20,
+  nextDayDisbursementsPerTenant: 60,
 
   perCheckFee: 4,
   disbursementFeeHigh: 1,
@@ -63,9 +62,6 @@ export const DEFAULT_PNL: PnlAssumptions = {
   checkDepositCost: 0.68,
   nextDayDisbursementCost: 0.5,
   sameDayDisbursementCost: 1,
-  rtpCost: 0.5,
-  nextDayMixPct: 80,
-  sameDayMixPct: 15,
   walletPerTenantMonthly: 0,
 
   checkAltMonthlyFee: 0,
@@ -77,6 +73,12 @@ export const DEFAULT_PNL: PnlAssumptions = {
 export interface PnlResult {
   checks: number;
   disbursements: number;
+  sameDayDisbursements: number;
+  nextDayDisbursements: number;
+  sameDayRevenue: number;
+  nextDayRevenue: number;
+  sameDayCost: number;
+  nextDayCost: number;
 
   maintenanceRevenue: number;
   perCheckRevenue: number;
@@ -108,34 +110,19 @@ export interface PnlResult {
 
 
 const nn = (v: number) => (Number.isFinite(v) && v > 0 ? v : 0);
-const clampPct = (v: number) => Math.min(100, Math.max(0, Number.isFinite(v) ? v : 0));
-
-/** Blended cost of a single disbursement across next-day / same-day / RTP rails. */
-function blendedDisbursementCost(a: PnlAssumptions): number {
-  const nextDay = clampPct(a.nextDayMixPct) / 100;
-  const sameDay = clampPct(a.sameDayMixPct) / 100;
-  const rtp = Math.max(0, 1 - nextDay - sameDay);
-  return (
-    nextDay * nn(a.nextDayDisbursementCost) +
-    sameDay * nn(a.sameDayDisbursementCost) +
-    rtp * nn(a.rtpCost)
-  );
-}
-
-/** Blended price charged for a single disbursement ($1.00 / $0.75 mix). */
-function blendedDisbursementFee(a: PnlAssumptions): number {
-  const high = clampPct(a.disbursementsAtHighRatePct) / 100;
-  return high * nn(a.disbursementFeeHigh) + (1 - high) * nn(a.disbursementFeeLow);
-}
 
 export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResult {
   const tenants = nn(tenantOverride ?? a.tenants);
   const checks = tenants * nn(a.checksPerTenantPerMonth);
-  const disbursements = checks * nn(a.disbursementsPerCheck);
+  const sameDayDisbursements = tenants * nn(a.sameDayDisbursementsPerTenant);
+  const nextDayDisbursements = tenants * nn(a.nextDayDisbursementsPerTenant);
+  const disbursements = sameDayDisbursements + nextDayDisbursements;
 
   const maintenanceRevenue = tenants * nn(a.monthlyMaintenanceFee);
   const perCheckRevenue = checks * nn(a.perCheckFee);
-  const disbursementRevenue = disbursements * blendedDisbursementFee(a);
+  const sameDayRevenue = sameDayDisbursements * nn(a.disbursementFeeHigh);
+  const nextDayRevenue = nextDayDisbursements * nn(a.disbursementFeeLow);
+  const disbursementRevenue = sameDayRevenue + nextDayRevenue;
   // One-time $7,500 setup fee is charged per tenant — every tenant in the base counts.
   const setupRevenueAllTenants = tenants * nn(a.setupFee);
   const setupRevenue = setupRevenueAllTenants;
@@ -144,7 +131,9 @@ export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResul
 
 
   const depositCost = checks * nn(a.checkDepositCost);
-  const disbursementCost = disbursements * blendedDisbursementCost(a);
+  const sameDayCost = sameDayDisbursements * nn(a.sameDayDisbursementCost);
+  const nextDayCost = nextDayDisbursements * nn(a.nextDayDisbursementCost);
+  const disbursementCost = sameDayCost + nextDayCost;
   const walletCost = tenants * nn(a.walletPerTenantMonthly);
   const variableCost = depositCost + disbursementCost + walletCost;
 
@@ -161,6 +150,12 @@ export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResul
   return {
     checks,
     disbursements,
+    sameDayDisbursements,
+    nextDayDisbursements,
+    sameDayRevenue,
+    nextDayRevenue,
+    sameDayCost,
+    nextDayCost,
     maintenanceRevenue,
     perCheckRevenue,
     disbursementRevenue,
@@ -189,20 +184,24 @@ export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResul
 /** Recurring gross profit generated by one additional tenant (excludes setup fee). */
 function computeContributionPerTenant(a: PnlAssumptions): number {
   const checks = nn(a.checksPerTenantPerMonth);
-  const disbursements = checks * nn(a.disbursementsPerCheck);
+  const sameDay = nn(a.sameDayDisbursementsPerTenant);
+  const nextDay = nn(a.nextDayDisbursementsPerTenant);
 
   const revenue =
     nn(a.monthlyMaintenanceFee) +
     checks * nn(a.perCheckFee) +
-    disbursements * blendedDisbursementFee(a);
+    sameDay * nn(a.disbursementFeeHigh) +
+    nextDay * nn(a.disbursementFeeLow);
 
   const cost =
     checks * nn(a.checkDepositCost) +
-    disbursements * blendedDisbursementCost(a) +
+    sameDay * nn(a.sameDayDisbursementCost) +
+    nextDay * nn(a.nextDayDisbursementCost) +
     nn(a.walletPerTenantMonthly);
 
   return revenue - cost;
 }
+
 
 export interface ProjectionRow {
   month: number;
@@ -249,15 +248,33 @@ export type ScenarioKey = "low" | "expected" | "high";
 export const SCENARIOS: Record<ScenarioKey, { label: string; patch: Partial<PnlAssumptions> }> = {
   low: {
     label: "Low volume",
-    patch: { tenants: 3, checksPerTenantPerMonth: 20, disbursementsPerCheck: 2, newTenantsPerMonth: 0 },
+    patch: {
+      tenants: 3,
+      checksPerTenantPerMonth: 20,
+      sameDayDisbursementsPerTenant: 10,
+      nextDayDisbursementsPerTenant: 30,
+      newTenantsPerMonth: 0,
+    },
   },
   expected: {
     label: "Expected",
-    patch: { tenants: 10, checksPerTenantPerMonth: 40, disbursementsPerCheck: 2, newTenantsPerMonth: 1 },
+    patch: {
+      tenants: 10,
+      checksPerTenantPerMonth: 40,
+      sameDayDisbursementsPerTenant: 20,
+      nextDayDisbursementsPerTenant: 60,
+      newTenantsPerMonth: 1,
+    },
   },
   high: {
     label: "High volume",
-    patch: { tenants: 30, checksPerTenantPerMonth: 100, disbursementsPerCheck: 3, newTenantsPerMonth: 3 },
+    patch: {
+      tenants: 30,
+      checksPerTenantPerMonth: 100,
+      sameDayDisbursementsPerTenant: 60,
+      nextDayDisbursementsPerTenant: 240,
+      newTenantsPerMonth: 3,
+    },
   },
 };
 
@@ -305,7 +322,10 @@ export function bestIinkPlan(checks: number): IinkPlan {
 
 export interface ComparisonInputs {
   checksPerMonth: number;
-  disbursementsPerCheck: number;
+  /** Same-day disbursements per month (billed at the $1.00 rate). */
+  sameDayDisbursementsPerMonth: number;
+  /** Next-day disbursements per month (billed at the $0.75 rate). */
+  nextDayDisbursementsPerMonth: number;
   mortgageChecksPerMonth: number; // checks requiring mortgage-company endorsement handling
   avgCheckAmount: number; // drives iink's capped 1% mortgage-payee fee
 
@@ -314,7 +334,6 @@ export interface ComparisonInputs {
   coPerCheckFee: number;
   coSameDayDisbursementFee: number;
   coNextDayDisbursementFee: number;
-  coSameDayMixPct: number; // share of disbursements sent same day; remainder next day
   coMortgageFee: number; // MortgageOps handling per mortgage check (pass-through)
   coReferrals: number; // active referrals — $5 off each, capped
   coReferralCreditPerReferral: number;
@@ -333,7 +352,8 @@ export interface ComparisonInputs {
 
 export const DEFAULT_COMPARISON: ComparisonInputs = {
   checksPerMonth: 50,
-  disbursementsPerCheck: 2,
+  sameDayDisbursementsPerMonth: 25,
+  nextDayDisbursementsPerMonth: 75,
   mortgageChecksPerMonth: 10,
   avgCheckAmount: 25000,
 
@@ -341,7 +361,6 @@ export const DEFAULT_COMPARISON: ComparisonInputs = {
   coPerCheckFee: 4,
   coSameDayDisbursementFee: 1,
   coNextDayDisbursementFee: 0.75,
-  coSameDayMixPct: 50,
   coMortgageFee: 10,
   coReferrals: 0,
   coReferralCreditPerReferral: 5,
@@ -369,6 +388,10 @@ export interface SideCost {
 
 export interface ComparisonResult {
   disbursements: number;
+  sameDayDisbursements: number;
+  nextDayDisbursements: number;
+  sameDayCost: number;
+  nextDayCost: number;
   checksOps: SideCost;
   iink: SideCost;
   iinkPlan: IinkPlan;
@@ -399,10 +422,18 @@ export function referralCredit(i: ComparisonInputs): number {
   );
 }
 
-/** Blended ChecksOps price per disbursement across same-day / next-day. */
-function coDisbursementFee(i: ComparisonInputs): number {
-  const sameDay = clampPct(i.coSameDayMixPct) / 100;
-  return sameDay * nn(i.coSameDayDisbursementFee) + (1 - sameDay) * nn(i.coNextDayDisbursementFee);
+/** Disbursement counts, scaled proportionally when sweeping check volume. */
+function disbursementCounts(i: ComparisonInputs, checks: number) {
+  const base = nn(i.checksPerMonth);
+  const scale = base > 0 ? checks / base : 0;
+  const sameDay = nn(i.sameDayDisbursementsPerMonth) * scale;
+  const nextDay = nn(i.nextDayDisbursementsPerMonth) * scale;
+  return {
+    sameDay,
+    nextDay,
+    count: sameDay + nextDay,
+    cost: sameDay * nn(i.coSameDayDisbursementFee) + nextDay * nn(i.coNextDayDisbursementFee),
+  };
 }
 
 /** Resolve the iink plan in play — either the picked plan or the cheapest for the volume. */
@@ -442,7 +473,8 @@ function iinkSide(i: ComparisonInputs, checks: number, mortgageChecks: number) {
 
 export function compareCosts(i: ComparisonInputs, checksOverride?: number): ComparisonResult {
   const checks = nn(checksOverride ?? i.checksPerMonth);
-  const disbursements = checks * nn(i.disbursementsPerCheck);
+  const d = disbursementCounts(i, checks);
+  const disbursements = d.count;
   // Scale mortgage checks with volume when sweeping the sensitivity table.
   const mortgageChecks =
     checksOverride !== undefined && nn(i.checksPerMonth) > 0
@@ -453,7 +485,7 @@ export function compareCosts(i: ComparisonInputs, checksOverride?: number): Comp
     {
       monthlyFee: nn(i.coMonthlyFee),
       perCheck: checks * nn(i.coPerCheckFee),
-      perDisbursement: disbursements * coDisbursementFee(i),
+      perDisbursement: d.cost,
       mortgageFee: mortgageChecks * nn(i.coMortgageFee),
       referralCredit: referralCredit(i),
     },
@@ -476,6 +508,10 @@ export function compareCosts(i: ComparisonInputs, checksOverride?: number): Comp
 
   return {
     disbursements,
+    sameDayDisbursements: d.sameDay,
+    nextDayDisbursements: d.nextDay,
+    sameDayCost: d.sameDay * nn(i.coSameDayDisbursementFee),
+    nextDayCost: d.nextDay * nn(i.coNextDayDisbursementFee),
     checksOps,
     iink,
     iinkPlan: ii.plan,
@@ -489,7 +525,7 @@ export function compareCosts(i: ComparisonInputs, checksOverride?: number): Comp
 
 /** Monthly savings at a given check count, without recursing into break-even search. */
 function savingsAt(i: ComparisonInputs, checks: number): number {
-  const disbursements = checks * nn(i.disbursementsPerCheck);
+  const d = disbursementCounts(i, checks);
   const mortgageChecks =
     nn(i.checksPerMonth) > 0 ? (nn(i.mortgageChecksPerMonth) / nn(i.checksPerMonth)) * checks : 0;
 
@@ -497,7 +533,7 @@ function savingsAt(i: ComparisonInputs, checks: number): number {
     0,
     nn(i.coMonthlyFee) +
       checks * nn(i.coPerCheckFee) +
-      disbursements * coDisbursementFee(i) +
+      d.cost +
       mortgageChecks * nn(i.coMortgageFee) -
       referralCredit(i),
   );
