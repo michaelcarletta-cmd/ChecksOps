@@ -127,10 +127,12 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
           tone={result.netProfit >= 0 ? "positive" : "negative"}
         />
         <StatTile
-          label="Break-even tenants"
-          value={result.breakEvenTenants > 0 ? String(result.breakEvenTenants) : "—"}
-          sub={`${money(result.contributionPerTenant)} contribution / tenant`}
+          label="One-time setup fees"
+          value={money(result.setupRevenueAllTenants)}
+          sub={`${a.tenants} tenants × ${money(a.setupFee)}`}
+          tone="positive"
         />
+
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
