@@ -247,47 +247,43 @@ export const SCENARIOS: Record<ScenarioKey, { label: string; patch: Partial<PnlA
 
 export interface ComparisonInputs {
   checksPerMonth: number;
-  avgCheckAmount: number;
   disbursementsPerCheck: number;
-  instantMixPct: number; // % of disbursements sent instant/RTP
   mortgageChecksPerMonth: number; // checks requiring mortgage-company endorsement handling
 
   // ChecksOps pricing
   coMonthlyFee: number;
   coPerCheckFee: number;
-  coPerDisbursementFee: number;
-  coPercentFeePct: number;
-  coInstantSurcharge: number;
+  coSameDayDisbursementFee: number;
+  coNextDayDisbursementFee: number;
+  coSameDayMixPct: number; // share of disbursements sent same day; remainder next day
   coMortgageFee: number; // MortgageOps handling per mortgage check (pass-through)
+  coReferrals: number; // active referrals — $5 off each, capped
+  coReferralCreditPerReferral: number;
+  coReferralCreditCap: number;
 
   // iink comparison assumptions — CONFIRM against current iink pricing
   iinkMonthlyFee: number;
   iinkPerCheckFee: number;
-  iinkPercentFeePct: number;
-  iinkInstantFeePct: number; // extra % for instant funding
-  iinkPerDisbursementFee: number;
   iinkMortgageFee: number; // mortgage endorsement handling per check
 }
 
 export const DEFAULT_COMPARISON: ComparisonInputs = {
   checksPerMonth: 50,
-  avgCheckAmount: 12000,
   disbursementsPerCheck: 2,
-  instantMixPct: 15,
   mortgageChecksPerMonth: 10,
 
   coMonthlyFee: 100,
   coPerCheckFee: 4,
-  coPerDisbursementFee: 1,
-  coPercentFeePct: 0,
-  coInstantSurcharge: 0.5,
+  coSameDayDisbursementFee: 1,
+  coNextDayDisbursementFee: 0.75,
+  coSameDayMixPct: 50,
   coMortgageFee: 10,
+  coReferrals: 0,
+  coReferralCreditPerReferral: 5,
+  coReferralCreditCap: 25,
 
   iinkMonthlyFee: 0,
   iinkPerCheckFee: 0,
-  iinkPercentFeePct: 3,
-  iinkInstantFeePct: 1,
-  iinkPerDisbursementFee: 0,
   iinkMortgageFee: 0,
 };
 
@@ -295,19 +291,14 @@ export interface SideCost {
   monthlyFee: number;
   perCheck: number;
   perDisbursement: number;
-  percentFee: number;
-  instantFee: number;
   mortgageFee: number;
+  referralCredit: number; // negative-going discount, stored positive
   total: number;
   costPerCheck: number;
-  percentOfVolume: number;
-  basisPoints: number;
 }
 
 export interface ComparisonResult {
-  volume: number;
   disbursements: number;
-  instantDisbursements: number;
   checksOps: SideCost;
   iink: SideCost;
   monthlySavings: number;
@@ -316,62 +307,61 @@ export interface ComparisonResult {
   breakEvenChecks: number | null;
 }
 
-function sideTotals(parts: Omit<SideCost, "total" | "costPerCheck" | "percentOfVolume" | "basisPoints">, checks: number, volume: number): SideCost {
-  const total =
-    parts.monthlyFee +
-    parts.perCheck +
-    parts.perDisbursement +
-    parts.percentFee +
-    parts.instantFee +
-    parts.mortgageFee;
-  return {
-    ...parts,
-    total,
-    costPerCheck: checks > 0 ? total / checks : 0,
-    percentOfVolume: volume > 0 ? (total / volume) * 100 : 0,
-    basisPoints: volume > 0 ? (total / volume) * 10000 : 0,
-  };
+function sideTotals(
+  parts: Omit<SideCost, "total" | "costPerCheck">,
+  checks: number,
+): SideCost {
+  const total = Math.max(
+    0,
+    parts.monthlyFee + parts.perCheck + parts.perDisbursement + parts.mortgageFee - parts.referralCredit,
+  );
+  return { ...parts, total, costPerCheck: checks > 0 ? total / checks : 0 };
+}
+
+/** Referral credit applied to the ChecksOps monthly fee ($5 each, capped). */
+export function referralCredit(i: ComparisonInputs): number {
+  return Math.min(
+    nn(i.coReferralCreditCap),
+    nn(i.coReferrals) * nn(i.coReferralCreditPerReferral),
+  );
+}
+
+/** Blended ChecksOps price per disbursement across same-day / next-day. */
+function coDisbursementFee(i: ComparisonInputs): number {
+  const sameDay = clampPct(i.coSameDayMixPct) / 100;
+  return sameDay * nn(i.coSameDayDisbursementFee) + (1 - sameDay) * nn(i.coNextDayDisbursementFee);
 }
 
 export function compareCosts(i: ComparisonInputs, checksOverride?: number): ComparisonResult {
   const checks = nn(checksOverride ?? i.checksPerMonth);
-  const volume = checks * nn(i.avgCheckAmount);
   const disbursements = checks * nn(i.disbursementsPerCheck);
-  const instantShare = clampPct(i.instantMixPct) / 100;
-  const instantDisbursements = disbursements * instantShare;
 
   const checksOps = sideTotals(
     {
       monthlyFee: nn(i.coMonthlyFee),
       perCheck: checks * nn(i.coPerCheckFee),
-      perDisbursement: disbursements * nn(i.coPerDisbursementFee),
-      percentFee: volume * (clampPct(i.coPercentFeePct) / 100),
-      instantFee: instantDisbursements * nn(i.coInstantSurcharge),
+      perDisbursement: disbursements * coDisbursementFee(i),
       mortgageFee: nn(i.mortgageChecksPerMonth) * nn(i.coMortgageFee),
+      referralCredit: referralCredit(i),
     },
     checks,
-    volume,
   );
 
   const iink = sideTotals(
     {
       monthlyFee: nn(i.iinkMonthlyFee),
       perCheck: checks * nn(i.iinkPerCheckFee),
-      perDisbursement: disbursements * nn(i.iinkPerDisbursementFee),
-      percentFee: volume * (clampPct(i.iinkPercentFeePct) / 100),
-      instantFee: volume * instantShare * (clampPct(i.iinkInstantFeePct) / 100),
+      perDisbursement: 0,
       mortgageFee: nn(i.mortgageChecksPerMonth) * nn(i.iinkMortgageFee),
+      referralCredit: 0,
     },
     checks,
-    volume,
   );
 
   const monthlySavings = iink.total - checksOps.total;
 
   return {
-    volume,
     disbursements,
-    instantDisbursements,
     checksOps,
     iink,
     monthlySavings,
@@ -383,24 +373,20 @@ export function compareCosts(i: ComparisonInputs, checksOverride?: number): Comp
 
 /** Monthly savings at a given check count, without recursing into break-even search. */
 function savingsAt(i: ComparisonInputs, checks: number): number {
-  const volume = checks * nn(i.avgCheckAmount);
   const disbursements = checks * nn(i.disbursementsPerCheck);
-  const instantShare = clampPct(i.instantMixPct) / 100;
 
-  const co =
+  const co = Math.max(
+    0,
     nn(i.coMonthlyFee) +
-    checks * nn(i.coPerCheckFee) +
-    disbursements * nn(i.coPerDisbursementFee) +
-    volume * (clampPct(i.coPercentFeePct) / 100) +
-    disbursements * instantShare * nn(i.coInstantSurcharge) +
-    nn(i.mortgageChecksPerMonth) * nn(i.coMortgageFee);
+      checks * nn(i.coPerCheckFee) +
+      disbursements * coDisbursementFee(i) +
+      nn(i.mortgageChecksPerMonth) * nn(i.coMortgageFee) -
+      referralCredit(i),
+  );
 
   const ii =
     nn(i.iinkMonthlyFee) +
     checks * nn(i.iinkPerCheckFee) +
-    disbursements * nn(i.iinkPerDisbursementFee) +
-    volume * (clampPct(i.iinkPercentFeePct) / 100) +
-    volume * instantShare * (clampPct(i.iinkInstantFeePct) / 100) +
     nn(i.mortgageChecksPerMonth) * nn(i.iinkMortgageFee);
 
   return ii - co;
