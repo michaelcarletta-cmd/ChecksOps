@@ -24,39 +24,36 @@ export function ClaimFundsSummary({ settlement, checks }: ClaimFundsSummaryProps
 
   const s = settlement || {};
 
-  // ACV for dwelling = RCV - rec dep - non-rec dep - deductible
-  const dwellingAcv = Math.max(0,
+  // Expected amounts are tracked against full RCV. Recoverable depreciation is
+  // broken out as its own category, so it is subtracted here to avoid double
+  // counting. Deductibles and withheld/non-recoverable amounts (e.g. Ordinance
+  // & Law paid when incurred) are NOT subtracted — they remain outstanding
+  // until released, otherwise a claim can look fully funded while money is due.
+  const dwellingExpected = Math.max(0,
     Number(s.replacement_cost_value || 0)
     - Number(s.recoverable_depreciation || 0)
-    - Number(s.non_recoverable_depreciation || 0)
-    - Number(s.deductible || 0)
   );
 
-  const otherStructuresAcv = Math.max(0,
+  const otherStructuresExpected = Math.max(0,
     Number(s.other_structures_rcv || 0)
     - Number(s.other_structures_recoverable_depreciation || 0)
-    - Number(s.other_structures_non_recoverable_depreciation || 0)
-    - Number(s.other_structures_deductible || 0)
   );
 
-  const personalPropertyAcv = Math.max(0,
+  const personalPropertyExpected = Math.max(0,
     Number(s.personal_property_rcv || 0)
     - Number(s.personal_property_recoverable_depreciation || 0)
-    - Number(s.personal_property_non_recoverable_depreciation || 0)
   );
 
-  const ordinanceLawNet = Math.max(0,
+  const ordinanceLawExpected = Math.max(0,
     Number(s.pwi_rcv || 0)
     - Number(s.pwi_recoverable_depreciation || 0)
-    - Number(s.pwi_non_recoverable_depreciation || 0)
-    - Number(s.pwi_deductible || 0)
   );
 
-  const aleAcv = Math.max(0,
+  const aleExpected = Math.max(0,
     Number(s.ale_rcv || 0)
     - Number(s.ale_recoverable_depreciation || 0)
-    - Number(s.ale_non_recoverable_depreciation || 0)
   );
+
 
   const totalRecoverableDepreciation =
     Number(s.recoverable_depreciation || 0)
@@ -67,10 +64,10 @@ export function ClaimFundsSummary({ settlement, checks }: ClaimFundsSummaryProps
 
   const categories: FundCategory[] = [
     {
-      label: "Dwelling ACV",
+      label: "Dwelling",
       checkTypes: ["initial"],
-      expected: dwellingAcv,
-      description: "RCV − Rec. Dep. − Non-Rec. Dep. − Deductible",
+      expected: dwellingExpected,
+      description: "RCV less recoverable depreciation (tracked separately)",
     },
     {
       label: "Recoverable Depreciation",
@@ -81,27 +78,28 @@ export function ClaimFundsSummary({ settlement, checks }: ClaimFundsSummaryProps
     {
       label: "Other Structures",
       checkTypes: ["other_structures"],
-      expected: otherStructuresAcv,
+      expected: otherStructuresExpected,
       description: "Detached garage, fence, shed, etc.",
     },
     {
       label: "Ordinance & Law",
       checkTypes: ["ordinance_law"],
-      expected: ordinanceLawNet,
+      expected: ordinanceLawExpected,
       description: "Code-required upgrades (Paid When Incurred)",
     },
     {
       label: "Personal Property / Contents",
       checkTypes: ["contents"],
-      expected: personalPropertyAcv,
+      expected: personalPropertyExpected,
       description: "Furniture, appliances, personal belongings",
     },
     {
       label: "Additional Living Expenses",
       checkTypes: ["ale"],
-      expected: aleAcv,
+      expected: aleExpected,
       description: "Temporary housing & living costs",
     },
+
     {
       label: "Supplemental Payments",
       checkTypes: ["supplemental"],

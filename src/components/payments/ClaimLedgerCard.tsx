@@ -274,8 +274,12 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
   const totalDeductible =
     Number(s.deductible || 0)
     + Number(s.other_structures_deductible || 0);
-  const totalExpected = dwellingAcv + otherStructuresAcv + ppAcv + ordLawNet + aleAcv + totalRecDep
-    + Number(s.supplement_expected || 0);
+  // Expected funds = full RCV across every category (+ any known supplement).
+  // Deductible and non-recoverable/withheld amounts (e.g. Ordinance & Law paid
+  // when incurred) are shown in the breakdown but must NOT reduce the target —
+  // otherwise a claim can look "fully funded" while money is still outstanding.
+  const totalExpected = totalRcv + Number(s.supplement_expected || 0);
+
 
   const totalReceived = siblingChecks.reduce((sum, c: any) => sum + Number(c.amount || 0), 0);
   const remaining = Math.max(0, totalExpected - totalReceived);
