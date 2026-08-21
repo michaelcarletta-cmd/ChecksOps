@@ -486,7 +486,7 @@ function InvoiceActions({
   cancelInvoice: { mutate: (id: string) => void };
   deleteInvoice: { mutate: (id: string) => void };
 }) {
-  const canResend = !["draft", "paid"].includes(inv.status);
+  const canResend = !["draft", "paid", "canceled"].includes(inv.status);
   const canDelete = inv.status === "canceled" || inv.status === "draft";
   return (
     <DropdownMenu>
