@@ -47,11 +47,20 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
   const projection = useMemo(() => projectTwelveMonths(a, growth), [a, growth]);
 
   const revenueBars = [
-    { name: "Maintenance", value: result.maintenanceRevenue },
-    { name: "Per-check", value: result.perCheckRevenue },
-    { name: "Disbursements", value: result.disbursementRevenue },
-    { name: "Setup fees", value: result.setupRevenue },
+    { name: "Maintenance", value: result.maintenanceRevenue, annual: result.maintenanceRevenue * 12 },
+    { name: "Per-check", value: result.perCheckRevenue, annual: result.perCheckRevenue * 12 },
+    { name: "Disbursements", value: result.disbursementRevenue, annual: result.disbursementRevenue * 12 },
+    {
+      name: "Setup fees (one-time, all tenants)",
+      value: result.setupRevenueAllTenants,
+      annual: result.setupRevenueAllTenants,
+    },
   ].filter((r) => r.value > 0);
+
+  // Setup fees are billed once, so the annual view is recurring × 12 + one-time setup.
+  const annualGrossRevenue = result.recurringRevenue * 12 + result.setupRevenueAllTenants;
+  const annualNetProfit =
+    (result.recurringRevenue - result.variableCost - result.fixedOverhead) * 12 + result.setupRevenueAllTenants;
 
   const costBars = [
     { name: "Deposit (RDC)", value: result.depositCost },
