@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
-import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Palette, Briefcase, Home } from "lucide-react";
+import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Palette, Briefcase, Home, Calculator } from "lucide-react";
 import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { SettingsHero } from "@/components/settings/SettingsHero";
