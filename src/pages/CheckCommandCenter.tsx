@@ -3508,7 +3508,9 @@ function CheckDetailPanel({
   const handleMoveToDeposited = async (force = false) => {
     if (!user?.id || !check) return;
     setMovingToDeposited(true);
+    const rollbackStage = optimisticStage(qc, [checkId], "deposited");
     try {
+
       // 1. Check if a deposit_items row already exists for this check
       const { data: existingItem } = await supabase
         .from("deposit_items")
