@@ -45,7 +45,7 @@ import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImage
 import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
 import { EndorsementOverride } from "@/lib/endorsementLayout";
 import { LossDraftDetailPanel } from "@/components/loss-draft/LossDraftDetailPanel";
-import { ArrowDownToLine, FileBarChart } from "lucide-react";
+import { ArrowDownToLine, FileBarChart, Loader2 } from "lucide-react";
 // Help moved to Settings → ChecksOps Guide
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
