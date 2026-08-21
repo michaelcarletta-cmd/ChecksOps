@@ -149,6 +149,8 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                 <NumberField label="Same day mix" suffix="%" max={100} value={i.coSameDayMixPct} onChange={set("coSameDayMixPct")} hint="Remainder is sent next day." />
                 <NumberField label="MortgageOps handling" prefix="$" step={1} value={i.coMortgageFee} onChange={set("coMortgageFee")} hint="Per mortgage check, billed at cost." />
                 <NumberField label="Referrals" value={i.coReferrals} onChange={set("coReferrals")} hint={`$${i.coReferralCreditPerReferral} credit each toward the monthly fee, max $${i.coReferralCreditCap}/mo (${Math.ceil(i.coReferralCreditCap / Math.max(1, i.coReferralCreditPerReferral))} referrals).`} />
+                <NumberField label="One-time setup fee" prefix="$" step={500} value={i.coSetupFee} onChange={set("coSetupFee")} hint="Charged once at onboarding; excluded from monthly cost." />
+
               </CardContent>
             </Card>
 
