@@ -8,7 +8,9 @@
  *  - founding partners                 → $75 / month locked
  *  - disbursements                     → $1.00 pass-through (Actum/Moov cost $1.00)
  *  - CheckAlt (FinCapture) RDC deposit → $0.68 per check cost
- *  - bill-mortgage-handling            → $10 first check / $5 additional + shipping
+ *
+ * MortgageOps handling is billed at cost (pass-through) and therefore does not
+ * appear in the P&L model; it only shows up in the client savings comparison.
  *
  * Every value is editable in the UI. Confirm against the current
  * Moov / CheckAlt / bank contracts before quoting.
@@ -26,8 +28,6 @@ export interface PnlAssumptions {
   disbursementFeeHigh: number; // $1.00
   disbursementFeeLow: number; // $0.75
   monthlyMaintenanceFee: number;
-  mortgageHandlingFee: number;
-  mortgageChecksPerTenantPerMonth: number;
   setupFee: number;
   newTenantsPerMonth: number;
 
@@ -57,8 +57,6 @@ export const DEFAULT_PNL: PnlAssumptions = {
   disbursementFeeHigh: 1,
   disbursementFeeLow: 0.75,
   monthlyMaintenanceFee: 100,
-  mortgageHandlingFee: 10,
-  mortgageChecksPerTenantPerMonth: 4,
   setupFee: 7500,
   newTenantsPerMonth: 1,
 
@@ -83,7 +81,6 @@ export interface PnlResult {
   maintenanceRevenue: number;
   perCheckRevenue: number;
   disbursementRevenue: number;
-  mortgageRevenue: number;
   setupRevenue: number;
   grossRevenue: number;
 
@@ -134,11 +131,8 @@ export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResul
   const maintenanceRevenue = tenants * nn(a.monthlyMaintenanceFee);
   const perCheckRevenue = checks * nn(a.perCheckFee);
   const disbursementRevenue = disbursements * blendedDisbursementFee(a);
-  const mortgageChecks = tenants * nn(a.mortgageChecksPerTenantPerMonth);
-  const mortgageRevenue = mortgageChecks * nn(a.mortgageHandlingFee);
   const setupRevenue = nn(a.newTenantsPerMonth) * nn(a.setupFee);
-  const grossRevenue =
-    maintenanceRevenue + perCheckRevenue + disbursementRevenue + mortgageRevenue + setupRevenue;
+  const grossRevenue = maintenanceRevenue + perCheckRevenue + disbursementRevenue + setupRevenue;
 
   const depositCost = checks * nn(a.checkDepositCost);
   const disbursementCost = disbursements * blendedDisbursementCost(a);
@@ -161,7 +155,6 @@ export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResul
     maintenanceRevenue,
     perCheckRevenue,
     disbursementRevenue,
-    mortgageRevenue,
     setupRevenue,
     grossRevenue,
     depositCost,
@@ -185,13 +178,11 @@ export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResul
 function computeContributionPerTenant(a: PnlAssumptions): number {
   const checks = nn(a.checksPerTenantPerMonth);
   const disbursements = checks * nn(a.disbursementsPerCheck);
-  const mortgageChecks = nn(a.mortgageChecksPerTenantPerMonth);
 
   const revenue =
     nn(a.monthlyMaintenanceFee) +
     checks * nn(a.perCheckFee) +
-    disbursements * blendedDisbursementFee(a) +
-    mortgageChecks * nn(a.mortgageHandlingFee);
+    disbursements * blendedDisbursementFee(a);
 
   const cost =
     checks * nn(a.checkDepositCost) +
@@ -259,6 +250,7 @@ export interface ComparisonInputs {
   avgCheckAmount: number;
   disbursementsPerCheck: number;
   instantMixPct: number; // % of disbursements sent instant/RTP
+  mortgageChecksPerMonth: number; // checks requiring mortgage-company endorsement handling
 
   // ChecksOps pricing
   coMonthlyFee: number;
@@ -266,6 +258,7 @@ export interface ComparisonInputs {
   coPerDisbursementFee: number;
   coPercentFeePct: number;
   coInstantSurcharge: number;
+  coMortgageFee: number; // MortgageOps handling per mortgage check (pass-through)
 
   // iink comparison assumptions — CONFIRM against current iink pricing
   iinkMonthlyFee: number;
@@ -273,6 +266,7 @@ export interface ComparisonInputs {
   iinkPercentFeePct: number;
   iinkInstantFeePct: number; // extra % for instant funding
   iinkPerDisbursementFee: number;
+  iinkMortgageFee: number; // mortgage endorsement handling per check
 }
 
 export const DEFAULT_COMPARISON: ComparisonInputs = {
@@ -280,18 +274,21 @@ export const DEFAULT_COMPARISON: ComparisonInputs = {
   avgCheckAmount: 12000,
   disbursementsPerCheck: 2,
   instantMixPct: 15,
+  mortgageChecksPerMonth: 10,
 
   coMonthlyFee: 100,
   coPerCheckFee: 4,
   coPerDisbursementFee: 1,
   coPercentFeePct: 0,
   coInstantSurcharge: 0.5,
+  coMortgageFee: 10,
 
   iinkMonthlyFee: 0,
   iinkPerCheckFee: 0,
   iinkPercentFeePct: 3,
   iinkInstantFeePct: 1,
   iinkPerDisbursementFee: 0,
+  iinkMortgageFee: 0,
 };
 
 export interface SideCost {
@@ -300,6 +297,7 @@ export interface SideCost {
   perDisbursement: number;
   percentFee: number;
   instantFee: number;
+  mortgageFee: number;
   total: number;
   costPerCheck: number;
   percentOfVolume: number;
@@ -319,7 +317,13 @@ export interface ComparisonResult {
 }
 
 function sideTotals(parts: Omit<SideCost, "total" | "costPerCheck" | "percentOfVolume" | "basisPoints">, checks: number, volume: number): SideCost {
-  const total = parts.monthlyFee + parts.perCheck + parts.perDisbursement + parts.percentFee + parts.instantFee;
+  const total =
+    parts.monthlyFee +
+    parts.perCheck +
+    parts.perDisbursement +
+    parts.percentFee +
+    parts.instantFee +
+    parts.mortgageFee;
   return {
     ...parts,
     total,
@@ -343,6 +347,7 @@ export function compareCosts(i: ComparisonInputs, checksOverride?: number): Comp
       perDisbursement: disbursements * nn(i.coPerDisbursementFee),
       percentFee: volume * (clampPct(i.coPercentFeePct) / 100),
       instantFee: instantDisbursements * nn(i.coInstantSurcharge),
+      mortgageFee: nn(i.mortgageChecksPerMonth) * nn(i.coMortgageFee),
     },
     checks,
     volume,
@@ -355,6 +360,7 @@ export function compareCosts(i: ComparisonInputs, checksOverride?: number): Comp
       perDisbursement: disbursements * nn(i.iinkPerDisbursementFee),
       percentFee: volume * (clampPct(i.iinkPercentFeePct) / 100),
       instantFee: volume * instantShare * (clampPct(i.iinkInstantFeePct) / 100),
+      mortgageFee: nn(i.mortgageChecksPerMonth) * nn(i.iinkMortgageFee),
     },
     checks,
     volume,
@@ -386,14 +392,16 @@ function savingsAt(i: ComparisonInputs, checks: number): number {
     checks * nn(i.coPerCheckFee) +
     disbursements * nn(i.coPerDisbursementFee) +
     volume * (clampPct(i.coPercentFeePct) / 100) +
-    disbursements * instantShare * nn(i.coInstantSurcharge);
+    disbursements * instantShare * nn(i.coInstantSurcharge) +
+    nn(i.mortgageChecksPerMonth) * nn(i.coMortgageFee);
 
   const ii =
     nn(i.iinkMonthlyFee) +
     checks * nn(i.iinkPerCheckFee) +
     disbursements * nn(i.iinkPerDisbursementFee) +
     volume * (clampPct(i.iinkPercentFeePct) / 100) +
-    volume * instantShare * (clampPct(i.iinkInstantFeePct) / 100);
+    volume * instantShare * (clampPct(i.iinkInstantFeePct) / 100) +
+    nn(i.mortgageChecksPerMonth) * nn(i.iinkMortgageFee);
 
   return ii - co;
 }

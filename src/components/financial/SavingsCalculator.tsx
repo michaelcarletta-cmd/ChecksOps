@@ -64,6 +64,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
       ["Disbursement fees", r.checksOps.perDisbursement, r.iink.perDisbursement],
       ["% of funds fees", r.checksOps.percentFee, r.iink.percentFee],
       ["Instant funding fees", r.checksOps.instantFee, r.iink.instantFee],
+      ["MortgageOps handling", r.checksOps.mortgageFee, r.iink.mortgageFee],
       ["Total monthly cost", r.checksOps.total, r.iink.total],
       ["Cost per check", r.checksOps.costPerCheck, r.iink.costPerCheck],
       ["Basis points of volume", r.checksOps.basisPoints, r.iink.basisPoints],
@@ -125,6 +126,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                 <NumberField label="Avg check amount" prefix="$" step={500} value={i.avgCheckAmount} onChange={set("avgCheckAmount")} />
                 <NumberField label="Disbursements / check" step={0.1} value={i.disbursementsPerCheck} onChange={set("disbursementsPerCheck")} />
                 <NumberField label="Instant funding mix" suffix="%" max={100} value={i.instantMixPct} onChange={set("instantMixPct")} />
+                <NumberField label="Mortgage checks / month" value={i.mortgageChecksPerMonth} onChange={set("mortgageChecksPerMonth")} hint="Checks needing mortgage-company endorsement handling." />
               </CardContent>
             </Card>
 
@@ -138,6 +140,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                 <NumberField label="Per disbursement" prefix="$" step={0.25} value={i.coPerDisbursementFee} onChange={set("coPerDisbursementFee")} />
                 <NumberField label="% of funds" suffix="%" step={0.1} max={100} value={i.coPercentFeePct} onChange={set("coPercentFeePct")} />
                 <NumberField label="Instant surcharge" prefix="$" step={0.25} value={i.coInstantSurcharge} onChange={set("coInstantSurcharge")} />
+                <NumberField label="MortgageOps handling" prefix="$" step={1} value={i.coMortgageFee} onChange={set("coMortgageFee")} hint="Per mortgage check, billed at cost." />
               </CardContent>
             </Card>
 
@@ -152,6 +155,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                 <NumberField label="% of funds" suffix="%" step={0.1} max={100} value={i.iinkPercentFeePct} onChange={set("iinkPercentFeePct")} />
                 <NumberField label="Instant funding %" suffix="%" step={0.1} max={100} value={i.iinkInstantFeePct} onChange={set("iinkInstantFeePct")} />
                 <NumberField label="Per disbursement" prefix="$" step={0.25} value={i.iinkPerDisbursementFee} onChange={set("iinkPerDisbursementFee")} />
+                <NumberField label="Mortgage handling" prefix="$" step={1} value={i.iinkMortgageFee} onChange={set("iinkMortgageFee")} />
               </CardContent>
             </Card>
           </div>
@@ -181,6 +185,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                     ["Disbursement fees", r.checksOps.perDisbursement, r.iink.perDisbursement],
                     ["% of funds", r.checksOps.percentFee, r.iink.percentFee],
                     ["Instant funding", r.checksOps.instantFee, r.iink.instantFee],
+                    ["MortgageOps handling", r.checksOps.mortgageFee, r.iink.mortgageFee],
                   ].map(([label, co, ii]) => (
                     <TableRow key={String(label)}>
                       <TableCell className="text-muted-foreground">{label}</TableCell>

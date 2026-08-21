@@ -50,7 +50,6 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
     { name: "Maintenance", value: result.maintenanceRevenue },
     { name: "Per-check", value: result.perCheckRevenue },
     { name: "Disbursements", value: result.disbursementRevenue },
-    { name: "MortgageOps", value: result.mortgageRevenue },
     { name: "Setup fees", value: result.setupRevenue },
   ].filter((r) => r.value > 0);
 
@@ -150,8 +149,6 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
                 <NumberField label="Disbursement fee (low)" prefix="$" step={0.05} value={a.disbursementFeeLow} onChange={set("disbursementFeeLow")} hint="$0.75 tier." />
                 <NumberField label="% at $1.00 rate" suffix="%" max={100} value={a.disbursementsAtHighRatePct} onChange={set("disbursementsAtHighRatePct")} hint="Remainder billed at the $0.75 rate." />
                 <NumberField label="Monthly maintenance fee" prefix="$" value={a.monthlyMaintenanceFee} onChange={set("monthlyMaintenanceFee")} />
-                <NumberField label="MortgageOps fee" prefix="$" value={a.mortgageHandlingFee} onChange={set("mortgageHandlingFee")} hint="$10 first check, $5 additional." />
-                <NumberField label="MortgageOps checks / tenant" value={a.mortgageChecksPerTenantPerMonth} onChange={set("mortgageChecksPerTenantPerMonth")} />
                 <NumberField label="Setup fee (one-time)" prefix="$" step={250} value={a.setupFee} onChange={set("setupFee")} />
                 <NumberField label="New tenants / mo" value={a.newTenantsPerMonth} onChange={set("newTenantsPerMonth")} hint="Drives setup fee revenue." />
               </CardContent>
@@ -166,8 +163,8 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
                 <NumberField label="Next day disbursement" prefix="$" step={0.05} value={a.nextDayDisbursementCost} onChange={set("nextDayDisbursementCost")} />
                 <NumberField label="Same day disbursement" prefix="$" step={0.05} value={a.sameDayDisbursementCost} onChange={set("sameDayDisbursementCost")} />
                 <NumberField label="RTP" prefix="$" step={0.05} value={a.rtpCost} onChange={set("rtpCost")} />
-                <NumberField label="Next day mix" suffix="%" max={100} value={a.nextDayMixPct} onChange={set("nextDayMixPct")} />
-                <NumberField label="Same day mix" suffix="%" max={100} value={a.sameDayMixPct} onChange={set("sameDayMixPct")} hint="Remainder of the mix is RTP." />
+                <NumberField label="Next day mix" suffix="%" max={100} value={a.nextDayMixPct} onChange={set("nextDayMixPct")} hint="Share of disbursements sent on the next-day ACH rail." />
+                <NumberField label="Same day mix" suffix="%" max={100} value={a.sameDayMixPct} onChange={set("sameDayMixPct")} hint="Share sent same-day ACH. Whatever is left of the two goes out on RTP." />
                 <NumberField label="Wallet / tenant" prefix="$" value={a.walletPerTenantMonthly} onChange={set("walletPerTenantMonthly")} />
               </CardContent>
             </Card>
