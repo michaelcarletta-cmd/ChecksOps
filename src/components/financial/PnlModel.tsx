@@ -202,8 +202,20 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
               <CardContent className="grid grid-cols-2 gap-3">
                 <NumberField label="CheckAlt monthly fee" prefix="$" step={50} value={a.checkAltMonthlyFee} onChange={set("checkAltMonthlyFee")} />
                 <NumberField label="Moov monthly minimum" prefix="$" step={50} value={a.moovMonthlyMinimumFee} onChange={set("moovMonthlyMinimumFee")} />
-                <NumberField label="KYB / KYC setup" prefix="$" step={50} value={a.kybKycSetupCost} onChange={set("kybKycSetupCost")} />
-                <NumberField label="CheckAlt onboarding fee" prefix="$" step={50} value={a.checkAltOnboardingFee} onChange={set("checkAltOnboardingFee")} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Onboarding cost (one-time, per tenant)</CardTitle>
+                <CardDescription className="text-xs">
+                  Charged once per tenant — {money(result.onboardingCostPerTenant)} × {a.tenants} tenants ={" "}
+                  {money(result.onboardingCostAllTenants)}.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-3">
+                <NumberField label="KYB / KYC setup / tenant" prefix="$" step={50} value={a.kybKycSetupCost} onChange={set("kybKycSetupCost")} />
+                <NumberField label="CheckAlt onboarding / tenant" prefix="$" step={50} value={a.checkAltOnboardingFee} onChange={set("checkAltOnboardingFee")} />
               </CardContent>
             </Card>
           </div>
