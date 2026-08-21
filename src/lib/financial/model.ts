@@ -141,14 +141,13 @@ export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResul
   const nextDayCost = nextDayDisbursements * nn(a.nextDayDisbursementCost);
   const disbursementCost = sameDayCost + nextDayCost;
   const walletCost = tenants * nn(a.walletPerTenantMonthly);
-  const variableCost = depositCost + disbursementCost + walletCost;
+  const onboardingCostPerTenant = nn(a.kybKycSetupCost) + nn(a.checkAltOnboardingFee);
+  const onboardingCostAllTenants = tenants * onboardingCostPerTenant;
+  // One-time onboarding sits alongside the one-time setup revenue it offsets.
+  const variableCost = depositCost + disbursementCost + walletCost + onboardingCostAllTenants;
 
   const grossProfit = grossRevenue - variableCost;
-  const fixedOverhead =
-    nn(a.checkAltMonthlyFee) +
-    nn(a.moovMonthlyMinimumFee) +
-    nn(a.kybKycSetupCost) +
-    nn(a.checkAltOnboardingFee);
+  const fixedOverhead = nn(a.checkAltMonthlyFee) + nn(a.moovMonthlyMinimumFee);
   const netProfit = grossProfit - fixedOverhead;
 
   const one = computeContributionPerTenant(a);
@@ -174,6 +173,8 @@ export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResul
     disbursementCost,
     walletCost,
     variableCost,
+    onboardingCostPerTenant,
+    onboardingCostAllTenants,
     grossProfit,
     grossMarginPct: grossRevenue > 0 ? (grossProfit / grossRevenue) * 100 : 0,
     fixedOverhead,
