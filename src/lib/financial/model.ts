@@ -336,6 +336,8 @@ export const DEFAULT_COMPARISON: ComparisonInputs = {
   coReferrals: 0,
   coReferralCreditPerReferral: 5,
   coReferralCreditCap: 25,
+  coSetupFee: 7500,
+
 
   iinkPlan: "auto",
   iinkMonthlyFee: 375,
