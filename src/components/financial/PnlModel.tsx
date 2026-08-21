@@ -58,17 +58,26 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
     },
   ].filter((r) => r.value > 0);
 
-  // Setup fees are billed once, so the annual view is recurring × 12 + one-time setup.
+  // Setup fees and onboarding costs are billed once, so the annual view is
+  // recurring × 12 plus the one-time lines.
+  const recurringVariableCost = result.variableCost - result.onboardingCostAllTenants;
   const annualGrossRevenue = result.recurringRevenue * 12 + result.setupRevenueAllTenants;
   const annualNetProfit =
-    (result.recurringRevenue - result.variableCost - result.fixedOverhead) * 12 + result.setupRevenueAllTenants;
+    (result.recurringRevenue - recurringVariableCost - result.fixedOverhead) * 12 +
+    result.setupRevenueAllTenants -
+    result.onboardingCostAllTenants;
 
   const costBars = [
-    { name: "Deposit (RDC)", value: result.depositCost },
-    { name: "Same-day rail cost", value: result.sameDayCost },
-    { name: "Next-day rail cost", value: result.nextDayCost },
-    { name: "Wallet / tenant", value: result.walletCost },
-    { name: "Fixed overhead", value: result.fixedOverhead },
+    { name: "Deposit (RDC)", value: result.depositCost, annual: result.depositCost * 12 },
+    { name: "Same-day rail cost", value: result.sameDayCost, annual: result.sameDayCost * 12 },
+    { name: "Next-day rail cost", value: result.nextDayCost, annual: result.nextDayCost * 12 },
+    { name: "Wallet / tenant", value: result.walletCost, annual: result.walletCost * 12 },
+    { name: "Fixed overhead", value: result.fixedOverhead, annual: result.fixedOverhead * 12 },
+    {
+      name: "Onboarding (KYB/KYC + CheckAlt, one-time per tenant)",
+      value: result.onboardingCostAllTenants,
+      annual: result.onboardingCostAllTenants,
+    },
   ].filter((r) => r.value > 0);
 
 
