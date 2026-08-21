@@ -178,6 +178,8 @@ import {
   FUNDS_TYPE_OPTIONS,
 } from "@/features/check-command/status";
 import { useCheckCommandRealtime } from "@/features/check-command/useCheckCommandRealtime";
+import { optimisticStage, optimisticRemove } from "@/features/check-command/optimistic";
+
 
 /* ------------------------------------------------------------------ */
 /*  Class filter + total bar (shared)                                  */
@@ -401,15 +403,9 @@ export default function CheckCommandCenter() {
     const ids = Array.from(bulkSelected);
     const idSet = new Set(ids);
 
-    // Phase 3: Optimistic update — move checks to the target stage immediately
-    // in the queue cache, then roll back any rows that fail server-side.
-    const queueKey = ["check-intake-items", tenantId] as const;
-    const previous = qc.getQueryData<any[]>(queueKey);
-    if (previous) {
-      qc.setQueryData<any[]>(queueKey, (curr) =>
-        (curr ?? []).map((c: any) => (idSet.has(c.id) ? { ...c, check_stage: path, status: path } : c)),
-      );
-    }
+    // Phase 4: Optimistic update — move checks to the target stage immediately
+    // across every queue cache, then roll back if anything fails server-side.
+    const rollback = optimisticStage(qc, idSet, path);
 
     let ok = 0; const failed: string[] = []; const failedIds: string[] = [];
     for (const id of ids) {
@@ -425,15 +421,12 @@ export default function CheckCommandCenter() {
     if (failed.length === 0) {
       sonnerToast.success(`${ok} check${ok === 1 ? "" : "s"} moved to ${label}`);
     } else {
-      // Roll back failed rows to their prior state
-      if (previous) {
-        const prevById = new Map(previous.map((c: any) => [c.id, c]));
-        qc.setQueryData<any[]>(queueKey, (curr) =>
-          (curr ?? []).map((c: any) => (failedIds.includes(c.id) ? (prevById.get(c.id) ?? c) : c)),
-        );
-      }
+      // Any failure rolls the optimistic patch back; the refetch below is the
+      // source of truth for the rows that did succeed.
+      rollback();
       sonnerToast.error(`${ok} succeeded, ${failed.length} failed. ${failed[0] ?? ""}`);
     }
+
     clearBulk();
     qc.invalidateQueries({ queryKey: ["check-intake-items"] });
     qc.invalidateQueries({ queryKey: ["check-review-queue"] });
@@ -508,16 +501,24 @@ export default function CheckCommandCenter() {
       const { error } = await supabase.from("check_intake_items").delete().eq("id", checkId);
       if (error) throw new Error(`Failed to delete check: ${error.message}`);
     },
+    // Phase 4: drop the row from the queue immediately, restore it if the
+    // delete fails server-side.
+    onMutate: (checkId: string) => {
+      const rollback = optimisticRemove(qc, [checkId]);
+      return { rollback };
+    },
     onSuccess: () => {
       toast({ title: "Check deleted" });
       setSelectedCheck(null);
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
       qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
     },
-    onError: (e) => {
+    onError: (e, _vars, ctx) => {
+      ctx?.rollback?.();
       toast({ title: "Delete failed", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
     },
   });
+
 
   const { data: checks = [], isLoading } = useQuery({
     queryKey: ["check-intake-items", tenantId],
@@ -3414,7 +3415,10 @@ function CheckDetailPanel({
   const handleBypassEndorsements = async () => {
     if (!user?.id || !check) return;
     setBypassingEndorsements(true);
+    // Phase 4: reflect the stage move in the queue instantly.
+    const rollbackStage = optimisticStage(qc, [checkId], "branch_deposit_required");
     try {
+
       const now = new Date().toISOString();
 
       const { error: endorsementErr } = await supabase
@@ -3465,6 +3469,7 @@ function CheckDetailPanel({
       qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
       onRefresh();
     } catch (e: any) {
+      rollbackStage();
       toast({ title: "Move failed", description: e.message, variant: "destructive" });
     } finally {
       setBypassingEndorsements(false);
@@ -3474,6 +3479,7 @@ function CheckDetailPanel({
   const handleUndoDecision = async () => {
     if (!user?.id || !check) return;
     setUndoing(true);
+    const rollbackStage = optimisticStage(qc, [checkId], "needs_review");
     try {
       const { data, error } = await supabase.rpc("submit_check_review_decision_safe", {
         p_check_id: checkId,
@@ -3485,13 +3491,16 @@ function CheckDetailPanel({
       toast({ title: "Decision reverted", description: "Check returned to review queue." });
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
       qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
       onRefresh();
     } catch (e: any) {
+      rollbackStage();
       toast({ title: "Error", description: e.message, variant: "destructive" });
     } finally {
       setUndoing(false);
     }
   };
+
 
   // Branch deposit → Deposited transition
   // Routes through the deposit pipeline so the check appears in Deposit Operations
@@ -3499,7 +3508,9 @@ function CheckDetailPanel({
   const handleMoveToDeposited = async (force = false) => {
     if (!user?.id || !check) return;
     setMovingToDeposited(true);
+    const rollbackStage = optimisticStage(qc, [checkId], "deposited");
     try {
+
       // 1. Check if a deposit_items row already exists for this check
       const { data: existingItem } = await supabase
         .from("deposit_items")
@@ -3584,7 +3595,9 @@ function CheckDetailPanel({
       qc.invalidateQueries({ queryKey: ["deposit-recon-summary"] });
       onRefresh();
     } catch (e: any) {
+      rollbackStage();
       toast({ title: "Failed to move check", description: e.message, variant: "destructive" });
+
     } finally {
       setMovingToDeposited(false);
     }
