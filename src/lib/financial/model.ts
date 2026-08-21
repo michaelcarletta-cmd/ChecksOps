@@ -82,7 +82,11 @@ export interface PnlResult {
   perCheckRevenue: number;
   disbursementRevenue: number;
   setupRevenue: number;
+  /** One-time setup fee billed across the entire tenant base (tenants x setup fee). */
+  setupRevenueAllTenants: number;
   grossRevenue: number;
+  /** Recurring gross revenue only — excludes the one-time setup fee. */
+  recurringRevenue: number;
 
   depositCost: number;
   disbursementCost: number;
@@ -101,6 +105,7 @@ export interface PnlResult {
   contributionPerTenant: number;
   breakEvenTenants: number;
 }
+
 
 const nn = (v: number) => (Number.isFinite(v) && v > 0 ? v : 0);
 const clampPct = (v: number) => Math.min(100, Math.max(0, Number.isFinite(v) ? v : 0));
