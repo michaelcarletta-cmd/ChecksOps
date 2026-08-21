@@ -232,6 +232,25 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
                       {money(result.netProfit * 12)}
                     </TableCell>
                   </TableRow>
+                  <TableRow>
+                    <TableCell className="text-muted-foreground">
+                      One-time setup fees ({a.tenants} × {money(a.setupFee)})
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-emerald-500">
+                      {money(result.setupRevenueAllTenants)}
+                    </TableCell>
+                    <TableCell className="text-right text-xs text-muted-foreground">billed once</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="text-muted-foreground">Break-even tenants</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {result.breakEvenTenants > 0 ? result.breakEvenTenants : "—"}
+                    </TableCell>
+                    <TableCell className="text-right text-xs text-muted-foreground">
+                      {money(result.contributionPerTenant)} / tenant contribution
+                    </TableCell>
+                  </TableRow>
+
                 </TableBody>
               </Table>
             </CardContent>
