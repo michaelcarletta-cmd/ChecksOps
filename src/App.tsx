@@ -33,6 +33,7 @@ const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
 const RecipientPaymentSetup = lazy(() => import("./pages/RecipientPaymentSetup"));
 const AdminTenants = lazy(() => import("./pages/admin/AdminTenants"));
 const AdminMortgageOps = lazy(() => import("./pages/admin/AdminMortgageOps"));
+const AdminFinancialModel = lazy(() => import("./pages/admin/AdminFinancialModel"));
 const VerifyAccount = lazy(() => import("./pages/VerifyAccount"));
 const VerifyAccountStart = lazy(() => import("./pages/VerifyAccountStart"));
 const PrivacyNotice = lazy(() => import("./pages/PrivacyNotice"));
