@@ -23,18 +23,19 @@ const AppLayoutContent = ({ children }: AppLayoutProps) => {
   return (
     <div className="flex min-h-screen w-full bg-background">
       <AppSidebar />
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-14 border-b border-border/70 bg-background/95 backdrop-blur flex items-center gap-2 px-4 sticky top-0 z-10">
+      <div className="flex-1 flex flex-col min-w-0 max-w-full">
+        <header className="h-14 border-b border-border/70 bg-background/95 backdrop-blur flex items-center gap-2 px-3 sm:px-4 sticky top-0 z-10 min-w-0">
           <SidebarTrigger className="shrink-0" />
-          <div className="ml-2 flex items-center gap-4 flex-1 min-w-0">
+          <div className="ml-1 sm:ml-2 flex items-center gap-4 flex-1 min-w-0 overflow-hidden">
           </div>
           <UrgentAlertsBell />
           <QuickTaskBar />
         </header>
-        <main className="flex-1 min-w-0 max-w-full overflow-x-clip p-3 md:p-6 animate-fade-in">
+        <main className="flex-1 min-w-0 max-w-full overflow-x-clip px-fluid py-3 md:py-6 animate-fade-in">
           {children}
         </main>
       </div>
+
     </div>
   );
 };

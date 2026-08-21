@@ -173,6 +173,32 @@ All colors MUST be HSL.
     height: auto;
   }
 
+  /* Form controls stay inside their container on every viewport */
+  input,
+  select,
+  textarea,
+  button {
+    max-width: 100%;
+  }
+
+  /* Code blocks scroll instead of stretching the page */
+  pre,
+  code {
+    overflow-x: auto;
+    overflow-wrap: break-word;
+  }
+
+  /* Tables never exceed their wrapper */
+  table {
+    max-width: 100%;
+  }
+
+  /* Radix overlays (dialog / popover / dropdown) stay inside the viewport */
+  [role="dialog"],
+  [data-radix-popper-content-wrapper] > * {
+    max-width: calc(100vw - 1.5rem);
+  }
+
   /* Long unbroken strings (emails, URLs, IDs, hashes) wrap instead of
      blowing out their container or overlapping neighbouring text. */
   p,
@@ -192,6 +218,16 @@ All colors MUST be HSL.
   th {
     overflow-wrap: break-word;
   }
+
+  /* Headings and long labels hyphenate on narrow screens rather than clipping */
+  @media (max-width: 767px) {
+    h1,
+    h2,
+    h3 {
+      hyphens: auto;
+    }
+  }
+
 
   @media (max-width: 767px) {
     body {
@@ -234,7 +270,73 @@ All colors MUST be HSL.
     -ms-overflow-style: none;  /* IE and Edge */
     scrollbar-width: none;  /* Firefox */
   }
+
+  /* ---- Fluid layout / overflow toolkit ---- */
+
+  /* Any flex or grid child that must be allowed to shrink and truncate */
+  .min-w-0-all > * {
+    min-width: 0;
+  }
+
+  /* Horizontal scroll region with momentum + no vertical bleed */
+  .scroll-x {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+
+  /* Table wrapper: scrolls horizontally only when it truly needs to */
+  .table-scroll {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Break anywhere — for hashes, tokens, long emails and URLs */
+  .break-anywhere {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  /* Multi-line clamps */
+  .truncate-2,
+  .truncate-3 {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .truncate-2 { -webkit-line-clamp: 2; }
+  .truncate-3 { -webkit-line-clamp: 3; }
+
+  /* Single-line truncation that also works inside flex rows */
+  .truncate-flex {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Fluid type — scales smoothly between mobile and desktop */
+  .text-fluid-sm { font-size: clamp(0.75rem, 0.7rem + 0.25vw, 0.875rem); }
+  .text-fluid-base { font-size: clamp(0.875rem, 0.82rem + 0.3vw, 1rem); }
+  .text-fluid-lg { font-size: clamp(1rem, 0.9rem + 0.5vw, 1.25rem); }
+  .text-fluid-xl { font-size: clamp(1.25rem, 1.05rem + 1vw, 1.875rem); }
+  .text-fluid-2xl { font-size: clamp(1.5rem, 1.2rem + 1.6vw, 2.5rem); }
+
+  /* Fluid gutters for page-level containers */
+  .px-fluid { padding-inline: clamp(0.75rem, 2vw, 2rem); }
+  .gap-fluid { gap: clamp(0.5rem, 1.2vw, 1.5rem); }
+
+  /* Auto-fitting responsive card grid without breakpoint juggling */
+  .grid-fluid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+    gap: clamp(0.5rem, 1.2vw, 1.5rem);
+  }
 }
+
 
 /* Thin subtle scrollbars for data sections */
 .overflow-y-auto {
