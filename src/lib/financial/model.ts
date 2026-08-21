@@ -96,6 +96,10 @@ export interface PnlResult {
   disbursementCost: number;
   walletCost: number;
   variableCost: number;
+  /** One-time KYB/KYC + CheckAlt onboarding cost for a single tenant. */
+  onboardingCostPerTenant: number;
+  /** One-time onboarding cost across the whole tenant base. */
+  onboardingCostAllTenants: number;
 
   grossProfit: number;
   grossMarginPct: number;
