@@ -389,6 +389,10 @@ export interface SideCost {
 
 export interface ComparisonResult {
   disbursements: number;
+  sameDayDisbursements: number;
+  nextDayDisbursements: number;
+  sameDayCost: number;
+  nextDayCost: number;
   checksOps: SideCost;
   iink: SideCost;
   iinkPlan: IinkPlan;
@@ -470,7 +474,8 @@ function iinkSide(i: ComparisonInputs, checks: number, mortgageChecks: number) {
 
 export function compareCosts(i: ComparisonInputs, checksOverride?: number): ComparisonResult {
   const checks = nn(checksOverride ?? i.checksPerMonth);
-  const disbursements = checks * nn(i.disbursementsPerCheck);
+  const d = disbursementCounts(i, checks);
+  const disbursements = d.count;
   // Scale mortgage checks with volume when sweeping the sensitivity table.
   const mortgageChecks =
     checksOverride !== undefined && nn(i.checksPerMonth) > 0
@@ -481,7 +486,7 @@ export function compareCosts(i: ComparisonInputs, checksOverride?: number): Comp
     {
       monthlyFee: nn(i.coMonthlyFee),
       perCheck: checks * nn(i.coPerCheckFee),
-      perDisbursement: disbursements * coDisbursementFee(i),
+      perDisbursement: d.cost,
       mortgageFee: mortgageChecks * nn(i.coMortgageFee),
       referralCredit: referralCredit(i),
     },
@@ -504,6 +509,10 @@ export function compareCosts(i: ComparisonInputs, checksOverride?: number): Comp
 
   return {
     disbursements,
+    sameDayDisbursements: d.sameDay,
+    nextDayDisbursements: d.nextDay,
+    sameDayCost: d.sameDay * nn(i.coSameDayDisbursementFee),
+    nextDayCost: d.nextDay * nn(i.coNextDayDisbursementFee),
     checksOps,
     iink,
     iinkPlan: ii.plan,
@@ -517,7 +526,7 @@ export function compareCosts(i: ComparisonInputs, checksOverride?: number): Comp
 
 /** Monthly savings at a given check count, without recursing into break-even search. */
 function savingsAt(i: ComparisonInputs, checks: number): number {
-  const disbursements = checks * nn(i.disbursementsPerCheck);
+  const d = disbursementCounts(i, checks);
   const mortgageChecks =
     nn(i.checksPerMonth) > 0 ? (nn(i.mortgageChecksPerMonth) / nn(i.checksPerMonth)) * checks : 0;
 
@@ -525,7 +534,7 @@ function savingsAt(i: ComparisonInputs, checks: number): number {
     0,
     nn(i.coMonthlyFee) +
       checks * nn(i.coPerCheckFee) +
-      disbursements * coDisbursementFee(i) +
+      d.cost +
       mortgageChecks * nn(i.coMortgageFee) -
       referralCredit(i),
   );
