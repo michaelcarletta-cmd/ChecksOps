@@ -58,17 +58,26 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
     },
   ].filter((r) => r.value > 0);
 
-  // Setup fees are billed once, so the annual view is recurring × 12 + one-time setup.
+  // Setup fees and onboarding costs are billed once, so the annual view is
+  // recurring × 12 plus the one-time lines.
+  const recurringVariableCost = result.variableCost - result.onboardingCostAllTenants;
   const annualGrossRevenue = result.recurringRevenue * 12 + result.setupRevenueAllTenants;
   const annualNetProfit =
-    (result.recurringRevenue - result.variableCost - result.fixedOverhead) * 12 + result.setupRevenueAllTenants;
+    (result.recurringRevenue - recurringVariableCost - result.fixedOverhead) * 12 +
+    result.setupRevenueAllTenants -
+    result.onboardingCostAllTenants;
 
   const costBars = [
-    { name: "Deposit (RDC)", value: result.depositCost },
-    { name: "Same-day rail cost", value: result.sameDayCost },
-    { name: "Next-day rail cost", value: result.nextDayCost },
-    { name: "Wallet / tenant", value: result.walletCost },
-    { name: "Fixed overhead", value: result.fixedOverhead },
+    { name: "Deposit (RDC)", value: result.depositCost, annual: result.depositCost * 12 },
+    { name: "Same-day rail cost", value: result.sameDayCost, annual: result.sameDayCost * 12 },
+    { name: "Next-day rail cost", value: result.nextDayCost, annual: result.nextDayCost * 12 },
+    { name: "Wallet / tenant", value: result.walletCost, annual: result.walletCost * 12 },
+    { name: "Fixed overhead", value: result.fixedOverhead, annual: result.fixedOverhead * 12 },
+    {
+      name: "Onboarding (KYB/KYC + CheckAlt, one-time per tenant)",
+      value: result.onboardingCostAllTenants,
+      annual: result.onboardingCostAllTenants,
+    },
   ].filter((r) => r.value > 0);
 
 
@@ -83,8 +92,9 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
       ["Recurring revenue", result.recurringRevenue, result.recurringRevenue * 12],
       ["Setup fees (one-time, all tenants)", result.setupRevenueAllTenants, result.setupRevenueAllTenants],
       ["Gross revenue", result.grossRevenue, annualGrossRevenue],
-      ["Variable cost", result.variableCost, result.variableCost * 12],
-      ["Gross profit", result.grossProfit, result.grossProfit * 12],
+      ["Variable cost (recurring)", recurringVariableCost, recurringVariableCost * 12],
+      ["Onboarding cost (one-time, all tenants)", result.onboardingCostAllTenants, result.onboardingCostAllTenants],
+      ["Gross profit", result.grossProfit, annualGrossRevenue - recurringVariableCost * 12 - result.onboardingCostAllTenants],
       ["Fixed overhead", result.fixedOverhead, result.fixedOverhead * 12],
       ["Net profit", result.netProfit, annualNetProfit],
       ["Gross margin %", result.grossMarginPct.toFixed(1), ""],
@@ -193,8 +203,20 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
               <CardContent className="grid grid-cols-2 gap-3">
                 <NumberField label="CheckAlt monthly fee" prefix="$" step={50} value={a.checkAltMonthlyFee} onChange={set("checkAltMonthlyFee")} />
                 <NumberField label="Moov monthly minimum" prefix="$" step={50} value={a.moovMonthlyMinimumFee} onChange={set("moovMonthlyMinimumFee")} />
-                <NumberField label="KYB / KYC setup" prefix="$" step={50} value={a.kybKycSetupCost} onChange={set("kybKycSetupCost")} />
-                <NumberField label="CheckAlt onboarding fee" prefix="$" step={50} value={a.checkAltOnboardingFee} onChange={set("checkAltOnboardingFee")} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Onboarding cost (one-time, per tenant)</CardTitle>
+                <CardDescription className="text-xs">
+                  Charged once per tenant — {money(result.onboardingCostPerTenant)} × {a.tenants} tenants ={" "}
+                  {money(result.onboardingCostAllTenants)}.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-3">
+                <NumberField label="KYB / KYC setup / tenant" prefix="$" step={50} value={a.kybKycSetupCost} onChange={set("kybKycSetupCost")} />
+                <NumberField label="CheckAlt onboarding / tenant" prefix="$" step={50} value={a.checkAltOnboardingFee} onChange={set("checkAltOnboardingFee")} />
               </CardContent>
             </Card>
           </div>
@@ -240,7 +262,7 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
                     <TableRow key={r.name}>
                       <TableCell className="text-muted-foreground">{r.name}</TableCell>
                       <TableCell className="text-right tabular-nums text-destructive">({money(r.value)})</TableCell>
-                      <TableCell className="text-right tabular-nums text-destructive">({money(r.value * 12)})</TableCell>
+                      <TableCell className="text-right tabular-nums text-destructive">({money(r.annual)})</TableCell>
                     </TableRow>
                   ))}
                   <TableRow className="font-semibold">

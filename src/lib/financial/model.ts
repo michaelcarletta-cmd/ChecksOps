@@ -42,6 +42,8 @@ export interface PnlAssumptions {
   // Fixed overhead (monthly)
   checkAltMonthlyFee: number;
   moovMonthlyMinimumFee: number;
+
+  // One-time onboarding cost, charged per tenant (not monthly)
   kybKycSetupCost: number;
   checkAltOnboardingFee: number;
 }
@@ -94,6 +96,10 @@ export interface PnlResult {
   disbursementCost: number;
   walletCost: number;
   variableCost: number;
+  /** One-time KYB/KYC + CheckAlt onboarding cost for a single tenant. */
+  onboardingCostPerTenant: number;
+  /** One-time onboarding cost across the whole tenant base. */
+  onboardingCostAllTenants: number;
 
   grossProfit: number;
   grossMarginPct: number;
@@ -135,14 +141,13 @@ export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResul
   const nextDayCost = nextDayDisbursements * nn(a.nextDayDisbursementCost);
   const disbursementCost = sameDayCost + nextDayCost;
   const walletCost = tenants * nn(a.walletPerTenantMonthly);
-  const variableCost = depositCost + disbursementCost + walletCost;
+  const onboardingCostPerTenant = nn(a.kybKycSetupCost) + nn(a.checkAltOnboardingFee);
+  const onboardingCostAllTenants = tenants * onboardingCostPerTenant;
+  // One-time onboarding sits alongside the one-time setup revenue it offsets.
+  const variableCost = depositCost + disbursementCost + walletCost + onboardingCostAllTenants;
 
   const grossProfit = grossRevenue - variableCost;
-  const fixedOverhead =
-    nn(a.checkAltMonthlyFee) +
-    nn(a.moovMonthlyMinimumFee) +
-    nn(a.kybKycSetupCost) +
-    nn(a.checkAltOnboardingFee);
+  const fixedOverhead = nn(a.checkAltMonthlyFee) + nn(a.moovMonthlyMinimumFee);
   const netProfit = grossProfit - fixedOverhead;
 
   const one = computeContributionPerTenant(a);
@@ -168,6 +173,8 @@ export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResul
     disbursementCost,
     walletCost,
     variableCost,
+    onboardingCostPerTenant,
+    onboardingCostAllTenants,
     grossProfit,
     grossMarginPct: grossRevenue > 0 ? (grossProfit / grossRevenue) * 100 : 0,
     fixedOverhead,
@@ -220,13 +227,16 @@ export function projectTwelveMonths(a: PnlAssumptions, netNewTenantsPerMonth: nu
   for (let m = 1; m <= 12; m++) {
     if (m > 1) tenants += nn(netNewTenantsPerMonth);
     const r = computePnl(a, tenants);
-    // Setup fee is one-time: month 1 bills the whole existing base, later months
-    // only bill the tenants added that month.
-    const setupThisMonth =
-      m === 1 ? tenants * nn(a.setupFee) : nn(netNewTenantsPerMonth) * nn(a.setupFee);
+    // Setup fee and onboarding cost are one-time per tenant: month 1 covers the
+    // whole existing base, later months only the tenants added that month.
+    const newThisMonth = m === 1 ? tenants : nn(netNewTenantsPerMonth);
+    const setupThisMonth = newThisMonth * nn(a.setupFee);
+    const onboardingThisMonth = newThisMonth * r.onboardingCostPerTenant;
     const revenue = r.recurringRevenue + setupThisMonth;
-    const cost = r.variableCost + r.fixedOverhead;
-    const grossProfit = revenue - r.variableCost;
+    const recurringVariableCost = r.variableCost - r.onboardingCostAllTenants;
+    const variable = recurringVariableCost + onboardingThisMonth;
+    const cost = variable + r.fixedOverhead;
+    const grossProfit = revenue - variable;
     const netProfit = revenue - cost;
     rows.push({
       month: m,
