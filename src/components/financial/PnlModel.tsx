@@ -47,22 +47,20 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
   const projection = useMemo(() => projectTwelveMonths(a, growth), [a, growth]);
 
   const revenueBars = [
-    { name: "Subscriptions", value: result.subscriptionRevenue },
+    { name: "Maintenance", value: result.maintenanceRevenue },
     { name: "Per-check", value: result.perCheckRevenue },
     { name: "Disbursements", value: result.disbursementRevenue },
-    { name: "% of volume", value: result.percentFeeRevenue },
-    { name: "Mortgage ops", value: result.mortgageRevenue },
+    { name: "MortgageOps", value: result.mortgageRevenue },
     { name: "Setup fees", value: result.setupRevenue },
   ].filter((r) => r.value > 0);
 
   const costBars = [
     { name: "Deposit (RDC)", value: result.depositCost },
     { name: "Disbursement rails", value: result.disbursementCost },
-    { name: "OCR / AI", value: result.ocrCostTotal },
-    { name: "Mortgage shipping", value: result.mortgageCostTotal },
-    { name: "Per-tenant ops", value: result.perTenantCost },
+    { name: "Wallet / tenant", value: result.walletCost },
     { name: "Fixed overhead", value: result.fixedOverhead },
   ].filter((r) => r.value > 0);
+
 
   const applyScenario = (key: ScenarioKey) => {
     setScenario(key);
