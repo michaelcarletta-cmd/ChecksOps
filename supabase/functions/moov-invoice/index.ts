@@ -370,6 +370,51 @@ serve(async (req) => {
 
     }
 
+    /* ------------------------------ delete ------------------------------ */
+    if (action === "delete") {
+      const { data: row } = await supabase
+        .from("moov_invoices")
+        .select("*")
+        .eq("id", body.invoice_id)
+        .eq("tenant_id", tenant_id)
+        .maybeSingle();
+      if (!row) return json({ error: "Invoice not found" }, 404);
+      const st = (row as any).status;
+      if (st !== "canceled" && st !== "draft") {
+        return json({ error: "Only canceled or draft invoices can be deleted" }, 400);
+      }
+
+      // Best-effort provider cleanup (may already be gone).
+      if ((row as any).moov_invoice_id) {
+        try {
+          await moovFetch(
+            `/accounts/${merchantAccountId}/invoices/${(row as any).moov_invoice_id}`,
+            { method: "DELETE", scopes: invoiceScopes(merchantAccountId, true), apiVersion: INVOICE_API_VERSION },
+          );
+        } catch (e) {
+          console.error("[moov-invoice] provider delete failed (continuing)", (e as Error).message);
+        }
+      }
+
+      const { error: delErr } = await supabase
+        .from("moov_invoices")
+        .delete()
+        .eq("id", (row as any).id)
+        .eq("tenant_id", tenant_id);
+      if (delErr) return json({ error: `Could not delete invoice: ${delErr.message}` }, 500);
+
+      await logPaymentEvent(supabase, {
+        tenant_id,
+        event_type: "invoice.deleted",
+        previous_status: st,
+        new_status: "deleted",
+        environment,
+        provider_metadata: { invoiceID: (row as any).moov_invoice_id },
+      });
+
+      return json({ success: true, deleted: true });
+    }
+
     return json({ error: `Unknown action "${action}"` }, 400);
   } catch (e) {
     const err = e as any;

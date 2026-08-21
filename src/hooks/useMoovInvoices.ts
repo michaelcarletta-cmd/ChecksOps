@@ -129,6 +129,16 @@ export function useMoovInvoices() {
     onError,
   });
 
+  const deleteInvoice = useMutation({
+    mutationFn: (invoiceId: string) =>
+      callInvoiceFn({ action: "delete", tenant_id: tenantId, invoice_id: invoiceId }),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Invoice deleted", description: "It was removed from your invoice list." });
+    },
+    onError,
+  });
+
   const syncInvoices = useMutation({
     mutationFn: () => callInvoiceFn({ action: "sync", tenant_id: tenantId }),
     onSuccess: (data: any) => {
@@ -138,6 +148,6 @@ export function useMoovInvoices() {
     onError,
   });
 
-  return { tenantId, invoices, createInvoice, sendInvoice, resendInvoice, cancelInvoice, syncInvoices };
+  return { tenantId, invoices, createInvoice, sendInvoice, resendInvoice, cancelInvoice, deleteInvoice, syncInvoices };
 }
 
