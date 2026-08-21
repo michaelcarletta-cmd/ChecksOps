@@ -78,11 +78,13 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
   const exportCsv = () => {
     downloadCsv("checksops-pnl-model.csv", [
       ["Metric", "Monthly", "Annual"],
-      ["Gross revenue", result.grossRevenue, result.grossRevenue * 12],
+      ["Recurring revenue", result.recurringRevenue, result.recurringRevenue * 12],
+      ["Setup fees (one-time, all tenants)", result.setupRevenueAllTenants, result.setupRevenueAllTenants],
+      ["Gross revenue", result.grossRevenue, annualGrossRevenue],
       ["Variable cost", result.variableCost, result.variableCost * 12],
       ["Gross profit", result.grossProfit, result.grossProfit * 12],
       ["Fixed overhead", result.fixedOverhead, result.fixedOverhead * 12],
-      ["Net profit", result.netProfit, result.netProfit * 12],
+      ["Net profit", result.netProfit, annualNetProfit],
       ["Gross margin %", result.grossMarginPct.toFixed(1), ""],
       ["Net margin %", result.netMarginPct.toFixed(1), ""],
       ["Tenants", result.checks > 0 ? a.tenants : 0, ""],
