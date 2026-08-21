@@ -142,390 +142,42 @@ const TabLoader = () => (
 
 
 /* ------------------------------------------------------------------ */
-/*  Types                                                              */
+/*  Types + status helpers (extracted — src/features/check-command)     */
 /* ------------------------------------------------------------------ */
 
-interface CheckPayee {
-  id: string;
-  check_id: string;
-  payee_name: string;
-  payee_type: string;
-  endorsement_status: string;
-  contact_email: string | null;
-  contact_phone: string | null; // SMS removed from endorsements
-  notification_sent_via: string | null;
-  notification_sent_at: string | null;
-  endorsed_at: string | null;
-}
-
-interface CheckAltDepositSummary {
-  id: string;
-  status: string | null;
-  submitted_at: string | null;
-  approved_at: string | null;
-  updated_at: string | null;
-  last_status_payload?: Record<string, unknown> | null;
-}
-
-interface CheckItem {
-  id: string;
-  claim_id: string | null;
-  front_image_path: string;
-  back_image_path: string | null;
-  carrier_name: string | null;
-  check_number: string | null;
-  amount: number | null;
-  issue_date: string | null;
-  expiration_days: number | null;
-  detected_claim_number: string | null;
-  payee_line: string | null;
-  is_multi_payee: boolean;
-  ocr_status: string;
-  deposit_recommendation: string | null;
-  deposit_recommendation_reasons: string[] | null;
-  status: string;
-  created_at: string;
-  uploaded_by: string | null;
-  reviewed_by: string | null;
-  reviewed_at: string | null;
-  review_notes: string | null;
-  endorsement_packet_path: string | null;
-  endorsement_override: Record<string, unknown> | null;
-  funds_type?: string | null;
-  property_address?: string | null;
-  payment_classification?: string | null;
-  payee_address?: string | null;
-  deposited_at?: string | null;
-  deposited_by_tenant_id?: string | null;
-  check_stage?: string | null;
-  updated_at?: string | null;
-  check_payees?: CheckPayee[];
-  checkalt_deposits?: CheckAltDepositSummary[];
-  partner_status?: string | null;
-  partner_status_label?: string | null;
-  partner_status_updated_at?: string | null;
-  external_origin?: Record<string, unknown> | null;
-  check_source?: string | null;
-  cash_job_id?: string | null;
-  cash_job_payment_class?: string | null;
-}
-
-interface CheckEndorsementSummary {
-  id: string;
-  payee_name: string;
-  payee_type: string;
-  status: string;
-  signature_image_url?: string | null;
-  signature_method?: string | null;
-  signed_at: string | null;
-  created_at?: string;
-}
-
-const normalizeEndorsementName = (value?: string | null) => (value ?? "").trim().toLowerCase();
-const normalizeEndorsementType = (value?: string | null) => (value ?? "other").trim().toLowerCase();
-
-const normalizeEndorsementStatus = (status?: string | null, signedAt?: string | null) => {
-  if (signedAt) return "signed";
-
-  const value = (status ?? "").trim().toLowerCase();
-  if (["signed", "endorsed", "complete", "completed"].includes(value)) return "signed";
-  if (value === "waived") return "waived";
-  if (value === "manual_required") return "manual_required";
-  if (["declined", "rejected"].includes(value)) return "rejected";
-  if (["sent", "requested", "awaiting", "in_progress", "viewed", "opened"].includes(value)) return "sent";
-  if (value === "expired") return "expired";
-  return "pending";
-};
-
-function mergeEndorsementSummaryRows(
-  checkId: string,
-  endorsements: CheckEndorsementSummary[],
-  payees: CheckPayee[],
-): CheckEndorsementSummary[] {
-  if (payees.length === 0) return endorsements;
-
-  const usedEndorsementIds = new Set<string>();
-  const byExactKey = new Map<string, CheckEndorsementSummary[]>();
-  const byName = new Map<string, CheckEndorsementSummary[]>();
-
-  for (const endorsement of endorsements) {
-    const exactKey = `${normalizeEndorsementName(endorsement.payee_name)}::${normalizeEndorsementType(endorsement.payee_type)}`;
-    const nameKey = normalizeEndorsementName(endorsement.payee_name);
-    byExactKey.set(exactKey, [...(byExactKey.get(exactKey) ?? []), endorsement]);
-    byName.set(nameKey, [...(byName.get(nameKey) ?? []), endorsement]);
-  }
-
-  const merged: CheckEndorsementSummary[] = [];
-
-  payees.forEach((payee) => {
-    const exactKey = `${normalizeEndorsementName(payee.payee_name)}::${normalizeEndorsementType(payee.payee_type)}`;
-    const nameKey = normalizeEndorsementName(payee.payee_name);
-    const match =
-      byExactKey.get(exactKey)?.find((row) => !usedEndorsementIds.has(row.id)) ??
-      byName.get(nameKey)?.find((row) => !usedEndorsementIds.has(row.id));
-
-    if (match) {
-      usedEndorsementIds.add(match.id);
-      merged.push(match);
-    } else {
-      merged.push({
-        id: `payee-${checkId}-${payee.id}`,
-        payee_name: payee.payee_name,
-        payee_type: payee.payee_type ?? "other",
-        status: normalizeEndorsementStatus(payee.endorsement_status, payee.endorsed_at),
-        signed_at: payee.endorsed_at,
-        signature_image_url: null,
-        signature_method: null,
-      });
-    }
-  });
-
-  for (const endorsement of endorsements) {
-    if (!usedEndorsementIds.has(endorsement.id)) merged.push(endorsement);
-  }
-
-  // Final deduplication by name to ensure no duplicate rows appear in the UI
-  const best = new Map<string, CheckEndorsementSummary>();
-  const rank = (e: CheckEndorsementSummary) => {
-    const s = (e.status ?? "").toLowerCase();
-    if (s === "signed" || !!e.signed_at) return 3;
-    if (s === "waived") return 2;
-    if (s === "sent") return 1;
-    return 0;
-  };
-  for (const e of merged) {
-    const key = normalizeEndorsementName(e.payee_name);
-    const prev = best.get(key);
-    // Prefer higher rank, or earlier creation date for stability
-    if (!prev || rank(e) > rank(prev)) {
-      best.set(key, e);
-    } else if (rank(e) === rank(prev) && e.created_at && prev.created_at) {
-      if (new Date(e.created_at).getTime() < new Date(prev.created_at).getTime()) {
-        best.set(key, e);
-      }
-    }
-  }
-
-  return Array.from(best.values());
-}
-
-/**
- * For checks mirrored from a partner app (e.g. FreedomClaims), the local `status`
- * column stays at `uploaded` because ChecksOps has not processed them internally.
- * The partner's authoritative workflow state is mirrored into `partner_status`
- * by the receive-check-status edge function. Use that value to bucket and label
- * mirrored checks so users see the real Freedom-side state.
- */
-const isMirroredCheck = (c: CheckItem) =>
-  !!c.external_origin && typeof c.external_origin === "object" &&
-  (c.external_origin as any).source_app === "freedom_crm";
-
-// Lifecycle rank — higher = further along. Used to prefer whichever of local
-// status vs mirrored partner_status is most advanced, so a stale partner value
-// can never mask completed local work (e.g. endorsements finished here but the
-// origin app never pushed an update).
-const lifecycleRank = (s: string | null | undefined): number => {
-  switch ((s || "").toLowerCase()) {
-    case "deposited":
-    case "released":
-      return 50;
-    case "approved_for_deposit":
-    case "endorsed":
-      return 40;
-    case "endorsements_in_progress":
-    case "endorsement_pending":
-      return 30;
-    case "loss_draft_required":
-      return 25;
-    case "needs_review":
-    case "in_review":
-    case "ocr_complete":
-      return 20;
-    case "held":
-      return 15;
-    case "received":
-    case "processing":
-    case "uploaded":
-      return 10;
-    case "voided":
-    case "returned":
-      return 5;
-    default:
-      return 0;
-  }
-};
-
-const getEffectiveStatus = (c: CheckItem): string => {
-  if (isMirroredCheck(c) && c.partner_status) {
-    // Prefer local on ties so completed local work (e.g. "deposited") is never
-    // masked by an equivalent-rank partner value (e.g. "released").
-    return lifecycleRank(c.status) >= lifecycleRank(c.partner_status)
-      ? c.status
-      : c.partner_status;
-  }
-  return c.status;
-};
-
-const prettifyStatus = (s: string | null | undefined): string => {
-  if (!s) return "";
-  // Unify "approved_for_deposit" and "ready_for_deposit" under one label/wording.
-  if (s === "approved_for_deposit" || s === "ready_for_deposit" || s === "ready") {
-    return "Ready for Deposit";
-  }
-  // "released" from partner systems means the check itself was deposited
-  // (funds released from check to bank). Don't conflate with disbursement.
-  if (s === "released" || s === "deposited") {
-    return "Deposited";
-  }
-  return s.replace(/_/g, " ");
-};
-
-const getEffectiveStatusLabel = (c: CheckItem): string => {
-  if (isMirroredCheck(c) && c.partner_status) {
-    const useLocal = lifecycleRank(c.status) >= lifecycleRank(c.partner_status);
-    if (useLocal) return prettifyStatus(c.status);
-    return c.partner_status_label
-      ? prettifyStatus(c.partner_status)
-      : prettifyStatus(c.partner_status);
-  }
-  return prettifyStatus(c.status);
-};
-
-const getLatestCheckAltDeposit = (c: CheckItem): CheckAltDepositSummary | null => {
-  const deposits = c.checkalt_deposits ?? [];
-  if (deposits.length === 0) return null;
-  return [...deposits].sort((a, b) => {
-    const aTime = new Date(a.updated_at ?? a.approved_at ?? a.submitted_at ?? 0).getTime();
-    const bTime = new Date(b.updated_at ?? b.approved_at ?? b.submitted_at ?? 0).getTime();
-    return bTime - aTime;
-  })[0] ?? null;
-};
-
-const getCheckAltStatus = (c: CheckItem): string | null => getLatestCheckAltDeposit(c)?.status ?? null;
-
-// Per-tab status label overrides requested by ops:
-//  - Endorsing tab: always "Endorsements in Progress"
-//  - Ready for Deposit tab: always "Endorsed - Ready for Deposit"
-//  - Deposited tab: "Deposit in Progress" for first 48h after deposited_at,
-//    then "Ready for Release" (funds presumed cleared in the bank account).
-const getTabStatusLabel = (c: CheckItem, tab: string): string => {
-  if (tab === "endorsements") return "Endorsements in Progress";
-  if (tab === "ready") return "Endorsed - Ready for Deposit";
-  if (tab === "deposited") {
-    if (getCheckAltStatus(c) === "pending_approval") return "Pending Approval";
-    const depositedAt = (c as any).deposited_at as string | null | undefined;
-    if (!depositedAt) return "Deposit in Progress";
-    const hours = (Date.now() - new Date(depositedAt).getTime()) / 36e5;
-    return hours >= 48 ? "Ready for Release" : "Deposit in Progress";
-  }
-  return getEffectiveStatusLabel(c);
-};
-
-const getTabStatusClass = (c: CheckItem, tab: string): string => {
-  if (tab === "deposited") {
-    if (getCheckAltStatus(c) === "pending_approval") return "bg-amber-500/20 text-amber-400";
-    const depositedAt = c.deposited_at;
-    if (depositedAt) {
-      const hours = (Date.now() - new Date(depositedAt).getTime()) / 36e5;
-      if (hours >= 48) return "bg-emerald-500/20 text-emerald-400";
-    }
-    return "bg-primary/20 text-primary";
-  }
-  return statusColors[getEffectiveStatus(c)] ?? "";
-};
-
-
-interface AuditEntry {
-  id: string;
-  event_type: string;
-  event_description: string | null;
-  event_data: Record<string, unknown> | null;
-  created_at: string;
-  actor_id: string | null;
-}
-
-interface ClaimOption {
-  id: string;
-  claim_number: string | null;
-  policyholder_name: string | null;
-}
-
-interface CheckGroup {
-  key: string;
-  claimNumber: string;
-  policyholderName: string;
-  checks: CheckItem[];
-  totalAmount: number;
-  latestCreatedAt: string;
-}
-
-/**
- * Extract a clean insured/policyholder name from a raw check payee_line.
- * Filters out banks, mortgage companies, public adjusters, and trailing addresses.
- */
-function extractInsuredName(payeeLine: string | null | undefined): string | null {
-  if (!payeeLine) return null;
-  let line = payeeLine.replace(/^\s*(pay\s+to\s+the\s+order\s+of[:\s]*|pay\s+to[:\s]+|of[:\s]+)/i, "").trim();
-  const digitIdx = line.search(/\d/);
-  if (digitIdx > 0) line = line.slice(0, digitIdx).trim();
-  const parts = line.split(/\s*(?:&|\band\b|,|\/)\s*/i).map((p) => p.trim()).filter(Boolean);
-  const EXCLUDE = /freedom\s+adjust|adjuster|bank|mortgage|loan\s*depot|loandepot|isaoa|atima|its\s+successors|n\.?a\.?$|llc$|inc\.?$|corp|company|servicing|trust|holdings|public\s+adjust/i;
-  const insured = parts.find((p) => !EXCLUDE.test(p)) || parts[0] || null;
-  return insured ? insured.replace(/\s+/g, " ").trim() : null;
-}
-
-/* ------------------------------------------------------------------ */
-/*  Config maps                                                        */
-/* ------------------------------------------------------------------ */
-
-const statusColors: Record<string, string> = {
-  uploaded: "bg-muted text-muted-foreground",
-  processing: "bg-blue-500/20 text-blue-400",
-  ocr_complete: "bg-blue-500/20 text-blue-400",
-  endorsements_in_progress: "bg-amber-500/20 text-amber-400",
-  endorsements_complete: "bg-emerald-500/20 text-emerald-300",
-  manual_review_required: "bg-orange-500/20 text-orange-400",
-  needs_review: "bg-red-500/20 text-red-400",
-  approved_for_deposit: "bg-emerald-500/20 text-emerald-400",
-  branch_deposit_required: "bg-blue-500/20 text-blue-400",
-  loss_draft_required: "bg-purple-500/20 text-purple-400",
-  reissue_requested: "bg-orange-500/20 text-orange-400",
-  deposited: "bg-primary/20 text-primary",
-  voided: "bg-destructive/20 text-destructive",
-  ready: "bg-emerald-500/20 text-emerald-400",
-};
-
-const recommendationConfig: Record<string, { label: string; icon: typeof CheckCircle2; color: string }> = {
-  ready_for_deposit: { label: "Ready for Deposit", icon: CheckCircle2, color: "text-emerald-400" },
-  endorsements_pending: { label: "Endorsements Pending", icon: Clock, color: "text-amber-400" },
-  manual_review_required: { label: "Manual Review Required", icon: AlertTriangle, color: "text-orange-400" },
-  branch_deposit_recommended: { label: "Branch Deposit", icon: Building2, color: "text-blue-400" },
-  request_reissue: { label: "Request Reissue", icon: RotateCcw, color: "text-red-400" },
-};
-
-const payeeTypeIcons: Record<string, typeof Users> = {
-  insured: Users,
-  mortgage_company: Building2,
-  contractor: Shield,
-  public_adjuster: FileCheck,
-  other: AlertTriangle,
-};
-
-const endorsementColors: Record<string, string> = {
-  pending: "bg-muted text-muted-foreground",
-  viewed: "bg-blue-500/20 text-blue-400",
-  signed: "bg-emerald-500/20 text-emerald-400",
-  waived: "bg-emerald-500/20 text-emerald-400",
-  rejected: "bg-red-500/20 text-red-400",
-  expired: "bg-muted text-muted-foreground line-through",
-};
-
-// "Waived" means the signature is physically on the check — show it as Endorsed.
-const endorsementStatusLabel = (status?: string | null): string => {
-  const v = (status ?? "").toLowerCase();
-  if (v === "waived" || v === "signed") return "Endorsed";
-  return status ?? "pending";
-};
+import type {
+  CheckPayee,
+  CheckAltDepositSummary,
+  CheckItem,
+  CheckEndorsementSummary,
+  AuditEntry,
+  ClaimOption,
+  CheckGroup,
+} from "@/features/check-command/types";
+import {
+  normalizeEndorsementName,
+  normalizeEndorsementType,
+  normalizeEndorsementStatus,
+  mergeEndorsementSummaryRows,
+  isMirroredCheck,
+  lifecycleRank,
+  getEffectiveStatus,
+  prettifyStatus,
+  getEffectiveStatusLabel,
+  getLatestCheckAltDeposit,
+  getCheckAltStatus,
+  getTabStatusLabel,
+  getTabStatusClass,
+  extractInsuredName,
+  statusColors,
+  recommendationConfig,
+  payeeTypeIcons,
+  endorsementColors,
+  endorsementStatusLabel,
+  STATUS_OPTIONS,
+  FUNDS_TYPE_OPTIONS,
+} from "@/features/check-command/status";
+import { useCheckCommandRealtime } from "@/features/check-command/useCheckCommandRealtime";
 
 /* ------------------------------------------------------------------ */
 /*  Class filter + total bar (shared)                                  */
@@ -795,69 +447,8 @@ export default function CheckCommandCenter() {
     }
   }, [selectedCheck, reviewCheckId, isMobile]);
 
-  // Realtime: reflect check status/stage changes immediately without manual refresh.
-  // Phase 6: Debounce invalidations so bursts of events (bulk decisions,
-  // webhook fan-out, endorsement composites) coalesce into a single refetch
-  // instead of hammering the queue query.
-  useEffect(() => {
-    if (!tenantId) return;
-
-    const pending = new Set<string>();
-    const pendingDetailIds = new Set<string>();
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const flush = () => {
-      timer = null;
-      const keys = Array.from(pending);
-      pending.clear();
-      const ids = Array.from(pendingDetailIds);
-      pendingDetailIds.clear();
-      for (const k of keys) {
-        if (k === "loss-draft-counts") {
-          qc.invalidateQueries({ queryKey: ["loss-draft-counts", tenantId] });
-        } else {
-          qc.invalidateQueries({ queryKey: [k] });
-        }
-      }
-      for (const id of ids) {
-        qc.invalidateQueries({ queryKey: ["check-detail", id] });
-      }
-    };
-    const schedule = (keys: string[], detailId?: string | null) => {
-      for (const k of keys) pending.add(k);
-      if (detailId) pendingDetailIds.add(detailId);
-      if (timer) return;
-      timer = setTimeout(flush, 250);
-    };
-
-    const channel = supabase
-      .channel(`check-command-center-${tenantId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "check_intake_items", filter: `tenant_id=eq.${tenantId}` },
-        (payload: any) => {
-          const id = payload?.new?.id ?? payload?.old?.id;
-          schedule(
-            ["check-intake-items", "check-review-queue", "check-dashboard-counts", "loss-draft-counts"],
-            id,
-          );
-        }
-      )
-      // NOTE: check_endorsements has no tenant_id, so we don't subscribe here.
-      // The per-check detail view (CheckDetailPanel) subscribes scoped by check_id.
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "check_files", filter: `tenant_id=eq.${tenantId}` },
-        () => {
-          schedule(["check-intake-items", "check-review-queue", "check-dashboard-counts"]);
-        }
-      )
-      .subscribe();
-    return () => {
-      if (timer) clearTimeout(timer);
-      supabase.removeChannel(channel);
-    };
-  }, [tenantId, qc]);
+  // Realtime: consolidated in useCheckCommandRealtime (debounced invalidations).
+  useCheckCommandRealtime(tenantId);
 
   const { data: tenantMembershipRole } = useQuery({
     queryKey: ["check-command-center-tenant-role", tenantId, user?.id],
@@ -3170,14 +2761,6 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 /*  Admin Status Override — manually move a check between stages       */
 /* ------------------------------------------------------------------ */
 
-const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "needs_review", label: "Review" },
-  { value: "endorsements_in_progress", label: "Endorsing" },
-  { value: "approved_for_deposit", label: "Ready for Deposit" },
-  { value: "loss_draft_required", label: "Loss Draft" },
-  { value: "reissue_requested", label: "Reissue" },
-  { value: "voided", label: "Void" },
-];
 
 function StatusOverride({
   checkId,
@@ -5521,17 +5104,6 @@ function EditableField({
   );
 }
 
-const FUNDS_TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: "acv", label: "ACV (Actual Cash Value)" },
-  { value: "rcv", label: "RCV (Replacement Cost Value)" },
-  { value: "recoverable_depreciation", label: "Recoverable Depreciation" },
-  { value: "supplement", label: "Supplement" },
-  { value: "overhead_and_profit", label: "Overhead & Profit (O&P)" },
-  { value: "deductible", label: "Deductible" },
-  { value: "other_structures", label: "Other Structures" },
-  { value: "personal_property", label: "Personal Property" },
-  { value: "additional_living_expenses", label: "Additional Living Expenses (ALE)" },
-];
 
 function FundsTypeField({
   checkId,
