@@ -178,6 +178,8 @@ import {
   FUNDS_TYPE_OPTIONS,
 } from "@/features/check-command/status";
 import { useCheckCommandRealtime } from "@/features/check-command/useCheckCommandRealtime";
+import { optimisticStage, optimisticRemove } from "@/features/check-command/optimistic";
+
 
 /* ------------------------------------------------------------------ */
 /*  Class filter + total bar (shared)                                  */
