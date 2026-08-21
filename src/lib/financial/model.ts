@@ -110,7 +110,6 @@ export interface PnlResult {
 
 
 const nn = (v: number) => (Number.isFinite(v) && v > 0 ? v : 0);
-const clampPct = (v: number) => Math.min(100, Math.max(0, Number.isFinite(v) ? v : 0));
 
 export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResult {
   const tenants = nn(tenantOverride ?? a.tenants);
