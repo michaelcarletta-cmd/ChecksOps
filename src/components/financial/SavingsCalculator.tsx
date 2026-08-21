@@ -25,6 +25,7 @@ import {
   IINK_PLANS,
   SENSITIVITY_VOLUMES,
   compareCosts,
+  computePayback,
   money,
   pct,
 } from "@/lib/financial/model";
@@ -40,6 +41,9 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
     setI((prev) => ({ ...prev, [key]: v }));
 
   const r = useMemo(() => compareCosts(i), [i]);
+  const payback = useMemo(() => computePayback(i, 24), [i]);
+  const perCheck = (v: number) => (i.checksPerMonth > 0 ? v / i.checksPerMonth : 0);
+
   const sensitivity = useMemo(
     () =>
       SENSITIVITY_VOLUMES.map((n) => {
@@ -77,7 +81,15 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
       [],
       ["Checks / mo", "ChecksOps", "iink", "Savings"],
       ...sensitivity.map((s) => [s.checks, s.ChecksOps, s.iink, s.savings]),
+      [],
+      ["One-time setup fee", payback.setupFee],
+      ["Payback month", payback.paybackMonth ?? "Not within 24 months"],
+      ["2-year net savings after setup fee", payback.twoYearNetSavings],
+      [],
+      ["Month", "ChecksOps cumulative (incl. setup)", "iink cumulative", "Net position"],
+      ...payback.rows.map((row) => [row.month, row.checksOpsCumulative, row.iinkCumulative, row.cumulativeSavings]),
     ]);
+
 
   return (
     <div className="space-y-4">
@@ -145,6 +157,8 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                 <NumberField label="Same day mix" suffix="%" max={100} value={i.coSameDayMixPct} onChange={set("coSameDayMixPct")} hint="Remainder is sent next day." />
                 <NumberField label="MortgageOps handling" prefix="$" step={1} value={i.coMortgageFee} onChange={set("coMortgageFee")} hint="Per mortgage check, billed at cost." />
                 <NumberField label="Referrals" value={i.coReferrals} onChange={set("coReferrals")} hint={`$${i.coReferralCreditPerReferral} credit each toward the monthly fee, max $${i.coReferralCreditCap}/mo (${Math.ceil(i.coReferralCreditCap / Math.max(1, i.coReferralCreditPerReferral))} referrals).`} />
+                <NumberField label="One-time setup fee" prefix="$" step={500} value={i.coSetupFee} onChange={set("coSetupFee")} hint="Charged once at onboarding; excluded from monthly cost." />
+
               </CardContent>
             </Card>
 
@@ -200,7 +214,9 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                   <TableRow>
                     <TableHead>Cost line</TableHead>
                     <TableHead className="text-right">ChecksOps</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">CO / check</TableHead>
                     <TableHead className="text-right">iink</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">iink / check</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -214,23 +230,108 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                     <TableRow key={String(label)}>
                       <TableCell className="text-muted-foreground">{label}</TableCell>
                       <TableCell className="text-right tabular-nums">{money(Number(co))}</TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">{money(perCheck(Number(co)), 2)}</TableCell>
                       <TableCell className="text-right tabular-nums">{money(Number(ii))}</TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">{money(perCheck(Number(ii)), 2)}</TableCell>
                     </TableRow>
                   ))}
                   <TableRow className="font-semibold">
                     <TableCell>Total per month</TableCell>
                     <TableCell className="text-right tabular-nums text-emerald-500">{money(r.checksOps.total)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-emerald-500">{money(r.checksOps.costPerCheck, 2)}</TableCell>
                     <TableCell className="text-right tabular-nums">{money(r.iink.total)}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="text-muted-foreground">Cost per check</TableCell>
-                    <TableCell className="text-right tabular-nums">{money(r.checksOps.costPerCheck, 2)}</TableCell>
                     <TableCell className="text-right tabular-nums">{money(r.iink.costPerCheck, 2)}</TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
+              <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+                Cost per check is the total monthly cost divided by {i.checksPerMonth.toLocaleString()} checks. For
+                ChecksOps that is {money(perCheck(r.checksOps.monthlyFee), 2)} monthly fee +{" "}
+                {money(perCheck(r.checksOps.perCheck), 2)} per-check + {money(perCheck(r.checksOps.perDisbursement), 2)}{" "}
+                disbursements ({i.disbursementsPerCheck} per check) +{" "}
+                {money(perCheck(r.checksOps.mortgageFee), 2)} MortgageOps handling −{" "}
+                {money(perCheck(r.checksOps.referralCredit), 2)} referral credit ={" "}
+                <span className="font-medium text-foreground">{money(r.checksOps.costPerCheck, 2)}</span> per check.
+              </p>
+            </CardContent>
+
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Setup fee payback — 24 months</CardTitle>
+              <CardDescription className="text-xs">
+                Cumulative spend including the one-time {money(payback.setupFee)} ChecksOps setup fee, against iink's
+                ongoing subscription.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <StatTile label="One-time setup" value={money(payback.setupFee)} sub="Charged once, month 1" />
+                <StatTile label="Monthly savings" value={money(payback.monthlySavings)} tone={payback.monthlySavings >= 0 ? "positive" : "negative"} />
+                <StatTile
+                  label="Pays for itself"
+                  value={payback.paybackMonth ? `Month ${payback.paybackMonth}` : "Not within 24 mo"}
+                  sub={payback.paybackMonth ? `${(payback.paybackMonth / 12).toFixed(1)} years` : "At these rates"}
+                  tone={payback.paybackMonth && payback.paybackMonth <= 24 ? "positive" : "negative"}
+                />
+                <StatTile
+                  label="2-year net savings"
+                  value={money(payback.twoYearNetSavings)}
+                  sub="After the setup fee"
+                  tone={payback.twoYearNetSavings >= 0 ? "positive" : "negative"}
+                />
+              </div>
+
+              <div className="h-[240px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={payback.rows} margin={{ left: -12, right: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: CHART_AXIS }} interval={1} />
+                    <YAxis tick={{ fontSize: 10, fill: CHART_AXIS }} tickFormatter={(v) => money(Number(v))} width={70} />
+                    <RTooltip formatter={(v: number) => money(v)} contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Line type="monotone" name="ChecksOps (incl. setup)" dataKey="checksOpsCumulative" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                    <Line type="monotone" name="iink cumulative" dataKey="iinkCumulative" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Month</TableHead>
+                      <TableHead className="text-right">ChecksOps cumulative</TableHead>
+                      <TableHead className="text-right">iink cumulative</TableHead>
+                      <TableHead className="text-right">Net position</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {payback.rows
+                      .filter((row) => row.month % 3 === 0 || row.month === 1 || row.month === payback.paybackMonth)
+                      .map((row) => (
+                        <TableRow key={row.month}>
+                          <TableCell className="whitespace-nowrap">
+                            M{row.month}
+                            {row.month === payback.paybackMonth && (
+                              <span className="ml-2 text-[11px] text-emerald-500">break-even</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">{money(row.checksOpsCumulative)}</TableCell>
+                          <TableCell className="text-right tabular-nums">{money(row.iinkCumulative)}</TableCell>
+                          <TableCell className={`text-right tabular-nums ${row.cumulativeSavings >= 0 ? "text-emerald-500" : "text-destructive"}`}>
+                            {money(row.cumulativeSavings)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
+
+
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>

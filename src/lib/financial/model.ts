@@ -309,6 +309,8 @@ export interface ComparisonInputs {
   coReferrals: number; // active referrals — $5 off each, capped
   coReferralCreditPerReferral: number;
   coReferralCreditCap: number;
+  coSetupFee: number; // one-time onboarding / implementation fee
+
 
   // iink pricing (iink.com/pricing)
   iinkPlan: IinkPlanKey | "auto";
@@ -334,6 +336,8 @@ export const DEFAULT_COMPARISON: ComparisonInputs = {
   coReferrals: 0,
   coReferralCreditPerReferral: 5,
   coReferralCreditCap: 25,
+  coSetupFee: 7500,
+
 
   iinkPlan: "auto",
   iinkMonthlyFee: 375,
@@ -500,8 +504,55 @@ export function findBreakEvenChecks(i: ComparisonInputs): number | null {
   return null;
 }
 
+/* ------------------------------------------------------------------ */
+/* Setup-fee payback (one-time $7,500 vs iink's ongoing subscription)  */
+/* ------------------------------------------------------------------ */
+
+export interface PaybackRow {
+  month: number;
+  label: string;
+  checksOpsCumulative: number; // includes the one-time setup fee in month 1
+  iinkCumulative: number;
+  cumulativeSavings: number;
+}
+
+export interface PaybackResult {
+  setupFee: number;
+  monthlySavings: number;
+  rows: PaybackRow[];
+  /** First month where cumulative ChecksOps spend (incl. setup) drops below iink. */
+  paybackMonth: number | null;
+  /** Cumulative savings at month 24, net of the setup fee. */
+  twoYearNetSavings: number;
+}
+
+export function computePayback(i: ComparisonInputs, months = 24): PaybackResult {
+  const r = compareCosts(i);
+  const setupFee = nn(i.coSetupFee);
+  const rows: PaybackRow[] = [];
+  let co = setupFee;
+  let ii = 0;
+  let paybackMonth: number | null = null;
+
+  for (let m = 1; m <= months; m++) {
+    co += r.checksOps.total;
+    ii += r.iink.total;
+    const cumulativeSavings = ii - co;
+    if (paybackMonth === null && cumulativeSavings >= 0) paybackMonth = m;
+    rows.push({ month: m, label: `M${m}`, checksOpsCumulative: co, iinkCumulative: ii, cumulativeSavings });
+  }
+
+  return {
+    setupFee,
+    monthlySavings: r.monthlySavings,
+    rows,
+    paybackMonth,
+    twoYearNetSavings: rows.length ? rows[rows.length - 1].cumulativeSavings : -setupFee,
+  };
+}
 
 export const SENSITIVITY_VOLUMES = [25, 50, 100, 250, 500, 1000];
+
 
 export const money = (v: number, decimals = 0) =>
   new Intl.NumberFormat("en-US", {
