@@ -18,89 +18,78 @@ export interface PnlAssumptions {
   // Volume
   tenants: number;
   checksPerTenantPerMonth: number;
-  avgCheckValue: number;
   disbursementsPerCheck: number;
-  achMixPct: number; // 0-100, remainder is instant/RTP
+  disbursementsAtHighRatePct: number; // share of disbursements billed at the $1.00 rate
 
   // Revenue (charged to tenant)
-  monthlyPlatformFee: number;
   perCheckFee: number;
-  perDisbursementFee: number;
-  percentFeePct: number; // % of payment volume, 0 by default
+  disbursementFeeHigh: number; // $1.00
+  disbursementFeeLow: number; // $0.75
+  monthlyMaintenanceFee: number;
   mortgageHandlingFee: number;
   mortgageChecksPerTenantPerMonth: number;
   setupFee: number;
   newTenantsPerMonth: number;
 
-  // Variable costs
+  // Cost structure
   checkDepositCost: number; // CheckAlt / RDC per check
-  achCost: number; // per ACH disbursement
-  instantCost: number; // per RTP / instant push
-  ocrCost: number; // AI/OCR + storage per check
-  mortgageShippingCost: number;
-
-  // Per-tenant fixed costs
-  kycPerTenantMonthly: number;
+  nextDayDisbursementCost: number;
+  sameDayDisbursementCost: number;
+  rtpCost: number;
+  nextDayMixPct: number;
+  sameDayMixPct: number; // remainder of the two is RTP
   walletPerTenantMonthly: number;
-  supportPerTenantMonthly: number;
 
-  // Company fixed overhead (monthly)
-  payroll: number;
-  software: number;
-  compliance: number;
-  otherOverhead: number;
+  // Fixed overhead (monthly)
+  checkAltMonthlyFee: number;
+  moovMonthlyMinimumFee: number;
+  kybKycSetupCost: number;
+  checkAltOnboardingFee: number;
 }
 
 export const DEFAULT_PNL: PnlAssumptions = {
   tenants: 5,
   checksPerTenantPerMonth: 40,
-  avgCheckValue: 12000,
   disbursementsPerCheck: 2,
-  achMixPct: 85,
+  disbursementsAtHighRatePct: 100,
 
-  monthlyPlatformFee: 100,
   perCheckFee: 4,
-  perDisbursementFee: 1,
-  percentFeePct: 0,
+  disbursementFeeHigh: 1,
+  disbursementFeeLow: 0.75,
+  monthlyMaintenanceFee: 100,
   mortgageHandlingFee: 10,
   mortgageChecksPerTenantPerMonth: 4,
   setupFee: 7500,
   newTenantsPerMonth: 1,
 
   checkDepositCost: 0.68,
-  achCost: 1,
-  instantCost: 1.5,
-  ocrCost: 0.15,
-  mortgageShippingCost: 30,
-
-  kycPerTenantMonthly: 0,
+  nextDayDisbursementCost: 0.5,
+  sameDayDisbursementCost: 1,
+  rtpCost: 0.5,
+  nextDayMixPct: 80,
+  sameDayMixPct: 15,
   walletPerTenantMonthly: 0,
-  supportPerTenantMonthly: 5,
 
-  payroll: 0,
-  software: 500,
-  compliance: 250,
-  otherOverhead: 250,
+  checkAltMonthlyFee: 0,
+  moovMonthlyMinimumFee: 0,
+  kybKycSetupCost: 0,
+  checkAltOnboardingFee: 0,
 };
 
 export interface PnlResult {
   checks: number;
   disbursements: number;
-  paymentVolume: number;
 
-  subscriptionRevenue: number;
+  maintenanceRevenue: number;
   perCheckRevenue: number;
   disbursementRevenue: number;
-  percentFeeRevenue: number;
   mortgageRevenue: number;
   setupRevenue: number;
   grossRevenue: number;
 
   depositCost: number;
   disbursementCost: number;
-  ocrCostTotal: number;
-  mortgageCostTotal: number;
-  perTenantCost: number;
+  walletCost: number;
   variableCost: number;
 
   grossProfit: number;
@@ -119,34 +108,49 @@ export interface PnlResult {
 const nn = (v: number) => (Number.isFinite(v) && v > 0 ? v : 0);
 const clampPct = (v: number) => Math.min(100, Math.max(0, Number.isFinite(v) ? v : 0));
 
+/** Blended cost of a single disbursement across next-day / same-day / RTP rails. */
+function blendedDisbursementCost(a: PnlAssumptions): number {
+  const nextDay = clampPct(a.nextDayMixPct) / 100;
+  const sameDay = clampPct(a.sameDayMixPct) / 100;
+  const rtp = Math.max(0, 1 - nextDay - sameDay);
+  return (
+    nextDay * nn(a.nextDayDisbursementCost) +
+    sameDay * nn(a.sameDayDisbursementCost) +
+    rtp * nn(a.rtpCost)
+  );
+}
+
+/** Blended price charged for a single disbursement ($1.00 / $0.75 mix). */
+function blendedDisbursementFee(a: PnlAssumptions): number {
+  const high = clampPct(a.disbursementsAtHighRatePct) / 100;
+  return high * nn(a.disbursementFeeHigh) + (1 - high) * nn(a.disbursementFeeLow);
+}
+
 export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResult {
   const tenants = nn(tenantOverride ?? a.tenants);
   const checks = tenants * nn(a.checksPerTenantPerMonth);
   const disbursements = checks * nn(a.disbursementsPerCheck);
-  const paymentVolume = checks * nn(a.avgCheckValue);
-  const achShare = clampPct(a.achMixPct) / 100;
 
-  const subscriptionRevenue = tenants * nn(a.monthlyPlatformFee);
+  const maintenanceRevenue = tenants * nn(a.monthlyMaintenanceFee);
   const perCheckRevenue = checks * nn(a.perCheckFee);
-  const disbursementRevenue = disbursements * nn(a.perDisbursementFee);
-  const percentFeeRevenue = paymentVolume * (clampPct(a.percentFeePct) / 100);
+  const disbursementRevenue = disbursements * blendedDisbursementFee(a);
   const mortgageChecks = tenants * nn(a.mortgageChecksPerTenantPerMonth);
-  const mortgageRevenue = mortgageChecks * (nn(a.mortgageHandlingFee) + nn(a.mortgageShippingCost));
+  const mortgageRevenue = mortgageChecks * nn(a.mortgageHandlingFee);
   const setupRevenue = nn(a.newTenantsPerMonth) * nn(a.setupFee);
   const grossRevenue =
-    subscriptionRevenue + perCheckRevenue + disbursementRevenue + percentFeeRevenue + mortgageRevenue + setupRevenue;
+    maintenanceRevenue + perCheckRevenue + disbursementRevenue + mortgageRevenue + setupRevenue;
 
   const depositCost = checks * nn(a.checkDepositCost);
-  const disbursementCost =
-    disbursements * achShare * nn(a.achCost) + disbursements * (1 - achShare) * nn(a.instantCost);
-  const ocrCostTotal = checks * nn(a.ocrCost);
-  const mortgageCostTotal = mortgageChecks * nn(a.mortgageShippingCost);
-  const perTenantCost =
-    tenants * (nn(a.kycPerTenantMonthly) + nn(a.walletPerTenantMonthly) + nn(a.supportPerTenantMonthly));
-  const variableCost = depositCost + disbursementCost + ocrCostTotal + mortgageCostTotal + perTenantCost;
+  const disbursementCost = disbursements * blendedDisbursementCost(a);
+  const walletCost = tenants * nn(a.walletPerTenantMonthly);
+  const variableCost = depositCost + disbursementCost + walletCost;
 
   const grossProfit = grossRevenue - variableCost;
-  const fixedOverhead = nn(a.payroll) + nn(a.software) + nn(a.compliance) + nn(a.otherOverhead);
+  const fixedOverhead =
+    nn(a.checkAltMonthlyFee) +
+    nn(a.moovMonthlyMinimumFee) +
+    nn(a.kybKycSetupCost) +
+    nn(a.checkAltOnboardingFee);
   const netProfit = grossProfit - fixedOverhead;
 
   const one = computeContributionPerTenant(a);
@@ -154,19 +158,15 @@ export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResul
   return {
     checks,
     disbursements,
-    paymentVolume,
-    subscriptionRevenue,
+    maintenanceRevenue,
     perCheckRevenue,
     disbursementRevenue,
-    percentFeeRevenue,
     mortgageRevenue,
     setupRevenue,
     grossRevenue,
     depositCost,
     disbursementCost,
-    ocrCostTotal,
-    mortgageCostTotal,
-    perTenantCost,
+    walletCost,
     variableCost,
     grossProfit,
     grossMarginPct: grossRevenue > 0 ? (grossProfit / grossRevenue) * 100 : 0,
@@ -183,28 +183,20 @@ export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResul
 
 /** Recurring gross profit generated by one additional tenant (excludes setup fee). */
 function computeContributionPerTenant(a: PnlAssumptions): number {
-  const noSetup: PnlAssumptions = { ...a, tenants: 1, newTenantsPerMonth: 0 };
-  const checks = nn(noSetup.checksPerTenantPerMonth);
-  const disbursements = checks * nn(noSetup.disbursementsPerCheck);
-  const achShare = clampPct(noSetup.achMixPct) / 100;
-  const mortgageChecks = nn(noSetup.mortgageChecksPerTenantPerMonth);
+  const checks = nn(a.checksPerTenantPerMonth);
+  const disbursements = checks * nn(a.disbursementsPerCheck);
+  const mortgageChecks = nn(a.mortgageChecksPerTenantPerMonth);
 
   const revenue =
-    nn(noSetup.monthlyPlatformFee) +
-    checks * nn(noSetup.perCheckFee) +
-    disbursements * nn(noSetup.perDisbursementFee) +
-    checks * nn(noSetup.avgCheckValue) * (clampPct(noSetup.percentFeePct) / 100) +
-    mortgageChecks * (nn(noSetup.mortgageHandlingFee) + nn(noSetup.mortgageShippingCost));
+    nn(a.monthlyMaintenanceFee) +
+    checks * nn(a.perCheckFee) +
+    disbursements * blendedDisbursementFee(a) +
+    mortgageChecks * nn(a.mortgageHandlingFee);
 
   const cost =
-    checks * nn(noSetup.checkDepositCost) +
-    disbursements * achShare * nn(noSetup.achCost) +
-    disbursements * (1 - achShare) * nn(noSetup.instantCost) +
-    checks * nn(noSetup.ocrCost) +
-    mortgageChecks * nn(noSetup.mortgageShippingCost) +
-    nn(noSetup.kycPerTenantMonthly) +
-    nn(noSetup.walletPerTenantMonthly) +
-    nn(noSetup.supportPerTenantMonthly);
+    checks * nn(a.checkDepositCost) +
+    disbursements * blendedDisbursementCost(a) +
+    nn(a.walletPerTenantMonthly);
 
   return revenue - cost;
 }
@@ -256,6 +248,7 @@ export const SCENARIOS: Record<ScenarioKey, { label: string; patch: Partial<PnlA
     patch: { tenants: 30, checksPerTenantPerMonth: 100, disbursementsPerCheck: 3, newTenantsPerMonth: 3 },
   },
 };
+
 
 /* ------------------------------------------------------------------ */
 /* ChecksOps vs iink comparison                                        */
@@ -382,11 +375,33 @@ export function compareCosts(i: ComparisonInputs, checksOverride?: number): Comp
   };
 }
 
+/** Monthly savings at a given check count, without recursing into break-even search. */
+function savingsAt(i: ComparisonInputs, checks: number): number {
+  const volume = checks * nn(i.avgCheckAmount);
+  const disbursements = checks * nn(i.disbursementsPerCheck);
+  const instantShare = clampPct(i.instantMixPct) / 100;
+
+  const co =
+    nn(i.coMonthlyFee) +
+    checks * nn(i.coPerCheckFee) +
+    disbursements * nn(i.coPerDisbursementFee) +
+    volume * (clampPct(i.coPercentFeePct) / 100) +
+    disbursements * instantShare * nn(i.coInstantSurcharge);
+
+  const ii =
+    nn(i.iinkMonthlyFee) +
+    checks * nn(i.iinkPerCheckFee) +
+    disbursements * nn(i.iinkPerDisbursementFee) +
+    volume * (clampPct(i.iinkPercentFeePct) / 100) +
+    volume * instantShare * (clampPct(i.iinkInstantFeePct) / 100);
+
+  return ii - co;
+}
+
 /** Smallest whole check count where ChecksOps becomes cheaper than iink. */
 export function findBreakEvenChecks(i: ComparisonInputs): number | null {
   for (let n = 1; n <= 2000; n++) {
-    const r = compareCosts(i, n);
-    if (r.monthlySavings > 0) return n;
+    if (savingsAt(i, n) > 0) return n;
   }
   return null;
 }
