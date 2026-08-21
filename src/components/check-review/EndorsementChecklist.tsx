@@ -822,7 +822,16 @@ function EndorsementCard({
 
       const { error: updateErr } = await supabase
         .from("check_intake_items")
-        .update({ back_image_path: newPath })
+        .update({
+          // The returned mortgage-endorsed image is now the canonical base.
+          // Clear every artifact derived from the prior back image so the
+          // adjuster/deposit flow cannot silently reuse the stale upload.
+          back_image_path: newPath,
+          back_image_original_path: newPath,
+          back_image_deposit_path: null,
+          endorsement_render_status: "idle",
+          endorsement_render_meta: null,
+        })
         .eq("id", endorsement.check_id);
 
       if (updateErr) throw updateErr;

@@ -493,7 +493,15 @@ function EndorsedCheckUpload({
 
       const { error: updateErr } = await supabase
         .from("check_intake_items")
-        .update({ back_image_path: newPath })
+        .update({
+          // Make this returned mortgage-endorsed image the new pristine base
+          // and invalidate outputs generated from the previous back image.
+          back_image_path: newPath,
+          back_image_original_path: newPath,
+          back_image_deposit_path: null,
+          endorsement_render_status: "idle",
+          endorsement_render_meta: null,
+        })
         .eq("id", checkId);
       if (updateErr) throw updateErr;
 

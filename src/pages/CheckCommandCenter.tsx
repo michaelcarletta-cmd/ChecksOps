@@ -4131,7 +4131,13 @@ function CheckDetailPanel({
                               if (uploadErr) throw uploadErr;
                               const { error: updateErr } = await supabase
                                 .from("check_intake_items")
-                                .update({ back_image_path: newPath })
+                                .update({
+                                  back_image_path: newPath,
+                                  back_image_original_path: newPath,
+                                  back_image_deposit_path: null,
+                                  endorsement_render_status: "idle",
+                                  endorsement_render_meta: null,
+                                })
                                 .eq("id", check.id);
                               if (updateErr) throw updateErr;
                               await supabase.from("check_audit_log").insert({
