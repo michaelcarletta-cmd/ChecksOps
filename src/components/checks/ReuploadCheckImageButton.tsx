@@ -112,6 +112,9 @@ export function ReuploadCheckImageButton({
       });
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
       qc.invalidateQueries({ queryKey: ["check-image", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-back-img"] });
+      qc.invalidateQueries({ queryKey: ["check-back-img-original-for-adjuster", checkId] });
       onUploaded?.();
     } catch (e: any) {
       toast({
