@@ -394,12 +394,17 @@ async function detectCheckBBox(src: string, natW: number, natH: number): Promise
   }
   if (!box) return fallbackRect(natW, natH);
 
-  const pad = 4;
+  // Generous safety margin. A tight bbox regularly clips the right edge of a
+  // check (light background bleeds into the paper), and CheckAlt/Mitek rejects
+  // or mis-reads checks whose border is cut off. Padding ~3% per side keeps a
+  // sliver of background around the check instead.
+  const pad = Math.max(8, Math.round(Math.min(w, h) * 0.03));
   const x0 = Math.max(0, box.x - pad) / scale;
   const y0 = Math.max(0, box.y - pad) / scale;
   const x1 = Math.min(w - 1, box.x + box.w + pad) / scale;
   const y1 = Math.min(h - 1, box.y + box.h + pad) / scale;
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+
 }
 
 function sampleCornerLuminance(lum: Uint8ClampedArray, w: number, h: number, patch: number): number {
