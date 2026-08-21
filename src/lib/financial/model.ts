@@ -73,6 +73,12 @@ export const DEFAULT_PNL: PnlAssumptions = {
 export interface PnlResult {
   checks: number;
   disbursements: number;
+  sameDayDisbursements: number;
+  nextDayDisbursements: number;
+  sameDayRevenue: number;
+  nextDayRevenue: number;
+  sameDayCost: number;
+  nextDayCost: number;
 
   maintenanceRevenue: number;
   perCheckRevenue: number;
