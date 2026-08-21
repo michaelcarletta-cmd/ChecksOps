@@ -139,7 +139,8 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-3">
                 <NumberField label="Checks / month" value={i.checksPerMonth} onChange={set("checksPerMonth")} />
-                <NumberField label="Disbursements / check" step={0.1} value={i.disbursementsPerCheck} onChange={set("disbursementsPerCheck")} />
+                <NumberField label="Same-day disbursements / mo" value={i.sameDayDisbursementsPerMonth} onChange={set("sameDayDisbursementsPerMonth")} hint="Count billed at the same-day rate." />
+                <NumberField label="Next-day disbursements / mo" value={i.nextDayDisbursementsPerMonth} onChange={set("nextDayDisbursementsPerMonth")} hint="Count billed at the next-day rate." />
                 <NumberField label="Mortgage checks / month" value={i.mortgageChecksPerMonth} onChange={set("mortgageChecksPerMonth")} hint="Checks needing mortgage-company endorsement handling." />
                 <NumberField label="Avg check amount" prefix="$" step={1000} value={i.avgCheckAmount} onChange={set("avgCheckAmount")} hint="Drives iink's capped 1% mortgage-payee fee." />
               </CardContent>
@@ -154,7 +155,6 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                 <NumberField label="Per check" prefix="$" step={0.25} value={i.coPerCheckFee} onChange={set("coPerCheckFee")} />
                 <NumberField label="Same day disbursement" prefix="$" step={0.05} value={i.coSameDayDisbursementFee} onChange={set("coSameDayDisbursementFee")} />
                 <NumberField label="Next day disbursement" prefix="$" step={0.05} value={i.coNextDayDisbursementFee} onChange={set("coNextDayDisbursementFee")} />
-                <NumberField label="Same day mix" suffix="%" max={100} value={i.coSameDayMixPct} onChange={set("coSameDayMixPct")} hint="Remainder is sent next day." />
                 <NumberField label="MortgageOps handling" prefix="$" step={1} value={i.coMortgageFee} onChange={set("coMortgageFee")} hint="Per mortgage check, billed at cost." />
                 <NumberField label="Referrals" value={i.coReferrals} onChange={set("coReferrals")} hint={`$${i.coReferralCreditPerReferral} credit each toward the monthly fee, max $${i.coReferralCreditCap}/mo (${Math.ceil(i.coReferralCreditCap / Math.max(1, i.coReferralCreditPerReferral))} referrals).`} />
                 <NumberField label="One-time setup fee" prefix="$" step={500} value={i.coSetupFee} onChange={set("coSetupFee")} hint="Charged once at onboarding; excluded from monthly cost." />
@@ -205,7 +205,8 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Side-by-side cost</CardTitle>
               <CardDescription className="text-xs">
-                {i.checksPerMonth.toLocaleString()} checks · {r.disbursements.toLocaleString()} disbursements per month
+                {i.checksPerMonth.toLocaleString()} checks · {Math.round(r.sameDayDisbursements).toLocaleString()}{" "}
+                same-day + {Math.round(r.nextDayDisbursements).toLocaleString()} next-day disbursements per month
               </CardDescription>
             </CardHeader>
             <CardContent className="overflow-x-auto">
@@ -223,7 +224,16 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                   {[
                     ["Monthly platform fee", r.checksOps.monthlyFee, r.iink.monthlyFee],
                     ["Per-check fees (over allowance)", r.checksOps.perCheck, r.iink.perCheck],
-                    ["Disbursement fees", r.checksOps.perDisbursement, r.iink.perDisbursement],
+                    [
+                      `Same-day disbursements (${Math.round(r.sameDayDisbursements).toLocaleString()} × ${money(i.coSameDayDisbursementFee, 2)})`,
+                      r.sameDayCost,
+                      0,
+                    ],
+                    [
+                      `Next-day disbursements (${Math.round(r.nextDayDisbursements).toLocaleString()} × ${money(i.coNextDayDisbursementFee, 2)})`,
+                      r.nextDayCost,
+                      0,
+                    ],
                     ["MortgageOps handling", r.checksOps.mortgageFee, r.iink.mortgageFee],
                     ["Referral credit", -r.checksOps.referralCredit, 0],
                   ].map(([label, co, ii]) => (
@@ -248,7 +258,9 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                 Cost per check is the total monthly cost divided by {i.checksPerMonth.toLocaleString()} checks. For
                 ChecksOps that is {money(perCheck(r.checksOps.monthlyFee), 2)} monthly fee +{" "}
                 {money(perCheck(r.checksOps.perCheck), 2)} per-check + {money(perCheck(r.checksOps.perDisbursement), 2)}{" "}
-                disbursements ({i.disbursementsPerCheck} per check) +{" "}
+                disbursements ({Math.round(r.sameDayDisbursements).toLocaleString()} same-day at{" "}
+                {money(i.coSameDayDisbursementFee, 2)} + {Math.round(r.nextDayDisbursements).toLocaleString()} next-day
+                at {money(i.coNextDayDisbursementFee, 2)}) +{" "}
                 {money(perCheck(r.checksOps.mortgageFee), 2)} MortgageOps handling −{" "}
                 {money(perCheck(r.checksOps.referralCredit), 2)} referral credit ={" "}
                 <span className="font-medium text-foreground">{money(r.checksOps.costPerCheck, 2)}</span> per check.
