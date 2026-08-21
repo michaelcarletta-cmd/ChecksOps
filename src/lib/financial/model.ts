@@ -137,7 +137,10 @@ export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResul
   const perCheckRevenue = checks * nn(a.perCheckFee);
   const disbursementRevenue = disbursements * blendedDisbursementFee(a);
   const setupRevenue = nn(a.newTenantsPerMonth) * nn(a.setupFee);
-  const grossRevenue = maintenanceRevenue + perCheckRevenue + disbursementRevenue + setupRevenue;
+  const setupRevenueAllTenants = tenants * nn(a.setupFee);
+  const recurringRevenue = maintenanceRevenue + perCheckRevenue + disbursementRevenue;
+  const grossRevenue = recurringRevenue + setupRevenue;
+
 
   const depositCost = checks * nn(a.checkDepositCost);
   const disbursementCost = disbursements * blendedDisbursementCost(a);
