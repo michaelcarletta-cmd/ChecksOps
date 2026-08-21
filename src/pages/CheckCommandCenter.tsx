@@ -401,15 +401,9 @@ export default function CheckCommandCenter() {
     const ids = Array.from(bulkSelected);
     const idSet = new Set(ids);
 
-    // Phase 3: Optimistic update — move checks to the target stage immediately
-    // in the queue cache, then roll back any rows that fail server-side.
-    const queueKey = ["check-intake-items", tenantId] as const;
-    const previous = qc.getQueryData<any[]>(queueKey);
-    if (previous) {
-      qc.setQueryData<any[]>(queueKey, (curr) =>
-        (curr ?? []).map((c: any) => (idSet.has(c.id) ? { ...c, check_stage: path, status: path } : c)),
-      );
-    }
+    // Phase 4: Optimistic update — move checks to the target stage immediately
+    // across every queue cache, then roll back if anything fails server-side.
+    const rollback = optimisticStage(qc, idSet, path);
 
     let ok = 0; const failed: string[] = []; const failedIds: string[] = [];
     for (const id of ids) {
@@ -425,15 +419,12 @@ export default function CheckCommandCenter() {
     if (failed.length === 0) {
       sonnerToast.success(`${ok} check${ok === 1 ? "" : "s"} moved to ${label}`);
     } else {
-      // Roll back failed rows to their prior state
-      if (previous) {
-        const prevById = new Map(previous.map((c: any) => [c.id, c]));
-        qc.setQueryData<any[]>(queueKey, (curr) =>
-          (curr ?? []).map((c: any) => (failedIds.includes(c.id) ? (prevById.get(c.id) ?? c) : c)),
-        );
-      }
+      // Any failure rolls the optimistic patch back; the refetch below is the
+      // source of truth for the rows that did succeed.
+      rollback();
       sonnerToast.error(`${ok} succeeded, ${failed.length} failed. ${failed[0] ?? ""}`);
     }
+
     clearBulk();
     qc.invalidateQueries({ queryKey: ["check-intake-items"] });
     qc.invalidateQueries({ queryKey: ["check-review-queue"] });
