@@ -136,10 +136,11 @@ export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResul
   const maintenanceRevenue = tenants * nn(a.monthlyMaintenanceFee);
   const perCheckRevenue = checks * nn(a.perCheckFee);
   const disbursementRevenue = disbursements * blendedDisbursementFee(a);
-  const setupRevenue = nn(a.newTenantsPerMonth) * nn(a.setupFee);
+  // One-time $7,500 setup fee is charged per tenant — every tenant in the base counts.
   const setupRevenueAllTenants = tenants * nn(a.setupFee);
+  const setupRevenue = setupRevenueAllTenants;
   const recurringRevenue = maintenanceRevenue + perCheckRevenue + disbursementRevenue;
-  const grossRevenue = recurringRevenue + setupRevenue;
+  const grossRevenue = recurringRevenue + setupRevenueAllTenants;
 
 
   const depositCost = checks * nn(a.checkDepositCost);
