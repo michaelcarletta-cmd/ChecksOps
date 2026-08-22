@@ -71,8 +71,11 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
       ["Average check amount", i.avgCheckAmount],
       ["% checks with mortgage payee", i.mortgagePctOfChecks],
       ["Avg mortgage companies on those checks", i.avgMortgageCompanies],
-      ["RTP / instant usage %", i.rtpUsagePct],
-      ["Next-day disbursements / month", i.nextDayDisbursementsPerMonth],
+      ["Same-day ACH disbursements / month", i.sameDayDisbursementsPerMonth],
+      ["Next-day ACH disbursements / month", i.nextDayDisbursementsPerMonth],
+      ["RTP transfers / month", i.rtpTransfersPerMonth],
+      ["Avg RTP transfer amount", i.avgRtpTransferAmount],
+      ["Avg mortgage checks per claim", i.avgMortgageChecksPerClaim],
       ["iink billing term", i.iinkAnnualBilling ? "Annual (10% off)" : "Monthly"],
       [],
       [
