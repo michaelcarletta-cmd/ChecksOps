@@ -427,12 +427,15 @@ export function iinkTierCost(tier: IinkTier, i: SavingsInputs, checks: number): 
       subscription: tier.monthlyFee * discount,
       perCheck: overage * tier.overageFee,
       disbursement: v.rtpAmount * (tier.rtpPct / 100),
+      // iink does not bill an internal-wallet transfer.
+      wallet: 0,
       otherRecurring: tier.annualUnderwritingFee / 12,
       credits: 0,
       mortgageBase: v.mortgageChecks * perMortgageCheck,
       mortgageAdditionalCompanies: v.extraCompanies * tier.additionalMortgageCompanyFee,
     },
     checks,
+    v.jobs,
   );
 }
 
