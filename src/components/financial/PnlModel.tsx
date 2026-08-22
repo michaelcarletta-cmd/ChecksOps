@@ -28,7 +28,13 @@ import {
   money,
   pct,
   projectTwelveMonths,
+  tenantVolumes,
 } from "@/lib/financial/model";
+import {
+  COST_PER_JOB_NOTE,
+  workflowCostComponents,
+  workflowPriceComponents,
+} from "@/lib/financial/workflows";
 import { downloadCsv } from "@/lib/financial/csv";
 
 const CHART_AXIS = "hsl(var(--muted-foreground))";
@@ -44,6 +50,31 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
   };
 
   const result = useMemo(() => computePnl(a), [a]);
+  const per = useMemo(() => tenantVolumes(a), [a]);
+  const workflowPrices = useMemo(
+    () =>
+      workflowPriceComponents(a, {
+        perCheckFee: a.perCheckFee,
+        sameDayFee: a.disbursementFeeHigh,
+        nextDayFee: a.disbursementFeeLow,
+        rtpPct: a.rtpFeePct,
+        rtpCap: a.rtpFeeCap,
+        walletFee: a.walletTransferFee,
+        avgRtpAmount: a.avgRtpTransferAmount,
+      }, a.jobsPerTenantPerMonth),
+    [a],
+  );
+  const workflowCosts = useMemo(
+    () =>
+      workflowCostComponents(a, {
+        depositCostPerCheck: a.checkDepositCost,
+        sameDayCost: a.sameDayDisbursementCost,
+        nextDayCost: a.nextDayDisbursementCost,
+        rtpCostPerTransfer: a.rtpCostPerTransfer,
+        walletCost: a.walletTransferCost,
+      }, a.jobsPerTenantPerMonth),
+    [a],
+  );
   const projection = useMemo(() => projectTwelveMonths(a, growth), [a, growth]);
 
   const revenueBars = [
@@ -51,6 +82,8 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
     { name: "Per-check", value: result.perCheckRevenue, annual: result.perCheckRevenue * 12 },
     { name: "Same-day disbursements", value: result.sameDayRevenue, annual: result.sameDayRevenue * 12 },
     { name: "Next-day disbursements", value: result.nextDayRevenue, annual: result.nextDayRevenue * 12 },
+    { name: "RTP / instant", value: result.rtpRevenue, annual: result.rtpRevenue * 12 },
+    { name: "Wallet transfers", value: result.walletRevenue, annual: result.walletRevenue * 12 },
     {
       name: "Setup fees (one-time, all tenants)",
       value: result.setupRevenueAllTenants,
@@ -71,6 +104,8 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
     { name: "Deposit (RDC)", value: result.depositCost, annual: result.depositCost * 12 },
     { name: "Same-day rail cost", value: result.sameDayCost, annual: result.sameDayCost * 12 },
     { name: "Next-day rail cost", value: result.nextDayCost, annual: result.nextDayCost * 12 },
+    { name: "RTP rail cost", value: result.rtpCost, annual: result.rtpCost * 12 },
+    { name: "Wallet transfer cost", value: result.walletTransferCostTotal, annual: result.walletTransferCostTotal * 12 },
     { name: "Wallet / tenant", value: result.walletCost, annual: result.walletCost * 12 },
     { name: "Fixed overhead", value: result.fixedOverhead, annual: result.fixedOverhead * 12 },
     {
@@ -100,7 +135,13 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
       ["Gross margin %", result.grossMarginPct.toFixed(1), ""],
       ["Net margin %", result.netMarginPct.toFixed(1), ""],
       ["Tenants", result.checks > 0 ? a.tenants : 0, ""],
+      ["Jobs / transactions per month", result.jobs, result.jobs * 12],
       ["Checks / month", result.checks, result.checks * 12],
+      ["RTP transfers / month", result.rtpTransfers, result.rtpTransfers * 12],
+      ["Wallet transfers / month", result.walletTransfers, result.walletTransfers * 12],
+      ["Revenue per job", result.revenuePerJob, ""],
+      ["Variable cost per job", result.variableCostPerJob, ""],
+      ["Gross profit per job", result.grossProfitPerJob, ""],
       ["Disbursements / month", result.disbursements, result.disbursements * 12],
       ["Revenue per tenant", result.revenuePerTenant, result.revenuePerTenant * 12],
       ["Profit per tenant", result.profitPerTenant, result.profitPerTenant * 12],
@@ -160,6 +201,22 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
           sub={`${a.tenants} tenants × ${money(a.setupFee)}`}
           tone="positive"
         />
+        <StatTile
+          label="Revenue / job"
+          value={money(result.revenuePerJob, 2)}
+          sub={`${Math.round(result.jobs).toLocaleString()} jobs / mo · recurring only`}
+        />
+        <StatTile
+          label="Variable cost / job"
+          value={money(result.variableCostPerJob, 2)}
+          sub="Weighted across the workflow mix"
+        />
+        <StatTile
+          label="Gross profit / job"
+          value={money(result.grossProfitPerJob, 2)}
+          sub={`${Math.round(result.checks).toLocaleString()} of ${Math.round(result.jobs).toLocaleString()} jobs process a check`}
+          tone={result.grossProfitPerJob >= 0 ? "positive" : "negative"}
+        />
 
       </div>
 
@@ -172,11 +229,21 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-3">
                 <NumberField label="Tenants" value={a.tenants} onChange={set("tenants")} />
-                <NumberField label="Checks / tenant / mo" value={a.checksPerTenantPerMonth} onChange={set("checksPerTenantPerMonth")} />
+                {!a.useWorkflowMix && (
+                  <NumberField label="Checks / tenant / mo" value={a.checksPerTenantPerMonth} onChange={set("checksPerTenantPerMonth")} />
+                )}
                 <NumberField label="Per-check fee" prefix="$" step={0.25} value={a.perCheckFee} onChange={set("perCheckFee")} />
-                <NumberField label="Same-day disbursements / tenant / mo" value={a.sameDayDisbursementsPerTenant} onChange={set("sameDayDisbursementsPerTenant")} hint="Billed at the same-day rate." />
-                <NumberField label="Next-day disbursements / tenant / mo" value={a.nextDayDisbursementsPerTenant} onChange={set("nextDayDisbursementsPerTenant")} hint="Billed at the next-day rate." />
+                {!a.useWorkflowMix && (
+                  <>
+                    <NumberField label="Same-day disbursements / tenant / mo" value={a.sameDayDisbursementsPerTenant} onChange={set("sameDayDisbursementsPerTenant")} hint="Billed at the same-day rate." />
+                    <NumberField label="Next-day disbursements / tenant / mo" value={a.nextDayDisbursementsPerTenant} onChange={set("nextDayDisbursementsPerTenant")} hint="Billed at the next-day rate." />
+                  </>
+                )}
                 <NumberField label="Disbursement fee (high)" prefix="$" step={0.05} value={a.disbursementFeeHigh} onChange={set("disbursementFeeHigh")} hint="$1.00 tier." />
+                <NumberField label="RTP fee" suffix="%" step={0.05} value={a.rtpFeePct} onChange={set("rtpFeePct")} hint="Instant transfers are billed as a % of the amount." />
+                <NumberField label="RTP fee cap" prefix="$" step={0.5} value={a.rtpFeeCap} onChange={set("rtpFeeCap")} hint="Maximum RTP fee per transfer." />
+                <NumberField label="Avg RTP transfer" prefix="$" step={500} value={a.avgRtpTransferAmount} onChange={set("avgRtpTransferAmount")} />
+                <NumberField label="Wallet transfer fee" prefix="$" step={0.25} value={a.walletTransferFee} onChange={set("walletTransferFee")} hint="Charged on wallet / internal transfer jobs. $0 today." />
                 <NumberField label="Disbursement fee (low)" prefix="$" step={0.05} value={a.disbursementFeeLow} onChange={set("disbursementFeeLow")} hint="$0.75 tier." />
                 <NumberField label="Monthly maintenance fee" prefix="$" value={a.monthlyMaintenanceFee} onChange={set("monthlyMaintenanceFee")} />
                 <NumberField label="Setup fee (one-time)" prefix="$" step={250} value={a.setupFee} onChange={set("setupFee")} />
@@ -192,6 +259,8 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
                 <NumberField label="Deposit cost / check" prefix="$" step={0.01} value={a.checkDepositCost} onChange={set("checkDepositCost")} hint="CheckAlt FinCapture RDC." />
                 <NumberField label="Next day disbursement" prefix="$" step={0.05} value={a.nextDayDisbursementCost} onChange={set("nextDayDisbursementCost")} />
                 <NumberField label="Same day disbursement" prefix="$" step={0.05} value={a.sameDayDisbursementCost} onChange={set("sameDayDisbursementCost")} />
+                <NumberField label="RTP cost / transfer" prefix="$" step={0.05} value={a.rtpCostPerTransfer} onChange={set("rtpCostPerTransfer")} hint="NEEDS CONFIRMATION — placeholder Moov instant-transfer cost." />
+                <NumberField label="Wallet transfer cost" prefix="$" step={0.05} value={a.walletTransferCost} onChange={set("walletTransferCost")} hint="NEEDS CONFIRMATION — our cost per internal wallet transfer." />
                 <NumberField label="Wallet / tenant" prefix="$" value={a.walletPerTenantMonthly} onChange={set("walletPerTenantMonthly")} />
               </CardContent>
             </Card>
