@@ -83,7 +83,17 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
       [`iink pricing source: ${IINK_PRICING_SOURCE} (captured ${IINK_PRICING_CAPTURED})`],
       [],
       ["Prospect profile"],
-      ["Checks / month", i.checksPerMonth],
+      ["Workflow mix in use", i.useWorkflowMix ? "Yes" : "No — explicit counts"],
+      ["Jobs / transactions per month", i.useWorkflowMix ? i.jobsPerMonth : ""],
+      ["% check + 1 ACH", i.pctCheckAchSingle],
+      ["% check + multiple ACH", i.pctCheckAchMulti],
+      ["% receive funds only", i.pctReceiveOnly],
+      ["% wallet / internal transfer", i.pctWalletTransfer],
+      ["% RTP / instant payment", i.pctRtp],
+      ["ACH per multi-ACH job", i.avgAchOnMultiAchJob],
+      ["Payouts per receive-only job", i.avgPayoutsPerReceiveOnlyJob],
+      ["% payouts same-day", i.pctPayoutsSameDay],
+      ["Processed checks / month", checks],
       ["Average check amount", i.avgCheckAmount],
       ["% checks with mortgage payee", i.mortgagePctOfChecks],
       ["Avg mortgage companies on those checks", i.avgMortgageCompanies],
@@ -92,6 +102,22 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
       ["RTP transfers / month", i.rtpTransfersPerMonth],
       ["Avg RTP transfer amount", i.avgRtpTransferAmount],
       ["Avg mortgage checks per claim", i.avgMortgageChecksPerClaim],
+      [],
+      ["Cost per job / transaction by workflow"],
+      ["Workflow", "Share %", "Jobs / mo", "Check processing", "ACH", "RTP", "Wallet", "Total / job", "Monthly"],
+      ...workflows.map((w) => [
+        w.label,
+        (w.share * 100).toFixed(1),
+        w.jobs,
+        w.checkProcessing,
+        w.ach,
+        w.rtp,
+        w.wallet,
+        w.total,
+        w.total * w.jobs,
+      ]),
+      ["Weighted variable fee / job", weightedPerJobCost],
+      ["Effective all-in cost / job", r.checksOps.costPerJob],
       ["iink billing term", i.iinkAnnualBilling ? "Annual (10% off)" : "Monthly"],
       [],
       [
@@ -105,6 +131,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
         "Processing subtotal",
         "Mortgage fees",
         "Total / mo",
+        "Cost per job",
         "Cost per check",
         "Monthly savings vs ChecksOps",
         "Annual savings",
@@ -122,6 +149,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
         r.checksOps.processingTotal,
         r.checksOps.mortgageTotal,
         r.checksOps.total,
+        r.checksOps.costPerJob,
         r.checksOps.costPerCheck,
         "",
         "",
@@ -139,6 +167,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
         t.cost.processingTotal,
         t.cost.mortgageTotal,
         t.cost.total,
+        t.cost.costPerJob,
         t.cost.costPerCheck,
         t.monthlySavings,
         t.annualSavings,
@@ -463,14 +492,101 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
         )}
 
         <div className="min-w-0 space-y-4">
+          {/* Cost per job / transaction */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Cost per job / transaction</CardTitle>
+              <CardDescription className="text-xs">{COST_PER_JOB_NOTE}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <StatTile
+                  label="Effective cost / job"
+                  value={money(r.checksOps.costPerJob, 2)}
+                  sub={`${Math.round(r.checksOps.jobs).toLocaleString()} jobs / mo, all-in`}
+                />
+                <StatTile
+                  label="Weighted variable fee / job"
+                  value={money(weightedPerJobCost, 2)}
+                  sub="Mix-weighted transaction fees, before the monthly fee"
+                />
+                <StatTile
+                  label="Processed checks / mo"
+                  value={Math.round(checks).toLocaleString()}
+                  sub={
+                    i.useWorkflowMix
+                      ? `${pct(checks > 0 && r.checksOps.jobs > 0 ? (checks / r.checksOps.jobs) * 100 : 0, 0)} of jobs carry check processing`
+                      : "Explicit count — workflow mix off"
+                  }
+                />
+                <StatTile
+                  label="Cost / processed check"
+                  value={money(r.checksOps.costPerCheck, 2)}
+                  sub="Reference only — overstates recipient-heavy books"
+                />
+              </div>
+
+              <div className="table-scroll">
+                <Table className="text-xs">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Workflow</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Share</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Jobs / mo</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Check processing</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">ACH</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">RTP</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Wallet</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Total / job</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Monthly</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {workflows.map((w) => (
+                      <TableRow key={w.key} className={w.share > 0 ? undefined : "opacity-50"}>
+                        <TableCell className="min-w-[180px]">
+                          <span className="font-medium">{w.label}</span>
+                          <span className="block text-[11px] text-muted-foreground">{w.description}</span>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{pct(w.share * 100, 0)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{Math.round(w.jobs).toLocaleString()}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {w.checkProcessing > 0 ? money(w.checkProcessing, 2) : "—"}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {w.ach > 0 ? `${money(w.ach, 2)} (${w.achPerJob}×)` : "—"}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{w.rtp > 0 ? money(w.rtp, 2) : "—"}</TableCell>
+                        <TableCell className="text-right tabular-nums">{w.wallet > 0 ? money(w.wallet, 2) : "—"}</TableCell>
+                        <TableCell className="text-right tabular-nums font-semibold text-emerald-500">
+                          {money(w.total, 2)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{money(w.total * w.jobs)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                Receive-funds-only and wallet jobs carry no check-processing component. ACH is shown at the
+                mix-weighted blend of the same-day and next-day rate ({i.pctPayoutsSameDay}% same-day). The
+                monthly fee, referral credits and mortgage / loss-draft fees sit outside this per-job view and
+                are added in the plan comparison below.
+              </p>
+            </CardContent>
+          </Card>
+
           {/* Apples-to-apples split */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Monthly cost by plan</CardTitle>
               <CardDescription className="text-xs">
-                {i.checksPerMonth.toLocaleString()} checks · {Math.round((i.checksPerMonth * Math.min(100, i.mortgagePctOfChecks)) / 100).toLocaleString()} with a
-                mortgage payee · normal check processing is separated from mortgage / loss-draft fees so the
-                comparison is apples-to-apples.
+{Math.round(r.checksOps.jobs).toLocaleString()} jobs / mo ·{" "}
+                {Math.round(checks).toLocaleString()} processed checks ·{" "}
+                {Math.round((checks * Math.min(100, i.mortgagePctOfChecks)) / 100).toLocaleString()} with a mortgage
+                payee. Normal check processing is separated from mortgage / loss-draft fees, and the iink side is
+                costed on the prospect's real workflow mix — receive-only, wallet and RTP jobs never count as check
+                submissions.
               </CardDescription>
             </CardHeader>
             <CardContent className="table-scroll">
@@ -485,6 +601,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                     <TableHead className="text-right whitespace-nowrap">Processing subtotal</TableHead>
                     <TableHead className="text-right whitespace-nowrap">Mortgage fees</TableHead>
                     <TableHead className="text-right whitespace-nowrap">Total / mo</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Per job</TableHead>
                     <TableHead className="text-right whitespace-nowrap">Per check</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -498,6 +615,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                     <TableCell className="text-right tabular-nums">{money(r.checksOps.processingTotal)}</TableCell>
                     <TableCell className="text-right tabular-nums">{money(r.checksOps.mortgageTotal)}</TableCell>
                     <TableCell className="text-right tabular-nums text-emerald-500">{money(r.checksOps.total)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-emerald-500">{money(r.checksOps.costPerJob, 2)}</TableCell>
                     <TableCell className="text-right tabular-nums text-emerald-500">{money(r.checksOps.costPerCheck, 2)}</TableCell>
                   </TableRow>
                   {r.tiers.map((t) => (
@@ -520,6 +638,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                       <TableCell className="text-right tabular-nums">{money(t.cost.processingTotal)}</TableCell>
                       <TableCell className="text-right tabular-nums">{money(t.cost.mortgageTotal)}</TableCell>
                       <TableCell className="text-right tabular-nums">{money(t.cost.total)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{money(t.cost.costPerJob, 2)}</TableCell>
                       <TableCell className="text-right tabular-nums">{money(t.cost.costPerCheck, 2)}</TableCell>
                     </TableRow>
                   ))}
