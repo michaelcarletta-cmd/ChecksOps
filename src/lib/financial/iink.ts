@@ -11,6 +11,15 @@
  * pass-through, MortgageOps handling, $7,500 one-time setup).
  */
 
+import {
+  DEFAULT_WORKFLOW_MIX,
+  WorkflowMix,
+  WorkflowPriceRates,
+  mixChecksPerMonth,
+  workflowPriceComponents,
+  workflowVolumesForChecks,
+} from "./workflows";
+
 export const IINK_PRICING_SOURCE = "iink.com/pricing";
 export const IINK_PRICING_CAPTURED = "August 21, 2026";
 
@@ -184,21 +193,22 @@ export const IINK_FEATURE_ROWS: {
 /* Inputs                                                              */
 /* ------------------------------------------------------------------ */
 
-export interface SavingsInputs {
+export interface SavingsInputs extends WorkflowMix {
   // Prospect profile
+  /** Legacy explicit check count — used only when the workflow mix is off. */
   checksPerMonth: number;
   avgCheckAmount: number;
-  /** % of monthly checks that carry a mortgage-company payee. */
+  /** % of processed checks that carry a mortgage-company payee. */
   mortgagePctOfChecks: number;
   /** Average number of mortgage companies on those applicable checks. */
   avgMortgageCompanies: number;
   /** Average number of check submissions per mortgage claim (1 = single check). */
   avgMortgageChecksPerClaim: number;
-  /** Same-day ACH disbursements per month. */
+  /** Same-day ACH disbursements per month (legacy explicit mode). */
   sameDayDisbursementsPerMonth: number;
-  /** Next-day ACH disbursements per month. */
+  /** Next-day ACH disbursements per month (legacy explicit mode). */
   nextDayDisbursementsPerMonth: number;
-  /** Instant RTP transfers per month. */
+  /** Instant RTP transfers per month (legacy explicit mode). */
   rtpTransfersPerMonth: number;
   /** Average dollar amount of an RTP transfer — drives iink's % RTP fee. */
   avgRtpTransferAmount: number;
@@ -214,6 +224,8 @@ export interface SavingsInputs {
   coPerCheckFee: number;
   coSameDayDisbursementFee: number;
   coNextDayDisbursementFee: number;
+  /** Fee on a wallet / internal transfer. Zero today — editable. */
+  coWalletTransferFee: number;
   coMortgageFee: number;
   coMortgageAdditionalCheckFee: number;
   coRtpPct: number;
@@ -225,6 +237,8 @@ export interface SavingsInputs {
 }
 
 export const DEFAULT_SAVINGS: SavingsInputs = {
+  ...DEFAULT_WORKFLOW_MIX,
+
   checksPerMonth: 50,
   avgCheckAmount: 25_000,
   mortgagePctOfChecks: 20,
@@ -242,6 +256,7 @@ export const DEFAULT_SAVINGS: SavingsInputs = {
   coPerCheckFee: 4,
   coSameDayDisbursementFee: 1,
   coNextDayDisbursementFee: 0.75,
+  coWalletTransferFee: 0,
   coMortgageFee: 10,
   coMortgageAdditionalCheckFee: 5,
   coRtpPct: 0.95,
@@ -251,6 +266,22 @@ export const DEFAULT_SAVINGS: SavingsInputs = {
   coReferralCreditCap: 25,
   coSetupFee: 7500,
 };
+
+/** Price rates in the shape the workflow model expects. */
+export const priceRatesFrom = (i: SavingsInputs): WorkflowPriceRates => ({
+  perCheckFee: i.coPerCheckFee,
+  sameDayFee: i.coSameDayDisbursementFee,
+  nextDayFee: i.coNextDayDisbursementFee,
+  rtpPct: i.coRtpPct,
+  rtpCap: i.coRtpFeeCap,
+  walletFee: i.coWalletTransferFee,
+  avgRtpAmount: i.avgRtpTransferAmount,
+});
+
+/** Monthly processed-check count actually used by the model. */
+export const effectiveChecks = (i: SavingsInputs) =>
+  i.useWorkflowMix ? mixChecksPerMonth(i) : nn(i.checksPerMonth);
+
 
 const nn = (v: number) => (Number.isFinite(v) && v > 0 ? v : 0);
 
@@ -263,6 +294,8 @@ export interface CostBreakdown {
   subscription: number;
   perCheck: number;
   disbursement: number;
+  /** Wallet / internal transfer fees. */
+  wallet: number;
   otherRecurring: number; // e.g. amortized annual underwriting fee
   credits: number; // stored positive, subtracted from the total
   processingTotal: number;
@@ -273,32 +306,75 @@ export interface CostBreakdown {
   mortgageTotal: number;
 
   total: number;
+  /** Legacy per-processed-check view. Kept for reference, not the headline. */
   costPerCheck: number;
+  /** Total jobs / transactions behind this cost. */
+  jobs: number;
+  /** Primary metric — effective cost per job / transaction. */
+  costPerJob: number;
 }
 
-function finish(b: Omit<CostBreakdown, "processingTotal" | "mortgageTotal" | "total" | "costPerCheck">, checks: number): CostBreakdown {
+type CostSeed = Omit<
+  CostBreakdown,
+  "processingTotal" | "mortgageTotal" | "total" | "costPerCheck" | "jobs" | "costPerJob"
+>;
+
+function finish(b: CostSeed, checks: number, jobs: number): CostBreakdown {
   const processingTotal = Math.max(
     0,
-    b.subscription + b.perCheck + b.disbursement + b.otherRecurring - b.credits,
+    b.subscription + b.perCheck + b.disbursement + b.wallet + b.otherRecurring - b.credits,
   );
   const mortgageTotal = b.mortgageBase + b.mortgageAdditionalCompanies;
   const total = processingTotal + mortgageTotal;
-  return { ...b, processingTotal, mortgageTotal, total, costPerCheck: checks > 0 ? total / checks : 0 };
+  return {
+    ...b,
+    processingTotal,
+    mortgageTotal,
+    total,
+    costPerCheck: checks > 0 ? total / checks : 0,
+    jobs,
+    costPerJob: jobs > 0 ? total / jobs : 0,
+  };
 }
 
-/** Volume-derived counts, scaled when sweeping check volume for sensitivity. */
+/**
+ * Volume-derived counts for a given PROCESSED CHECK count.
+ *
+ * Workflow-mix mode derives ACH / RTP / wallet volume from the job mix, so a
+ * receive-funds-only or wallet job never picks up a check-processing component.
+ * Legacy mode scales the explicit counts against the base check volume.
+ */
 export function scaledVolumes(i: SavingsInputs, checks: number) {
-  const base = nn(i.checksPerMonth);
-  const scale = base > 0 ? checks / base : 0;
   const mortgageChecks = checks * (Math.min(100, nn(i.mortgagePctOfChecks)) / 100);
   const extraCompanies = Math.max(0, nn(i.avgMortgageCompanies) - 1) * mortgageChecks;
   // Additional check submissions on the same mortgage claim ($5 each on ChecksOps).
   const extraMortgageChecks = Math.max(0, nn(i.avgMortgageChecksPerClaim) - 1) * mortgageChecks;
-  const nextDay = nn(i.nextDayDisbursementsPerMonth) * scale;
-  const sameDay = nn(i.sameDayDisbursementsPerMonth) * scale;
-  const rtpTransfers = nn(i.rtpTransfersPerMonth) * scale;
-  const rtpAmount = rtpTransfers * nn(i.avgRtpTransferAmount);
   const usesMortgage = i.usesMortgageServices !== false;
+
+  let sameDay: number;
+  let nextDay: number;
+  let rtpTransfers: number;
+  let walletTransfers: number;
+  let jobs: number;
+
+  if (i.useWorkflowMix) {
+    const w = workflowVolumesForChecks(i, checks);
+    sameDay = w.sameDay;
+    nextDay = w.nextDay;
+    rtpTransfers = w.rtpTransfers;
+    walletTransfers = w.walletTransfers;
+    jobs = w.jobs;
+  } else {
+    const base = nn(i.checksPerMonth);
+    const scale = base > 0 ? checks / base : 0;
+    sameDay = nn(i.sameDayDisbursementsPerMonth) * scale;
+    nextDay = nn(i.nextDayDisbursementsPerMonth) * scale;
+    rtpTransfers = nn(i.rtpTransfersPerMonth) * scale;
+    walletTransfers = 0;
+    // Without a mix, a "job" is one processed check plus its disbursements.
+    jobs = Math.max(checks, checks + rtpTransfers);
+  }
+
   return {
     usesMortgage,
     mortgageChecks: usesMortgage ? mortgageChecks : 0,
@@ -307,7 +383,9 @@ export function scaledVolumes(i: SavingsInputs, checks: number) {
     nextDay,
     sameDay,
     rtpTransfers,
-    rtpAmount,
+    rtpAmount: rtpTransfers * nn(i.avgRtpTransferAmount),
+    walletTransfers,
+    jobs,
   };
 }
 
@@ -325,20 +403,28 @@ export function checksOpsCost(i: SavingsInputs, checks: number): CostBreakdown {
   return finish(
     {
       subscription: nn(i.coMonthlyFee),
+      // Only processed checks carry the check-processing component.
       perCheck: checks * nn(i.coPerCheckFee),
       disbursement:
         v.sameDay * nn(i.coSameDayDisbursementFee) +
         v.nextDay * nn(i.coNextDayDisbursementFee) +
         v.rtpTransfers *
           Math.min(nn(i.coRtpFeeCap), nn(i.avgRtpTransferAmount) * (nn(i.coRtpPct) / 100)),
+      wallet: v.walletTransfers * nn(i.coWalletTransferFee),
       otherRecurring: 0,
       credits: referralCredit(i),
       mortgageBase: v.mortgageChecks * nn(i.coMortgageFee),
       mortgageAdditionalCompanies: v.extraMortgageChecks * nn(i.coMortgageAdditionalCheckFee),
     },
     checks,
+    v.jobs,
   );
 }
+
+/** Per-workflow price breakdown at the prospect's own volume. */
+export const checksOpsWorkflowBreakdown = (i: SavingsInputs) =>
+  workflowPriceComponents(i, priceRatesFrom(i));
+
 
 export function iinkTierCost(tier: IinkTier, i: SavingsInputs, checks: number): CostBreakdown {
   const v = scaledVolumes(i, checks);
@@ -350,12 +436,15 @@ export function iinkTierCost(tier: IinkTier, i: SavingsInputs, checks: number): 
       subscription: tier.monthlyFee * discount,
       perCheck: overage * tier.overageFee,
       disbursement: v.rtpAmount * (tier.rtpPct / 100),
+      // iink does not bill an internal-wallet transfer.
+      wallet: 0,
       otherRecurring: tier.annualUnderwritingFee / 12,
       credits: 0,
       mortgageBase: v.mortgageChecks * perMortgageCheck,
       mortgageAdditionalCompanies: v.extraCompanies * tier.additionalMortgageCompanyFee,
     },
     checks,
+    v.jobs,
   );
 }
 
@@ -389,7 +478,7 @@ function breakEvenFor(tier: IinkTier, i: SavingsInputs): number | null {
 }
 
 export function computeSavings(i: SavingsInputs, checksOverride?: number): SavingsResult {
-  const checks = nn(checksOverride ?? i.checksPerMonth);
+  const checks = nn(checksOverride ?? effectiveChecks(i));
   const co = checksOpsCost(i, checks);
 
   const tiers: TierComparison[] = IINK_TIERS.map((tier) => {

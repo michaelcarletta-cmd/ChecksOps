@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Download, RotateCcw } from "lucide-react";
 import { NumberField, StatTile } from "./NumberField";
@@ -28,7 +30,13 @@ import {
   money,
   pct,
   projectTwelveMonths,
+  tenantVolumes,
 } from "@/lib/financial/model";
+import {
+  COST_PER_JOB_NOTE,
+  workflowCostComponents,
+  workflowPriceComponents,
+} from "@/lib/financial/workflows";
 import { downloadCsv } from "@/lib/financial/csv";
 
 const CHART_AXIS = "hsl(var(--muted-foreground))";
@@ -44,6 +52,31 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
   };
 
   const result = useMemo(() => computePnl(a), [a]);
+  const per = useMemo(() => tenantVolumes(a), [a]);
+  const workflowPrices = useMemo(
+    () =>
+      workflowPriceComponents(a, {
+        perCheckFee: a.perCheckFee,
+        sameDayFee: a.disbursementFeeHigh,
+        nextDayFee: a.disbursementFeeLow,
+        rtpPct: a.rtpFeePct,
+        rtpCap: a.rtpFeeCap,
+        walletFee: a.walletTransferFee,
+        avgRtpAmount: a.avgRtpTransferAmount,
+      }, a.jobsPerTenantPerMonth),
+    [a],
+  );
+  const workflowCosts = useMemo(
+    () =>
+      workflowCostComponents(a, {
+        depositCostPerCheck: a.checkDepositCost,
+        sameDayCost: a.sameDayDisbursementCost,
+        nextDayCost: a.nextDayDisbursementCost,
+        rtpCostPerTransfer: a.rtpCostPerTransfer,
+        walletCost: a.walletTransferCost,
+      }, a.jobsPerTenantPerMonth),
+    [a],
+  );
   const projection = useMemo(() => projectTwelveMonths(a, growth), [a, growth]);
 
   const revenueBars = [
@@ -51,6 +84,8 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
     { name: "Per-check", value: result.perCheckRevenue, annual: result.perCheckRevenue * 12 },
     { name: "Same-day disbursements", value: result.sameDayRevenue, annual: result.sameDayRevenue * 12 },
     { name: "Next-day disbursements", value: result.nextDayRevenue, annual: result.nextDayRevenue * 12 },
+    { name: "RTP / instant", value: result.rtpRevenue, annual: result.rtpRevenue * 12 },
+    { name: "Wallet transfers", value: result.walletRevenue, annual: result.walletRevenue * 12 },
     {
       name: "Setup fees (one-time, all tenants)",
       value: result.setupRevenueAllTenants,
@@ -71,6 +106,8 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
     { name: "Deposit (RDC)", value: result.depositCost, annual: result.depositCost * 12 },
     { name: "Same-day rail cost", value: result.sameDayCost, annual: result.sameDayCost * 12 },
     { name: "Next-day rail cost", value: result.nextDayCost, annual: result.nextDayCost * 12 },
+    { name: "RTP rail cost", value: result.rtpCost, annual: result.rtpCost * 12 },
+    { name: "Wallet transfer cost", value: result.walletTransferCostTotal, annual: result.walletTransferCostTotal * 12 },
     { name: "Wallet / tenant", value: result.walletCost, annual: result.walletCost * 12 },
     { name: "Fixed overhead", value: result.fixedOverhead, annual: result.fixedOverhead * 12 },
     {
@@ -100,7 +137,13 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
       ["Gross margin %", result.grossMarginPct.toFixed(1), ""],
       ["Net margin %", result.netMarginPct.toFixed(1), ""],
       ["Tenants", result.checks > 0 ? a.tenants : 0, ""],
+      ["Jobs / transactions per month", result.jobs, result.jobs * 12],
       ["Checks / month", result.checks, result.checks * 12],
+      ["RTP transfers / month", result.rtpTransfers, result.rtpTransfers * 12],
+      ["Wallet transfers / month", result.walletTransfers, result.walletTransfers * 12],
+      ["Revenue per job", result.revenuePerJob, ""],
+      ["Variable cost per job", result.variableCostPerJob, ""],
+      ["Gross profit per job", result.grossProfitPerJob, ""],
       ["Disbursements / month", result.disbursements, result.disbursements * 12],
       ["Revenue per tenant", result.revenuePerTenant, result.revenuePerTenant * 12],
       ["Profit per tenant", result.profitPerTenant, result.profitPerTenant * 12],
@@ -160,6 +203,22 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
           sub={`${a.tenants} tenants × ${money(a.setupFee)}`}
           tone="positive"
         />
+        <StatTile
+          label="Revenue / job"
+          value={money(result.revenuePerJob, 2)}
+          sub={`${Math.round(result.jobs).toLocaleString()} jobs / mo · recurring only`}
+        />
+        <StatTile
+          label="Variable cost / job"
+          value={money(result.variableCostPerJob, 2)}
+          sub="Weighted across the workflow mix"
+        />
+        <StatTile
+          label="Gross profit / job"
+          value={money(result.grossProfitPerJob, 2)}
+          sub={`${Math.round(result.checks).toLocaleString()} of ${Math.round(result.jobs).toLocaleString()} jobs process a check`}
+          tone={result.grossProfitPerJob >= 0 ? "positive" : "negative"}
+        />
 
       </div>
 
@@ -172,11 +231,21 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-3">
                 <NumberField label="Tenants" value={a.tenants} onChange={set("tenants")} />
-                <NumberField label="Checks / tenant / mo" value={a.checksPerTenantPerMonth} onChange={set("checksPerTenantPerMonth")} />
+                {!a.useWorkflowMix && (
+                  <NumberField label="Checks / tenant / mo" value={a.checksPerTenantPerMonth} onChange={set("checksPerTenantPerMonth")} />
+                )}
                 <NumberField label="Per-check fee" prefix="$" step={0.25} value={a.perCheckFee} onChange={set("perCheckFee")} />
-                <NumberField label="Same-day disbursements / tenant / mo" value={a.sameDayDisbursementsPerTenant} onChange={set("sameDayDisbursementsPerTenant")} hint="Billed at the same-day rate." />
-                <NumberField label="Next-day disbursements / tenant / mo" value={a.nextDayDisbursementsPerTenant} onChange={set("nextDayDisbursementsPerTenant")} hint="Billed at the next-day rate." />
+                {!a.useWorkflowMix && (
+                  <>
+                    <NumberField label="Same-day disbursements / tenant / mo" value={a.sameDayDisbursementsPerTenant} onChange={set("sameDayDisbursementsPerTenant")} hint="Billed at the same-day rate." />
+                    <NumberField label="Next-day disbursements / tenant / mo" value={a.nextDayDisbursementsPerTenant} onChange={set("nextDayDisbursementsPerTenant")} hint="Billed at the next-day rate." />
+                  </>
+                )}
                 <NumberField label="Disbursement fee (high)" prefix="$" step={0.05} value={a.disbursementFeeHigh} onChange={set("disbursementFeeHigh")} hint="$1.00 tier." />
+                <NumberField label="RTP fee" suffix="%" step={0.05} value={a.rtpFeePct} onChange={set("rtpFeePct")} hint="Instant transfers are billed as a % of the amount." />
+                <NumberField label="RTP fee cap" prefix="$" step={0.5} value={a.rtpFeeCap} onChange={set("rtpFeeCap")} hint="Maximum RTP fee per transfer." />
+                <NumberField label="Avg RTP transfer" prefix="$" step={500} value={a.avgRtpTransferAmount} onChange={set("avgRtpTransferAmount")} />
+                <NumberField label="Wallet transfer fee" prefix="$" step={0.25} value={a.walletTransferFee} onChange={set("walletTransferFee")} hint="Charged on wallet / internal transfer jobs. $0 today." />
                 <NumberField label="Disbursement fee (low)" prefix="$" step={0.05} value={a.disbursementFeeLow} onChange={set("disbursementFeeLow")} hint="$0.75 tier." />
                 <NumberField label="Monthly maintenance fee" prefix="$" value={a.monthlyMaintenanceFee} onChange={set("monthlyMaintenanceFee")} />
                 <NumberField label="Setup fee (one-time)" prefix="$" step={250} value={a.setupFee} onChange={set("setupFee")} />
@@ -186,12 +255,68 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
 
             <Card>
               <CardHeader className="pb-3">
+                <CardTitle className="text-base">Workflow / transaction mix</CardTitle>
+                <CardDescription className="text-xs">
+                  Per tenant, per month. Checks, ACH, RTP and wallet volume are all derived from this mix, so
+                  recipient-heavy tenants are not charged a check-processing cost they never incur.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-border/60 p-2.5">
+                  <Label htmlFor="pnl-workflow-mix" className="text-xs text-muted-foreground">
+                    Use workflow mix
+                  </Label>
+                  <Switch
+                    id="pnl-workflow-mix"
+                    checked={a.useWorkflowMix}
+                    onCheckedChange={(v) => {
+                      setScenario("custom");
+                      setA((prev) => ({ ...prev, useWorkflowMix: v }));
+                    }}
+                  />
+                </div>
+                {a.useWorkflowMix ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <NumberField label="Jobs / tenant / mo" value={a.jobsPerTenantPerMonth} onChange={set("jobsPerTenantPerMonth")} hint="Every payment event, not just processed checks." />
+                      <NumberField label="Payouts sent same-day" suffix="%" max={100} step={5} value={a.pctPayoutsSameDay} onChange={set("pctPayoutsSameDay")} />
+                      <NumberField label="Check + 1 ACH" suffix="%" max={100} step={5} value={a.pctCheckAchSingle} onChange={set("pctCheckAchSingle")} />
+                      <NumberField label="Check + multiple ACH" suffix="%" max={100} step={5} value={a.pctCheckAchMulti} onChange={set("pctCheckAchMulti")} />
+                      <NumberField label="Receive funds only" suffix="%" max={100} step={5} value={a.pctReceiveOnly} onChange={set("pctReceiveOnly")} hint="No check-processing revenue or cost." />
+                      <NumberField label="Wallet / internal" suffix="%" max={100} step={5} value={a.pctWalletTransfer} onChange={set("pctWalletTransfer")} />
+                      <NumberField label="RTP / instant" suffix="%" max={100} step={5} value={a.pctRtp} onChange={set("pctRtp")} />
+                      <NumberField label="ACH on multi-ACH job" step={0.5} value={a.avgAchOnMultiAchJob} onChange={set("avgAchOnMultiAchJob")} />
+                      <NumberField label="Payouts / receive-only job" step={0.5} value={a.avgPayoutsPerReceiveOnlyJob} onChange={set("avgPayoutsPerReceiveOnlyJob")} />
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                      Per tenant: {Math.round(per.checks).toLocaleString()} processed checks ·{" "}
+                      {Math.round(per.sameDay).toLocaleString()} same-day ·{" "}
+                      {Math.round(per.nextDay).toLocaleString()} next-day ·{" "}
+                      {Math.round(per.rtpTransfers).toLocaleString()} RTP ·{" "}
+                      {Math.round(per.walletTransfers).toLocaleString()} wallet. Shares are normalised to 100%.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    Workflow mix off — the explicit check and disbursement counts above drive the model and every
+                    job is treated as a processed check.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+
+
+            <Card>
+              <CardHeader className="pb-3">
                 <CardTitle className="text-base">Cost structure</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-3">
                 <NumberField label="Deposit cost / check" prefix="$" step={0.01} value={a.checkDepositCost} onChange={set("checkDepositCost")} hint="CheckAlt FinCapture RDC." />
                 <NumberField label="Next day disbursement" prefix="$" step={0.05} value={a.nextDayDisbursementCost} onChange={set("nextDayDisbursementCost")} />
                 <NumberField label="Same day disbursement" prefix="$" step={0.05} value={a.sameDayDisbursementCost} onChange={set("sameDayDisbursementCost")} />
+                <NumberField label="RTP cost / transfer" prefix="$" step={0.05} value={a.rtpCostPerTransfer} onChange={set("rtpCostPerTransfer")} hint="NEEDS CONFIRMATION — placeholder Moov instant-transfer cost." />
+                <NumberField label="Wallet transfer cost" prefix="$" step={0.05} value={a.walletTransferCost} onChange={set("walletTransferCost")} hint="NEEDS CONFIRMATION — our cost per internal wallet transfer." />
                 <NumberField label="Wallet / tenant" prefix="$" value={a.walletPerTenantMonthly} onChange={set("walletPerTenantMonthly")} />
               </CardContent>
             </Card>
@@ -223,6 +348,79 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
         )}
 
         <div className="min-w-0 space-y-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Unit economics per job / transaction</CardTitle>
+              <CardDescription className="text-xs">{COST_PER_JOB_NOTE}</CardDescription>
+            </CardHeader>
+            <CardContent className="table-scroll">
+              <Table className="text-xs">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Workflow</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Share</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Jobs / tenant / mo</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Revenue / job</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Variable cost / job</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Gross profit / job</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Margin</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {workflowPrices.map((w, index) => {
+                    const cost = workflowCosts[index];
+                    const profit = w.total - cost.total;
+                    return (
+                      <TableRow key={w.key} className={w.share > 0 ? undefined : "opacity-50"}>
+                        <TableCell className="min-w-[180px]">
+                          <span className="font-medium">{w.label}</span>
+                          <span className="block text-[11px] text-muted-foreground">
+                            {w.checkProcessing > 0
+                              ? `Check ${money(w.checkProcessing, 2)}`
+                              : "No check processing"}
+                            {w.ach > 0 ? ` + ACH ${money(w.ach, 2)}` : ""}
+                            {w.rtp > 0 ? ` + RTP ${money(w.rtp, 2)}` : ""}
+                            {w.wallet > 0 ? ` + wallet ${money(w.wallet, 2)}` : ""}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{pct(w.share * 100, 0)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{Math.round(w.jobs).toLocaleString()}</TableCell>
+                        <TableCell className="text-right tabular-nums">{money(w.total, 2)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{money(cost.total, 2)}</TableCell>
+                        <TableCell
+                          className={`text-right tabular-nums ${profit >= 0 ? "text-emerald-500" : "text-destructive"}`}
+                        >
+                          {money(profit, 2)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {w.total > 0 ? pct((profit / w.total) * 100, 0) : "—"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  <TableRow className="font-semibold">
+                    <TableCell>Weighted average (incl. monthly fee)</TableCell>
+                    <TableCell className="text-right tabular-nums">100%</TableCell>
+                    <TableCell className="text-right tabular-nums">{Math.round(per.jobs).toLocaleString()}</TableCell>
+                    <TableCell className="text-right tabular-nums">{money(result.revenuePerJob, 2)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{money(result.variableCostPerJob, 2)}</TableCell>
+                    <TableCell
+                      className={`text-right tabular-nums ${result.grossProfitPerJob >= 0 ? "text-emerald-500" : "text-destructive"}`}
+                    >
+                      {money(result.grossProfitPerJob, 2)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {result.revenuePerJob > 0
+                        ? pct((result.grossProfitPerJob / result.revenuePerJob) * 100, 0)
+                        : "—"}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Monthly P&amp;L</CardTitle>

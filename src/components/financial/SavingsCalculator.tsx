@@ -31,8 +31,15 @@ import {
   SavingsInputs,
   computeSavings,
   computeSavingsPayback,
+  effectiveChecks,
+  priceRatesFrom,
   referralCredit,
 } from "@/lib/financial/iink";
+import {
+  COST_PER_JOB_NOTE,
+  workflowPriceComponents,
+  workflowVolumes,
+} from "@/lib/financial/workflows";
 import { PricingOptimizer } from "./PricingOptimizer";
 import { downloadCsv } from "@/lib/financial/csv";
 
@@ -44,6 +51,13 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
   const set = <K extends keyof SavingsInputs>(key: K) => (v: number) =>
     setI((prev) => ({ ...prev, [key]: v }));
 
+  const checks = useMemo(() => effectiveChecks(i), [i]);
+  const vol = useMemo(() => (i.useWorkflowMix ? workflowVolumes(i) : null), [i]);
+  const workflows = useMemo(() => workflowPriceComponents(i, priceRatesFrom(i)), [i]);
+  const weightedPerJobCost = useMemo(
+    () => workflows.reduce((a, w) => a + w.share * w.total, 0),
+    [workflows],
+  );
   const r = useMemo(() => computeSavings(i), [i]);
   const payback = useMemo(() => computeSavingsPayback(i, 24), [i]);
   const best = r.best;
@@ -69,7 +83,17 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
       [`iink pricing source: ${IINK_PRICING_SOURCE} (captured ${IINK_PRICING_CAPTURED})`],
       [],
       ["Prospect profile"],
-      ["Checks / month", i.checksPerMonth],
+      ["Workflow mix in use", i.useWorkflowMix ? "Yes" : "No — explicit counts"],
+      ["Jobs / transactions per month", i.useWorkflowMix ? i.jobsPerMonth : ""],
+      ["% check + 1 ACH", i.pctCheckAchSingle],
+      ["% check + multiple ACH", i.pctCheckAchMulti],
+      ["% receive funds only", i.pctReceiveOnly],
+      ["% wallet / internal transfer", i.pctWalletTransfer],
+      ["% RTP / instant payment", i.pctRtp],
+      ["ACH per multi-ACH job", i.avgAchOnMultiAchJob],
+      ["Payouts per receive-only job", i.avgPayoutsPerReceiveOnlyJob],
+      ["% payouts same-day", i.pctPayoutsSameDay],
+      ["Processed checks / month", checks],
       ["Average check amount", i.avgCheckAmount],
       ["% checks with mortgage payee", i.mortgagePctOfChecks],
       ["Avg mortgage companies on those checks", i.avgMortgageCompanies],
@@ -78,6 +102,22 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
       ["RTP transfers / month", i.rtpTransfersPerMonth],
       ["Avg RTP transfer amount", i.avgRtpTransferAmount],
       ["Avg mortgage checks per claim", i.avgMortgageChecksPerClaim],
+      [],
+      ["Cost per job / transaction by workflow"],
+      ["Workflow", "Share %", "Jobs / mo", "Check processing", "ACH", "RTP", "Wallet", "Total / job", "Monthly"],
+      ...workflows.map((w) => [
+        w.label,
+        (w.share * 100).toFixed(1),
+        w.jobs,
+        w.checkProcessing,
+        w.ach,
+        w.rtp,
+        w.wallet,
+        w.total,
+        w.total * w.jobs,
+      ]),
+      ["Weighted variable fee / job", weightedPerJobCost],
+      ["Effective all-in cost / job", r.checksOps.costPerJob],
       ["iink billing term", i.iinkAnnualBilling ? "Annual (10% off)" : "Monthly"],
       [],
       [
@@ -91,6 +131,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
         "Processing subtotal",
         "Mortgage fees",
         "Total / mo",
+        "Cost per job",
         "Cost per check",
         "Monthly savings vs ChecksOps",
         "Annual savings",
@@ -108,6 +149,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
         r.checksOps.processingTotal,
         r.checksOps.mortgageTotal,
         r.checksOps.total,
+        r.checksOps.costPerJob,
         r.checksOps.costPerCheck,
         "",
         "",
@@ -125,6 +167,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
         t.cost.processingTotal,
         t.cost.mortgageTotal,
         t.cost.total,
+        t.cost.costPerJob,
         t.cost.costPerCheck,
         t.monthlySavings,
         t.annualSavings,
@@ -154,7 +197,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
         <StatTile
           label="Estimated annual savings"
           value={best ? money(best.annualSavings) : "—"}
-          sub={best ? `${money(r.checksOps.costPerCheck, 2)} vs ${money(best.cost.costPerCheck, 2)} per check` : "—"}
+          sub={best ? `${money(r.checksOps.costPerJob, 2)} vs ${money(best.cost.costPerJob, 2)} per job / transaction` : "—"}
           tone={best && best.annualSavings >= 0 ? "positive" : "negative"}
         />
         <StatTile
@@ -199,7 +242,14 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                 <CardTitle className="text-base">Prospect profile</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-3">
-                <NumberField label="Checks / month" value={i.checksPerMonth} onChange={set("checksPerMonth")} />
+                {!i.useWorkflowMix && (
+                  <NumberField
+                    label="Checks / month"
+                    value={i.checksPerMonth}
+                    onChange={set("checksPerMonth")}
+                    hint="Processed checks. Derived from the workflow mix when that is switched on."
+                  />
+                )}
                 <NumberField
                   label="Avg check amount"
                   prefix="$"
@@ -231,24 +281,28 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                   onChange={set("avgMortgageChecksPerClaim")}
                   hint="ChecksOps bills $10 for the first mortgage check on a claim and $5 for each additional check on that claim."
                 />
-                <NumberField
-                  label="Same-day ACH / mo"
-                  value={i.sameDayDisbursementsPerMonth}
-                  onChange={set("sameDayDisbursementsPerMonth")}
-                  hint="Flat same-day ACH disbursement fee on ChecksOps. Included on iink plans."
-                />
-                <NumberField
-                  label="Next-day ACH / mo"
-                  value={i.nextDayDisbursementsPerMonth}
-                  onChange={set("nextDayDisbursementsPerMonth")}
-                  hint="Flat next-day ACH disbursement fee on ChecksOps. Included on iink plans."
-                />
-                <NumberField
-                  label="RTP transfers / mo"
-                  value={i.rtpTransfersPerMonth}
-                  onChange={set("rtpTransfersPerMonth")}
-                  hint="Instant transfers. ChecksOps charges 0.95% capped at $5.00; iink charges 2–3% of the amount."
-                />
+                {!i.useWorkflowMix && (
+                  <>
+                    <NumberField
+                      label="Same-day ACH / mo"
+                      value={i.sameDayDisbursementsPerMonth}
+                      onChange={set("sameDayDisbursementsPerMonth")}
+                      hint="Flat same-day ACH disbursement fee on ChecksOps. Included on iink plans."
+                    />
+                    <NumberField
+                      label="Next-day ACH / mo"
+                      value={i.nextDayDisbursementsPerMonth}
+                      onChange={set("nextDayDisbursementsPerMonth")}
+                      hint="Flat next-day ACH disbursement fee on ChecksOps. Included on iink plans."
+                    />
+                    <NumberField
+                      label="RTP transfers / mo"
+                      value={i.rtpTransfersPerMonth}
+                      onChange={set("rtpTransfersPerMonth")}
+                      hint="Instant transfers. ChecksOps charges 0.95% capped at $5.00; iink charges 2–3% of the amount."
+                    />
+                  </>
+                )}
                 <NumberField
                   label="Avg RTP transfer"
                   prefix="$"
@@ -273,6 +327,123 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
 
             <Card>
               <CardHeader className="pb-3">
+                <CardTitle className="text-base">Workflow / transaction mix</CardTitle>
+                <CardDescription className="text-xs">
+                  Not every job is a processed check. Set the share of monthly jobs by workflow — processed
+                  checks, ACH, RTP and wallet volume are all derived from this mix.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-border/60 p-2.5">
+                  <Label htmlFor="use-workflow-mix" className="text-xs text-muted-foreground">
+                    Use workflow mix
+                  </Label>
+                  <Switch
+                    id="use-workflow-mix"
+                    checked={i.useWorkflowMix}
+                    onCheckedChange={(v) => setI((prev) => ({ ...prev, useWorkflowMix: v }))}
+                  />
+                </div>
+
+                {i.useWorkflowMix ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <NumberField
+                        label="Jobs / transactions per mo"
+                        value={i.jobsPerMonth}
+                        onChange={set("jobsPerMonth")}
+                        hint="Every payment event the tenant runs through ChecksOps, however we are involved."
+                      />
+                      <NumberField
+                        label="Payouts sent same-day"
+                        suffix="%"
+                        max={100}
+                        step={5}
+                        value={i.pctPayoutsSameDay}
+                        onChange={set("pctPayoutsSameDay")}
+                        hint="Split of ACH payouts between the same-day and next-day rate."
+                      />
+                      <NumberField
+                        label="Check + 1 ACH"
+                        suffix="%"
+                        max={100}
+                        step={5}
+                        value={i.pctCheckAchSingle}
+                        onChange={set("pctCheckAchSingle")}
+                        hint="We process the check and send one disbursement."
+                      />
+                      <NumberField
+                        label="Check + multiple ACH"
+                        suffix="%"
+                        max={100}
+                        step={5}
+                        value={i.pctCheckAchMulti}
+                        onChange={set("pctCheckAchMulti")}
+                        hint="One processed check split across several disbursements."
+                      />
+                      <NumberField
+                        label="Receive funds only"
+                        suffix="%"
+                        max={100}
+                        step={5}
+                        value={i.pctReceiveOnly}
+                        onChange={set("pctReceiveOnly")}
+                        hint="No check-processing component at all — the tenant is the recipient."
+                      />
+                      <NumberField
+                        label="Wallet / internal transfer"
+                        suffix="%"
+                        max={100}
+                        step={5}
+                        value={i.pctWalletTransfer}
+                        onChange={set("pctWalletTransfer")}
+                        hint="Money moved inside the platform wallet."
+                      />
+                      <NumberField
+                        label="RTP / instant payment"
+                        suffix="%"
+                        max={100}
+                        step={5}
+                        value={i.pctRtp}
+                        onChange={set("pctRtp")}
+                        hint="Instant payout with no check-processing component."
+                      />
+                      <NumberField
+                        label="ACH on multi-ACH job"
+                        step={0.5}
+                        value={i.avgAchOnMultiAchJob}
+                        onChange={set("avgAchOnMultiAchJob")}
+                        hint="Average disbursements when a processed check is split."
+                      />
+                      <NumberField
+                        label="Payouts / receive-only job"
+                        step={0.5}
+                        value={i.avgPayoutsPerReceiveOnlyJob}
+                        onChange={set("avgPayoutsPerReceiveOnlyJob")}
+                        hint="Set to 0 for pure receipts where the tenant does not pay anyone out."
+                      />
+                    </div>
+                    {vol && (
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        Derived: {Math.round(vol.checks).toLocaleString()} processed checks ·{" "}
+                        {Math.round(vol.achPayouts).toLocaleString()} ACH ({Math.round(vol.sameDay).toLocaleString()} same-day
+                        / {Math.round(vol.nextDay).toLocaleString()} next-day) ·{" "}
+                        {Math.round(vol.rtpTransfers).toLocaleString()} RTP ·{" "}
+                        {Math.round(vol.walletTransfers).toLocaleString()} wallet. Shares are normalised to 100%.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    Workflow mix off — the explicit check, ACH and RTP counts in the prospect profile drive the
+                    model, and every job is treated as a processed check.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
                 <CardTitle className="text-base">ChecksOps pricing</CardTitle>
                 <CardDescription className="text-xs">
                   Seeded from the rates the platform bills today. Editable.
@@ -285,6 +456,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                 <NumberField label="Next-day ACH" prefix="$" step={0.05} value={i.coNextDayDisbursementFee} onChange={set("coNextDayDisbursementFee")} hint="Flat fee per next-day ACH disbursement." />
                 <NumberField label="RTP rate" suffix="%" step={0.05} value={i.coRtpPct} onChange={set("coRtpPct")} hint="Instant RTP transfers are priced as a % of the transfer amount." />
                 <NumberField label="RTP fee cap" prefix="$" step={0.5} value={i.coRtpFeeCap} onChange={set("coRtpFeeCap")} hint="Maximum RTP fee per transfer." />
+                <NumberField label="Wallet transfer fee" prefix="$" step={0.25} value={i.coWalletTransferFee} onChange={set("coWalletTransferFee")} hint="Charged on a wallet / internal transfer job. $0 today — editable." />
                 <NumberField label="Mortgage handling" prefix="$" step={1} value={i.coMortgageFee} onChange={set("coMortgageFee")} hint="Flat fee for the first mortgage check on a claim." />
                 <NumberField label="Additional mortgage check" prefix="$" step={1} value={i.coMortgageAdditionalCheckFee} onChange={set("coMortgageAdditionalCheckFee")} hint="Each additional check on the same mortgage claim." />
 
@@ -320,14 +492,101 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
         )}
 
         <div className="min-w-0 space-y-4">
+          {/* Cost per job / transaction */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Cost per job / transaction</CardTitle>
+              <CardDescription className="text-xs">{COST_PER_JOB_NOTE}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <StatTile
+                  label="Effective cost / job"
+                  value={money(r.checksOps.costPerJob, 2)}
+                  sub={`${Math.round(r.checksOps.jobs).toLocaleString()} jobs / mo, all-in`}
+                />
+                <StatTile
+                  label="Weighted variable fee / job"
+                  value={money(weightedPerJobCost, 2)}
+                  sub="Mix-weighted transaction fees, before the monthly fee"
+                />
+                <StatTile
+                  label="Processed checks / mo"
+                  value={Math.round(checks).toLocaleString()}
+                  sub={
+                    i.useWorkflowMix
+                      ? `${pct(checks > 0 && r.checksOps.jobs > 0 ? (checks / r.checksOps.jobs) * 100 : 0, 0)} of jobs carry check processing`
+                      : "Explicit count — workflow mix off"
+                  }
+                />
+                <StatTile
+                  label="Cost / processed check"
+                  value={money(r.checksOps.costPerCheck, 2)}
+                  sub="Reference only — overstates recipient-heavy books"
+                />
+              </div>
+
+              <div className="table-scroll">
+                <Table className="text-xs">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Workflow</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Share</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Jobs / mo</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Check processing</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">ACH</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">RTP</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Wallet</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Total / job</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Monthly</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {workflows.map((w) => (
+                      <TableRow key={w.key} className={w.share > 0 ? undefined : "opacity-50"}>
+                        <TableCell className="min-w-[180px]">
+                          <span className="font-medium">{w.label}</span>
+                          <span className="block text-[11px] text-muted-foreground">{w.description}</span>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{pct(w.share * 100, 0)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{Math.round(w.jobs).toLocaleString()}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {w.checkProcessing > 0 ? money(w.checkProcessing, 2) : "—"}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {w.ach > 0 ? `${money(w.ach, 2)} (${w.achPerJob}×)` : "—"}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{w.rtp > 0 ? money(w.rtp, 2) : "—"}</TableCell>
+                        <TableCell className="text-right tabular-nums">{w.wallet > 0 ? money(w.wallet, 2) : "—"}</TableCell>
+                        <TableCell className="text-right tabular-nums font-semibold text-emerald-500">
+                          {money(w.total, 2)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{money(w.total * w.jobs)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                Receive-funds-only and wallet jobs carry no check-processing component. ACH is shown at the
+                mix-weighted blend of the same-day and next-day rate ({i.pctPayoutsSameDay}% same-day). The
+                monthly fee, referral credits and mortgage / loss-draft fees sit outside this per-job view and
+                are added in the plan comparison below.
+              </p>
+            </CardContent>
+          </Card>
+
           {/* Apples-to-apples split */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Monthly cost by plan</CardTitle>
               <CardDescription className="text-xs">
-                {i.checksPerMonth.toLocaleString()} checks · {Math.round((i.checksPerMonth * Math.min(100, i.mortgagePctOfChecks)) / 100).toLocaleString()} with a
-                mortgage payee · normal check processing is separated from mortgage / loss-draft fees so the
-                comparison is apples-to-apples.
+{Math.round(r.checksOps.jobs).toLocaleString()} jobs / mo ·{" "}
+                {Math.round(checks).toLocaleString()} processed checks ·{" "}
+                {Math.round((checks * Math.min(100, i.mortgagePctOfChecks)) / 100).toLocaleString()} with a mortgage
+                payee. Normal check processing is separated from mortgage / loss-draft fees, and the iink side is
+                costed on the prospect's real workflow mix — receive-only, wallet and RTP jobs never count as check
+                submissions.
               </CardDescription>
             </CardHeader>
             <CardContent className="table-scroll">
@@ -342,6 +601,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                     <TableHead className="text-right whitespace-nowrap">Processing subtotal</TableHead>
                     <TableHead className="text-right whitespace-nowrap">Mortgage fees</TableHead>
                     <TableHead className="text-right whitespace-nowrap">Total / mo</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Per job</TableHead>
                     <TableHead className="text-right whitespace-nowrap">Per check</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -355,6 +615,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                     <TableCell className="text-right tabular-nums">{money(r.checksOps.processingTotal)}</TableCell>
                     <TableCell className="text-right tabular-nums">{money(r.checksOps.mortgageTotal)}</TableCell>
                     <TableCell className="text-right tabular-nums text-emerald-500">{money(r.checksOps.total)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-emerald-500">{money(r.checksOps.costPerJob, 2)}</TableCell>
                     <TableCell className="text-right tabular-nums text-emerald-500">{money(r.checksOps.costPerCheck, 2)}</TableCell>
                   </TableRow>
                   {r.tiers.map((t) => (
@@ -377,6 +638,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                       <TableCell className="text-right tabular-nums">{money(t.cost.processingTotal)}</TableCell>
                       <TableCell className="text-right tabular-nums">{money(t.cost.mortgageTotal)}</TableCell>
                       <TableCell className="text-right tabular-nums">{money(t.cost.total)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{money(t.cost.costPerJob, 2)}</TableCell>
                       <TableCell className="text-right tabular-nums">{money(t.cost.costPerCheck, 2)}</TableCell>
                     </TableRow>
                   ))}

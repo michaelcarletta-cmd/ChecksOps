@@ -16,9 +16,18 @@
  * Moov / CheckAlt / bank contracts before quoting.
  */
 
-export interface PnlAssumptions {
+import {
+  DEFAULT_WORKFLOW_MIX,
+  WorkflowMix,
+  workflowVolumes,
+} from "./workflows";
+
+export interface PnlAssumptions extends WorkflowMix {
   // Volume
   tenants: number;
+  /** Jobs / transactions per tenant per month — drives the workflow mix. */
+  jobsPerTenantPerMonth: number;
+  /** Legacy explicit check count, used only when the workflow mix is off. */
   checksPerTenantPerMonth: number;
   /** Same-day disbursements per tenant per month — billed at the $1.00 rate. */
   sameDayDisbursementsPerTenant: number;
@@ -29,6 +38,13 @@ export interface PnlAssumptions {
   perCheckFee: number;
   disbursementFeeHigh: number; // $1.00 — same day
   disbursementFeeLow: number; // $0.75 — next day
+  /** Instant RTP fee, % of the transfer amount, capped. */
+  rtpFeePct: number;
+  rtpFeeCap: number;
+  /** Average RTP transfer size — drives the % fee. */
+  avgRtpTransferAmount: number;
+  /** Fee charged on a wallet / internal transfer. */
+  walletTransferFee: number;
   monthlyMaintenanceFee: number;
   setupFee: number;
   newTenantsPerMonth: number;
@@ -37,6 +53,10 @@ export interface PnlAssumptions {
   checkDepositCost: number; // CheckAlt / RDC per check
   nextDayDisbursementCost: number;
   sameDayDisbursementCost: number;
+  /** Our cost per instant RTP transfer. CONFIRM against the Moov contract. */
+  rtpCostPerTransfer: number;
+  /** Our cost per wallet / internal transfer. CONFIRM. */
+  walletTransferCost: number;
   walletPerTenantMonthly: number;
 
   // Fixed overhead (monthly)
@@ -49,6 +69,9 @@ export interface PnlAssumptions {
 }
 
 export const DEFAULT_PNL: PnlAssumptions = {
+  ...DEFAULT_WORKFLOW_MIX,
+  jobsPerTenantPerMonth: 80,
+
   tenants: 5,
   checksPerTenantPerMonth: 40,
   sameDayDisbursementsPerTenant: 20,
@@ -57,6 +80,10 @@ export const DEFAULT_PNL: PnlAssumptions = {
   perCheckFee: 4,
   disbursementFeeHigh: 1,
   disbursementFeeLow: 0.75,
+  rtpFeePct: 0.95,
+  rtpFeeCap: 5,
+  avgRtpTransferAmount: 10_000,
+  walletTransferFee: 0,
   monthlyMaintenanceFee: 100,
   setupFee: 7500,
   newTenantsPerMonth: 1,
@@ -64,6 +91,8 @@ export const DEFAULT_PNL: PnlAssumptions = {
   checkDepositCost: 0.68,
   nextDayDisbursementCost: 0.5,
   sameDayDisbursementCost: 1,
+  rtpCostPerTransfer: 0.5,
+  walletTransferCost: 0,
   walletPerTenantMonthly: 0,
 
   checkAltMonthlyFee: 0,
@@ -74,6 +103,18 @@ export const DEFAULT_PNL: PnlAssumptions = {
 
 export interface PnlResult {
   checks: number;
+  /** Total jobs / transactions across the tenant base. */
+  jobs: number;
+  rtpTransfers: number;
+  walletTransfers: number;
+  rtpRevenue: number;
+  rtpCost: number;
+  walletRevenue: number;
+  walletTransferCostTotal: number;
+  /** Primary unit metrics — per job / transaction, not per check. */
+  revenuePerJob: number;
+  variableCostPerJob: number;
+  grossProfitPerJob: number;
   disbursements: number;
   sameDayDisbursements: number;
   nextDayDisbursements: number;
@@ -114,21 +155,58 @@ export interface PnlResult {
   breakEvenTenants: number;
 }
 
+/** Per-tenant monthly volumes, from the workflow mix or the legacy explicit inputs. */
+export function tenantVolumes(a: PnlAssumptions) {
+  if (a.useWorkflowMix) {
+    const w = workflowVolumes(a, a.jobsPerTenantPerMonth);
+    return {
+      checks: w.checks,
+      sameDay: w.sameDay,
+      nextDay: w.nextDay,
+      rtpTransfers: w.rtpTransfers,
+      walletTransfers: w.walletTransfers,
+      jobs: w.jobs,
+    };
+  }
+  const checks = nn(a.checksPerTenantPerMonth);
+  const sameDay = nn(a.sameDayDisbursementsPerTenant);
+  const nextDay = nn(a.nextDayDisbursementsPerTenant);
+  return {
+    checks,
+    sameDay,
+    nextDay,
+    rtpTransfers: 0,
+    walletTransfers: 0,
+    // Without a mix, a job is one processed check.
+    jobs: checks,
+  };
+}
+
+/** Unit fee charged on one RTP transfer (percentage of amount, capped). */
+export const rtpUnitFee = (a: PnlAssumptions) =>
+  Math.min(nn(a.rtpFeeCap), nn(a.avgRtpTransferAmount) * (nn(a.rtpFeePct) / 100));
+
 
 const nn = (v: number) => (Number.isFinite(v) && v > 0 ? v : 0);
 
 export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResult {
   const tenants = nn(tenantOverride ?? a.tenants);
-  const checks = tenants * nn(a.checksPerTenantPerMonth);
-  const sameDayDisbursements = tenants * nn(a.sameDayDisbursementsPerTenant);
-  const nextDayDisbursements = tenants * nn(a.nextDayDisbursementsPerTenant);
-  const disbursements = sameDayDisbursements + nextDayDisbursements;
+  const per = tenantVolumes(a);
+  const checks = tenants * per.checks;
+  const jobs = tenants * per.jobs;
+  const sameDayDisbursements = tenants * per.sameDay;
+  const nextDayDisbursements = tenants * per.nextDay;
+  const rtpTransfers = tenants * per.rtpTransfers;
+  const walletTransfers = tenants * per.walletTransfers;
+  const disbursements = sameDayDisbursements + nextDayDisbursements + rtpTransfers;
 
   const maintenanceRevenue = tenants * nn(a.monthlyMaintenanceFee);
   const perCheckRevenue = checks * nn(a.perCheckFee);
   const sameDayRevenue = sameDayDisbursements * nn(a.disbursementFeeHigh);
   const nextDayRevenue = nextDayDisbursements * nn(a.disbursementFeeLow);
-  const disbursementRevenue = sameDayRevenue + nextDayRevenue;
+  const rtpRevenue = rtpTransfers * rtpUnitFee(a);
+  const walletRevenue = walletTransfers * nn(a.walletTransferFee);
+  const disbursementRevenue = sameDayRevenue + nextDayRevenue + rtpRevenue + walletRevenue;
   // One-time $7,500 setup fee is charged per tenant — every tenant in the base counts.
   const setupRevenueAllTenants = tenants * nn(a.setupFee);
   const setupRevenue = setupRevenueAllTenants;
@@ -139,7 +217,9 @@ export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResul
   const depositCost = checks * nn(a.checkDepositCost);
   const sameDayCost = sameDayDisbursements * nn(a.sameDayDisbursementCost);
   const nextDayCost = nextDayDisbursements * nn(a.nextDayDisbursementCost);
-  const disbursementCost = sameDayCost + nextDayCost;
+  const rtpCost = rtpTransfers * nn(a.rtpCostPerTransfer);
+  const walletCost2 = walletTransfers * nn(a.walletTransferCost);
+  const disbursementCost = sameDayCost + nextDayCost + rtpCost + walletCost2;
   const walletCost = tenants * nn(a.walletPerTenantMonthly);
   const onboardingCostPerTenant = nn(a.kybKycSetupCost) + nn(a.checkAltOnboardingFee);
   const onboardingCostAllTenants = tenants * onboardingCostPerTenant;
@@ -154,6 +234,17 @@ export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResul
 
   return {
     checks,
+    jobs,
+    rtpTransfers,
+    walletTransfers,
+    rtpRevenue,
+    rtpCost,
+    walletRevenue,
+    walletTransferCostTotal: walletCost2,
+    revenuePerJob: jobs > 0 ? recurringRevenue / jobs : 0,
+    variableCostPerJob: jobs > 0 ? (variableCost - onboardingCostAllTenants) / jobs : 0,
+    grossProfitPerJob:
+      jobs > 0 ? (recurringRevenue - (variableCost - onboardingCostAllTenants)) / jobs : 0,
     disbursements,
     sameDayDisbursements,
     nextDayDisbursements,
@@ -190,20 +281,22 @@ export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResul
 
 /** Recurring gross profit generated by one additional tenant (excludes setup fee). */
 function computeContributionPerTenant(a: PnlAssumptions): number {
-  const checks = nn(a.checksPerTenantPerMonth);
-  const sameDay = nn(a.sameDayDisbursementsPerTenant);
-  const nextDay = nn(a.nextDayDisbursementsPerTenant);
+  const { checks, sameDay, nextDay, rtpTransfers, walletTransfers } = tenantVolumes(a);
 
   const revenue =
     nn(a.monthlyMaintenanceFee) +
     checks * nn(a.perCheckFee) +
     sameDay * nn(a.disbursementFeeHigh) +
-    nextDay * nn(a.disbursementFeeLow);
+    nextDay * nn(a.disbursementFeeLow) +
+    rtpTransfers * rtpUnitFee(a) +
+    walletTransfers * nn(a.walletTransferFee);
 
   const cost =
     checks * nn(a.checkDepositCost) +
     sameDay * nn(a.sameDayDisbursementCost) +
     nextDay * nn(a.nextDayDisbursementCost) +
+    rtpTransfers * nn(a.rtpCostPerTransfer) +
+    walletTransfers * nn(a.walletTransferCost) +
     nn(a.walletPerTenantMonthly);
 
   return revenue - cost;
@@ -260,6 +353,7 @@ export const SCENARIOS: Record<ScenarioKey, { label: string; patch: Partial<PnlA
     label: "Low volume",
     patch: {
       tenants: 3,
+      jobsPerTenantPerMonth: 40,
       checksPerTenantPerMonth: 20,
       sameDayDisbursementsPerTenant: 10,
       nextDayDisbursementsPerTenant: 30,
@@ -270,6 +364,7 @@ export const SCENARIOS: Record<ScenarioKey, { label: string; patch: Partial<PnlA
     label: "Expected",
     patch: {
       tenants: 10,
+      jobsPerTenantPerMonth: 80,
       checksPerTenantPerMonth: 40,
       sameDayDisbursementsPerTenant: 20,
       nextDayDisbursementsPerTenant: 60,
@@ -280,6 +375,7 @@ export const SCENARIOS: Record<ScenarioKey, { label: string; patch: Partial<PnlA
     label: "High volume",
     patch: {
       tenants: 30,
+      jobsPerTenantPerMonth: 200,
       checksPerTenantPerMonth: 100,
       sameDayDisbursementsPerTenant: 60,
       nextDayDisbursementsPerTenant: 240,

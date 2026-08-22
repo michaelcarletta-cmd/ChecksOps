@@ -14,6 +14,7 @@
 import {
   IinkTier,
   SavingsInputs,
+  effectiveChecks,
   iinkTierCost,
   scaledVolumes,
 } from "./iink";
@@ -45,6 +46,8 @@ export interface PricingScenario {
   nextDayFee: number;
   rtpPct: number;
   rtpCap: number;
+  /** Fee on a wallet / internal transfer job. */
+  walletFee: number;
   mortgageFee: number;
   mortgageAdditionalCheckFee: number;
 }
@@ -62,6 +65,7 @@ export const DEFAULT_SCENARIOS: PricingScenario[] = [
     nextDayFee: 0.75,
     rtpPct: 0.95,
     rtpCap: 5,
+    walletFee: 0,
     mortgageFee: 10,
     mortgageAdditionalCheckFee: 5,
   },
@@ -81,6 +85,7 @@ export const DEFAULT_SCENARIOS: PricingScenario[] = [
     nextDayFee: 0.75,
     rtpPct: 0.95,
     rtpCap: 5,
+    walletFee: 0,
     mortgageFee: 10,
     mortgageAdditionalCheckFee: 5,
   },
@@ -100,6 +105,7 @@ export const DEFAULT_SCENARIOS: PricingScenario[] = [
     nextDayFee: 0.75,
     rtpPct: 0.95,
     rtpCap: 5,
+    walletFee: 0,
     mortgageFee: 10,
     mortgageAdditionalCheckFee: 5,
   },
@@ -120,6 +126,8 @@ export interface ProviderCosts {
   rtpCostPerTransfer: number;
   /** Our cost to handle a mortgage / loss-draft check (labour + shipping). CONFIRM. */
   mortgageHandlingCost: number;
+  /** Our cost per wallet / internal transfer. CONFIRM. */
+  walletCost: number;
   /** Monthly platform/infra cost carried per tenant. */
   platformCostPerTenant: number;
 }
@@ -130,6 +138,7 @@ export const DEFAULT_PROVIDER_COSTS: ProviderCosts = {
   nextDayCost: 0.5,
   rtpCostPerTransfer: 0.5,
   mortgageHandlingCost: 8,
+  walletCost: 0,
   platformCostPerTenant: 15,
 };
 
@@ -161,11 +170,16 @@ export interface ScenarioCost {
   subscription: number;
   perCheck: number;
   disbursement: number;
+  wallet: number;
   credits: number;
   processingTotal: number;
   mortgageTotal: number;
   total: number;
   costPerCheck: number;
+  /** Jobs / transactions behind the cost — the workflow-mix denominator. */
+  jobs: number;
+  /** Primary metric: effective cost per job / transaction. */
+  costPerJob: number;
 }
 
 export interface ScenarioMargin {
@@ -188,8 +202,9 @@ export function scenarioCost(
     v.sameDay * nn(s.sameDayFee) +
     v.nextDay * nn(s.nextDayFee) +
     v.rtpTransfers * Math.min(nn(s.rtpCap), nn(i.avgRtpTransferAmount) * (nn(s.rtpPct) / 100));
+  const wallet = v.walletTransfers * nn(s.walletFee);
   const credits = Math.min(subscription, nn(referralCredits));
-  const processingTotal = Math.max(0, subscription + perCheck + disbursement - credits);
+  const processingTotal = Math.max(0, subscription + perCheck + disbursement + wallet - credits);
   const mortgageTotal = v.usesMortgage
     ? v.mortgageChecks * nn(s.mortgageFee) + v.extraMortgageChecks * nn(s.mortgageAdditionalCheckFee)
     : 0;
@@ -198,11 +213,14 @@ export function scenarioCost(
     subscription,
     perCheck,
     disbursement,
+    wallet,
     credits,
     processingTotal,
     mortgageTotal,
     total,
     costPerCheck: checks > 0 ? total / checks : 0,
+    jobs: v.jobs,
+    costPerJob: v.jobs > 0 ? total / v.jobs : 0,
   };
 }
 
@@ -218,6 +236,7 @@ export function scenarioMargin(
     v.sameDay * nn(c.sameDayCost) +
     v.nextDay * nn(c.nextDayCost) +
     v.rtpTransfers * nn(c.rtpCostPerTransfer) +
+    v.walletTransfers * nn(c.walletCost) +
     (v.usesMortgage ? (v.mortgageChecks + v.extraMortgageChecks) * nn(c.mortgageHandlingCost) : 0) +
     nn(c.platformCostPerTenant);
   const revenue = cost.total;
@@ -358,12 +377,12 @@ export function analyzeScenario(
     c,
     t,
     tiers,
-    nn(i.checksPerMonth),
+    effectiveChecks(i),
     referralCredits,
   );
 
   const vsTiers: ScenarioVsTier[] = tiers.map((tier) => {
-    const iinkTotal = iinkTierCost(tier, i, nn(i.checksPerMonth)).total;
+    const iinkTotal = iinkTierCost(tier, i, effectiveChecks(i)).total;
     const prospectTotal = atProspectVolume.cost.total;
     const monthlySavings = iinkTotal - prospectTotal;
     return {
@@ -432,7 +451,7 @@ export function optimizePricing(
     const v = bestFit.atProspectVolume;
     const tierLabel = v.bestTier ? `iink ${v.bestTier.label}` : "iink";
     if (v.inTargetCorridor) {
-      bestFitReason = `At ${nn(i.checksPerMonth).toLocaleString()} checks/mo this lands ${v.savingsPct.toFixed(0)}% under ${tierLabel} — inside the ${t.minDiscountPct}–${t.maxDiscountPct}% target — while holding a ${v.margin.grossMarginPct.toFixed(0)}% gross margin.`;
+      bestFitReason = `At ${effectiveChecks(i).toLocaleString()} checks/mo this lands ${v.savingsPct.toFixed(0)}% under ${tierLabel} — inside the ${t.minDiscountPct}–${t.maxDiscountPct}% target — while holding a ${v.margin.grossMarginPct.toFixed(0)}% gross margin.`;
     } else if (v.aboveCorridor && v.marginHealthy) {
       bestFitReason = `Beats ${tierLabel} by ${v.savingsPct.toFixed(0)}% at a ${v.margin.grossMarginPct.toFixed(0)}% gross margin — that is well past the ${t.minDiscountPct}–${t.maxDiscountPct}% target, so there is headroom to price higher and still win the deal.`;
     } else if (v.wins && v.marginHealthy) {
@@ -440,7 +459,7 @@ export function optimizePricing(
     } else if (v.wins) {
       bestFitReason = `Beats ${tierLabel} by ${v.savingsPct.toFixed(0)}%, but gross margin is only ${v.margin.grossMarginPct.toFixed(0)}% — below the ${t.minGrossMarginPct}% floor. Raise the per-check band or the monthly fee.`;
     } else {
-      bestFitReason = `No configured scenario beats ${tierLabel} at ${nn(i.checksPerMonth).toLocaleString()} checks/mo. This is the closest — ${v.savingsPct.toFixed(0)}% vs ${tierLabel}. Lower the monthly fee or the per-check bands.`;
+      bestFitReason = `No configured scenario beats ${tierLabel} at ${effectiveChecks(i).toLocaleString()} checks/mo. This is the closest — ${v.savingsPct.toFixed(0)}% vs ${tierLabel}. Lower the monthly fee or the per-check bands.`;
     }
   }
 

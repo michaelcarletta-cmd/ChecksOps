@@ -79,6 +79,7 @@ export function PricingOptimizer({ inputs, referralCredits, presentation }: Prop
       ["Next-day ACH cost", costs.nextDayCost],
       ["RTP cost / transfer", costs.rtpCostPerTransfer],
       ["Mortgage handling cost / check", costs.mortgageHandlingCost],
+      ["Wallet transfer cost", costs.walletCost],
       ["Platform cost / tenant", costs.platformCostPerTenant],
       [],
       [
@@ -86,6 +87,7 @@ export function PricingOptimizer({ inputs, referralCredits, presentation }: Prop
         "Checks / mo",
         "Customer cost / mo",
         "Customer cost / yr",
+        "Effective cost / job",
         "Effective cost / check",
         "Best eligible iink tier",
         "iink cost / mo",
@@ -101,6 +103,7 @@ export function PricingOptimizer({ inputs, referralCredits, presentation }: Prop
           v.checks,
           v.cost.total,
           v.cost.total * 12,
+          v.cost.costPerJob,
           v.cost.costPerCheck,
           v.bestTier?.label ?? "None eligible",
           v.bestTierTotal,
@@ -143,7 +146,7 @@ export function PricingOptimizer({ inputs, referralCredits, presentation }: Prop
               <StatTile
                 label="Customer cost / mo"
                 value={money(bestFit.atProspectVolume.cost.total)}
-                sub={`${money(bestFit.atProspectVolume.cost.costPerCheck, 2)} per check`}
+                sub={`${money(bestFit.atProspectVolume.cost.costPerJob, 2)} per job · ${money(bestFit.atProspectVolume.cost.costPerCheck, 2)} per processed check`}
               />
               <StatTile
                 label="Savings vs iink"
@@ -241,6 +244,7 @@ export function PricingOptimizer({ inputs, referralCredits, presentation }: Prop
                   <NumberField label="Next-day ACH" prefix="$" step={0.05} value={s.nextDayFee} onChange={(v) => patchScenario(s.key, { nextDayFee: v })} />
                   <NumberField label="RTP rate" suffix="%" step={0.05} value={s.rtpPct} onChange={(v) => patchScenario(s.key, { rtpPct: v })} />
                   <NumberField label="RTP cap" prefix="$" step={0.5} value={s.rtpCap} onChange={(v) => patchScenario(s.key, { rtpCap: v })} />
+                  <NumberField label="Wallet transfer fee" prefix="$" step={0.25} value={s.walletFee} onChange={(v) => patchScenario(s.key, { walletFee: v })} hint="Charged on wallet / internal transfer jobs." />
                   <NumberField label="Mortgage handling" prefix="$" value={s.mortgageFee} onChange={(v) => patchScenario(s.key, { mortgageFee: v })} hint="Only applied when the prospect uses mortgage / loss-draft services." />
                   <NumberField label="Addl mortgage check" prefix="$" value={s.mortgageAdditionalCheckFee} onChange={(v) => patchScenario(s.key, { mortgageAdditionalCheckFee: v })} />
                 </div>
@@ -267,6 +271,7 @@ export function PricingOptimizer({ inputs, referralCredits, presentation }: Prop
               <NumberField label="Next-day ACH cost" prefix="$" step={0.05} value={costs.nextDayCost} onChange={(v) => setCosts({ ...costs, nextDayCost: v })} />
               <NumberField label="RTP cost / transfer" prefix="$" step={0.05} value={costs.rtpCostPerTransfer} onChange={(v) => setCosts({ ...costs, rtpCostPerTransfer: v })} hint="NEEDS CONFIRMATION — placeholder Moov instant-transfer cost." />
               <NumberField label="Mortgage handling cost" prefix="$" step={0.5} value={costs.mortgageHandlingCost} onChange={(v) => setCosts({ ...costs, mortgageHandlingCost: v })} hint="NEEDS CONFIRMATION — labour plus shipping label per loss-draft check." />
+              <NumberField label="Wallet transfer cost" prefix="$" step={0.05} value={costs.walletCost} onChange={(v) => setCosts({ ...costs, walletCost: v })} hint="NEEDS CONFIRMATION — our cost per wallet / internal transfer." />
               <NumberField label="Platform cost / tenant" prefix="$" value={costs.platformCostPerTenant} onChange={(v) => setCosts({ ...costs, platformCostPerTenant: v })} hint="Infra and support carried per tenant per month." />
             </CardContent>
           </Card>
@@ -311,6 +316,7 @@ export function PricingOptimizer({ inputs, referralCredits, presentation }: Prop
                   <TableHead>Checks / mo</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Customer / mo</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Customer / yr</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Cost / job</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Cost / check</TableHead>
                   <TableHead className="whitespace-nowrap">Applicable iink tier</TableHead>
                   <TableHead className="text-right whitespace-nowrap">iink / mo</TableHead>
@@ -329,6 +335,7 @@ export function PricingOptimizer({ inputs, referralCredits, presentation }: Prop
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{money(v.cost.total)}</TableCell>
                     <TableCell className="text-right tabular-nums">{money(v.cost.total * 12)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{money(v.cost.costPerJob, 2)}</TableCell>
                     <TableCell className="text-right tabular-nums">{money(v.cost.costPerCheck, 2)}</TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">
                       {v.bestTier?.label ?? "None eligible"}
@@ -369,8 +376,9 @@ export function PricingOptimizer({ inputs, referralCredits, presentation }: Prop
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Break-even check volume by scenario</CardTitle>
           <CardDescription className="text-xs">
-            Smallest monthly check volume where each ChecksOps scenario becomes cheaper than that iink tier,
-            at the prospect&apos;s current mortgage, ACH and RTP mix.
+            Smallest monthly PROCESSED CHECK volume where each ChecksOps scenario becomes cheaper than that
+            iink tier. Jobs, ACH, RTP and wallet volume scale with the check count at the prospect&apos;s
+            workflow mix, so receive-only and wallet work is never priced as check processing.
           </CardDescription>
         </CardHeader>
         <CardContent className="table-scroll">
@@ -408,8 +416,9 @@ export function PricingOptimizer({ inputs, referralCredits, presentation }: Prop
         <AlertDescription className="text-xs">
           These scenarios are a sales and modeling tool. Nothing here changes live customer pricing, tenant
           billing rates, or invoicing. Mortgage / loss-draft fees are excluded entirely unless the prospect
-          profile marks those services as in use. RTP cost per transfer and mortgage handling cost are
-          placeholders pending contract confirmation.
+          profile marks those services as in use. Margins are computed on the workflow mix, so a
+          recipient-heavy book is not charged a deposit cost it never incurs. RTP cost per transfer, wallet
+          transfer cost and mortgage handling cost are placeholders pending contract confirmation.
         </AlertDescription>
       </Alert>
     </div>
