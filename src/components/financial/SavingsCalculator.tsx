@@ -71,8 +71,11 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
       ["Average check amount", i.avgCheckAmount],
       ["% checks with mortgage payee", i.mortgagePctOfChecks],
       ["Avg mortgage companies on those checks", i.avgMortgageCompanies],
-      ["RTP / instant usage %", i.rtpUsagePct],
-      ["Next-day disbursements / month", i.nextDayDisbursementsPerMonth],
+      ["Same-day ACH disbursements / month", i.sameDayDisbursementsPerMonth],
+      ["Next-day ACH disbursements / month", i.nextDayDisbursementsPerMonth],
+      ["RTP transfers / month", i.rtpTransfersPerMonth],
+      ["Avg RTP transfer amount", i.avgRtpTransferAmount],
+      ["Avg mortgage checks per claim", i.avgMortgageChecksPerClaim],
       ["iink billing term", i.iinkAnnualBilling ? "Annual (10% off)" : "Monthly"],
       [],
       [
@@ -220,20 +223,39 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                   hint="iink charges $15 for each mortgage company beyond the first."
                 />
                 <NumberField
-                  label="RTP / instant usage"
-                  suffix="%"
-                  max={100}
-                  step={5}
-                  value={i.rtpUsagePct}
-                  onChange={set("rtpUsagePct")}
-                  hint="Share of proceeds sent instantly. iink prices RTP as a % of the amount; ChecksOps charges a flat same-day fee."
+                  label="Mortgage checks / claim"
+                  step={0.5}
+                  value={i.avgMortgageChecksPerClaim}
+                  onChange={set("avgMortgageChecksPerClaim")}
+                  hint="ChecksOps bills $10 for the first mortgage check on a claim and $5 for each additional check on that claim."
                 />
                 <NumberField
-                  label="Next-day disbursements / mo"
+                  label="Same-day ACH / mo"
+                  value={i.sameDayDisbursementsPerMonth}
+                  onChange={set("sameDayDisbursementsPerMonth")}
+                  hint="Flat same-day ACH disbursement fee on ChecksOps. Included on iink plans."
+                />
+                <NumberField
+                  label="Next-day ACH / mo"
                   value={i.nextDayDisbursementsPerMonth}
                   onChange={set("nextDayDisbursementsPerMonth")}
-                  hint="Standard ACH payouts. Included on iink plans; ChecksOps bills a flat per-payout fee."
+                  hint="Flat next-day ACH disbursement fee on ChecksOps. Included on iink plans."
                 />
+                <NumberField
+                  label="RTP transfers / mo"
+                  value={i.rtpTransfersPerMonth}
+                  onChange={set("rtpTransfersPerMonth")}
+                  hint="Instant transfers. ChecksOps charges 0.95% capped at $5.00; iink charges 2–3% of the amount."
+                />
+                <NumberField
+                  label="Avg RTP transfer"
+                  prefix="$"
+                  step={500}
+                  value={i.avgRtpTransferAmount}
+                  onChange={set("avgRtpTransferAmount")}
+                  hint="Drives both the ChecksOps 0.95% (max $5) fee and iink's % RTP rate."
+                />
+
               </CardContent>
             </Card>
 
@@ -247,9 +269,13 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
               <CardContent className="grid grid-cols-2 gap-3">
                 <NumberField label="Monthly fee" prefix="$" value={i.coMonthlyFee} onChange={set("coMonthlyFee")} />
                 <NumberField label="Per check" prefix="$" step={0.25} value={i.coPerCheckFee} onChange={set("coPerCheckFee")} />
-                <NumberField label="Same-day / instant" prefix="$" step={0.05} value={i.coSameDayDisbursementFee} onChange={set("coSameDayDisbursementFee")} />
-                <NumberField label="Next-day disbursement" prefix="$" step={0.05} value={i.coNextDayDisbursementFee} onChange={set("coNextDayDisbursementFee")} />
-                <NumberField label="MortgageOps handling" prefix="$" step={1} value={i.coMortgageFee} onChange={set("coMortgageFee")} hint="Per mortgage check, billed at cost. Confirm shipping-label handling." />
+                <NumberField label="Same-day ACH" prefix="$" step={0.05} value={i.coSameDayDisbursementFee} onChange={set("coSameDayDisbursementFee")} hint="Flat fee per same-day ACH disbursement." />
+                <NumberField label="Next-day ACH" prefix="$" step={0.05} value={i.coNextDayDisbursementFee} onChange={set("coNextDayDisbursementFee")} hint="Flat fee per next-day ACH disbursement." />
+                <NumberField label="RTP rate" suffix="%" step={0.05} value={i.coRtpPct} onChange={set("coRtpPct")} hint="Instant RTP transfers are priced as a % of the transfer amount." />
+                <NumberField label="RTP fee cap" prefix="$" step={0.5} value={i.coRtpFeeCap} onChange={set("coRtpFeeCap")} hint="Maximum RTP fee per transfer." />
+                <NumberField label="Mortgage handling" prefix="$" step={1} value={i.coMortgageFee} onChange={set("coMortgageFee")} hint="Flat fee for the first mortgage check on a claim." />
+                <NumberField label="Additional mortgage check" prefix="$" step={1} value={i.coMortgageAdditionalCheckFee} onChange={set("coMortgageAdditionalCheckFee")} hint="Each additional check on the same mortgage claim." />
+
                 <NumberField
                   label="Referrals"
                   value={i.coReferrals}
