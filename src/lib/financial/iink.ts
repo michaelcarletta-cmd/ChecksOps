@@ -234,6 +234,7 @@ export const DEFAULT_SAVINGS: SavingsInputs = {
   nextDayDisbursementsPerMonth: 75,
   rtpTransfersPerMonth: 10,
   avgRtpTransferAmount: 10_000,
+  usesMortgageServices: true,
 
   iinkAnnualBilling: false,
 
@@ -286,7 +287,7 @@ function finish(b: Omit<CostBreakdown, "processingTotal" | "mortgageTotal" | "to
 }
 
 /** Volume-derived counts, scaled when sweeping check volume for sensitivity. */
-function volumes(i: SavingsInputs, checks: number) {
+export function scaledVolumes(i: SavingsInputs, checks: number) {
   const base = nn(i.checksPerMonth);
   const scale = base > 0 ? checks / base : 0;
   const mortgageChecks = checks * (Math.min(100, nn(i.mortgagePctOfChecks)) / 100);
@@ -297,7 +298,17 @@ function volumes(i: SavingsInputs, checks: number) {
   const sameDay = nn(i.sameDayDisbursementsPerMonth) * scale;
   const rtpTransfers = nn(i.rtpTransfersPerMonth) * scale;
   const rtpAmount = rtpTransfers * nn(i.avgRtpTransferAmount);
-  return { mortgageChecks, extraCompanies, extraMortgageChecks, nextDay, sameDay, rtpTransfers, rtpAmount };
+  const usesMortgage = i.usesMortgageServices !== false;
+  return {
+    usesMortgage,
+    mortgageChecks: usesMortgage ? mortgageChecks : 0,
+    extraCompanies: usesMortgage ? extraCompanies : 0,
+    extraMortgageChecks: usesMortgage ? extraMortgageChecks : 0,
+    nextDay,
+    sameDay,
+    rtpTransfers,
+    rtpAmount,
+  };
 }
 
 /** Referral credit applied to the ChecksOps monthly fee ($5 each, capped). */
@@ -310,7 +321,7 @@ export function referralCredit(i: SavingsInputs): number {
 }
 
 export function checksOpsCost(i: SavingsInputs, checks: number): CostBreakdown {
-  const v = volumes(i, checks);
+  const v = scaledVolumes(i, checks);
   return finish(
     {
       subscription: nn(i.coMonthlyFee),
@@ -330,7 +341,7 @@ export function checksOpsCost(i: SavingsInputs, checks: number): CostBreakdown {
 }
 
 export function iinkTierCost(tier: IinkTier, i: SavingsInputs, checks: number): CostBreakdown {
-  const v = volumes(i, checks);
+  const v = scaledVolumes(i, checks);
   const discount = i.iinkAnnualBilling ? 1 - IINK_ANNUAL_DISCOUNT_PCT / 100 : 1;
   const overage = Math.max(0, checks - tier.includedChecks);
   const perMortgageCheck = Math.min(tier.mortgageFeeCap, nn(i.avgCheckAmount) * (tier.mortgageFeePct / 100));
