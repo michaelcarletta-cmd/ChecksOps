@@ -478,7 +478,7 @@ function breakEvenFor(tier: IinkTier, i: SavingsInputs): number | null {
 }
 
 export function computeSavings(i: SavingsInputs, checksOverride?: number): SavingsResult {
-  const checks = nn(checksOverride ?? i.checksPerMonth);
+  const checks = nn(checksOverride ?? effectiveChecks(i));
   const co = checksOpsCost(i, checks);
 
   const tiers: TierComparison[] = IINK_TIERS.map((tier) => {
