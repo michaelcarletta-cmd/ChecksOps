@@ -11,6 +11,15 @@
  * pass-through, MortgageOps handling, $7,500 one-time setup).
  */
 
+import {
+  DEFAULT_WORKFLOW_MIX,
+  WorkflowMix,
+  WorkflowPriceRates,
+  mixChecksPerMonth,
+  workflowPriceComponents,
+  workflowVolumesForChecks,
+} from "./workflows";
+
 export const IINK_PRICING_SOURCE = "iink.com/pricing";
 export const IINK_PRICING_CAPTURED = "August 21, 2026";
 
