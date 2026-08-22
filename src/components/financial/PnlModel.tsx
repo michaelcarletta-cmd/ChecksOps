@@ -348,6 +348,79 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
         <div className="min-w-0 space-y-4">
           <Card>
             <CardHeader className="pb-2">
+              <CardTitle className="text-base">Unit economics per job / transaction</CardTitle>
+              <CardDescription className="text-xs">{COST_PER_JOB_NOTE}</CardDescription>
+            </CardHeader>
+            <CardContent className="table-scroll">
+              <Table className="text-xs">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Workflow</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Share</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Jobs / tenant / mo</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Revenue / job</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Variable cost / job</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Gross profit / job</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Margin</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {workflowPrices.map((w, index) => {
+                    const cost = workflowCosts[index];
+                    const profit = w.total - cost.total;
+                    return (
+                      <TableRow key={w.key} className={w.share > 0 ? undefined : "opacity-50"}>
+                        <TableCell className="min-w-[180px]">
+                          <span className="font-medium">{w.label}</span>
+                          <span className="block text-[11px] text-muted-foreground">
+                            {w.checkProcessing > 0
+                              ? `Check ${money(w.checkProcessing, 2)}`
+                              : "No check processing"}
+                            {w.ach > 0 ? ` + ACH ${money(w.ach, 2)}` : ""}
+                            {w.rtp > 0 ? ` + RTP ${money(w.rtp, 2)}` : ""}
+                            {w.wallet > 0 ? ` + wallet ${money(w.wallet, 2)}` : ""}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{pct(w.share * 100, 0)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{Math.round(w.jobs).toLocaleString()}</TableCell>
+                        <TableCell className="text-right tabular-nums">{money(w.total, 2)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{money(cost.total, 2)}</TableCell>
+                        <TableCell
+                          className={`text-right tabular-nums ${profit >= 0 ? "text-emerald-500" : "text-destructive"}`}
+                        >
+                          {money(profit, 2)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {w.total > 0 ? pct((profit / w.total) * 100, 0) : "—"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  <TableRow className="font-semibold">
+                    <TableCell>Weighted average (incl. monthly fee)</TableCell>
+                    <TableCell className="text-right tabular-nums">100%</TableCell>
+                    <TableCell className="text-right tabular-nums">{Math.round(per.jobs).toLocaleString()}</TableCell>
+                    <TableCell className="text-right tabular-nums">{money(result.revenuePerJob, 2)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{money(result.variableCostPerJob, 2)}</TableCell>
+                    <TableCell
+                      className={`text-right tabular-nums ${result.grossProfitPerJob >= 0 ? "text-emerald-500" : "text-destructive"}`}
+                    >
+                      {money(result.grossProfitPerJob, 2)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {result.revenuePerJob > 0
+                        ? pct((result.grossProfitPerJob / result.revenuePerJob) * 100, 0)
+                        : "—"}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+
+          <Card>
+            <CardHeader className="pb-2">
               <CardTitle className="text-base">Monthly P&amp;L</CardTitle>
               <CardDescription className="text-xs">
                 {result.checks.toLocaleString()} checks · {result.sameDayDisbursements.toLocaleString()} same-day +{" "}
