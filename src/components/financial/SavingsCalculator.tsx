@@ -269,9 +269,13 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
               <CardContent className="grid grid-cols-2 gap-3">
                 <NumberField label="Monthly fee" prefix="$" value={i.coMonthlyFee} onChange={set("coMonthlyFee")} />
                 <NumberField label="Per check" prefix="$" step={0.25} value={i.coPerCheckFee} onChange={set("coPerCheckFee")} />
-                <NumberField label="Same-day / instant" prefix="$" step={0.05} value={i.coSameDayDisbursementFee} onChange={set("coSameDayDisbursementFee")} />
-                <NumberField label="Next-day disbursement" prefix="$" step={0.05} value={i.coNextDayDisbursementFee} onChange={set("coNextDayDisbursementFee")} />
-                <NumberField label="MortgageOps handling" prefix="$" step={1} value={i.coMortgageFee} onChange={set("coMortgageFee")} hint="Per mortgage check, billed at cost. Confirm shipping-label handling." />
+                <NumberField label="Same-day ACH" prefix="$" step={0.05} value={i.coSameDayDisbursementFee} onChange={set("coSameDayDisbursementFee")} hint="Flat fee per same-day ACH disbursement." />
+                <NumberField label="Next-day ACH" prefix="$" step={0.05} value={i.coNextDayDisbursementFee} onChange={set("coNextDayDisbursementFee")} hint="Flat fee per next-day ACH disbursement." />
+                <NumberField label="RTP rate" suffix="%" step={0.05} value={i.coRtpPct} onChange={set("coRtpPct")} hint="Instant RTP transfers are priced as a % of the transfer amount." />
+                <NumberField label="RTP fee cap" prefix="$" step={0.5} value={i.coRtpFeeCap} onChange={set("coRtpFeeCap")} hint="Maximum RTP fee per transfer." />
+                <NumberField label="Mortgage handling" prefix="$" step={1} value={i.coMortgageFee} onChange={set("coMortgageFee")} hint="Flat fee for the first mortgage check on a claim." />
+                <NumberField label="Additional mortgage check" prefix="$" step={1} value={i.coMortgageAdditionalCheckFee} onChange={set("coMortgageAdditionalCheckFee")} hint="Each additional check on the same mortgage claim." />
+
                 <NumberField
                   label="Referrals"
                   value={i.coReferrals}
