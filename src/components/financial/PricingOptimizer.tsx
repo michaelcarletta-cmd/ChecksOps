@@ -346,6 +346,8 @@ export function PricingOptimizer({ inputs, referralCredits, presentation }: Prop
                     <TableCell className="whitespace-nowrap">
                       {v.inTargetCorridor ? (
                         <Badge variant="secondary" className="text-[10px]">In target</Badge>
+                      ) : v.aboveCorridor && v.marginHealthy ? (
+                        <Badge variant="outline" className="text-[10px]">Room to raise</Badge>
                       ) : v.wins && v.marginHealthy ? (
                         <Badge variant="outline" className="text-[10px]">Wins</Badge>
                       ) : v.wins ? (

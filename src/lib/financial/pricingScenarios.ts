@@ -256,6 +256,8 @@ export interface ScenarioAtVolume {
   wins: boolean;
   /** True when savings land in the 20–30% target corridor and margin clears the floor. */
   inTargetCorridor: boolean;
+  /** Cheaper than iink by MORE than the target — room to raise price. */
+  aboveCorridor: boolean;
   marginHealthy: boolean;
 }
 
@@ -327,6 +329,7 @@ function atVolume(
     wins: savings > 0,
     inTargetCorridor:
       savingsPct >= t.minDiscountPct && savingsPct <= t.maxDiscountPct && marginHealthy,
+    aboveCorridor: savings > 0 && savingsPct > t.maxDiscountPct,
     marginHealthy,
   };
 }
@@ -430,6 +433,8 @@ export function optimizePricing(
     const tierLabel = v.bestTier ? `iink ${v.bestTier.label}` : "iink";
     if (v.inTargetCorridor) {
       bestFitReason = `At ${nn(i.checksPerMonth).toLocaleString()} checks/mo this lands ${v.savingsPct.toFixed(0)}% under ${tierLabel} — inside the ${t.minDiscountPct}–${t.maxDiscountPct}% target — while holding a ${v.margin.grossMarginPct.toFixed(0)}% gross margin.`;
+    } else if (v.aboveCorridor && v.marginHealthy) {
+      bestFitReason = `Beats ${tierLabel} by ${v.savingsPct.toFixed(0)}% at a ${v.margin.grossMarginPct.toFixed(0)}% gross margin — that is well past the ${t.minDiscountPct}–${t.maxDiscountPct}% target, so there is headroom to price higher and still win the deal.`;
     } else if (v.wins && v.marginHealthy) {
       bestFitReason = `Beats ${tierLabel} by ${v.savingsPct.toFixed(0)}% with a ${v.margin.grossMarginPct.toFixed(0)}% gross margin, though that sits outside the ${t.minDiscountPct}–${t.maxDiscountPct}% target corridor.`;
     } else if (v.wins) {
