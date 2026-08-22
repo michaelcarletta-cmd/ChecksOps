@@ -353,6 +353,7 @@ export const SCENARIOS: Record<ScenarioKey, { label: string; patch: Partial<PnlA
     label: "Low volume",
     patch: {
       tenants: 3,
+      jobsPerTenantPerMonth: 40,
       checksPerTenantPerMonth: 20,
       sameDayDisbursementsPerTenant: 10,
       nextDayDisbursementsPerTenant: 30,
@@ -363,6 +364,7 @@ export const SCENARIOS: Record<ScenarioKey, { label: string; patch: Partial<PnlA
     label: "Expected",
     patch: {
       tenants: 10,
+      jobsPerTenantPerMonth: 80,
       checksPerTenantPerMonth: 40,
       sameDayDisbursementsPerTenant: 20,
       nextDayDisbursementsPerTenant: 60,
@@ -373,6 +375,7 @@ export const SCENARIOS: Record<ScenarioKey, { label: string; patch: Partial<PnlA
     label: "High volume",
     patch: {
       tenants: 30,
+      jobsPerTenantPerMonth: 200,
       checksPerTenantPerMonth: 100,
       sameDayDisbursementsPerTenant: 60,
       nextDayDisbursementsPerTenant: 240,
