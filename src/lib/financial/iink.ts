@@ -145,22 +145,22 @@ export const IINK_FEATURE_ROWS: {
   },
   {
     label: "Instant RTP transfers",
-    checksOps: "Flat same-day fee",
+    checksOps: "0.95% of transfer, max $5.00",
     values: { basic: "3% of amount", essential: "2%", plus: "2%", premium: "2%" },
   },
   {
     label: "Standard ACH transfers",
-    checksOps: "Flat next-day fee",
+    checksOps: "Flat same-day / next-day fee",
     values: { basic: "Included", essential: "Included", plus: "Included", premium: "Included" },
   },
   {
     label: "Mortgage check fee",
-    checksOps: "Flat handling fee",
+    checksOps: "Flat $10 handling fee",
     values: { basic: "1% (cap $329)", essential: "1% (cap $329)", plus: "1% (cap $299)", premium: "1% (cap $299)" },
   },
   {
-    label: "Additional mortgage companies (2+)",
-    checksOps: "Included in handling fee",
+    label: "Additional mortgage checks / companies",
+    checksOps: "$5 per additional check on the claim",
     values: { basic: "$15", essential: "$15", plus: "$15", premium: "$15" },
   },
   {
@@ -192,10 +192,16 @@ export interface SavingsInputs {
   mortgagePctOfChecks: number;
   /** Average number of mortgage companies on those applicable checks. */
   avgMortgageCompanies: number;
-  /** % of disbursed proceeds sent instantly (RTP / same-day). */
-  rtpUsagePct: number;
-  /** Disbursements per month sent next-day (ACH). */
+  /** Average number of check submissions per mortgage claim (1 = single check). */
+  avgMortgageChecksPerClaim: number;
+  /** Same-day ACH disbursements per month. */
+  sameDayDisbursementsPerMonth: number;
+  /** Next-day ACH disbursements per month. */
   nextDayDisbursementsPerMonth: number;
+  /** Instant RTP transfers per month. */
+  rtpTransfersPerMonth: number;
+  /** Average dollar amount of an RTP transfer — drives iink's % RTP fee. */
+  avgRtpTransferAmount: number;
 
   // iink term
   iinkAnnualBilling: boolean;
@@ -206,6 +212,9 @@ export interface SavingsInputs {
   coSameDayDisbursementFee: number;
   coNextDayDisbursementFee: number;
   coMortgageFee: number;
+  coMortgageAdditionalCheckFee: number;
+  coRtpPct: number;
+  coRtpFeeCap: number;
   coReferrals: number;
   coReferralCreditPerReferral: number;
   coReferralCreditCap: number;
@@ -217,8 +226,11 @@ export const DEFAULT_SAVINGS: SavingsInputs = {
   avgCheckAmount: 25_000,
   mortgagePctOfChecks: 20,
   avgMortgageCompanies: 1,
-  rtpUsagePct: 25,
+  avgMortgageChecksPerClaim: 1,
+  sameDayDisbursementsPerMonth: 25,
   nextDayDisbursementsPerMonth: 75,
+  rtpTransfersPerMonth: 10,
+  avgRtpTransferAmount: 10_000,
 
   iinkAnnualBilling: false,
 
@@ -227,6 +239,9 @@ export const DEFAULT_SAVINGS: SavingsInputs = {
   coSameDayDisbursementFee: 1,
   coNextDayDisbursementFee: 0.75,
   coMortgageFee: 10,
+  coMortgageAdditionalCheckFee: 5,
+  coRtpPct: 0.95,
+  coRtpFeeCap: 5,
   coReferrals: 0,
   coReferralCreditPerReferral: 5,
   coReferralCreditCap: 25,
@@ -273,13 +288,13 @@ function volumes(i: SavingsInputs, checks: number) {
   const scale = base > 0 ? checks / base : 0;
   const mortgageChecks = checks * (Math.min(100, nn(i.mortgagePctOfChecks)) / 100);
   const extraCompanies = Math.max(0, nn(i.avgMortgageCompanies) - 1) * mortgageChecks;
+  // Additional check submissions on the same mortgage claim ($5 each on ChecksOps).
+  const extraMortgageChecks = Math.max(0, nn(i.avgMortgageChecksPerClaim) - 1) * mortgageChecks;
   const nextDay = nn(i.nextDayDisbursementsPerMonth) * scale;
-  const proceeds = checks * nn(i.avgCheckAmount);
-  const rtpShare = Math.min(100, nn(i.rtpUsagePct)) / 100;
-  const rtpAmount = proceeds * rtpShare;
-  // Instant/same-day disbursements are modeled as the RTP share of check volume.
-  const sameDay = checks * rtpShare;
-  return { mortgageChecks, extraCompanies, nextDay, sameDay, rtpAmount };
+  const sameDay = nn(i.sameDayDisbursementsPerMonth) * scale;
+  const rtpTransfers = nn(i.rtpTransfersPerMonth) * scale;
+  const rtpAmount = rtpTransfers * nn(i.avgRtpTransferAmount);
+  return { mortgageChecks, extraCompanies, extraMortgageChecks, nextDay, sameDay, rtpTransfers, rtpAmount };
 }
 
 /** Referral credit applied to the ChecksOps monthly fee ($5 each, capped). */
@@ -298,11 +313,14 @@ export function checksOpsCost(i: SavingsInputs, checks: number): CostBreakdown {
       subscription: nn(i.coMonthlyFee),
       perCheck: checks * nn(i.coPerCheckFee),
       disbursement:
-        v.sameDay * nn(i.coSameDayDisbursementFee) + v.nextDay * nn(i.coNextDayDisbursementFee),
+        v.sameDay * nn(i.coSameDayDisbursementFee) +
+        v.nextDay * nn(i.coNextDayDisbursementFee) +
+        v.rtpTransfers *
+          Math.min(nn(i.coRtpFeeCap), nn(i.avgRtpTransferAmount) * (nn(i.coRtpPct) / 100)),
       otherRecurring: 0,
       credits: referralCredit(i),
       mortgageBase: v.mortgageChecks * nn(i.coMortgageFee),
-      mortgageAdditionalCompanies: 0,
+      mortgageAdditionalCompanies: v.extraMortgageChecks * nn(i.coMortgageAdditionalCheckFee),
     },
     checks,
   );
