@@ -202,6 +202,9 @@ export interface SavingsInputs {
   rtpTransfersPerMonth: number;
   /** Average dollar amount of an RTP transfer — drives iink's % RTP fee. */
   avgRtpTransferAmount: number;
+  /** Whether the prospect actually uses mortgage / loss-draft services at all. */
+  usesMortgageServices: boolean;
+
 
   // iink term
   iinkAnnualBilling: boolean;
