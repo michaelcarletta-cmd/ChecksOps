@@ -223,20 +223,39 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                   hint="iink charges $15 for each mortgage company beyond the first."
                 />
                 <NumberField
-                  label="RTP / instant usage"
-                  suffix="%"
-                  max={100}
-                  step={5}
-                  value={i.rtpUsagePct}
-                  onChange={set("rtpUsagePct")}
-                  hint="Share of proceeds sent instantly. iink prices RTP as a % of the amount; ChecksOps charges a flat same-day fee."
+                  label="Mortgage checks / claim"
+                  step={0.5}
+                  value={i.avgMortgageChecksPerClaim}
+                  onChange={set("avgMortgageChecksPerClaim")}
+                  hint="ChecksOps bills $10 for the first mortgage check on a claim and $5 for each additional check on that claim."
                 />
                 <NumberField
-                  label="Next-day disbursements / mo"
+                  label="Same-day ACH / mo"
+                  value={i.sameDayDisbursementsPerMonth}
+                  onChange={set("sameDayDisbursementsPerMonth")}
+                  hint="Flat same-day ACH disbursement fee on ChecksOps. Included on iink plans."
+                />
+                <NumberField
+                  label="Next-day ACH / mo"
                   value={i.nextDayDisbursementsPerMonth}
                   onChange={set("nextDayDisbursementsPerMonth")}
-                  hint="Standard ACH payouts. Included on iink plans; ChecksOps bills a flat per-payout fee."
+                  hint="Flat next-day ACH disbursement fee on ChecksOps. Included on iink plans."
                 />
+                <NumberField
+                  label="RTP transfers / mo"
+                  value={i.rtpTransfersPerMonth}
+                  onChange={set("rtpTransfersPerMonth")}
+                  hint="Instant transfers. ChecksOps charges 0.95% capped at $5.00; iink charges 2–3% of the amount."
+                />
+                <NumberField
+                  label="Avg RTP transfer"
+                  prefix="$"
+                  step={500}
+                  value={i.avgRtpTransferAmount}
+                  onChange={set("avgRtpTransferAmount")}
+                  hint="Drives both the ChecksOps 0.95% (max $5) fee and iink's % RTP rate."
+                />
+
               </CardContent>
             </Card>
 
