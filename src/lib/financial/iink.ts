@@ -184,21 +184,22 @@ export const IINK_FEATURE_ROWS: {
 /* Inputs                                                              */
 /* ------------------------------------------------------------------ */
 
-export interface SavingsInputs {
+export interface SavingsInputs extends WorkflowMix {
   // Prospect profile
+  /** Legacy explicit check count — used only when the workflow mix is off. */
   checksPerMonth: number;
   avgCheckAmount: number;
-  /** % of monthly checks that carry a mortgage-company payee. */
+  /** % of processed checks that carry a mortgage-company payee. */
   mortgagePctOfChecks: number;
   /** Average number of mortgage companies on those applicable checks. */
   avgMortgageCompanies: number;
   /** Average number of check submissions per mortgage claim (1 = single check). */
   avgMortgageChecksPerClaim: number;
-  /** Same-day ACH disbursements per month. */
+  /** Same-day ACH disbursements per month (legacy explicit mode). */
   sameDayDisbursementsPerMonth: number;
-  /** Next-day ACH disbursements per month. */
+  /** Next-day ACH disbursements per month (legacy explicit mode). */
   nextDayDisbursementsPerMonth: number;
-  /** Instant RTP transfers per month. */
+  /** Instant RTP transfers per month (legacy explicit mode). */
   rtpTransfersPerMonth: number;
   /** Average dollar amount of an RTP transfer — drives iink's % RTP fee. */
   avgRtpTransferAmount: number;
@@ -214,6 +215,8 @@ export interface SavingsInputs {
   coPerCheckFee: number;
   coSameDayDisbursementFee: number;
   coNextDayDisbursementFee: number;
+  /** Fee on a wallet / internal transfer. Zero today — editable. */
+  coWalletTransferFee: number;
   coMortgageFee: number;
   coMortgageAdditionalCheckFee: number;
   coRtpPct: number;
@@ -225,6 +228,8 @@ export interface SavingsInputs {
 }
 
 export const DEFAULT_SAVINGS: SavingsInputs = {
+  ...DEFAULT_WORKFLOW_MIX,
+
   checksPerMonth: 50,
   avgCheckAmount: 25_000,
   mortgagePctOfChecks: 20,
@@ -242,6 +247,7 @@ export const DEFAULT_SAVINGS: SavingsInputs = {
   coPerCheckFee: 4,
   coSameDayDisbursementFee: 1,
   coNextDayDisbursementFee: 0.75,
+  coWalletTransferFee: 0,
   coMortgageFee: 10,
   coMortgageAdditionalCheckFee: 5,
   coRtpPct: 0.95,
@@ -251,6 +257,22 @@ export const DEFAULT_SAVINGS: SavingsInputs = {
   coReferralCreditCap: 25,
   coSetupFee: 7500,
 };
+
+/** Price rates in the shape the workflow model expects. */
+export const priceRatesFrom = (i: SavingsInputs): WorkflowPriceRates => ({
+  perCheckFee: i.coPerCheckFee,
+  sameDayFee: i.coSameDayDisbursementFee,
+  nextDayFee: i.coNextDayDisbursementFee,
+  rtpPct: i.coRtpPct,
+  rtpCap: i.coRtpFeeCap,
+  walletFee: i.coWalletTransferFee,
+  avgRtpAmount: i.avgRtpTransferAmount,
+});
+
+/** Monthly processed-check count actually used by the model. */
+export const effectiveChecks = (i: SavingsInputs) =>
+  i.useWorkflowMix ? mixChecksPerMonth(i) : nn(i.checksPerMonth);
+
 
 const nn = (v: number) => (Number.isFinite(v) && v > 0 ? v : 0);
 
