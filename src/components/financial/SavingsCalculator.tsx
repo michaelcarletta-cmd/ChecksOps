@@ -31,7 +31,9 @@ import {
   SavingsInputs,
   computeSavings,
   computeSavingsPayback,
+  referralCredit,
 } from "@/lib/financial/iink";
+import { PricingOptimizer } from "./PricingOptimizer";
 import { downloadCsv } from "@/lib/financial/csv";
 
 const CHART_AXIS = "hsl(var(--muted-foreground))";
@@ -255,6 +257,16 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                   onChange={set("avgRtpTransferAmount")}
                   hint="Drives both the ChecksOps 0.95% (max $5) fee and iink's % RTP rate."
                 />
+                <div className="col-span-2 flex items-center justify-between gap-2 rounded-lg border border-border/60 p-2.5">
+                  <Label htmlFor="uses-mortgage" className="text-xs text-muted-foreground">
+                    Uses mortgage / loss-draft services
+                  </Label>
+                  <Switch
+                    id="uses-mortgage"
+                    checked={i.usesMortgageServices}
+                    onCheckedChange={(v) => setI((prev) => ({ ...prev, usesMortgageServices: v }))}
+                  />
+                </div>
 
               </CardContent>
             </Card>
@@ -567,6 +579,12 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
               comparison purposes only.
             </AlertDescription>
           </Alert>
+
+          <PricingOptimizer
+            inputs={i}
+            referralCredits={referralCredit(i)}
+            presentation={presentation}
+          />
         </div>
       </div>
     </div>
