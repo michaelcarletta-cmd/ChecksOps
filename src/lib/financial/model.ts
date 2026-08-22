@@ -110,7 +110,7 @@ export interface PnlResult {
   rtpRevenue: number;
   rtpCost: number;
   walletRevenue: number;
-  walletCost: number;
+  walletTransferCostTotal: number;
   /** Primary unit metrics — per job / transaction, not per check. */
   revenuePerJob: number;
   variableCostPerJob: number;
@@ -240,7 +240,7 @@ export function computePnl(a: PnlAssumptions, tenantOverride?: number): PnlResul
     rtpRevenue,
     rtpCost,
     walletRevenue,
-    walletCost: walletCost2,
+    walletTransferCostTotal: walletCost2,
     revenuePerJob: jobs > 0 ? recurringRevenue / jobs : 0,
     variableCostPerJob: jobs > 0 ? (variableCost - onboardingCostAllTenants) / jobs : 0,
     grossProfitPerJob:
