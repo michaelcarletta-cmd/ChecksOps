@@ -23509,6 +23509,10 @@ export type Database = {
         Args: { p_actor_id: string; p_check_id: string; p_reason: string }
         Returns: Json
       }
+      admin_override_check_status: {
+        Args: { p_actor_id: string; p_check_id: string; p_new_status: string }
+        Returns: Json
+      }
       admin_set_contractor_pro: {
         Args: { p_approve: boolean; p_contractor_id: string }
         Returns: Json

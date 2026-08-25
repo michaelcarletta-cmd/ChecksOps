@@ -2707,63 +2707,17 @@ function StatusOverride({
     }
     setSaving(true);
     try {
-      // Map the new status to the matching stage + recommendation so the check
-      // fully moves out of its old tab (tabs filter on status AND deposit_recommendation).
-      const stageMap: Record<string, string> = {
-        uploaded: "review",
-        processing: "review",
-        ocr_complete: "review",
-        needs_review: "review",
-        manual_review_required: "review",
-        reissue_requested: "review",
-        endorsements_in_progress: "endorsing",
-        endorsements_complete: "endorsing",
-        approved_for_deposit: "ready_for_deposit",
-        branch_deposit_required: "ready_for_deposit",
-        loss_draft_required: "loss_draft",
-        deposited: "deposited",
-        voided: "review",
-      };
-      const recMap: Record<string, string | null> = {
-        endorsements_in_progress: "endorsements_pending",
-        endorsements_complete: "endorsements_pending",
-        approved_for_deposit: "ready_for_deposit",
-        branch_deposit_required: "branch_deposit_recommended",
-        loss_draft_required: "loss_draft_required",
-        reissue_requested: "request_reissue",
-        needs_review: null,
-        manual_review_required: null,
-        uploaded: null,
-        processing: null,
-        ocr_complete: null,
-        deposited: null,
-        voided: null,
-      };
-      const newStage = (stageMap[newStatus] ?? "review") as "review" | "loss_draft" | "endorsing" | "ready_for_deposit" | "deposited";
-      const newRec = recMap[newStatus] ?? null;
-      const nowIso = new Date().toISOString();
-      const { error } = await supabase
-        .from("check_intake_items")
-        .update({
-          status: newStatus,
-          check_stage: newStage,
-          deposit_recommendation: newRec,
-          updated_at: nowIso,
-        })
-        .eq("id", checkId);
-      if (error) throw error;
-      // Mirror stage to claim_checks so other views stay in sync.
-      await supabase
-        .from("claim_checks")
-        .update({ check_stage: newStage, updated_at: nowIso })
-        .eq("check_intake_item_id", checkId);
-      await supabase.from("check_audit_log").insert({
-        check_id: checkId,
-        event_type: "status_manual_override",
-        actor_id: user?.id ?? null,
-        event_description: `Status manually changed from "${currentStatus}" to "${newStatus}"`,
-        event_data: { old_status: currentStatus, new_status: newStatus, new_stage: newStage },
+      // Route through the security-definer RPC: it validates the admin/staff
+      // permission server-side, updates status + stage + recommendation
+      // atomically, mirrors claim_checks, and writes the audit log — bypassing
+      // the RLS failures that blocked direct frontend updates.
+      const { data, error } = await supabase.rpc("admin_override_check_status", {
+        p_check_id: checkId,
+        p_new_status: newStatus,
+        p_actor_id: user?.id ?? null,
       });
+      if (error) throw error;
+      if (data && (data as any).ok === false) throw new Error((data as any).error ?? "Override rejected");
       toast({ title: "Status updated", description: `Moved to ${newStatus.replace(/_/g, " ")}` });
       setEditing(false);
       onSuccess();
