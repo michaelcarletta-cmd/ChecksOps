@@ -1072,11 +1072,10 @@ export default function CheckCommandCenter() {
       s?.stakeholder_accounts?.custname,
     ];
     if (haystacks.some((v) => v && v.toString().toLowerCase().includes(q))) return true;
-    // Match against the split amount, the parent check amount, and the batch total
+    // Match against the split amount or the parent check amount
     return (
       matchesAmountQuery(q, s?.amount != null ? Number(s.amount) : null) ||
-      matchesAmountQuery(q, item?.amount != null ? Number(item.amount) : null) ||
-      matchesAmountQuery(q, s?.disbursement_batches?.total_amount != null ? Number(s.disbursement_batches.total_amount) : null)
+      matchesAmountQuery(q, item?.amount != null ? Number(item.amount) : null)
     );
   }, [searchQuery]);
 
