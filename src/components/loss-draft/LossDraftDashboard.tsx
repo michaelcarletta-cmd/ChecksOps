@@ -107,8 +107,11 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
   const q = (searchQuery ?? "").trim().toLowerCase();
   const searched = q
     ? visibleDrafts.filter(d =>
-        [d.claim_number, d.policyholder_name, d.mortgage_servicer, d.insurance_company]
-          .some(v => v && v.toString().toLowerCase().includes(q))
+        [d.claim_number, d.policyholder_name, d.mortgage_servicer, d.insurance_company, d.check_number, d.payee_line, d.carrier_name]
+          .some(v => v && v.toString().toLowerCase().includes(q)) ||
+        matchesAmountQuery(q, d.check_amount) ||
+        matchesAmountQuery(q, d.unreleased_amount) ||
+        matchesAmountQuery(q, d.total_escrowed)
       )
     : visibleDrafts;
 

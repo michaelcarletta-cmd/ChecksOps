@@ -278,7 +278,8 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
   const filteredItems = q
     ? baseFiltered.filter((i) =>
         [i.check_number, i.carrier_name, i.bank_reference, i.deposit_slip_number, i.provider_reference]
-          .some((v) => v && v.toString().toLowerCase().includes(q))
+          .some((v) => v && v.toString().toLowerCase().includes(q)) ||
+        matchesAmountQuery(q, i.amount)
       )
     : baseFiltered;
 
