@@ -157,6 +157,7 @@ import type {
 import {
   normalizeEndorsementName,
   normalizeEndorsementType,
+  matchesAmountQuery,
   normalizeEndorsementStatus,
   mergeEndorsementSummaryRows,
   isMirroredCheck,
