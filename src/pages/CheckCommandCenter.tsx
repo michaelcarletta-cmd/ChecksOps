@@ -763,11 +763,13 @@ export default function CheckCommandCenter() {
       c.carrier_name,
       c.payee_line,
       c.detected_claim_number,
+      c.property_address,
       linked?.claim_number,
       linked?.policyholder_name,
       ...(c.check_payees ?? []).map((p) => p.payee_name),
     ];
-    return haystacks.some((v) => v && v.toString().toLowerCase().includes(q));
+    if (haystacks.some((v) => v && v.toString().toLowerCase().includes(q))) return true;
+    return matchesAmountQuery(q, c.amount);
   }, [searchQuery, claimLookup]);
 
   const awaitingEndorsement = allChecks.filter(
