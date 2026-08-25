@@ -1071,7 +1071,13 @@ export default function CheckCommandCenter() {
       s?.stakeholder_accounts?.nickname,
       s?.stakeholder_accounts?.custname,
     ];
-    return haystacks.some((v) => v && v.toString().toLowerCase().includes(q));
+    if (haystacks.some((v) => v && v.toString().toLowerCase().includes(q))) return true;
+    // Match against the split amount, the parent check amount, and the batch total
+    return (
+      matchesAmountQuery(q, s?.amount != null ? Number(s.amount) : null) ||
+      matchesAmountQuery(q, item?.amount != null ? Number(item.amount) : null) ||
+      matchesAmountQuery(q, s?.disbursement_batches?.total_amount != null ? Number(s.disbursement_batches.total_amount) : null)
+    );
   }, [searchQuery]);
 
   const filteredFundsReleased = useMemo(
