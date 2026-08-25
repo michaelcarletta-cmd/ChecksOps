@@ -1,0 +1,3 @@
+DROP INDEX IF EXISTS public.check_billing_events_tenant_check_event_uniq;
+CREATE UNIQUE INDEX check_billing_events_tenant_check_event_uniq
+ON public.check_billing_events (tenant_id, check_intake_item_id, event_type);
