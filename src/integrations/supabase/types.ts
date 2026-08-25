@@ -24897,6 +24897,7 @@ export type Database = {
         Args: { _tenant_id: string }
         Returns: boolean
       }
+      is_guided_claim: { Args: { _claim_id: string }; Returns: boolean }
       is_master_owner: { Args: never; Returns: boolean }
       is_org_admin: {
         Args: { _org_id: string; _user_id: string }
