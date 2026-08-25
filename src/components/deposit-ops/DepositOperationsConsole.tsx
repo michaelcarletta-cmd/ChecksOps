@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { matchesAmountQuery } from "@/features/check-command/status";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
@@ -278,7 +279,8 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
   const filteredItems = q
     ? baseFiltered.filter((i) =>
         [i.check_number, i.carrier_name, i.bank_reference, i.deposit_slip_number, i.provider_reference]
-          .some((v) => v && v.toString().toLowerCase().includes(q))
+          .some((v) => v && v.toString().toLowerCase().includes(q)) ||
+        matchesAmountQuery(q, i.amount)
       )
     : baseFiltered;
 

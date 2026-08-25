@@ -23,6 +23,24 @@ import type {
 export const normalizeEndorsementName = (value?: string | null) => (value ?? "").trim().toLowerCase();
 export const normalizeEndorsementType = (value?: string | null) => (value ?? "other").trim().toLowerCase();
 
+/**
+ * Matches a free-text search query against a money amount.
+ * Accepts "$1,250.00", "1250", "1250.00", or partials like "250.0".
+ * Only numeric-looking queries (after stripping $, commas, spaces) are tested
+ * so name searches never accidentally match amounts.
+ */
+export const matchesAmountQuery = (query: string, amount: number | null | undefined): boolean => {
+  if (amount == null || !Number.isFinite(amount)) return false;
+  const q = query.replace(/[$,\s]/g, "");
+  if (!q || !/^\d*\.?\d+$/.test(q)) return false;
+  const variants = [
+    amount.toFixed(2),
+    amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    String(Math.trunc(amount)),
+  ];
+  return variants.some((v) => v.includes(q));
+};
+
 export const normalizeEndorsementStatus = (status?: string | null, signedAt?: string | null) => {
   if (signedAt) return "signed";
 

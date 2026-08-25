@@ -157,6 +157,7 @@ import type {
 import {
   normalizeEndorsementName,
   normalizeEndorsementType,
+  matchesAmountQuery,
   normalizeEndorsementStatus,
   mergeEndorsementSummaryRows,
   isMirroredCheck,
@@ -763,11 +764,13 @@ export default function CheckCommandCenter() {
       c.carrier_name,
       c.payee_line,
       c.detected_claim_number,
+      c.property_address,
       linked?.claim_number,
       linked?.policyholder_name,
       ...(c.check_payees ?? []).map((p) => p.payee_name),
     ];
-    return haystacks.some((v) => v && v.toString().toLowerCase().includes(q));
+    if (haystacks.some((v) => v && v.toString().toLowerCase().includes(q))) return true;
+    return matchesAmountQuery(q, c.amount);
   }, [searchQuery, claimLookup]);
 
   const awaitingEndorsement = allChecks.filter(
@@ -1069,7 +1072,12 @@ export default function CheckCommandCenter() {
       s?.stakeholder_accounts?.nickname,
       s?.stakeholder_accounts?.custname,
     ];
-    return haystacks.some((v) => v && v.toString().toLowerCase().includes(q));
+    if (haystacks.some((v) => v && v.toString().toLowerCase().includes(q))) return true;
+    // Match against the split amount or the parent check amount
+    return (
+      matchesAmountQuery(q, s?.amount != null ? Number(s.amount) : null) ||
+      matchesAmountQuery(q, item?.amount != null ? Number(item.amount) : null)
+    );
   }, [searchQuery]);
 
   const filteredFundsReleased = useMemo(
@@ -1206,7 +1214,7 @@ export default function CheckCommandCenter() {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         <Input
-          placeholder="Search by policyholder name, claim #, check #, payee, or carrier..."
+          placeholder="Search by name, claim #, check #, payee, carrier, or amount..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="pl-9 h-10"
