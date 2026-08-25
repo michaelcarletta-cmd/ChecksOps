@@ -17,6 +17,7 @@ import { LossDraftDetailPanel } from "./LossDraftDetailPanel";
 import { LossDraftDashboardCards, type LossDraftFilter } from "./LossDraftDashboardCards";
 import { NewLossDraftDialog } from "./NewLossDraftDialog";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
+import { matchesAmountQuery } from "@/features/check-command/status";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
