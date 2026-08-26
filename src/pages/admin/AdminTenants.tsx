@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PLATFORM_OWNER_EMAIL } from "@/lib/masterMerchant";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -35,7 +36,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DataView, FilterBar, type DataColumn } from "@/components/shell";
 
 
-const ALLOWED_EMAIL = "mcarletta@freedomadj.com";
+const ALLOWED_EMAIL = PLATFORM_OWNER_EMAIL;
 
 type Tenant = {
   id: string;
