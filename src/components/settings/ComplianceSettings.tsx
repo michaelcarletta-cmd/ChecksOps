@@ -41,8 +41,10 @@ function joinAddress(a: AddressParts): string {
   return [a.street, a.city, tail].filter(Boolean).join(", ");
 }
 
-export function ComplianceSettings() {
-  const { tenant } = useTenant();
+export function ComplianceSettings({ tenantId: tenantIdOverride }: { tenantId?: string } = {}) {
+  const { tenant: ctxTenant } = useTenant();
+  // Platform admins render this inside tenant management for a specific org.
+  const tenant = (tenantIdOverride ? { id: tenantIdOverride } : ctxTenant) as { id: string } | null;
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
