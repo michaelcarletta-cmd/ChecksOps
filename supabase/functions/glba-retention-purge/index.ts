@@ -47,10 +47,6 @@ Deno.serve(async (req) => {
     // 2. Purge PII from related tables. Keep skeletal rows for aggregate financial audit trail.
     const tablesToDelete = [
       "claim_files",
-      "claim_photos",
-      "claim_communications_diary",
-      "claim_additional_contacts",
-      "claim_ai_conversations",
     ];
     const deletions: Record<string, number> = {};
 
