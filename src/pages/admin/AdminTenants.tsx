@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { PLATFORM_OWNER_EMAIL } from "@/lib/masterMerchant";
 import { TenantMoovIdentityCard } from "@/components/admin/TenantMoovIdentityCard";
 import { PlatformBankPanel } from "@/components/admin/PlatformBankPanel";
+import { PlatformTreasuryPanel } from "@/components/admin/PlatformTreasuryPanel";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -16,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
-import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Palette, Briefcase, Home, Calculator, Landmark } from "lucide-react";
+import { Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Palette, Briefcase, Home, Calculator, Landmark, Wallet } from "lucide-react";
 import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { SettingsHero } from "@/components/settings/SettingsHero";
@@ -197,6 +198,7 @@ export default function AdminTenants() {
 
             <TabsTrigger value="tenants"><Building2 className="w-4 h-4 mr-1" /> Tenants</TabsTrigger>
             <TabsTrigger value="platform-banking"><Landmark className="w-4 h-4 mr-1" /> Platform Banking</TabsTrigger>
+            <TabsTrigger value="treasury"><Wallet className="w-4 h-4 mr-1" /> Wallet & P&amp;L</TabsTrigger>
             <TabsTrigger value="referrals"><Gift className="w-4 h-4 mr-1" /> Referral Dashboard</TabsTrigger>
 
           </TabsList>
@@ -216,6 +218,10 @@ export default function AdminTenants() {
           <TabsContent value="platform-banking">
             <PlatformBankPanel />
           </TabsContent>
+          <TabsContent value="treasury">
+            <PlatformTreasuryPanel />
+          </TabsContent>
+
           <TabsContent value="referrals">
             <AdminReferralDashboard />
           </TabsContent>
