@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { PLATFORM_OWNER_EMAIL } from "@/lib/masterMerchant";
 import { TenantMoovIdentityCard } from "@/components/admin/TenantMoovIdentityCard";
+import { PlatformBankPanel } from "@/components/admin/PlatformBankPanel";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -195,8 +196,9 @@ export default function AdminTenants() {
           <TabsList className="mb-6">
 
             <TabsTrigger value="tenants"><Building2 className="w-4 h-4 mr-1" /> Tenants</TabsTrigger>
+            <TabsTrigger value="platform-banking"><Landmark className="w-4 h-4 mr-1" /> Platform Banking</TabsTrigger>
             <TabsTrigger value="referrals"><Gift className="w-4 h-4 mr-1" /> Referral Dashboard</TabsTrigger>
-            
+
           </TabsList>
           <TabsContent value="tenants">
             {loading ? (
