@@ -16,6 +16,8 @@ import { SettingsHero } from "./SettingsHero";
 import { SectionCard } from "./SectionCard";
 import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
 import { VettingDocumentsPanel } from "@/components/settings/VettingDocumentsPanel";
+import { PaymentAccountPanel } from "@/components/payments/PaymentAccountPanel";
+
 
 
 
