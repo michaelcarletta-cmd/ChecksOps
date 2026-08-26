@@ -15197,10 +15197,6 @@ export type Database = {
         }
         Returns: boolean
       }
-      has_workspace_access: {
-        Args: { _user_id: string; _workspace_id: string }
-        Returns: boolean
-      }
       init_loss_draft_documents: {
         Args: { p_loss_draft_id: string }
         Returns: undefined
