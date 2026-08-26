@@ -109,21 +109,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Log to claim activity
-    if (claim_id) {
-      await supabase.from("claim_activity").insert({
-        claim_id,
-        user_id: user.id,
-        activity_type: "docupost_send",
-        description: `Sent ${document_type || "document"} via Docupost to ${to_name} at ${to_address1}, ${to_city}, ${to_state} ${to_zip}`,
-        metadata: {
-          document_type,
-          recipient: to_name,
-          address: `${to_address1}, ${to_city}, ${to_state} ${to_zip}`,
-          docupost_response: result,
-        },
-      });
-    }
+    // Activity logging removed: claim_activity table no longer exists in ChecksOps
+
 
     return new Response(
       JSON.stringify({ success: true, data: result }),

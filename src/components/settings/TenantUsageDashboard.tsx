@@ -90,8 +90,9 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
           .gte("created_at", yearStart)
           .lt("created_at", yearEnd),
         supabase
-          .from("moov_transfers" as any)
-          .select("id, amount, status, created_at")
+          .from("payment_transfers")
+          .select("id, amount_cents, status, created_at")
+          .eq("provider", "moov")
           .eq("tenant_id", tenantId)
           .gte("created_at", yearStart)
           .lt("created_at", yearEnd),
@@ -125,7 +126,7 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
       const moovCount = moovRes.data?.length ?? 0;
       const moovOutAmount = (moovRes.data ?? [])
         .filter((r: any) => r.status === "completed")
-        .reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0);
+        .reduce((s: number, r: any) => s + Number(r.amount_cents ?? 0) / 100, 0);
       const maintenance = maintRes.data ?? [];
       const maintenancePaidCents = maintenance
         .filter((r: any) => ["cleared", "recorded", "submitted"].includes(r.status))

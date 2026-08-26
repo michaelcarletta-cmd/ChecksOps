@@ -998,8 +998,9 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
           .gte("created_at", range.start.toISOString())
           .lt("created_at", range.end.toISOString()),
         supabase
-          .from("moov_transfers" as any)
-          .select("id, amount, status, created_at")
+          .from("payment_transfers")
+          .select("id, amount_cents, status, created_at")
+          .eq("provider", "moov")
           .eq("tenant_id", tenantId)
           .gte("created_at", range.start.toISOString())
           .lt("created_at", range.end.toISOString()),
@@ -1026,7 +1027,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
         count: moovRes.data?.length ?? 0,
         amountOut: (moovRes.data ?? [])
           .filter((r: any) => r.status === "completed")
-          .reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0),
+          .reduce((s: number, r: any) => s + Number(r.amount_cents ?? 0) / 100, 0),
       });
       setMaintenance(maintRes.data ?? []);
       setTenantMeta(tenantRes.data as any ?? null);
