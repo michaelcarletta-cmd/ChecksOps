@@ -38,12 +38,37 @@ serve(async (req) => {
       return json({ success: true, already_existed: true, account: existing });
     }
 
-    const { data: tenant } = await supabase
+    const { data: tenant, error: tenantErr } = await supabase
       .from("tenants")
-      .select("id, name, email_from_address, email_reply_to, business_phone, business_address, business_city, business_state, business_zip")
+      .select("id, name, legal_business_name, email_from_address, email_reply_to, business_phone, business_address")
       .eq("id", tenant_id)
       .maybeSingle();
+    if (tenantErr) {
+      console.error("[moov-account-create] tenant lookup", tenantErr.message);
+      return json({ error: `Could not load organization: ${tenantErr.message}` }, 500);
+    }
     if (!tenant) return json({ error: "Organization not found" }, 404);
+
+    // `business_address` is stored combined: "street, city, ST ZIP".
+    const addr = (() => {
+      const raw = String((tenant as any).business_address ?? "").trim();
+      if (!raw) return null;
+      const parts = raw.split(",").map((p) => p.trim()).filter(Boolean);
+      if (parts.length >= 3) {
+        const tail = parts[parts.length - 1].split(/\s+/);
+        const postalCode = tail.length > 1 ? tail[tail.length - 1] : "";
+        const stateOrProvince = tail.length > 1 ? tail.slice(0, -1).join(" ") : tail[0] ?? "";
+        return {
+          addressLine1: parts.slice(0, parts.length - 2).join(", "),
+          city: parts[parts.length - 2] ?? "",
+          stateOrProvince,
+          postalCode,
+          country: "US",
+        };
+      }
+      return null;
+    })();
+
 
     const idempotencyKey = `checksops-account-${environment}-${tenant_id}`;
 
@@ -68,19 +93,14 @@ serve(async (req) => {
         accountType: "business",
         profile: {
           business: {
-            legalBusinessName: (tenant as any).name ?? "ChecksOps Organization",
+            legalBusinessName: (tenant as any).legal_business_name ?? (tenant as any).name ?? "ChecksOps Organization",
             email: (tenant as any).email_reply_to ?? (tenant as any).email_from_address ?? undefined,
             phone: (tenant as any).business_phone
               ? { number: String((tenant as any).business_phone).replace(/\D/g, "").slice(-10) }
               : undefined,
-            address: (tenant as any).business_address ? {
-              addressLine1: (tenant as any).business_address,
-              city: (tenant as any).business_city,
-              stateOrProvince: (tenant as any).business_state,
-              postalCode: (tenant as any).business_zip,
-              country: "US"
-            } : undefined,
+            address: addr ?? undefined,
           },
+
         },
         capabilities: ["transfers", "send-funds", "wallet", "send-funds.ach"],
         // Provider-issued ToS acceptance token from the hosted ToS component.
