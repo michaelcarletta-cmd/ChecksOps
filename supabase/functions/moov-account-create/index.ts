@@ -93,19 +93,14 @@ serve(async (req) => {
         accountType: "business",
         profile: {
           business: {
-            legalBusinessName: (tenant as any).name ?? "ChecksOps Organization",
+            legalBusinessName: (tenant as any).legal_business_name ?? (tenant as any).name ?? "ChecksOps Organization",
             email: (tenant as any).email_reply_to ?? (tenant as any).email_from_address ?? undefined,
             phone: (tenant as any).business_phone
               ? { number: String((tenant as any).business_phone).replace(/\D/g, "").slice(-10) }
               : undefined,
-            address: (tenant as any).business_address ? {
-              addressLine1: (tenant as any).business_address,
-              city: (tenant as any).business_city,
-              stateOrProvince: (tenant as any).business_state,
-              postalCode: (tenant as any).business_zip,
-              country: "US"
-            } : undefined,
+            address: addr ?? undefined,
           },
+
         },
         capabilities: ["transfers", "send-funds", "wallet", "send-funds.ach"],
         // Provider-issued ToS acceptance token from the hosted ToS component.
