@@ -197,6 +197,7 @@ export default function AdminTenants() {
 
             <TabsTrigger value="tenants"><Building2 className="w-4 h-4 mr-1" /> Tenants</TabsTrigger>
             <TabsTrigger value="platform-banking"><Landmark className="w-4 h-4 mr-1" /> Platform Banking</TabsTrigger>
+            <TabsTrigger value="treasury"><Wallet className="w-4 h-4 mr-1" /> Wallet & P&amp;L</TabsTrigger>
             <TabsTrigger value="referrals"><Gift className="w-4 h-4 mr-1" /> Referral Dashboard</TabsTrigger>
 
           </TabsList>
