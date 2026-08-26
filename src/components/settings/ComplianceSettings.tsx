@@ -15,6 +15,7 @@ import { formatPhoneNumber } from "@/lib/utils";
 import { SettingsHero } from "./SettingsHero";
 import { SectionCard } from "./SectionCard";
 import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
+import { VettingDocumentsPanel } from "@/components/settings/VettingDocumentsPanel";
 
 
 
@@ -40,8 +41,10 @@ function joinAddress(a: AddressParts): string {
   return [a.street, a.city, tail].filter(Boolean).join(", ");
 }
 
-export function ComplianceSettings() {
-  const { tenant } = useTenant();
+export function ComplianceSettings({ tenantId: tenantIdOverride }: { tenantId?: string } = {}) {
+  const { tenant: ctxTenant } = useTenant();
+  // Platform admins render this inside tenant management for a specific org.
+  const tenant = (tenantIdOverride ? { id: tenantIdOverride } : ctxTenant) as { id: string } | null;
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -196,12 +199,21 @@ export function ComplianceSettings() {
       </SectionCard>
 
       <SectionCard
-        title="Vetted Documents"
+        title="Vetting Documents"
         accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
         icon={<ShieldCheck className="h-4 w-4 text-sky-500" />}
-        description="Upload business and identity verification documents. Files stream directly to the payment provider and are never stored here."
+        description="W-9, license, insurance and signed agreements collected during onboarding."
       >
-        <VerificationDocumentsPanel />
+        <VettingDocumentsPanel tenantId={tenant?.id} />
+      </SectionCard>
+
+      <SectionCard
+        title="Payment Provider Verification"
+        accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
+        icon={<ShieldCheck className="h-4 w-4 text-sky-500" />}
+        description="Identity documents that stream directly to the payment provider and are never stored here."
+      >
+        <VerificationDocumentsPanel tenantId={tenant?.id} />
       </SectionCard>
     </div>
 

@@ -11631,6 +11631,82 @@ export type Database = {
           },
         ]
       }
+      tenant_vetting_documents: {
+        Row: {
+          content_type: string | null
+          created_at: string
+          doc_type: string
+          expires_on: string | null
+          file_name: string
+          file_path: string
+          file_size_bytes: number | null
+          id: string
+          review_notes: string | null
+          review_status: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          tenant_id: string
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          content_type?: string | null
+          created_at?: string
+          doc_type: string
+          expires_on?: string | null
+          file_name: string
+          file_path: string
+          file_size_bytes?: number | null
+          id?: string
+          review_notes?: string | null
+          review_status?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          tenant_id: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          content_type?: string | null
+          created_at?: string
+          doc_type?: string
+          expires_on?: string | null
+          file_name?: string
+          file_path?: string
+          file_size_bytes?: number | null
+          id?: string
+          review_notes?: string | null
+          review_status?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          tenant_id?: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_vetting_documents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_vetting_documents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_vetting_documents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenants: {
         Row: {
           ach_policy_acknowledged_at: string | null
