@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
+import { isPlatformOwner } from "@/lib/masterMerchant";
 
 export function WhiteLabelLogin() {
   const { tenant } = useTenant();
@@ -76,6 +77,14 @@ export function WhiteLabelLogin() {
       const authenticatedUserId = sessionData.user?.id ?? sessionData.session?.user?.id;
       if (!authenticatedUserId) {
         throw new Error("Unable to start your session");
+      }
+
+      // The platform owner belongs to no organization — send them to Tenant
+      // Management instead of rejecting them for missing membership.
+      const sessionEmail = (sessionData.user?.email ?? sessionData.session?.user?.email ?? normalizedEmail).trim().toLowerCase();
+      if (isPlatformOwner(sessionEmail)) {
+        navigate("/admin/tenants", { replace: true });
+        return;
       }
 
       const { data: membership, error: membershipError } = await supabase
