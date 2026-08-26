@@ -194,15 +194,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Log the notification in claim events
-    await serviceSupabase.from("claim_events").insert([{
-      claim_id: claimId,
-      event_type: "payment_direction_notification_sent",
-      occurred_at: new Date().toISOString(),
-      date_source: "system",
-      summary: `Payment direction request sent${results.email ? " via email" : ""}${results.sms ? " via SMS" : ""}`,
-      metadata_json: { check_id: checkId, email: !!results.email, sms: !!results.sms },
-    }]);
+    console.log("[payment-direction] notification sent", {
+      claimId,
+      checkId,
+      email: !!results.email,
+      sms: !!results.sms,
+    });
 
     return new Response(
       JSON.stringify({ success: true, results }),
