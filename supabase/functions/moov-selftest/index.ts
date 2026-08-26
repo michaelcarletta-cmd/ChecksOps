@@ -39,11 +39,22 @@ serve(async (req) => {
       detail: { environment: moovEnvironment(), host: moovHost(), origin: moovOrigin() },
     });
 
+    // Decodes the (non-secret) claims of an issued token so we can see which
+    // scopes the provider actually granted us.
+    const claims = (jwt: string) => {
+      try {
+        const p = jwt.split(".")[1];
+        return JSON.parse(atob(p.replace(/-/g, "+").replace(/_/g, "/")));
+      } catch { return null; }
+    };
+
     // 1. OAuth — the gate everything else depends on.
     await record("oauth_token", async () => {
       const t = await moovToken(scopes.accountsWrite());
-      return { token_length: t.length };
+      const c = claims(t) ?? {};
+      return { token_length: t.length, granted_scopes: c.scope ?? c.scp ?? null, aud: c.aud ?? null };
     });
+
 
     // 2. Platform account listing (needs /accounts.write on the key).
     await record("list_accounts", async () => {
@@ -55,12 +66,23 @@ serve(async (req) => {
     // 2b. Platform (facilitator) account — the id we transact under.
     const platformId = Deno.env.get("MOOV_PLATFORM_ACCOUNT_ID");
     if (platformId) {
+      steps.push({
+        step: "platform_account_id_shape",
+        ok: /^[0-9a-f-]{36}$/i.test(platformId),
+        detail: { length: platformId.length, masked: `${platformId.slice(0, 8)}…${platformId.slice(-4)}` },
+      });
+      await record("platform_account_scope_grant", async () => {
+        const t = await moovToken(scopes.accountRead(platformId));
+        const c = claims(t) ?? {};
+        return { granted_scopes: c.scope ?? c.scp ?? null };
+      });
       await record("platform_account_read", () =>
         moovFetch(`/accounts/${platformId}`, { method: "GET", scopes: scopes.accountRead(platformId) }),
       );
     } else {
       steps.push({ step: "platform_account_read", ok: false, detail: "MOOV_PLATFORM_ACCOUNT_ID is not set" });
     }
+
 
     // 3. This tenant's connected account, if one exists yet.
     const { data: account } = await supabase
