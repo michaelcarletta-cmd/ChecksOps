@@ -198,23 +198,44 @@ export function ComplianceSettings({ tenantId: tenantIdOverride }: { tenantId?: 
         </div>
       </SectionCard>
 
-      <SectionCard
-        title="Vetting Documents"
-        accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
-        icon={<ShieldCheck className="h-4 w-4 text-sky-500" />}
-        description="W-9, license, insurance and signed agreements collected during onboarding."
-      >
-        <VettingDocumentsPanel tenantId={tenant?.id} />
-      </SectionCard>
+      {!tenantIdOverride && (
+        <SectionCard
+          title="Payment Account Setup"
+          accent="bg-gradient-to-r from-primary/60 to-primary/10"
+          icon={<ShieldCheck className="h-4 w-4 text-primary" />}
+          description="Create and verify your payment account before sending or receiving funds."
+        >
+          <PaymentAccountPanel />
+        </SectionCard>
+      )}
 
       <SectionCard
-        title="Payment Provider Verification"
+        title="Onboarding Documents"
         accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
         icon={<ShieldCheck className="h-4 w-4 text-sky-500" />}
-        description="Identity documents that stream directly to the payment provider and are never stored here."
+        description="Everything required to complete onboarding: W-9, license, insurance and signed agreements, plus the identity documents that stream directly to the payment provider."
       >
-        <VerificationDocumentsPanel tenantId={tenant?.id} />
+        <div className="space-y-8">
+          <div className="space-y-3">
+            <div>
+              <h4 className="text-sm font-semibold">Vetting Documents</h4>
+              <p className="text-xs text-muted-foreground">W-9, license, insurance and signed agreements collected during onboarding.</p>
+            </div>
+            <VettingDocumentsPanel tenantId={tenant?.id} />
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
+            <div>
+              <h4 className="text-sm font-semibold">Payment Provider Verification</h4>
+              <p className="text-xs text-muted-foreground">Identity documents that stream directly to the payment provider and are never stored here.</p>
+            </div>
+            <VerificationDocumentsPanel tenantId={tenant?.id} />
+          </div>
+        </div>
       </SectionCard>
+
     </div>
 
 
