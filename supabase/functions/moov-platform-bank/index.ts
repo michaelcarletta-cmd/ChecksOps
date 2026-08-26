@@ -283,12 +283,15 @@ serve(async (req) => {
         .eq("id", methodId)
         .eq("provider", "moov")
         .eq("environment", environment)
+        .eq("is_platform", true)
         .is("tenant_id", null)
         .maybeSingle();
       if (!method) return json({ error: "Platform bank account not found." }, 404);
       if (method.provider_account_id !== accountId) return json({ error: "Forbidden" }, 403);
 
       const bankAccountId = method.provider_bank_account_id as string;
+
+
 
       // Provider is the authority on whether this bank is already verified.
       try {
@@ -363,6 +366,7 @@ serve(async (req) => {
         .eq("id", methodId)
         .eq("provider", "moov")
         .eq("environment", environment)
+        .eq("is_platform", true)
         .is("tenant_id", null)
         .maybeSingle();
       if (!method) return json({ error: "Platform bank account not found." }, 404);
