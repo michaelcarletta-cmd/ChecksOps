@@ -207,6 +207,7 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <ThemeScope>
+              <RecoveryHashRedirect />
               <AppRoutes />
             </ThemeScope>
           </AuthProvider>
