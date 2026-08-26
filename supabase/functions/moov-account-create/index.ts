@@ -38,12 +38,37 @@ serve(async (req) => {
       return json({ success: true, already_existed: true, account: existing });
     }
 
-    const { data: tenant } = await supabase
+    const { data: tenant, error: tenantErr } = await supabase
       .from("tenants")
-      .select("id, name, email_from_address, email_reply_to, business_phone, business_address, business_city, business_state, business_zip")
+      .select("id, name, legal_business_name, email_from_address, email_reply_to, business_phone, business_address")
       .eq("id", tenant_id)
       .maybeSingle();
+    if (tenantErr) {
+      console.error("[moov-account-create] tenant lookup", tenantErr.message);
+      return json({ error: `Could not load organization: ${tenantErr.message}` }, 500);
+    }
     if (!tenant) return json({ error: "Organization not found" }, 404);
+
+    // `business_address` is stored combined: "street, city, ST ZIP".
+    const addr = (() => {
+      const raw = String((tenant as any).business_address ?? "").trim();
+      if (!raw) return null;
+      const parts = raw.split(",").map((p) => p.trim()).filter(Boolean);
+      if (parts.length >= 3) {
+        const tail = parts[parts.length - 1].split(/\s+/);
+        const postalCode = tail.length > 1 ? tail[tail.length - 1] : "";
+        const stateOrProvince = tail.length > 1 ? tail.slice(0, -1).join(" ") : tail[0] ?? "";
+        return {
+          addressLine1: parts.slice(0, parts.length - 2).join(", "),
+          city: parts[parts.length - 2] ?? "",
+          stateOrProvince,
+          postalCode,
+          country: "US",
+        };
+      }
+      return null;
+    })();
+
 
     const idempotencyKey = `checksops-account-${environment}-${tenant_id}`;
 
