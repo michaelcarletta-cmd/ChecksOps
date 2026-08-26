@@ -8274,6 +8274,7 @@ export type Database = {
           holder_name: string | null
           id: string
           is_default: boolean
+          is_platform: boolean
           last_four: string | null
           provider: string
           provider_account_id: string
@@ -8302,6 +8303,7 @@ export type Database = {
           holder_name?: string | null
           id?: string
           is_default?: boolean
+          is_platform?: boolean
           last_four?: string | null
           provider?: string
           provider_account_id: string
@@ -8330,6 +8332,7 @@ export type Database = {
           holder_name?: string | null
           id?: string
           is_default?: boolean
+          is_platform?: boolean
           last_four?: string | null
           provider?: string
           provider_account_id?: string
