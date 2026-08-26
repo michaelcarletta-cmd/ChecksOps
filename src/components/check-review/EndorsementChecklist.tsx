@@ -309,24 +309,7 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
         .eq("id", claimId)
         .maybeSingle();
 
-      if ((claim as any)?.signature_cc_email) {
-        return { claimId, email: (claim as any).signature_cc_email as string };
-      }
-
-      const { data: assignments } = await supabase
-        .from("claim_contractors")
-        .select("contractor_id")
-        .eq("claim_id", claimId);
-
-      const ids = (assignments ?? []).map((a: any) => a.contractor_id).filter(Boolean);
-      if (ids.length === 0) return { claimId, email: "" };
-
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("email")
-        .in("id", ids);
-
-      return { claimId, email: profiles?.find((p: any) => p.email)?.email ?? "" };
+      return { claimId, email: ((claim as any)?.signature_cc_email as string) ?? "" };
     },
   });
 
