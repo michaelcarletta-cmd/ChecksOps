@@ -328,6 +328,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <ComplianceSettings tenantId={tenant.id} />
           </TabsContent>
           <TabsContent value="integrations" className="mt-6 space-y-6">
+            <TenantMoovIdentityCard tenantId={tenant.id} tenantName={tenant.name} />
             <CheckAltSettings />
           </TabsContent>
           <TabsContent value="billing" className="mt-6 space-y-6">
