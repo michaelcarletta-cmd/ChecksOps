@@ -1,0 +1,16 @@
+DROP TABLE IF EXISTS public.claim_expenses CASCADE;
+DROP TABLE IF EXISTS public.claim_fees CASCADE;
+DROP TABLE IF EXISTS public.claim_normal_bills CASCADE;
+DROP TABLE IF EXISTS public.claim_loss_of_use_expenses CASCADE;
+DROP TABLE IF EXISTS public.expenses_categories CASCADE;
+DROP TABLE IF EXISTS public.expenses_payees CASCADE;
+DROP TABLE IF EXISTS public.reserve_config CASCADE;
+DROP TABLE IF EXISTS public.linked_claims CASCADE;
+DROP TABLE IF EXISTS public.file_comments CASCADE;
+DROP TABLE IF EXISTS public.generated_assets CASCADE;
+DROP TABLE IF EXISTS public.user_notes CASCADE;
+DROP TABLE IF EXISTS public.claim_photos CASCADE;
+DROP TABLE IF EXISTS public.claim_ai_conversations CASCADE;
+DROP TABLE IF EXISTS public.claim_ai_pending_actions CASCADE;
+DROP TABLE IF EXISTS public.onesx_orders CASCADE;
+DROP TABLE IF EXISTS public.user_licenses CASCADE;
