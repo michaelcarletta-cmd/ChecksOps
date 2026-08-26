@@ -1866,6 +1866,91 @@ export type Database = {
           },
         ]
       }
+      check_cases: {
+        Row: {
+          carrier_name: string | null
+          claim_number: string | null
+          created_at: string
+          external_claim_id: string | null
+          external_reference: string | null
+          external_system: string
+          id: string
+          insured_email: string | null
+          insured_name: string | null
+          insured_phone: string | null
+          loan_number: string | null
+          loss_date: string | null
+          mortgage_company_id: string | null
+          policy_number: string | null
+          property_address: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          carrier_name?: string | null
+          claim_number?: string | null
+          created_at?: string
+          external_claim_id?: string | null
+          external_reference?: string | null
+          external_system?: string
+          id?: string
+          insured_email?: string | null
+          insured_name?: string | null
+          insured_phone?: string | null
+          loan_number?: string | null
+          loss_date?: string | null
+          mortgage_company_id?: string | null
+          policy_number?: string | null
+          property_address?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          carrier_name?: string | null
+          claim_number?: string | null
+          created_at?: string
+          external_claim_id?: string | null
+          external_reference?: string | null
+          external_system?: string
+          id?: string
+          insured_email?: string | null
+          insured_name?: string | null
+          insured_phone?: string | null
+          loan_number?: string | null
+          loss_date?: string | null
+          mortgage_company_id?: string | null
+          policy_number?: string | null
+          property_address?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_cases_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "check_cases_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "check_cases_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       check_deletion_log: {
         Row: {
           amount: number | null
@@ -2217,6 +2302,7 @@ export type Database = {
           back_image_original_path: string | null
           back_image_path: string | null
           carrier_name: string | null
+          case_id: string | null
           cash_job_id: string | null
           cash_job_payment_class: string | null
           check_number: string | null
@@ -2282,6 +2368,7 @@ export type Database = {
           back_image_original_path?: string | null
           back_image_path?: string | null
           carrier_name?: string | null
+          case_id?: string | null
           cash_job_id?: string | null
           cash_job_payment_class?: string | null
           check_number?: string | null
@@ -2347,6 +2434,7 @@ export type Database = {
           back_image_original_path?: string | null
           back_image_path?: string | null
           carrier_name?: string | null
+          case_id?: string | null
           cash_job_id?: string | null
           cash_job_payment_class?: string | null
           check_number?: string | null
@@ -2406,6 +2494,13 @@ export type Database = {
           uploaded_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "check_intake_items_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "check_cases"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "check_intake_items_cash_job_id_fkey"
             columns: ["cash_job_id"]
@@ -4039,6 +4134,7 @@ export type Database = {
       claim_check_mortgage_draws: {
         Row: {
           amount: number | null
+          case_id: string | null
           check_id: string
           claim_id: string
           completed_at: string | null
@@ -4054,6 +4150,7 @@ export type Database = {
         }
         Insert: {
           amount?: number | null
+          case_id?: string | null
           check_id: string
           claim_id: string
           completed_at?: string | null
@@ -4069,6 +4166,7 @@ export type Database = {
         }
         Update: {
           amount?: number | null
+          case_id?: string | null
           check_id?: string
           claim_id?: string
           completed_at?: string | null
@@ -4083,6 +4181,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_check_mortgage_draws_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "check_cases"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "claim_check_mortgage_draws_check_id_fkey"
             columns: ["check_id"]
@@ -4290,6 +4395,7 @@ export type Database = {
           account_number: string | null
           amount: number
           carrier_name: string | null
+          case_id: string | null
           check_date: string
           check_intake_item_id: string | null
           check_number: string | null
@@ -4328,6 +4434,7 @@ export type Database = {
           account_number?: string | null
           amount: number
           carrier_name?: string | null
+          case_id?: string | null
           check_date: string
           check_intake_item_id?: string | null
           check_number?: string | null
@@ -4366,6 +4473,7 @@ export type Database = {
           account_number?: string | null
           amount?: number
           carrier_name?: string | null
+          case_id?: string | null
           check_date?: string
           check_intake_item_id?: string | null
           check_number?: string | null
@@ -4401,6 +4509,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_checks_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "check_cases"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "claim_checks_check_intake_item_id_fkey"
             columns: ["check_intake_item_id"]
@@ -14825,6 +14940,7 @@ export type Database = {
           assigned_to_user_id: string | null
           attached_check_id: string | null
           back_path: string | null
+          case_id: string | null
           claim_id: string | null
           created_at: string
           front_path: string
@@ -14844,6 +14960,7 @@ export type Database = {
           assigned_to_user_id?: string | null
           attached_check_id?: string | null
           back_path?: string | null
+          case_id?: string | null
           claim_id?: string | null
           created_at?: string
           front_path: string
@@ -14863,6 +14980,7 @@ export type Database = {
           assigned_to_user_id?: string | null
           attached_check_id?: string | null
           back_path?: string | null
+          case_id?: string | null
           claim_id?: string | null
           created_at?: string
           front_path?: string
@@ -14878,6 +14996,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "homeowner_ledger_check_uploads_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "check_cases"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "homeowner_ledger_check_uploads_claim_id_fkey"
             columns: ["claim_id"]
@@ -14912,6 +15037,7 @@ export type Database = {
         Row: {
           actor_label: string | null
           amount: number | null
+          case_id: string | null
           check_id: string | null
           claim_id: string
           created_at: string
@@ -14925,6 +15051,7 @@ export type Database = {
         Insert: {
           actor_label?: string | null
           amount?: number | null
+          case_id?: string | null
           check_id?: string | null
           claim_id: string
           created_at?: string
@@ -14938,6 +15065,7 @@ export type Database = {
         Update: {
           actor_label?: string | null
           amount?: number | null
+          case_id?: string | null
           check_id?: string | null
           claim_id?: string
           created_at?: string
@@ -14949,6 +15077,13 @@ export type Database = {
           tenant_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "homeowner_ledger_events_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "check_cases"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "homeowner_ledger_events_claim_id_fkey"
             columns: ["claim_id"]
@@ -14974,6 +15109,7 @@ export type Database = {
       }
       homeowner_ledger_tokens: {
         Row: {
+          case_id: string | null
           claim_id: string | null
           created_at: string
           created_by: string | null
@@ -14992,6 +15128,7 @@ export type Database = {
           view_count: number
         }
         Insert: {
+          case_id?: string | null
           claim_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -15010,6 +15147,7 @@ export type Database = {
           view_count?: number
         }
         Update: {
+          case_id?: string | null
           claim_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -15028,6 +15166,13 @@ export type Database = {
           view_count?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "homeowner_ledger_tokens_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "check_cases"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "homeowner_ledger_tokens_claim_id_fkey"
             columns: ["claim_id"]
@@ -15934,6 +16079,7 @@ export type Database = {
       }
       loss_draft_tracking: {
         Row: {
+          case_id: string | null
           check_intake_item_id: string | null
           check_received_back_date: string | null
           check_received_date: string | null
@@ -15970,6 +16116,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          case_id?: string | null
           check_intake_item_id?: string | null
           check_received_back_date?: string | null
           check_received_date?: string | null
@@ -16006,6 +16153,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          case_id?: string | null
           check_intake_item_id?: string | null
           check_received_back_date?: string | null
           check_received_date?: string | null
@@ -16042,6 +16190,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "loss_draft_tracking_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "check_cases"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "loss_draft_tracking_check_intake_item_id_fkey"
             columns: ["check_intake_item_id"]
@@ -16707,6 +16862,7 @@ export type Database = {
       mortgage_releases: {
         Row: {
           amount: number
+          case_id: string | null
           check_id: string | null
           claim_id: string
           created_at: string
@@ -16721,6 +16877,7 @@ export type Database = {
         }
         Insert: {
           amount?: number
+          case_id?: string | null
           check_id?: string | null
           claim_id: string
           created_at?: string
@@ -16735,6 +16892,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          case_id?: string | null
           check_id?: string | null
           claim_id?: string
           created_at?: string
@@ -16748,6 +16906,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "mortgage_releases_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "check_cases"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "mortgage_releases_check_id_fkey"
             columns: ["check_id"]
@@ -20058,6 +20223,7 @@ export type Database = {
       }
       signature_requests: {
         Row: {
+          case_id: string | null
           check_intake_item_id: string | null
           claim_id: string | null
           completed_at: string | null
@@ -20081,6 +20247,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          case_id?: string | null
           check_intake_item_id?: string | null
           claim_id?: string | null
           completed_at?: string | null
@@ -20104,6 +20271,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          case_id?: string | null
           check_intake_item_id?: string | null
           claim_id?: string | null
           completed_at?: string | null
@@ -20127,6 +20295,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "signature_requests_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "check_cases"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "signature_requests_check_intake_item_id_fkey"
             columns: ["check_intake_item_id"]
@@ -25234,6 +25409,18 @@ export type Database = {
       release_darwin_job: {
         Args: { p_error_message?: string; p_job_type: string }
         Returns: boolean
+      }
+      resolve_check_case: {
+        Args: {
+          _carrier_name?: string
+          _claim_id?: string
+          _claim_number?: string
+          _external_claim_id?: string
+          _insured_name?: string
+          _property_address?: string
+          _tenant_id: string
+        }
+        Returns: string
       }
       resolve_deposit_exception: {
         Args: {
