@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { useAuth } from "@/hooks/useAuth";
-import { isMasterMerchant, MASTER_MERCHANT_EMAIL } from "@/lib/masterMerchant";
+import { isPlatformOwner } from "@/lib/masterMerchant";
 
 /**
  * Generic ChecksOps sign-in page at checkops.com/login.
