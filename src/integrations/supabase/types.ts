@@ -190,89 +190,6 @@ export type Database = {
           },
         ]
       }
-      ai_knowledge_chunks: {
-        Row: {
-          chunk_index: number
-          content: string
-          created_at: string
-          document_id: string
-          embedding: string | null
-          id: string
-          metadata: Json | null
-        }
-        Insert: {
-          chunk_index: number
-          content: string
-          created_at?: string
-          document_id: string
-          embedding?: string | null
-          id?: string
-          metadata?: Json | null
-        }
-        Update: {
-          chunk_index?: number
-          content?: string
-          created_at?: string
-          document_id?: string
-          embedding?: string | null
-          id?: string
-          metadata?: Json | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ai_knowledge_chunks_document_id_fkey"
-            columns: ["document_id"]
-            isOneToOne: false
-            referencedRelation: "ai_knowledge_documents"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ai_knowledge_documents: {
-        Row: {
-          category: string
-          created_at: string
-          description: string | null
-          error_message: string | null
-          file_name: string
-          file_path: string
-          file_size: number | null
-          file_type: string
-          id: string
-          status: string
-          updated_at: string
-          uploaded_by: string | null
-        }
-        Insert: {
-          category: string
-          created_at?: string
-          description?: string | null
-          error_message?: string | null
-          file_name: string
-          file_path: string
-          file_size?: number | null
-          file_type: string
-          id?: string
-          status?: string
-          updated_at?: string
-          uploaded_by?: string | null
-        }
-        Update: {
-          category?: string
-          created_at?: string
-          description?: string | null
-          error_message?: string | null
-          file_name?: string
-          file_path?: string
-          file_size?: number | null
-          file_type?: string
-          id?: string
-          status?: string
-          updated_at?: string
-          uploaded_by?: string | null
-        }
-        Relationships: []
-      }
       ai_response_cache: {
         Row: {
           cache_key: string
@@ -351,169 +268,6 @@ export type Database = {
           record_type?: string
           user_agent?: string | null
           user_id?: string | null
-        }
-        Relationships: []
-      }
-      autopilot_action_feedback: {
-        Row: {
-          action_summary: string
-          action_type: string
-          claim_id: string
-          confidence: string
-          created_at: string
-          id: string
-          priority_score: number | null
-          user_action: string
-          user_id: string | null
-        }
-        Insert: {
-          action_summary: string
-          action_type: string
-          claim_id: string
-          confidence?: string
-          created_at?: string
-          id?: string
-          priority_score?: number | null
-          user_action: string
-          user_id?: string | null
-        }
-        Update: {
-          action_summary?: string
-          action_type?: string
-          claim_id?: string
-          confidence?: string
-          created_at?: string
-          id?: string
-          priority_score?: number | null
-          user_action?: string
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "autopilot_action_feedback_claim_id_fkey"
-            columns: ["claim_id"]
-            isOneToOne: false
-            referencedRelation: "claim_last_activity"
-            referencedColumns: ["claim_id"]
-          },
-          {
-            foreignKeyName: "autopilot_action_feedback_claim_id_fkey"
-            columns: ["claim_id"]
-            isOneToOne: false
-            referencedRelation: "claim_money_snapshot"
-            referencedColumns: ["claim_id"]
-          },
-          {
-            foreignKeyName: "autopilot_action_feedback_claim_id_fkey"
-            columns: ["claim_id"]
-            isOneToOne: false
-            referencedRelation: "claims"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      autopilot_model_snapshot: {
-        Row: {
-          confidence_adjustments: Json
-          created_at: string
-          drift_analytics_summary: Json
-          escalation_governance: Json
-          health_parameters: Json
-          id: string
-          notes: string | null
-          resistance_thresholds: Json
-          scoring_weights: Json
-          snapshot_date: string
-          snapshot_type: string
-        }
-        Insert: {
-          confidence_adjustments?: Json
-          created_at?: string
-          drift_analytics_summary?: Json
-          escalation_governance?: Json
-          health_parameters?: Json
-          id?: string
-          notes?: string | null
-          resistance_thresholds?: Json
-          scoring_weights?: Json
-          snapshot_date?: string
-          snapshot_type?: string
-        }
-        Update: {
-          confidence_adjustments?: Json
-          created_at?: string
-          drift_analytics_summary?: Json
-          escalation_governance?: Json
-          health_parameters?: Json
-          id?: string
-          notes?: string | null
-          resistance_thresholds?: Json
-          scoring_weights?: Json
-          snapshot_date?: string
-          snapshot_type?: string
-        }
-        Relationships: []
-      }
-      bank_balance: {
-        Row: {
-          balance: number
-          business_loans: number
-          id: string
-          updated_at: string
-        }
-        Insert: {
-          balance?: number
-          business_loans?: number
-          id?: string
-          updated_at?: string
-        }
-        Update: {
-          balance?: number
-          business_loans?: number
-          id?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      cash_flow_forecast: {
-        Row: {
-          avg_payment_velocity: number | null
-          avg_resistance_score: number | null
-          created_at: string
-          expected_30d_recovery: number | null
-          expected_60d_recovery: number | null
-          expected_90d_exposure: number | null
-          forecast_date: string
-          id: string
-          methodology_notes: string | null
-          total_claims_active: number | null
-          total_outstanding_gap: number | null
-        }
-        Insert: {
-          avg_payment_velocity?: number | null
-          avg_resistance_score?: number | null
-          created_at?: string
-          expected_30d_recovery?: number | null
-          expected_60d_recovery?: number | null
-          expected_90d_exposure?: number | null
-          forecast_date?: string
-          id?: string
-          methodology_notes?: string | null
-          total_claims_active?: number | null
-          total_outstanding_gap?: number | null
-        }
-        Update: {
-          avg_payment_velocity?: number | null
-          avg_resistance_score?: number | null
-          created_at?: string
-          expected_30d_recovery?: number | null
-          expected_60d_recovery?: number | null
-          expected_90d_exposure?: number | null
-          forecast_date?: string
-          id?: string
-          methodology_notes?: string | null
-          total_claims_active?: number | null
-          total_outstanding_gap?: number | null
         }
         Relationships: []
       }
@@ -3001,49 +2755,6 @@ export type Database = {
           },
         ]
       }
-      claim_contractors: {
-        Row: {
-          assigned_at: string | null
-          claim_id: string
-          contractor_id: string
-          id: string
-        }
-        Insert: {
-          assigned_at?: string | null
-          claim_id: string
-          contractor_id: string
-          id?: string
-        }
-        Update: {
-          assigned_at?: string | null
-          claim_id?: string
-          contractor_id?: string
-          id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "claim_contractors_claim_id_fkey"
-            columns: ["claim_id"]
-            isOneToOne: false
-            referencedRelation: "claim_last_activity"
-            referencedColumns: ["claim_id"]
-          },
-          {
-            foreignKeyName: "claim_contractors_claim_id_fkey"
-            columns: ["claim_id"]
-            isOneToOne: false
-            referencedRelation: "claim_money_snapshot"
-            referencedColumns: ["claim_id"]
-          },
-          {
-            foreignKeyName: "claim_contractors_claim_id_fkey"
-            columns: ["claim_id"]
-            isOneToOne: false
-            referencedRelation: "claims"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       claim_disbursements: {
         Row: {
           amount: number | null
@@ -3898,94 +3609,6 @@ export type Database = {
           },
         ]
       }
-      clawdbot_config: {
-        Row: {
-          active: boolean | null
-          clawdbot_endpoint: string | null
-          created_at: string
-          id: string
-          notification_preferences: Json | null
-          updated_at: string
-          user_id: string
-          webhook_secret: string
-        }
-        Insert: {
-          active?: boolean | null
-          clawdbot_endpoint?: string | null
-          created_at?: string
-          id?: string
-          notification_preferences?: Json | null
-          updated_at?: string
-          user_id: string
-          webhook_secret: string
-        }
-        Update: {
-          active?: boolean | null
-          clawdbot_endpoint?: string | null
-          created_at?: string
-          id?: string
-          notification_preferences?: Json | null
-          updated_at?: string
-          user_id?: string
-          webhook_secret?: string
-        }
-        Relationships: []
-      }
-      clawdbot_message_log: {
-        Row: {
-          action_type: string | null
-          claim_id: string | null
-          created_at: string
-          direction: string
-          id: string
-          message_content: string
-          metadata: Json | null
-          user_id: string
-        }
-        Insert: {
-          action_type?: string | null
-          claim_id?: string | null
-          created_at?: string
-          direction: string
-          id?: string
-          message_content: string
-          metadata?: Json | null
-          user_id: string
-        }
-        Update: {
-          action_type?: string | null
-          claim_id?: string | null
-          created_at?: string
-          direction?: string
-          id?: string
-          message_content?: string
-          metadata?: Json | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "clawdbot_message_log_claim_id_fkey"
-            columns: ["claim_id"]
-            isOneToOne: false
-            referencedRelation: "claim_last_activity"
-            referencedColumns: ["claim_id"]
-          },
-          {
-            foreignKeyName: "clawdbot_message_log_claim_id_fkey"
-            columns: ["claim_id"]
-            isOneToOne: false
-            referencedRelation: "claim_money_snapshot"
-            referencedColumns: ["claim_id"]
-          },
-          {
-            foreignKeyName: "clawdbot_message_log_claim_id_fkey"
-            columns: ["claim_id"]
-            isOneToOne: false
-            referencedRelation: "claims"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       company_branding: {
         Row: {
           automation_exclude_claims_older_than_days: number | null
@@ -4253,13 +3876,6 @@ export type Database = {
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "contractor_reviews_contractor_id_fkey"
-            columns: ["contractor_id"]
-            isOneToOne: false
-            referencedRelation: "contractor_directory_view"
             referencedColumns: ["id"]
           },
           {
@@ -5906,33 +5522,6 @@ export type Database = {
           },
         ]
       }
-      encryption_keys: {
-        Row: {
-          created_at: string
-          id: string
-          is_active: boolean
-          key_id: string
-          key_name: string
-          rotated_at: string | null
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          is_active?: boolean
-          key_id: string
-          key_name: string
-          rotated_at?: string | null
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          is_active?: boolean
-          key_id?: string
-          key_name?: string
-          rotated_at?: string | null
-        }
-        Relationships: []
-      }
       endorsement_audit_log: {
         Row: {
           actor_id: string | null
@@ -6534,13 +6123,6 @@ export type Database = {
             foreignKeyName: "homeowner_check_uploads_contractor_profile_id_fkey"
             columns: ["contractor_profile_id"]
             isOneToOne: false
-            referencedRelation: "contractor_directory_view"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "homeowner_check_uploads_contractor_profile_id_fkey"
-            columns: ["contractor_profile_id"]
-            isOneToOne: false
             referencedRelation: "contractor_profiles"
             referencedColumns: ["id"]
           },
@@ -6585,13 +6167,6 @@ export type Database = {
           zip?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "homeowner_directory_leads_contractor_id_fkey"
-            columns: ["contractor_id"]
-            isOneToOne: false
-            referencedRelation: "contractor_directory_view"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "homeowner_directory_leads_contractor_id_fkey"
             columns: ["contractor_id"]
@@ -6684,13 +6259,6 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "homeowner_intro_requests_contractor_profile_id_fkey"
-            columns: ["contractor_profile_id"]
-            isOneToOne: false
-            referencedRelation: "contractor_directory_view"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "homeowner_intro_requests_contractor_profile_id_fkey"
             columns: ["contractor_profile_id"]
@@ -6961,30 +6529,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      increase_settings: {
-        Row: {
-          id: string
-          setting_key: string
-          setting_value: Json
-          updated_at: string | null
-          updated_by: string | null
-        }
-        Insert: {
-          id?: string
-          setting_key: string
-          setting_value: Json
-          updated_at?: string | null
-          updated_by?: string | null
-        }
-        Update: {
-          id?: string
-          setting_key?: string
-          setting_value?: Json
-          updated_at?: string | null
-          updated_by?: string | null
-        }
-        Relationships: []
       }
       loss_draft_audit_log: {
         Row: {
@@ -8254,33 +7798,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      outstanding_checks: {
-        Row: {
-          amount: number
-          check_number: string | null
-          created_at: string
-          id: string
-          payee: string
-          updated_at: string
-        }
-        Insert: {
-          amount?: number
-          check_number?: string | null
-          created_at?: string
-          id?: string
-          payee: string
-          updated_at?: string
-        }
-        Update: {
-          amount?: number
-          check_number?: string | null
-          created_at?: string
-          id?: string
-          payee?: string
-          updated_at?: string
-        }
-        Relationships: []
       }
       payment_event_log: {
         Row: {
@@ -12412,42 +11929,6 @@ export type Database = {
           },
         ]
       }
-      user_phone_links: {
-        Row: {
-          created_at: string
-          id: string
-          is_verified: boolean
-          phone_number: string
-          updated_at: string
-          user_id: string
-          verification_code: string | null
-          verification_expires_at: string | null
-          verified_at: string | null
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          is_verified?: boolean
-          phone_number: string
-          updated_at?: string
-          user_id: string
-          verification_code?: string | null
-          verification_expires_at?: string | null
-          verified_at?: string | null
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          is_verified?: boolean
-          phone_number?: string
-          updated_at?: string
-          user_id?: string
-          verification_code?: string | null
-          verification_expires_at?: string | null
-          verified_at?: string | null
-        }
-        Relationships: []
-      }
       user_roles: {
         Row: {
           id: string
@@ -12648,33 +12129,6 @@ export type Database = {
           rcv_claimed: number | null
           rd_available: number | null
           unclassified_payment_total: number | null
-        }
-        Relationships: []
-      }
-      contractor_directory_view: {
-        Row: {
-          avatar_url: string | null
-          avg_rating: number | null
-          bio: string | null
-          coi_expires_at: string | null
-          created_at: string | null
-          directory_opt_in: boolean | null
-          display_name: string | null
-          home_base_lat: number | null
-          home_base_lng: number | null
-          id: string | null
-          is_directory_listed: boolean | null
-          jobs_count: number | null
-          license_number: string | null
-          review_count: number | null
-          service_metros: string[] | null
-          service_radius_miles: number | null
-          service_states: string[] | null
-          service_zip_prefixes: string[] | null
-          tier: string | null
-          trades: string[] | null
-          updated_at: string | null
-          user_id: string | null
         }
         Relationships: []
       }
@@ -13078,17 +12532,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      portfolio_intelligence: {
-        Row: {
-          avg_days_open: number | null
-          denied_claims: number | null
-          pct_at_risk: number | null
-          total_active_claims: number | null
-          total_outstanding_gap: number | null
-          total_unreleased_depreciation: number | null
-        }
-        Relationships: []
       }
       stale_endorsements: {
         Row: {
@@ -13850,10 +13293,6 @@ export type Database = {
         }
         Returns: undefined
       }
-      decrypt_pii: {
-        Args: { p_ciphertext: string; p_key_name?: string }
-        Returns: string
-      }
       decrypt_tenant_openai_key: { Args: { p_tenant: string }; Returns: string }
       deduct_tenant_credits: {
         Args: {
@@ -13916,10 +13355,6 @@ export type Database = {
         | { Args: { table_name: string }; Returns: string }
       email_queue_dispatch: { Args: never; Returns: undefined }
       enablelongtransactions: { Args: never; Returns: string }
-      encrypt_pii: {
-        Args: { p_key_name?: string; p_plaintext: string }
-        Returns: string
-      }
       encrypt_tenant_openai_key: { Args: { p_key: string }; Returns: string }
       enqueue_email: {
         Args: { payload: Json; queue_name: string }
@@ -14145,7 +13580,6 @@ export type Database = {
         Returns: Json
       }
       get_portfolio_carrier_analytics: { Args: never; Returns: Json }
-      get_portfolio_intelligence: { Args: never; Returns: Json }
       get_stuck_checks: {
         Args: never
         Returns: {
@@ -14527,7 +13961,6 @@ export type Database = {
         Args: { p_actor_id?: string }
         Returns: Json
       }
-      refresh_portfolio_views: { Args: never; Returns: undefined }
       register_session: {
         Args: {
           p_device_info?: string
