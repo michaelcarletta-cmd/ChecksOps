@@ -25410,6 +25410,18 @@ export type Database = {
         Args: { p_error_message?: string; p_job_type: string }
         Returns: boolean
       }
+      resolve_check_case: {
+        Args: {
+          _carrier_name?: string
+          _claim_id?: string
+          _claim_number?: string
+          _external_claim_id?: string
+          _insured_name?: string
+          _property_address?: string
+          _tenant_id: string
+        }
+        Returns: string
+      }
       resolve_deposit_exception: {
         Args: {
           p_action?: string
