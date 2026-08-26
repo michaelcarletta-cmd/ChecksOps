@@ -5,7 +5,8 @@
 // rails keep their own clients (`_shared/plaidClient.ts`, actum helpers) and
 // keep working exactly as before.
 //
-// Sandbox only. `MOOV_ENVIRONMENT` must be "sandbox"; production is refused.
+// `MOOV_ENVIRONMENT` selects which credential set is live: "sandbox" or
+// "production". Production is enabled — the keys themselves decide the ledger.
 
 // Moov serves sandbox and production from the SAME host; the environment is
 // determined by which API credentials are used. There is no api.sandbox.moov.io
@@ -19,10 +20,6 @@ export function moovEnvironment(): string {
   const env = (Deno.env.get("MOOV_ENVIRONMENT") ?? "sandbox").toLowerCase();
   if (!MOOV_HOSTS[env]) {
     throw new Error(`MOOV_ENVIRONMENT must be "sandbox" or "production", got "${env}"`);
-  }
-  if (env === "production") {
-    // Hard stop: this integration is explicitly sandbox-only for now.
-    throw new Error("Moov production is not enabled for ChecksOps yet.");
   }
   return env;
 }

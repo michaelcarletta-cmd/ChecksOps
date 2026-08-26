@@ -7,7 +7,7 @@ import { moovConfigured, moovEnvironment } from "./moovClient.ts";
  * Moov is off globally. It only runs when ALL of these are true:
  *   1. MOOV_ENABLED === "true"        (global internal-test switch)
  *   2. tenants.moov_allowlisted       (per-tenant allowlist)
- *   3. Moov sandbox credentials exist
+ *   3. Moov API credentials exist for the configured environment
  *
  * Actum and Plaid never reach this code path.
  */
@@ -136,7 +136,7 @@ export async function logPaymentEvent(
 ) {
   const { error } = await supabase.from("payment_event_log").insert({
     provider: "moov",
-    environment: row.environment ?? "sandbox",
+    environment: row.environment ?? (Deno.env.get("MOOV_ENVIRONMENT") ?? "sandbox").toLowerCase(),
     tenant_id: row.tenant_id ?? null,
     recipient_id: row.recipient_id ?? null,
     transfer_id: row.transfer_id ?? null,
