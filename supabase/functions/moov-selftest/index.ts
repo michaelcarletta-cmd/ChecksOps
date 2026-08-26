@@ -52,6 +52,16 @@ serve(async (req) => {
       return { count: list.length, ids: list.map((a: any) => a?.accountID ?? a?.accountId).slice(0, 5) };
     });
 
+    // 2b. Platform (facilitator) account — the id we transact under.
+    const platformId = Deno.env.get("MOOV_PLATFORM_ACCOUNT_ID");
+    if (platformId) {
+      await record("platform_account_read", () =>
+        moovFetch(`/accounts/${platformId}`, { method: "GET", scopes: scopes.accountRead(platformId) }),
+      );
+    } else {
+      steps.push({ step: "platform_account_read", ok: false, detail: "MOOV_PLATFORM_ACCOUNT_ID is not set" });
+    }
+
     // 3. This tenant's connected account, if one exists yet.
     const { data: account } = await supabase
       .from("payment_provider_accounts")
