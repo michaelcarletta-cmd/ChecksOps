@@ -1,10 +1,11 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import { useCustomDomainTenant } from "./hooks/useCustomDomainTenant";
 import { CustomDomainWhiteLabelApp } from "./components/white-label/CustomDomainWhiteLabelApp";
 import { AuthProvider } from "./hooks/useAuth";
@@ -123,6 +124,40 @@ function LegacyWlRedirect() {
   return <Navigate to={rest || "/"} replace />;
 }
 
+/**
+ * Password-recovery links can land on ANY path (site root, login, etc.)
+ * depending on which redirect URL the email used. Wherever one lands,
+ * route it to the reset form so the user always sees "Set a new password".
+ */
+function RecoveryHashRedirect() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const goToReset = () => {
+      if (window.location.pathname !== "/reset-password") {
+        navigate(
+          { pathname: "/reset-password", hash: window.location.hash },
+          { replace: true }
+        );
+      }
+    };
+
+    // Hash still present (client hasn't consumed it yet)
+    if (window.location.hash.includes("type=recovery")) {
+      goToReset();
+    }
+
+    // Fired once the Supabase client exchanges the recovery token
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") goToReset();
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  return null;
+}
+
 function AppRoutes() {
   const { tenantSlug, loading } = useCustomDomainTenant();
   const pathname = window.location.pathname;
@@ -172,6 +207,7 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <ThemeScope>
+              <RecoveryHashRedirect />
               <AppRoutes />
             </ThemeScope>
           </AuthProvider>
