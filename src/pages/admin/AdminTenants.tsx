@@ -197,8 +197,7 @@ export default function AdminTenants() {
           <TabsList className="mb-6">
 
             <TabsTrigger value="tenants"><Building2 className="w-4 h-4 mr-1" /> Tenants</TabsTrigger>
-            <TabsTrigger value="platform-banking"><Landmark className="w-4 h-4 mr-1" /> Platform Banking</TabsTrigger>
-            <TabsTrigger value="treasury"><Wallet className="w-4 h-4 mr-1" /> Wallet & P&amp;L</TabsTrigger>
+            <TabsTrigger value="platform-finance"><Landmark className="w-4 h-4 mr-1" /> Platform Finance</TabsTrigger>
             <TabsTrigger value="referrals"><Gift className="w-4 h-4 mr-1" /> Referral Dashboard</TabsTrigger>
 
           </TabsList>
@@ -215,11 +214,19 @@ export default function AdminTenants() {
               />
             )}
           </TabsContent>
-          <TabsContent value="platform-banking">
-            <PlatformBankPanel />
-          </TabsContent>
-          <TabsContent value="treasury">
-            <PlatformTreasuryPanel />
+          <TabsContent value="platform-finance">
+            <Tabs defaultValue="banking" className="w-full">
+              <TabsList className="mb-4">
+                <TabsTrigger value="banking"><Landmark className="w-4 h-4 mr-1" /> Banking</TabsTrigger>
+                <TabsTrigger value="treasury"><Wallet className="w-4 h-4 mr-1" /> Wallet &amp; P&amp;L</TabsTrigger>
+              </TabsList>
+              <TabsContent value="banking">
+                <PlatformBankPanel />
+              </TabsContent>
+              <TabsContent value="treasury">
+                <PlatformTreasuryPanel />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           <TabsContent value="referrals">
