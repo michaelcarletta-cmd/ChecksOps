@@ -44,6 +44,8 @@ export function PaymentAccountPanel() {
   const [busy, setBusy] = useState<null | "setup" | "sync" | "bridge" | "bank_link">(null);
   const [showBankLink, setShowBankLink] = useState(false);
   const [setupWindow, setSetupWindow] = useState<Window | null>(null);
+  const [setupUrl, setSetupUrl] = useState<string | null>(null);
+
 
   useEffect(() => {
     // Monitor the setup window. If it closes, automatically refresh.
@@ -82,6 +84,8 @@ export function PaymentAccountPanel() {
   async function handleSetup() {
     if (!tenantId) return;
     setBusy("setup");
+    // Open the tab synchronously so the browser doesn't treat it as a popup.
+    const win = window.open("about:blank", "_blank", "noopener,noreferrer");
     try {
       if (!account?.externalAccountId) {
         await invoke("moov-account-create", { tenant_id: tenantId });
@@ -91,20 +95,33 @@ export function PaymentAccountPanel() {
         return_url: `${window.location.origin}/payments?tab=settings`,
       });
       if (res?.url) {
-        const win = window.open(res.url, "_blank", "noopener,noreferrer");
-        setSetupWindow(win);
-        toast({
-          title: "Setup opened",
-          description: "Finish setup in the new tab. This page will refresh once you close it.",
-        });
+        if (win && !win.closed) {
+          win.location.href = res.url;
+          setSetupWindow(win);
+          toast({
+            title: "Setup opened",
+            description: "Finish setup in the new tab. This page will refresh once you close it.",
+          });
+        } else {
+          setSetupUrl(res.url);
+          toast({
+            title: "Pop-up blocked",
+            description: "Use the setup link below to continue.",
+          });
+        }
+      } else {
+        win?.close();
+        throw new Error("Could not generate a setup link.");
       }
       await refresh();
     } catch (e: any) {
+      win?.close();
       toast({ title: "Couldn't start payment setup", description: e.message, variant: "destructive" });
     } finally {
       setBusy(null);
     }
   }
+
 
   async function handleBankLink() {
     // native Moov bank link
@@ -202,6 +219,23 @@ export function PaymentAccountPanel() {
             </ul>
           </div>
         ) : null}
+
+        {setupUrl ? (
+          <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 space-y-1.5">
+            <p className="text-xs font-medium">Your browser blocked the setup tab</p>
+            <a
+              href={setupUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-primary underline inline-flex items-center gap-1"
+              onClick={() => setSetupUrl(null)}
+            >
+              <ExternalLink className="h-3.5 w-3.5" /> Open payment account setup
+            </a>
+          </div>
+        ) : null}
+
+
 
         {showBankLink && tenantId ? (
           <div className="pt-2">
