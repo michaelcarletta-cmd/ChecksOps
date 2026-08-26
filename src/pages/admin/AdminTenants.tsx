@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { PLATFORM_OWNER_EMAIL } from "@/lib/masterMerchant";
+import { TenantMoovIdentityCard } from "@/components/admin/TenantMoovIdentityCard";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
