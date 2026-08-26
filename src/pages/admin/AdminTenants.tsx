@@ -217,6 +217,10 @@ export default function AdminTenants() {
           <TabsContent value="platform-banking">
             <PlatformBankPanel />
           </TabsContent>
+          <TabsContent value="treasury">
+            <PlatformTreasuryPanel />
+          </TabsContent>
+
           <TabsContent value="referrals">
             <AdminReferralDashboard />
           </TabsContent>
