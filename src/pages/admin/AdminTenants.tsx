@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { PLATFORM_OWNER_EMAIL } from "@/lib/masterMerchant";
+import { TenantMoovIdentityCard } from "@/components/admin/TenantMoovIdentityCard";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -35,7 +37,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DataView, FilterBar, type DataColumn } from "@/components/shell";
 
 
-const ALLOWED_EMAIL = "mcarletta@freedomadj.com";
+const ALLOWED_EMAIL = PLATFORM_OWNER_EMAIL;
 
 type Tenant = {
   id: string;
@@ -327,6 +329,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <ComplianceSettings tenantId={tenant.id} />
           </TabsContent>
           <TabsContent value="integrations" className="mt-6 space-y-6">
+            <TenantMoovIdentityCard tenantId={tenant.id} tenantName={tenant.name} />
             <CheckAltSettings />
           </TabsContent>
           <TabsContent value="billing" className="mt-6 space-y-6">

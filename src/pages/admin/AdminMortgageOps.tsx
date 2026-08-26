@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { PLATFORM_OWNER_EMAIL } from "@/lib/masterMerchant";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import { ArrowLeft, Loader2, Plus, RefreshCw, Trash2, Briefcase, ShieldAlert, Ke
 import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
 
 
-const ALLOWED_EMAIL = "mcarletta@freedomadj.com";
+const ALLOWED_EMAIL = PLATFORM_OWNER_EMAIL;
 
 type AgentRow = {
   user_id: string;
