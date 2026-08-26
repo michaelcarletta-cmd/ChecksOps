@@ -220,6 +220,23 @@ export function PaymentAccountPanel() {
           </div>
         ) : null}
 
+        {setupUrl ? (
+          <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 space-y-1.5">
+            <p className="text-xs font-medium">Your browser blocked the setup tab</p>
+            <a
+              href={setupUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-primary underline inline-flex items-center gap-1"
+              onClick={() => setSetupUrl(null)}
+            >
+              <ExternalLink className="h-3.5 w-3.5" /> Open payment account setup
+            </a>
+          </div>
+        ) : null}
+
+
+
         {showBankLink && tenantId ? (
           <div className="pt-2">
             <div className="flex items-center justify-between mb-2">
