@@ -36,7 +36,14 @@ export default function CheckOpsLogin() {
   const resolveAndRedirect = async (userId: string, emailHint?: string | null) => {
     // The platform owner is not a member of any single organization — it lands
     // on Tenant Management, never inside a tenant's Moov-backed workspace.
-    const emailLc = (emailHint ?? user?.email ?? "").trim().toLowerCase();
+    // Resolve the email defensively: the useAuth closure can briefly hold a
+    // stale user object right after a password-recovery session is exchanged,
+    // so fall back to the live session before giving up on the bypass.
+    let emailLc = (emailHint ?? user?.email ?? "").trim().toLowerCase();
+    if (!isPlatformOwner(emailLc)) {
+      const { data: fresh } = await supabase.auth.getUser();
+      emailLc = (fresh.user?.email ?? emailLc).trim().toLowerCase();
+    }
     if (isPlatformOwner(emailLc)) {
       navigate(`/admin/tenants`, { replace: true });
       return;
