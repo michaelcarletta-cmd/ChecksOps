@@ -34,10 +34,11 @@ export default function CheckOpsLogin() {
   }, [user?.id, authLoading]);
 
   const resolveAndRedirect = async (userId: string, emailHint?: string | null) => {
-    // Master merchant (platform owner) always lands on their home tenant, regardless of memberships/roles.
+    // The platform owner is not a member of any single organization — it lands
+    // on Tenant Management, never inside a tenant's Moov-backed workspace.
     const emailLc = (emailHint ?? user?.email ?? "").trim().toLowerCase();
-    if (isMasterMerchant(emailLc) || emailLc === MASTER_MERCHANT_EMAIL) {
-      navigate(`/freedom/checks`, { replace: true });
+    if (isPlatformOwner(emailLc)) {
+      navigate(`/admin/tenants`, { replace: true });
       return;
     }
     // Block mortgage-only accounts from entering ChecksOps.
