@@ -51,7 +51,6 @@ Deno.serve(async (req) => {
       "claim_communications_diary",
       "claim_additional_contacts",
       "claim_ai_conversations",
-      "guided_communications",
     ];
     const deletions: Record<string, number> = {};
 
