@@ -66,12 +66,23 @@ serve(async (req) => {
     // 2b. Platform (facilitator) account — the id we transact under.
     const platformId = Deno.env.get("MOOV_PLATFORM_ACCOUNT_ID");
     if (platformId) {
+      steps.push({
+        step: "platform_account_id_shape",
+        ok: /^[0-9a-f-]{36}$/i.test(platformId),
+        detail: { length: platformId.length, masked: `${platformId.slice(0, 8)}…${platformId.slice(-4)}` },
+      });
+      await record("platform_account_scope_grant", async () => {
+        const t = await moovToken(scopes.accountRead(platformId));
+        const c = claims(t) ?? {};
+        return { granted_scopes: c.scope ?? c.scp ?? null };
+      });
       await record("platform_account_read", () =>
         moovFetch(`/accounts/${platformId}`, { method: "GET", scopes: scopes.accountRead(platformId) }),
       );
     } else {
       steps.push({ step: "platform_account_read", ok: false, detail: "MOOV_PLATFORM_ACCOUNT_ID is not set" });
     }
+
 
     // 3. This tenant's connected account, if one exists yet.
     const { data: account } = await supabase
