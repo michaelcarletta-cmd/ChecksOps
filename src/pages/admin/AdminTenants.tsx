@@ -1027,7 +1027,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
         count: moovRes.data?.length ?? 0,
         amountOut: (moovRes.data ?? [])
           .filter((r: any) => r.status === "completed")
-          .reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0),
+          .reduce((s: number, r: any) => s + Number(r.amount_cents ?? 0) / 100, 0),
       });
       setMaintenance(maintRes.data ?? []);
       setTenantMeta(tenantRes.data as any ?? null);
