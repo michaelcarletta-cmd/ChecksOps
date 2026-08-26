@@ -22,6 +22,18 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
+async function hmacHex(secret: string, payload: string, hash: "SHA-256" | "SHA-512"): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+  return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 async function hmacBase64(secret: string, payload: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
@@ -34,31 +46,61 @@ async function hmacBase64(secret: string, payload: string): Promise<string> {
   return btoa(String.fromCharCode(...new Uint8Array(sig)));
 }
 
-/** Moov signs `webhookID.timestamp.body` with the webhook secret. */
+function parseTimestampMs(raw: string): number {
+  const n = Number(raw);
+  if (Number.isFinite(n) && n > 0) return n > 1e12 ? n : n * 1000;
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : NaN;
+}
+
+/**
+ * Moov signs `timestamp|nonce|webhookID` with HMAC-SHA512 (hex) and sends it in
+ * `X-Signature`. A legacy Svix-style body signature is still accepted as a
+ * fallback for older endpoint configurations.
+ */
 async function verifySignature(req: Request, rawBody: string): Promise<{ ok: boolean; eventId: string | null }> {
   const secret = Deno.env.get("MOOV_WEBHOOK_SECRET");
   if (!secret) return { ok: false, eventId: null };
 
-  const webhookId = req.headers.get("webhook-id") ?? req.headers.get("x-moov-webhook-id");
-  const timestamp = req.headers.get("webhook-timestamp") ?? req.headers.get("x-moov-timestamp");
-  const signatureHeader = req.headers.get("webhook-signature") ?? req.headers.get("x-moov-signature");
-  if (!webhookId || !timestamp || !signatureHeader) return { ok: false, eventId: null };
+  const h = (name: string) => req.headers.get(name);
+  const webhookId = h("x-webhook-id") ?? h("webhook-id") ?? h("x-moov-webhook-id");
+  const timestamp = h("x-timestamp") ?? h("webhook-timestamp") ?? h("x-moov-timestamp");
+  const nonce = h("x-nonce");
+  const signatureHeader = h("x-signature") ?? h("webhook-signature") ?? h("x-moov-signature");
 
-  // Reject anything older than 5 minutes (replay protection).
-  const ts = Number(timestamp);
-  const tsMs = ts > 1e12 ? ts : ts * 1000;
-  if (!Number.isFinite(tsMs) || Math.abs(Date.now() - tsMs) > 5 * 60 * 1000) {
+  if (!webhookId || !timestamp || !signatureHeader) {
+    console.warn("[moov-webhook] missing signature headers", {
+      hasId: !!webhookId,
+      hasTimestamp: !!timestamp,
+      hasNonce: !!nonce,
+      hasSignature: !!signatureHeader,
+    });
     return { ok: false, eventId: webhookId };
   }
 
-  const expected = await hmacBase64(secret, `${webhookId}.${timestamp}.${rawBody}`);
-  // Header may be a space-separated list of "v1,<sig>" entries.
-  const candidates = signatureHeader
-    .split(/\s+/)
-    .map((s) => (s.includes(",") ? s.split(",")[1] : s))
-    .filter(Boolean);
+  // Replay protection — accept a 5 minute window.
+  const tsMs = parseTimestampMs(timestamp);
+  if (!Number.isFinite(tsMs) || Math.abs(Date.now() - tsMs) > 5 * 60 * 1000) {
+    console.warn("[moov-webhook] timestamp outside allowed window");
+    return { ok: false, eventId: webhookId };
+  }
 
-  const ok = candidates.some((c) => timingSafeEqual(c, expected));
+  const candidates = signatureHeader
+    .split(/[\s,]+/)
+    .map((s) => s.trim())
+    .filter((s) => s && s !== "v1");
+
+  // Primary: Moov HMAC-SHA512 hex over `timestamp|nonce|webhookID`.
+  if (nonce) {
+    const expected = await hmacHex(secret, `${timestamp}|${nonce}|${webhookId}`, "SHA-512");
+    if (candidates.some((c) => timingSafeEqual(c.toLowerCase(), expected))) {
+      return { ok: true, eventId: webhookId };
+    }
+  }
+
+  // Fallback: legacy body signature (base64 HMAC-SHA256 over id.timestamp.body).
+  const legacy = await hmacBase64(secret, `${webhookId}.${timestamp}.${rawBody}`);
+  const ok = candidates.some((c) => timingSafeEqual(c, legacy));
   return { ok, eventId: webhookId };
 }
 
