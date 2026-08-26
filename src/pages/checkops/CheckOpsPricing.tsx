@@ -23,7 +23,7 @@ const platformIncludes = [
   "Loss draft visibility & mortgage tracking",
   "Deposit operations dashboard & reconciliation",
   "Role-based access controls",
-  "Backend, storage, and Darwin AI copilot included",
+  "Backend, storage, and AI document intelligence included",
   "Dedicated onboarding & training",
 ];
 

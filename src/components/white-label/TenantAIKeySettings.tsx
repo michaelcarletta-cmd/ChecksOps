@@ -154,8 +154,8 @@ export function TenantAIKeySettings() {
     <div className="space-y-6">
       <SettingsHero
         title="AI Intelligence Engine"
-        description="Configure your OpenAI API key to enable Darwin's document analysis and OCR intelligence."
-        badge="Darwin Intelligence"
+        description="Configure your OpenAI API key to enable document analysis and OCR intelligence."
+        badge="AI Intelligence"
         icon={<Sparkles className="h-4 w-4 text-primary" />}
       />
 
