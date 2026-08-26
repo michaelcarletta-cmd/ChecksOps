@@ -86,6 +86,7 @@ async function localMethods(supabase: ReturnType<typeof serviceClient>, environm
     .eq("provider", "moov")
     .eq("environment", environment)
     .eq("provider_account_id", accountId)
+    .eq("is_platform", true)
     .is("tenant_id", null)
     .is("external_recipient_id", null)
     .order("created_at", { ascending: false });
@@ -226,6 +227,7 @@ serve(async (req) => {
           {
             tenant_id: null,
             external_recipient_id: null,
+            is_platform: true,
             provider: "moov",
             environment,
             provider_account_id: accountId,
