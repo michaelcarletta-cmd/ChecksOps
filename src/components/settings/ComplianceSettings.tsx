@@ -17,6 +17,8 @@ import { SectionCard } from "./SectionCard";
 import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
 import { VettingDocumentsPanel } from "@/components/settings/VettingDocumentsPanel";
 import { PaymentAccountPanel } from "@/components/payments/PaymentAccountPanel";
+import { PaymentReadinessPanel } from "@/components/payments/PaymentReadinessPanel";
+
 
 
 
@@ -207,9 +209,13 @@ export function ComplianceSettings({ tenantId: tenantIdOverride }: { tenantId?: 
           icon={<ShieldCheck className="h-4 w-4 text-primary" />}
           description="Create and verify your payment account before sending or receiving funds."
         >
-          <PaymentAccountPanel />
+          <div className="space-y-4">
+            <PaymentAccountPanel />
+            <PaymentReadinessPanel />
+          </div>
         </SectionCard>
       )}
+
 
       <SectionCard
         title="Onboarding Documents"
