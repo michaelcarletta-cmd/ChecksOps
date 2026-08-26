@@ -18375,10 +18375,6 @@ export type Database = {
         Args: { p_actor_id: string; p_deposit_item_ids: string[] }
         Returns: Json
       }
-      bump_claim_intelligence_version: {
-        Args: { _claim_id: string; _reason: string }
-        Returns: undefined
-      }
       can_manage_roles: { Args: { _user_id: string }; Returns: boolean }
       check_team_member_cap: {
         Args: { _role: string; _tenant_id: string }
@@ -18701,22 +18697,6 @@ export type Database = {
         Returns: Json
       }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
-      find_nearest_building_footprint: {
-        Args: { search_lat: number; search_lng: number; search_radius?: number }
-        Returns: {
-          area_sqft: number
-          bbox: Json
-          centroid_lat: number
-          centroid_lng: number
-          distance_meters: number
-          geometry_json: string
-          id: string
-          source: string
-          source_id: string
-          state: string
-          vertex_count: number
-        }[]
-      }
       generate_deposit_daily_digest: {
         Args: { p_actor_id?: string; p_digest_type?: string }
         Returns: Json
@@ -18991,7 +18971,6 @@ export type Database = {
       }
       get_total_unread_check_messages: { Args: never; Returns: number }
       get_user_tenant_ids: { Args: { _user_id: string }; Returns: string[] }
-      get_weekly_command_review: { Args: never; Returns: Json }
       gettransactionid: { Args: never; Returns: unknown }
       has_permission: {
         Args: { _permission: string; _user_id: string }
@@ -19011,20 +18990,6 @@ export type Database = {
       init_loss_draft_documents: {
         Args: { p_loss_draft_id: string }
         Returns: undefined
-      }
-      insert_building_footprints_batch: {
-        Args: {
-          p_areas_sqft: number[]
-          p_bboxes: Json[]
-          p_centroid_lats: number[]
-          p_centroid_lngs: number[]
-          p_source_ids: string[]
-          p_sources: string[]
-          p_states: string[]
-          p_vertex_counts: number[]
-          p_wkts: string[]
-        }
-        Returns: Json
       }
       invalidate_all_sessions: { Args: { p_user_id?: string }; Returns: number }
       invalidate_session: {
@@ -19183,38 +19148,6 @@ export type Database = {
           p_notes?: string
         }
         Returns: Json
-      }
-      match_claim_document_chunks: {
-        Args: {
-          exclude_claim_id?: string
-          filter_carrier?: string
-          filter_decision?: Database["public"]["Enums"]["claim_doc_decision"]
-          filter_evidence_type?: Database["public"]["Enums"]["claim_doc_evidence_type"]
-          filter_loss_type?: Database["public"]["Enums"]["claim_doc_loss_type"]
-          filter_state?: string
-          filter_trade?: Database["public"]["Enums"]["claim_doc_trade"]
-          match_count?: number
-          query_embedding: string
-        }
-        Returns: {
-          carrier_name: string
-          chunk_index: number
-          claim_id: string
-          content: string
-          decision_type: Database["public"]["Enums"]["claim_doc_decision"]
-          denial_rationale: string
-          evidence_type: Database["public"]["Enums"]["claim_doc_evidence_type"]
-          file_id: string
-          id: string
-          loss_date: string
-          loss_type: Database["public"]["Enums"]["claim_doc_loss_type"]
-          outcome_paid_amount: number
-          outcome_resolution_type: string
-          policy_form: string
-          similarity: number
-          state_code: string
-          trade: Database["public"]["Enums"]["claim_doc_trade"]
-        }[]
       }
       match_knowledge_chunks: {
         Args: {
