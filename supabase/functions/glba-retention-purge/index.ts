@@ -50,9 +50,6 @@ Deno.serve(async (req) => {
       "claim_photos",
       "claim_communications_diary",
       "claim_additional_contacts",
-      "claim_home_inventory",
-      "claim_document_intelligence",
-      "claim_document_meaning",
       "claim_ai_conversations",
       "guided_communications",
     ];
