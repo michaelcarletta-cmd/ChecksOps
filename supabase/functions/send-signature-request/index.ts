@@ -632,11 +632,7 @@ Deno.serve(async (req) => {
 
     if (claimId && !allFailed) {
       const signerNames = signersArr.map((s: any) => s.signer_name).join(", ");
-      await sb.from("claim_updates").insert({
-        claim_id: claimId,
-        content: `📝 Signature request sent for "${request.document_name}" to ${signerNames}`,
-        update_type: "esign",
-      });
+      console.log("[send-signature-request] sent", request.document_name, signerNames);
 
       // Mirror to homeowner ledger so the homeowner sees signature activity live
       try {

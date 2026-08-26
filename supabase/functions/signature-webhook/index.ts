@@ -78,31 +78,13 @@ Deno.serve(async (req) => {
       ? `✅ Document "${document_name || 'Agreement'}" signed by ${signer_name || signer_email || 'signer'}`
       : `📝 Signature event: ${event_type || status || 'update'} for "${document_name || 'Agreement'}"`;
 
-    const { error: updateError } = await supabase
-      .from('claim_updates')
-      .insert({
-        claim_id: targetClaimId,
-        content: eventDescription,
-        update_type: 'signature'
-      });
-
-    if (updateError) {
-      console.error("Error creating claim update:", updateError);
-    }
+    console.log("[signature-webhook]", targetClaimId, eventDescription);
 
     // If there's a signed document URL, we could download and store it
     // For now, just log it
     if (signed_document_url) {
       console.log("Signed document available at:", signed_document_url);
       
-      // Create a note with the document link
-      await supabase
-        .from('claim_updates')
-        .insert({
-          claim_id: targetClaimId,
-          content: `📄 Signed document available: [Download signed document](${signed_document_url})`,
-          update_type: 'document'
-        });
     }
 
     // Update the claims table to reflect activity

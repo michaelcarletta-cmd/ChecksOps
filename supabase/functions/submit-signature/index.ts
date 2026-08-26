@@ -638,12 +638,6 @@ Deno.serve(async (req) => {
             });
           }
 
-          // Claim timeline
-          await sb.from("claim_updates").insert({
-            claim_id: claimId,
-            content: `✅ All signatures completed for "${request.document_name}" — signed PDF generated`,
-            update_type: "esign",
-          });
         }
 
         // Resolve check_intake_item_id: prefer explicit link, otherwise
@@ -730,14 +724,6 @@ Deno.serve(async (req) => {
           payload: null,
         });
 
-        // Still log timeline entry when there is a claim — signatures are captured
-        if (claimId) {
-          await sb.from("claim_updates").insert({
-            claim_id: claimId,
-            content: `⚠️ Signatures completed for "${request.document_name}" but PDF generation failed — retry available`,
-            update_type: "esign",
-          });
-        }
       }
 
     } else {
