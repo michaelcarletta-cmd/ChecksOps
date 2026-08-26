@@ -90,8 +90,9 @@ export function TenantUsageDashboard({ tenantId, tenantName, isOpen, onClose }: 
           .gte("created_at", yearStart)
           .lt("created_at", yearEnd),
         supabase
-          .from("moov_transfers" as any)
-          .select("id, amount, status, created_at")
+          .from("payment_transfers")
+          .select("id, amount_cents, status, created_at")
+          .eq("provider", "moov")
           .eq("tenant_id", tenantId)
           .gte("created_at", yearStart)
           .lt("created_at", yearEnd),
