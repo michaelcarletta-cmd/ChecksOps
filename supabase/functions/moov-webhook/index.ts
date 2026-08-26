@@ -96,6 +96,18 @@ async function verifySignature(req: Request, rawBody: string): Promise<{ ok: boo
     if (candidates.some((c) => timingSafeEqual(c.toLowerCase(), expected))) {
       return { ok: true, eventId: webhookId };
     }
+    // Temporary diagnostics while bringing up the live endpoint. The signature
+    // header is a one-way HMAC (not reversible), so logging it is safe; the
+    // signing secret itself is never logged — only its length.
+    console.warn("[moov-webhook] primary scheme mismatch", {
+      webhookId,
+      timestamp,
+      nonce,
+      received: candidates,
+      expected,
+      secretLength: secret.length,
+      secretHasWhitespace: secret !== secret.trim(),
+    });
   }
 
   // Fallback: legacy body signature (base64 HMAC-SHA256 over id.timestamp.body).
