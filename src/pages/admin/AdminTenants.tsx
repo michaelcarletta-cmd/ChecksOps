@@ -324,7 +324,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <EmailSenderSettings />
           </TabsContent>
           <TabsContent value="compliance" className="mt-6 space-y-8">
-            <ComplianceSettings />
+            <ComplianceSettings tenantId={tenant.id} />
           </TabsContent>
           <TabsContent value="integrations" className="mt-6 space-y-6">
             <CheckAltSettings />
