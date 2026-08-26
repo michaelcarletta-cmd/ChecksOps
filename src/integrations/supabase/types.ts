@@ -3882,6 +3882,13 @@ export type Database = {
             foreignKeyName: "contractor_reviews_contractor_id_fkey"
             columns: ["contractor_id"]
             isOneToOne: false
+            referencedRelation: "contractor_directory_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contractor_reviews_contractor_id_fkey"
+            columns: ["contractor_id"]
+            isOneToOne: false
             referencedRelation: "contractor_profiles"
             referencedColumns: ["id"]
           },
@@ -6123,6 +6130,13 @@ export type Database = {
             foreignKeyName: "homeowner_check_uploads_contractor_profile_id_fkey"
             columns: ["contractor_profile_id"]
             isOneToOne: false
+            referencedRelation: "contractor_directory_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "homeowner_check_uploads_contractor_profile_id_fkey"
+            columns: ["contractor_profile_id"]
+            isOneToOne: false
             referencedRelation: "contractor_profiles"
             referencedColumns: ["id"]
           },
@@ -6167,6 +6181,13 @@ export type Database = {
           zip?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "homeowner_directory_leads_contractor_id_fkey"
+            columns: ["contractor_id"]
+            isOneToOne: false
+            referencedRelation: "contractor_directory_view"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "homeowner_directory_leads_contractor_id_fkey"
             columns: ["contractor_id"]
@@ -6259,6 +6280,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "homeowner_intro_requests_contractor_profile_id_fkey"
+            columns: ["contractor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "contractor_directory_view"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "homeowner_intro_requests_contractor_profile_id_fkey"
             columns: ["contractor_profile_id"]
@@ -12208,6 +12236,33 @@ export type Database = {
           rcv_claimed: number | null
           rd_available: number | null
           unclassified_payment_total: number | null
+        }
+        Relationships: []
+      }
+      contractor_directory_view: {
+        Row: {
+          avatar_url: string | null
+          avg_rating: number | null
+          bio: string | null
+          coi_expires_at: string | null
+          created_at: string | null
+          directory_opt_in: boolean | null
+          display_name: string | null
+          home_base_lat: number | null
+          home_base_lng: number | null
+          id: string | null
+          is_directory_listed: boolean | null
+          jobs_count: number | null
+          license_number: string | null
+          review_count: number | null
+          service_metros: string[] | null
+          service_radius_miles: number | null
+          service_states: string[] | null
+          service_zip_prefixes: string[] | null
+          tier: string | null
+          trades: string[] | null
+          updated_at: string | null
+          user_id: string | null
         }
         Relationships: []
       }
