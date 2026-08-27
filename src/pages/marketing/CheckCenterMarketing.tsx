@@ -230,7 +230,7 @@ const HeroMockup = () => {
 };
 
 export default function CheckCenterMarketing() {
-  const supportEmail = "checksopsadmin@gmail.com";
+  const supportEmail = "support@checksops.com";
   const [menuOpen, setMenuOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", company: "", role: "", notes: "" });
