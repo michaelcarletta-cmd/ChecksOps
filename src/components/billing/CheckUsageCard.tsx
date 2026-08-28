@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isPlatformOwner } from "@/lib/masterMerchant";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -58,8 +59,7 @@ export function CheckUsageCard() {
     },
   });
 
-  const isFreedomAdjustment = user?.email === "mcarletta@freedomadj.com";
-  const showBillingAmounts = isFreedomAdjustment || tenant?.per_check_billing_enabled;
+  const showBillingAmounts = isPlatformOwner(user?.email) || tenant?.per_check_billing_enabled;
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["check-usage-current-month", tenantId],

@@ -1182,16 +1182,6 @@ export default function CheckCommandCenter() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1 md:gap-2 w-full sm:w-auto">
-          {user?.email === "mcarletta@freedomadj.com" && (
-            <a
-              href="/admin/tenants"
-              className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-gradient-to-r from-amber-500/20 to-yellow-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 shadow-sm hover:from-amber-500/30 hover:to-yellow-500/20 transition-all"
-              title="Owner-only: Tenant Management"
-            >
-              <Shield className="h-3.5 w-3.5" />
-              Tenant Admin
-            </a>
-          )}
           {/* Help moved to Settings → ChecksOps Guide */}
           <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
             <DialogTrigger asChild>

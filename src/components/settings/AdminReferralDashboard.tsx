@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { isPlatformOwner } from "@/lib/masterMerchant";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -15,7 +16,7 @@ export function AdminReferralDashboard() {
   const [search, setSearch] = useState("");
 
   // Only show to admin
-  if (user?.email !== "mcarletta@freedomadj.com") return null;
+  if (!isPlatformOwner(user?.email)) return null;
 
   const { data: tenants = [], isLoading } = useQuery({
     queryKey: ["admin-referral-tenants"],
