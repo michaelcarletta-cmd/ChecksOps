@@ -83,11 +83,11 @@ const PayoutMockup = () => (
   <div className="rounded-xl border border-border/60 bg-card/80 shadow-xl overflow-hidden">
     <div className="p-4 border-b border-border/40 bg-muted/20 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <Wallet className="h-4 w-4 text-[#7d8548]" />
+        <Send className="h-4 w-4 text-[#7d8548]" />
         <span className="text-sm font-semibold">Send Payment</span>
       </div>
       <Badge variant="outline" className="text-[10px] border-[#596032]/30 text-[#7d8548] bg-[#596032]/10">
-        ACH · Verified account
+        ACH · Wallet funded
       </Badge>
     </div>
     <div className="p-4 space-y-3">
@@ -97,13 +97,13 @@ const PayoutMockup = () => (
           <span className="font-medium">Ridgeline Roofing LLC</span>
         </div>
         <div className="flex justify-between text-xs">
-          <span className="text-muted-foreground">Bank</span>
-          <span className="font-mono">Chase ••7831</span>
+          <span className="text-muted-foreground">Source</span>
+          <span className="font-mono">Wallet ••4210</span>
         </div>
         <div className="flex justify-between text-xs">
-          <span className="text-muted-foreground">Verification</span>
+          <span className="text-muted-foreground">Speed</span>
           <span className="inline-flex items-center gap-1 text-emerald-400">
-            <ShieldCheck className="h-3 w-3" /> Bank-login verified
+            <ShieldCheck className="h-3 w-3" /> Next business day
           </span>
         </div>
       </div>
@@ -114,11 +114,44 @@ const PayoutMockup = () => (
         </div>
         <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
           <span>Claim CLM-2044 · Draw #2</span>
-          <span>Tokenized · no bank details re-entered</span>
+          <span>Verified · tokenized account</span>
         </div>
       </div>
       <Button size="sm" className="w-full gap-1.5 bg-[#596032] hover:bg-[#596032]/90 text-white">
         <Send className="h-3.5 w-3.5" /> Send $8,420.00
+      </Button>
+    </div>
+  </div>
+);
+
+const WalletMockup = () => (
+  <div className="rounded-xl border border-border/60 bg-card/80 shadow-xl overflow-hidden">
+    <div className="p-4 border-b border-border/40 bg-muted/20 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Wallet className="h-4 w-4 text-[#7d8548]" />
+        <span className="text-sm font-semibold">Organization Wallet</span>
+      </div>
+      <Badge variant="outline" className="text-[10px] border-[#596032]/30 text-[#7d8548] bg-[#596032]/10">
+        Moov powered
+      </Badge>
+    </div>
+    <div className="p-4 space-y-3">
+      <div className="flex justify-between items-center">
+        <span className="text-xs text-muted-foreground">Available balance</span>
+        <span className="text-xl font-mono font-bold">$47,250.00</span>
+      </div>
+      <div className="rounded-md border border-border/50 bg-muted/10 p-3 space-y-1.5">
+        <div className="flex justify-between text-xs">
+          <span className="text-muted-foreground">Pending</span>
+          <span className="font-mono">$12,400.00</span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span className="text-muted-foreground">Linked bank</span>
+          <span className="font-mono">Chase ••4210</span>
+        </div>
+      </div>
+      <Button size="sm" variant="outline" className="w-full gap-1.5 border-[#596032]/30 text-[#7d8548] hover:bg-[#596032]/10 hover:text-[#7d8548]">
+        <Banknote className="h-3.5 w-3.5" /> Add funds
       </Button>
     </div>
   </div>
@@ -578,27 +611,27 @@ export default function CheckCenterMarketing() {
           <div className="max-w-2xl">
             <Badge variant="outline" className="mb-4">Money movement</Badge>
             <h2 className="text-3xl md:text-4xl font-bold tracking-tight">
-              From cleared check to funded subcontractor.
+              Wallet-powered money movement.
             </h2>
             <p className="mt-4 text-muted-foreground text-lg">
-              ChecksOps connects directly into bank-grade rails so approved checks clear electronically
-              and approved disbursements move by ACH — all inside the same claim file, with the same audit trail.
+              ChecksOps connects check clearing, wallet funding, and disbursements into one
+              claim-centric workflow. Each organization gets its own connected account and wallet,
+              so funds move faster while your company keeps full control.
             </p>
           </div>
 
-          <div className="mt-12 grid lg:grid-cols-2 gap-8">
+          <div className="mt-12 grid lg:grid-cols-3 gap-8">
             {/* Clearing side */}
             <div className="space-y-5">
               <div className="flex items-center gap-2">
                 <div className="h-9 w-9 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
                   <Banknote className="h-4 w-4" />
                 </div>
-                <h3 className="text-lg font-semibold">Clear the check</h3>
+                <h3 className="text-lg font-semibold">Deposit checks</h3>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Once every payee has endorsed and the packet is approved, the check clears through an
-                integrated remote deposit capture rail — no branch trip, no manual re-keying. Status flows
-                back into the claim file automatically.
+                Once every payee has endorsed and the packet is approved, the check clears
+                electronically through our integrated remote deposit capture rail.
               </p>
               <DepositMockup />
               <ul className="space-y-2 text-xs text-muted-foreground">
@@ -615,25 +648,51 @@ export default function CheckCenterMarketing() {
               </ul>
             </div>
 
+            {/* Wallet side */}
+            <div className="space-y-5">
+              <div className="flex items-center gap-2">
+                <div className="h-9 w-9 rounded-lg bg-[#596032]/10 text-[#7d8548] flex items-center justify-center">
+                  <Wallet className="h-4 w-4" />
+                </div>
+                <h3 className="text-lg font-semibold">Fund your wallet</h3>
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Each organization pre-funds its own wallet from a linked bank account. Pay
+                disbursements from the balance instead of pulling from the bank on every payout.
+              </p>
+              <WalletMockup />
+              <ul className="space-y-2 text-xs text-muted-foreground">
+                {[
+                  "Your company's own wallet — separate, isolated, and owned by you",
+                  "Add funds once and cover many payouts without re-entering bank details",
+                  "Real-time balance and pending activity inside the claim file",
+                ].map((t) => (
+                  <li key={t} className="flex gap-2 items-start">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-[#7d8548] mt-0.5 flex-shrink-0" />
+                    <span>{t}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
             {/* Payout side */}
             <div className="space-y-5">
               <div className="flex items-center gap-2">
                 <div className="h-9 w-9 rounded-lg bg-[#596032]/10 text-[#7d8548] flex items-center justify-center">
                   <Send className="h-4 w-4" />
                 </div>
-                <h3 className="text-lg font-semibold">Pay the subs, vendors, and reps</h3>
+                <h3 className="text-lg font-semibold">Pay from the wallet</h3>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Recipients verify their bank account once — through a secure bank-login flow, not a
-                paper form. After that, every future ACH is a single click. No routing numbers to
-                collect, no voided checks, no wires to chase.
+                Send ACH, same-day ACH, or RTP disbursements to subs, vendors, and reps from your
+                wallet. Recipients verify once; every future payment is a single click.
               </p>
               <PayoutMockup />
               <ul className="space-y-2 text-xs text-muted-foreground">
                 {[
-                  "Bank ownership verified at signup — no more bad account numbers",
-                  "Account details tokenized after the first payment; never re-entered",
-                  "Every disbursement tied to a claim, draw, and approver in the audit log",
+                  "Bank account verified at signup — no more bad routing numbers",
+                  "Every disbursement tied to claim, draw, and approver in the audit log",
+                  "Choose speed per payment: standard, same-day, or real-time RTP",
                 ].map((t) => (
                   <li key={t} className="flex gap-2 items-start">
                     <CheckCircle2 className="h-3.5 w-3.5 text-[#7d8548] mt-0.5 flex-shrink-0" />
@@ -645,8 +704,9 @@ export default function CheckCenterMarketing() {
           </div>
 
           <p className="mt-10 text-center text-[11px] text-muted-foreground max-w-3xl mx-auto">
-            Deposit and ACH rails are provided by regulated banking partners. ChecksOps orchestrates
-            the workflow, evidence, and approvals — your company remains the merchant of record.
+            Money movement is powered by Moov, a regulated money services provider. Deposit rails are
+            provided by our banking partner. ChecksOps orchestrates the workflow, evidence, and
+            approvals — your company remains the merchant of record.
           </p>
         </div>
       </section>
