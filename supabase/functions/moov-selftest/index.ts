@@ -136,6 +136,23 @@ serve(async (req) => {
       );
     }
 
+    // Fee plans live on the PARTNER (platform) account and are what an
+    // onboarding invite must reference. Probe the documented scope variants so
+    // we can tell a permissions problem from "no plan attached".
+    if (platformId) {
+      const probes: Array<[string, string[]]> = [
+        ["fee_plans_partner_profile_read", [`/accounts/${platformId}/profile.read`]],
+        ["fee_plans_partner_profile_write", [`/accounts/${platformId}/profile.write`]],
+        ["fee_plans_global", ["/fed.read"]],
+      ];
+      for (const [name, scopeSet] of probes) {
+        await record(name, () =>
+          moovFetch(`/accounts/${platformId}/fee-plans`, { method: "GET", scopes: scopeSet }),
+        );
+      }
+    }
+
+
     const failures = steps.filter((s) => !s.ok && s.step !== "fee_plans_optional" && s.step !== "tenant_account");
     return json({ success: failures.length === 0, environment, steps, failure_count: failures.length });
   } catch (e) {
