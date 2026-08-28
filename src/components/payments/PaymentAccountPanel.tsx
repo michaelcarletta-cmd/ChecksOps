@@ -85,7 +85,16 @@ export function PaymentAccountPanel() {
     if (!tenantId) return;
     setBusy("setup");
     // Open the tab synchronously so the browser doesn't treat it as a popup.
-    const win = window.open("about:blank", "_blank", "noopener,noreferrer");
+    // NOTE: do NOT pass "noopener" here — with noopener the browser returns
+    // null and we can never navigate the tab, leaving a blank page open.
+    const win = window.open("", "_blank");
+    if (win) {
+      try {
+        win.document.write(
+          "<!doctype html><title>Opening secure setup…</title><body style='font-family:system-ui;background:#0b0b0c;color:#eee;display:flex;align-items:center;justify-content:center;height:100vh'>Opening secure setup…</body>",
+        );
+      } catch { /* cross-origin safety */ }
+    }
     try {
       if (!account?.externalAccountId) {
         await invoke("moov-account-create", { tenant_id: tenantId });
@@ -96,7 +105,8 @@ export function PaymentAccountPanel() {
       });
       if (res?.url) {
         if (win && !win.closed) {
-          win.location.href = res.url;
+          try { (win as any).opener = null; } catch { /* ignore */ }
+          win.location.replace(res.url);
           setSetupWindow(win);
           toast({
             title: "Setup opened",
@@ -120,6 +130,7 @@ export function PaymentAccountPanel() {
     } finally {
       setBusy(null);
     }
+
   }
 
 
