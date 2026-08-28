@@ -111,6 +111,25 @@ serve(async (req) => {
       }
     }
 
+    // Same one-homeowner rule for claim scope: a claim file gets a single
+    // verified homeowner bank account.
+    if (scope === "claim") {
+      const { data: claimLink } = await supabase
+        .from("homeowner_bank_link_tokens")
+        .select("id")
+        .eq("claim_id", claim_id)
+        .not("status", "in", "(revoked,expired)")
+        .limit(1)
+        .maybeSingle();
+      if (claimLink) {
+        return new Response(JSON.stringify({
+          error: "A homeowner bank account is already set up for this claim file. Only one homeowner account can be verified per claim.",
+        }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+
+
+
     const verificationToken = crypto.randomUUID();
     // Homeowner-facing bank link: give them plenty of time to open it. Actum's
     // AuthenteCheck session (short-lived) is minted lazily when they click, so
