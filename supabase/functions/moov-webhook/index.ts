@@ -452,13 +452,23 @@ async function syncFundingRequest(
       auto_send_after_funding: false,
     }).eq("id", request.related_payment_id);
 
-    await supabase.from("notifications").insert({
+    // Auditable alert for tenant finance admins — surfaced in Wallet Ops.
+    await supabase.from("payment_event_log").insert({
+      provider: "moov",
+      environment,
       tenant_id: request.tenant_id,
-      title: fundingStatus === "returned" ? "Wallet funding was returned" : "Wallet funding failed",
-      message:
-        "A bank transfer into your wallet did not complete, so the related payment is on hold. Review it in Wallet Ops.",
-      type: "warning",
+      provider_transfer_id: providerTransferId,
+      event_type: fundingStatus === "returned"
+        ? "wallet.funding.returned"
+        : "wallet.funding.failed",
+      new_status: fundingStatus,
+      provider_metadata: {
+        funding_request_id: request.id,
+        payment_id: request.related_payment_id,
+        action_required: true,
+      },
     }).then(() => undefined, () => undefined);
+
   }
 }
 
