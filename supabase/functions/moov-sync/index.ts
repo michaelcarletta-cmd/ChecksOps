@@ -329,7 +329,14 @@ serve(async (req) => {
       });
     }
 
-    return json({ success: true, status: onboardingStatus, account: updated, bank_count: (banks ?? []).length });
+    return json({
+      success: true,
+      status: onboardingStatus,
+      account: updated,
+      bank_count: (banks ?? []).length,
+      adopted_account_id: adoptedAccountId,
+    });
+
   } catch (e) {
     console.error("[moov-sync]", (e as Error).message);
     return json({ error: (e as Error).message }, 500);
