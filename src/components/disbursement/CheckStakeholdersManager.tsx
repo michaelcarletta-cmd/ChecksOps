@@ -268,33 +268,81 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
                 />
               </div>
 
-              {availableToAdd.length === 0 ? (
-                <p className="text-xs text-muted-foreground p-2 text-center">
-                  {searchQuery ? "No matching stakeholders found." : "All your accounts are already added."}
-                </p>
-              ) : (
-                <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
-                  {availableToAdd.map((a: any) => {
-                    const holder = a.custname || a.homeowner_name || a.nickname;
-                    return (
+              {visiblePartners.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground px-1">Partner organizations</p>
+                  <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+                    {visiblePartners.map((p: any) => (
                       <button
-                        key={a.id}
-                        className="w-full text-left p-2 rounded hover:bg-accent text-xs flex items-center justify-between group transition-colors"
-                        onClick={() => addMut.mutate(a.id)}
-                        disabled={addMut.isPending}
+                        key={p.partner_tenant_id}
+                        className="w-full text-left p-2 rounded hover:bg-accent text-xs flex items-center justify-between group transition-colors disabled:opacity-50"
+                        onClick={() => addPartnerMut.mutate(p.partner_tenant_id)}
+                        disabled={addPartnerMut.isPending || !p.payout_ready}
+                        title={p.payout_ready ? "Add this partner as a stakeholder" : "This partner hasn't finished bank verification"}
                       >
                         <span className="min-w-0">
-                          <span className="font-medium block truncate group-hover:text-accent-foreground">{holder}</span>
+                          <span className="font-medium block truncate group-hover:text-accent-foreground">{p.partner_name}</span>
                           <span className="text-muted-foreground text-[10px]">
-                            Payment account connected
+                            {p.payout_ready
+                              ? `Bank approved${p.last_four ? ` · ${p.bank_name ?? "Bank"} ••${p.last_four}` : ""}`
+                              : "Bank not verified yet"}
                           </span>
                         </span>
-                        <Badge variant="outline" className="text-[9px] ml-2 shrink-0">{TYPE_LABELS[a.account_type] ?? a.account_type}</Badge>
+                        <Badge
+                          variant="outline"
+                          className={`text-[9px] ml-2 shrink-0 ${p.payout_ready ? "border-purple-500/30 text-purple-600 bg-purple-500/10" : ""}`}
+                        >
+                          <Handshake className="h-2.5 w-2.5 mr-0.5" /> Partner
+                        </Badge>
                       </button>
-                    );
-                  })}
+                    ))}
+                  </div>
                 </div>
               )}
+
+              {availableToAdd.length > 0 && (
+                <div className="space-y-1">
+                  {visiblePartners.length > 0 && (
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground px-1">Saved stakeholders</p>
+                  )}
+                  <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
+                    {availableToAdd.map((a: any) => {
+                      const holder = a.custname || a.homeowner_name || a.nickname;
+                      return (
+                        <button
+                          key={a.id}
+                          className="w-full text-left p-2 rounded hover:bg-accent text-xs flex items-center justify-between group transition-colors"
+                          onClick={() => addMut.mutate(a.id)}
+                          disabled={addMut.isPending}
+                        >
+                          <span className="min-w-0">
+                            <span className="font-medium block truncate group-hover:text-accent-foreground">{holder}</span>
+                            <span className="text-muted-foreground text-[10px]">
+                              Payment account connected
+                            </span>
+                          </span>
+                          <Badge variant="outline" className="text-[9px] ml-2 shrink-0">{TYPE_LABELS[a.account_type] ?? a.account_type}</Badge>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {availableToAdd.length === 0 && visiblePartners.length === 0 && (
+                <p className="text-xs text-muted-foreground p-2 text-center">
+                  {searchQuery ? "No matches found." : "Everyone available is already added."}
+                </p>
+              )}
+
+              <Button
+                size="sm"
+                variant="secondary"
+                className="w-full h-8 text-xs"
+                onClick={() => { setPickerOpen(false); setExternalDialogOpen(true); }}
+              >
+                <UserPlus className="h-3 w-3 mr-1" /> Add someone new
+              </Button>
             </div>
           </PopoverContent>
         </Popover>
@@ -307,6 +355,15 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
         checkIntakeItemId={checkIntakeItemId}
         claimId={(checkMeta?.claim_id as string | null) ?? null}
       />
+
+      <AddExternalStakeholderDialog
+        open={externalDialogOpen}
+        onOpenChange={setExternalDialogOpen}
+        checkIntakeItemId={checkIntakeItemId}
+        claimId={(checkMeta?.claim_id as string | null) ?? null}
+      />
+
+
 
       {activeCheckStakeholders.length === 0 ? (
         <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground text-center">
