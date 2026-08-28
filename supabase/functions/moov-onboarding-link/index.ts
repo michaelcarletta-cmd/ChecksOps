@@ -47,8 +47,9 @@ serve(async (req) => {
       .filter(Boolean);
 
     if (feePlanCodes.length === 0) {
-      // Candidate partner accounts to search for fee plans: the configured
-      // platform account, then any account the platform credentials can see.
+      // Fee plans live on the PARTNER (platform) account and are readable with
+      // that account's profile.read scope — NOT profile.write, which Moov
+      // answers with 403 and which previously made discovery silently fail.
       const candidates: string[] = [];
       if (envPlatformId) candidates.push(envPlatformId);
 
@@ -67,34 +68,32 @@ serve(async (req) => {
           console.error("[moov-onboarding-link] account list", (e as Error).message);
         }
       }
-      candidates.push(accountId);
 
       for (const candidate of candidates) {
         try {
           const plans = await moovFetch<any>(`/accounts/${candidate}/fee-plans`, {
             method: "GET",
-            scopes: scopes.accountWrite(candidate),
+            scopes: scopes.accountRead(candidate),
           });
           const list = Array.isArray(plans) ? plans : plans?.feePlans ?? [];
+          if (list.length === 0) continue;
 
-          // If a plan ID is pinned, prefer the plan that matches it.
-          if (pinnedPlanId) {
-            const match = list.find(
-              (p: any) => (p?.planID ?? p?.planId ?? p?.id) === pinnedPlanId,
-            );
-            const matchedCode = match?.planCode ?? match?.code;
-            if (typeof matchedCode === "string" && matchedCode.length > 0) {
-              feePlanCodes = [matchedCode];
-              platformAccountId = candidate;
-              break;
-            }
-          }
+          // A plan is referenced by its code when it has one, otherwise by its
+          // plan id. Only identifiers that actually exist on the partner
+          // account are ever sent — a stale pinned id would make the hosted
+          // onboarding page fail after the merchant signs up.
+          const identify = (p: any) =>
+            p?.planCode ?? p?.code ?? p?.planID ?? p?.planId ?? p?.id ?? null;
 
-          const codes = list
-            .map((p: any) => p?.planCode ?? p?.code)
-            .filter((c: unknown): c is string => typeof c === "string" && c.length > 0);
-          if (codes.length > 0) {
-            feePlanCodes = codes.slice(0, 1);
+          const pinned = pinnedPlanId
+            ? list.find((p: any) =>
+              [p?.planID, p?.planId, p?.id, p?.planCode, p?.code].includes(pinnedPlanId)
+            )
+            : null;
+
+          const chosen = identify(pinned ?? list[0]);
+          if (typeof chosen === "string" && chosen.length > 0) {
+            feePlanCodes = [chosen];
             platformAccountId = candidate;
             break;
           }
@@ -104,10 +103,6 @@ serve(async (req) => {
       }
     }
 
-    // Last resort: send the pinned plan identifier straight through.
-    if (feePlanCodes.length === 0 && pinnedPlanId) {
-      feePlanCodes = [pinnedPlanId];
-    }
 
     if (feePlanCodes.length === 0) {
       return json(
