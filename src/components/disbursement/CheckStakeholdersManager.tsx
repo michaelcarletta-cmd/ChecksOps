@@ -90,6 +90,21 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
     },
   });
 
+  // Partner organizations of this tenant, with whether their bank account is
+  // approved and ready to receive money.
+  const { data: partnerOptions = [] } = useQuery({
+    queryKey: ["partner-payout-options", checkIntakeItemId],
+    enabled: !!checkIntakeItemId && !!tenant?.id,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc("list_partner_payout_options", {
+        _check_intake_item_id: checkIntakeItemId,
+      });
+      if (error) throw error;
+      return (data ?? []) as any[];
+    },
+  });
+
+
   const activeCheckStakeholders = checkStakeholders.filter((s: any) => s.stakeholder_accounts?.is_active !== false);
   const selectedIds = new Set(activeCheckStakeholders.map((s: any) => s.stakeholder_account_id));
   
