@@ -83,11 +83,11 @@ const PayoutMockup = () => (
   <div className="rounded-xl border border-border/60 bg-card/80 shadow-xl overflow-hidden">
     <div className="p-4 border-b border-border/40 bg-muted/20 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <Wallet className="h-4 w-4 text-[#7d8548]" />
+        <Send className="h-4 w-4 text-[#7d8548]" />
         <span className="text-sm font-semibold">Send Payment</span>
       </div>
       <Badge variant="outline" className="text-[10px] border-[#596032]/30 text-[#7d8548] bg-[#596032]/10">
-        ACH · Verified account
+        ACH · Wallet funded
       </Badge>
     </div>
     <div className="p-4 space-y-3">
@@ -97,13 +97,13 @@ const PayoutMockup = () => (
           <span className="font-medium">Ridgeline Roofing LLC</span>
         </div>
         <div className="flex justify-between text-xs">
-          <span className="text-muted-foreground">Bank</span>
-          <span className="font-mono">Chase ••7831</span>
+          <span className="text-muted-foreground">Source</span>
+          <span className="font-mono">Wallet ••4210</span>
         </div>
         <div className="flex justify-between text-xs">
-          <span className="text-muted-foreground">Verification</span>
+          <span className="text-muted-foreground">Speed</span>
           <span className="inline-flex items-center gap-1 text-emerald-400">
-            <ShieldCheck className="h-3 w-3" /> Bank-login verified
+            <ShieldCheck className="h-3 w-3" /> Next business day
           </span>
         </div>
       </div>
@@ -114,11 +114,44 @@ const PayoutMockup = () => (
         </div>
         <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
           <span>Claim CLM-2044 · Draw #2</span>
-          <span>Tokenized · no bank details re-entered</span>
+          <span>Verified · tokenized account</span>
         </div>
       </div>
       <Button size="sm" className="w-full gap-1.5 bg-[#596032] hover:bg-[#596032]/90 text-white">
         <Send className="h-3.5 w-3.5" /> Send $8,420.00
+      </Button>
+    </div>
+  </div>
+);
+
+const WalletMockup = () => (
+  <div className="rounded-xl border border-border/60 bg-card/80 shadow-xl overflow-hidden">
+    <div className="p-4 border-b border-border/40 bg-muted/20 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Wallet className="h-4 w-4 text-[#7d8548]" />
+        <span className="text-sm font-semibold">Organization Wallet</span>
+      </div>
+      <Badge variant="outline" className="text-[10px] border-[#596032]/30 text-[#7d8548] bg-[#596032]/10">
+        Moov powered
+      </Badge>
+    </div>
+    <div className="p-4 space-y-3">
+      <div className="flex justify-between items-center">
+        <span className="text-xs text-muted-foreground">Available balance</span>
+        <span className="text-xl font-mono font-bold">$47,250.00</span>
+      </div>
+      <div className="rounded-md border border-border/50 bg-muted/10 p-3 space-y-1.5">
+        <div className="flex justify-between text-xs">
+          <span className="text-muted-foreground">Pending</span>
+          <span className="font-mono">$12,400.00</span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span className="text-muted-foreground">Linked bank</span>
+          <span className="font-mono">Chase ••4210</span>
+        </div>
+      </div>
+      <Button size="sm" variant="outline" className="w-full gap-1.5 border-[#596032]/30 text-[#7d8548] hover:bg-[#596032]/10 hover:text-[#7d8548]">
+        <Banknote className="h-3.5 w-3.5" /> Add funds
       </Button>
     </div>
   </div>
