@@ -33,7 +33,9 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
   const qc = useQueryClient();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [homeownerDialogOpen, setHomeownerDialogOpen] = useState(false);
+  const [externalDialogOpen, setExternalDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
 
   const { data: checkMeta } = useQuery({
     queryKey: ["check-meta-for-stakeholders", checkIntakeItemId],
