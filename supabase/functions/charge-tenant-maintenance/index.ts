@@ -52,7 +52,7 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       // Must be platform admin
-      if (userData.user.email !== "mcarletta@freedomadj.com") {
+      if ((userData.user.email ?? "").toLowerCase() !== "checksopsadmin@gmail.com") {
         return new Response(JSON.stringify({ error: "Forbidden: platform admin only" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       actorUserId = userData.user.id;
