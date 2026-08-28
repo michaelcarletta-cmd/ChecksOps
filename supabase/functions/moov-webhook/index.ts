@@ -217,7 +217,32 @@ async function handleEvent(
         })
         .eq("provider_bank_account_id", data.bankAccountID)
         .eq("environment", environment);
+
+      // Keep external recipients (homeowners, one-time payees, subs) and their
+      // mirrored stakeholder records in step with the provider.
+      if (providerAccountId) {
+        await supabase
+          .from("external_payment_recipients")
+          .update({
+            onboarding_status: status === "verified" ? "ready" : "awaiting_bank",
+          })
+          .eq("provider_account_id", providerAccountId)
+          .eq("environment", environment);
+
+        await supabase
+          .from("stakeholder_accounts")
+          .update({
+            provider_bank_account_id: data.bankAccountID,
+            provider_bank_name: data.bankName ?? data.bankAccount?.bankName ?? null,
+            provider_last_four: data.lastFourAccountNumber ?? data.bankAccount?.lastFourAccountNumber ?? null,
+            verification_status: status === "verified" ? "verified" : "pending",
+            verified_at: status === "verified" ? new Date().toISOString() : null,
+          })
+          .eq("provider_account_id", providerAccountId)
+          .eq("provider", "moov");
+      }
     }
+
 
     await supabase.from("payment_event_log").insert({
       provider: "moov",
