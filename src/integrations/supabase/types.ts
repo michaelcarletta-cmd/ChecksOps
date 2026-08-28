@@ -13098,6 +13098,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      add_partner_stakeholder_to_check: {
+        Args: { _check_intake_item_id: string; _partner_tenant_id: string }
+        Returns: string
+      }
       addauth: { Args: { "": string }; Returns: boolean }
       addgeometrycolumn:
         | {
@@ -13847,6 +13851,17 @@ export type Database = {
           payee_line: string
           status: string
           updated_at: string
+        }[]
+      }
+      list_partner_payout_options: {
+        Args: { _check_intake_item_id: string }
+        Returns: {
+          already_added: boolean
+          bank_name: string
+          last_four: string
+          partner_name: string
+          partner_tenant_id: string
+          payout_ready: boolean
         }[]
       }
       list_partner_shared_checks: {
