@@ -365,9 +365,7 @@ export function DisbursementConsole({
             return {
               batchId: batch.id,
               rail: "moov" as const,
-              note: `Awaiting funding — ${currency(
-                Number((fundData as any)?.amount_cents ?? 0) / 100,
-              )} is transferring from your bank. The payment sends automatically once the funds are available.`,
+              note: `Awaiting funding — ${(Number((fundData as any)?.amount_cents ?? 0) / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })} is transferring from your bank. The payment sends automatically once the funds are available.`,
             };
           }
         }
