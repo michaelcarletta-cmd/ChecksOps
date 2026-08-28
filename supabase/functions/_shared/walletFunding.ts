@@ -218,34 +218,3 @@ export async function callerCanMoveFunds(
     .from("user_roles").select("role").eq("user_id", userId).eq("role", "admin").maybeSingle();
   return Boolean(adminRole) || ["owner", "admin", "manager"].includes(String(membership?.role ?? ""));
 }
-
-/** Appends an auditable funding event. */
-export async function logFundingEvent(
-  supabase: SupabaseClient,
-  args: {
-    tenant_id: string;
-    environment: string;
-    event_type: string;
-    funding_request_id?: string | null;
-    payment_id?: string | null;
-    provider_transfer_id?: string | null;
-    previous_status?: string | null;
-    new_status?: string | null;
-    metadata?: Record<string, unknown>;
-  },
-): Promise<void> {
-  await supabase.from("payment_event_log").insert({
-    provider: "moov",
-    environment: args.environment,
-    tenant_id: args.tenant_id,
-    event_type: args.event_type,
-    provider_transfer_id: args.provider_transfer_id ?? null,
-    previous_status: args.previous_status ?? null,
-    new_status: args.new_status ?? null,
-    provider_metadata: {
-      funding_request_id: args.funding_request_id ?? null,
-      payment_id: args.payment_id ?? null,
-      ...(args.metadata ?? {}),
-    },
-  }).then(() => undefined, () => undefined);
-}
