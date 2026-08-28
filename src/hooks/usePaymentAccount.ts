@@ -29,9 +29,31 @@ export function usePaymentAccount() {
     queryFn: () => getPaymentAccount(tenantId!),
   });
 
+  /**
+   * Self-heal: when an account exists but has never been mirrored locally
+   * (for example right after it was re-pointed at the correct provider
+   * account), pull the live state once so the UI never shows a stale
+   * "no bank connected" for an account the provider already verified.
+   */
+  const qc = useQueryClient();
+  const healed = useRef<string | null>(null);
+  const account = accountQuery.data ?? null;
+
+  useEffect(() => {
+    if (!tenantId || !account?.externalAccountId || account.lastSync) return;
+    if (healed.current === account.externalAccountId) return;
+    healed.current = account.externalAccountId;
+    verifyPaymentAccount(tenantId)
+      .then(() => {
+        qc.invalidateQueries({ queryKey: ["payment-account"] });
+        qc.invalidateQueries({ queryKey: ["payment-readiness"] });
+      })
+      .catch(() => { /* surfaced by the manual refresh action */ });
+  }, [tenantId, account?.externalAccountId, account?.lastSync, qc]);
+
   return {
     provider: providerQuery.data ?? null,
-    account: accountQuery.data ?? null,
+    account,
     isLoading: providerQuery.isLoading || accountQuery.isLoading,
     error: (providerQuery.error ?? accountQuery.error) as Error | null,
     refetch: accountQuery.refetch,
