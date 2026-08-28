@@ -18,7 +18,7 @@ import { VerificationDocumentsPanel } from "@/components/payments/VerificationDo
 import { VettingDocumentsPanel } from "@/components/settings/VettingDocumentsPanel";
 import { PaymentAccountPanel } from "@/components/payments/PaymentAccountPanel";
 import { PaymentReadinessPanel } from "@/components/payments/PaymentReadinessPanel";
-import { MoovAccountLinkPanel } from "@/components/payments/MoovAccountLinkPanel";
+
 
 
 
@@ -214,7 +214,6 @@ export function ComplianceSettings({ tenantId: tenantIdOverride }: { tenantId?: 
           <div className="space-y-4">
             <PaymentAccountPanel />
             <PaymentReadinessPanel />
-            <MoovAccountLinkPanel />
           </div>
 
         </SectionCard>
