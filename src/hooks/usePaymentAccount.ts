@@ -1,6 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
-import { getPaymentAccount, resolveTenantProvider } from "@/lib/payments/paymentService";
+import {
+  getPaymentAccount,
+  resolveTenantProvider,
+  verifyPaymentAccount,
+} from "@/lib/payments/paymentService";
 import type { PaymentAccount, PaymentProviderId } from "@/lib/payments/types";
 
 /**
