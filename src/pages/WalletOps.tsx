@@ -374,6 +374,16 @@ export default function WalletOps() {
           </div>
         </SectionCard>
 
+        {/* Automatic funding */}
+        <SectionCard
+          title="Automatic Funding"
+          icon={<Banknote className="h-4 w-4 text-emerald-500" />}
+          accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
+        >
+          <AutoFundingPanel canEdit={isAdmin} />
+        </SectionCard>
+
+
         {/* Payout preferences */}
         <SectionCard
           title="Payout Preferences"
