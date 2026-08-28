@@ -131,6 +131,32 @@ export function CheckStakeholdersManager({ checkIntakeItemId }: Props) {
     });
   }, [allAccounts, selectedIds, searchQuery, currentClaimHomeowner]);
 
+  const visiblePartners = useMemo(() => {
+    const query = searchQuery.toLowerCase().trim();
+    return (partnerOptions as any[]).filter(
+      (p) => !p.already_added && (!query || String(p.partner_name ?? "").toLowerCase().includes(query)),
+    );
+  }, [partnerOptions, searchQuery]);
+
+  const addPartnerMut = useMutation({
+    mutationFn: async (partnerTenantId: string) => {
+      const { error } = await (supabase as any).rpc("add_partner_stakeholder_to_check", {
+        _check_intake_item_id: checkIntakeItemId,
+        _partner_tenant_id: partnerTenantId,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["check-stakeholders", checkIntakeItemId] });
+      qc.invalidateQueries({ queryKey: ["partner-payout-options", checkIntakeItemId] });
+      qc.invalidateQueries({ queryKey: ["disbursement-accounts", checkIntakeItemId] });
+      setPickerOpen(false);
+      toast({ title: "Partner added", description: "Their approved payment account is attached to this check." });
+    },
+    onError: (e: any) => toast({ title: "Couldn't add partner", description: e.message, variant: "destructive" }),
+  });
+
+
   const addMut = useMutation({
     mutationFn: async (accountId: string) => {
       const { error } = await supabase.from("check_stakeholders").insert({
