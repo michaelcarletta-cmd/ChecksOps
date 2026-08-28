@@ -78,9 +78,13 @@ export function capabilityState(cap: CapabilityLike | null): ReadinessState {
 }
 
 export function currentlyDue(caps: CapabilityLike[] | null | undefined): string[] {
-  return (caps ?? [])
-    .flatMap((c) => c.requirements?.currentlyDue ?? [])
-    .filter((r): r is string => typeof r === "string" && r.length > 0);
+  return Array.from(
+    new Set(
+      (caps ?? [])
+        .flatMap((c) => c.requirements?.currentlyDue ?? [])
+        .filter((r): r is string => typeof r === "string" && r.length > 0),
+    ),
+  );
 }
 
 /** Bank verification is only "ready" when Moov reports the account verified. */
