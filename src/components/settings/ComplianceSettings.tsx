@@ -18,6 +18,8 @@ import { VerificationDocumentsPanel } from "@/components/payments/VerificationDo
 import { VettingDocumentsPanel } from "@/components/settings/VettingDocumentsPanel";
 import { PaymentAccountPanel } from "@/components/payments/PaymentAccountPanel";
 import { PaymentReadinessPanel } from "@/components/payments/PaymentReadinessPanel";
+import { MoovAccountLinkPanel } from "@/components/payments/MoovAccountLinkPanel";
+
 
 
 
