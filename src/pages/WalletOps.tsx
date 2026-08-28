@@ -54,6 +54,8 @@ import { useTenant } from "@/contexts/TenantContext";
 import { useToast } from "@/hooks/use-toast";
 import { SWEEP_RAIL_HINT, SWEEP_RAIL_LABEL, type SweepPushRail } from "@/lib/payments/sweeps";
 import { WalletPanel } from "@/components/payments/WalletPanel";
+import { AutoFundingPanel } from "@/components/payments/AutoFundingPanel";
+
 import { MoovTreasuryPanel } from "@/components/payments/MoovTreasuryPanel";
 import { PaymentAccountPanel } from "@/components/payments/PaymentAccountPanel";
 import { PaymentReadinessPanel } from "@/components/payments/PaymentReadinessPanel";
