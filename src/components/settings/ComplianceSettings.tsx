@@ -15,7 +15,6 @@ import { formatPhoneNumber } from "@/lib/utils";
 import { SettingsHero } from "./SettingsHero";
 import { SectionCard } from "./SectionCard";
 import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
-import { VettingDocumentsPanel } from "@/components/settings/VettingDocumentsPanel";
 import { PaymentAccountPanel } from "@/components/payments/PaymentAccountPanel";
 import { PaymentReadinessPanel } from "@/components/payments/PaymentReadinessPanel";
 
@@ -221,31 +220,14 @@ export function ComplianceSettings({ tenantId: tenantIdOverride }: { tenantId?: 
 
 
       <SectionCard
-        title="Onboarding Documents"
+        title="Payment Provider Verification"
         accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
         icon={<ShieldCheck className="h-4 w-4 text-sky-500" />}
-        description="Everything required to complete onboarding: W-9, license, insurance and signed agreements, plus the identity documents that stream directly to the payment provider."
+        description="Upload every onboarding document here — identity and business verification plus W-9, license, insurance and signed agreements. Documents stream to the payment provider and stay visible to tenant management."
       >
-        <div className="space-y-8">
-          <div className="space-y-3">
-            <div>
-              <h4 className="text-sm font-semibold">Vetting Documents</h4>
-              <p className="text-xs text-muted-foreground">W-9, license, insurance and signed agreements collected during onboarding.</p>
-            </div>
-            <VettingDocumentsPanel tenantId={tenant?.id} />
-          </div>
-
-          <Separator />
-
-          <div className="space-y-3">
-            <div>
-              <h4 className="text-sm font-semibold">Payment Provider Verification</h4>
-              <p className="text-xs text-muted-foreground">Identity documents that stream directly to the payment provider and are never stored here.</p>
-            </div>
-            <VerificationDocumentsPanel tenantId={tenant?.id} />
-          </div>
-        </div>
+        <VerificationDocumentsPanel tenantId={tenant?.id} />
       </SectionCard>
+
 
     </div>
 
