@@ -8,10 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, X, Users, Handshake, ShieldCheck, MailCheck, Lock, Home, Link2, Loader2, Search } from "lucide-react";
+import { Plus, X, Users, Handshake, ShieldCheck, MailCheck, Lock, Home, Link2, Loader2, Search, UserPlus } from "lucide-react";
 import { VERIFICATION_BADGE_CLASS, VERIFICATION_LABEL, type VerificationStatus } from "@/lib/banking";
 import { isMoovAllowedForTenant } from "@/lib/payments/featureFlags";
 import { SendHomeownerBankLinkDialog } from "./SendHomeownerBankLinkDialog";
+import { AddExternalStakeholderDialog } from "./AddExternalStakeholderDialog";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
 
 
