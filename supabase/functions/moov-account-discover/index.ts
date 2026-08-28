@@ -81,7 +81,15 @@ serve(async (req) => {
 
       await supabase
         .from("tenants")
-        .update({ moov_account_id: link_account_id })
+        .update({
+          moov_account_id: link_account_id,
+          // Clear the mirrored snapshot from the previous account so the UI
+          // never shows stale bank/verification state until the next sync.
+          bank_connection_status: "not_connected",
+          bank_name: null,
+          bank_last_four: null,
+          last_sync: null,
+        })
         .eq("id", tenant_id);
 
       return json({ success: true, linked_account_id: link_account_id });
