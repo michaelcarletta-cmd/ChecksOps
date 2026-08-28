@@ -4961,6 +4961,11 @@ export type Database = {
       }
       disbursement_batches: {
         Row: {
+          amount_reserved_cents: number
+          approved_amount_cents: number | null
+          approved_at: string | null
+          approved_by: string | null
+          auto_send_after_funding: boolean
           available_amount: number
           check_amount: number
           check_intake_item_id: string | null
@@ -4973,6 +4978,8 @@ export type Database = {
           debit_status: string | null
           delivery_speed: string | null
           deposit_item_id: string | null
+          funding_request_id: string | null
+          funding_status: string | null
           id: string
           moov_transfer_group_id: string | null
           notes: string | null
@@ -4985,6 +4992,11 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          amount_reserved_cents?: number
+          approved_amount_cents?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          auto_send_after_funding?: boolean
           available_amount: number
           check_amount: number
           check_intake_item_id?: string | null
@@ -4997,6 +5009,8 @@ export type Database = {
           debit_status?: string | null
           delivery_speed?: string | null
           deposit_item_id?: string | null
+          funding_request_id?: string | null
+          funding_status?: string | null
           id?: string
           moov_transfer_group_id?: string | null
           notes?: string | null
@@ -5009,6 +5023,11 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          amount_reserved_cents?: number
+          approved_amount_cents?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          auto_send_after_funding?: boolean
           available_amount?: number
           check_amount?: number
           check_intake_item_id?: string | null
@@ -5021,6 +5040,8 @@ export type Database = {
           debit_status?: string | null
           delivery_speed?: string | null
           deposit_item_id?: string | null
+          funding_request_id?: string | null
+          funding_status?: string | null
           id?: string
           moov_transfer_group_id?: string | null
           notes?: string | null
@@ -5074,6 +5095,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "deposit_reminder_queue"
             referencedColumns: ["deposit_item_id"]
+          },
+          {
+            foreignKeyName: "disbursement_batches_funding_request_id_fkey"
+            columns: ["funding_request_id"]
+            isOneToOne: false
+            referencedRelation: "wallet_funding_requests"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "disbursement_batches_tenant_id_fkey"
@@ -11738,6 +11766,89 @@ export type Database = {
           },
         ]
       }
+      tenant_wallet_funding_settings: {
+        Row: {
+          authorization_accepted_at: string | null
+          authorization_accepted_by: string | null
+          authorization_version: string | null
+          auto_funding_enabled: boolean
+          created_at: string
+          funding_bank_account_id: string | null
+          funding_payment_method_id: string | null
+          funding_strategy: string
+          id: string
+          maximum_daily_pull_cents: number
+          maximum_single_pull_cents: number
+          require_payment_approval: boolean
+          target_wallet_balance_cents: number
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          authorization_accepted_at?: string | null
+          authorization_accepted_by?: string | null
+          authorization_version?: string | null
+          auto_funding_enabled?: boolean
+          created_at?: string
+          funding_bank_account_id?: string | null
+          funding_payment_method_id?: string | null
+          funding_strategy?: string
+          id?: string
+          maximum_daily_pull_cents?: number
+          maximum_single_pull_cents?: number
+          require_payment_approval?: boolean
+          target_wallet_balance_cents?: number
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          authorization_accepted_at?: string | null
+          authorization_accepted_by?: string | null
+          authorization_version?: string | null
+          auto_funding_enabled?: boolean
+          created_at?: string
+          funding_bank_account_id?: string | null
+          funding_payment_method_id?: string | null
+          funding_strategy?: string
+          id?: string
+          maximum_daily_pull_cents?: number
+          maximum_single_pull_cents?: number
+          require_payment_approval?: boolean
+          target_wallet_balance_cents?: number
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_wallet_funding_settings_funding_bank_account_id_fkey"
+            columns: ["funding_bank_account_id"]
+            isOneToOne: false
+            referencedRelation: "payment_provider_methods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_wallet_funding_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenant_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_wallet_funding_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_wallet_funding_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenants: {
         Row: {
           ach_policy_acknowledged_at: string | null
@@ -12157,6 +12268,150 @@ export type Database = {
             columns: ["checkalt_deposit_id"]
             isOneToOne: false
             referencedRelation: "checkalt_deposits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wallet_funding_requests: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          failure_code: string | null
+          failure_reason: string | null
+          funds_available_at: string | null
+          id: string
+          idempotency_key: string
+          initiated_at: string | null
+          initiated_by: string | null
+          moov_account_id: string | null
+          moov_transfer_id: string | null
+          moov_wallet_id: string | null
+          payment_amount_cents: number
+          related_claim_check_file_id: string | null
+          related_payment_id: string | null
+          requested_amount_cents: number
+          shortage_amount_cents: number
+          source_bank_account_id: string | null
+          source_payment_method_id: string | null
+          status: string
+          strategy: string
+          tenant_id: string
+          transfer_id: string | null
+          updated_at: string
+          wallet_available_balance_at_request_cents: number
+          wallet_row_id: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          failure_code?: string | null
+          failure_reason?: string | null
+          funds_available_at?: string | null
+          id?: string
+          idempotency_key: string
+          initiated_at?: string | null
+          initiated_by?: string | null
+          moov_account_id?: string | null
+          moov_transfer_id?: string | null
+          moov_wallet_id?: string | null
+          payment_amount_cents?: number
+          related_claim_check_file_id?: string | null
+          related_payment_id?: string | null
+          requested_amount_cents: number
+          shortage_amount_cents?: number
+          source_bank_account_id?: string | null
+          source_payment_method_id?: string | null
+          status?: string
+          strategy?: string
+          tenant_id: string
+          transfer_id?: string | null
+          updated_at?: string
+          wallet_available_balance_at_request_cents?: number
+          wallet_row_id?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          failure_code?: string | null
+          failure_reason?: string | null
+          funds_available_at?: string | null
+          id?: string
+          idempotency_key?: string
+          initiated_at?: string | null
+          initiated_by?: string | null
+          moov_account_id?: string | null
+          moov_transfer_id?: string | null
+          moov_wallet_id?: string | null
+          payment_amount_cents?: number
+          related_claim_check_file_id?: string | null
+          related_payment_id?: string | null
+          requested_amount_cents?: number
+          shortage_amount_cents?: number
+          source_bank_account_id?: string | null
+          source_payment_method_id?: string | null
+          status?: string
+          strategy?: string
+          tenant_id?: string
+          transfer_id?: string | null
+          updated_at?: string
+          wallet_available_balance_at_request_cents?: number
+          wallet_row_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_funding_requests_related_claim_check_file_id_fkey"
+            columns: ["related_claim_check_file_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_funding_requests_related_payment_id_fkey"
+            columns: ["related_payment_id"]
+            isOneToOne: false
+            referencedRelation: "disbursement_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_funding_requests_source_bank_account_id_fkey"
+            columns: ["source_bank_account_id"]
+            isOneToOne: false
+            referencedRelation: "payment_provider_methods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_funding_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_funding_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_funding_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_funding_requests_transfer_id_fkey"
+            columns: ["transfer_id"]
+            isOneToOne: false
+            referencedRelation: "payment_transfers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_funding_requests_wallet_row_id_fkey"
+            columns: ["wallet_row_id"]
+            isOneToOne: false
+            referencedRelation: "payment_wallets"
             referencedColumns: ["id"]
           },
         ]
