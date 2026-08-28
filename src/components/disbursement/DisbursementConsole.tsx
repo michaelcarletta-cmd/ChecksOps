@@ -328,12 +328,48 @@ export function DisbursementConsole({
 
       if (splitsErr) throw splitsErr;
 
+      // Record the approval that authorizes any bank debit for this payment.
+      const approvedCents = Math.round(Number(availableAmount || 0) * 100);
+      await supabase
+        .from("disbursement_batches")
+        .update({
+          approved_at: new Date().toISOString(),
+          approved_by: user.id,
+          approved_amount_cents: approvedCents,
+        })
+        .eq("id", batch.id);
+
       // Primary rail: Moov. Nothing is paid there unless EVERY recipient is
       // Moov-ready, so a 409 leaves the batch untouched and we fall back to the
       // legacy rail for the whole batch.
       let moovFallbackNote: string | null = null;
 
       if (moovEnabled && deliverySpeed !== "external") {
+        // Does the wallet cover it? If not, pull the exact shortage first and
+        // hold the payment until the funds are actually available.
+        const { data: fundingCalc } = await supabase.functions.invoke("calculate-payment-funding", {
+          body: { tenant_id: tenant.id, payment_id: batch.id },
+        });
+
+        if ((fundingCalc as any)?.fundingRequired && (fundingCalc as any)?.auto_funding_enabled) {
+          const { data: fundData, error: fundErr } = await supabase.functions.invoke(
+            "initiate-wallet-funding",
+            { body: { tenant_id: tenant.id, payment_id: batch.id } },
+          );
+          if (fundErr) {
+            let reason: any = null;
+            try { reason = await (fundErr as any).context?.json?.(); } catch { reason = null; }
+            throw new Error(reason?.error ?? fundErr.message ?? "Could not start wallet funding.");
+          }
+          if ((fundData as any)?.funding_required !== false) {
+            return {
+              batchId: batch.id,
+              rail: "moov" as const,
+              note: `Awaiting funding — ${(Number((fundData as any)?.amount_cents ?? 0) / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })} is transferring from your bank. The payment sends automatically once the funds are available.`,
+            };
+          }
+        }
+
         const { data: moovData, error: moovErr } = await supabase.functions.invoke("moov-disburse", {
           body: { batch_id: batch.id, source_kind: sourceKind },
         });
@@ -341,6 +377,7 @@ export function DisbursementConsole({
         if (!moovErr && (moovData as any)?.success) {
           return { batchId: batch.id, rail: "moov" as const, note: null };
         }
+
 
         // Read the structured reason so we only fall back for setup gaps.
         let reason: any = (moovData as any) ?? null;

@@ -370,6 +370,10 @@ async function handleEvent(
       .eq("id", t.transfer_group_id);
   }
 
+  // Automatic wallet funding: keep the funding request in step, and send the
+  // approved payment once (and only once) the money is actually available.
+  await syncFundingRequest(supabase, environment, transferId, newStatus, patch.failure_reason as string | undefined);
+
   await supabase.from("payment_event_log").insert({
     provider: "moov",
     environment,
@@ -383,6 +387,91 @@ async function handleEvent(
     provider_metadata: sanitize({ provider_status: providerStatus }),
   });
 }
+
+const FUNDING_TERMINAL = ["completed", "failed", "returned", "canceled"];
+
+/**
+ * Maps a provider transfer status onto its wallet funding request.
+ *
+ * Webhooks duplicate and arrive out of order, so a terminal funding record is
+ * never moved backwards, and the outgoing payment is only ever handed to
+ * `process-funded-payment` — which itself locks before sending.
+ */
+async function syncFundingRequest(
+  supabase: any,
+  environment: string,
+  providerTransferId: string,
+  newStatus: string,
+  failureReason?: string,
+): Promise<void> {
+  const { data: request } = await supabase
+    .from("wallet_funding_requests")
+    .select("id, tenant_id, status, related_payment_id")
+    .eq("moov_transfer_id", providerTransferId)
+    .maybeSingle();
+  if (!request) return;
+  if (FUNDING_TERMINAL.includes(String(request.status))) return;
+
+  const map: Record<string, string> = {
+    completed: "completed",
+    failed: "failed",
+    returned: "returned",
+    reversed: "returned",
+    canceled: "canceled",
+    cancelled: "canceled",
+  };
+  const fundingStatus = map[newStatus] ?? "pending";
+  const now = new Date().toISOString();
+
+  await supabase.from("wallet_funding_requests").update({
+    status: fundingStatus,
+    failure_code: ["failed", "returned"].includes(fundingStatus) ? newStatus : null,
+    failure_reason: ["failed", "returned"].includes(fundingStatus) ? (failureReason ?? null) : null,
+    funds_available_at: fundingStatus === "completed" ? now : null,
+    completed_at: FUNDING_TERMINAL.includes(fundingStatus) ? now : null,
+  }).eq("id", request.id);
+
+  if (fundingStatus === "completed") {
+    // Hand off to the sender. Failed ACH debits are NEVER retried here.
+    await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/process-funded-payment`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-checksops-internal": Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+      },
+      body: JSON.stringify({ funding_request_id: request.id }),
+    }).catch((e) => console.error("[moov-webhook] process-funded-payment", (e as Error).message));
+    return;
+  }
+
+  if (["failed", "returned"].includes(fundingStatus) && request.related_payment_id) {
+    await supabase.from("disbursement_batches").update({
+      funding_status: fundingStatus === "returned" ? "action_required" : "funding_failed",
+      amount_reserved_cents: 0,
+      auto_send_after_funding: false,
+    }).eq("id", request.related_payment_id);
+
+    // Auditable alert for tenant finance admins — surfaced in Wallet Ops.
+    await supabase.from("payment_event_log").insert({
+      provider: "moov",
+      environment,
+      tenant_id: request.tenant_id,
+      provider_transfer_id: providerTransferId,
+      event_type: fundingStatus === "returned"
+        ? "wallet.funding.returned"
+        : "wallet.funding.failed",
+      new_status: fundingStatus,
+      provider_metadata: {
+        funding_request_id: request.id,
+        payment_id: request.related_payment_id,
+        action_required: true,
+      },
+    }).then(() => undefined, () => undefined);
+
+  }
+}
+
 
 
 /** Falls back to the event name when the payload carries no status. */

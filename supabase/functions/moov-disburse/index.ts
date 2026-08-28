@@ -47,20 +47,44 @@ serve(async (req) => {
 
     const tenantId = batch.tenant_id as string;
 
-    const caller = await requireMoovCaller(req, tenantId);
-    if (isResponse(caller)) return caller;
-    const { supabase, environment, userId } = caller;
+    /**
+     * Internal invocation: `process-funded-payment` sends an already approved
+     * payment once its wallet funding lands. It presents the service key, so
+     * there is no end user session to authenticate — the approval that
+     * authorized this send was recorded on the batch itself.
+     */
+    const internalKey = req.headers.get("x-checksops-internal");
+    const isInternal = Boolean(internalKey) &&
+      internalKey === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    /* ---------- Permission ---------- */
+    let supabase, environment: string, userId: string | null;
 
-    const { data: membership } = await supabase
-      .from("tenant_users").select("role")
-      .eq("tenant_id", tenantId).eq("user_id", userId).maybeSingle();
-    const { data: adminRole } = await supabase
-      .from("user_roles").select("role").eq("user_id", userId).eq("role", "admin").maybeSingle();
-    if (!adminRole && !["owner", "admin", "manager"].includes(String(membership?.role ?? ""))) {
-      return json({ error: "You do not have permission to send payments." }, 403);
+    if (isInternal) {
+      supabase = svc;
+      environment = (Deno.env.get("MOOV_ENVIRONMENT") ?? "sandbox").toLowerCase();
+      const { data: approver } = await svc
+        .from("disbursement_batches").select("approved_by, created_by")
+        .eq("id", batchId).maybeSingle();
+      userId = approver?.approved_by ?? approver?.created_by ?? null;
+    } else {
+      const caller = await requireMoovCaller(req, tenantId);
+      if (isResponse(caller)) return caller;
+      supabase = caller.supabase;
+      environment = caller.environment;
+      userId = caller.userId;
+
+      /* ---------- Permission ---------- */
+
+      const { data: membership } = await supabase
+        .from("tenant_users").select("role")
+        .eq("tenant_id", tenantId).eq("user_id", userId).maybeSingle();
+      const { data: adminRole } = await supabase
+        .from("user_roles").select("role").eq("user_id", userId).eq("role", "admin").maybeSingle();
+      if (!adminRole && !["owner", "admin", "manager"].includes(String(membership?.role ?? ""))) {
+        return json({ error: "You do not have permission to send payments." }, 403);
+      }
     }
+
 
     /* ---------- Splits ---------- */
 
