@@ -190,9 +190,73 @@ export default function RecipientPaymentSetup() {
               </div>
             )}
 
-            {!loading && !error && !done && (
-              <div ref={dropRef} className="min-h-[220px]" />
+            {!loading && session && !done && (
+              <form onSubmit={handleSubmit} className="space-y-4 pt-1">
+                <div className="space-y-2">
+                  <Label htmlFor="holder-name">Account holder name</Label>
+                  <Input
+                    id="holder-name"
+                    value={holderName}
+                    onChange={(e) => setHolderName(e.target.value.slice(0, 128))}
+                    placeholder="Exactly as it appears at your bank"
+                    autoComplete="off"
+                  />
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Account owner</Label>
+                    <Select value={holderType} onValueChange={setHolderType}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="individual">Individual</SelectItem>
+                        <SelectItem value="business">Business</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Account type</Label>
+                    <Select value={bankAccountType} onValueChange={setBankAccountType}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="checking">Checking</SelectItem>
+                        <SelectItem value="savings">Savings</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="routing">Routing number</Label>
+                  <Input
+                    id="routing"
+                    inputMode="numeric"
+                    value={routingNumber}
+                    onChange={(e) => setRoutingNumber(digitsOnly(e.target.value, 9))}
+                    placeholder="9 digits"
+                    autoComplete="off"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="account">Account number</Label>
+                  <Input
+                    id="account"
+                    inputMode="numeric"
+                    value={accountNumber}
+                    onChange={(e) => setAccountNumber(digitsOnly(e.target.value, 17))}
+                    placeholder="4–17 digits"
+                    autoComplete="off"
+                  />
+                </div>
+
+                <Button type="submit" className="w-full" disabled={!canSubmit}>
+                  {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Save bank account
+                </Button>
+              </form>
             )}
+
           </CardContent>
         </Card>
 
