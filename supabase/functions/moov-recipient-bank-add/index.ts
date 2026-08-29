@@ -51,7 +51,7 @@ serve(async (req) => {
 
     const { data: recipient } = await supabase
       .from("external_payment_recipients")
-      .select("id, tenant_id, provider_account_id, token_expires_at, environment")
+      .select("id, tenant_id, provider_account_id, token_expires_at, environment, stakeholder_account_id")
       .eq("secure_token", token)
       .maybeSingle();
 
@@ -97,11 +97,11 @@ serve(async (req) => {
       })
       .eq("id", recipient.id);
 
-    if (recipient.stakeholder_account_id) {
+    if ((recipient as any).stakeholder_account_id) {
       await supabase
         .from("stakeholder_accounts")
         .update({ verification_status: status === "verified" ? "verified" : "pending" })
-        .eq("id", recipient.stakeholder_account_id);
+        .eq("id", (recipient as any).stakeholder_account_id);
     }
 
     await supabase.from("payment_event_log").insert(sanitize({
