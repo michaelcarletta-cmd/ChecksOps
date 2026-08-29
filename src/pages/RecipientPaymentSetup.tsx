@@ -1,9 +1,20 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { applyMoovTheme } from "@/lib/payments/moovTheme";
 import { Loader2, ShieldCheck, Landmark, AlertCircle, CheckCircle2 } from "lucide-react";
+
 
 
 /**
@@ -28,35 +39,19 @@ interface SessionData {
   environment: string;
 }
 
-const MOOV_JS_SRC = "https://js.moov.io/v1";
-
-function useMoovScript(enabled: boolean) {
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    if (!enabled) return;
-    if ((window as any).Moov) { setReady(true); return; }
-    const existing = document.querySelector(`script[src="${MOOV_JS_SRC}"]`);
-    if (existing) {
-      existing.addEventListener("load", () => setReady(true));
-      return;
-    }
-    const s = document.createElement("script");
-    s.src = MOOV_JS_SRC;
-    s.async = true;
-    s.onload = () => setReady(true);
-    document.body.appendChild(s);
-  }, [enabled]);
-  return ready;
-}
-
 export default function RecipientPaymentSetup() {
   const { token } = useParams<{ token: string }>();
   const [session, setSession] = useState<SessionData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [done, setDone] = useState(false);
-  const dropRef = useRef<HTMLDivElement>(null);
-  const scriptReady = useMoovScript(!!session);
+  const [saving, setSaving] = useState(false);
+  const [holderName, setHolderName] = useState("");
+  const [holderType, setHolderType] = useState("individual");
+  const [bankAccountType, setBankAccountType] = useState("checking");
+  const [routingNumber, setRoutingNumber] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+
 
   // Brand the hosted Moov component so it matches the payer's look.
   useEffect(
@@ -95,25 +90,49 @@ export default function RecipientPaymentSetup() {
     return () => { cancelled = true; };
   }, [token]);
 
-  useEffect(() => {
-    if (!session || !scriptReady || !dropRef.current) return;
-    const Moov = (window as any).Moov;
-    if (!Moov?.mount) return;
+  const digitsOnly = (value: string, max: number) => value.replace(/\D/g, "").slice(0, max);
 
+  const canSubmit =
+    holderName.trim().length >= 2 &&
+    routingNumber.length === 9 &&
+    accountNumber.length >= 4 &&
+    !saving;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setSaving(true);
+    setError(null);
     try {
-      // Hosted bank-account component. Sensitive fields are rendered and
-      // submitted by the provider, not by ChecksOps.
-      Moov.mount(dropRef.current, {
-        drop: "bank-account",
-        token: session.token,
-        accountID: session.account_id,
-        onSuccess: () => setDone(true),
-        onError: (err: any) => setError(err?.message ?? "Could not save your bank account."),
+      const { data, error: fnErr } = await supabase.functions.invoke("moov-recipient-bank-add", {
+        body: {
+          token,
+          holder_name: holderName.trim(),
+          holder_type: holderType,
+          bank_account_type: bankAccountType,
+          routing_number: routingNumber,
+          account_number: accountNumber,
+        },
       });
-    } catch (e: any) {
-      setError(e?.message ?? "Could not load the secure bank form.");
+      if (fnErr) {
+        let message = "Could not save your bank account.";
+        try {
+          const parsed = await (fnErr as any).context?.json?.();
+          if (parsed?.error) message = parsed.error;
+        } catch { /* keep default */ }
+        throw new Error(message);
+      }
+      if ((data as any)?.error) throw new Error((data as any).error);
+      setAccountNumber("");
+      setRoutingNumber("");
+      setDone(true);
+    } catch (err: any) {
+      setError(err?.message ?? "Could not save your bank account.");
+    } finally {
+      setSaving(false);
     }
-  }, [session, scriptReady]);
+  }
+
 
   return (
     <main className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -171,9 +190,73 @@ export default function RecipientPaymentSetup() {
               </div>
             )}
 
-            {!loading && !error && !done && (
-              <div ref={dropRef} className="min-h-[220px]" />
+            {!loading && session && !done && (
+              <form onSubmit={handleSubmit} className="space-y-4 pt-1">
+                <div className="space-y-2">
+                  <Label htmlFor="holder-name">Account holder name</Label>
+                  <Input
+                    id="holder-name"
+                    value={holderName}
+                    onChange={(e) => setHolderName(e.target.value.slice(0, 128))}
+                    placeholder="Exactly as it appears at your bank"
+                    autoComplete="off"
+                  />
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Account owner</Label>
+                    <Select value={holderType} onValueChange={setHolderType}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="individual">Individual</SelectItem>
+                        <SelectItem value="business">Business</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Account type</Label>
+                    <Select value={bankAccountType} onValueChange={setBankAccountType}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="checking">Checking</SelectItem>
+                        <SelectItem value="savings">Savings</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="routing">Routing number</Label>
+                  <Input
+                    id="routing"
+                    inputMode="numeric"
+                    value={routingNumber}
+                    onChange={(e) => setRoutingNumber(digitsOnly(e.target.value, 9))}
+                    placeholder="9 digits"
+                    autoComplete="off"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="account">Account number</Label>
+                  <Input
+                    id="account"
+                    inputMode="numeric"
+                    value={accountNumber}
+                    onChange={(e) => setAccountNumber(digitsOnly(e.target.value, 17))}
+                    placeholder="4–17 digits"
+                    autoComplete="off"
+                  />
+                </div>
+
+                <Button type="submit" className="w-full" disabled={!canSubmit}>
+                  {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Save bank account
+                </Button>
+              </form>
             )}
+
           </CardContent>
         </Card>
 
