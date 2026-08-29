@@ -95,25 +95,49 @@ export default function RecipientPaymentSetup() {
     return () => { cancelled = true; };
   }, [token]);
 
-  useEffect(() => {
-    if (!session || !scriptReady || !dropRef.current) return;
-    const Moov = (window as any).Moov;
-    if (!Moov?.mount) return;
+  const digitsOnly = (value: string, max: number) => value.replace(/\D/g, "").slice(0, max);
 
+  const canSubmit =
+    holderName.trim().length >= 2 &&
+    routingNumber.length === 9 &&
+    accountNumber.length >= 4 &&
+    !saving;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setSaving(true);
+    setError(null);
     try {
-      // Hosted bank-account component. Sensitive fields are rendered and
-      // submitted by the provider, not by ChecksOps.
-      Moov.mount(dropRef.current, {
-        drop: "bank-account",
-        token: session.token,
-        accountID: session.account_id,
-        onSuccess: () => setDone(true),
-        onError: (err: any) => setError(err?.message ?? "Could not save your bank account."),
+      const { data, error: fnErr } = await supabase.functions.invoke("moov-recipient-bank-add", {
+        body: {
+          token,
+          holder_name: holderName.trim(),
+          holder_type: holderType,
+          bank_account_type: bankAccountType,
+          routing_number: routingNumber,
+          account_number: accountNumber,
+        },
       });
-    } catch (e: any) {
-      setError(e?.message ?? "Could not load the secure bank form.");
+      if (fnErr) {
+        let message = "Could not save your bank account.";
+        try {
+          const parsed = await (fnErr as any).context?.json?.();
+          if (parsed?.error) message = parsed.error;
+        } catch { /* keep default */ }
+        throw new Error(message);
+      }
+      if ((data as any)?.error) throw new Error((data as any).error);
+      setAccountNumber("");
+      setRoutingNumber("");
+      setDone(true);
+    } catch (err: any) {
+      setError(err?.message ?? "Could not save your bank account.");
+    } finally {
+      setSaving(false);
     }
-  }, [session, scriptReady]);
+  }
+
 
   return (
     <main className="min-h-screen bg-background flex items-center justify-center p-4">
