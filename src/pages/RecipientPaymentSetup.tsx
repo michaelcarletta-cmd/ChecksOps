@@ -39,35 +39,19 @@ interface SessionData {
   environment: string;
 }
 
-const MOOV_JS_SRC = "https://js.moov.io/v1";
-
-function useMoovScript(enabled: boolean) {
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    if (!enabled) return;
-    if ((window as any).Moov) { setReady(true); return; }
-    const existing = document.querySelector(`script[src="${MOOV_JS_SRC}"]`);
-    if (existing) {
-      existing.addEventListener("load", () => setReady(true));
-      return;
-    }
-    const s = document.createElement("script");
-    s.src = MOOV_JS_SRC;
-    s.async = true;
-    s.onload = () => setReady(true);
-    document.body.appendChild(s);
-  }, [enabled]);
-  return ready;
-}
-
 export default function RecipientPaymentSetup() {
   const { token } = useParams<{ token: string }>();
   const [session, setSession] = useState<SessionData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [done, setDone] = useState(false);
-  const dropRef = useRef<HTMLDivElement>(null);
-  const scriptReady = useMoovScript(!!session);
+  const [saving, setSaving] = useState(false);
+  const [holderName, setHolderName] = useState("");
+  const [holderType, setHolderType] = useState("individual");
+  const [bankAccountType, setBankAccountType] = useState("checking");
+  const [routingNumber, setRoutingNumber] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+
 
   // Brand the hosted Moov component so it matches the payer's look.
   useEffect(
