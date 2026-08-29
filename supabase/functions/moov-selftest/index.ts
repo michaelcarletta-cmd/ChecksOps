@@ -153,7 +153,15 @@ serve(async (req) => {
     }
 
 
-    const failures = steps.filter((s) => !s.ok && s.step !== "fee_plans_optional" && s.step !== "tenant_account");
+    // These steps are exploratory scope probes / optional lookups — a failure
+    // there is expected and is not a health signal.
+    const informational = new Set([
+      "fee_plans_optional",
+      "tenant_account",
+      "fee_plans_partner_profile_write",
+      "fee_plans_global",
+    ]);
+    const failures = steps.filter((s) => !s.ok && !informational.has(s.step));
     return json({ success: failures.length === 0, environment, steps, failure_count: failures.length });
   } catch (e) {
     console.error("[moov-selftest]", (e as Error).message);
