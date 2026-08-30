@@ -117,7 +117,7 @@ serve(async (req) => {
           templateData: {
             nickname: account.nickname,
             custname: account.custname,
-            verifyUrl: `${Deno.env.get("APP_BASE_URL") ?? "https://checksops.com"}/verify-account/${token}`,
+            verifyUrl,
           },
         },
       });
