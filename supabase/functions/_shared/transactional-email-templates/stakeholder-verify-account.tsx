@@ -32,10 +32,9 @@ const Email = ({ nickname, custname, verifyUrl }: Props) => (
           link your bank account.
         </Text>
         <Text style={text}>
-          Click the button below, then sign in to your bank through our
-          verification partner. This confirms your account instantly — no
-          waiting on deposits, and we never see or store your bank login
-          credentials.
+          Click the button below to open your secure setup page, then enter
+          your bank details. They go straight to our regulated payments
+          partner — {SITE_NAME} never stores your full account number.
         </Text>
 
         <Section style={{ textAlign: 'center', margin: '24px 0' }}>
