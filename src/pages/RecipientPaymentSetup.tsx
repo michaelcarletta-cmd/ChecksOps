@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,6 +51,17 @@ export default function RecipientPaymentSetup() {
   const [bankAccountType, setBankAccountType] = useState("checking");
   const [routingNumber, setRoutingNumber] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [dob, setDob] = useState("");
+  const [ssn, setSsn] = useState("");
+  const [ein, setEin] = useState("");
+  const [addressLine1, setAddressLine1] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [postalCode, setPostalCode] = useState("");
+  const [tosReady, setTosReady] = useState(false);
+  const tosMountRef = useRef<HTMLDivElement | null>(null);
 
 
   // Brand the hosted Moov component so it matches the payer's look.
@@ -90,12 +101,46 @@ export default function RecipientPaymentSetup() {
     return () => { cancelled = true; };
   }, [token]);
 
+  // Mount the provider's hosted Terms of Service component once the session
+  // token is available; it mints the acceptance token we submit with the form.
+  const tosTokenRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!session?.token) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await loadMoovJs();
+        if (cancelled || !tosMountRef.current) return;
+        const el = document.createElement("moov-terms-of-service") as any;
+        el.token = session.token;
+        el.onTermsOfServiceTokenReady = (t: any) => {
+          tosTokenRef.current = typeof t === "string" ? t : t?.token ?? null;
+          setTosReady(Boolean(tosTokenRef.current));
+        };
+        el.onTermsOfServiceTokenError = () => setTosReady(false);
+        tosMountRef.current.replaceChildren(el);
+      } catch { /* leave ToS hidden; submit will surface an error */ }
+    })();
+    return () => { cancelled = true; };
+  }, [session?.token]);
+
   const digitsOnly = (value: string, max: number) => value.replace(/\D/g, "").slice(0, max);
+
+  const identityValid =
+    addressLine1.trim().length >= 3 &&
+    city.trim().length >= 1 &&
+    /^[A-Za-z]{2}$/.test(state.trim()) &&
+    postalCode.trim().length >= 5 &&
+    (holderType === "business"
+      ? ein.length === 9
+      : firstName.trim().length >= 1 && lastName.trim().length >= 1 && /^\d{4}-\d{2}-\d{2}$/.test(dob) && ssn.length === 9);
 
   const canSubmit =
     holderName.trim().length >= 2 &&
     routingNumber.length === 9 &&
     accountNumber.length >= 4 &&
+    identityValid &&
+    tosReady &&
     !saving;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -112,6 +157,16 @@ export default function RecipientPaymentSetup() {
           bank_account_type: bankAccountType,
           routing_number: routingNumber,
           account_number: accountNumber,
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          dob,
+          ssn,
+          ein,
+          address_line1: addressLine1.trim(),
+          city: city.trim(),
+          state: state.trim().toUpperCase(),
+          postal_code: postalCode.trim(),
+          tos_token: tosTokenRef.current,
         },
       });
       if (fnErr) {
@@ -125,6 +180,8 @@ export default function RecipientPaymentSetup() {
       if ((data as any)?.error) throw new Error((data as any).error);
       setAccountNumber("");
       setRoutingNumber("");
+      setSsn("");
+      setEin("");
       setDone(true);
     } catch (err: any) {
       setError(err?.message ?? "Could not save your bank account.");
@@ -226,6 +283,77 @@ export default function RecipientPaymentSetup() {
                   </div>
                 </div>
 
+                <div className="rounded-md border border-border/60 p-3 space-y-4">
+                  <p className="text-xs font-medium text-foreground">
+                    Verify your identity
+                  </p>
+                  <p className="text-[11px] text-muted-foreground -mt-2">
+                    Required by our payment provider before it can send you money. These details
+                    go directly to the provider and are never stored by ChecksOps.
+                  </p>
+
+                  {holderType === "individual" ? (
+                    <>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="first-name">Legal first name</Label>
+                          <Input id="first-name" value={firstName}
+                            onChange={(e) => setFirstName(e.target.value.slice(0, 64))} autoComplete="given-name" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="last-name">Legal last name</Label>
+                          <Input id="last-name" value={lastName}
+                            onChange={(e) => setLastName(e.target.value.slice(0, 64))} autoComplete="family-name" />
+                        </div>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="dob">Date of birth</Label>
+                          <Input id="dob" type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="ssn">SSN</Label>
+                          <Input id="ssn" inputMode="numeric" type="password" value={ssn}
+                            onChange={(e) => setSsn(digitsOnly(e.target.value, 9))}
+                            placeholder="9 digits" autoComplete="off" />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label htmlFor="ein">Business EIN</Label>
+                      <Input id="ein" inputMode="numeric" value={ein}
+                        onChange={(e) => setEin(digitsOnly(e.target.value, 9))}
+                        placeholder="9 digits" autoComplete="off" />
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="addr">Street address</Label>
+                    <Input id="addr" value={addressLine1}
+                      onChange={(e) => setAddressLine1(e.target.value.slice(0, 128))} autoComplete="address-line1" />
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="city">City</Label>
+                      <Input id="city" value={city}
+                        onChange={(e) => setCity(e.target.value.slice(0, 64))} autoComplete="address-level2" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="state">State</Label>
+                      <Input id="state" value={state} maxLength={2}
+                        onChange={(e) => setState(e.target.value.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase())}
+                        placeholder="NJ" autoComplete="address-level1" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="zip">ZIP</Label>
+                      <Input id="zip" inputMode="numeric" value={postalCode}
+                        onChange={(e) => setPostalCode(e.target.value.replace(/[^\d-]/g, "").slice(0, 10))}
+                        autoComplete="postal-code" />
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="routing">Routing number</Label>
                   <Input
@@ -250,9 +378,16 @@ export default function RecipientPaymentSetup() {
                   />
                 </div>
 
+                <div ref={tosMountRef} className="text-[11px] text-muted-foreground" />
+                {!tosReady && !done && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Loading the payment provider's Terms of Service…
+                  </p>
+                )}
+
                 <Button type="submit" className="w-full" disabled={!canSubmit}>
                   {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Save bank account
+                  Agree & save bank account
                 </Button>
               </form>
             )}
@@ -267,4 +402,22 @@ export default function RecipientPaymentSetup() {
       </div>
     </main>
   );
+}
+
+let moovJsPromise: Promise<void> | null = null;
+
+/** Loads the provider's browser SDK once, on demand (Terms of Service Drop). */
+function loadMoovJs(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  if ((window as any).customElements?.get?.("moov-terms-of-service")) return Promise.resolve();
+  if (moovJsPromise) return moovJsPromise;
+  moovJsPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://js.moov.io/v1";
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Could not load the payment provider's secure component."));
+    document.head.appendChild(script);
+  });
+  return moovJsPromise;
 }

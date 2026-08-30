@@ -32,6 +32,20 @@ serve(async (req) => {
     const routingNumber = String(body?.routing_number ?? "").replace(/\D/g, "");
     const accountNumber = String(body?.account_number ?? "").replace(/\D/g, "");
 
+    // Identity details the provider requires before it will pay this recipient.
+    const firstName = String(body?.first_name ?? "").trim();
+    const lastName = String(body?.last_name ?? "").trim();
+    const dob = String(body?.dob ?? "").trim(); // YYYY-MM-DD (individuals)
+    const addressLine1 = String(body?.address_line1 ?? "").trim();
+    const city = String(body?.city ?? "").trim();
+    const state = String(body?.state ?? "").trim().toUpperCase();
+    const postalCode = String(body?.postal_code ?? "").trim();
+    const ssn = String(body?.ssn ?? "").replace(/\D/g, "");
+    const ein = String(body?.ein ?? "").replace(/\D/g, "");
+    const tosToken = typeof body?.tos_token === "string" && body.tos_token.length >= 8
+      ? String(body.tos_token)
+      : null;
+
     if (!token) return json({ error: "token is required" }, 400);
     if (holderName.length < 2 || holderName.length > 128) {
       return json({ error: "Enter the account holder name as it appears at the bank." }, 400);
@@ -41,6 +55,27 @@ serve(async (req) => {
     }
     if (!DIGITS.test(accountNumber) || accountNumber.length < 4 || accountNumber.length > 17) {
       return json({ error: "Account number must be between 4 and 17 digits." }, 400);
+    }
+
+    // Identity validation — forwarded to the provider, never stored.
+    if (!addressLine1 || !city || !/^[A-Z]{2}$/.test(state) || postalCode.length < 5) {
+      return json({ error: "Enter your full legal address (street, city, state, ZIP)." }, 400);
+    }
+    if (holderType === "individual") {
+      if (!firstName || !lastName) {
+        return json({ error: "Enter your legal first and last name." }, 400);
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
+        return json({ error: "Enter your date of birth." }, 400);
+      }
+      if (ssn.length !== 9) {
+        return json({ error: "Enter your full 9-digit SSN." }, 400);
+      }
+    } else if (ein.length !== 9) {
+      return json({ error: "Enter the business 9-digit EIN." }, 400);
+    }
+    if (!tosToken) {
+      return json({ error: "Please review and accept the payment provider's Terms of Service." }, 400);
     }
 
     const environment = moovEnvironment();
@@ -64,6 +99,74 @@ serve(async (req) => {
     }
     const accountId = recipient.provider_account_id as string | null;
     if (!accountId) return json({ error: "This payment setup is not ready yet." }, 409);
+
+    // 1. Record Terms of Service acceptance (token minted by the provider's
+    //    hosted component in the browser).
+    try {
+      await moovFetch<any>(`/accounts/${accountId}`, {
+        method: "PATCH",
+        scopes: scopes.accountWrite(accountId),
+        body: { termsOfService: { token: tosToken } },
+      });
+    } catch (e) {
+      // Already-accepted ToS returns an error on some accounts — only fail hard
+      // if the capability request below also fails.
+      console.error("[moov-recipient-bank-add] tos patch", (e as Error).message);
+    }
+
+    // 2. Submit the identity profile the provider needs to pay this recipient.
+    //    SSN/EIN are forwarded only — never persisted or logged.
+    const [dobYear, dobMonth, dobDay] = dob ? dob.split("-").map(Number) : [0, 0, 0];
+    const address = {
+      addressLine1,
+      city,
+      stateOrProvince: state,
+      postalCode,
+      country: "US",
+    };
+    const profileBody = holderType === "business"
+      ? {
+        accountType: "business",
+        profile: {
+          business: {
+            legalBusinessName: holderName,
+            address,
+            governmentID: { ein: { full: ein } },
+          },
+        },
+      }
+      : {
+        accountType: "individual",
+        profile: {
+          individual: {
+            name: { firstName, lastName },
+            address,
+            birthDate: { day: dobDay, month: dobMonth, year: dobYear },
+            governmentID: { ssn: { full: ssn, last4: ssn.slice(-4) } },
+          },
+        },
+      };
+    try {
+      await moovFetch<any>(`/accounts/${accountId}`, {
+        method: "PATCH",
+        scopes: scopes.accountWrite(accountId),
+        body: profileBody,
+      });
+    } catch (e) {
+      console.error("[moov-recipient-bank-add] profile patch", (e as Error).message);
+      return json({ error: "The payment provider could not verify your identity details. Please check them and try again." }, 502);
+    }
+
+    // 3. Enable the capabilities required to receive payments.
+    try {
+      await moovFetch<any>(`/accounts/${accountId}/capabilities`, {
+        method: "POST",
+        scopes: scopes.capabilitiesWrite(accountId),
+        body: { capabilities: ["send-funds", "receive-funds", "wallet"] },
+      });
+    } catch (e) {
+      console.error("[moov-recipient-bank-add] capabilities", (e as Error).message);
+    }
 
     let created: any;
     try {
