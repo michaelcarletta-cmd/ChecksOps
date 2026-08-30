@@ -281,6 +281,12 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
       setInvoiceShippingDesc(rr.invoice_shipping_description || "2-Day shipping label");
       setInvoiceRecipient(rr.invoice_recipient_email || "");
       setInvoiceNotes(rr.invoice_notes || "");
+      setMailToName(rr.mail_to_name || rr.mortgage_company || "");
+      setMailToAddress(rr.mail_to_address || "");
+      setShipCarrier(rr.shipping_label_carrier || "");
+      setShipTracking(rr.shipping_label_tracking || "");
+
+
 
       const tenantP = supabase.from("tenants").select("id,name").eq("id", r.tenant_id).maybeSingle();
       const checkP = r.check_intake_item_id
