@@ -246,7 +246,16 @@ function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () =>
         </CardContent>
       </Card>
 
+      <ProjectSchedulePanel plan={data.project_plan ?? null} />
+      <MoneySummaryPanel
+        money={data.money ?? null}
+        payments={data.deductible_payments ?? []}
+        token={token}
+        onPaid={onRefresh}
+      />
+
       <CollapsibleUpload token={token} onDone={onRefresh} />
+
 
       <PendingEndorsementsPanel pending={data.pending_endorsements ?? []} />
       <PendingSignaturesPanel token={token} pending={data.pending_signatures ?? []} />
