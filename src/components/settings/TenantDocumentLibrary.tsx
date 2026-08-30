@@ -11,11 +11,23 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import {
   FileText, Upload, Loader2, Trash2, Download, Palette, Home as HomeIcon,
-  FileSignature, Image as ImageIcon, Headset, Eye,
+  FileSignature, Image as ImageIcon, Headset, Eye, Landmark,
 } from "lucide-react";
 
 // Categories stored as doc_type = `library:<category>:<slug>`
-type LibraryCategory = "template" | "shingle" | "siding" | "letterhead" | "catalog";
+type LibraryCategory = "mortgage" | "template" | "shingle" | "siding" | "letterhead" | "catalog";
+
+// Mortgage companies almost always ask for the same packet up front.
+const MORTGAGE_DOC_KINDS = [
+  "W-9",
+  "Contractor license",
+  "General liability insurance",
+  "Workers comp insurance",
+  "Certificate of insurance",
+  "Signed contract",
+  "Adjuster / TPA letter",
+  "Other",
+];
 
 const CATEGORIES: {
   key: LibraryCategory;
@@ -24,6 +36,15 @@ const CATEGORIES: {
   accept: string;
   icon: any;
 }[] = [
+  {
+    key: "mortgage",
+    label: "Mortgage docs",
+    description:
+      "W-9, contractor license, insurance certificates and anything else mortgage companies request. These auto-attach to every check you send to the Mortgage Desk, so ops never has to ask you for them.",
+    accept: ".pdf,.doc,.docx,image/*",
+    icon: Landmark,
+  },
+
   {
     key: "template",
     label: "Templates",
@@ -108,13 +129,15 @@ export function TenantDocumentLibrary({ tenantId }: { tenantId: string }) {
           <FileText className="h-4 w-4" /> Document Library
         </CardTitle>
         <CardDescription>
-          Templates, color catalogs, and letterhead assets your team reuses across claims.
-          Files here appear in mortgage ops, loss draft docs, and the homeowner selection flow.
+          Mortgage packet docs (W-9, license, insurance), templates, color catalogs, and letterhead
+          your team reuses across claims. Mortgage docs auto-attach to every check you send to the
+          ChecksOps Mortgage Desk, so they never have to ask you for them.
         </CardDescription>
+
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="template">
-          <TabsList className="grid grid-cols-4 w-full">
+        <Tabs defaultValue="mortgage">
+          <TabsList className="flex w-full flex-wrap h-auto gap-1">
             {CATEGORIES.map((c) => (
               <TabsTrigger key={c.key} value={c.key} className="text-xs">
                 <c.icon className="h-3.5 w-3.5 mr-1" /> {c.label}
@@ -130,8 +153,11 @@ export function TenantDocumentLibrary({ tenantId }: { tenantId: string }) {
                   tenantId={tenantId}
                   category={c.key}
                   accept={c.accept}
+                  kinds={c.key === "mortgage" ? MORTGAGE_DOC_KINDS : undefined}
+                  defaultAutoShare={c.key === "mortgage"}
                   onDone={load}
                 />
+
                 {loading ? (
                   <div className="py-6 flex justify-center">
                     <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
@@ -157,12 +183,21 @@ export function TenantDocumentLibrary({ tenantId }: { tenantId: string }) {
 }
 
 function UploadBar({
-  tenantId, category, accept, onDone,
-}: { tenantId: string; category: LibraryCategory; accept: string; onDone: () => void }) {
+  tenantId, category, accept, kinds, defaultAutoShare, onDone,
+}: {
+  tenantId: string;
+  category: LibraryCategory;
+  accept: string;
+  kinds?: string[];
+  defaultAutoShare?: boolean;
+  onDone: () => void;
+}) {
   const { user } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [displayName, setDisplayName] = useState("");
+  const [kind, setKind] = useState(kinds?.[0] ?? "");
+  const [autoShare, setAutoShare] = useState(!!defaultAutoShare);
 
   const handleUpload = async (file: File) => {
     if (file.size > 25 * 1024 * 1024) {
@@ -178,7 +213,8 @@ function UploadBar({
         .upload(path, file, { upsert: false, contentType: file.type });
       if (upErr) throw upErr;
 
-      const slug = (displayName || file.name)
+      const label = displayName || (kinds && kind && kind !== "Other" ? kind : "") || file.name;
+      const slug = label
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "")
@@ -188,13 +224,17 @@ function UploadBar({
         tenant_id: tenantId,
         doc_type: `${PREFIX}${category}:${slug}`,
         file_path: path,
-        file_name: displayName || file.name,
+        file_name: label,
         mime_type: file.type,
         file_size: file.size,
+        auto_share_mortgage_ops: autoShare,
         uploaded_by: user?.id ?? null,
       });
       if (insErr) throw insErr;
-      toast({ title: "Added to library" });
+      toast({
+        title: "Added to library",
+        description: autoShare ? "Will auto-attach to Mortgage Desk requests." : undefined,
+      });
       setDisplayName("");
       onDone();
     } catch (e: any) {
@@ -207,15 +247,34 @@ function UploadBar({
 
   return (
     <div className="flex flex-wrap items-end gap-2 rounded border border-border p-3">
+      {kinds && (
+        <div className="space-y-1 min-w-[180px]">
+          <Label className="text-xs">Document type</Label>
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value)}
+            className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
+          >
+            {kinds.map((k) => (
+              <option key={k} value={k}>{k}</option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="space-y-1 flex-1 min-w-[180px]">
         <Label className="text-xs">Display name (optional)</Label>
         <Input
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
-          placeholder="e.g. Third Party Authorization"
+          placeholder={kinds ? "e.g. W-9 (2026)" : "e.g. Third Party Authorization"}
           className="h-8"
         />
       </div>
+      <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none pb-1.5">
+        <Checkbox checked={autoShare} onCheckedChange={(v) => setAutoShare(v === true)} />
+        <span className="flex items-center gap-1"><Headset className="h-3 w-3" /> Auto-share with Mortgage Ops</span>
+      </label>
+
       <input
         ref={fileRef}
         type="file"
@@ -263,12 +322,39 @@ function LibraryItem({ row, onChange }: { row: LibraryRow; onChange: () => void 
       .from("tenant_documents" as any)
       .update({ auto_share_mortgage_ops: next } as any)
       .eq("id", row.id);
-    setSaving(false);
     if (error) {
+      setSaving(false);
       setAutoShare(!next);
       toast({ title: "Could not update", description: error.message, variant: "destructive" });
       return;
     }
+
+    // Backfill: attach to Mortgage Desk requests that are still open, so ops
+    // gets the doc even if it was uploaded after the check was sent.
+    if (next) {
+      const { data: openReqs } = await supabase
+        .from("mortgage_handling_requests")
+        .select("id")
+        .eq("tenant_id", row.tenant_id)
+        .in("status", ["requested", "in_progress"]);
+      if (openReqs?.length) {
+        await supabase.from("mortgage_request_library_documents" as any).upsert(
+          openReqs.map((r: any) => ({
+            request_id: r.id,
+            tenant_id: row.tenant_id,
+            tenant_document_id: row.id,
+            doc_type: row.doc_type,
+            file_name: row.file_name,
+            file_path: row.file_path,
+            mime_type: row.mime_type,
+            file_size: row.file_size,
+          })),
+          { onConflict: "request_id,file_path", ignoreDuplicates: true } as any
+        );
+      }
+    }
+    setSaving(false);
+
     toast({
       title: next ? "Will auto-share with Mortgage Ops" : "Auto-share turned off",
       description: next
