@@ -266,28 +266,6 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                   onChange={set("avgMortgageChecksPerClaim")}
                   hint="ChecksOps bills $10 for the first mortgage check on a claim and $5 for each additional check on that claim."
                 />
-                {!i.useWorkflowMix && (
-                  <>
-                    <NumberField
-                      label="Same-day ACH / mo"
-                      value={i.sameDayDisbursementsPerMonth}
-                      onChange={set("sameDayDisbursementsPerMonth")}
-                      hint="Flat same-day ACH disbursement fee on ChecksOps. Included on iink plans."
-                    />
-                    <NumberField
-                      label="Next-day ACH / mo"
-                      value={i.nextDayDisbursementsPerMonth}
-                      onChange={set("nextDayDisbursementsPerMonth")}
-                      hint="Flat next-day ACH disbursement fee on ChecksOps. Included on iink plans."
-                    />
-                    <NumberField
-                      label="RTP transfers / mo"
-                      value={i.rtpTransfersPerMonth}
-                      onChange={set("rtpTransfersPerMonth")}
-                      hint="Instant transfers. ChecksOps charges 0.95% capped at $5.00; iink charges 2–3% of the amount."
-                    />
-                  </>
-                )}
                 <NumberField
                   label="Avg RTP transfer"
                   prefix="$"
