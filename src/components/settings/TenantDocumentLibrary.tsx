@@ -129,9 +129,11 @@ export function TenantDocumentLibrary({ tenantId }: { tenantId: string }) {
           <FileText className="h-4 w-4" /> Document Library
         </CardTitle>
         <CardDescription>
-          Templates, color catalogs, and letterhead assets your team reuses across claims.
-          Files here appear in mortgage ops, loss draft docs, and the homeowner selection flow.
+          Mortgage packet docs (W-9, license, insurance), templates, color catalogs, and letterhead
+          your team reuses across claims. Mortgage docs auto-attach to every check you send to the
+          ChecksOps Mortgage Desk, so they never have to ask you for them.
         </CardDescription>
+
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="mortgage">
