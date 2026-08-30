@@ -11,8 +11,9 @@ import {
   ShieldCheck, Loader2, ImagePlus, Upload, CheckCircle2,
   Banknote, Send, PenTool, Wallet, Hammer, FileText, AlertCircle,
   Phone, Building2, MessageSquare, ChevronDown, ChevronUp, Palette, Plus,
-  Download,
+  Download, CalendarRange, Landmark,
 } from "lucide-react";
+
 import { toast } from "sonner";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
