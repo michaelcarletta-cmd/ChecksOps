@@ -60,13 +60,13 @@ export function PlatformAnnouncementBanner() {
 
   const hardRefresh = () => {
     // Drop cached assets so tenants pick up the new build immediately.
-    if ("caches" in window) {
-      caches.keys().then((keys) => keys.forEach((k) => caches.delete(k))).finally(() => {
-        window.location.reload();
-      });
+    const reload = () => window.location.reload();
+    if (typeof caches !== "undefined") {
+      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))).finally(reload);
     } else {
-      window.location.reload();
+      reload();
     }
+
   };
 
   return (
