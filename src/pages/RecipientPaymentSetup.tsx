@@ -376,9 +376,16 @@ export default function RecipientPaymentSetup() {
                   />
                 </div>
 
+                <div ref={tosMountRef} className="text-[11px] text-muted-foreground" />
+                {!tosReady && !done && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Loading the payment provider's Terms of Service…
+                  </p>
+                )}
+
                 <Button type="submit" className="w-full" disabled={!canSubmit}>
                   {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Save bank account
+                  Agree & save bank account
                 </Button>
               </form>
             )}
