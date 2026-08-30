@@ -848,7 +848,7 @@ function DepositItemDetail({
         onClose={() => setImageViewerOpen(false)}
       />
 
-      {/* Disbursement (Actum ACH) */}
+      {/* Disbursement (ACH) */}
       {depositItem && (
         <DisbursementConsole
           depositItemId={depositItem.id}
