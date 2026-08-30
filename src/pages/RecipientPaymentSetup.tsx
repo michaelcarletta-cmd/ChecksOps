@@ -378,7 +378,35 @@ export default function RecipientPaymentSetup() {
                   />
                 </div>
 
-                <div ref={tosMountRef} className="text-[11px] text-muted-foreground" />
+                {/* The Moov ToS Drop only exists to mint the acceptance token — it
+                    renders an unthemeable white box, so it stays visually hidden
+                    and we show our own themed agreement text with the same links. */}
+                <div
+                  ref={tosMountRef}
+                  aria-hidden="true"
+                  style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clipPath: "inset(50%)" }}
+                />
+                <p className="text-[11px] leading-relaxed text-muted-foreground rounded-md border border-border/60 bg-muted/30 p-3">
+                  By clicking continue, you agree to the terms of Moov's{" "}
+                  <a
+                    href="https://moov.io/legal/privacy/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline underline-offset-2"
+                  >
+                    Privacy Policy
+                  </a>{" "}
+                  and{" "}
+                  <a
+                    href="https://moov.io/legal/platform-agreement/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline underline-offset-2"
+                  >
+                    Platform Agreement
+                  </a>
+                  .
+                </p>
                 {!tosReady && !done && (
                   <p className="text-[11px] text-muted-foreground">
                     Loading the payment provider's Terms of Service…

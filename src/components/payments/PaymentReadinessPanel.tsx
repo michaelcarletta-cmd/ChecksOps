@@ -194,7 +194,13 @@ export function PaymentReadinessPanel() {
           </div>
         )}
 
-        <div ref={tosMountRef} />
+        {/* Moov ToS Drop is mounted only to mint the acceptance token; it renders
+            an unthemeable white box, so keep it visually hidden. */}
+        <div
+          ref={tosMountRef}
+          aria-hidden="true"
+          style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clipPath: "inset(50%)" }}
+        />
 
         <div className="flex flex-col sm:flex-row gap-2 pt-1">
           {tosCheck && tosCheck.state !== "ready" && (
