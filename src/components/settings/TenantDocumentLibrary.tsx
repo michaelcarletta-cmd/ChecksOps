@@ -11,11 +11,23 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import {
   FileText, Upload, Loader2, Trash2, Download, Palette, Home as HomeIcon,
-  FileSignature, Image as ImageIcon, Headset, Eye,
+  FileSignature, Image as ImageIcon, Headset, Eye, Landmark,
 } from "lucide-react";
 
 // Categories stored as doc_type = `library:<category>:<slug>`
-type LibraryCategory = "template" | "shingle" | "siding" | "letterhead" | "catalog";
+type LibraryCategory = "mortgage" | "template" | "shingle" | "siding" | "letterhead" | "catalog";
+
+// Mortgage companies almost always ask for the same packet up front.
+const MORTGAGE_DOC_KINDS = [
+  "W-9",
+  "Contractor license",
+  "General liability insurance",
+  "Workers comp insurance",
+  "Certificate of insurance",
+  "Signed contract",
+  "Adjuster / TPA letter",
+  "Other",
+];
 
 const CATEGORIES: {
   key: LibraryCategory;
@@ -24,6 +36,15 @@ const CATEGORIES: {
   accept: string;
   icon: any;
 }[] = [
+  {
+    key: "mortgage",
+    label: "Mortgage docs",
+    description:
+      "W-9, contractor license, insurance certificates and anything else mortgage companies request. These auto-attach to every check you send to the Mortgage Desk, so ops never has to ask you for them.",
+    accept: ".pdf,.doc,.docx,image/*",
+    icon: Landmark,
+  },
+
   {
     key: "template",
     label: "Templates",
