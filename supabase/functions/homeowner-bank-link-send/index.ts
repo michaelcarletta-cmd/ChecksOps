@@ -292,8 +292,7 @@ serve(async (req) => {
           templateData: {
             nickname,
             custname: homeowner_name,
-            verifyUrl: payoutUrl
-              ?? `${Deno.env.get("APP_BASE_URL") ?? "https://checksops.com"}/verify-account/${verificationToken}`,
+            verifyUrl: payoutUrl,
           },
         },
       });
