@@ -128,7 +128,19 @@ serve(async (req) => {
       }
     }
 
-
+    // Homeowners receiving claim funds are paid on Moov only. Verify the tenant
+    // has a usable Moov provider account BEFORE creating any rows.
+    const { data: moovAcct } = await supabase
+      .from("payment_provider_accounts")
+      .select("id, provider, can_send_payments, disabled")
+      .eq("tenant_id", tenant_id)
+      .eq("provider", "moov")
+      .maybeSingle();
+    if (!moovAcct || moovAcct.disabled) {
+      return new Response(JSON.stringify({
+        error: "Your payment account isn't set up yet. Finish payment account setup under Settings → Compliance & Docs before sending a homeowner bank link.",
+      }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     const verificationToken = crypto.randomUUID();
     // Homeowner-facing bank link: give them plenty of time to open it. Actum's
