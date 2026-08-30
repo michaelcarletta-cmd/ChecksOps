@@ -68,6 +68,36 @@ type SharedDocument = {
   url: string;
 };
 
+type ProjectPlan = {
+  start_window_start: string | null;
+  start_window_end: string | null;
+  schedule_status: string;
+  schedule_note: string | null;
+  updated_at: string | null;
+};
+
+type MoneySummary = {
+  contract_total: number;
+  insurance_received: number;
+  insurance_outstanding: number;
+  deductible_amount: number;
+  deductible_paid: number;
+  deductible_due: number;
+  other_out_of_pocket: number;
+  out_of_pocket_total: number;
+  allow_deductible_payment: boolean;
+};
+
+type DeductiblePayment = {
+  id: string;
+  amount: number;
+  status: string;
+  bank_name: string | null;
+  bank_last_four: string | null;
+  created_at: string;
+  completed_at: string | null;
+};
+
 type Summary = {
   ok: boolean;
   mode: "claim" | "pre_claim";
@@ -79,8 +109,12 @@ type Summary = {
   pending_signatures?: PendingSignature[];
   pending_endorsements?: PendingEndorsement[];
   shared_documents?: SharedDocument[];
+  project_plan?: ProjectPlan | null;
+  money?: MoneySummary | null;
+  deductible_payments?: DeductiblePayment[];
   can_upload: boolean;
 };
+
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n || 0);
