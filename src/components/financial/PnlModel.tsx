@@ -248,51 +248,27 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Workflow / transaction mix</CardTitle>
                 <CardDescription className="text-xs">
-                  Per tenant, per month. Checks, ACH, RTP and wallet volume are all derived from this mix, so
-                  recipient-heavy tenants are not charged a check-processing cost they never incur.
+                  Per tenant, per month — plain counts, no percentages. Receive-funds-only and wallet jobs never
+                  pick up a check-processing cost.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex items-center justify-between gap-2 rounded-lg border border-border/60 p-2.5">
-                  <Label htmlFor="pnl-workflow-mix" className="text-xs text-muted-foreground">
-                    Use workflow mix
-                  </Label>
-                  <Switch
-                    id="pnl-workflow-mix"
-                    checked={a.useWorkflowMix}
-                    onCheckedChange={(v) => {
-                      setScenario("custom");
-                      setA((prev) => ({ ...prev, useWorkflowMix: v }));
-                    }}
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <NumberField label="Checks / mo" value={a.checksPerMonth} onChange={set("checksPerMonth")} hint="Insurance checks we process." />
+                  <NumberField label="Same-day payouts / mo" value={a.sameDayPayoutsPerMonth} onChange={set("sameDayPayoutsPerMonth")} hint="Billed at the same-day rate." />
+                  <NumberField label="Next-day payouts / mo" value={a.nextDayPayoutsPerMonth} onChange={set("nextDayPayoutsPerMonth")} hint="Billed at the next-day rate." />
+                  <NumberField label="Received funds / mo" value={a.receiveOnlyPerMonth} onChange={set("receiveOnlyPerMonth")} hint="Tenant only receives money — no check component." />
+                  <NumberField label="RTP / mo" value={a.rtpPerMonth} onChange={set("rtpPerMonth")} hint="Instant payouts." />
+                  <NumberField label="Wallet transfers / mo" value={a.walletPerMonth} onChange={set("walletPerMonth")} hint="Internal wallet moves." />
                 </div>
-                {a.useWorkflowMix ? (
-                  <>
-                    <div className="grid grid-cols-2 gap-3">
-                      <NumberField label="Jobs / tenant / mo" value={a.jobsPerTenantPerMonth} onChange={set("jobsPerTenantPerMonth")} hint="Every payment event, not just processed checks." />
-                      <NumberField label="Payouts sent same-day" suffix="%" max={100} step={5} value={a.pctPayoutsSameDay} onChange={set("pctPayoutsSameDay")} />
-                      <NumberField label="Check + 1 ACH" suffix="%" max={100} step={5} value={a.pctCheckAchSingle} onChange={set("pctCheckAchSingle")} />
-                      <NumberField label="Check + multiple ACH" suffix="%" max={100} step={5} value={a.pctCheckAchMulti} onChange={set("pctCheckAchMulti")} />
-                      <NumberField label="Receive funds only" suffix="%" max={100} step={5} value={a.pctReceiveOnly} onChange={set("pctReceiveOnly")} hint="No check-processing revenue or cost." />
-                      <NumberField label="Wallet / internal" suffix="%" max={100} step={5} value={a.pctWalletTransfer} onChange={set("pctWalletTransfer")} />
-                      <NumberField label="RTP / instant" suffix="%" max={100} step={5} value={a.pctRtp} onChange={set("pctRtp")} />
-                      <NumberField label="ACH on multi-ACH job" step={0.5} value={a.avgAchOnMultiAchJob} onChange={set("avgAchOnMultiAchJob")} />
-                      <NumberField label="Payouts / receive-only job" step={0.5} value={a.avgPayoutsPerReceiveOnlyJob} onChange={set("avgPayoutsPerReceiveOnlyJob")} />
-                    </div>
-                    <p className="text-[11px] leading-relaxed text-muted-foreground">
-                      Per tenant: {Math.round(per.checks).toLocaleString()} processed checks ·{" "}
-                      {Math.round(per.sameDay).toLocaleString()} same-day ·{" "}
-                      {Math.round(per.nextDay).toLocaleString()} next-day ·{" "}
-                      {Math.round(per.rtpTransfers).toLocaleString()} RTP ·{" "}
-                      {Math.round(per.walletTransfers).toLocaleString()} wallet. Shares are normalised to 100%.
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    Workflow mix off — the explicit check and disbursement counts above drive the model and every
-                    job is treated as a processed check.
-                  </p>
-                )}
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Per tenant: {Math.round(per.jobs).toLocaleString()} jobs / mo —{" "}
+                  {Math.round(per.checks).toLocaleString()} checks ·{" "}
+                  {Math.round(per.sameDay).toLocaleString()} same-day ·{" "}
+                  {Math.round(per.nextDay).toLocaleString()} next-day ·{" "}
+                  {Math.round(per.rtpTransfers).toLocaleString()} RTP ·{" "}
+                  {Math.round(per.walletTransfers).toLocaleString()} wallet.
+                </p>
               </CardContent>
             </Card>
 
