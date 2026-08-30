@@ -281,6 +281,77 @@ export default function RecipientPaymentSetup() {
                   </div>
                 </div>
 
+                <div className="rounded-md border border-border/60 p-3 space-y-4">
+                  <p className="text-xs font-medium text-foreground">
+                    Verify your identity
+                  </p>
+                  <p className="text-[11px] text-muted-foreground -mt-2">
+                    Required by our payment provider before it can send you money. These details
+                    go directly to the provider and are never stored by ChecksOps.
+                  </p>
+
+                  {holderType === "individual" ? (
+                    <>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="first-name">Legal first name</Label>
+                          <Input id="first-name" value={firstName}
+                            onChange={(e) => setFirstName(e.target.value.slice(0, 64))} autoComplete="given-name" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="last-name">Legal last name</Label>
+                          <Input id="last-name" value={lastName}
+                            onChange={(e) => setLastName(e.target.value.slice(0, 64))} autoComplete="family-name" />
+                        </div>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="dob">Date of birth</Label>
+                          <Input id="dob" type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="ssn">SSN</Label>
+                          <Input id="ssn" inputMode="numeric" type="password" value={ssn}
+                            onChange={(e) => setSsn(digitsOnly(e.target.value, 9))}
+                            placeholder="9 digits" autoComplete="off" />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label htmlFor="ein">Business EIN</Label>
+                      <Input id="ein" inputMode="numeric" value={ein}
+                        onChange={(e) => setEin(digitsOnly(e.target.value, 9))}
+                        placeholder="9 digits" autoComplete="off" />
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="addr">Street address</Label>
+                    <Input id="addr" value={addressLine1}
+                      onChange={(e) => setAddressLine1(e.target.value.slice(0, 128))} autoComplete="address-line1" />
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="city">City</Label>
+                      <Input id="city" value={city}
+                        onChange={(e) => setCity(e.target.value.slice(0, 64))} autoComplete="address-level2" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="state">State</Label>
+                      <Input id="state" value={state} maxLength={2}
+                        onChange={(e) => setState(e.target.value.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase())}
+                        placeholder="NJ" autoComplete="address-level1" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="zip">ZIP</Label>
+                      <Input id="zip" inputMode="numeric" value={postalCode}
+                        onChange={(e) => setPostalCode(e.target.value.replace(/[^\d-]/g, "").slice(0, 10))}
+                        autoComplete="postal-code" />
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="routing">Routing number</Label>
                   <Input
