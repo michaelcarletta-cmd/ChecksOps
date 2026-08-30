@@ -306,7 +306,11 @@ Deno.serve(async (req) => {
       pending_signatures,
       pending_endorsements,
       shared_documents,
+      project_plan,
+      money,
+      deductible_payments,
       can_upload: true,
+
     })
   } catch (e) {
     console.error('homeowner-ledger-view error', e)
