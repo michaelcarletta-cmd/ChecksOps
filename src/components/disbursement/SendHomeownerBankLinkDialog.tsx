@@ -69,11 +69,12 @@ export function SendHomeownerBankLinkDialog({ open, onOpenChange, checkIntakeIte
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Home className="h-4 w-4" /> Send homeowner bank-link
+            <Home className="h-4 w-4" /> Send homeowner payout setup
           </DialogTitle>
           <DialogDescription>
-            The homeowner will receive an email with a secure link to verify their bank account. Once verified,
-            their account is auto-added as a disbursable stakeholder.
+            The homeowner receives a secure link to complete their payout profile and bank details so claim
+            funds can be sent directly to their bank account. Once complete, they're auto-added as a
+            disbursable stakeholder.
           </DialogDescription>
         </DialogHeader>
 
