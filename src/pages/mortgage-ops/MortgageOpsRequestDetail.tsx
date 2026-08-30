@@ -437,6 +437,121 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     void load();
   };
 
+  // ---- Shipping / mail-to (tenant-visible) ----------------------------------
+
+  const prefillMailToFromDirectory = async () => {
+    const name = (mailToName || req?.mortgage_company || "").trim();
+    if (!name) {
+      toast.error("Enter the mortgage company name first");
+      return;
+    }
+    const { data } = await supabase
+      .from("mortgage_companies")
+      .select("name,address_line_1,address_line_2,address_line_3,address_line_4,address_line_5")
+      .ilike("name", `%${name}%`)
+      .limit(1)
+      .maybeSingle();
+    if (!data) {
+      toast.error("No directory match — enter the address manually");
+      return;
+    }
+    const lines = [
+      (data as any).address_line_1,
+      (data as any).address_line_2,
+      (data as any).address_line_3,
+      (data as any).address_line_4,
+      (data as any).address_line_5,
+    ].filter(Boolean);
+    if (!lines.length) {
+      toast.error("Directory has no address for this company");
+      return;
+    }
+    setMailToName((data as any).name || name);
+    setMailToAddress(lines.join("\n"));
+    toast.success("Address pulled from the mortgage directory");
+  };
+
+  const saveShippingDetails = async (opts?: { silent?: boolean }) => {
+    if (!req) return;
+    setSavingShipping(true);
+    try {
+      const { error } = await supabase
+        .from("mortgage_handling_requests")
+        .update({
+          mail_to_name: mailToName.trim() || null,
+          mail_to_address: mailToAddress.trim() || null,
+          shipping_label_carrier: shipCarrier.trim() || null,
+          shipping_label_tracking: shipTracking.trim() || null,
+        } as any)
+        .eq("id", req.id);
+      if (error) throw error;
+      if (!opts?.silent) toast.success("Shipping details saved — visible to the tenant");
+      void load();
+      onAction?.();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save shipping details");
+    } finally {
+      setSavingShipping(false);
+    }
+  };
+
+  const uploadShippingLabel = async (file: File) => {
+    if (!req || !check?.id || !user?.id) {
+      toast.error("A check must be linked before uploading a label");
+      return;
+    }
+    setUploadingLabel(true);
+    try {
+      const path = `checks/${check.id}/mortgage-ops/label-${Date.now()}-${file.name.replace(/[^a-z0-9.\-_]/gi, "_")}`;
+      const { error: upErr } = await supabase.storage
+        .from("claim-files")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) throw upErr;
+
+      const { error: updErr } = await supabase
+        .from("mortgage_handling_requests")
+        .update({
+          shipping_label_path: path,
+          shipping_label_name: file.name,
+          shipping_label_uploaded_at: new Date().toISOString(),
+          shipping_label_uploaded_by: user.id,
+          shipping_label_carrier: shipCarrier.trim() || null,
+          shipping_label_tracking: shipTracking.trim() || null,
+          mail_to_name: mailToName.trim() || null,
+          mail_to_address: mailToAddress.trim() || null,
+        } as any)
+        .eq("id", req.id);
+      if (updErr) throw updErr;
+
+      await supabase.from("check_messages").insert({
+        check_id: check.id,
+        sender_id: user.id,
+        body: `🏷️ Mortgage Ops uploaded a shipping label${shipCarrier ? ` (${shipCarrier})` : ""}${shipTracking ? ` · tracking ${shipTracking}` : ""}. Download it from the Mortgage Desk card on this loss draft.`,
+      });
+
+      toast.success("Shipping label uploaded — tenant can download it");
+      void load();
+      onAction?.();
+    } catch (e: any) {
+      toast.error(e?.message || "Label upload failed");
+    } finally {
+      setUploadingLabel(false);
+    }
+  };
+
+  const openShippingLabel = async () => {
+    if (!req?.shipping_label_path) return;
+    const { data, error } = await supabase.storage
+      .from("claim-files")
+      .createSignedUrl(req.shipping_label_path, 3600);
+    if (error || !data?.signedUrl) {
+      toast.error(error?.message || "Could not open label");
+      return;
+    }
+    window.open(data.signedUrl, "_blank", "noopener");
+  };
+
+
   // Mortgage-ops work is billed to the tenant's monthly usage totals (not a
   // per-request contractor invoice). Ops still records the actual shipping
   // label cost here so the end-of-month sweep pulls the right amount.
