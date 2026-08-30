@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
+import { PlatformAnnouncementBanner } from "@/components/platform/PlatformAnnouncementBanner";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -208,6 +209,7 @@ const App = () => (
           <AuthProvider>
             <ThemeScope>
               <RecoveryHashRedirect />
+              <PlatformAnnouncementBanner />
               <AppRoutes />
             </ThemeScope>
           </AuthProvider>
