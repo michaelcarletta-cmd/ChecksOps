@@ -180,6 +180,8 @@ export default function RecipientPaymentSetup() {
       if ((data as any)?.error) throw new Error((data as any).error);
       setAccountNumber("");
       setRoutingNumber("");
+      setSsn("");
+      setEin("");
       setDone(true);
     } catch (err: any) {
       setError(err?.message ?? "Could not save your bank account.");
