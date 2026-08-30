@@ -194,9 +194,7 @@ export const IINK_FEATURE_ROWS: {
 /* ------------------------------------------------------------------ */
 
 export interface SavingsInputs extends WorkflowMix {
-  // Prospect profile
-  /** Legacy explicit check count — used only when the workflow mix is off. */
-  checksPerMonth: number;
+  // Prospect profile (monthly counts come from the workflow mix)
   avgCheckAmount: number;
   /** % of processed checks that carry a mortgage-company payee. */
   mortgagePctOfChecks: number;
@@ -204,12 +202,6 @@ export interface SavingsInputs extends WorkflowMix {
   avgMortgageCompanies: number;
   /** Average number of check submissions per mortgage claim (1 = single check). */
   avgMortgageChecksPerClaim: number;
-  /** Same-day ACH disbursements per month (legacy explicit mode). */
-  sameDayDisbursementsPerMonth: number;
-  /** Next-day ACH disbursements per month (legacy explicit mode). */
-  nextDayDisbursementsPerMonth: number;
-  /** Instant RTP transfers per month (legacy explicit mode). */
-  rtpTransfersPerMonth: number;
   /** Average dollar amount of an RTP transfer — drives iink's % RTP fee. */
   avgRtpTransferAmount: number;
   /** Whether the prospect actually uses mortgage / loss-draft services at all. */
@@ -238,15 +230,14 @@ export interface SavingsInputs extends WorkflowMix {
 
 export const DEFAULT_SAVINGS: SavingsInputs = {
   ...DEFAULT_WORKFLOW_MIX,
-
   checksPerMonth: 50,
+  sameDayPayoutsPerMonth: 25,
+  nextDayPayoutsPerMonth: 75,
+
   avgCheckAmount: 25_000,
   mortgagePctOfChecks: 20,
   avgMortgageCompanies: 1,
   avgMortgageChecksPerClaim: 1,
-  sameDayDisbursementsPerMonth: 25,
-  nextDayDisbursementsPerMonth: 75,
-  rtpTransfersPerMonth: 10,
   avgRtpTransferAmount: 10_000,
   usesMortgageServices: true,
 
@@ -279,8 +270,7 @@ export const priceRatesFrom = (i: SavingsInputs): WorkflowPriceRates => ({
 });
 
 /** Monthly processed-check count actually used by the model. */
-export const effectiveChecks = (i: SavingsInputs) =>
-  i.useWorkflowMix ? mixChecksPerMonth(i) : nn(i.checksPerMonth);
+export const effectiveChecks = (i: SavingsInputs) => mixChecksPerMonth(i);
 
 
 const nn = (v: number) => (Number.isFinite(v) && v > 0 ? v : 0);
@@ -340,9 +330,9 @@ function finish(b: CostSeed, checks: number, jobs: number): CostBreakdown {
 /**
  * Volume-derived counts for a given PROCESSED CHECK count.
  *
- * Workflow-mix mode derives ACH / RTP / wallet volume from the job mix, so a
- * receive-funds-only or wallet job never picks up a check-processing component.
- * Legacy mode scales the explicit counts against the base check volume.
+ * ACH / RTP / wallet / receive-only counts scale proportionally with the
+ * processed-check count, so a receive-funds-only or wallet job never picks up
+ * a check-processing component.
  */
 export function scaledVolumes(i: SavingsInputs, checks: number) {
   const mortgageChecks = checks * (Math.min(100, nn(i.mortgagePctOfChecks)) / 100);
@@ -351,29 +341,12 @@ export function scaledVolumes(i: SavingsInputs, checks: number) {
   const extraMortgageChecks = Math.max(0, nn(i.avgMortgageChecksPerClaim) - 1) * mortgageChecks;
   const usesMortgage = i.usesMortgageServices !== false;
 
-  let sameDay: number;
-  let nextDay: number;
-  let rtpTransfers: number;
-  let walletTransfers: number;
-  let jobs: number;
-
-  if (i.useWorkflowMix) {
-    const w = workflowVolumesForChecks(i, checks);
-    sameDay = w.sameDay;
-    nextDay = w.nextDay;
-    rtpTransfers = w.rtpTransfers;
-    walletTransfers = w.walletTransfers;
-    jobs = w.jobs;
-  } else {
-    const base = nn(i.checksPerMonth);
-    const scale = base > 0 ? checks / base : 0;
-    sameDay = nn(i.sameDayDisbursementsPerMonth) * scale;
-    nextDay = nn(i.nextDayDisbursementsPerMonth) * scale;
-    rtpTransfers = nn(i.rtpTransfersPerMonth) * scale;
-    walletTransfers = 0;
-    // Without a mix, a "job" is one processed check plus its disbursements.
-    jobs = Math.max(checks, checks + rtpTransfers);
-  }
+  const w = workflowVolumesForChecks(i, checks);
+  const sameDay = w.sameDay;
+  const nextDay = w.nextDay;
+  const rtpTransfers = w.rtpTransfers;
+  const walletTransfers = w.walletTransfers;
+  const jobs = w.jobs;
 
   return {
     usesMortgage,

@@ -8,25 +8,25 @@
  *   disburser  — we only move money out (no check processing component)
  *   recipient  — the tenant receives funds someone else disbursed
  *
- * A job that is "check processed + 1 ACH" carries the per-check fee plus one
- * disbursement fee. A receive-funds-only job carries no check-processing
- * component at all. Averaging every transaction against the check count makes
- * recipient-heavy tenants look far more expensive than they are, and understates
- * our gross margin on them.
+ * The mix is entered as SIMPLE MONTHLY COUNTS — no percentages:
  *
- * The primary metric is therefore EFFECTIVE COST PER JOB / TRANSACTION, built
- * from the components each workflow actually consumes.
+ *   checks per month          — insurance checks we process
+ *   same-day payouts / month  — ACH payouts sent same-day
+ *   next-day payouts / month  — ACH payouts sent next-day
+ *   received funds / month    — jobs where the tenant only receives money
+ *   RTP / month               — instant payouts
+ *   wallet transfers / month  — internal wallet moves
+ *
+ * A processed check carries the per-check fee plus its ACH payouts. A
+ * receive-funds-only job carries no check-processing component at all. The
+ * primary metric is EFFECTIVE COST PER JOB / TRANSACTION, built from the
+ * components each workflow actually consumes.
  *
  * Every rate below is supplied by the caller and is editable in the UI. Nothing
  * here reads or writes live billing.
  */
 
-export type WorkflowKey =
-  | "check_ach_single"
-  | "check_ach_multi"
-  | "receive_only"
-  | "wallet_transfer"
-  | "rtp";
+export type WorkflowKey = "check_ach" | "receive_only" | "wallet_transfer" | "rtp";
 
 export interface WorkflowMeta {
   key: WorkflowKey;
@@ -38,15 +38,9 @@ export interface WorkflowMeta {
 
 export const WORKFLOW_META: WorkflowMeta[] = [
   {
-    key: "check_ach_single",
-    label: "Check processed + 1 ACH",
-    description: "We process the insurance check and send one ACH disbursement.",
-    processesCheck: true,
-  },
-  {
-    key: "check_ach_multi",
-    label: "Check processed + multiple ACH",
-    description: "One processed check split across several ACH disbursements.",
+    key: "check_ach",
+    label: "Processed checks",
+    description: "We process the insurance check and disburse the funds by ACH.",
     processesCheck: true,
   },
   {
@@ -70,125 +64,107 @@ export const WORKFLOW_META: WorkflowMeta[] = [
 ];
 
 /* ------------------------------------------------------------------ */
-/* Mix inputs                                                          */
+/* Mix inputs — plain monthly counts, no percentages                   */
 /* ------------------------------------------------------------------ */
 
 export interface WorkflowMix {
-  /** When false, the caller's legacy explicit check / ACH / RTP counts are used. */
-  useWorkflowMix: boolean;
-  /** Total jobs / transactions per month across every workflow. */
-  jobsPerMonth: number;
-
-  /** Share of jobs, %. Normalised if they do not sum to 100. */
-  pctCheckAchSingle: number;
-  pctCheckAchMulti: number;
-  pctReceiveOnly: number;
-  pctWalletTransfer: number;
-  pctRtp: number;
-
-  /** ACH disbursements on a multi-ACH processed-check job. */
-  avgAchOnMultiAchJob: number;
-  /** Payouts on a receive-funds-only job (often 1, sometimes 0 for pure receipts). */
-  avgPayoutsPerReceiveOnlyJob: number;
-  /** Share of ACH payouts sent same-day rather than next-day, %. */
-  pctPayoutsSameDay: number;
+  /** Processed checks per month (per tenant in the P&L model). */
+  checksPerMonth: number;
+  /** Same-day ACH payouts per month. */
+  sameDayPayoutsPerMonth: number;
+  /** Next-day ACH payouts per month. */
+  nextDayPayoutsPerMonth: number;
+  /** Receive-funds-only transactions per month (no check component). */
+  receiveOnlyPerMonth: number;
+  /** Instant RTP transfers per month. */
+  rtpPerMonth: number;
+  /** Wallet / internal transfers per month. */
+  walletPerMonth: number;
 }
 
 export const DEFAULT_WORKFLOW_MIX: WorkflowMix = {
-  useWorkflowMix: true,
-  jobsPerMonth: 100,
-  pctCheckAchSingle: 40,
-  pctCheckAchMulti: 10,
-  pctReceiveOnly: 35,
-  pctWalletTransfer: 5,
-  pctRtp: 10,
-  avgAchOnMultiAchJob: 3,
-  avgPayoutsPerReceiveOnlyJob: 1,
-  pctPayoutsSameDay: 25,
+  checksPerMonth: 40,
+  sameDayPayoutsPerMonth: 20,
+  nextDayPayoutsPerMonth: 60,
+  receiveOnlyPerMonth: 30,
+  rtpPerMonth: 10,
+  walletPerMonth: 5,
 };
 
 const nn = (v: number) => (Number.isFinite(v) && v > 0 ? v : 0);
 
-/** Workflow shares as fractions of 1, normalised so they always sum to 1 (or all 0). */
-export function workflowShares(m: WorkflowMix): Record<WorkflowKey, number> {
-  const raw: Record<WorkflowKey, number> = {
-    check_ach_single: nn(m.pctCheckAchSingle),
-    check_ach_multi: nn(m.pctCheckAchMulti),
-    receive_only: nn(m.pctReceiveOnly),
-    wallet_transfer: nn(m.pctWalletTransfer),
-    rtp: nn(m.pctRtp),
-  };
-  const total = Object.values(raw).reduce((a, b) => a + b, 0);
-  if (total <= 0) {
-    return { check_ach_single: 0, check_ach_multi: 0, receive_only: 0, wallet_transfer: 0, rtp: 0 };
-  }
-  return {
-    check_ach_single: raw.check_ach_single / total,
-    check_ach_multi: raw.check_ach_multi / total,
-    receive_only: raw.receive_only / total,
-    wallet_transfer: raw.wallet_transfer / total,
-    rtp: raw.rtp / total,
-  };
-}
-
 export interface WorkflowVolumes {
   jobs: number;
   jobsByWorkflow: Record<WorkflowKey, number>;
-  /** Checks actually processed — only the two processed-check workflows. */
+  /** Checks actually processed. */
   checks: number;
   achPayouts: number;
   sameDay: number;
   nextDay: number;
+  receiveOnly: number;
   rtpTransfers: number;
   walletTransfers: number;
 }
 
-/** Volumes for an explicit job count (defaults to the mix's own jobsPerMonth). */
-export function workflowVolumes(m: WorkflowMix, jobsOverride?: number): WorkflowVolumes {
-  const jobs = nn(jobsOverride ?? m.jobsPerMonth);
-  const s = workflowShares(m);
+/**
+ * Volumes for the mix, optionally scaled by a multiplier (used by the
+ * volume-sensitivity sweeps, which pin the processed-check count and scale
+ * every other count with it).
+ */
+export function workflowVolumes(m: WorkflowMix, scale = 1): WorkflowVolumes {
+  const k = nn(scale) || 0;
+  const checks = nn(m.checksPerMonth) * k;
+  const sameDay = nn(m.sameDayPayoutsPerMonth) * k;
+  const nextDay = nn(m.nextDayPayoutsPerMonth) * k;
+  const receiveOnly = nn(m.receiveOnlyPerMonth) * k;
+  const rtpTransfers = nn(m.rtpPerMonth) * k;
+  const walletTransfers = nn(m.walletPerMonth) * k;
+
   const jobsByWorkflow: Record<WorkflowKey, number> = {
-    check_ach_single: jobs * s.check_ach_single,
-    check_ach_multi: jobs * s.check_ach_multi,
-    receive_only: jobs * s.receive_only,
-    wallet_transfer: jobs * s.wallet_transfer,
-    rtp: jobs * s.rtp,
+    check_ach: checks,
+    receive_only: receiveOnly,
+    wallet_transfer: walletTransfers,
+    rtp: rtpTransfers,
   };
 
-  const checks = jobsByWorkflow.check_ach_single + jobsByWorkflow.check_ach_multi;
-  const achPayouts =
-    jobsByWorkflow.check_ach_single * 1 +
-    jobsByWorkflow.check_ach_multi * nn(m.avgAchOnMultiAchJob) +
-    jobsByWorkflow.receive_only * nn(m.avgPayoutsPerReceiveOnlyJob);
-
-  const sameDayShare = Math.min(100, nn(m.pctPayoutsSameDay)) / 100;
   return {
-    jobs,
+    jobs: checks + receiveOnly + rtpTransfers + walletTransfers,
     jobsByWorkflow,
     checks,
-    achPayouts,
-    sameDay: achPayouts * sameDayShare,
-    nextDay: achPayouts * (1 - sameDayShare),
-    rtpTransfers: jobsByWorkflow.rtp,
-    walletTransfers: jobsByWorkflow.wallet_transfer,
+    achPayouts: sameDay + nextDay,
+    sameDay,
+    nextDay,
+    receiveOnly,
+    rtpTransfers,
+    walletTransfers,
   };
 }
 
-/** Checks per month implied by the mix at its own job volume. */
+/** Checks per month implied by the mix. */
 export const mixChecksPerMonth = (m: WorkflowMix) => workflowVolumes(m).checks;
 
 /**
  * Volumes when a sweep pins the PROCESSED CHECK count (the iink comparison and
- * the volume sensitivity tables both sweep on checks). Jobs scale with checks so
- * the receive-only / wallet / RTP tail keeps its share of the book.
+ * the volume sensitivity tables both sweep on checks). Every other count
+ * scales proportionally so the shape of the book stays the same.
  */
 export function workflowVolumesForChecks(m: WorkflowMix, checks: number): WorkflowVolumes {
   const base = mixChecksPerMonth(m);
-  if (base <= 0) {
-    // No processed-check workflows configured — the sweep cannot scale on checks.
-    return workflowVolumes(m);
-  }
-  return workflowVolumes(m, nn(m.jobsPerMonth) * (nn(checks) / base));
+  if (base <= 0) return workflowVolumes(m);
+  return workflowVolumes(m, nn(checks) / base);
+}
+
+/** Share of monthly jobs for each workflow, 0–1. */
+export function workflowShares(m: WorkflowMix): Record<WorkflowKey, number> {
+  const v = workflowVolumes(m);
+  const total = v.jobs;
+  const share = (n: number) => (total > 0 ? n / total : 0);
+  return {
+    check_ach: share(v.jobsByWorkflow.check_ach),
+    receive_only: share(v.jobsByWorkflow.receive_only),
+    wallet_transfer: share(v.jobsByWorkflow.wallet_transfer),
+    rtp: share(v.jobsByWorkflow.rtp),
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -232,47 +208,42 @@ export interface WorkflowComponents {
   total: number;
 }
 
-const blendedAch = (r: WorkflowPriceRates, m: WorkflowMix) => {
-  const sd = Math.min(100, nn(m.pctPayoutsSameDay)) / 100;
-  return sd * nn(r.sameDayFee) + (1 - sd) * nn(r.nextDayFee);
+/** Payout-weighted average ACH fee across the same-day / next-day counts. */
+const blendedAch = (sameDayFee: number, nextDayFee: number, m: WorkflowMix) => {
+  const sd = nn(m.sameDayPayoutsPerMonth);
+  const nd = nn(m.nextDayPayoutsPerMonth);
+  const total = sd + nd;
+  if (total <= 0) return nn(nextDayFee);
+  return (sd * nn(sameDayFee) + nd * nn(nextDayFee)) / total;
 };
 
-const blendedAchCost = (c: WorkflowCostRates, m: WorkflowMix) => {
-  const sd = Math.min(100, nn(m.pctPayoutsSameDay)) / 100;
-  return sd * nn(c.sameDayCost) + (1 - sd) * nn(c.nextDayCost);
+/** Average ACH payouts per processed check. */
+const achPerCheckJob = (m: WorkflowMix) => {
+  const checks = nn(m.checksPerMonth);
+  return checks > 0 ? (nn(m.sameDayPayoutsPerMonth) + nn(m.nextDayPayoutsPerMonth)) / checks : 0;
 };
 
-const achPerJobFor = (key: WorkflowKey, m: WorkflowMix) => {
-  if (key === "check_ach_single") return 1;
-  if (key === "check_ach_multi") return nn(m.avgAchOnMultiAchJob);
-  if (key === "receive_only") return nn(m.avgPayoutsPerReceiveOnlyJob);
-  return 0;
-};
-
-/** Price components for a single job of each workflow. */
-export function workflowPriceComponents(
+function buildComponents(
   m: WorkflowMix,
-  r: WorkflowPriceRates,
-  jobsOverride?: number,
+  unit: { check: number; ach: number; rtp: number; wallet: number },
+  scale?: number,
 ): WorkflowComponents[] {
-  const v = workflowVolumes(m, jobsOverride);
+  const v = workflowVolumes(m, scale);
   const s = workflowShares(m);
-  const achUnit = blendedAch(r, m);
-  const rtpUnit = Math.min(nn(r.rtpCap), nn(r.avgRtpAmount) * (nn(r.rtpPct) / 100));
+  const achPerJob = achPerCheckJob(m);
 
   return WORKFLOW_META.map((meta) => {
-    const achPerJob = achPerJobFor(meta.key, m);
-    const checkProcessing = meta.processesCheck ? nn(r.perCheckFee) : 0;
-    const ach = achPerJob * achUnit;
-    const rtp = meta.key === "rtp" ? rtpUnit : 0;
-    const wallet = meta.key === "wallet_transfer" ? nn(r.walletFee) : 0;
+    const checkProcessing = meta.processesCheck ? unit.check : 0;
+    const ach = meta.key === "check_ach" ? achPerJob * unit.ach : 0;
+    const rtp = meta.key === "rtp" ? unit.rtp : 0;
+    const wallet = meta.key === "wallet_transfer" ? unit.wallet : 0;
     return {
       key: meta.key,
       label: meta.label,
       description: meta.description,
       share: s[meta.key],
       jobs: v.jobsByWorkflow[meta.key],
-      achPerJob,
+      achPerJob: meta.key === "check_ach" ? achPerJob : 0,
       checkProcessing,
       ach,
       rtp,
@@ -282,36 +253,40 @@ export function workflowPriceComponents(
   });
 }
 
+/** Price components for a single job of each workflow. */
+export function workflowPriceComponents(
+  m: WorkflowMix,
+  r: WorkflowPriceRates,
+  scale?: number,
+): WorkflowComponents[] {
+  return buildComponents(
+    m,
+    {
+      check: nn(r.perCheckFee),
+      ach: blendedAch(r.sameDayFee, r.nextDayFee, m),
+      rtp: Math.min(nn(r.rtpCap), nn(r.avgRtpAmount) * (nn(r.rtpPct) / 100)),
+      wallet: nn(r.walletFee),
+    },
+    scale,
+  );
+}
+
 /** Variable provider cost for a single job of each workflow. */
 export function workflowCostComponents(
   m: WorkflowMix,
   c: WorkflowCostRates,
-  jobsOverride?: number,
+  scale?: number,
 ): WorkflowComponents[] {
-  const v = workflowVolumes(m, jobsOverride);
-  const s = workflowShares(m);
-  const achUnit = blendedAchCost(c, m);
-
-  return WORKFLOW_META.map((meta) => {
-    const achPerJob = achPerJobFor(meta.key, m);
-    const checkProcessing = meta.processesCheck ? nn(c.depositCostPerCheck) : 0;
-    const ach = achPerJob * achUnit;
-    const rtp = meta.key === "rtp" ? nn(c.rtpCostPerTransfer) : 0;
-    const wallet = meta.key === "wallet_transfer" ? nn(c.walletCost) : 0;
-    return {
-      key: meta.key,
-      label: meta.label,
-      description: meta.description,
-      share: s[meta.key],
-      jobs: v.jobsByWorkflow[meta.key],
-      achPerJob,
-      checkProcessing,
-      ach,
-      rtp,
-      wallet,
-      total: checkProcessing + ach + rtp + wallet,
-    };
-  });
+  return buildComponents(
+    m,
+    {
+      check: nn(c.depositCostPerCheck),
+      ach: blendedAch(c.sameDayCost, c.nextDayCost, m),
+      rtp: nn(c.rtpCostPerTransfer),
+      wallet: nn(c.walletCost),
+    },
+    scale,
+  );
 }
 
 /** Share-weighted average across the mix — the headline "per job" number. */
