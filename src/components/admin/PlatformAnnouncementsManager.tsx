@@ -89,7 +89,7 @@ export function PlatformAnnouncementsManager() {
         title="New platform announcement"
         description="Shown as a banner at the top of every page for every tenant, signed in or not."
         icon={<Megaphone className="h-4 w-4 text-primary" />}
-        accent="primary"
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
       >
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-1.5 md:col-span-2">
@@ -140,7 +140,7 @@ export function PlatformAnnouncementsManager() {
         title="Announcements"
         description="Toggle off to hide from tenants without deleting."
         icon={<Megaphone className="h-4 w-4 text-primary" />}
-        accent="primary"
+        accent="bg-gradient-to-r from-primary/60 to-primary/10"
       >
         {isLoading ? (
           <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
