@@ -51,6 +51,10 @@ Deno.serve(async (req) => {
     let pending_signatures: any[] = []
     let pending_endorsements: any[] = []
     let shared_documents: any[] = []
+    let project_plan: any = null
+    let money: any = null
+    let deductible_payments: any[] = []
+
 
     if (tok.claim_id) {
       const { data: c, error: claimErr } = await supabase
