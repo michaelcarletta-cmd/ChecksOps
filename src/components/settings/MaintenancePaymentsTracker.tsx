@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { DollarSign, Plus, Trash2, Zap, Loader2 } from "lucide-react";
+import { DollarSign, Plus, Trash2 } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 
 export function MaintenancePaymentsTracker() {
@@ -44,33 +44,11 @@ export function MaintenancePaymentsTracker() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tenant_maintenance_payments")
-        .select("id, tenant_id, amount_cents, period_start, period_end, method, reference, notes, received_at, status, failure_reason, actum_order_id, tenants:tenant_id(name)")
+        .select("id, tenant_id, amount_cents, period_start, period_end, method, reference, notes, received_at, status, failure_reason, tenants:tenant_id(name)")
         .order("received_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
-  });
-
-  const chargeMutation = useMutation({
-    mutationFn: async (dryRun: boolean) => {
-      const { data, error } = await supabase.functions.invoke("charge-tenant-maintenance", {
-        body: { dry_run: dryRun },
-      });
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: (data: any, dryRun) => {
-      const skipped = (data?.results ?? []).filter((r: any) => r.skipped).length;
-      const charged = (data?.results ?? []).filter((r: any) => r.status === "submitted").length;
-      const failed = (data?.results ?? []).filter((r: any) => r.status === "failed").length;
-      toast.success(
-        dryRun
-          ? `Dry run: would charge ${(data?.results ?? []).filter((r: any) => r.would_charge_cents).length} tenant(s)`
-          : `Charged ${charged}, failed ${failed}, skipped ${skipped}`,
-      );
-      qc.invalidateQueries({ queryKey: ["maintenance-payments"] });
-    },
-    onError: (e: any) => toast.error(e?.message ?? "Charge run failed"),
   });
 
   const addMutation = useMutation({
@@ -128,16 +106,6 @@ export function MaintenancePaymentsTracker() {
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => chargeMutation.mutate(true)} disabled={chargeMutation.isPending}>
-              {chargeMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Zap className="h-3.5 w-3.5 mr-1.5" />}
-              Dry run
-            </Button>
-            <Button size="sm" variant="default" onClick={() => {
-              if (!confirm("Run auto-debit for all eligible tenants now? This will pull the monthly fee via ACH.")) return;
-              chargeMutation.mutate(false);
-            }} disabled={chargeMutation.isPending}>
-              <Zap className="h-3.5 w-3.5 mr-1.5" /> Run charges
-            </Button>
             <Button size="sm" variant="ghost" onClick={() => setOpen(!open)}>
               <Plus className="h-3.5 w-3.5 mr-1.5" /> Log manual
             </Button>
@@ -234,7 +202,7 @@ export function MaintenancePaymentsTracker() {
                     </Badge>
                     {p.failure_reason && <div className="text-[10px] text-destructive mt-0.5">{p.failure_reason}</div>}
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{p.reference || p.actum_order_id || "—"}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{p.reference || "—"}</TableCell>
                   <TableCell className="text-right text-xs font-bold tabular-nums">${(p.amount_cents / 100).toFixed(2)}</TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(p.id)} className="h-7 w-7">

@@ -3,12 +3,10 @@ import type { PaymentProviderId } from "./types";
 /**
  * Payment feature flags.
  *
- * Defaults keep today's behaviour exactly as-is: Actum and Plaid stay on,
- * Moov stays off. A tenant row can override the resolved provider once its
- * flag is enabled, so switching rails is a data change, not a deploy.
+ * Moov is the money-movement rail. Plaid remains available only as a legacy
+ * fallback flag; the Actum/Authentecheck rail has been removed entirely.
  */
 export interface PaymentFeatureFlags {
-  USE_ACTUM: boolean;
   USE_PLAID: boolean;
   USE_MOOV: boolean;
   SHOW_PAYMENT_SETTINGS: boolean;
@@ -23,7 +21,6 @@ function envFlag(name: string, fallback: boolean): boolean {
 }
 
 export const PAYMENT_FLAGS: PaymentFeatureFlags = {
-  USE_ACTUM: false,
   USE_PLAID: envFlag("USE_PLAID", false),
   // Moov is on, but still gated per-organization by the `moov_allowlisted`
   // flag (enforced again on the backend), so only allowlisted orgs see it.
@@ -43,8 +40,6 @@ export function isMoovAllowedForTenant(tenantAllowlisted: boolean | null | undef
 
 export function isProviderEnabled(provider: PaymentProviderId): boolean {
   switch (provider) {
-    case "actum":
-      return PAYMENT_FLAGS.USE_ACTUM;
     case "plaid":
       return PAYMENT_FLAGS.USE_PLAID;
     case "moov":
@@ -56,17 +51,13 @@ export function isProviderEnabled(provider: PaymentProviderId): boolean {
 
 /** The provider used when a tenant has no explicit (or no enabled) preference. */
 export function defaultProvider(): PaymentProviderId {
-  // Deliberately never Moov: enabling the Moov flag must not migrate any
-  // existing tenant. A tenant only lands on Moov by setting payment_provider
-  // explicitly on its own row.
-  if (PAYMENT_FLAGS.USE_ACTUM) return "actum";
-  return "plaid";
+  return PAYMENT_FLAGS.USE_MOOV ? "moov" : "plaid";
 }
 
 /**
  * Resolves the rail for a tenant.
- * `payment_provider` (new, provider-neutral) wins; `payment_rail` (legacy
- * actum/plaid flag) is the fallback so nothing changes for current tenants.
+ * `payment_provider` (provider-neutral) wins; the legacy `payment_rail`
+ * column is only consulted as a fallback.
  */
 export function resolveProvider(
   tenantPaymentProvider?: string | null,

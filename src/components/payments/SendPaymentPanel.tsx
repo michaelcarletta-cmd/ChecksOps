@@ -45,7 +45,6 @@ export function SendPaymentPanel({
   const [confirmed, setConfirmed] = useState(false);
   const [adminOverride, setAdminOverride] = useState(false);
   const { isAdmin } = usePermissions();
-  // isActum hook usage removed as Actum is disabled globally.
 
   // Load contractor's primary stakeholder account
   const { data: contractorAccount, isLoading: accountLoading } = useQuery({
@@ -86,7 +85,7 @@ export function SendPaymentPanel({
     ? (isNaN(feeNum) ? 0 : (feeNum / 100) * checkAmount)
     : (isNaN(feeNum) ? 0 : feeNum);
   const paymentAmount = checkAmount - feeAmount;
-  const actumFee = 1.00; // $1 pass-through per disbursement
+  const disbursementFee = 1.00; // $1 pass-through per disbursement
 
   const sendPayment = useMutation({
     mutationFn: async () => {
@@ -118,8 +117,7 @@ export function SendPaymentPanel({
 
       if (payErr) throw payErr;
 
-      // Actum is disabled globally.
-      throw new Error("Actum payment rail is no longer available. Please use the Moov payout hub.");
+      throw new Error("This legacy payment rail has been removed. Please use the Moov payout hub.");
     },
     onSuccess: () => {
       toast({ title: "Payment sent", description: `$${paymentAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} sent to ${contractorName}` });
@@ -192,7 +190,6 @@ export function SendPaymentPanel({
     );
   }
 
-  // Actum disabled globally. Check Moov eligibility if this were to be updated to Moov.
   return <div className="p-6 text-center text-sm text-muted-foreground border rounded-lg">Contractor payments are currently moving to Moov. Please use the Disbursement Console for all payments.</div>;
 
   return (
