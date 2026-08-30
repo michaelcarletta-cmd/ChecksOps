@@ -100,6 +100,74 @@ serve(async (req) => {
     const accountId = recipient.provider_account_id as string | null;
     if (!accountId) return json({ error: "This payment setup is not ready yet." }, 409);
 
+    // 1. Record Terms of Service acceptance (token minted by the provider's
+    //    hosted component in the browser).
+    try {
+      await moovFetch<any>(`/accounts/${accountId}`, {
+        method: "PATCH",
+        scopes: scopes.accountWrite(accountId),
+        body: { termsOfService: { token: tosToken } },
+      });
+    } catch (e) {
+      // Already-accepted ToS returns an error on some accounts — only fail hard
+      // if the capability request below also fails.
+      console.error("[moov-recipient-bank-add] tos patch", (e as Error).message);
+    }
+
+    // 2. Submit the identity profile the provider needs to pay this recipient.
+    //    SSN/EIN are forwarded only — never persisted or logged.
+    const [dobYear, dobMonth, dobDay] = dob ? dob.split("-").map(Number) : [0, 0, 0];
+    const address = {
+      addressLine1,
+      city,
+      stateOrProvince: state,
+      postalCode,
+      country: "US",
+    };
+    const profileBody = holderType === "business"
+      ? {
+        accountType: "business",
+        profile: {
+          business: {
+            legalBusinessName: holderName,
+            address,
+            governmentID: { ein: { full: ein } },
+          },
+        },
+      }
+      : {
+        accountType: "individual",
+        profile: {
+          individual: {
+            name: { firstName, lastName },
+            address,
+            birthDate: { day: dobDay, month: dobMonth, year: dobYear },
+            governmentID: { ssn: { full: ssn, last4: ssn.slice(-4) } },
+          },
+        },
+      };
+    try {
+      await moovFetch<any>(`/accounts/${accountId}`, {
+        method: "PATCH",
+        scopes: scopes.accountWrite(accountId),
+        body: profileBody,
+      });
+    } catch (e) {
+      console.error("[moov-recipient-bank-add] profile patch", (e as Error).message);
+      return json({ error: "The payment provider could not verify your identity details. Please check them and try again." }, 502);
+    }
+
+    // 3. Enable the capabilities required to receive payments.
+    try {
+      await moovFetch<any>(`/accounts/${accountId}/capabilities`, {
+        method: "POST",
+        scopes: scopes.capabilitiesWrite(accountId),
+        body: { capabilities: ["send-funds", "receive-funds", "wallet"] },
+      });
+    } catch (e) {
+      console.error("[moov-recipient-bank-add] capabilities", (e as Error).message);
+    }
+
     let created: any;
     try {
       created = await moovFetch<any>(`/accounts/${accountId}/bank-accounts`, {
