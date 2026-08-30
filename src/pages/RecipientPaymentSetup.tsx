@@ -157,6 +157,16 @@ export default function RecipientPaymentSetup() {
           bank_account_type: bankAccountType,
           routing_number: routingNumber,
           account_number: accountNumber,
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          dob,
+          ssn,
+          ein,
+          address_line1: addressLine1.trim(),
+          city: city.trim(),
+          state: state.trim().toUpperCase(),
+          postal_code: postalCode.trim(),
+          tos_token: tosTokenRef.current,
         },
       });
       if (fnErr) {
