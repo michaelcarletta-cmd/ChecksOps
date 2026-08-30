@@ -128,7 +128,19 @@ serve(async (req) => {
       }
     }
 
-
+    // Homeowners receiving claim funds are paid on Moov only. Verify the tenant
+    // has a usable Moov provider account BEFORE creating any rows.
+    const { data: moovAcct } = await supabase
+      .from("payment_provider_accounts")
+      .select("id, provider, can_send_payments, disabled")
+      .eq("tenant_id", tenant_id)
+      .eq("provider", "moov")
+      .maybeSingle();
+    if (!moovAcct || moovAcct.disabled) {
+      return new Response(JSON.stringify({
+        error: "Your payment account isn't set up yet. Finish payment account setup under Settings → Compliance & Docs before sending a homeowner bank link.",
+      }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     const verificationToken = crypto.randomUUID();
     // Homeowner-facing bank link: give them plenty of time to open it. Actum's
@@ -221,51 +233,50 @@ serve(async (req) => {
       }
     }
 
-    // 2c. Moov path — when this tenant is set up with the Moov rail, mint a
-    // provider recipient for the homeowner so their bank details are collected
-    // by Moov's hosted form and funds can be sent on the same rail the tenant
-    // disburses with. Falls back silently to the AuthenteCheck link if Moov
-    // isn't configured for this tenant.
+    // 2c. Moov recipient — REQUIRED. Homeowners receiving claim funds are paid
+    // on the Moov rail only, so their bank details are collected through Moov's
+    // hosted recipient setup (/pay-setup/:token). No AuthenteCheck/Plaid fallback.
     let payoutUrl: string | null = null;
     try {
-      const { data: providerAcct } = await supabase
-        .from("payment_provider_accounts")
-        .select("id, provider, can_send_payments, disabled")
-        .eq("tenant_id", tenant_id)
-        .eq("provider", "moov")
-        .maybeSingle();
-
-      if (providerAcct && !providerAcct.disabled) {
-        const { data: rec, error: recErr } = await authClient.functions.invoke("moov-recipient-create", {
-          body: {
-            tenant_id,
-            name: homeowner_name,
-            email: homeowner_email,
-            recipient_type: "individual",
-            relationship: "homeowner",
-            claim_id: scope === "claim" ? claim_id : null,
-            check_id: scope === "check" ? check_intake_item_id : null,
-            expires_in_days: 30,
-          },
-        });
-        if (recErr) throw recErr;
-        const recipient = (rec as any)?.recipient;
-        if (recipient?.provider_account_id) {
-          payoutUrl = (rec as any).secure_link ?? null;
-          await supabase
-            .from("stakeholder_accounts")
-            .update({
-              provider: "moov",
-              provider_environment: recipient.environment ?? null,
-              provider_account_id: recipient.provider_account_id,
-              verification_source: "moov",
-              verification_status: "pending",
-            })
-            .eq("id", account.id);
-        }
+      const { data: rec, error: recErr } = await authClient.functions.invoke("moov-recipient-create", {
+        body: {
+          tenant_id,
+          name: homeowner_name,
+          email: homeowner_email,
+          recipient_type: "individual",
+          relationship: "homeowner",
+          claim_id: scope === "claim" ? claim_id : null,
+          check_id: scope === "check" ? check_intake_item_id : null,
+          expires_in_days: 30,
+        },
+      });
+      if (recErr) throw recErr;
+      const recipient = (rec as any)?.recipient;
+      payoutUrl = (rec as any)?.secure_link ?? null;
+      if (!recipient?.provider_account_id || !payoutUrl) {
+        throw new Error("Moov did not return a payout setup link");
       }
+      await supabase
+        .from("stakeholder_accounts")
+        .update({
+          provider: "moov",
+          provider_environment: recipient.environment ?? null,
+          provider_account_id: recipient.provider_account_id,
+          verification_source: "moov",
+          verification_status: "pending",
+        })
+        .eq("id", account.id);
     } catch (e) {
-      console.error("[homeowner-bank-link-send] moov recipient setup skipped:", (e as Error).message);
+      const msg = (e as Error).message ?? "Failed to create Moov recipient";
+      console.error("[homeowner-bank-link-send] moov recipient failed:", msg);
+      // Roll back the shell records so the tenant can retry cleanly.
+      await supabase.from("check_stakeholders").delete().eq("stakeholder_account_id", account.id);
+      await supabase.from("homeowner_bank_link_tokens").delete().eq("id", linkRow.id);
+      await supabase.from("stakeholder_accounts").delete().eq("id", account.id);
+      return new Response(JSON.stringify({
+        success: false,
+        error: `Could not create the homeowner payout profile: ${msg}`,
+      }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
 
@@ -281,8 +292,7 @@ serve(async (req) => {
           templateData: {
             nickname,
             custname: homeowner_name,
-            verifyUrl: payoutUrl
-              ?? `${Deno.env.get("APP_BASE_URL") ?? "https://checksops.com"}/verify-account/${verificationToken}`,
+            verifyUrl: payoutUrl,
           },
         },
       });
@@ -299,6 +309,7 @@ serve(async (req) => {
       success: true,
       link_token_id: linkRow.id,
       stakeholder_account_id: account.id,
+      payout_url: payoutUrl,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err: any) {
     console.error("[homeowner-bank-link-send]", err);
