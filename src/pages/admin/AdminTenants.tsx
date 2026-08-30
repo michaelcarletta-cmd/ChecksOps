@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
-import { Megaphone, Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Palette, Briefcase, Home, Calculator, Landmark, Wallet } from "lucide-react";
+import { Megaphone, Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, Upload, X, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Palette, Briefcase, Home, Calculator, Landmark, Wallet, LogOut } from "lucide-react";
 import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { SettingsHero } from "@/components/settings/SettingsHero";
@@ -168,15 +168,15 @@ export default function AdminTenants() {
               <Home className="w-4 h-4 mr-1" /> Home
             </Button>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate("/admin/mortgage-ops")}>
-              <Briefcase className="w-4 h-4 mr-1" /> Mortgage Ops
+              <Briefcase className="w-4 h-4 sm:mr-1" /> <span className="hidden sm:inline">Mortgage Ops</span>
             </Button>
             <Button variant="outline" size="sm" onClick={() => navigate("/admin/financial-model")}>
-              <Calculator className="w-4 h-4 mr-1" /> Financial Model
+              <Calculator className="w-4 h-4 sm:mr-1" /> <span className="hidden sm:inline">Financial Model</span>
             </Button>
             <Button variant="ghost" size="sm" onClick={loadTenants}>
-              <RefreshCw className="w-4 h-4 mr-1" /> Refresh
+              <RefreshCw className="w-4 h-4 sm:mr-1" /> <span className="hidden sm:inline">Refresh</span>
             </Button>
             <Dialog open={createOpen} onOpenChange={setCreateOpen}>
               <DialogTrigger asChild>
@@ -184,6 +184,16 @@ export default function AdminTenants() {
               </DialogTrigger>
               <CreateTenantDialog onCreated={(t) => { setCreateOpen(false); loadTenants(); setSelected(t); }} />
             </Dialog>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={async () => {
+                await supabase.auth.signOut();
+                navigate("/login");
+              }}
+            >
+              <LogOut className="w-4 h-4 sm:mr-1" /> <span className="hidden sm:inline">Log Out</span>
+            </Button>
           </div>
         </div>
 
@@ -195,7 +205,7 @@ export default function AdminTenants() {
         />
 
         <Tabs defaultValue="tenants" className="w-full">
-          <TabsList className="mb-6">
+          <TabsList className="mb-6 w-full justify-start overflow-x-auto flex-nowrap">
 
             <TabsTrigger value="tenants"><Building2 className="w-4 h-4 mr-1" /> Tenants</TabsTrigger>
             <TabsTrigger value="platform-finance"><Landmark className="w-4 h-4 mr-1" /> Platform Finance</TabsTrigger>
