@@ -235,14 +235,6 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                 <CardTitle className="text-base">Prospect profile</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-3">
-                {!i.useWorkflowMix && (
-                  <NumberField
-                    label="Checks / month"
-                    value={i.checksPerMonth}
-                    onChange={set("checksPerMonth")}
-                    hint="Processed checks. Derived from the workflow mix when that is switched on."
-                  />
-                )}
                 <NumberField
                   label="Avg check amount"
                   prefix="$"
