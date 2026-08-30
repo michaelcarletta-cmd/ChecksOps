@@ -49,7 +49,7 @@ const CATEGORIES: {
     key: "template",
     label: "Templates",
     description:
-      "Reusable PDF/DOCX templates (TPA, contracts, waivers) mortgage ops and files can send.",
+      "Reusable PDF/DOCX templates (TPA, contracts, waivers) your team sends from check files.",
     accept: ".pdf,.doc,.docx",
     icon: FileSignature,
   },
@@ -220,6 +220,9 @@ function UploadBar({
         .replace(/^-|-$/g, "")
         .slice(0, 60) || crypto.randomUUID().slice(0, 8);
 
+      // Only Mortgage docs can auto-share with the Mortgage Desk; templates,
+      // catalogs and letterhead stay internal to the tenant.
+      const shareWithOps = category === "mortgage" && autoShare;
       const { error: insErr } = await supabase.from("tenant_documents" as any).insert({
         tenant_id: tenantId,
         doc_type: `${PREFIX}${category}:${slug}`,
@@ -227,13 +230,13 @@ function UploadBar({
         file_name: label,
         mime_type: file.type,
         file_size: file.size,
-        auto_share_mortgage_ops: autoShare,
+        auto_share_mortgage_ops: shareWithOps,
         uploaded_by: user?.id ?? null,
       });
       if (insErr) throw insErr;
       toast({
         title: "Added to library",
-        description: autoShare ? "Will auto-attach to Mortgage Desk requests." : undefined,
+        description: shareWithOps ? "Will auto-attach to Mortgage Desk requests." : undefined,
       });
       setDisplayName("");
       onDone();
@@ -270,10 +273,12 @@ function UploadBar({
           className="h-8"
         />
       </div>
-      <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none pb-1.5">
-        <Checkbox checked={autoShare} onCheckedChange={(v) => setAutoShare(v === true)} />
-        <span className="flex items-center gap-1"><Headset className="h-3 w-3" /> Auto-share with Mortgage Ops</span>
-      </label>
+      {category === "mortgage" && (
+        <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none pb-1.5">
+          <Checkbox checked={autoShare} onCheckedChange={(v) => setAutoShare(v === true)} />
+          <span className="flex items-center gap-1"><Headset className="h-3 w-3" /> Auto-share with Mortgage Ops</span>
+        </label>
+      )}
 
       <input
         ref={fileRef}
@@ -413,18 +418,20 @@ function LibraryItem({ row, onChange }: { row: LibraryRow; onChange: () => void 
           {row.file_size ? ` · ${(row.file_size / 1024).toFixed(0)} KB` : ""}
         </p>
       </div>
-      <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none mr-1">
-        <Checkbox
-          checked={autoShare}
-          disabled={saving}
-          onCheckedChange={(v) => toggleAutoShare(v === true)}
-          aria-label="Auto-share with Mortgage Ops"
-        />
-        <span className="flex items-center gap-1">
-          <Headset className="h-3 w-3" />
-          Auto-share with Mortgage Ops
-        </span>
-      </label>
+      {row.doc_type.startsWith(`${PREFIX}mortgage:`) && (
+        <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none mr-1">
+          <Checkbox
+            checked={autoShare}
+            disabled={saving}
+            onCheckedChange={(v) => toggleAutoShare(v === true)}
+            aria-label="Auto-share with Mortgage Ops"
+          />
+          <span className="flex items-center gap-1">
+            <Headset className="h-3 w-3" />
+            Auto-share with Mortgage Ops
+          </span>
+        </label>
+      )}
       <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none mr-1">
         <Checkbox
           checked={sharedHomeowner}
