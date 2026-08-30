@@ -13,6 +13,8 @@ import { DisbursementConsole } from "@/components/disbursement/DisbursementConso
 import { InlineErrorBoundary } from "@/components/InlineErrorBoundary";
 import { SendHomeownerBankLinkDialog } from "@/components/disbursement/SendHomeownerBankLinkDialog";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
+import { ProjectPlanCard } from "@/components/homeowner-ledger/ProjectPlanCard";
+
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
 
