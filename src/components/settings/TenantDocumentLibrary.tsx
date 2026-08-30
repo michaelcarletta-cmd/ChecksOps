@@ -134,8 +134,8 @@ export function TenantDocumentLibrary({ tenantId }: { tenantId: string }) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="template">
-          <TabsList className="grid grid-cols-4 w-full">
+        <Tabs defaultValue="mortgage">
+          <TabsList className="flex w-full flex-wrap h-auto gap-1">
             {CATEGORIES.map((c) => (
               <TabsTrigger key={c.key} value={c.key} className="text-xs">
                 <c.icon className="h-3.5 w-3.5 mr-1" /> {c.label}
@@ -151,8 +151,11 @@ export function TenantDocumentLibrary({ tenantId }: { tenantId: string }) {
                   tenantId={tenantId}
                   category={c.key}
                   accept={c.accept}
+                  kinds={c.key === "mortgage" ? MORTGAGE_DOC_KINDS : undefined}
+                  defaultAutoShare={c.key === "mortgage"}
                   onDone={load}
                 />
+
                 {loading ? (
                   <div className="py-6 flex justify-center">
                     <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
