@@ -23,16 +23,8 @@ import {
 } from "./workflows";
 
 export interface PnlAssumptions extends WorkflowMix {
-  // Volume
+  // Volume (workflow-mix counts are per tenant per month)
   tenants: number;
-  /** Jobs / transactions per tenant per month — drives the workflow mix. */
-  jobsPerTenantPerMonth: number;
-  /** Legacy explicit check count, used only when the workflow mix is off. */
-  checksPerTenantPerMonth: number;
-  /** Same-day disbursements per tenant per month — billed at the $1.00 rate. */
-  sameDayDisbursementsPerTenant: number;
-  /** Next-day disbursements per tenant per month — billed at the $0.75 rate. */
-  nextDayDisbursementsPerTenant: number;
 
   // Revenue (charged to tenant)
   perCheckFee: number;
@@ -70,12 +62,8 @@ export interface PnlAssumptions extends WorkflowMix {
 
 export const DEFAULT_PNL: PnlAssumptions = {
   ...DEFAULT_WORKFLOW_MIX,
-  jobsPerTenantPerMonth: 80,
 
   tenants: 5,
-  checksPerTenantPerMonth: 40,
-  sameDayDisbursementsPerTenant: 20,
-  nextDayDisbursementsPerTenant: 60,
 
   perCheckFee: 4,
   disbursementFeeHigh: 1,
@@ -155,30 +143,16 @@ export interface PnlResult {
   breakEvenTenants: number;
 }
 
-/** Per-tenant monthly volumes, from the workflow mix or the legacy explicit inputs. */
+/** Per-tenant monthly volumes, straight from the workflow-mix counts. */
 export function tenantVolumes(a: PnlAssumptions) {
-  if (a.useWorkflowMix) {
-    const w = workflowVolumes(a, a.jobsPerTenantPerMonth);
-    return {
-      checks: w.checks,
-      sameDay: w.sameDay,
-      nextDay: w.nextDay,
-      rtpTransfers: w.rtpTransfers,
-      walletTransfers: w.walletTransfers,
-      jobs: w.jobs,
-    };
-  }
-  const checks = nn(a.checksPerTenantPerMonth);
-  const sameDay = nn(a.sameDayDisbursementsPerTenant);
-  const nextDay = nn(a.nextDayDisbursementsPerTenant);
+  const w = workflowVolumes(a);
   return {
-    checks,
-    sameDay,
-    nextDay,
-    rtpTransfers: 0,
-    walletTransfers: 0,
-    // Without a mix, a job is one processed check.
-    jobs: checks,
+    checks: w.checks,
+    sameDay: w.sameDay,
+    nextDay: w.nextDay,
+    rtpTransfers: w.rtpTransfers,
+    walletTransfers: w.walletTransfers,
+    jobs: w.jobs,
   };
 }
 
@@ -353,10 +327,12 @@ export const SCENARIOS: Record<ScenarioKey, { label: string; patch: Partial<PnlA
     label: "Low volume",
     patch: {
       tenants: 3,
-      jobsPerTenantPerMonth: 40,
-      checksPerTenantPerMonth: 20,
-      sameDayDisbursementsPerTenant: 10,
-      nextDayDisbursementsPerTenant: 30,
+      checksPerMonth: 20,
+      sameDayPayoutsPerMonth: 10,
+      nextDayPayoutsPerMonth: 30,
+      receiveOnlyPerMonth: 15,
+      rtpPerMonth: 5,
+      walletPerMonth: 2,
       newTenantsPerMonth: 0,
     },
   },
@@ -364,10 +340,12 @@ export const SCENARIOS: Record<ScenarioKey, { label: string; patch: Partial<PnlA
     label: "Expected",
     patch: {
       tenants: 10,
-      jobsPerTenantPerMonth: 80,
-      checksPerTenantPerMonth: 40,
-      sameDayDisbursementsPerTenant: 20,
-      nextDayDisbursementsPerTenant: 60,
+      checksPerMonth: 40,
+      sameDayPayoutsPerMonth: 20,
+      nextDayPayoutsPerMonth: 60,
+      receiveOnlyPerMonth: 30,
+      rtpPerMonth: 10,
+      walletPerMonth: 5,
       newTenantsPerMonth: 1,
     },
   },
@@ -375,10 +353,12 @@ export const SCENARIOS: Record<ScenarioKey, { label: string; patch: Partial<PnlA
     label: "High volume",
     patch: {
       tenants: 30,
-      jobsPerTenantPerMonth: 200,
-      checksPerTenantPerMonth: 100,
-      sameDayDisbursementsPerTenant: 60,
-      nextDayDisbursementsPerTenant: 240,
+      checksPerMonth: 100,
+      sameDayPayoutsPerMonth: 60,
+      nextDayPayoutsPerMonth: 180,
+      receiveOnlyPerMonth: 80,
+      rtpPerMonth: 30,
+      walletPerMonth: 15,
       newTenantsPerMonth: 3,
     },
   },
