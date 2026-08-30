@@ -1,12 +1,12 @@
 /**
  * Provider-agnostic payment domain model.
  *
- * Nothing in here knows about Actum, Plaid, or Moov. Providers implement the
+ * Nothing in here knows about Plaid or Moov. Providers implement the
  * `PaymentProvider` interface below; business logic and UI only ever talk to
  * the interface and these types.
  */
 
-export type PaymentProviderId = "actum" | "plaid" | "moov";
+export type PaymentProviderId = "plaid" | "moov";
 
 /** Lifecycle of a tenant's connected payment account. */
 export type PaymentAccountStatus =
