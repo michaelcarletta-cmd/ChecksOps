@@ -46,10 +46,14 @@ export function SendHomeownerBankLinkDialog({ open, onOpenChange, checkIntakeIte
       if ((data as any)?.error) throw new Error((data as any).error);
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
+      const url = data?.payout_url as string | undefined;
+      if (url) {
+        navigator.clipboard?.writeText(url).catch(() => {});
+      }
       toast({
-        title: "Bank verification link sent",
-        description: `${name} will receive an email to link their bank account. Once verified they'll appear as a stakeholder here.`,
+        title: "Payout setup link sent",
+        description: `${name} will receive an email to complete their payout profile and bank details. ${url ? "The link was also copied to your clipboard." : ""}`,
       });
       qc.invalidateQueries({ queryKey: ["check-stakeholders", checkIntakeItemId] });
       setName(""); setEmail("");
