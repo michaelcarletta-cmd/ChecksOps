@@ -19,10 +19,16 @@ export interface PlatformAnnouncement {
 
 /** Announcements currently inside their display window. */
 export function useActivePlatformAnnouncements() {
-  return useQuery({
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
     queryKey: ["platform-announcements", "active"],
-    staleTime: 60_000,
-    refetchInterval: 5 * 60_000,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: true,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     queryFn: async (): Promise<PlatformAnnouncement[]> => {
       const nowIso = new Date().toISOString();
       const { data, error } = await supabase
@@ -37,6 +43,25 @@ export function useActivePlatformAnnouncements() {
       );
     },
   });
+
+  // Push updates: any change to announcements appears instantly, no refresh needed.
+  useEffect(() => {
+    const channel = supabase
+      .channel("platform-announcements-live")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "platform_announcements" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["platform-announcements"] });
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
+  return query;
 }
 
 /** Every announcement (platform owner only — RLS blocks others from writing). */
