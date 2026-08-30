@@ -98,7 +98,15 @@ interface RequestRow {
   invoice_shipping_description?: string | null;
   invoice_notes?: string | null;
   invoice_number?: string | null;
+  mail_to_name?: string | null;
+  mail_to_address?: string | null;
+  shipping_label_path?: string | null;
+  shipping_label_name?: string | null;
+  shipping_label_carrier?: string | null;
+  shipping_label_tracking?: string | null;
+  shipping_label_uploaded_at?: string | null;
 }
+
 
 interface SiblingRequestRow {
   id: string;
