@@ -52,7 +52,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
     setI((prev) => ({ ...prev, [key]: v }));
 
   const checks = useMemo(() => effectiveChecks(i), [i]);
-  const vol = useMemo(() => (i.useWorkflowMix ? workflowVolumes(i) : null), [i]);
+  const vol = useMemo(() => workflowVolumes(i), [i]);
   const workflows = useMemo(() => workflowPriceComponents(i, priceRatesFrom(i)), [i]);
   const weightedPerJobCost = useMemo(
     () => workflows.reduce((a, w) => a + w.share * w.total, 0),
@@ -83,23 +83,16 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
       [`iink pricing source: ${IINK_PRICING_SOURCE} (captured ${IINK_PRICING_CAPTURED})`],
       [],
       ["Prospect profile"],
-      ["Workflow mix in use", i.useWorkflowMix ? "Yes" : "No — explicit counts"],
-      ["Jobs / transactions per month", i.useWorkflowMix ? i.jobsPerMonth : ""],
-      ["% check + 1 ACH", i.pctCheckAchSingle],
-      ["% check + multiple ACH", i.pctCheckAchMulti],
-      ["% receive funds only", i.pctReceiveOnly],
-      ["% wallet / internal transfer", i.pctWalletTransfer],
-      ["% RTP / instant payment", i.pctRtp],
-      ["ACH per multi-ACH job", i.avgAchOnMultiAchJob],
-      ["Payouts per receive-only job", i.avgPayoutsPerReceiveOnlyJob],
-      ["% payouts same-day", i.pctPayoutsSameDay],
+      ["Jobs / transactions per month", vol.jobs],
       ["Processed checks / month", checks],
+      ["Same-day payouts / month", i.sameDayPayoutsPerMonth],
+      ["Next-day payouts / month", i.nextDayPayoutsPerMonth],
+      ["Received funds / month", i.receiveOnlyPerMonth],
+      ["RTP / instant payments / month", i.rtpPerMonth],
+      ["Wallet transfers / month", i.walletPerMonth],
       ["Average check amount", i.avgCheckAmount],
       ["% checks with mortgage payee", i.mortgagePctOfChecks],
       ["Avg mortgage companies on those checks", i.avgMortgageCompanies],
-      ["Same-day ACH disbursements / month", i.sameDayDisbursementsPerMonth],
-      ["Next-day ACH disbursements / month", i.nextDayDisbursementsPerMonth],
-      ["RTP transfers / month", i.rtpTransfersPerMonth],
       ["Avg RTP transfer amount", i.avgRtpTransferAmount],
       ["Avg mortgage checks per claim", i.avgMortgageChecksPerClaim],
       [],
