@@ -70,7 +70,7 @@ export function PlatformAnnouncementBanner() {
   };
 
   return (
-    <div className="w-full">
+    <div className="sticky top-0 z-50 w-full">
       {visible.map((a) => {
         const tone = TONE[a.severity] ?? TONE.info;
         const windowText = formatWindow(a);
