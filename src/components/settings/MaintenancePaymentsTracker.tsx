@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { DollarSign, Plus, Trash2, Zap, Loader2 } from "lucide-react";
+import { DollarSign, Plus, Trash2, Loader2 } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 
 export function MaintenancePaymentsTracker() {
