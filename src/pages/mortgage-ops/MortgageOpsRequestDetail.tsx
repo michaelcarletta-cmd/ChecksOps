@@ -1159,9 +1159,13 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
 
               <CardContent className="pt-4 space-y-3">
                 <div className="font-semibold text-sm flex items-center justify-between">
-                  <span className="flex items-center gap-2"><FileText className="h-4 w-4" /> Attachments</span>
+                  <span className="flex items-center gap-2"><FileText className="h-4 w-4" /> Check file attachments</span>
                   <span className="text-xs text-muted-foreground">{files.length}</span>
                 </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Every document the contractor adds to this check file (adjuster worksheet, carrier estimate, etc.)
+                  shows here automatically — including files uploaded after the request was sent.
+                </p>
                 {files.length === 0 ? (
                   <p className="text-xs text-muted-foreground">No attachments yet.</p>
                 ) : (
