@@ -47,16 +47,18 @@ export function WhiteLabelCheckCenter() {
     <div className="min-h-screen bg-background">
       <header className="h-14 border-b border-border/40 bg-background/95 backdrop-blur flex items-center px-3 md:px-5 sticky top-0 z-10">
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
-          {tenant?.logo_url && (
+          {tenant?.logo_url ? (
             <img src={tenant.logo_url} alt={tenant.name} className="h-7 md:h-8 object-contain flex-shrink-0" />
-          )}
+          ) : null}
           <div className="flex items-center gap-2 min-w-0">
-            <div className="min-w-0">
-              <span className="text-sm font-semibold truncate block">{tenant?.name || "Check Center"}</span>
-              <span className="hidden sm:flex items-center gap-1 text-[10px] text-muted-foreground leading-none">
-                <Banknote className="h-3 w-3" /> ChecksOps command center
-              </span>
-            </div>
+            {!tenant?.logo_url && (
+              <div className="min-w-0">
+                <span className="text-sm font-semibold truncate block">{tenant?.name || "Check Center"}</span>
+                <span className="hidden sm:flex items-center gap-1 text-[10px] text-muted-foreground leading-none">
+                  <Banknote className="h-3 w-3" /> ChecksOps command center
+                </span>
+              </div>
+            )}
             {tenant && !tenant.is_system_tenant && tenant.subscription_status === "active" && (
               <Badge
                 variant="outline"
