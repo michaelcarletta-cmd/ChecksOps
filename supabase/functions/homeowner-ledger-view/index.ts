@@ -51,6 +51,10 @@ Deno.serve(async (req) => {
     let pending_signatures: any[] = []
     let pending_endorsements: any[] = []
     let shared_documents: any[] = []
+    let project_plan: any = null
+    let money: any = null
+    let deductible_payments: any[] = []
+
 
     if (tok.claim_id) {
       const { data: c, error: claimErr } = await supabase
@@ -130,6 +134,51 @@ Deno.serve(async (req) => {
         }
       }
       totals.remaining = Math.max(0, totals.received - totals.released)
+
+      // Project schedule + money summary (contractor-maintained)
+      const { data: plan } = await supabase
+        .from('claim_project_plans')
+        .select('start_window_start, start_window_end, schedule_status, schedule_note, contract_total, deductible_amount, other_out_of_pocket, share_with_homeowner, allow_deductible_payment, updated_at')
+        .eq('claim_id', tok.claim_id)
+        .maybeSingle()
+
+      const { data: dpays } = await supabase
+        .from('homeowner_deductible_payments')
+        .select('id, amount, status, bank_name, bank_last_four, created_at, completed_at')
+        .eq('claim_id', tok.claim_id)
+        .order('created_at', { ascending: false })
+      deductible_payments = (dpays ?? []) as any[]
+
+      if (plan && plan.share_with_homeowner) {
+        project_plan = {
+          start_window_start: plan.start_window_start,
+          start_window_end: plan.start_window_end,
+          schedule_status: plan.schedule_status,
+          schedule_note: plan.schedule_note,
+          updated_at: plan.updated_at,
+        }
+        const deductible = Number(plan.deductible_amount ?? 0)
+        const other = Number(plan.other_out_of_pocket ?? 0)
+        const contract = Number(plan.contract_total ?? 0)
+        const deductiblePaid = deductible_payments
+          .filter((p) => !['failed', 'returned', 'canceled'].includes(String(p.status)))
+          .reduce((s, p) => s + Number(p.amount ?? 0), 0)
+        const insuranceOutstanding = contract > 0
+          ? Math.max(0, contract - deductible - other - totals.received)
+          : 0
+        money = {
+          contract_total: contract,
+          insurance_received: totals.received,
+          insurance_outstanding: insuranceOutstanding,
+          deductible_amount: deductible,
+          deductible_paid: deductiblePaid,
+          deductible_due: Math.max(0, deductible - deductiblePaid),
+          other_out_of_pocket: other,
+          out_of_pocket_total: Math.max(0, deductible + other - deductiblePaid),
+          allow_deductible_payment: !!plan.allow_deductible_payment,
+        }
+      }
+
 
       const checkIds = checks.map((c) => c.id)
       const checkMeta = new Map(checks.map((c) => [c.id, c]))
@@ -257,7 +306,11 @@ Deno.serve(async (req) => {
       pending_signatures,
       pending_endorsements,
       shared_documents,
+      project_plan,
+      money,
+      deductible_payments,
       can_upload: true,
+
     })
   } catch (e) {
     console.error('homeowner-ledger-view error', e)

@@ -11,8 +11,9 @@ import {
   ShieldCheck, Loader2, ImagePlus, Upload, CheckCircle2,
   Banknote, Send, PenTool, Wallet, Hammer, FileText, AlertCircle,
   Phone, Building2, MessageSquare, ChevronDown, ChevronUp, Palette, Plus,
-  Download,
+  Download, CalendarRange, Landmark,
 } from "lucide-react";
+
 import { toast } from "sonner";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
@@ -68,6 +69,36 @@ type SharedDocument = {
   url: string;
 };
 
+type ProjectPlan = {
+  start_window_start: string | null;
+  start_window_end: string | null;
+  schedule_status: string;
+  schedule_note: string | null;
+  updated_at: string | null;
+};
+
+type MoneySummary = {
+  contract_total: number;
+  insurance_received: number;
+  insurance_outstanding: number;
+  deductible_amount: number;
+  deductible_paid: number;
+  deductible_due: number;
+  other_out_of_pocket: number;
+  out_of_pocket_total: number;
+  allow_deductible_payment: boolean;
+};
+
+type DeductiblePayment = {
+  id: string;
+  amount: number;
+  status: string;
+  bank_name: string | null;
+  bank_last_four: string | null;
+  created_at: string;
+  completed_at: string | null;
+};
+
 type Summary = {
   ok: boolean;
   mode: "claim" | "pre_claim";
@@ -79,8 +110,12 @@ type Summary = {
   pending_signatures?: PendingSignature[];
   pending_endorsements?: PendingEndorsement[];
   shared_documents?: SharedDocument[];
+  project_plan?: ProjectPlan | null;
+  money?: MoneySummary | null;
+  deductible_payments?: DeductiblePayment[];
   can_upload: boolean;
 };
+
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n || 0);
@@ -212,7 +247,16 @@ function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () =>
         </CardContent>
       </Card>
 
+      <ProjectSchedulePanel plan={data.project_plan ?? null} />
+      <MoneySummaryPanel
+        money={data.money ?? null}
+        payments={data.deductible_payments ?? []}
+        token={token}
+        onPaid={onRefresh}
+      />
+
       <CollapsibleUpload token={token} onDone={onRefresh} />
+
 
       <PendingEndorsementsPanel pending={data.pending_endorsements ?? []} />
       <PendingSignaturesPanel token={token} pending={data.pending_signatures ?? []} />
@@ -702,4 +746,209 @@ async function fileToBase64(f: File): Promise<string> {
     r.onerror = () => rej(new Error("read failed"));
     r.readAsDataURL(f);
   });
+}
+
+/* ---------------- Project schedule ---------------- */
+
+const SCHEDULE_LABEL: Record<string, { label: string; tone: string }> = {
+  tentative: { label: "Tentative", tone: "text-amber-400" },
+  confirmed: { label: "Confirmed", tone: "text-emerald-400" },
+  rescheduled: { label: "Rescheduled", tone: "text-amber-400" },
+  in_progress: { label: "In progress", tone: "text-sky-400" },
+  on_hold: { label: "On hold", tone: "text-muted-foreground" },
+  complete: { label: "Complete", tone: "text-emerald-400" },
+};
+
+function prettyDate(d: string | null): string | null {
+  if (!d) return null;
+  const parsed = new Date(`${d}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function ProjectSchedulePanel({ plan }: { plan: ProjectPlan | null }) {
+  if (!plan) return null;
+  const start = prettyDate(plan.start_window_start);
+  const end = prettyDate(plan.start_window_end);
+  if (!start && !end && !plan.schedule_note) return null;
+  const meta = SCHEDULE_LABEL[plan.schedule_status] ?? SCHEDULE_LABEL.tentative;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <CalendarRange className="h-4 w-4 text-primary" />
+          Your project start
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-lg font-semibold">
+            {start && end && start !== end ? `${start} – ${end}` : start || end || "To be scheduled"}
+          </span>
+          <Badge variant="secondary" className={`text-[10px] ${meta.tone}`}>{meta.label}</Badge>
+        </div>
+        {plan.schedule_note && (
+          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{plan.schedule_note}</p>
+        )}
+        <p className="text-[11px] text-muted-foreground">
+          Dates are an estimate from your contractor and can shift with materials and weather.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ---------------- Money summary + deductible payment ---------------- */
+
+function MoneySummaryPanel({
+  money, payments, token, onPaid,
+}: {
+  money: MoneySummary | null;
+  payments: DeductiblePayment[];
+  token: string;
+  onPaid: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [holderName, setHolderName] = useState("");
+  const [accountType, setAccountType] = useState<"checking" | "savings">("checking");
+  const [routing, setRouting] = useState("");
+  const [account, setAccount] = useState("");
+  const [authorized, setAuthorized] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open && money && !amount) setAmount(money.deductible_due.toFixed(2));
+  }, [open, money]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!money) return null;
+
+  const canPay = money.allow_deductible_payment && money.deductible_due > 0;
+
+  const submit = async () => {
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("homeowner-deductible-pay", {
+        body: {
+          token,
+          amount: Number(amount),
+          holder_name: holderName,
+          bank_account_type: accountType,
+          routing_number: routing,
+          account_number: account,
+          authorized,
+        },
+      });
+      const msg = (data as any)?.error ?? error?.message;
+      if (msg) throw new Error(msg);
+      toast.success("Payment started. Your bank transfer is on its way.");
+      setRouting("");
+      setAccount("");
+      setAuthorized(false);
+      setOpen(false);
+      onPaid();
+    } catch (e: any) {
+      toast.error(e.message || "Payment could not be started");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Wallet className="h-4 w-4 text-primary" />
+          What insurance covers &amp; what you owe
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-2 gap-2">
+          <TotalTile label="Insurance received" value={money.insurance_received} tone="text-emerald-400" />
+          <TotalTile label="Insurance still expected" value={money.insurance_outstanding} tone="text-sky-400" />
+          <TotalTile label="Your deductible" value={money.deductible_amount} tone="text-amber-400" />
+          <TotalTile label="Your total out of pocket" value={money.out_of_pocket_total} tone="text-foreground" highlight />
+        </div>
+        {money.contract_total > 0 && (
+          <p className="text-[11px] text-muted-foreground">
+            Total project amount {fmt(money.contract_total)}
+            {money.other_out_of_pocket > 0 ? ` · Other out of pocket ${fmt(money.other_out_of_pocket)}` : ""}
+            {money.deductible_paid > 0 ? ` · Deductible paid ${fmt(money.deductible_paid)}` : ""}
+          </p>
+        )}
+
+        {payments.length > 0 && (
+          <div className="space-y-1">
+            {payments.map((p) => (
+              <div key={p.id} className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">
+                  Deductible payment{p.bank_last_four ? ` · ${p.bank_name ?? "Bank"} ••••${p.bank_last_four}` : ""}
+                </span>
+                <span className="flex items-center gap-2">
+                  {fmt(Number(p.amount))}
+                  <Badge variant="secondary" className="text-[10px]">{p.status}</Badge>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {canPay && !open && (
+          <Button size="sm" className="w-full" onClick={() => setOpen(true)}>
+            <Landmark className="h-4 w-4 mr-1.5" />
+            Pay {fmt(money.deductible_due)} deductible from your bank
+          </Button>
+        )}
+
+        {canPay && open && (
+          <div className="space-y-3 rounded-lg border border-border p-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Amount</Label>
+              <Input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Name on the account</Label>
+              <Input value={holderName} onChange={(e) => setHolderName(e.target.value)} placeholder="Jane Homeowner" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Routing number</Label>
+                <Input inputMode="numeric" value={routing} onChange={(e) => setRouting(e.target.value.replace(/\D/g, ""))} maxLength={9} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Account number</Label>
+                <Input inputMode="numeric" value={account} onChange={(e) => setAccount(e.target.value.replace(/\D/g, ""))} maxLength={17} />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              {(["checking", "savings"] as const).map((t) => (
+                <Button key={t} type="button" size="sm" variant={accountType === t ? "default" : "outline"}
+                  className="flex-1 capitalize" onClick={() => setAccountType(t)}>
+                  {t}
+                </Button>
+              ))}
+            </div>
+            <label className="flex items-start gap-2 text-[11px] text-muted-foreground">
+              <input type="checkbox" className="mt-0.5" checked={authorized} onChange={(e) => setAuthorized(e.target.checked)} />
+              <span>
+                I authorize a one-time electronic debit (ACH) from this bank account for the amount above,
+                payable to my contractor. Bank transfers can take several business days to settle.
+              </span>
+            </label>
+            <div className="flex gap-2">
+              <Button size="sm" className="flex-1" disabled={submitting || !authorized} onClick={submit}>
+                {submitting ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : null}
+                Pay {amount ? fmt(Number(amount)) : ""}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setOpen(false)} disabled={submitting}>Cancel</Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+              <ShieldCheck className="h-3 w-3" /> Your bank numbers go straight to our payment provider and are never stored here.
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }

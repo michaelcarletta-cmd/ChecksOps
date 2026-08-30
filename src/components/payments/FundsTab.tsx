@@ -13,6 +13,8 @@ import { DisbursementConsole } from "@/components/disbursement/DisbursementConso
 import { InlineErrorBoundary } from "@/components/InlineErrorBoundary";
 import { SendHomeownerBankLinkDialog } from "@/components/disbursement/SendHomeownerBankLinkDialog";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
+import { ProjectPlanCard } from "@/components/homeowner-ledger/ProjectPlanCard";
+
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
 
@@ -419,7 +421,12 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
         </Card>
       )}
 
+      {claimId && tenant?.id && (
+        <ProjectPlanCard claimId={claimId} tenantId={tenant.id} />
+      )}
+
       {/* Homeowner links */}
+
       <div className="space-y-2">
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setHomeownerLinkOpen(true)}>
