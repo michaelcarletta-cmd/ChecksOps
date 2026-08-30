@@ -181,12 +181,21 @@ export function TenantDocumentLibrary({ tenantId }: { tenantId: string }) {
 }
 
 function UploadBar({
-  tenantId, category, accept, onDone,
-}: { tenantId: string; category: LibraryCategory; accept: string; onDone: () => void }) {
+  tenantId, category, accept, kinds, defaultAutoShare, onDone,
+}: {
+  tenantId: string;
+  category: LibraryCategory;
+  accept: string;
+  kinds?: string[];
+  defaultAutoShare?: boolean;
+  onDone: () => void;
+}) {
   const { user } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [displayName, setDisplayName] = useState("");
+  const [kind, setKind] = useState(kinds?.[0] ?? "");
+  const [autoShare, setAutoShare] = useState(!!defaultAutoShare);
 
   const handleUpload = async (file: File) => {
     if (file.size > 25 * 1024 * 1024) {
@@ -202,7 +211,8 @@ function UploadBar({
         .upload(path, file, { upsert: false, contentType: file.type });
       if (upErr) throw upErr;
 
-      const slug = (displayName || file.name)
+      const label = displayName || (kinds && kind && kind !== "Other" ? kind : "") || file.name;
+      const slug = label
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "")
@@ -212,13 +222,17 @@ function UploadBar({
         tenant_id: tenantId,
         doc_type: `${PREFIX}${category}:${slug}`,
         file_path: path,
-        file_name: displayName || file.name,
+        file_name: label,
         mime_type: file.type,
         file_size: file.size,
+        auto_share_mortgage_ops: autoShare,
         uploaded_by: user?.id ?? null,
       });
       if (insErr) throw insErr;
-      toast({ title: "Added to library" });
+      toast({
+        title: "Added to library",
+        description: autoShare ? "Will auto-attach to Mortgage Desk requests." : undefined,
+      });
       setDisplayName("");
       onDone();
     } catch (e: any) {
@@ -231,15 +245,34 @@ function UploadBar({
 
   return (
     <div className="flex flex-wrap items-end gap-2 rounded border border-border p-3">
+      {kinds && (
+        <div className="space-y-1 min-w-[180px]">
+          <Label className="text-xs">Document type</Label>
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value)}
+            className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
+          >
+            {kinds.map((k) => (
+              <option key={k} value={k}>{k}</option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="space-y-1 flex-1 min-w-[180px]">
         <Label className="text-xs">Display name (optional)</Label>
         <Input
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
-          placeholder="e.g. Third Party Authorization"
+          placeholder={kinds ? "e.g. W-9 (2026)" : "e.g. Third Party Authorization"}
           className="h-8"
         />
       </div>
+      <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none pb-1.5">
+        <Checkbox checked={autoShare} onCheckedChange={(v) => setAutoShare(v === true)} />
+        <span className="flex items-center gap-1"><Headset className="h-3 w-3" /> Auto-share with Mortgage Ops</span>
+      </label>
+
       <input
         ref={fileRef}
         type="file"
