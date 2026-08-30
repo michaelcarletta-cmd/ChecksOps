@@ -302,6 +302,12 @@ export function LossDraftDetailPanel({
               />
             )}
 
+            {draft.check_intake_item_id && (
+              <MortgageDeskShippingCard checkIntakeItemId={draft.check_intake_item_id} />
+            )}
+
+
+
 
           </div>
         )}
