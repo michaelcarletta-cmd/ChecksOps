@@ -403,3 +403,21 @@ export default function RecipientPaymentSetup() {
     </main>
   );
 }
+
+let moovJsPromise: Promise<void> | null = null;
+
+/** Loads the provider's browser SDK once, on demand (Terms of Service Drop). */
+function loadMoovJs(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  if ((window as any).customElements?.get?.("moov-terms-of-service")) return Promise.resolve();
+  if (moovJsPromise) return moovJsPromise;
+  moovJsPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://js.moov.io/v1";
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Could not load the payment provider's secure component."));
+    document.head.appendChild(script);
+  });
+  return moovJsPromise;
+}
