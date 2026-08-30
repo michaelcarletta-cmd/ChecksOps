@@ -89,6 +89,7 @@ export function PlatformAnnouncementsManager() {
         title="New platform announcement"
         description="Shown as a banner at the top of every page for every tenant, signed in or not."
         icon={<Megaphone className="h-4 w-4 text-primary" />}
+        accent="primary"
       >
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-1.5 md:col-span-2">
@@ -135,7 +136,12 @@ export function PlatformAnnouncementsManager() {
         </div>
       </SectionCard>
 
-      <SectionCard title="Announcements" description="Toggle off to hide from tenants without deleting.">
+      <SectionCard
+        title="Announcements"
+        description="Toggle off to hide from tenants without deleting."
+        icon={<Megaphone className="h-4 w-4 text-primary" />}
+        accent="primary"
+      >
         {isLoading ? (
           <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
         ) : announcements.length === 0 ? (
