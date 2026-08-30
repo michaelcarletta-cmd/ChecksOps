@@ -69,6 +69,30 @@ serve(async (req) => {
       })
       .eq("id", stakeholder_account_id);
 
+    const appBase = Deno.env.get("CHECKSOPS_APP_URL") ?? Deno.env.get("APP_BASE_URL") ?? "https://checksops.com";
+    let verifyUrl = `${appBase}/verify-account/${token}`;
+
+    // Moov is the payment rail: send the recipient to the branded Moov-backed
+    // setup page (/pay-setup/:token) instead of the legacy bank-login flow.
+    if ((Deno.env.get("MOOV_ENABLED") ?? "false").toLowerCase() === "true") {
+      const moovLink = await ensureMoovRecipientLink({
+        supabase,
+        authHeader,
+        appBase,
+        tenantId: account.tenant_id,
+        stakeholderAccountId: stakeholder_account_id,
+        name: account.custname || account.nickname || "Payment recipient",
+        email: to,
+      });
+      if (typeof moovLink === "object" && "error" in moovLink) {
+        return new Response(JSON.stringify({ success: false, error: moovLink.error }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      verifyUrl = moovLink as string;
+    }
+
     await supabase.from("stakeholder_account_verification_log").insert({
       stakeholder_account_id,
       tenant_id: account.tenant_id,
