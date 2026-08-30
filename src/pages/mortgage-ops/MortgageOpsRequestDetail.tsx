@@ -1328,6 +1328,109 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
               </Card>
             )}
 
+            {/* Shipping & mail-to — everything here is visible to the tenant */}
+            <Card>
+              <CardContent className="pt-4 space-y-3">
+                <div className="font-semibold text-sm flex items-center gap-2">
+                  <MapPin className="h-4 w-4" /> Shipping &amp; mail-to address
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  The tenant sees this address and label on their loss draft — so they can
+                  ship the check themselves if they'd rather use their own label.
+                </p>
+
+                <div>
+                  <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Mail to (name)</label>
+                  <Input
+                    value={mailToName}
+                    onChange={(e) => setMailToName(e.target.value)}
+                    placeholder="Mortgage company / loss draft dept"
+                    className="h-8 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Mailing address</label>
+                    <Button size="sm" variant="ghost" className="h-6 text-[11px]" onClick={prefillMailToFromDirectory}>
+                      Pull from directory
+                    </Button>
+                  </div>
+                  <Textarea
+                    rows={4}
+                    value={mailToAddress}
+                    onChange={(e) => setMailToAddress(e.target.value)}
+                    placeholder={"Attn: Loss Draft Dept\n1234 Main St\nSuite 100\nCity, ST 00000"}
+                    className="text-sm"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Carrier</label>
+                    <Input
+                      value={shipCarrier}
+                      onChange={(e) => setShipCarrier(e.target.value)}
+                      placeholder="FedEx / UPS / USPS"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Tracking #</label>
+                    <Input
+                      value={shipTracking}
+                      onChange={(e) => setShipTracking(e.target.value)}
+                      placeholder="Tracking number"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                </div>
+
+                {req.shipping_label_path && (
+                  <div className="flex items-center justify-between gap-2 rounded border border-border/60 bg-muted/30 p-2 text-xs">
+                    <span className="truncate">
+                      🏷️ {req.shipping_label_name || "Shipping label"}
+                      {req.shipping_label_uploaded_at && (
+                        <span className="text-muted-foreground">
+                          {" "}· {format(new Date(req.shipping_label_uploaded_at), "MMM d, yyyy")}
+                        </span>
+                      )}
+                    </span>
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={openShippingLabel}>
+                      <Download className="h-3 w-3 mr-1" /> Open
+                    </Button>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="inline-flex">
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="application/pdf,image/*"
+                      disabled={uploadingLabel}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) void uploadShippingLabel(f);
+                        e.target.value = "";
+                      }}
+                    />
+                    <Button size="sm" variant="outline" className="h-8 text-xs" disabled={uploadingLabel} asChild>
+                      <span>
+                        {uploadingLabel ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Upload className="h-3 w-3 mr-1" />}
+                        {req.shipping_label_path ? "Replace label" : "Upload shipping label"}
+                      </span>
+                    </Button>
+                  </label>
+                  <Button size="sm" className="h-8 text-xs" disabled={savingShipping} onClick={() => saveShippingDetails()}>
+                    {savingShipping ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}
+                    Save shipping details
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+
             {/* Tenant usage — mortgage-ops work rolls up into the tenant's
                 monthly usage. No per-request contractor invoice is sent; ChecksOps
                 sweeps totals at month end. */}
