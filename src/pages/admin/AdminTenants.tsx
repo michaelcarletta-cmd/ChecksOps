@@ -234,6 +234,10 @@ export default function AdminTenants() {
           <TabsContent value="referrals">
             <AdminReferralDashboard />
           </TabsContent>
+          <TabsContent value="announcements">
+            <PlatformAnnouncementsManager />
+          </TabsContent>
+
         </Tabs>
 
       </SettingsPageShell>
