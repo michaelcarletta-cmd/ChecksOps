@@ -109,31 +109,58 @@ Deno.serve(async (req) => {
       }
       events = collapsed
 
-      // Authoritative totals: derive from check_intake_items + claim_disbursements
+      // Authoritative totals: derive from check_intake_items + disbursements
       // (events can be stale/backfilled inconsistently).
       const { data: allChecks } = await supabase
         .from('check_intake_items')
         .select('id, amount, check_stage, check_number')
         .eq('claim_id', tok.claim_id)
       const checks = (allChecks ?? []) as Array<{ id: string; amount: number | null; check_stage: string | null; check_number: string | null }>
+      // Any stage at or past deposit counts as deposited (funds_released is
+      // downstream of deposited — it must not reset the deposited total).
+      const DEPOSITED_STAGES = ['deposited', 'cleared', 'funds_released', 'disbursed']
       for (const c of checks) {
         const amt = Number(c.amount ?? 0)
         totals.received += amt
-        if (['deposited', 'cleared'].includes((c.check_stage || '').toLowerCase())) {
+        if (DEPOSITED_STAGES.includes((c.check_stage || '').toLowerCase())) {
           totals.deposited += amt
         }
       }
+
+      // Released = money actually sent out for this claim's checks.
+      const DEAD_STATUSES = ['cancelled', 'canceled', 'failed', 'returned', 'voided']
+      const claimCheckIds = checks.map((c) => c.id)
+      if (claimCheckIds.length > 0) {
+        const { data: batches } = await supabase
+          .from('disbursement_batches')
+          .select('id')
+          .in('check_intake_item_id', claimCheckIds)
+        const batchIds = (batches ?? []).map((b: any) => b.id)
+        if (batchIds.length > 0) {
+          const { data: splits } = await supabase
+            .from('disbursement_splits')
+            .select('amount, status')
+            .in('batch_id', batchIds)
+          for (const s of (splits ?? []) as any[]) {
+            if (!DEAD_STATUSES.includes(String(s.status || '').toLowerCase())) {
+              totals.released += Number(s.amount ?? 0)
+            }
+          }
+        }
+      }
+      // Legacy fallback (older claims recorded payouts here).
       const { data: disb } = await supabase
         .from('claim_disbursements')
         .select('amount, status')
         .eq('claim_id', tok.claim_id)
       for (const d of (disb ?? [])) {
         const s = ((d as any).status || '').toLowerCase()
-        if (s !== 'cancelled' && s !== 'failed') {
+        if (!DEAD_STATUSES.includes(s)) {
           totals.released += Number((d as any).amount ?? 0)
         }
       }
       totals.remaining = Math.max(0, totals.received - totals.released)
+
 
       // Project schedule + money summary (contractor-maintained)
       const { data: plan } = await supabase
