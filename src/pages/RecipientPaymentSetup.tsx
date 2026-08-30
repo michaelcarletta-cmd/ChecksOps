@@ -101,12 +101,46 @@ export default function RecipientPaymentSetup() {
     return () => { cancelled = true; };
   }, [token]);
 
+  // Mount the provider's hosted Terms of Service component once the session
+  // token is available; it mints the acceptance token we submit with the form.
+  const tosTokenRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!session?.token) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await loadMoovJs();
+        if (cancelled || !tosMountRef.current) return;
+        const el = document.createElement("moov-terms-of-service") as any;
+        el.token = session.token;
+        el.onTermsOfServiceTokenReady = (t: any) => {
+          tosTokenRef.current = typeof t === "string" ? t : t?.token ?? null;
+          setTosReady(Boolean(tosTokenRef.current));
+        };
+        el.onTermsOfServiceTokenError = () => setTosReady(false);
+        tosMountRef.current.replaceChildren(el);
+      } catch { /* leave ToS hidden; submit will surface an error */ }
+    })();
+    return () => { cancelled = true; };
+  }, [session?.token]);
+
   const digitsOnly = (value: string, max: number) => value.replace(/\D/g, "").slice(0, max);
+
+  const identityValid =
+    addressLine1.trim().length >= 3 &&
+    city.trim().length >= 1 &&
+    /^[A-Za-z]{2}$/.test(state.trim()) &&
+    postalCode.trim().length >= 5 &&
+    (holderType === "business"
+      ? ein.length === 9
+      : firstName.trim().length >= 1 && lastName.trim().length >= 1 && /^\d{4}-\d{2}-\d{2}$/.test(dob) && ssn.length === 9);
 
   const canSubmit =
     holderName.trim().length >= 2 &&
     routingNumber.length === 9 &&
     accountNumber.length >= 4 &&
+    identityValid &&
+    tosReady &&
     !saving;
 
   async function handleSubmit(e: React.FormEvent) {
