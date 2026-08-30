@@ -63,7 +63,7 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
         rtpCap: a.rtpFeeCap,
         walletFee: a.walletTransferFee,
         avgRtpAmount: a.avgRtpTransferAmount,
-      }, a.jobsPerTenantPerMonth),
+      }),
     [a],
   );
   const workflowCosts = useMemo(
@@ -74,7 +74,7 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
         nextDayCost: a.nextDayDisbursementCost,
         rtpCostPerTransfer: a.rtpCostPerTransfer,
         walletCost: a.walletTransferCost,
-      }, a.jobsPerTenantPerMonth),
+      }),
     [a],
   );
   const projection = useMemo(() => projectTwelveMonths(a, growth), [a, growth]);
@@ -231,16 +231,7 @@ export function PnlModel({ presentation }: { presentation: boolean }) {
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-3">
                 <NumberField label="Tenants" value={a.tenants} onChange={set("tenants")} />
-                {!a.useWorkflowMix && (
-                  <NumberField label="Checks / tenant / mo" value={a.checksPerTenantPerMonth} onChange={set("checksPerTenantPerMonth")} />
-                )}
                 <NumberField label="Per-check fee" prefix="$" step={0.25} value={a.perCheckFee} onChange={set("perCheckFee")} />
-                {!a.useWorkflowMix && (
-                  <>
-                    <NumberField label="Same-day disbursements / tenant / mo" value={a.sameDayDisbursementsPerTenant} onChange={set("sameDayDisbursementsPerTenant")} hint="Billed at the same-day rate." />
-                    <NumberField label="Next-day disbursements / tenant / mo" value={a.nextDayDisbursementsPerTenant} onChange={set("nextDayDisbursementsPerTenant")} hint="Billed at the next-day rate." />
-                  </>
-                )}
                 <NumberField label="Disbursement fee (high)" prefix="$" step={0.05} value={a.disbursementFeeHigh} onChange={set("disbursementFeeHigh")} hint="$1.00 tier." />
                 <NumberField label="RTP fee" suffix="%" step={0.05} value={a.rtpFeePct} onChange={set("rtpFeePct")} hint="Instant transfers are billed as a % of the amount." />
                 <NumberField label="RTP fee cap" prefix="$" step={0.5} value={a.rtpFeeCap} onChange={set("rtpFeeCap")} hint="Maximum RTP fee per transfer." />
