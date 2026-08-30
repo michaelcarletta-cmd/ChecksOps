@@ -292,116 +292,58 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Workflow / transaction mix</CardTitle>
                 <CardDescription className="text-xs">
-                  Not every job is a processed check. Set the share of monthly jobs by workflow — processed
-                  checks, ACH, RTP and wallet volume are all derived from this mix.
+                  Plain monthly counts — no percentages. Receive-funds-only and wallet jobs never pick up a
+                  check-processing cost.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex items-center justify-between gap-2 rounded-lg border border-border/60 p-2.5">
-                  <Label htmlFor="use-workflow-mix" className="text-xs text-muted-foreground">
-                    Use workflow mix
-                  </Label>
-                  <Switch
-                    id="use-workflow-mix"
-                    checked={i.useWorkflowMix}
-                    onCheckedChange={(v) => setI((prev) => ({ ...prev, useWorkflowMix: v }))}
+                <div className="grid grid-cols-2 gap-3">
+                  <NumberField
+                    label="Checks / mo"
+                    value={i.checksPerMonth}
+                    onChange={set("checksPerMonth")}
+                    hint="Insurance checks we process."
+                  />
+                  <NumberField
+                    label="Same-day payouts / mo"
+                    value={i.sameDayPayoutsPerMonth}
+                    onChange={set("sameDayPayoutsPerMonth")}
+                    hint="Flat same-day fee on ChecksOps. Included on iink plans."
+                  />
+                  <NumberField
+                    label="Next-day payouts / mo"
+                    value={i.nextDayPayoutsPerMonth}
+                    onChange={set("nextDayPayoutsPerMonth")}
+                    hint="Flat next-day fee on ChecksOps. Included on iink plans."
+                  />
+                  <NumberField
+                    label="Received funds / mo"
+                    value={i.receiveOnlyPerMonth}
+                    onChange={set("receiveOnlyPerMonth")}
+                    hint="Tenant only receives money — no check component."
+                  />
+                  <NumberField
+                    label="RTP / mo"
+                    value={i.rtpPerMonth}
+                    onChange={set("rtpPerMonth")}
+                    hint="Instant transfers. ChecksOps charges 0.95% capped at $5.00; iink charges 2–3% of the amount."
+                  />
+                  <NumberField
+                    label="Wallet transfers / mo"
+                    value={i.walletPerMonth}
+                    onChange={set("walletPerMonth")}
+                    hint="Money moved inside the platform wallet."
                   />
                 </div>
-
-                {i.useWorkflowMix ? (
-                  <>
-                    <div className="grid grid-cols-2 gap-3">
-                      <NumberField
-                        label="Jobs / transactions per mo"
-                        value={i.jobsPerMonth}
-                        onChange={set("jobsPerMonth")}
-                        hint="Every payment event the tenant runs through ChecksOps, however we are involved."
-                      />
-                      <NumberField
-                        label="Payouts sent same-day"
-                        suffix="%"
-                        max={100}
-                        step={5}
-                        value={i.pctPayoutsSameDay}
-                        onChange={set("pctPayoutsSameDay")}
-                        hint="Split of ACH payouts between the same-day and next-day rate."
-                      />
-                      <NumberField
-                        label="Check + 1 ACH"
-                        suffix="%"
-                        max={100}
-                        step={5}
-                        value={i.pctCheckAchSingle}
-                        onChange={set("pctCheckAchSingle")}
-                        hint="We process the check and send one disbursement."
-                      />
-                      <NumberField
-                        label="Check + multiple ACH"
-                        suffix="%"
-                        max={100}
-                        step={5}
-                        value={i.pctCheckAchMulti}
-                        onChange={set("pctCheckAchMulti")}
-                        hint="One processed check split across several disbursements."
-                      />
-                      <NumberField
-                        label="Receive funds only"
-                        suffix="%"
-                        max={100}
-                        step={5}
-                        value={i.pctReceiveOnly}
-                        onChange={set("pctReceiveOnly")}
-                        hint="No check-processing component at all — the tenant is the recipient."
-                      />
-                      <NumberField
-                        label="Wallet / internal transfer"
-                        suffix="%"
-                        max={100}
-                        step={5}
-                        value={i.pctWalletTransfer}
-                        onChange={set("pctWalletTransfer")}
-                        hint="Money moved inside the platform wallet."
-                      />
-                      <NumberField
-                        label="RTP / instant payment"
-                        suffix="%"
-                        max={100}
-                        step={5}
-                        value={i.pctRtp}
-                        onChange={set("pctRtp")}
-                        hint="Instant payout with no check-processing component."
-                      />
-                      <NumberField
-                        label="ACH on multi-ACH job"
-                        step={0.5}
-                        value={i.avgAchOnMultiAchJob}
-                        onChange={set("avgAchOnMultiAchJob")}
-                        hint="Average disbursements when a processed check is split."
-                      />
-                      <NumberField
-                        label="Payouts / receive-only job"
-                        step={0.5}
-                        value={i.avgPayoutsPerReceiveOnlyJob}
-                        onChange={set("avgPayoutsPerReceiveOnlyJob")}
-                        hint="Set to 0 for pure receipts where the tenant does not pay anyone out."
-                      />
-                    </div>
-                    {vol && (
-                      <p className="text-[11px] leading-relaxed text-muted-foreground">
-                        Derived: {Math.round(vol.checks).toLocaleString()} processed checks ·{" "}
-                        {Math.round(vol.achPayouts).toLocaleString()} ACH ({Math.round(vol.sameDay).toLocaleString()} same-day
-                        / {Math.round(vol.nextDay).toLocaleString()} next-day) ·{" "}
-                        {Math.round(vol.rtpTransfers).toLocaleString()} RTP ·{" "}
-                        {Math.round(vol.walletTransfers).toLocaleString()} wallet. Shares are normalised to 100%.
-                      </p>
-                    )}
-                  </>
-                ) : (
-                  <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    Workflow mix off — the explicit check, ACH and RTP counts in the prospect profile drive the
-                    model, and every job is treated as a processed check.
-                  </p>
-                )}
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Total: {Math.round(vol.jobs).toLocaleString()} jobs / mo —{" "}
+                  {Math.round(vol.checks).toLocaleString()} checks ·{" "}
+                  {Math.round(vol.sameDay).toLocaleString()} same-day /{" "}
+                  {Math.round(vol.nextDay).toLocaleString()} next-day payouts ·{" "}
+                  {Math.round(vol.receiveOnly).toLocaleString()} received ·{" "}
+                  {Math.round(vol.rtpTransfers).toLocaleString()} RTP ·{" "}
+                  {Math.round(vol.walletTransfers).toLocaleString()} wallet.
+                </p>
               </CardContent>
             </Card>
 
