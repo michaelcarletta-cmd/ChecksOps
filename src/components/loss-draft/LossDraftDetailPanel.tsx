@@ -29,6 +29,8 @@ import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImage
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { CheckMessageThread } from "@/components/check-messages/CheckMessageThread";
 import { SendToMortgageDeskButton } from "./SendToMortgageDeskButton";
+import { MortgageDeskShippingCard } from "./MortgageDeskShippingCard";
+
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -301,6 +303,12 @@ export function LossDraftDetailPanel({
                 }
               />
             )}
+
+            {draft.check_intake_item_id && (
+              <MortgageDeskShippingCard checkIntakeItemId={draft.check_intake_item_id} />
+            )}
+
+
 
 
           </div>

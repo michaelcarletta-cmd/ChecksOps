@@ -7600,6 +7600,8 @@ export type Database = {
           invoice_url: string | null
           loan_number: string | null
           loss_type: string | null
+          mail_to_address: string | null
+          mail_to_name: string | null
           mortgage_company: string | null
           mortgage_servicer: string | null
           note: string | null
@@ -7607,6 +7609,12 @@ export type Database = {
           predecessor_request_id: string | null
           property_address: string | null
           requested_by: string | null
+          shipping_label_carrier: string | null
+          shipping_label_name: string | null
+          shipping_label_path: string | null
+          shipping_label_tracking: string | null
+          shipping_label_uploaded_at: string | null
+          shipping_label_uploaded_by: string | null
           status: string
           stripe_invoice_id: string | null
           stripe_invoice_item_id: string | null
@@ -7648,6 +7656,8 @@ export type Database = {
           invoice_url?: string | null
           loan_number?: string | null
           loss_type?: string | null
+          mail_to_address?: string | null
+          mail_to_name?: string | null
           mortgage_company?: string | null
           mortgage_servicer?: string | null
           note?: string | null
@@ -7655,6 +7665,12 @@ export type Database = {
           predecessor_request_id?: string | null
           property_address?: string | null
           requested_by?: string | null
+          shipping_label_carrier?: string | null
+          shipping_label_name?: string | null
+          shipping_label_path?: string | null
+          shipping_label_tracking?: string | null
+          shipping_label_uploaded_at?: string | null
+          shipping_label_uploaded_by?: string | null
           status?: string
           stripe_invoice_id?: string | null
           stripe_invoice_item_id?: string | null
@@ -7696,6 +7712,8 @@ export type Database = {
           invoice_url?: string | null
           loan_number?: string | null
           loss_type?: string | null
+          mail_to_address?: string | null
+          mail_to_name?: string | null
           mortgage_company?: string | null
           mortgage_servicer?: string | null
           note?: string | null
@@ -7703,6 +7721,12 @@ export type Database = {
           predecessor_request_id?: string | null
           property_address?: string | null
           requested_by?: string | null
+          shipping_label_carrier?: string | null
+          shipping_label_name?: string | null
+          shipping_label_path?: string | null
+          shipping_label_tracking?: string | null
+          shipping_label_uploaded_at?: string | null
+          shipping_label_uploaded_by?: string | null
           status?: string
           stripe_invoice_id?: string | null
           stripe_invoice_item_id?: string | null
@@ -13532,6 +13556,8 @@ export type Database = {
           invoice_url: string | null
           loan_number: string | null
           loss_type: string | null
+          mail_to_address: string | null
+          mail_to_name: string | null
           mortgage_company: string | null
           mortgage_servicer: string | null
           note: string | null
@@ -13539,6 +13565,12 @@ export type Database = {
           predecessor_request_id: string | null
           property_address: string | null
           requested_by: string | null
+          shipping_label_carrier: string | null
+          shipping_label_name: string | null
+          shipping_label_path: string | null
+          shipping_label_tracking: string | null
+          shipping_label_uploaded_at: string | null
+          shipping_label_uploaded_by: string | null
           status: string
           stripe_invoice_id: string | null
           stripe_invoice_item_id: string | null
@@ -15383,6 +15415,8 @@ export type Database = {
           invoice_url: string | null
           loan_number: string | null
           loss_type: string | null
+          mail_to_address: string | null
+          mail_to_name: string | null
           mortgage_company: string | null
           mortgage_servicer: string | null
           note: string | null
@@ -15390,6 +15424,12 @@ export type Database = {
           predecessor_request_id: string | null
           property_address: string | null
           requested_by: string | null
+          shipping_label_carrier: string | null
+          shipping_label_name: string | null
+          shipping_label_path: string | null
+          shipping_label_tracking: string | null
+          shipping_label_uploaded_at: string | null
+          shipping_label_uploaded_by: string | null
           status: string
           stripe_invoice_id: string | null
           stripe_invoice_item_id: string | null

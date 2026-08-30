@@ -98,7 +98,15 @@ interface RequestRow {
   invoice_shipping_description?: string | null;
   invoice_notes?: string | null;
   invoice_number?: string | null;
+  mail_to_name?: string | null;
+  mail_to_address?: string | null;
+  shipping_label_path?: string | null;
+  shipping_label_name?: string | null;
+  shipping_label_carrier?: string | null;
+  shipping_label_tracking?: string | null;
+  shipping_label_uploaded_at?: string | null;
 }
+
 
 interface SiblingRequestRow {
   id: string;
@@ -220,6 +228,16 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const [invoiceNotes, setInvoiceNotes] = useState<string>("");
   const [invoiceBusy, setInvoiceBusy] = useState(false);
 
+  // Shipping / mail-to state (visible to the tenant on their loss draft)
+  const [mailToName, setMailToName] = useState("");
+  const [mailToAddress, setMailToAddress] = useState("");
+  const [shipCarrier, setShipCarrier] = useState("");
+  const [shipTracking, setShipTracking] = useState("");
+  const [savingShipping, setSavingShipping] = useState(false);
+  const [uploadingLabel, setUploadingLabel] = useState(false);
+
+
+
   // Field-placement flow (mirrors Freedom CRM's SignatureRequests dialog).
   // When a signature PDF is uploaded, we hold it here and show the placer
   // dialog before actually dispatching the e-sign request.
@@ -263,6 +281,12 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
       setInvoiceShippingDesc(rr.invoice_shipping_description || "2-Day shipping label");
       setInvoiceRecipient(rr.invoice_recipient_email || "");
       setInvoiceNotes(rr.invoice_notes || "");
+      setMailToName(rr.mail_to_name || rr.mortgage_company || "");
+      setMailToAddress(rr.mail_to_address || "");
+      setShipCarrier(rr.shipping_label_carrier || "");
+      setShipTracking(rr.shipping_label_tracking || "");
+
+
 
       const tenantP = supabase.from("tenants").select("id,name").eq("id", r.tenant_id).maybeSingle();
       const checkP = r.check_intake_item_id
@@ -412,6 +436,121 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     toast.success("Update sent to tenant");
     void load();
   };
+
+  // ---- Shipping / mail-to (tenant-visible) ----------------------------------
+
+  const prefillMailToFromDirectory = async () => {
+    const name = (mailToName || req?.mortgage_company || "").trim();
+    if (!name) {
+      toast.error("Enter the mortgage company name first");
+      return;
+    }
+    const { data } = await supabase
+      .from("mortgage_companies")
+      .select("name,address_line_1,address_line_2,address_line_3,address_line_4,address_line_5")
+      .ilike("name", `%${name}%`)
+      .limit(1)
+      .maybeSingle();
+    if (!data) {
+      toast.error("No directory match — enter the address manually");
+      return;
+    }
+    const lines = [
+      (data as any).address_line_1,
+      (data as any).address_line_2,
+      (data as any).address_line_3,
+      (data as any).address_line_4,
+      (data as any).address_line_5,
+    ].filter(Boolean);
+    if (!lines.length) {
+      toast.error("Directory has no address for this company");
+      return;
+    }
+    setMailToName((data as any).name || name);
+    setMailToAddress(lines.join("\n"));
+    toast.success("Address pulled from the mortgage directory");
+  };
+
+  const saveShippingDetails = async (opts?: { silent?: boolean }) => {
+    if (!req) return;
+    setSavingShipping(true);
+    try {
+      const { error } = await supabase
+        .from("mortgage_handling_requests")
+        .update({
+          mail_to_name: mailToName.trim() || null,
+          mail_to_address: mailToAddress.trim() || null,
+          shipping_label_carrier: shipCarrier.trim() || null,
+          shipping_label_tracking: shipTracking.trim() || null,
+        } as any)
+        .eq("id", req.id);
+      if (error) throw error;
+      if (!opts?.silent) toast.success("Shipping details saved — visible to the tenant");
+      void load();
+      onAction?.();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save shipping details");
+    } finally {
+      setSavingShipping(false);
+    }
+  };
+
+  const uploadShippingLabel = async (file: File) => {
+    if (!req || !check?.id || !user?.id) {
+      toast.error("A check must be linked before uploading a label");
+      return;
+    }
+    setUploadingLabel(true);
+    try {
+      const path = `checks/${check.id}/mortgage-ops/label-${Date.now()}-${file.name.replace(/[^a-z0-9.\-_]/gi, "_")}`;
+      const { error: upErr } = await supabase.storage
+        .from("claim-files")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) throw upErr;
+
+      const { error: updErr } = await supabase
+        .from("mortgage_handling_requests")
+        .update({
+          shipping_label_path: path,
+          shipping_label_name: file.name,
+          shipping_label_uploaded_at: new Date().toISOString(),
+          shipping_label_uploaded_by: user.id,
+          shipping_label_carrier: shipCarrier.trim() || null,
+          shipping_label_tracking: shipTracking.trim() || null,
+          mail_to_name: mailToName.trim() || null,
+          mail_to_address: mailToAddress.trim() || null,
+        } as any)
+        .eq("id", req.id);
+      if (updErr) throw updErr;
+
+      await supabase.from("check_messages").insert({
+        check_id: check.id,
+        sender_id: user.id,
+        body: `🏷️ Mortgage Ops uploaded a shipping label${shipCarrier ? ` (${shipCarrier})` : ""}${shipTracking ? ` · tracking ${shipTracking}` : ""}. Download it from the Mortgage Desk card on this loss draft.`,
+      });
+
+      toast.success("Shipping label uploaded — tenant can download it");
+      void load();
+      onAction?.();
+    } catch (e: any) {
+      toast.error(e?.message || "Label upload failed");
+    } finally {
+      setUploadingLabel(false);
+    }
+  };
+
+  const openShippingLabel = async () => {
+    if (!req?.shipping_label_path) return;
+    const { data, error } = await supabase.storage
+      .from("claim-files")
+      .createSignedUrl(req.shipping_label_path, 3600);
+    if (error || !data?.signedUrl) {
+      toast.error(error?.message || "Could not open label");
+      return;
+    }
+    window.open(data.signedUrl, "_blank", "noopener");
+  };
+
 
   // Mortgage-ops work is billed to the tenant's monthly usage totals (not a
   // per-request contractor invoice). Ops still records the actual shipping
@@ -1188,6 +1327,109 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                 </CardContent>
               </Card>
             )}
+
+            {/* Shipping & mail-to — everything here is visible to the tenant */}
+            <Card>
+              <CardContent className="pt-4 space-y-3">
+                <div className="font-semibold text-sm flex items-center gap-2">
+                  <MapPin className="h-4 w-4" /> Shipping &amp; mail-to address
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  The tenant sees this address and label on their loss draft — so they can
+                  ship the check themselves if they'd rather use their own label.
+                </p>
+
+                <div>
+                  <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Mail to (name)</label>
+                  <Input
+                    value={mailToName}
+                    onChange={(e) => setMailToName(e.target.value)}
+                    placeholder="Mortgage company / loss draft dept"
+                    className="h-8 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Mailing address</label>
+                    <Button size="sm" variant="ghost" className="h-6 text-[11px]" onClick={prefillMailToFromDirectory}>
+                      Pull from directory
+                    </Button>
+                  </div>
+                  <Textarea
+                    rows={4}
+                    value={mailToAddress}
+                    onChange={(e) => setMailToAddress(e.target.value)}
+                    placeholder={"Attn: Loss Draft Dept\n1234 Main St\nSuite 100\nCity, ST 00000"}
+                    className="text-sm"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Carrier</label>
+                    <Input
+                      value={shipCarrier}
+                      onChange={(e) => setShipCarrier(e.target.value)}
+                      placeholder="FedEx / UPS / USPS"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Tracking #</label>
+                    <Input
+                      value={shipTracking}
+                      onChange={(e) => setShipTracking(e.target.value)}
+                      placeholder="Tracking number"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                </div>
+
+                {req.shipping_label_path && (
+                  <div className="flex items-center justify-between gap-2 rounded border border-border/60 bg-muted/30 p-2 text-xs">
+                    <span className="truncate">
+                      🏷️ {req.shipping_label_name || "Shipping label"}
+                      {req.shipping_label_uploaded_at && (
+                        <span className="text-muted-foreground">
+                          {" "}· {format(new Date(req.shipping_label_uploaded_at), "MMM d, yyyy")}
+                        </span>
+                      )}
+                    </span>
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={openShippingLabel}>
+                      <Download className="h-3 w-3 mr-1" /> Open
+                    </Button>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="inline-flex">
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="application/pdf,image/*"
+                      disabled={uploadingLabel}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) void uploadShippingLabel(f);
+                        e.target.value = "";
+                      }}
+                    />
+                    <Button size="sm" variant="outline" className="h-8 text-xs" disabled={uploadingLabel} asChild>
+                      <span>
+                        {uploadingLabel ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Upload className="h-3 w-3 mr-1" />}
+                        {req.shipping_label_path ? "Replace label" : "Upload shipping label"}
+                      </span>
+                    </Button>
+                  </label>
+                  <Button size="sm" className="h-8 text-xs" disabled={savingShipping} onClick={() => saveShippingDetails()}>
+                    {savingShipping ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}
+                    Save shipping details
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
 
             {/* Tenant usage — mortgage-ops work rolls up into the tenant's
                 monthly usage. No per-request contractor invoice is sent; ChecksOps

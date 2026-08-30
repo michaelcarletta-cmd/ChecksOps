@@ -16,6 +16,8 @@ import {
   Lock, CheckCircle2, Plus, DollarSign, Headset,
 } from "lucide-react";
 import { format } from "date-fns";
+import { MortgageDeskShippingCard } from "@/components/loss-draft/MortgageDeskShippingCard";
+
 
 type Props = {
   checkId: string;
@@ -270,6 +272,10 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
           </div>
         </div>
       )}
+      {(deskOpen || deskRequest?.status === "completed") && (
+        <MortgageDeskShippingCard checkIntakeItemId={checkId} />
+      )}
+
       {deskRequest?.status === "completed" && (
         <div className="rounded-md bg-emerald-500/10 p-3 text-xs flex items-center gap-2 flex-wrap">
           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />

@@ -157,7 +157,24 @@ export default function MortgageOpsQueue() {
     });
 
     if (status === "completed") {
+      // Notify the tenant thread + homeowner timeline (best-effort, never blocks)
+      const row = [...mine, ...available, ...completed].find((r) => r.id === id);
+      if (row?.check_intake_item_id) {
+        void supabase.from("check_messages").insert({
+          check_id: row.check_intake_item_id,
+          sender_id: user?.id ?? null,
+          body: `✅ ChecksOps Mortgage Desk completed work with ${row.mortgage_company || row.mortgage_servicer || "the mortgage company"}.${notes ? ` Notes: ${notes}` : ""}`,
+        } as any);
+        void supabase.from("homeowner_ledger_events").insert({
+          check_intake_item_id: row.check_intake_item_id,
+          claim_id: row.claim_id,
+          event_type: "mortgage_update",
+          title: "Mortgage company step complete",
+          description: "Our mortgage team finished working with your mortgage company on this check.",
+        } as any);
+      }
       // Trigger billing
+
       const { data: bill, error: billErr } = await supabase.functions.invoke("bill-mortgage-handling", {
         body: { request_id: id },
       });
