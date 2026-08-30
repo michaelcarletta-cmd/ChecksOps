@@ -3241,6 +3241,63 @@ export type Database = {
           },
         ]
       }
+      claim_project_plans: {
+        Row: {
+          allow_deductible_payment: boolean
+          case_id: string | null
+          claim_id: string | null
+          contract_total: number | null
+          created_at: string
+          created_by: string | null
+          deductible_amount: number | null
+          id: string
+          other_out_of_pocket: number | null
+          schedule_note: string | null
+          schedule_status: string
+          share_with_homeowner: boolean
+          start_window_end: string | null
+          start_window_start: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          allow_deductible_payment?: boolean
+          case_id?: string | null
+          claim_id?: string | null
+          contract_total?: number | null
+          created_at?: string
+          created_by?: string | null
+          deductible_amount?: number | null
+          id?: string
+          other_out_of_pocket?: number | null
+          schedule_note?: string | null
+          schedule_status?: string
+          share_with_homeowner?: boolean
+          start_window_end?: string | null
+          start_window_start?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          allow_deductible_payment?: boolean
+          case_id?: string | null
+          claim_id?: string | null
+          contract_total?: number | null
+          created_at?: string
+          created_by?: string | null
+          deductible_amount?: number | null
+          id?: string
+          other_out_of_pocket?: number | null
+          schedule_note?: string | null
+          schedule_status?: string
+          share_with_homeowner?: boolean
+          start_window_end?: string | null
+          start_window_start?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       claim_settlements: {
         Row: {
           ale_non_recoverable_depreciation: number | null
@@ -6173,6 +6230,102 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "homeowner_intro_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      homeowner_deductible_payments: {
+        Row: {
+          amount: number
+          authorization_accepted_at: string | null
+          authorization_text: string | null
+          bank_last_four: string | null
+          bank_name: string | null
+          case_id: string | null
+          claim_id: string | null
+          completed_at: string | null
+          created_at: string
+          environment: string
+          failure_reason: string | null
+          id: string
+          idempotency_key: string
+          payer_email: string | null
+          payer_name: string | null
+          payment_transfer_id: string | null
+          provider: string
+          provider_status: string | null
+          provider_transfer_id: string | null
+          recipient_id: string | null
+          status: string
+          tenant_id: string
+          token_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          authorization_accepted_at?: string | null
+          authorization_text?: string | null
+          bank_last_four?: string | null
+          bank_name?: string | null
+          case_id?: string | null
+          claim_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          environment?: string
+          failure_reason?: string | null
+          id?: string
+          idempotency_key: string
+          payer_email?: string | null
+          payer_name?: string | null
+          payment_transfer_id?: string | null
+          provider?: string
+          provider_status?: string | null
+          provider_transfer_id?: string | null
+          recipient_id?: string | null
+          status?: string
+          tenant_id: string
+          token_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          authorization_accepted_at?: string | null
+          authorization_text?: string | null
+          bank_last_four?: string | null
+          bank_name?: string | null
+          case_id?: string | null
+          claim_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          environment?: string
+          failure_reason?: string | null
+          id?: string
+          idempotency_key?: string
+          payer_email?: string | null
+          payer_name?: string | null
+          payment_transfer_id?: string | null
+          provider?: string
+          provider_status?: string | null
+          provider_transfer_id?: string | null
+          recipient_id?: string | null
+          status?: string
+          tenant_id?: string
+          token_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "homeowner_deductible_payments_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "external_payment_recipients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "homeowner_deductible_payments_token_id_fkey"
+            columns: ["token_id"]
+            isOneToOne: false
+            referencedRelation: "homeowner_ledger_tokens"
             referencedColumns: ["id"]
           },
         ]
