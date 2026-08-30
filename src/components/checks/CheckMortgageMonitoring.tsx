@@ -16,6 +16,8 @@ import {
   Lock, CheckCircle2, Plus, DollarSign, Headset,
 } from "lucide-react";
 import { format } from "date-fns";
+import { MortgageDeskShippingCard } from "@/components/loss-draft/MortgageDeskShippingCard";
+
 
 type Props = {
   checkId: string;
