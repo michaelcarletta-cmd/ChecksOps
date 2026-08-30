@@ -144,3 +144,85 @@ serve(async (req) => {
     return new Response(JSON.stringify({ success: false, error: err.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
+
+function secureToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Finds or creates the Moov recipient tied to this stakeholder account and
+ * returns a fresh /pay-setup link. Returns { error } when the payee cannot be
+ * set up as an external recipient (e.g. they are already a ChecksOps org).
+ */
+async function ensureMoovRecipientLink(args: {
+  supabase: any;
+  authHeader: string;
+  appBase: string;
+  tenantId: string;
+  stakeholderAccountId: string;
+  name: string;
+  email: string;
+}): Promise<string | { error: string }> {
+  const { supabase, authHeader, appBase, tenantId, stakeholderAccountId, name, email } = args;
+
+  let { data: recipient } = await supabase
+    .from("external_payment_recipients")
+    .select("id, provider_account_id, secure_token")
+    .eq("stakeholder_account_id", stakeholderAccountId)
+    .maybeSingle();
+
+  if (!recipient) {
+    const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/moov-recipient-create`, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        tenant_id: tenantId,
+        name,
+        email,
+        recipient_type: "individual",
+        relationship: "stakeholder",
+      }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { error: payload?.error ?? "Could not create the payment recipient." };
+    }
+    if (payload?.is_existing_member) {
+      return {
+        error:
+          "This payee is already a ChecksOps organization — their existing payment account will be used, no link needed.",
+      };
+    }
+    recipient = payload?.recipient ?? null;
+    if (!recipient?.id) return { error: "Could not create the payment recipient." };
+
+    await supabase
+      .from("external_payment_recipients")
+      .update({ stakeholder_account_id: stakeholderAccountId })
+      .eq("id", recipient.id);
+  }
+
+  if (!recipient.provider_account_id) {
+    return { error: "The payment provider account isn't ready yet. Try again in a moment." };
+  }
+
+  // Always rotate the token so an old emailed link stops working.
+  const newToken = secureToken();
+  const { error: tokErr } = await supabase
+    .from("external_payment_recipients")
+    .update({
+      secure_token: newToken,
+      token_expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+      token_used_at: null,
+    })
+    .eq("id", recipient.id);
+  if (tokErr) return { error: tokErr.message };
+
+  return `${appBase}/pay-setup/${newToken}`;
+}
