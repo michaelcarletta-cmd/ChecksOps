@@ -309,6 +309,7 @@ serve(async (req) => {
       success: true,
       link_token_id: linkRow.id,
       stakeholder_account_id: account.id,
+      payout_url: payoutUrl,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err: any) {
     console.error("[homeowner-bank-link-send]", err);
