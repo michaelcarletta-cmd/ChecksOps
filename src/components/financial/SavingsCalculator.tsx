@@ -418,11 +418,7 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
                 <StatTile
                   label="Processed checks / mo"
                   value={Math.round(checks).toLocaleString()}
-                  sub={
-                    i.useWorkflowMix
-                      ? `${pct(checks > 0 && r.checksOps.jobs > 0 ? (checks / r.checksOps.jobs) * 100 : 0, 0)} of jobs carry check processing`
-                      : "Explicit count — workflow mix off"
-                  }
+                  sub={`${pct(checks > 0 && r.checksOps.jobs > 0 ? (checks / r.checksOps.jobs) * 100 : 0, 0)} of jobs carry check processing`}
                 />
                 <StatTile
                   label="Cost / processed check"
@@ -474,9 +470,9 @@ export function SavingsCalculator({ presentation }: { presentation: boolean }) {
               </div>
               <p className="text-[11px] leading-relaxed text-muted-foreground">
                 Receive-funds-only and wallet jobs carry no check-processing component. ACH is shown at the
-                mix-weighted blend of the same-day and next-day rate ({i.pctPayoutsSameDay}% same-day). The
-                monthly fee, referral credits and mortgage / loss-draft fees sit outside this per-job view and
-                are added in the plan comparison below.
+                payout-weighted blend of the same-day and next-day rate ({Math.round(vol.sameDay)} same-day /{" "}
+                {Math.round(vol.nextDay)} next-day). The monthly fee, referral credits and mortgage / loss-draft
+                fees sit outside this per-job view and are added in the plan comparison below.
               </p>
             </CardContent>
           </Card>
