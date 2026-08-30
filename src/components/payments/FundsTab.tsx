@@ -419,7 +419,12 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
         </Card>
       )}
 
+      {claimId && tenant?.id && (
+        <ProjectPlanCard claimId={claimId} tenantId={tenant.id} />
+      )}
+
       {/* Homeowner links */}
+
       <div className="space-y-2">
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setHomeownerLinkOpen(true)}>
