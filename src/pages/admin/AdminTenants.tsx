@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { PLATFORM_OWNER_EMAIL } from "@/lib/masterMerchant";
 import { TenantMoovIdentityCard } from "@/components/admin/TenantMoovIdentityCard";
 import { PlatformBankPanel } from "@/components/admin/PlatformBankPanel";
