@@ -59,6 +59,7 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
           "id, checkalt_reference, amount, status, cleared_at, submitted_at, check_intake_items(check_number, carrier_name, payee_line, detected_claim_number)",
         )
         .eq("tenant_id", tenantId as string)
+        .not("status", "in", "(rejected,returned,error,declined)")
         .order("submitted_at", { ascending: false })
         .limit(1000);
       if (error) throw error;
