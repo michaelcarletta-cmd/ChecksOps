@@ -43,7 +43,7 @@ export function TenantBankAccountSettings() {
         .select("id, nickname, chk_acct, acct_type, is_active, custname, verification_status, verified_at, is_primary, origin, account_type")
         .eq("tenant_id", tenant!.id)
         .eq("is_active", true)
-        .eq("account_type", "operating")
+        .or("account_type.eq.operating,origin.eq.provider_connected")
         .neq("origin", "homeowner_link")
         .order("verified_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false });
