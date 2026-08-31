@@ -256,7 +256,12 @@ export default function RecipientPaymentSetup() {
       setTermsDone(true);
 
     } catch (err: any) {
-      setError(err?.message ?? "Could not record your acceptance.");
+      const providerMessage = typeof err?.error === "string"
+        ? err.error
+        : typeof err?.message === "string"
+          ? err.message
+          : null;
+      setError(providerMessage ?? "Could not record your acceptance.");
     } finally {
       setSaving(false);
     }
