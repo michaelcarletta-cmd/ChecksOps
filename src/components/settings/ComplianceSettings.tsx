@@ -151,7 +151,8 @@ export function ComplianceSettings({ tenantId: tenantIdOverride }: { tenantId?: 
     return <div className="flex items-center justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
   }
 
-  const kycDone = !!t?.kyc_completed_at;
+  const providerVerified = !!providerProfile?.verified;
+  const kycDone = !!t?.kyc_completed_at || providerVerified;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -175,9 +176,34 @@ export function ComplianceSettings({ tenantId: tenantIdOverride }: { tenantId?: 
         title="Know Your Customer (KYC)"
         accent="bg-gradient-to-r from-primary/60 to-primary/10"
         icon={<ShieldCheck className="h-4 w-4 text-primary" />}
-        description={`Required under our AML program before originating ACH payments. Last completed: ${t?.kyc_completed_at ? format(new Date(t.kyc_completed_at), "PPp") : "Never"}`}
+        description={
+          providerVerified
+            ? "Your business identity is already verified with our payment provider. Nothing further is required — these details are shown for your records."
+            : `Required under our AML program before originating ACH payments. Last completed: ${t?.kyc_completed_at ? format(new Date(t.kyc_completed_at), "PPp") : "Never"}`
+        }
       >
         <div className="space-y-4">
+          {providerVerified && (
+            <div className="flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+              <div className="text-xs">
+                <p className="font-medium text-emerald-500">Identity verified — no re-entry needed</p>
+                <p className="text-muted-foreground mt-0.5">
+                  {providerProfile?.business?.legalBusinessName || t?.legal_business_name || "Your business"}
+                  {providerProfile?.business?.taxIdProvided ? " • EIN on file" : ""}
+                  {providerProfile?.representatives.length
+                    ? ` • Controller: ${providerProfile.representatives
+                        .filter((r) => r.isController)
+                        .map((r) => `${r.firstName} ${r.lastName}`.trim())
+                        .join(", ") || "on file"}`
+                    : ""}
+                  . Edit below only if something changed.
+                </p>
+              </div>
+            </div>
+          )}
+
+
 
           <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Legal business name" value={form.legal_business_name} onChange={(v) => setForm({ ...form, legal_business_name: v })} />
