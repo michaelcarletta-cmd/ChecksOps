@@ -49,39 +49,90 @@ serve(async (req) => {
      * the provider rejects it when the creating address matches the address
      * that applies it. So the token is minted here with the account holder's
      * own IP and user agent forwarded, then applied to the account.
+     *
+     * Every step is defensive so this works for any tenant, whatever proxy
+     * headers happen to be present:
+     *  - several header sources are tried for the end-user IP
+     *  - a mint/apply retry runs with each candidate IP
+     *  - an "already accepted" answer from the provider is treated as success
      */
-    const acceptedIP =
-      (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() ||
-      req.headers.get("cf-connecting-ip") ||
-      "";
+    const ipCandidates = [
+      (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim(),
+      req.headers.get("cf-connecting-ip") ?? "",
+      req.headers.get("x-real-ip") ?? "",
+      req.headers.get("true-client-ip") ?? "",
+      req.headers.get("fly-client-ip") ?? "",
+    ].filter((ip, i, arr) => ip && arr.indexOf(ip) === i);
     const acceptedUserAgent = req.headers.get("user-agent") ?? "unknown";
 
-    let tosToken = clientToken;
-    if (!tosToken) {
-      const minted = await moovFetch<any>(`/tos-token`, {
-        scopes: ["/ping.read"],
-        extraHeaders: {
-          ...(acceptedIP ? { "X-Forwarded-For": acceptedIP } : {}),
-          "User-Agent": acceptedUserAgent,
-        },
-      });
-      const value = minted?.token ?? minted?.tosToken ?? null;
-      if (typeof value === "string" && value.length >= 8) tosToken = value;
-    }
-    if (!tosToken) return json({ error: "Could not generate the terms acceptance token." }, 502);
+    const alreadyAcceptedError = (msg: string) =>
+      /already\s+(been\s+)?accept|terms.*already/i.test(msg);
 
-    await moovFetch<any>(`/accounts/${accountId}`, {
-      method: "PATCH",
-      scopes: scopes.accountWrite(accountId),
-      body: { termsOfService: { token: tosToken } },
-      extraHeaders: {
-        ...(acceptedIP ? { "X-Forwarded-For": acceptedIP } : {}),
-        "User-Agent": acceptedUserAgent,
-      },
+    const headersFor = (ip: string) => ({
+      ...(ip ? { "X-Forwarded-For": ip, "X-Real-IP": ip } : {}),
+      "User-Agent": acceptedUserAgent,
     });
 
+    /** True when the provider already has terms recorded for this account. */
+    const remoteAccepted = async () => {
+      try {
+        const acct = await moovFetch<any>(`/accounts/${accountId}`, {
+          scopes: scopes.accountRead(accountId),
+        });
+        return !!(acct?.termsOfService?.acceptedDate ?? acct?.termsOfService?.acceptedOn ?? acct?.termsOfService);
+      } catch {
+        return false;
+      }
+    };
 
+    let applied = false;
+    let lastError: string | null = null;
 
+    for (const ip of ipCandidates.length ? ipCandidates : [""]) {
+      try {
+        let tosToken = clientToken;
+        if (!tosToken) {
+          const minted = await moovFetch<any>(`/tos-token`, {
+            scopes: ["/ping.read"],
+            extraHeaders: headersFor(ip),
+          });
+          const value = minted?.token ?? minted?.tosToken ?? null;
+          if (typeof value === "string" && value.length >= 8) tosToken = value;
+        }
+        if (!tosToken) {
+          lastError = "Could not generate the terms acceptance token.";
+          continue;
+        }
+
+        await moovFetch<any>(`/accounts/${accountId}`, {
+          method: "PATCH",
+          scopes: scopes.accountWrite(accountId),
+          body: { termsOfService: { token: tosToken } },
+          extraHeaders: headersFor(ip),
+        });
+        applied = true;
+        break;
+      } catch (err) {
+        const msg = (err as Error).message ?? String(err);
+        lastError = msg;
+        if (alreadyAcceptedError(msg)) {
+          applied = true;
+          break;
+        }
+        // A client token can only be applied once — fall back to minting.
+        if (clientToken) break;
+      }
+    }
+
+    if (!applied && (await remoteAccepted())) applied = true;
+
+    if (!applied) {
+      console.error("[moov-tos-accept] failed", { accountId, lastError, ipCandidates: ipCandidates.length });
+      return json(
+        { error: lastError ?? "Could not record terms acceptance with the payment provider." },
+        502,
+      );
+    }
 
     const acceptedAt = new Date().toISOString();
     await supabase
