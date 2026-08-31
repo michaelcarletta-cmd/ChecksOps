@@ -121,6 +121,13 @@ export default function RecipientPaymentSetup() {
       try {
         await loadMoovJs();
         if (cancelled || !tosMountRef.current) return;
+        // The direct existing-recipient acceptance call below must receive a
+        // fresh OAuth token. Do not spend that token first by mounting the Drop
+        // and generating a separate ToS token.
+        if (session.recipient.bank_linked && !replaceBank) {
+          setTosReady(true);
+          return;
+        }
         const el = document.createElement("moov-terms-of-service") as any;
         el.token = session.token;
         el.onTermsOfServiceTokenReady = (t: any) => {
