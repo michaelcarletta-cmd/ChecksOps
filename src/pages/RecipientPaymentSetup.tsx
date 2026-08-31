@@ -121,14 +121,8 @@ export default function RecipientPaymentSetup() {
       try {
         await loadMoovJs();
         if (cancelled || !tosMountRef.current) return;
-        // The direct existing-recipient acceptance call below must receive a
-        // fresh OAuth token. Do not spend that token first by mounting the Drop
-        // and generating a separate ToS token.
-        if (session.recipient.bank_linked && !replaceBank) {
-          setTosReady(true);
-          return;
-        }
         const el = document.createElement("moov-terms-of-service") as any;
+
         el.token = session.token;
         el.onTermsOfServiceTokenReady = (t: any) => {
           tosTokenRef.current = typeof t === "string" ? t : t?.token ?? null;
@@ -217,20 +211,16 @@ export default function RecipientPaymentSetup() {
     setSaving(true);
     setError(null);
     try {
-      await loadMoovJs();
-      const createMoov = (window as any).Moov;
-      if (typeof createMoov !== "function" || !session?.account_id) {
-        throw new Error("Could not initialize the payment provider. Please refresh and try again.");
+      // Same flow new recipients use: the provider's hosted terms component
+      // mints the acceptance token in this browser, and the backend applies it
+      // to the recipient account and confirms the requirement cleared.
+      const tosToken = tosTokenRef.current;
+      if (!tosToken) {
+        throw new Error("Please check the terms box above, then try again.");
       }
 
-      // Existing recipients must accept in the browser. This is the provider's
-      // documented one-step flow: it creates the ToS token from this OAuth
-      // session and applies it to the recipient account in the same request.
-      const moov = createMoov(session.token);
-      await moov.accounts.acceptTermsOfService({ accountID: session.account_id });
-
       const { data, error: fnErr } = await supabase.functions.invoke("moov-recipient-tos-accept", {
-        body: { token, verify_only: true },
+        body: { token, tos_token: tosToken },
       });
       if (fnErr) {
         let message = "Could not record your acceptance.";
@@ -242,6 +232,7 @@ export default function RecipientPaymentSetup() {
       }
       if ((data as any)?.error) throw new Error((data as any).error);
       setTermsDone(true);
+
     } catch (err: any) {
       setError(err?.message ?? "Could not record your acceptance.");
     } finally {

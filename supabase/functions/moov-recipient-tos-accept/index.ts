@@ -63,33 +63,41 @@ serve(async (req) => {
       }
     }
 
-    // Verify the agreement is genuinely on file before reporting success — a
-    // 403 can mean "already accepted" OR "token invalid", and only the account
-    // record can tell the two apart.
-    let termsOnFile = false;
-    try {
-      const acct = await moovFetch<any>(`/accounts/${accountId}`, {
-        method: "GET",
-        scopes: scopes.accountRead(accountId),
-      });
-      termsOnFile = Boolean(
-        acct?.termsOfServiceAcceptance?.acceptedDate ??
-          acct?.termsOfServiceAcceptance?.acceptedOn ??
-          acct?.termsOfService?.acceptedDate ??
-          acct?.termsOfService?.acceptedOn ??
-          acct?.termsOfServiceAcceptedOn,
-      );
-    } catch (e) {
-      console.error("[moov-recipient-tos-accept] verify", (e as Error).message);
+    // The provider does NOT return terms-of-service fields on GET /accounts.
+    // The only reliable signal is the payout capability's outstanding
+    // requirements: while terms are missing, "account.tos-acceptance" (or a
+    // similarly named terms requirement) stays in the requirement list.
+    async function termsRequirementOutstanding(): Promise<boolean | null> {
+      try {
+        const caps = await moovFetch<any>(`/accounts/${accountId}/capabilities`, {
+          method: "GET",
+          scopes: scopes.capabilitiesRead(accountId),
+        });
+        const list = Array.isArray(caps) ? caps : caps?.capabilities ?? [];
+        const raw = JSON.stringify(list ?? []);
+        console.log(
+          "[moov-recipient-tos-accept] capabilities",
+          JSON.stringify({ accountID: accountId, capabilities: list }),
+        );
+        return /tos|terms/i.test(raw);
+      } catch (e) {
+        console.error("[moov-recipient-tos-accept] capability read", (e as Error).message);
+        return null;
+      }
     }
 
-    if (!termsOnFile) {
-      console.error("[moov-recipient-tos-accept] acceptance not present", patchError ?? "client acceptance not recorded");
+    const outstanding = await termsRequirementOutstanding();
+    if (outstanding === true) {
+      console.error(
+        "[moov-recipient-tos-accept] terms requirement still outstanding",
+        patchError ?? "client acceptance not recorded",
+      );
       return json(
         { error: "The payment provider could not record your acceptance. Please try again." },
         502,
       );
     }
+
 
     // Terms are a prerequisite for the payout capability — request it now so a
     // previously blocked recipient becomes payable. Recipients only ever
