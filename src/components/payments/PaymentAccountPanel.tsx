@@ -84,54 +84,23 @@ export function PaymentAccountPanel() {
   async function handleSetup() {
     if (!tenantId) return;
     setBusy("setup");
-    // Open the tab synchronously so the browser doesn't treat it as a popup.
-    // NOTE: do NOT pass "noopener" here — with noopener the browser returns
-    // null and we can never navigate the tab, leaving a blank page open.
-    const win = window.open("", "_blank");
-    if (win) {
-      try {
-        win.document.write(
-          "<!doctype html><title>Opening secure setup…</title><body style='font-family:system-ui;background:#0b0b0c;color:#eee;display:flex;align-items:center;justify-content:center;height:100vh'>Opening secure setup…</body>",
-        );
-      } catch { /* cross-origin safety */ }
-    }
     try {
       if (!account?.externalAccountId) {
         await invoke("moov-account-create", { tenant_id: tenantId });
+        await qc.invalidateQueries({ queryKey: ["payment-account"] });
+        await refetch();
       }
-      const res = await invoke("moov-onboarding-link", {
-        tenant_id: tenantId,
-        return_url: `${window.location.origin}/payments?tab=settings`,
-      });
-      if (res?.url) {
-        if (win && !win.closed) {
-          try { (win as any).opener = null; } catch { /* ignore */ }
-          win.location.replace(res.url);
-          setSetupWindow(win);
-          toast({
-            title: "Setup opened",
-            description: "Finish setup in the new tab. This page will refresh once you close it.",
-          });
-        } else {
-          setSetupUrl(res.url);
-          toast({
-            title: "Pop-up blocked",
-            description: "Use the setup link below to continue.",
-          });
-        }
-      } else {
-        win?.close();
-        throw new Error("Could not generate a setup link.");
-      }
-      await refresh();
+      // Verification details are collected in-app and sent straight to the
+      // provider — the hosted signup page cannot be used for accounts we
+      // already created by API.
+      setShowOnboarding(true);
     } catch (e: any) {
-      win?.close();
       toast({ title: "Couldn't start payment setup", description: e.message, variant: "destructive" });
     } finally {
       setBusy(null);
     }
-
   }
+
 
 
   async function handleBankLink() {
