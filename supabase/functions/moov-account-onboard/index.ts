@@ -145,6 +145,10 @@ serve(async (req) => {
     if (!email || !email.includes("@")) return json({ error: "Provide a business email." }, 400);
 
     const ein = digits(b.ein, 9);
+    if (businessType !== "soleProprietorship" && (!ein || ein.length !== 9)) {
+      return json({ error: "Provide a valid 9-digit EIN." }, 400);
+    }
+
     const website = str(b.website, 200);
     const description = str(b.description, 300);
     if (!website && !description) {
@@ -163,23 +167,25 @@ serve(async (req) => {
       ...(ein && ein.length === 9 ? { taxID: { ein: { number: ein } } } : {}),
     };
 
+    /* ---------- validate controller + owners BEFORE any provider write ---------- */
+    const repsInput: RepresentativeInput[] = Array.isArray(payload?.representatives)
+      ? payload.representatives.slice(0, 6)
+      : [];
+
+    if (repsInput.length > 0 && !repsInput.some((r) => r.isController)) {
+      return json({ error: "One person must be marked as the controller." }, 400);
+    }
+    const repBodies = repsInput.map((rep) => buildRepresentative(rep));
+
+    /* ---------- write business profile ---------- */
     await moovFetch(`/accounts/${accountId}`, {
       method: "PATCH",
       scopes: scopes.accountWrite(accountId),
       body: { profile: { business: businessProfile } },
     });
 
-    /* ---------- controller + owners ---------- */
-    const repsInput: RepresentativeInput[] = Array.isArray(payload?.representatives)
-      ? payload.representatives.slice(0, 6)
-      : [];
-
     let repsCreated = 0;
-    if (repsInput.length > 0) {
-      if (!repsInput.some((r) => r.isController)) {
-        return json({ error: "One person must be marked as the controller." }, 400);
-      }
-
+    if (repBodies.length > 0) {
       const existing = await moovFetch<any[]>(`/accounts/${accountId}/representatives`, {
         scopes: scopes.representativesRead(accountId),
       }).catch(() => [] as any[]);
@@ -189,10 +195,10 @@ serve(async (req) => {
         ),
       );
 
-      for (const rep of repsInput) {
-        const body = buildRepresentative(rep);
+      for (const body of repBodies) {
         const key = `${body.name.firstName} ${body.name.lastName}`.toLowerCase();
         if (known.has(key)) continue;
+
         await moovFetch(`/accounts/${accountId}/representatives`, {
           method: "POST",
           scopes: scopes.representativesWrite(accountId),

@@ -249,8 +249,9 @@ export function PaymentAccountPanel() {
               {busy === "setup"
                 ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Opening…</>
                 : status === "additional_information_required" || status === "restricted"
-                ? <><ExternalLink className="h-3.5 w-3.5 mr-1.5" /> Provide Missing Info</>
-                : <><ExternalLink className="h-3.5 w-3.5 mr-1.5" /> Set Up Payment Account</>}
+                ? <><ShieldCheck className="h-3.5 w-3.5 mr-1.5" /> Provide Missing Info</>
+                : <><ShieldCheck className="h-3.5 w-3.5 mr-1.5" /> Set Up Payment Account</>}
+
             </Button>
             <Button
               size="sm"
