@@ -1340,6 +1340,11 @@ export default function CheckCommandCenter() {
                       <PendingApprovalDeposits />
                     </Suspense>
                   </TabsContent>
+                  <TabsContent value="bank_deposits" className="mt-3">
+                    <Suspense fallback={<TabLoader />}>
+                      <BankDepositReconciliation searchQuery={searchQuery} />
+                    </Suspense>
+                  </TabsContent>
                   <TabsContent value="deposit_history" className="mt-3">
                     <Suspense fallback={<TabLoader />}>
                       <CheckAltDepositHistory />
