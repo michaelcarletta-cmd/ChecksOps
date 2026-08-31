@@ -340,9 +340,10 @@ serve(async (req) => {
           tenant_id,
           event_type: "payment_account.new_requirements",
           environment,
-          metadata: { requirements: newlyDue },
+          provider_metadata: { requirements: newlyDue },
         });
         await notifyNewRequirements(supabase, tenant_id, newlyDue);
+
       }
     } catch (e) {
       console.warn("[moov-sync] requirement alert skipped", (e as Error).message);
