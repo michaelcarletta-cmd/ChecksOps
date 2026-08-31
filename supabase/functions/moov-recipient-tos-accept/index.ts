@@ -52,38 +52,54 @@ serve(async (req) => {
     if (!accountId) return json({ error: "This payment setup is not ready yet." }, 409);
     let patchError: string | null = null;
     try {
-
       await moovFetch<any>(`/accounts/${accountId}`, {
         method: "PATCH",
         scopes: scopes.accountWrite(accountId),
         body: { termsOfService: { token: tosToken } },
       });
     } catch (e) {
-      const message = (e as Error).message ?? "";
-      // Terms can only be recorded once. A repeat acceptance comes back as
-      // "already accepted" or a 403 forbidden — neither is a real failure.
-      patchError = /already|forbidden|403/i.test(message) ? null : message;
-      if (patchError) console.error("[moov-recipient-tos-accept] patch failed", message);
-      else console.log("[moov-recipient-tos-accept] terms already on file, continuing");
+      patchError = (e as Error).message ?? "patch failed";
+      console.error("[moov-recipient-tos-accept] patch failed", patchError);
     }
 
-    // Terms are a prerequisite for the payout capabilities — request them now
-    // so a previously blocked recipient becomes payable.
-    let capabilitiesOk = false;
+    // Verify the agreement is genuinely on file before reporting success — a
+    // 403 can mean "already accepted" OR "token invalid", and only the account
+    // record can tell the two apart.
+    let termsOnFile = false;
+    try {
+      const acct = await moovFetch<any>(`/accounts/${accountId}`, {
+        method: "GET",
+        scopes: scopes.accountRead(accountId),
+      });
+      termsOnFile = Boolean(
+        acct?.termsOfServiceAcceptance?.acceptedDate ??
+          acct?.termsOfService?.acceptedDate ??
+          acct?.termsOfServiceAcceptance?.acceptedOn,
+      );
+    } catch (e) {
+      console.error("[moov-recipient-tos-accept] verify", (e as Error).message);
+    }
+
+    if (patchError && !termsOnFile) {
+      return json(
+        { error: "The payment provider could not record your acceptance. Please try again." },
+        502,
+      );
+    }
+
+    // Terms are a prerequisite for the payout capability — request it now so a
+    // previously blocked recipient becomes payable. Recipients only ever
+    // receive pushed funds, so "send-funds" is the only valid capability here.
     try {
       await moovFetch<any>(`/accounts/${accountId}/capabilities`, {
         method: "POST",
         scopes: scopes.capabilitiesWrite(accountId),
-        body: { capabilities: ["send-funds", "receive-funds", "wallet"] },
+        body: { capabilities: ["send-funds"] },
       });
-      capabilitiesOk = true;
     } catch (e) {
       console.error("[moov-recipient-tos-accept] capabilities", (e as Error).message);
     }
 
-    if (patchError && !capabilitiesOk) {
-      return json({ error: "The payment provider could not record your acceptance. Please try again." }, 502);
-    }
 
 
     await supabase.from("payment_event_log").insert(sanitize({

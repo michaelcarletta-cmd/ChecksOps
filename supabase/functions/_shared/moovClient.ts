@@ -140,9 +140,13 @@ export const scopes = {
     `/accounts/${id}/bank-accounts.write`,
     `/accounts/${id}/bank-accounts.read`,
     `/accounts/${id}/profile.read`,
-    // Required by the moov-terms-of-service Drop to mint an acceptance token.
+    // The moov-terms-of-service Drop mints an acceptance token against the
+    // account profile — without profile.write the token it returns is not
+    // accepted when patched server-side.
+    `/accounts/${id}/profile.write`,
     `/accounts/${id}/ping.read`,
   ],
+
 
 };
 
