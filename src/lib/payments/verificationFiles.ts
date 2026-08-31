@@ -14,6 +14,7 @@ export const FILE_PURPOSE_OPTIONS = [
   { value: "individual_verification", label: "Individual verification" },
   { value: "representative_verification", label: "Representative verification" },
   { value: "w9", label: "W-9" },
+  { value: "bank_statement", label: "Bank statement (last 3 months)" },
   { value: "license", label: "License" },
   { value: "insurance", label: "Insurance" },
   { value: "saas_agreement", label: "SaaS Agreement" },

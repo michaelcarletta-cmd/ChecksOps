@@ -13,6 +13,7 @@ export const FILE_PURPOSES = [
   "individual_verification",
   "representative_verification",
   "w9",
+  "bank_statement",
   "license",
   "insurance",
   "saas_agreement",
@@ -31,6 +32,7 @@ export type MoovFilePurpose =
 
 const MOOV_PURPOSE_MAP: Record<string, MoovFilePurpose> = {
   w9: "business_verification",
+  bank_statement: "business_verification",
   license: "business_verification",
   insurance: "business_verification",
   saas_agreement: "business_verification",
