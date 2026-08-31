@@ -230,6 +230,13 @@ export default function RecipientPaymentSetup() {
       }
       const moov = createMoovClient(session.token);
       const acceptance = await moov.accounts.acceptTermsOfService({ accountID: session.account_id });
+       // Moov.js resolves some failures as a plain error string (not an Error
+       // and not `{ error }`). Treat that as a failure instead of continuing to
+       // backend verification and replacing the useful provider response with
+       // the generic "could not record" message.
+       if (typeof acceptance === "string") {
+         throw new Error(acceptance || "Could not record your acceptance.");
+       }
       if (acceptance?.error) {
         throw new Error(typeof acceptance.error === "string" ? acceptance.error : "Could not record your acceptance.");
       }
@@ -249,7 +256,12 @@ export default function RecipientPaymentSetup() {
       setTermsDone(true);
 
     } catch (err: any) {
-      setError(err?.message ?? "Could not record your acceptance.");
+      const providerMessage = typeof err?.error === "string"
+        ? err.error
+        : typeof err?.message === "string"
+          ? err.message
+          : null;
+      setError(providerMessage ?? "Could not record your acceptance.");
     } finally {
       setSaving(false);
     }

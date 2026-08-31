@@ -86,7 +86,17 @@ serve(async (req) => {
       }
     }
 
-    const outstanding = await termsRequirementOutstanding();
+    // Capability requirements can lag briefly after the browser-side account
+    // PATCH succeeds. Poll before reporting failure so a successful acceptance
+    // is not rejected because of provider-side eventual consistency.
+    let outstanding = await termsRequirementOutstanding();
+    if (verifyOnly && outstanding === true) {
+      for (const delayMs of [750, 1_500, 2_500]) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        outstanding = await termsRequirementOutstanding();
+        if (outstanding !== true) break;
+      }
+    }
     if (outstanding === true) {
       console.error(
         "[moov-recipient-tos-accept] terms requirement still outstanding",
