@@ -79,9 +79,11 @@ const tokenCache = new Map<string, CachedToken>();
  * Exchanges the platform credentials for a short-lived access token.
  * Tokens are cached per scope-set for the life of the isolate.
  */
-export async function moovToken(scopes: string[]): Promise<string> {
+export async function moovToken(scopes: string[], requestOrigin?: string): Promise<string> {
   const scope = scopes.join(" ");
-  const cached = tokenCache.get(scope);
+  const origin = requestOrigin ?? moovOrigin();
+  const cacheKey = `${origin}|${scope}`;
+  const cached = tokenCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now() + 30_000) return cached.token;
 
   const { key, secret } = credentials();
@@ -92,7 +94,7 @@ export async function moovToken(scopes: string[]): Promise<string> {
     headers: {
       Authorization: `Basic ${basic}`,
       "Content-Type": "application/x-www-form-urlencoded",
-      Origin: moovOrigin(),
+      Origin: origin,
     },
     body: new URLSearchParams({ grant_type: "client_credentials", scope }),
   });
@@ -110,7 +112,7 @@ export async function moovToken(scopes: string[]): Promise<string> {
 
   const token = body?.access_token as string;
   const ttl = Number(body?.expires_in ?? 300) * 1000;
-  tokenCache.set(scope, { token, expiresAt: Date.now() + ttl });
+  tokenCache.set(cacheKey, { token, expiresAt: Date.now() + ttl });
   return token;
 }
 
