@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Plus, Trash2, ShieldCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useProviderProfile } from "@/hooks/useProviderProfile";
+
 
 const BUSINESS_TYPES: { value: string; label: string }[] = [
   { value: "privateCorporation", label: "LLC / Private corporation" },
