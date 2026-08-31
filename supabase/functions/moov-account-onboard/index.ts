@@ -13,6 +13,7 @@ const BUSINESS_TYPES = [
   "soleProprietorship",
   "unincorporatedAssociation",
   "trust",
+  "llc",
   "publicCorporation",
   "privateCorporation",
   "partnership",
