@@ -1354,6 +1354,28 @@ function TenantManagementTable({
   const [proTenant, setProTenant] = useState<Tenant | null>(null);
   const [search, setSearch] = useState("");
 
+  // Live Moov KYC/verification status per tenant (keyed by tenant_id).
+  const { data: moovKycByTenant } = useQuery({
+    queryKey: ["admin-tenants-moov-kyc"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("payment_provider_accounts")
+        .select("tenant_id, status, verification_status, environment, created_at")
+        .eq("provider", "moov")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      const map: Record<string, { status: string | null; verification_status: string | null }> = {};
+      for (const a of data ?? []) {
+        // newest account wins (rows ordered desc)
+        if (!map[a.tenant_id]) {
+          map[a.tenant_id] = { status: a.status, verification_status: a.verification_status };
+        }
+      }
+      return map;
+    },
+    staleTime: 30_000,
+  });
+
   const updateTenant = async (id: string, patch: Record<string, any>, silent = false) => {
     setBusyId(id);
     const { error } = await supabase.from("tenants").update(patch as any).eq("id", id);
