@@ -59,24 +59,31 @@ serve(async (req) => {
       });
     } catch (e) {
       const message = (e as Error).message ?? "";
-      // An account that already accepted terms is a success, not a failure.
-      if (!/already/i.test(message)) {
-        console.error("[moov-recipient-tos-accept] patch failed", message);
-        return json({ error: "The payment provider could not record your acceptance. Please try again." }, 502);
-      }
+      // Terms can only be recorded once. A repeat acceptance comes back as
+      // "already accepted" or a 403 forbidden — neither is a real failure.
+      patchError = /already|forbidden|403/i.test(message) ? null : message;
+      if (patchError) console.error("[moov-recipient-tos-accept] patch failed", message);
+      else console.log("[moov-recipient-tos-accept] terms already on file, continuing");
     }
 
     // Terms are a prerequisite for the payout capabilities — request them now
     // so a previously blocked recipient becomes payable.
+    let capabilitiesOk = false;
     try {
       await moovFetch<any>(`/accounts/${accountId}/capabilities`, {
         method: "POST",
         scopes: scopes.capabilitiesWrite(accountId),
         body: { capabilities: ["send-funds", "receive-funds", "wallet"] },
       });
+      capabilitiesOk = true;
     } catch (e) {
       console.error("[moov-recipient-tos-accept] capabilities", (e as Error).message);
     }
+
+    if (patchError && !capabilitiesOk) {
+      return json({ error: "The payment provider could not record your acceptance. Please try again." }, 502);
+    }
+
 
     await supabase.from("payment_event_log").insert(sanitize({
       tenant_id: recipient.tenant_id,
