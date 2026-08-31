@@ -55,8 +55,20 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: `Cannot send verification link — account status is ${account.verification_status}` }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const to = recipient_email ?? account.verification_recipient_email;
-    if (!to) throw new Error("No recipient email on file");
+    let to = recipient_email ?? account.verification_recipient_email;
+
+    // Stakeholders onboarded through Moov keep their email on the external
+    // recipient record, not on verification_recipient_email — fall back to it
+    // so the terms-link button isn't silently gated off.
+    if (!to) {
+      const { data: recipientRow } = await supabase
+        .from("external_payment_recipients")
+        .select("email")
+        .eq("stakeholder_account_id", stakeholder_account_id)
+        .maybeSingle();
+      to = recipientRow?.email ?? null;
+    }
+    if (!to) throw new Error("No recipient email on file — edit the stakeholder and add their email first.");
 
     // Rotate token + extend expiry
     const token = crypto.randomUUID();
