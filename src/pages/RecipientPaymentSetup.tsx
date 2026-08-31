@@ -197,6 +197,33 @@ export default function RecipientPaymentSetup() {
     }
   }
 
+  async function handleAcceptTermsOnly() {
+    if (!tosReady || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke("moov-recipient-tos-accept", {
+        body: { token, tos_token: tosTokenRef.current },
+      });
+      if (fnErr) {
+        let message = "Could not record your acceptance.";
+        try {
+          const parsed = await (fnErr as any).context?.json?.();
+          if (parsed?.error) message = parsed.error;
+        } catch { /* keep default */ }
+        throw new Error(message);
+      }
+      if ((data as any)?.error) throw new Error((data as any).error);
+      setTermsDone(true);
+    } catch (err: any) {
+      setError(err?.message ?? "Could not record your acceptance.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+
+
 
   return (
     <main className="min-h-screen bg-background flex items-center justify-center p-4">
