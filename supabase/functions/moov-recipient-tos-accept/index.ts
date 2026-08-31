@@ -50,8 +50,9 @@ serve(async (req) => {
     }
     const accountId = recipient.provider_account_id as string | null;
     if (!accountId) return json({ error: "This payment setup is not ready yet." }, 409);
-
+    let patchError: string | null = null;
     try {
+
       await moovFetch<any>(`/accounts/${accountId}`, {
         method: "PATCH",
         scopes: scopes.accountWrite(accountId),
