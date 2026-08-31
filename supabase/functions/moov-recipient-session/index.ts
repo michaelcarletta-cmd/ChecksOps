@@ -13,7 +13,12 @@ function approvedBrowserOrigin(req: Request): string {
     const approved = host === "checksops.com"
       || host === "www.checksops.com"
       || host === "claim-buddy-crm.lovable.app"
-      || host.endsWith(".lovable.app");
+      || host.endsWith(".lovable.app")
+      // Lovable's authenticated preview is served from this separate domain.
+      // The provider binds browser OAuth tokens to the exact requesting origin,
+      // so falling back to checksops.com makes the browser-side ToS PATCH fail
+      // before our verification function is ever reached.
+      || host.endsWith(".lovableproject.com");
     return approved ? `${url.protocol}//${url.host}` : fallback;
   } catch {
     return fallback;
