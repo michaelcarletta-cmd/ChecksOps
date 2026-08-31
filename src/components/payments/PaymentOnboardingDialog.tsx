@@ -128,8 +128,62 @@ export function PaymentOnboardingDialog({ tenantId, open, onOpenChange, onSubmit
   const [address, setAddress] = useState<Address>(emptyAddress());
   const [people, setPeople] = useState<Person[]>([emptyPerson(true)]);
 
+  // Anything the provider already holds is prefilled, so a tenant who has
+  // onboarded before is never asked to retype their business details.
+  const { data: providerProfile } = useProviderProfile(open ? tenantId : null);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    if (!open) { setHydrated(false); return; }
+    const biz = providerProfile?.business;
+    if (!biz || hydrated) return;
+    setHydrated(true);
+    setLegalBusinessName((v) => v || biz.legalBusinessName);
+    setDoingBusinessAs((v) => v || biz.doingBusinessAs);
+    if (biz.businessType) setBusinessType(biz.businessType);
+    setEmail((v) => v || biz.email);
+    setPhone((v) => v || biz.phone);
+    setWebsite((v) => v || biz.website.replace(/^https?:\/\//, ""));
+    setDescription((v) => v || biz.description);
+    setAddress((a) =>
+      a.addressLine1
+        ? a
+        : {
+            addressLine1: biz.address.addressLine1 ?? "",
+            addressLine2: biz.address.addressLine2 ?? "",
+            city: biz.address.city ?? "",
+            stateOrProvince: biz.address.stateOrProvince ?? "",
+            postalCode: biz.address.postalCode ?? "",
+          },
+    );
+    if (providerProfile?.representatives.length) {
+      setPeople(
+        providerProfile.representatives.map((r) => ({
+          firstName: r.firstName,
+          lastName: r.lastName,
+          email: r.email,
+          phone: r.phone,
+          jobTitle: r.jobTitle || "Owner",
+          ssn: "",
+          birthDate: "",
+          address: {
+            addressLine1: r.address.addressLine1 ?? "",
+            addressLine2: r.address.addressLine2 ?? "",
+            city: r.address.city ?? "",
+            stateOrProvince: r.address.stateOrProvince ?? "",
+            postalCode: r.address.postalCode ?? "",
+          },
+          isController: r.isController,
+          isOwner: r.isOwner,
+          ownershipPercentage: r.ownershipPercentage,
+        })),
+      );
+    }
+  }, [open, providerProfile, hydrated]);
+
   const setPerson = (i: number, next: Partial<Person>) =>
     setPeople((prev) => prev.map((p, idx) => (idx === i ? { ...p, ...next } : p)));
+
 
   async function handleSubmit() {
     setSaving(true);
