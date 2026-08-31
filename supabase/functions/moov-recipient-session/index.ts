@@ -33,7 +33,7 @@ serve(async (req) => {
 
     const { data: recipient } = await supabase
       .from("external_payment_recipients")
-      .select("id, tenant_id, display_name, provider_account_id, token_expires_at, onboarding_status, environment")
+      .select("id, tenant_id, display_name, provider_account_id, token_expires_at, onboarding_status, environment, bank_linked_at, provider_bank_name, provider_last_four")
       .eq("secure_token", token)
       .maybeSingle();
 
@@ -64,6 +64,9 @@ serve(async (req) => {
         id: recipient.id,
         name: recipient.display_name,
         status: recipient.onboarding_status,
+        bank_linked: Boolean((recipient as any).bank_linked_at),
+        bank_name: (recipient as any).provider_bank_name ?? null,
+        last_four: (recipient as any).provider_last_four ?? null,
       },
       payer: {
         name: (tenant as any)?.name ?? "ChecksOps",

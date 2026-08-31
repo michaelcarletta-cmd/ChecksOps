@@ -27,7 +27,14 @@ import { Loader2, ShieldCheck, Landmark, AlertCircle, CheckCircle2 } from "lucid
  */
 
 interface SessionData {
-  recipient: { id: string; name: string; status: string };
+  recipient: {
+    id: string;
+    name: string;
+    status: string;
+    bank_linked?: boolean;
+    bank_name?: string | null;
+    last_four?: string | null;
+  };
   payer: {
     name: string;
     logo_url: string | null;
@@ -61,7 +68,10 @@ export default function RecipientPaymentSetup() {
   const [state, setState] = useState("");
   const [postalCode, setPostalCode] = useState("");
   const [tosReady, setTosReady] = useState(false);
+  const [termsDone, setTermsDone] = useState(false);
+  const [replaceBank, setReplaceBank] = useState(false);
   const tosMountRef = useRef<HTMLDivElement | null>(null);
+
 
 
   // Brand the hosted Moov component so it matches the payer's look.
@@ -122,9 +132,14 @@ export default function RecipientPaymentSetup() {
       } catch { /* leave ToS hidden; submit will surface an error */ }
     })();
     return () => { cancelled = true; };
-  }, [session?.token]);
+  }, [session?.token, replaceBank]);
+
+  // Recipients onboarded before the provider required terms already have a bank
+  // on file — they only need to accept terms to be payable again.
+  const showTermsOnly = Boolean(session?.recipient.bank_linked) && !replaceBank;
 
   const digitsOnly = (value: string, max: number) => value.replace(/\D/g, "").slice(0, max);
+
 
   const identityValid =
     addressLine1.trim().length >= 3 &&
@@ -190,6 +205,33 @@ export default function RecipientPaymentSetup() {
     }
   }
 
+  async function handleAcceptTermsOnly() {
+    if (!tosReady || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke("moov-recipient-tos-accept", {
+        body: { token, tos_token: tosTokenRef.current },
+      });
+      if (fnErr) {
+        let message = "Could not record your acceptance.";
+        try {
+          const parsed = await (fnErr as any).context?.json?.();
+          if (parsed?.error) message = parsed.error;
+        } catch { /* keep default */ }
+        throw new Error(message);
+      }
+      if ((data as any)?.error) throw new Error((data as any).error);
+      setTermsDone(true);
+    } catch (err: any) {
+      setError(err?.message ?? "Could not record your acceptance.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+
+
 
   return (
     <main className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -247,8 +289,66 @@ export default function RecipientPaymentSetup() {
               </div>
             )}
 
-            {!loading && session && !done && (
+            {!loading && session && !done && showTermsOnly && (
+              <div className="space-y-4 pt-1">
+                {termsDone ? (
+                  <div className="flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+                    <p className="text-xs text-emerald-500">
+                      Terms accepted. You can close this page — your payment can now be released.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="rounded-md border border-border/60 bg-muted/30 p-3">
+                      <p className="text-xs text-foreground font-medium">
+                        Bank account already on file
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        {session.recipient.bank_name ?? "Your bank"}
+                        {session.recipient.last_four ? ` ••••${session.recipient.last_four}` : ""} — one last
+                        step: accept the payment provider's terms so we can send your money.
+                      </p>
+                    </div>
+
+                    <div
+                      ref={tosMountRef}
+                      aria-hidden="true"
+                      style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clipPath: "inset(50%)" }}
+                    />
+                    <p className="text-[11px] leading-relaxed text-muted-foreground rounded-md border border-border/60 bg-muted/30 p-3">
+                      By continuing, you agree to the terms of Moov's{" "}
+                      <a href="https://moov.io/legal/privacy/" target="_blank" rel="noopener noreferrer"
+                        className="text-primary underline underline-offset-2">Privacy Policy</a>{" "}
+                      and{" "}
+                      <a href="https://moov.io/legal/platform-agreement/" target="_blank" rel="noopener noreferrer"
+                        className="text-primary underline underline-offset-2">Platform Agreement</a>.
+                    </p>
+                    {!tosReady && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Loading the payment provider's Terms of Service…
+                      </p>
+                    )}
+
+                    <Button className="w-full" disabled={!tosReady || saving} onClick={handleAcceptTermsOnly}>
+                      {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      Accept terms
+                    </Button>
+                    <button
+                      type="button"
+                      className="text-[11px] text-muted-foreground underline underline-offset-2 w-full text-center"
+                      onClick={() => setReplaceBank(true)}
+                    >
+                      Need to use a different bank account?
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {!loading && session && !done && !showTermsOnly && (
               <form onSubmit={handleSubmit} className="space-y-4 pt-1">
+
                 <div className="space-y-2">
                   <Label htmlFor="holder-name">Account holder name</Label>
                   <Input

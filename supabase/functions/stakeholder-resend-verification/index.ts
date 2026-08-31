@@ -29,7 +29,7 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { stakeholder_account_id, recipient_email } = await req.json();
+    const { stakeholder_account_id, recipient_email, terms_only } = await req.json();
     if (!stakeholder_account_id) throw new Error("stakeholder_account_id is required");
 
     const { data: account } = await supabase
@@ -49,7 +49,9 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    if (["verified", "admin_override", "locked"].includes(account.verification_status)) {
+    // terms_only: recipients onboarded before the provider required Terms of
+    // Service need a fresh link even though their bank is already verified.
+    if (!terms_only && ["verified", "admin_override", "locked"].includes(account.verification_status)) {
       return new Response(JSON.stringify({ error: `Cannot send verification link — account status is ${account.verification_status}` }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
