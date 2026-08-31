@@ -211,7 +211,7 @@ export default function RecipientPaymentSetup() {
     setError(null);
     try {
       const { data, error: fnErr } = await supabase.functions.invoke("moov-recipient-tos-accept", {
-        body: { token },
+        body: { token, tos_token: tosTokenRef.current },
       });
       if (fnErr) {
         let message = "Could not record your acceptance.";
