@@ -188,6 +188,19 @@ export function PaymentOnboardingDialog({ tenantId, open, onOpenChange, onSubmit
 
 
   async function handleSubmit() {
+    for (const p of people) {
+      if (p.isOwner) {
+        const pct = Number(p.ownershipPercentage);
+        if (!p.ownershipPercentage || !Number.isFinite(pct) || pct < 1 || pct > 100) {
+          toast({
+            title: "Ownership percentage required",
+            description: `Enter an ownership percentage between 1 and 100 for ${p.firstName || "each owner"} ${p.lastName || ""} (or uncheck "Owns 25% or more").`.trim(),
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+    }
     setSaving(true);
     try {
       const body = {
