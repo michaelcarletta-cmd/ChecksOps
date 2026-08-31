@@ -23,17 +23,34 @@ serve(async (req) => {
 
     const caller = await requireMoovCaller(req, tenant_id, { requireAdmin: true });
     if (isResponse(caller)) return caller;
-    const { environment } = caller;
+    const { environment, supabase } = caller;
 
-    const token = await moovToken(["/ping.read"]);
+    const { data: account } = await supabase
+      .from("payment_provider_accounts")
+      .select("provider_account_id")
+      .eq("tenant_id", tenant_id)
+      .eq("provider", "moov")
+      .eq("environment", environment)
+      .maybeSingle();
 
+    const accountId = (account?.provider_account_id as string | null) ?? null;
+
+    // The browser session needs profile write on the tenant account so the
+    // acceptance token it mints is bound to that account.
+    const sessionScopes = accountId
+      ? [`/accounts/${accountId}/profile.write`, `/accounts/${accountId}/profile.read`, "/ping.read"]
+      : ["/ping.read"];
+
+    const token = await moovToken(sessionScopes);
 
     return json({
       success: true,
       token,
       environment,
+      account_id: accountId,
       public_key: Deno.env.get("MOOV_PUBLIC_KEY") ?? null,
     });
+
   } catch (e) {
     console.error("[moov-tos-token]", (e as Error).message);
     return json({ error: (e as Error).message }, 500);
