@@ -191,8 +191,11 @@ export interface MoovRequestOptions {
   apiVersion?: string;
   /** Act on behalf of a connected account. */
   onBehalfOf?: string;
+  /** Extra headers, e.g. forwarding the end user's IP / user agent. */
+  extraHeaders?: Record<string, string>;
 
 }
+
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
