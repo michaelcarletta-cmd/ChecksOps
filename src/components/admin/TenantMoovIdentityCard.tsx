@@ -67,9 +67,9 @@ export function TenantMoovIdentityCard({
             <Badge variant="outline" className="text-[10px]">
               {a.environment}
             </Badge>
-            {a.status && (
+            {a.onboarding_status && (
               <Badge variant="outline" className="text-[10px]">
-                {a.status}
+                {a.onboarding_status}
               </Badge>
             )}
             {a.verification_status && (
