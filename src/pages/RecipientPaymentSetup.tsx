@@ -210,18 +210,6 @@ export default function RecipientPaymentSetup() {
     setSaving(true);
     setError(null);
     try {
-      const moovFactory = (window as any).Moov;
-      if (typeof moovFactory !== "function" || !session?.token || !session.account_id) {
-        throw new Error("The secure payment form is not ready. Please refresh and try again.");
-      }
-
-      // Existing recipients accept directly through Moov.js. This preserves the
-      // end user's browser context and OAuth session required by the platform
-      // agreement; forwarding a generated token to a separate server OAuth
-      // session is rejected by the provider.
-      const moov = moovFactory(session.token);
-      await moov.accounts.acceptTermsOfService({ accountID: session.account_id });
-
       const { data, error: fnErr } = await supabase.functions.invoke("moov-recipient-tos-accept", {
         body: { token },
       });
