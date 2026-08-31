@@ -178,20 +178,39 @@ export function PaymentReadinessPanel() {
           </div>
         )}
 
-        {/* Moov ToS Drop is mounted only to mint the acceptance token; it renders
-            an unthemeable white box, so keep it visually hidden. */}
-        <div
-          ref={tosMountRef}
-          aria-hidden="true"
-          style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clipPath: "inset(50%)" }}
-        />
+        {tosCheck && tosCheck.state !== "ready" && (
+          <div className="rounded-md border border-border bg-muted/30 p-2.5 space-y-1">
+            <p className="text-xs font-medium">Platform terms of service</p>
+            <p className="text-[11px] text-muted-foreground">
+              By accepting, the account holder agrees to our payment provider's{" "}
+              <a
+                href="https://moov.io/legal/platform-agreement/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2"
+              >
+                platform agreement
+              </a>{" "}
+              and{" "}
+              <a
+                href="https://moov.io/legal/privacy-policy/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2"
+              >
+                privacy policy
+              </a>
+              . Acceptance is recorded with the provider.
+            </p>
+          </div>
+        )}
 
         <div className="flex flex-col sm:flex-row gap-2 pt-1">
           {tosCheck && tosCheck.state !== "ready" && (
             <Button size="sm" className="h-8 text-xs flex-1" onClick={handleAcceptTerms} disabled={tosBusy}>
               {tosBusy
-                ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Opening terms…</>
-                : "Review & accept terms"}
+                ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Recording acceptance…</>
+                : "Accept terms"}
             </Button>
           )}
           <Button size="sm" variant="outline" className="h-8 text-xs" onClick={load} disabled={loading}>
@@ -205,20 +224,3 @@ export function PaymentReadinessPanel() {
   );
 }
 
-let moovJsPromise: Promise<void> | null = null;
-
-/** Loads the provider's browser SDK once, on demand. */
-function loadMoovJs(): Promise<void> {
-  if (typeof window === "undefined") return Promise.resolve();
-  if ((window as any).customElements?.get?.("moov-terms-of-service")) return Promise.resolve();
-  if (moovJsPromise) return moovJsPromise;
-  moovJsPromise = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "https://js.moov.io/v1";
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Could not load the payment provider's secure component."));
-    document.head.appendChild(script);
-  });
-  return moovJsPromise;
-}
