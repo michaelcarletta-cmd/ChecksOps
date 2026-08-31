@@ -118,6 +118,9 @@ const PendingApprovalDeposits = lazy(() =>
 const CheckAltDepositHistory = lazy(() =>
   import("@/components/settings/CheckAltSettings").then(m => ({ default: m.CheckAltDepositHistory }))
 );
+const BankDepositReconciliation = lazy(() =>
+  import("@/components/deposit-ops/BankDepositReconciliation")
+);
 const LossPreventionPanel = lazy(() =>
   import("@/components/check-review/LossPreventionPanel").then(m => ({ default: m.LossPreventionPanel }))
 );
