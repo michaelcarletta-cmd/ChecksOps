@@ -1311,6 +1311,7 @@ export default function CheckCommandCenter() {
                 {SHOW_CHECKALT && (
                   <>
                     <TabsTrigger value="pending_approvals" className="text-xs gap-1"><ShieldAlert className="h-3 w-3" />Pending Approvals</TabsTrigger>
+                    <TabsTrigger value="bank_deposits" className="text-xs gap-1"><Banknote className="h-3 w-3" />Bank Deposits</TabsTrigger>
                     <TabsTrigger value="deposit_history" className="text-xs gap-1"><Banknote className="h-3 w-3" />Deposit History</TabsTrigger>
                   </>
                 )}
