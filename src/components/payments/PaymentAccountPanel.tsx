@@ -47,6 +47,8 @@ export function PaymentAccountPanel() {
   const [showBankLink, setShowBankLink] = useState(false);
   const [setupWindow, setSetupWindow] = useState<Window | null>(null);
   const [setupUrl, setSetupUrl] = useState<string | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
 
 
   useEffect(() => {
