@@ -254,6 +254,8 @@ export function ComplianceSettings({ tenantId: tenantIdOverride }: { tenantId?: 
           <div className="space-y-4">
             <PaymentAccountPanel />
             <PaymentReadinessPanel />
+            <UnderwritingQuestionnairePanel tenantId={tenant?.id} />
+
           </div>
 
         </SectionCard>
