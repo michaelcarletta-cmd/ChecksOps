@@ -72,8 +72,8 @@ serve(async (req) => {
     }
 
     const b2b = pct(a.businessToBusinessPercentage);
-    const b2c = pct(a.businessToConsumerPercentage);
-    if (b2b + b2c !== 100) {
+    const c2b = pct(a.consumerToBusinessPercentage ?? a.businessToConsumerPercentage);
+    if (b2b + c2b !== 100) {
       return json({ error: "Business and consumer percentages must add up to 100." }, 400);
     }
 
@@ -83,11 +83,7 @@ serve(async (req) => {
       averageMonthlyTransactionVolume,
       volumeByCustomerType: {
         businessToBusinessPercentage: b2b,
-        businessToConsumerPercentage: b2c,
-      },
-      volumeShareByCustomerType: {
-        business: b2b,
-        consumer: b2c,
+        consumerToBusinessPercentage: c2b,
       },
       fulfillment: {
         hasPhysicalGoods: !!a.hasPhysicalGoods,

@@ -15,7 +15,7 @@ interface Answers {
   maxTransactionSize: string;
   averageMonthlyTransactionVolume: string;
   businessToBusinessPercentage: string;
-  businessToConsumerPercentage: string;
+  consumerToBusinessPercentage: string;
   hasPhysicalGoods: boolean;
   isShippingProduct: boolean;
   shipmentDurationDays: string;
@@ -27,7 +27,7 @@ const EMPTY: Answers = {
   maxTransactionSize: "",
   averageMonthlyTransactionVolume: "",
   businessToBusinessPercentage: "50",
-  businessToConsumerPercentage: "50",
+  consumerToBusinessPercentage: "50",
   hasPhysicalGoods: false,
   isShippingProduct: false,
   shipmentDurationDays: "0",
@@ -85,8 +85,8 @@ export function UnderwritingQuestionnairePanel({ tenantId }: { tenantId?: string
           averageTransactionSize: fromCents(u.averageTransactionSize),
           maxTransactionSize: fromCents(u.maxTransactionSize),
           averageMonthlyTransactionVolume: fromCents(u.averageMonthlyTransactionVolume),
-          businessToBusinessPercentage: String(vol.businessToBusinessPercentage ?? vol.business ?? 50),
-          businessToConsumerPercentage: String(vol.businessToConsumerPercentage ?? vol.consumer ?? 50),
+          businessToBusinessPercentage: String(vol.businessToBusinessPercentage ?? 50),
+          consumerToBusinessPercentage: String(vol.consumerToBusinessPercentage ?? 50),
           hasPhysicalGoods: !!u.fulfillment?.hasPhysicalGoods,
           isShippingProduct: !!u.fulfillment?.isShippingProduct,
           shipmentDurationDays: String(u.fulfillment?.shipmentDurationDays ?? 0),
@@ -187,14 +187,14 @@ export function UnderwritingQuestionnairePanel({ tenantId }: { tenantId?: string
                 const n = Math.min(100, Number(v || 0));
                 set({
                   businessToBusinessPercentage: v === "" ? "" : String(n),
-                  businessToConsumerPercentage: String(100 - n),
+                  consumerToBusinessPercentage: String(100 - n),
                 });
               }}
             />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Paid to consumers (%)</Label>
-            <Input value={answers.businessToConsumerPercentage} readOnly className="bg-muted/40" />
+            <Input value={answers.consumerToBusinessPercentage} readOnly className="bg-muted/40" />
           </div>
         </div>
 
