@@ -532,7 +532,7 @@ export function StakeholderAccountSettings() {
                       <ShieldAlert className="h-3 w-3 mr-1" /> Override
                     </Button>
                   )}
-                  {acct.verification_recipient_email && ["verified", "admin_override"].includes(vStatus) && (
+                  {["verified", "admin_override"].includes(vStatus) && (
                     <Button
                       size="sm"
                       variant="ghost"
