@@ -45,42 +45,41 @@ serve(async (req) => {
     const accountId = account.provider_account_id as string;
 
     /**
-     * Acceptance can be applied two ways. A token minted in the account
-     * holder's browser is preferred; when that is unavailable the provider's
-     * manual-entry form records the same evidence (timestamp, IP, user agent,
-     * domain) captured from this request.
+     * The acceptance token must be created by an OAuth-authenticated call, and
+     * the provider rejects it when the creating address matches the address
+     * that applies it. So the token is minted here with the account holder's
+     * own IP and user agent forwarded, then applied to the account.
      */
     const acceptedIP =
       (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() ||
       req.headers.get("cf-connecting-ip") ||
       "";
     const acceptedUserAgent = req.headers.get("user-agent") ?? "unknown";
-    const originHeader = req.headers.get("origin") ?? "";
-    let acceptedDomain = "checksops.com";
-    try { if (originHeader) acceptedDomain = new URL(originHeader).hostname; } catch { /* default */ }
 
-    const patchBody = clientToken
-      ? { termsOfService: { token: clientToken } }
-      : {
-          termsOfService: {
-            manual: {
-              acceptedDate: new Date().toISOString(),
-              acceptedIP,
-              acceptedUserAgent,
-              acceptedDomain,
-            },
-          },
-        };
-
-    if (!clientToken && !acceptedIP) {
-      return json({ error: "Could not capture the acceptance details. Please try again." }, 400);
+    let tosToken = clientToken;
+    if (!tosToken) {
+      const minted = await moovFetch<any>(`/tos-token`, {
+        scopes: ["/ping.read"],
+        extraHeaders: {
+          ...(acceptedIP ? { "X-Forwarded-For": acceptedIP } : {}),
+          "User-Agent": acceptedUserAgent,
+        },
+      });
+      const value = minted?.token ?? minted?.tosToken ?? null;
+      if (typeof value === "string" && value.length >= 8) tosToken = value;
     }
+    if (!tosToken) return json({ error: "Could not generate the terms acceptance token." }, 502);
 
     await moovFetch<any>(`/accounts/${accountId}`, {
       method: "PATCH",
       scopes: scopes.accountWrite(accountId),
-      body: patchBody,
+      body: { termsOfService: { token: tosToken } },
+      extraHeaders: {
+        ...(acceptedIP ? { "X-Forwarded-For": acceptedIP } : {}),
+        "User-Agent": acceptedUserAgent,
+      },
     });
+
 
 
 
