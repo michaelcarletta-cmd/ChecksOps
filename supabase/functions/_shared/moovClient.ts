@@ -191,8 +191,11 @@ export interface MoovRequestOptions {
   apiVersion?: string;
   /** Act on behalf of a connected account. */
   onBehalfOf?: string;
+  /** Extra headers, e.g. forwarding the end user's IP / user agent. */
+  extraHeaders?: Record<string, string>;
 
 }
+
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -229,6 +232,7 @@ export async function moovFetch<T = any>(
     headers["X-Idempotency-Key"] = await idempotencyUuid(opts.idempotencyKey);
   }
   if (opts.onBehalfOf) headers["X-Account-ID"] = opts.onBehalfOf;
+  if (opts.extraHeaders) Object.assign(headers, opts.extraHeaders);
 
 
   const res = await fetch(`${moovHost()}${path}`, {
