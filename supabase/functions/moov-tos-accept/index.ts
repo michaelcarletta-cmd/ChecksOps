@@ -45,26 +45,43 @@ serve(async (req) => {
     const accountId = account.provider_account_id as string;
 
     /**
-     * The acceptance token must be generated with an OAuth-authenticated API
-     * call. Browser widgets authenticate differently, and the provider rejects
-     * their tokens ("must be created using an oauth token"), so the token is
-     * always minted here, server side, right before it is applied.
+     * Acceptance can be applied two ways. A token minted in the account
+     * holder's browser is preferred; when that is unavailable the provider's
+     * manual-entry form records the same evidence (timestamp, IP, user agent,
+     * domain) captured from this request.
      */
-    let tosToken = clientToken;
-    try {
-      const minted = await moovFetch<any>(`/tos-token`, { scopes: ["/ping.read"] });
-      const value = minted?.token ?? minted?.tosToken ?? null;
-      if (typeof value === "string" && value.length >= 8) tosToken = value;
-    } catch (e) {
-      if (!tosToken) throw e;
+    const acceptedIP =
+      (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() ||
+      req.headers.get("cf-connecting-ip") ||
+      "";
+    const acceptedUserAgent = req.headers.get("user-agent") ?? "unknown";
+    const originHeader = req.headers.get("origin") ?? "";
+    let acceptedDomain = "checksops.com";
+    try { if (originHeader) acceptedDomain = new URL(originHeader).hostname; } catch { /* default */ }
+
+    const patchBody = clientToken
+      ? { termsOfService: { token: clientToken } }
+      : {
+          termsOfService: {
+            manual: {
+              acceptedDate: new Date().toISOString(),
+              acceptedIP,
+              acceptedUserAgent,
+              acceptedDomain,
+            },
+          },
+        };
+
+    if (!clientToken && !acceptedIP) {
+      return json({ error: "Could not capture the acceptance details. Please try again." }, 400);
     }
-    if (!tosToken) return json({ error: "Could not generate the terms acceptance token." }, 502);
 
     await moovFetch<any>(`/accounts/${accountId}`, {
       method: "PATCH",
       scopes: scopes.accountWrite(accountId),
-      body: { termsOfService: { token: tosToken } },
+      body: patchBody,
     });
+
 
 
     const acceptedAt = new Date().toISOString();
