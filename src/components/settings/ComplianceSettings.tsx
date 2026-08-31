@@ -17,6 +17,8 @@ import { SectionCard } from "./SectionCard";
 import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
 import { PaymentAccountPanel } from "@/components/payments/PaymentAccountPanel";
 import { PaymentReadinessPanel } from "@/components/payments/PaymentReadinessPanel";
+import { useProviderProfile } from "@/hooks/useProviderProfile";
+
 
 
 
@@ -81,23 +83,36 @@ export function ComplianceSettings({ tenantId: tenantIdOverride }: { tenantId?: 
     beneficial_owner_id_url: "",
   });
 
+  const { data: providerProfile } = useProviderProfile(tenant?.id);
+
   useEffect(() => {
     if (t) {
       const addr = parseAddress(t.business_address ?? "");
+      const biz = providerProfile?.business;
+      const controller =
+        providerProfile?.representatives.find((r) => r.isController) ??
+        providerProfile?.representatives[0];
       setForm({
-        legal_business_name: t.legal_business_name ?? "",
+        legal_business_name: t.legal_business_name ?? biz?.legalBusinessName ?? "",
         ein: t.ein ?? "",
-        street: addr.street,
-        city: addr.city,
-        state: addr.state,
-        zip: addr.zip,
-        business_phone: t.business_phone ? formatPhoneNumber(t.business_phone) : "",
-        beneficial_owner_name: t.beneficial_owner_name ?? "",
+        street: addr.street || (biz?.address.addressLine1 ?? ""),
+        city: addr.city || (biz?.address.city ?? ""),
+        state: addr.state || (biz?.address.stateOrProvince ?? ""),
+        zip: addr.zip || (biz?.address.postalCode ?? ""),
+        business_phone: t.business_phone
+          ? formatPhoneNumber(t.business_phone)
+          : biz?.phone
+          ? formatPhoneNumber(biz.phone)
+          : "",
+        beneficial_owner_name:
+          t.beneficial_owner_name ??
+          (controller ? `${controller.firstName} ${controller.lastName}`.trim() : ""),
         beneficial_owner_dob: t.beneficial_owner_dob ?? "",
         beneficial_owner_id_url: t.beneficial_owner_id_url ?? "",
       });
     }
-  }, [t]);
+  }, [t, providerProfile]);
+
 
   const saveKyc = useMutation({
     mutationFn: async () => {
@@ -136,7 +151,8 @@ export function ComplianceSettings({ tenantId: tenantIdOverride }: { tenantId?: 
     return <div className="flex items-center justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
   }
 
-  const kycDone = !!t?.kyc_completed_at;
+  const providerVerified = !!providerProfile?.verified;
+  const kycDone = !!t?.kyc_completed_at || providerVerified;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -160,9 +176,34 @@ export function ComplianceSettings({ tenantId: tenantIdOverride }: { tenantId?: 
         title="Know Your Customer (KYC)"
         accent="bg-gradient-to-r from-primary/60 to-primary/10"
         icon={<ShieldCheck className="h-4 w-4 text-primary" />}
-        description={`Required under our AML program before originating ACH payments. Last completed: ${t?.kyc_completed_at ? format(new Date(t.kyc_completed_at), "PPp") : "Never"}`}
+        description={
+          providerVerified
+            ? "Your business identity is already verified with our payment provider. Nothing further is required — these details are shown for your records."
+            : `Required under our AML program before originating ACH payments. Last completed: ${t?.kyc_completed_at ? format(new Date(t.kyc_completed_at), "PPp") : "Never"}`
+        }
       >
         <div className="space-y-4">
+          {providerVerified && (
+            <div className="flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+              <div className="text-xs">
+                <p className="font-medium text-emerald-500">Identity verified — no re-entry needed</p>
+                <p className="text-muted-foreground mt-0.5">
+                  {providerProfile?.business?.legalBusinessName || t?.legal_business_name || "Your business"}
+                  {providerProfile?.business?.taxIdProvided ? " • EIN on file" : ""}
+                  {providerProfile?.representatives.length
+                    ? ` • Controller: ${providerProfile.representatives
+                        .filter((r) => r.isController)
+                        .map((r) => `${r.firstName} ${r.lastName}`.trim())
+                        .join(", ") || "on file"}`
+                    : ""}
+                  . Edit below only if something changed.
+                </p>
+              </div>
+            </div>
+          )}
+
+
 
           <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Legal business name" value={form.legal_business_name} onChange={(v) => setForm({ ...form, legal_business_name: v })} />

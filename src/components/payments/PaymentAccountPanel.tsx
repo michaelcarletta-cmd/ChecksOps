@@ -193,7 +193,17 @@ export function PaymentAccountPanel() {
           </span>
         </div>
 
-        {caps?.informationRequired?.length ? (
+        {status === "active" ? (
+          <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2.5">
+            <p className="text-xs font-medium text-emerald-500">Verification complete</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Your business details are on file and verified — you don't need to enter them again.
+              {account?.bankConnectionStatus !== "connected"
+                ? " Next step: connect your settlement bank."
+                : ""}
+            </p>
+          </div>
+        ) : caps?.informationRequired?.length ? (
           <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2.5">
             <p className="text-xs font-medium text-amber-500">Additional information required</p>
             <ul className="mt-1 space-y-0.5">
@@ -203,6 +213,7 @@ export function PaymentAccountPanel() {
             </ul>
           </div>
         ) : null}
+
 
         {setupUrl ? (
           <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 space-y-1.5">
