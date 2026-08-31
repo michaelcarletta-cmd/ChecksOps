@@ -1360,7 +1360,7 @@ function TenantManagementTable({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("payment_provider_accounts")
-        .select("tenant_id, status, verification_status, environment, created_at")
+        .select("tenant_id, onboarding_status, verification_status, environment, created_at")
         .eq("provider", "moov")
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -1368,7 +1368,7 @@ function TenantManagementTable({
       for (const a of data ?? []) {
         // newest account wins (rows ordered desc)
         if (!map[a.tenant_id]) {
-          map[a.tenant_id] = { status: a.status, verification_status: a.verification_status };
+          map[a.tenant_id] = { status: a.onboarding_status, verification_status: a.verification_status };
         }
       }
       return map;
