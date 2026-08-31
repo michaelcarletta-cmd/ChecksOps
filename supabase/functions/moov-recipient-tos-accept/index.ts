@@ -23,6 +23,7 @@ serve(async (req) => {
     const tosToken = typeof body?.tos_token === "string" && body.tos_token.length >= 8
       ? String(body.tos_token)
       : null;
+    const verifyOnly = body?.verify_only === true;
 
     if (!token) return json({ error: "token is required" }, 400);
 
@@ -48,33 +49,18 @@ serve(async (req) => {
     const accountId = recipient.provider_account_id as string | null;
     if (!accountId) return json({ error: "This payment setup is not ready yet." }, 409);
     let patchError: string | null = null;
-    try {
-      const forwardedFor = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-      const acceptedIP = forwardedFor
-        ?? req.headers.get("cf-connecting-ip")
-        ?? req.headers.get("x-real-ip")
-        ?? "0.0.0.0";
-      const requestOrigin = req.headers.get("origin") ?? "https://checksops.com";
-      const acceptedDomain = new URL(requestOrigin).hostname;
-      const termsOfService = tosToken
-        ? { token: tosToken }
-        : {
-            manual: {
-              acceptedDate: new Date().toISOString(),
-              acceptedIP,
-              acceptedUserAgent: req.headers.get("user-agent") ?? "Unknown browser",
-              acceptedDomain,
-            },
-          };
-
-      await moovFetch<any>(`/accounts/${accountId}`, {
-        method: "PATCH",
-        scopes: scopes.accountWrite(accountId),
-        body: { termsOfService },
-      });
-    } catch (e) {
-      patchError = (e as Error).message ?? "patch failed";
-      console.error("[moov-recipient-tos-accept] patch failed", patchError);
+    if (!verifyOnly) {
+      if (!tosToken) return json({ error: "Terms acceptance token is required." }, 400);
+      try {
+        await moovFetch<any>(`/accounts/${accountId}`, {
+          method: "PATCH",
+          scopes: scopes.accountWrite(accountId),
+          body: { termsOfService: { token: tosToken } },
+        });
+      } catch (e) {
+        patchError = (e as Error).message ?? "patch failed";
+        console.error("[moov-recipient-tos-accept] patch failed", patchError);
+      }
     }
 
     // Verify the agreement is genuinely on file before reporting success — a
@@ -88,8 +74,10 @@ serve(async (req) => {
       });
       termsOnFile = Boolean(
         acct?.termsOfServiceAcceptance?.acceptedDate ??
+          acct?.termsOfServiceAcceptance?.acceptedOn ??
           acct?.termsOfService?.acceptedDate ??
-          acct?.termsOfServiceAcceptance?.acceptedOn,
+          acct?.termsOfService?.acceptedOn ??
+          acct?.termsOfServiceAcceptedOn,
       );
     } catch (e) {
       console.error("[moov-recipient-tos-accept] verify", (e as Error).message);
