@@ -145,6 +145,10 @@ serve(async (req) => {
     if (!email || !email.includes("@")) return json({ error: "Provide a business email." }, 400);
 
     const ein = digits(b.ein, 9);
+    if (businessType !== "soleProprietorship" && (!ein || ein.length !== 9)) {
+      return json({ error: "Provide a valid 9-digit EIN." }, 400);
+    }
+
     const website = str(b.website, 200);
     const description = str(b.description, 300);
     if (!website && !description) {
