@@ -3,6 +3,23 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { moovConfigured, moovEnvironment, moovToken, scopes } from "../_shared/moovClient.ts";
 import { corsHeaders, json } from "../_shared/moovGuard.ts";
 
+function approvedBrowserOrigin(req: Request): string {
+  const fallback = "https://checksops.com";
+  const raw = req.headers.get("origin");
+  if (!raw) return fallback;
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase();
+    const approved = host === "checksops.com"
+      || host === "www.checksops.com"
+      || host === "claim-buddy-crm.lovable.app"
+      || host.endsWith(".lovable.app");
+    return approved ? `${url.protocol}//${url.host}` : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 // PUBLIC endpoint for the branded recipient-payment page.
 //
 // The recipient has no ChecksOps login — they authenticate with the secure,
@@ -56,7 +73,9 @@ serve(async (req) => {
       .maybeSingle();
 
     const accountId = recipient.provider_account_id as string;
-    const providerToken = await moovToken(scopes.dropBankLink(accountId));
+    // Browser OAuth tokens are origin-bound by the provider. Mint against the
+    // exact approved domain where this public payment link is currently open.
+    const providerToken = await moovToken(scopes.dropBankLink(accountId), approvedBrowserOrigin(req));
 
     return json({
       success: true,
