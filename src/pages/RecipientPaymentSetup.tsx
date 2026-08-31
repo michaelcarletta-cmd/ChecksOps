@@ -132,9 +132,14 @@ export default function RecipientPaymentSetup() {
       } catch { /* leave ToS hidden; submit will surface an error */ }
     })();
     return () => { cancelled = true; };
-  }, [session?.token]);
+  }, [session?.token, replaceBank]);
+
+  // Recipients onboarded before the provider required terms already have a bank
+  // on file — they only need to accept terms to be payable again.
+  const showTermsOnly = Boolean(session?.recipient.bank_linked) && !replaceBank;
 
   const digitsOnly = (value: string, max: number) => value.replace(/\D/g, "").slice(0, max);
+
 
   const identityValid =
     addressLine1.trim().length >= 3 &&
