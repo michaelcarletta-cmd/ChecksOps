@@ -599,6 +599,47 @@ export function StakeholderAccountSettings() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base">Remove {deleteTarget?.label}?</DialogTitle>
+            <DialogDescription className="text-xs">
+              They will be unlinked from all checks and hidden from payouts.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-start gap-3 rounded-md border border-border/60 bg-muted/30 p-3">
+            <Switch
+              id="disconnect-provider"
+              checked={disconnectProvider}
+              onCheckedChange={setDisconnectProvider}
+            />
+            <div className="space-y-1">
+              <Label htmlFor="disconnect-provider" className="text-xs">
+                Also disconnect their payment account
+              </Label>
+              <p className="text-[11px] text-muted-foreground">
+                Payment accounts cannot be deleted at the provider — only disconnected. Leaving one
+                connected can keep incurring identity-verification fees.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={deleteAccount.isPending}
+              onClick={() => deleteTarget && deleteAccount.mutate({ id: deleteTarget.id, disconnectProvider })}
+            >
+              {deleteAccount.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Remove
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+
+
     </div>
   );
 }
