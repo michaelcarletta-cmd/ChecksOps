@@ -90,30 +90,15 @@ export function PaymentReadinessPanel() {
 
   /**
    * Records the account holder's acceptance of the provider's platform terms.
-   * The acceptance token must be generated from the account holder's own
-   * browser (the provider rejects tokens minted from our servers), so a
-   * short-lived session token is fetched first and used here.
+   * The acceptance itself is applied server side, where the provider requires
+   * the token to be minted with our credentials.
    */
   async function handleAcceptTerms() {
     if (!tenantId) return;
     setTosBusy(true);
     try {
-      const session = await invoke("moov-tos-token", { tenant_id: tenantId });
-      const res = await fetch("https://api.moov.io/tos-token", {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${session.token}`,
-          "x-moov-version": "v2024.01.00",
-          Accept: "application/json",
-        },
-      });
-      const payload = await res.json().catch(() => null);
-      const tosToken = payload?.token ?? payload?.tosToken ?? null;
-      if (!res.ok || typeof tosToken !== "string") {
-        throw new Error(payload?.error ?? "The terms could not be generated. Please try again.");
-      }
-      await invoke("moov-tos-accept", { tenant_id: tenantId, terms_of_service_token: tosToken });
-      toast({ title: "Terms accepted", description: "Your acceptance was recorded. Syncing account status..." });
+      await invoke("moov-tos-accept", { tenant_id: tenantId, accepted: true });
+      toast({ title: "Terms accepted", description: "Your acceptance was recorded. Syncing account status…" });
       await invoke("moov-sync", { tenant_id: tenantId }).catch(() => null);
       await load();
     } catch (e: any) {
@@ -122,6 +107,7 @@ export function PaymentReadinessPanel() {
       setTosBusy(false);
     }
   }
+
 
 
 
