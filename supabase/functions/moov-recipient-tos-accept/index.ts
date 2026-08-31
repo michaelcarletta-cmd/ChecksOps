@@ -25,9 +25,6 @@ serve(async (req) => {
       : null;
 
     if (!token) return json({ error: "token is required" }, 400);
-    if (!tosToken) {
-      return json({ error: "Please review and accept the payment provider's Terms of Service." }, 400);
-    }
 
     const environment = moovEnvironment();
     const supabase = createClient(
@@ -51,15 +48,17 @@ serve(async (req) => {
     const accountId = recipient.provider_account_id as string | null;
     if (!accountId) return json({ error: "This payment setup is not ready yet." }, 409);
     let patchError: string | null = null;
-    try {
-      await moovFetch<any>(`/accounts/${accountId}`, {
-        method: "PATCH",
-        scopes: scopes.accountWrite(accountId),
-        body: { termsOfService: { token: tosToken } },
-      });
-    } catch (e) {
-      patchError = (e as Error).message ?? "patch failed";
-      console.error("[moov-recipient-tos-accept] patch failed", patchError);
+    if (tosToken) {
+      try {
+        await moovFetch<any>(`/accounts/${accountId}`, {
+          method: "PATCH",
+          scopes: scopes.accountWrite(accountId),
+          body: { termsOfService: { token: tosToken } },
+        });
+      } catch (e) {
+        patchError = (e as Error).message ?? "patch failed";
+        console.error("[moov-recipient-tos-accept] patch failed", patchError);
+      }
     }
 
     // Verify the agreement is genuinely on file before reporting success — a
@@ -80,7 +79,8 @@ serve(async (req) => {
       console.error("[moov-recipient-tos-accept] verify", (e as Error).message);
     }
 
-    if (patchError && !termsOnFile) {
+    if (!termsOnFile) {
+      console.error("[moov-recipient-tos-accept] acceptance not present", patchError ?? "client acceptance not recorded");
       return json(
         { error: "The payment provider could not record your acceptance. Please try again." },
         502,
@@ -98,6 +98,10 @@ serve(async (req) => {
       });
     } catch (e) {
       console.error("[moov-recipient-tos-accept] capabilities", (e as Error).message);
+      return json(
+        { error: "Your agreement was recorded, but the payment provider could not finish enabling payments. Please try again." },
+        502,
+      );
     }
 
 
