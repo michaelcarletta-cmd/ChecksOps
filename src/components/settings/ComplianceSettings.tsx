@@ -17,6 +17,8 @@ import { SectionCard } from "./SectionCard";
 import { VerificationDocumentsPanel } from "@/components/payments/VerificationDocumentsPanel";
 import { PaymentAccountPanel } from "@/components/payments/PaymentAccountPanel";
 import { PaymentReadinessPanel } from "@/components/payments/PaymentReadinessPanel";
+import { UnderwritingQuestionnairePanel } from "@/components/payments/UnderwritingQuestionnairePanel";
+
 import { useProviderProfile } from "@/hooks/useProviderProfile";
 
 
@@ -254,6 +256,8 @@ export function ComplianceSettings({ tenantId: tenantIdOverride }: { tenantId?: 
           <div className="space-y-4">
             <PaymentAccountPanel />
             <PaymentReadinessPanel />
+            <UnderwritingQuestionnairePanel tenantId={tenant?.id} />
+
           </div>
 
         </SectionCard>
