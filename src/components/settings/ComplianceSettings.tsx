@@ -81,23 +81,36 @@ export function ComplianceSettings({ tenantId: tenantIdOverride }: { tenantId?: 
     beneficial_owner_id_url: "",
   });
 
+  const { data: providerProfile } = useProviderProfile(tenant?.id);
+
   useEffect(() => {
     if (t) {
       const addr = parseAddress(t.business_address ?? "");
+      const biz = providerProfile?.business;
+      const controller =
+        providerProfile?.representatives.find((r) => r.isController) ??
+        providerProfile?.representatives[0];
       setForm({
-        legal_business_name: t.legal_business_name ?? "",
+        legal_business_name: t.legal_business_name ?? biz?.legalBusinessName ?? "",
         ein: t.ein ?? "",
-        street: addr.street,
-        city: addr.city,
-        state: addr.state,
-        zip: addr.zip,
-        business_phone: t.business_phone ? formatPhoneNumber(t.business_phone) : "",
-        beneficial_owner_name: t.beneficial_owner_name ?? "",
+        street: addr.street || (biz?.address.addressLine1 ?? ""),
+        city: addr.city || (biz?.address.city ?? ""),
+        state: addr.state || (biz?.address.stateOrProvince ?? ""),
+        zip: addr.zip || (biz?.address.postalCode ?? ""),
+        business_phone: t.business_phone
+          ? formatPhoneNumber(t.business_phone)
+          : biz?.phone
+          ? formatPhoneNumber(biz.phone)
+          : "",
+        beneficial_owner_name:
+          t.beneficial_owner_name ??
+          (controller ? `${controller.firstName} ${controller.lastName}`.trim() : ""),
         beneficial_owner_dob: t.beneficial_owner_dob ?? "",
         beneficial_owner_id_url: t.beneficial_owner_id_url ?? "",
       });
     }
-  }, [t]);
+  }, [t, providerProfile]);
+
 
   const saveKyc = useMutation({
     mutationFn: async () => {
