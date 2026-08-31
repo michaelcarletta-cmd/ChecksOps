@@ -33,7 +33,7 @@ serve(async (req) => {
 
     const { data: recipient } = await supabase
       .from("external_payment_recipients")
-      .select("id, tenant_id, display_name, provider_account_id, token_expires_at, onboarding_status, environment")
+      .select("id, tenant_id, display_name, provider_account_id, token_expires_at, onboarding_status, environment, bank_linked_at, provider_bank_name, provider_last_four")
       .eq("secure_token", token)
       .maybeSingle();
 
