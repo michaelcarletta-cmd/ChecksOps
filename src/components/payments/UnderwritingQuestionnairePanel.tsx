@@ -178,7 +178,7 @@ export function UnderwritingQuestionnairePanel({ tenantId }: { tenantId?: string
 
         <div className="grid sm:grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label className="text-xs">Paid to businesses (%)</Label>
+            <Label className="text-xs">Volume with business customers (%)</Label>
             <Input
               inputMode="numeric"
               value={answers.businessToBusinessPercentage}
@@ -193,7 +193,7 @@ export function UnderwritingQuestionnairePanel({ tenantId }: { tenantId?: string
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Paid to consumers (%)</Label>
+            <Label className="text-xs">Volume with consumers (%)</Label>
             <Input value={answers.consumerToBusinessPercentage} readOnly className="bg-muted/40" />
           </div>
         </div>
