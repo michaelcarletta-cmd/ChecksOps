@@ -68,7 +68,10 @@ export default function RecipientPaymentSetup() {
   const [state, setState] = useState("");
   const [postalCode, setPostalCode] = useState("");
   const [tosReady, setTosReady] = useState(false);
+  const [termsDone, setTermsDone] = useState(false);
+  const [replaceBank, setReplaceBank] = useState(false);
   const tosMountRef = useRef<HTMLDivElement | null>(null);
+
 
 
   // Brand the hosted Moov component so it matches the payer's look.
