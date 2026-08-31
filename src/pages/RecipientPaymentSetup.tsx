@@ -210,8 +210,20 @@ export default function RecipientPaymentSetup() {
     setSaving(true);
     setError(null);
     try {
+      await loadMoovJs();
+      const createMoov = (window as any).Moov;
+      if (typeof createMoov !== "function" || !session?.account_id) {
+        throw new Error("Could not initialize the payment provider. Please refresh and try again.");
+      }
+
+      // Existing recipients must accept in the browser. This is the provider's
+      // documented one-step flow: it creates the ToS token from this OAuth
+      // session and applies it to the recipient account in the same request.
+      const moov = createMoov(session.token);
+      await moov.accounts.acceptTermsOfService({ accountID: session.account_id });
+
       const { data, error: fnErr } = await supabase.functions.invoke("moov-recipient-tos-accept", {
-        body: { token, tos_token: tosTokenRef.current },
+        body: { token, verify_only: true },
       });
       if (fnErr) {
         let message = "Could not record your acceptance.";
