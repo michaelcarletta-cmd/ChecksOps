@@ -1525,22 +1525,40 @@ function TenantManagementTable({
     {
       id: "kyc",
       header: "KYC",
-      headerClassName: "w-[8%] min-w-[80px]",
-      cell: (t) => (
-        <Select
-          value={t.kyc_status || "pending"}
-          onValueChange={(v) => updateTenant(t.id, { kyc_status: v })}
-        >
-          <SelectTrigger className="h-7 w-full min-w-[70px] text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="approved">Approved</SelectItem>
-            <SelectItem value="rejected">Rejected</SelectItem>
-          </SelectContent>
-        </Select>
-      ),
+      headerClassName: "w-[10%] min-w-[110px]",
+      cell: (t) => {
+        const moov = moovKycByTenant?.[t.id];
+        const vs = (moov?.verification_status || "").toLowerCase();
+        const moovBadge = !moov ? (
+          <Badge variant="outline" className="text-[10px] border-muted-foreground/30 text-muted-foreground">No Moov acct</Badge>
+        ) : vs === "verified" || vs === "approved" ? (
+          <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-500">Moov verified</Badge>
+        ) : vs === "pending" || vs === "in_review" || vs === "resubmission_requested" ? (
+          <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-500">Moov {vs.replace(/_/g, " ")}</Badge>
+        ) : vs === "rejected" || vs === "failed" ? (
+          <Badge variant="outline" className="text-[10px] border-destructive/40 text-destructive">Moov {vs}</Badge>
+        ) : (
+          <Badge variant="outline" className="text-[10px] border-muted-foreground/30">Moov {moov.verification_status || moov.status || "started"}</Badge>
+        );
+        return (
+          <div className="flex flex-col gap-1">
+            {moovBadge}
+            <Select
+              value={t.kyc_status || "pending"}
+              onValueChange={(v) => updateTenant(t.id, { kyc_status: v })}
+            >
+              <SelectTrigger className="h-7 w-full min-w-[70px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        );
+      },
     },
     {
       id: "actions",
