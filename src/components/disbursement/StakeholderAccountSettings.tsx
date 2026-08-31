@@ -71,6 +71,8 @@ export function StakeholderAccountSettings() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [capLimitDialog, setCapLimitDialog] = useState<null | "sales_rep" | "subcontractor" | "vendor">(null);
+  const [deleteTarget, setDeleteTarget] = useState<null | { id: string; label: string }>(null);
+  const [disconnectProvider, setDisconnectProvider] = useState(true);
 
   const { data: accounts = [], isLoading } = useQuery({
     queryKey: ["stakeholder-accounts", tenant?.id],
@@ -219,9 +221,11 @@ export function StakeholderAccountSettings() {
   });
 
   const resendVerification = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (input: string | { id: string; termsOnly?: boolean }) => {
+      const id = typeof input === "string" ? input : input.id;
+      const termsOnly = typeof input === "string" ? false : Boolean(input.termsOnly);
       const { data, error } = await supabase.functions.invoke("stakeholder-resend-verification", {
-        body: { stakeholder_account_id: id },
+        body: { stakeholder_account_id: id, terms_only: termsOnly },
       });
       if (error) {
         let msg = error.message ?? "Failed to resend verification";
@@ -233,12 +237,29 @@ export function StakeholderAccountSettings() {
       }
       if ((data as any)?.error) throw new Error((data as any).error);
     },
-    onSuccess: () => toast({ title: "Verification email resent" }),
+    onSuccess: () => toast({ title: "Setup link sent", description: "They can accept the provider's terms from the emailed link." }),
     onError: (e: any) => toast({ title: "Couldn't resend", description: e.message, variant: "destructive" }),
   });
 
   const deleteAccount = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, disconnectProvider }: { id: string; disconnectProvider: boolean }) => {
+      // Provider accounts can never be deleted — only disconnected. Do it first
+      // so verification (KYC/KYB) billing stops on the abandoned account.
+      if (disconnectProvider) {
+        const { data, error } = await supabase.functions.invoke("moov-recipient-disconnect", {
+          body: { stakeholder_account_id: id },
+        });
+        if (error) {
+          let msg = error.message ?? "Couldn't disconnect the payment account";
+          try {
+            const body = await (error as any).context?.json?.();
+            if (body?.error) msg = body.error;
+          } catch { /* keep default */ }
+          throw new Error(msg);
+        }
+        if ((data as any)?.error) throw new Error((data as any).error);
+      }
+
       const { error: linkError } = await supabase
         .from("check_stakeholders")
         .delete()
@@ -252,6 +273,7 @@ export function StakeholderAccountSettings() {
       if (error) throw error;
     },
     onSuccess: () => {
+      setDeleteTarget(null);
       toast({ title: "Account removed" });
       qc.invalidateQueries({ queryKey: ["stakeholder-accounts"] });
       qc.invalidateQueries({ queryKey: ["tenant-primary-accounts"] });
@@ -492,7 +514,7 @@ export function StakeholderAccountSettings() {
                       size="sm"
                       variant="ghost"
                       className="h-7 text-xs"
-                      onClick={() => resendVerification.mutate(acct.id)}
+                      onClick={() => resendVerification.mutate({ id: acct.id })}
                       disabled={resendVerification.isPending}
                     >
                       <MailCheck className="h-3 w-3 mr-1" /> Resend
@@ -510,11 +532,26 @@ export function StakeholderAccountSettings() {
                       <ShieldAlert className="h-3 w-3 mr-1" /> Override
                     </Button>
                   )}
+                  {acct.verification_recipient_email && ["verified", "admin_override"].includes(vStatus) && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs"
+                      onClick={() => resendVerification.mutate({ id: acct.id, termsOnly: true })}
+                      disabled={resendVerification.isPending}
+                      title="Send a link so they can accept the payment provider's terms of service"
+                    >
+                      <MailCheck className="h-3 w-3 mr-1" /> Send terms link
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                    onClick={() => deleteAccount.mutate(acct.id)}
+                    onClick={() => {
+                      setDisconnectProvider(true);
+                      setDeleteTarget({ id: acct.id, label: acct.custname || acct.nickname || "this stakeholder" });
+                    }}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
