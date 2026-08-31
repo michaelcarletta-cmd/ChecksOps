@@ -162,7 +162,7 @@ serve(async (req) => {
       await moovFetch<any>(`/accounts/${accountId}/capabilities`, {
         method: "POST",
         scopes: scopes.capabilitiesWrite(accountId),
-        body: { capabilities: ["send-funds", "receive-funds", "wallet"] },
+        body: { capabilities: ["send-funds"] },
       });
     } catch (e) {
       console.error("[moov-recipient-bank-add] capabilities", (e as Error).message);
