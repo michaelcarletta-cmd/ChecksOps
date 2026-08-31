@@ -14,6 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { MoovBankLink } from "./MoovBankLink";
 import { MicroDepositVerification } from "./MicroDepositVerification";
+import { PaymentOnboardingDialog } from "./PaymentOnboardingDialog";
+
 import {
   BANK_STATUS_LABEL,
   ONBOARDING_STATUS_LABEL,
