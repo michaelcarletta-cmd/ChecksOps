@@ -329,6 +329,26 @@ serve(async (req) => {
       });
     }
 
+    // Alert tenant admins when the provider adds NEW outstanding requirements.
+    try {
+      const previousReqs: string[] = Array.isArray(account.requirements)
+        ? (account.requirements as string[]).map(String)
+        : [];
+      const newlyDue = [...new Set(requirements.map(String))].filter((r) => !previousReqs.includes(r));
+      if (newlyDue.length > 0) {
+        await logPaymentEvent(supabase, {
+          tenant_id,
+          event_type: "payment_account.new_requirements",
+          environment,
+          metadata: { requirements: newlyDue },
+        });
+        await notifyNewRequirements(supabase, tenant_id, newlyDue);
+      }
+    } catch (e) {
+      console.warn("[moov-sync] requirement alert skipped", (e as Error).message);
+    }
+
+
     return json({
       success: true,
       status: onboardingStatus,
