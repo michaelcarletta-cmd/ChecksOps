@@ -232,6 +232,7 @@ export async function moovFetch<T = any>(
     headers["X-Idempotency-Key"] = await idempotencyUuid(opts.idempotencyKey);
   }
   if (opts.onBehalfOf) headers["X-Account-ID"] = opts.onBehalfOf;
+  if (opts.extraHeaders) Object.assign(headers, opts.extraHeaders);
 
 
   const res = await fetch(`${moovHost()}${path}`, {
