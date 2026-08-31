@@ -118,6 +118,9 @@ const PendingApprovalDeposits = lazy(() =>
 const CheckAltDepositHistory = lazy(() =>
   import("@/components/settings/CheckAltSettings").then(m => ({ default: m.CheckAltDepositHistory }))
 );
+const BankDepositReconciliation = lazy(() =>
+  import("@/components/deposit-ops/BankDepositReconciliation")
+);
 const LossPreventionPanel = lazy(() =>
   import("@/components/check-review/LossPreventionPanel").then(m => ({ default: m.LossPreventionPanel }))
 );
@@ -1308,6 +1311,7 @@ export default function CheckCommandCenter() {
                 {SHOW_CHECKALT && (
                   <>
                     <TabsTrigger value="pending_approvals" className="text-xs gap-1"><ShieldAlert className="h-3 w-3" />Pending Approvals</TabsTrigger>
+                    <TabsTrigger value="bank_deposits" className="text-xs gap-1"><Banknote className="h-3 w-3" />Bank Deposits</TabsTrigger>
                     <TabsTrigger value="deposit_history" className="text-xs gap-1"><Banknote className="h-3 w-3" />Deposit History</TabsTrigger>
                   </>
                 )}
@@ -1334,6 +1338,11 @@ export default function CheckCommandCenter() {
                   <TabsContent value="pending_approvals" className="mt-3">
                     <Suspense fallback={<TabLoader />}>
                       <PendingApprovalDeposits />
+                    </Suspense>
+                  </TabsContent>
+                  <TabsContent value="bank_deposits" className="mt-3">
+                    <Suspense fallback={<TabLoader />}>
+                      <BankDepositReconciliation searchQuery={searchQuery} />
                     </Suspense>
                   </TabsContent>
                   <TabsContent value="deposit_history" className="mt-3">
