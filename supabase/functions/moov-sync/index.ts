@@ -363,3 +363,114 @@ serve(async (req) => {
     return json({ error: (e as Error).message }, 500);
   }
 });
+
+/* --------------------------------------------------------------------------
+ * Requirement alerts
+ * Emails the tenant's admins whenever the payment provider adds a new
+ * outstanding onboarding/verification requirement to their account.
+ * ------------------------------------------------------------------------ */
+
+const REQUIREMENT_LABELS: Record<string, string> = {
+  "account.tos-acceptance": "Accept the payment provider's terms of service",
+  "individual.ssn": "Full Social Security Number for the account representative",
+  "individual.ssn-last4": "Last 4 of the representative's Social Security Number",
+  "individual.birthdate": "Representative's date of birth",
+  "individual.address": "Representative's home address",
+  "individual.email": "Representative's email address",
+  "individual.phone": "Representative's phone number",
+  "individual.firstname": "Representative's first name",
+  "individual.lastname": "Representative's last name",
+  "business.tax-id": "Business EIN / tax ID",
+  "business.legalname": "Registered legal business name",
+  "business.address": "Business address",
+  "business.phone": "Business phone number",
+  "business.website": "Business website",
+  "business.description": "Business description",
+  "business.classification": "Business type / classification",
+  "business.industry-code-mcc": "Business industry classification",
+  "business.averagetransactionsize": "Expected payment activity (average transaction size)",
+  "business.averagemonthlytransactionvolume": "Expected payment activity (monthly volume)",
+  "business.maxtransactionsize": "Expected payment activity (largest transaction)",
+  "document.business-verification": "Business verification document (e.g. bank statement, formation docs)",
+  "document.individual-verification": "Government-issued ID for the account representative",
+  "bank-account": "A verified bank account",
+};
+
+function requirementLabel(code: string): string {
+  const key = String(code).toLowerCase();
+  if (REQUIREMENT_LABELS[key]) return REQUIREMENT_LABELS[key];
+  const partial = Object.keys(REQUIREMENT_LABELS).find((k) => key.endsWith(k) || key.includes(k));
+  return partial ? REQUIREMENT_LABELS[partial] : code;
+}
+
+function escapeHtml(s: string): string {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
+}
+
+async function notifyNewRequirements(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  tenantId: string,
+  requirements: string[],
+) {
+  const resendKey = Deno.env.get("RESEND_API_KEY");
+  if (!resendKey) {
+    console.log("[moov-sync] new requirements, email skipped (no key):", requirements.join(", "));
+    return;
+  }
+
+  const [{ data: tenant }, { data: members }] = await Promise.all([
+    supabase.from("tenants").select("name").eq("id", tenantId).maybeSingle(),
+    supabase.from("tenant_users").select("user_id, role").eq("tenant_id", tenantId),
+  ]);
+
+  const adminIds = (members ?? [])
+    // deno-lint-ignore no-explicit-any
+    .filter((m: any) => ["owner", "admin"].includes(String(m.role ?? "").toLowerCase()))
+    // deno-lint-ignore no-explicit-any
+    .map((m: any) => m.user_id);
+  if (adminIds.length === 0) return;
+
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("email, full_name")
+    .in("id", adminIds);
+
+  const recipients = [...new Set(
+    // deno-lint-ignore no-explicit-any
+    (profiles ?? []).map((p: any) => String(p.email ?? "").trim()).filter(Boolean),
+  )];
+  if (recipients.length === 0) return;
+
+  const siteUrl = (Deno.env.get("SITE_URL") || "https://checksops.com").replace(/\/$/, "");
+  const items = requirements
+    .map((r) => `<li><strong>${escapeHtml(requirementLabel(r))}</strong><br/><span style="color:#94a3b8;font-size:12px">${escapeHtml(r)}</span></li>`)
+    .join("");
+
+  const html = `
+    <div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:560px">
+      <h2 style="margin:0 0 8px">Action needed on your payment account</h2>
+      <p>Our payment partner has requested additional information for
+      <strong>${escapeHtml(tenant?.name ?? "your account")}</strong>. Until this is provided,
+      payouts on this account may be paused.</p>
+      <ul>${items}</ul>
+      <p><a href="${siteUrl}/settings" style="background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Complete in Compliance &amp; Docs</a></p>
+      <p style="color:#64748b;font-size:12px">Sent automatically by ChecksOps. Questions? support@checksops.com</p>
+    </div>`;
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from: "ChecksOps <noreply@checksops.com>",
+      to: recipients,
+      reply_to: "support@checksops.com",
+      subject: `Action needed: payment account requirements (${requirements.length})`,
+      html,
+    }),
+  });
+  if (!res.ok) {
+    console.warn("[moov-sync] requirement email failed", res.status, await res.text());
+  }
+}
