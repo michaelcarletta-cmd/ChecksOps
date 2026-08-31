@@ -89,31 +89,14 @@ export function PaymentReadinessPanel() {
 
   useEffect(() => { void load(); }, [load]);
 
-  /** Loads the provider's hosted terms-of-service component on demand. */
+  /** Records the account holder's acceptance of the provider's platform terms. */
   async function handleAcceptTerms() {
     if (!tenantId) return;
     setTosBusy(true);
     try {
-      const session = await invoke("moov-tos-token", { tenant_id: tenantId });
-      await loadMoovJs();
-      const el = document.createElement("moov-terms-of-service") as any;
-      // Documented Drop properties: an API token plus ready/error callbacks.
-      el.token = session.token;
-      const tokenPromise: Promise<string> = new Promise((resolve, reject) => {
-        el.onTermsOfServiceTokenReady = (tosToken: any) => {
-          const value = typeof tosToken === "string" ? tosToken : tosToken?.token;
-          if (value) resolve(value);
-          else reject(new Error("Terms acceptance token was not returned."));
-        };
-        el.onTermsOfServiceTokenError = (err: any) =>
-          reject(new Error(err?.message ?? "Terms could not be displayed."));
-      });
-      tosMountRef.current?.replaceChildren(el);
-      const token = await tokenPromise;
-      await invoke("moov-tos-accept", { tenant_id: tenantId, terms_of_service_token: token });
-      tosMountRef.current?.replaceChildren();
+      await invoke("moov-tos-accept", { tenant_id: tenantId, accepted: true });
       toast({ title: "Terms accepted", description: "Your acceptance was recorded. Syncing account status..." });
-      await invoke("moov-sync", { tenant_id: tenantId });
+      await invoke("moov-sync", { tenant_id: tenantId }).catch(() => null);
       await load();
     } catch (e: any) {
       toast({ title: "Couldn't record terms acceptance", description: e.message, variant: "destructive" });
@@ -121,6 +104,7 @@ export function PaymentReadinessPanel() {
       setTosBusy(false);
     }
   }
+
 
 
   if (!enabled) return null;
