@@ -23,7 +23,7 @@ export function TenantMoovIdentityCard({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("payment_provider_accounts")
-        .select("provider, provider_account_id, environment, status, verification_status")
+        .select("provider, provider_account_id, environment, onboarding_status, verification_status")
         .eq("tenant_id", tenantId)
         .eq("provider", "moov")
         .order("created_at", { ascending: false });
