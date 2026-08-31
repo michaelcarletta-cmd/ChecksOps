@@ -109,9 +109,29 @@ serve(async (req) => {
         body: { termsOfService: { token: tosToken } },
       });
     } catch (e) {
-      // Already-accepted ToS returns an error on some accounts — only fail hard
-      // if the capability request below also fails.
       console.error("[moov-recipient-bank-add] tos patch", (e as Error).message);
+
+      // A provider may reject a second application after terms are already on
+      // file. Verify the account before deciding whether onboarding can safely
+      // continue; never silently complete setup without a recorded agreement.
+      let termsOnFile = false;
+      try {
+        const acct = await moovFetch<any>(`/accounts/${accountId}`, {
+          method: "GET",
+          scopes: scopes.accountRead(accountId),
+        });
+        termsOnFile = Boolean(
+          acct?.termsOfServiceAcceptance?.acceptedDate ??
+            acct?.termsOfService?.acceptedDate ??
+            acct?.termsOfServiceAcceptance?.acceptedOn,
+        );
+      } catch (verifyError) {
+        console.error("[moov-recipient-bank-add] tos verify", (verifyError as Error).message);
+      }
+
+      if (!termsOnFile) {
+        return json({ error: "The payment provider could not record your acceptance. Please try again." }, 502);
+      }
     }
 
     // 2. Submit the identity profile the provider needs to pay this recipient.
