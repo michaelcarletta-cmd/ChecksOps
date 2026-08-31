@@ -216,7 +216,7 @@ serve(async (req) => {
     await moovFetch(`/accounts/${accountId}/capabilities`, {
       method: "POST",
       scopes: scopes.capabilitiesWrite(accountId),
-      body: { capabilities: ["transfers", "send-funds", "collect-funds", "wallet"] },
+      body: { capabilities: ["transfers", "send-funds", "wallet", "send-funds.ach"] },
     }).catch((e) => console.error("[moov-account-onboard] capabilities", (e as Error).message));
 
     await supabase
