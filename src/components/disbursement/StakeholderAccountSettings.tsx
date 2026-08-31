@@ -86,10 +86,13 @@ export function StakeholderAccountSettings() {
         .order("is_primary", { ascending: false })
         .order("created_at", { ascending: true });
       if (error) throw error;
-      // Tenant's own bank account (operating) is shown separately at the top of
-      // the page in TenantBankAccountSettings. Exclude it here so stakeholders
-      // are strictly third parties identified by their account_type.
-      return (data ?? []).filter((a: any) => a.account_type !== "operating");
+      // Tenant's own bank account (operating, or a provider-connected payment
+      // account like the Moov-linked "payment account") is shown separately at
+      // the top of the page in TenantBankAccountSettings. Exclude both here so
+      // stakeholders are strictly third parties identified by their account_type.
+      return (data ?? []).filter(
+        (a: any) => a.account_type !== "operating" && a.origin !== "provider_connected",
+      );
     },
   });
 
