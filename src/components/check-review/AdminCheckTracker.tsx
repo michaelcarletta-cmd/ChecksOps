@@ -257,37 +257,15 @@ export function AdminCheckTracker({ searchQuery = "" }: { searchQuery?: string }
       const intakeId = c.check_intake_item_id;
       console.log("[AdminCheckTracker] routeTo", { checkId: c.id, intakeId, newStatus });
       if (intakeId) {
-        const { error, data } = await supabase
-          .from("check_intake_items")
-          .update({ status: newStatus, updated_at: new Date().toISOString() })
-          .eq("id", intakeId)
-          .select("id, status");
-        if (error) throw error;
-        if (!data || data.length === 0) {
-          throw new Error("Update returned no rows — likely blocked by row-level security. Confirm you have admin access.");
-        }
-
-        // Mirror to claim_checks deposit_status when meaningful
-        const depositStatus =
-          newStatus === "approved_for_deposit" ? "ready"
-          : newStatus === "deposited" ? "deposited"
-          : newStatus === "voided" ? "voided"
-          : "pending";
-        const { error: ccErr } = await supabase
-          .from("claim_checks")
-          .update({ deposit_status: depositStatus })
-          .eq("id", c.id);
-        if (ccErr) console.warn("[AdminCheckTracker] claim_checks mirror failed", ccErr);
-
-        // Audit
+        // Route through the admin override RPC (SECURITY DEFINER) so stage,
+        // status, claim_checks mirror and audit stay in sync.
         const { data: ud } = await supabase.auth.getUser();
-        await supabase.from("check_audit_log").insert({
-          check_id: intakeId,
-          event_type: "admin_routed",
-          event_description: `Admin rerouted check to "${newStatus}" from Check Tracker`,
-          actor_id: ud.user?.id ?? null,
-          event_data: { from_tracker: true, new_status: newStatus },
-        });
+        const { error } = await supabase.rpc("admin_override_check_status", {
+          p_check_id: intakeId,
+          p_new_status: newStatus,
+          p_actor_id: ud.user?.id ?? null,
+        } as any);
+        if (error) throw error;
       } else {
         // No intake item linked — fall back to claim_checks only
         const depositStatus =
