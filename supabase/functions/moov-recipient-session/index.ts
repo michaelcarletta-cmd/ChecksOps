@@ -64,6 +64,9 @@ serve(async (req) => {
         id: recipient.id,
         name: recipient.display_name,
         status: recipient.onboarding_status,
+        bank_linked: Boolean((recipient as any).bank_linked_at),
+        bank_name: (recipient as any).provider_bank_name ?? null,
+        last_four: (recipient as any).provider_last_four ?? null,
       },
       payer: {
         name: (tenant as any)?.name ?? "ChecksOps",
