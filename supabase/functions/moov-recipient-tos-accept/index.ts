@@ -79,6 +79,17 @@ serve(async (req) => {
           acct?.termsOfService?.acceptedOn ??
           acct?.termsOfServiceAcceptedOn,
       );
+      console.log(
+        "[moov-recipient-tos-accept] account tos fields",
+        JSON.stringify({
+          accountID: accountId,
+          keys: Object.keys(acct ?? {}),
+          termsOfService: acct?.termsOfService ?? null,
+          termsOfServiceAcceptance: acct?.termsOfServiceAcceptance ?? null,
+          capabilities: acct?.capabilities ?? null,
+        }),
+      );
+
     } catch (e) {
       console.error("[moov-recipient-tos-accept] verify", (e as Error).message);
     }
