@@ -72,7 +72,6 @@ export function PaymentReadinessPanel() {
   const [readiness, setReadiness] = useState<Readiness | null>(null);
   const [loading, setLoading] = useState(false);
   const [tosBusy, setTosBusy] = useState(false);
-  const tosMountRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
     if (!tenantId || !enabled) return;
