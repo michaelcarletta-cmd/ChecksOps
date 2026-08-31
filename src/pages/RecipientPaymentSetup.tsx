@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -68,6 +69,7 @@ export default function RecipientPaymentSetup() {
   const [state, setState] = useState("");
   const [postalCode, setPostalCode] = useState("");
   const [tosReady, setTosReady] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsDone, setTermsDone] = useState(false);
   const [replaceBank, setReplaceBank] = useState(false);
   const tosMountRef = useRef<HTMLDivElement | null>(null);
@@ -120,7 +122,18 @@ export default function RecipientPaymentSetup() {
     (async () => {
       try {
         await loadMoovJs();
-        if (cancelled || !tosMountRef.current) return;
+        if (cancelled) return;
+
+        // Existing recipients accept directly through Moov.js so token creation
+        // and the account PATCH use the same browser OAuth session. Passing a
+        // generated ToS token to a separately authenticated server PATCH causes
+        // the provider to reject it as not OAuth-created.
+        if (session.recipient.bank_linked && !replaceBank) {
+          setTosReady(typeof (window as any).Moov === "function");
+          return;
+        }
+
+        if (!tosMountRef.current) return;
         const el = document.createElement("moov-terms-of-service") as any;
 
         el.token = session.token;
@@ -207,20 +220,22 @@ export default function RecipientPaymentSetup() {
   }
 
   async function handleAcceptTermsOnly() {
-    if (!tosReady || saving) return;
+    if (!tosReady || !termsAccepted || saving || !session) return;
     setSaving(true);
     setError(null);
     try {
-      // Same flow new recipients use: the provider's hosted terms component
-      // mints the acceptance token in this browser, and the backend applies it
-      // to the recipient account and confirms the requirement cleared.
-      const tosToken = tosTokenRef.current;
-      if (!tosToken) {
-        throw new Error("Please check the terms box above, then try again.");
+      const createMoovClient = (window as any).Moov;
+      if (typeof createMoovClient !== "function") {
+        throw new Error("The secure terms service did not load. Please refresh and try again.");
+      }
+      const moov = createMoovClient(session.token);
+      const acceptance = await moov.accounts.acceptTermsOfService({ accountID: session.account_id });
+      if (acceptance?.error) {
+        throw new Error(typeof acceptance.error === "string" ? acceptance.error : "Could not record your acceptance.");
       }
 
       const { data, error: fnErr } = await supabase.functions.invoke("moov-recipient-tos-accept", {
-        body: { token, tos_token: tosToken },
+        body: { token, verify_only: true },
       });
       if (fnErr) {
         let message = "Could not record your acceptance.";
@@ -321,26 +336,29 @@ export default function RecipientPaymentSetup() {
                       </p>
                     </div>
 
-                    <div
-                      ref={tosMountRef}
-                      aria-hidden="true"
-                      style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clipPath: "inset(50%)" }}
-                    />
-                    <p className="text-[11px] leading-relaxed text-muted-foreground rounded-md border border-border/60 bg-muted/30 p-3">
-                      By continuing, you agree to the terms of Moov's{" "}
-                      <a href="https://moov.io/legal/privacy/" target="_blank" rel="noopener noreferrer"
-                        className="text-primary underline underline-offset-2">Privacy Policy</a>{" "}
-                      and{" "}
-                      <a href="https://moov.io/legal/platform-agreement/" target="_blank" rel="noopener noreferrer"
-                        className="text-primary underline underline-offset-2">Platform Agreement</a>.
-                    </p>
+                    <div className="flex items-start gap-3 rounded-md border border-border/60 bg-muted/30 p-3">
+                      <Checkbox
+                        id="accept-existing-recipient-terms"
+                        checked={termsAccepted}
+                        onCheckedChange={(checked) => setTermsAccepted(checked === true)}
+                        className="mt-0.5"
+                      />
+                      <Label htmlFor="accept-existing-recipient-terms" className="text-xs font-normal leading-relaxed cursor-pointer">
+                        I agree to Moov's{" "}
+                        <a href="https://moov.io/legal/privacy/" target="_blank" rel="noopener noreferrer"
+                          className="text-primary underline underline-offset-2">Privacy Policy</a>{" "}
+                        and{" "}
+                        <a href="https://moov.io/legal/platform-agreement/" target="_blank" rel="noopener noreferrer"
+                          className="text-primary underline underline-offset-2">Platform Agreement</a>.
+                      </Label>
+                    </div>
                     {!tosReady && (
                       <p className="text-[11px] text-muted-foreground">
                         Loading the payment provider's Terms of Service…
                       </p>
                     )}
 
-                    <Button className="w-full" disabled={!tosReady || saving} onClick={handleAcceptTermsOnly}>
+                    <Button className="w-full" disabled={!tosReady || !termsAccepted || saving} onClick={handleAcceptTermsOnly}>
                       {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                       Accept terms
                     </Button>
