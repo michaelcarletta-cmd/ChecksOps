@@ -276,7 +276,17 @@ export function PaymentAccountPanel() {
           </div>
         )}
 
+        {tenantId && (
+          <PaymentOnboardingDialog
+            tenantId={tenantId}
+            open={showOnboarding}
+            onOpenChange={setShowOnboarding}
+            onSubmitted={() => refresh()}
+          />
+        )}
+
       </CardContent>
     </Card>
+
   );
 }
