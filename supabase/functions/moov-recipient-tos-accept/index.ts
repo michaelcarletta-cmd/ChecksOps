@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { moovFetch, moovConfigured, moovEnvironment, moovHost, scopes } from "../_shared/moovClient.ts";
+import { moovFetch, moovConfigured, moovEnvironment, scopes } from "../_shared/moovClient.ts";
 import { corsHeaders, json, sanitize } from "../_shared/moovGuard.ts";
 
 /**
@@ -22,9 +22,6 @@ serve(async (req) => {
     const token = String(body?.token ?? "");
     const tosToken = typeof body?.tos_token === "string" && body.tos_token.length >= 8
       ? String(body.tos_token)
-      : null;
-    const browserOauthToken = typeof body?.browser_oauth_token === "string" && body.browser_oauth_token.length >= 20
-      ? String(body.browser_oauth_token)
       : null;
     const verifyOnly = body?.verify_only === true;
 
@@ -53,22 +50,15 @@ serve(async (req) => {
     if (!accountId) return json({ error: "This payment setup is not ready yet." }, 409);
     let patchError: string | null = null;
     if (!verifyOnly) {
-      if (!tosToken || !browserOauthToken) {
+      if (!tosToken) {
         return json({ error: "Terms acceptance session is required. Refresh the page and try again." }, 400);
       }
       try {
-        const response = await fetch(`${moovHost()}/accounts/${accountId}`, {
+        await moovFetch<any>(`/accounts/${accountId}`, {
           method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${browserOauthToken}`,
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            Origin: req.headers.get("origin") ?? "https://checksops.com",
-            "x-moov-version": Deno.env.get("MOOV_API_VERSION") ?? "v2024.01.00",
-          },
-          body: JSON.stringify({ termsOfService: { token: tosToken } }),
+          scopes: scopes.accountWrite(accountId),
+          body: { termsOfService: { token: tosToken } },
         });
-        if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
       } catch (e) {
         patchError = (e as Error).message ?? "patch failed";
         console.error("[moov-recipient-tos-accept] patch failed", patchError);

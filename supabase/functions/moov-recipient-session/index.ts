@@ -80,7 +80,14 @@ serve(async (req) => {
     const accountId = recipient.provider_account_id as string;
     // Browser OAuth tokens are origin-bound by the provider. Mint against the
     // exact approved domain where this public payment link is currently open.
-    const providerToken = await moovToken(scopes.dropBankLink(accountId), approvedBrowserOrigin(req));
+    const browserOrigin = approvedBrowserOrigin(req);
+    const [providerToken, tosToken] = await Promise.all([
+      moovToken(scopes.dropBankLink(accountId), browserOrigin),
+      // The hosted ToS Drop generates its acceptance token with a generic
+      // browser session. Keep this separate from account-scoped bank access;
+      // the acceptance token is applied later with server-side profile.write.
+      moovToken(["/ping.read"], browserOrigin),
+    ]);
 
     return json({
       success: true,
@@ -100,6 +107,7 @@ serve(async (req) => {
       },
       account_id: accountId,
       token: providerToken,
+      tos_token: tosToken,
       environment,
     });
   } catch (e) {
