@@ -204,6 +204,8 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
     unsynced_count: 0,
   });
 
+  const guardFinancial = useFinancialGuard(tenant?.id);
+
   // Deposit action mutation
   const actionMutation = useMutation({
     mutationFn: async (params: {
