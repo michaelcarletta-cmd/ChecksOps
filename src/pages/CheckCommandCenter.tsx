@@ -1,4 +1,5 @@
 import { Fragment, lazy, Suspense, useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useFinancialGuard } from "@/hooks/useFinancialGuard";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
@@ -2489,6 +2490,7 @@ function SummaryCard({
 function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
   const { toast } = useToast();
   const { tenantId } = useTenantFilter();
+  
   const [frontFile, setFrontFile] = useState<File | null>(null);
   const [backFile, setBackFile] = useState<File | null>(null);
   const [pendingCrop, setPendingCrop] = useState<{ file: File; side: "front" | "back" } | null>(null);
@@ -2875,6 +2877,7 @@ function CheckDetailPanel({
   checkId: string;
   onRefresh: () => void;
 }) {
+  const guardFinancial = useFinancialGuard();
   const [detailTab, setDetailTab] = useState("overview");
   const [undoing, setUndoing] = useState(false);
   const [reuploadingBack, setReuploadingBack] = useState(false);
@@ -3551,6 +3554,12 @@ function CheckDetailPanel({
   // real FinCapture API call (mirrors DepositOperationsConsole's flow).
   const handleDepositWithCheckAlt = async () => {
     if (!user?.id || !check) return;
+    try {
+      await guardFinancial("deposit.submit");
+    } catch (err: any) {
+      sonnerToast.error(err?.message ?? "Two-factor verification required");
+      return;
+    }
     setDepositingWithCheckAlt(true);
     try {
       const { data: existingItem } = await supabase

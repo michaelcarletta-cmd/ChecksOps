@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useFinancialGuard } from "@/hooks/useFinancialGuard";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -75,8 +76,11 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
   const total = amount + fee;
   const canContinue = !!selected && amount > 0 && Number.isFinite(amount);
 
+  const guardFinancial = useFinancialGuard(tenant?.id);
+
   const runMutation = useMutation({
     mutationFn: async () => {
+      await guardFinancial("payroll.run");
       if (!tenant?.id || !user?.id || !selected) throw new Error("Missing context");
 
       // Create disbursement batch (no claim linkage)

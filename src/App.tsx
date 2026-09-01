@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCustomDomainTenant } from "./hooks/useCustomDomainTenant";
 import { CustomDomainWhiteLabelApp } from "./components/white-label/CustomDomainWhiteLabelApp";
 import { AuthProvider } from "./hooks/useAuth";
+import { StepUpProvider } from "./hooks/useStepUp";
 import { ThemeProvider, ThemeScope } from "./hooks/useTheme";
 
 
@@ -28,7 +29,8 @@ const CheckOpsLanding = lazy(() => import("./pages/checkops/CheckOpsLanding"));
 const CheckOpsPricing = lazy(() => import("./pages/checkops/CheckOpsPricing"));
 const CheckOpsSecurity = lazy(() => import("./pages/checkops/CheckOpsSecurity"));
 const CheckOpsLogin = lazy(() => import("./pages/checkops/CheckOpsLogin"));
-const CheckOpsForgotPassword = lazy(() => import("./pages/checkops/CheckOpsForgotPassword"));
+const CheckOpsSignup = lazy(() => import("./pages/checkops/CheckOpsSignup"));
+const AccountSecurity = lazy(() => import("./pages/AccountSecurity"));
 const CheckOpsResetPassword = lazy(() => import("./pages/checkops/CheckOpsResetPassword"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
@@ -82,7 +84,9 @@ function CheckOpsRoutes() {
     <Routes>
       <Route path="/" element={<Suspense fallback={<PageLoader />}><CheckOpsLanding /></Suspense>} />
       <Route path="/login" element={<Suspense fallback={<PageLoader />}><CheckOpsLogin /></Suspense>} />
-      <Route path="/forgot-password" element={<Suspense fallback={<PageLoader />}><CheckOpsForgotPassword /></Suspense>} />
+      <Route path="/signup" element={<Suspense fallback={<PageLoader />}><CheckOpsSignup /></Suspense>} />
+      <Route path="/account/security" element={<Suspense fallback={<PageLoader />}><AccountSecurity /></Suspense>} />
+      <Route path="/forgot-password" element={<Navigate to="/login" replace />} />
       <Route path="/reset-password" element={<Suspense fallback={<PageLoader />}><CheckOpsResetPassword /></Suspense>} />
       <Route path="/auth" element={<Navigate to="/login" replace />} />
       <Route path="/sign" element={<Suspense fallback={<PageLoader />}><Sign /></Suspense>} />
@@ -206,11 +210,13 @@ const App = () => (
         <OfflineIndicator />
         <BrowserRouter>
           <AuthProvider>
-            <ThemeScope>
-              <RecoveryHashRedirect />
-              <PlatformAnnouncementBanner />
-              <AppRoutes />
-            </ThemeScope>
+            <StepUpProvider>
+              <ThemeScope>
+                <RecoveryHashRedirect />
+                <PlatformAnnouncementBanner />
+                <AppRoutes />
+              </ThemeScope>
+            </StepUpProvider>
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useFinancialGuard } from "@/hooks/useFinancialGuard";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -664,12 +665,15 @@ export function PendingApprovalDeposits() {
     refetchInterval: 30_000,
   });
 
+  const guardFinancial = useFinancialGuard();
+
   const decide = useMutation({
     mutationFn: async (args: {
       deposit_id: string;
       action: "approve" | "reject";
       reject_notes?: string;
     }) => {
+      if (args.action === "approve") await guardFinancial("deposit.approve");
       const { data, error } = await supabase.functions.invoke(
         "checkalt-approve-deposit",
         { body: args },

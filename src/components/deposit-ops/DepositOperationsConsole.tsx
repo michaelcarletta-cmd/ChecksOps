@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useFinancialGuard } from "@/hooks/useFinancialGuard";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { matchesAmountQuery } from "@/features/check-command/status";
@@ -204,6 +205,8 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
     unsynced_count: 0,
   });
 
+  const guardFinancial = useFinancialGuard(tenantId);
+
   // Deposit action mutation
   const actionMutation = useMutation({
     mutationFn: async (params: {
@@ -246,6 +249,7 @@ export function DepositOperationsConsole({ searchQuery = "" }: DepositOperations
   // manual record_submission dialog used by other providers.
   const checkaltSubmitMutation = useMutation({
     mutationFn: async (checkId: string) => {
+      await guardFinancial("deposit.submit");
       // Pre-normalize each side (front + back) so the deposit worker never
       // has to re-encode oversized images inline (avoids CPU-exceeded).
       const prepared = await prepareCheckAltDeposit(checkId);
