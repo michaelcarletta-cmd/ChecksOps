@@ -3551,6 +3551,12 @@ function CheckDetailPanel({
   // real FinCapture API call (mirrors DepositOperationsConsole's flow).
   const handleDepositWithCheckAlt = async () => {
     if (!user?.id || !check) return;
+    try {
+      await guardFinancial("deposit.submit");
+    } catch (err: any) {
+      sonnerToast.error(err?.message ?? "Two-factor verification required");
+      return;
+    }
     setDepositingWithCheckAlt(true);
     try {
       const { data: existingItem } = await supabase
