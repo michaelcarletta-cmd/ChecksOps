@@ -40,6 +40,12 @@ serve(async (req) => {
           transports: (c.transports ?? []) as AuthenticatorTransport[],
         }));
       }
+      // No registered passkeys for this email → starting the ceremony would
+      // just drop the user into the browser's QR/cross-device prompt with no
+      // way to complete. Fail fast with a recognizable code instead.
+      if (allowCredentials.length === 0) {
+        return json({ error: "no_passkeys" }, 200);
+      }
     }
 
     const options = await generateAuthenticationOptions({
