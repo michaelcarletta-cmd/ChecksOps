@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCustomDomainTenant } from "./hooks/useCustomDomainTenant";
 import { CustomDomainWhiteLabelApp } from "./components/white-label/CustomDomainWhiteLabelApp";
 import { AuthProvider } from "./hooks/useAuth";
+import { StepUpProvider } from "./hooks/useStepUp";
 import { ThemeProvider, ThemeScope } from "./hooks/useTheme";
 
 
