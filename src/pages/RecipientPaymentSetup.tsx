@@ -72,7 +72,7 @@ export default function RecipientPaymentSetup() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsDone, setTermsDone] = useState(false);
   const [replaceBank, setReplaceBank] = useState(false);
-  const tosMountRef = useRef<HTMLDivElement | null>(null);
+  
 
 
 
@@ -113,8 +113,10 @@ export default function RecipientPaymentSetup() {
     return () => { cancelled = true; };
   }, [token]);
 
-  // Mount the provider's hosted Terms of Service component once the session
-  // token is available; it mints the acceptance token we submit with the form.
+  // Load the provider's browser SDK. Terms are ALWAYS accepted in the browser
+  // with the same OAuth session that Moov.js was created with — the provider
+  // rejects a ToS token minted in one context and patched from another
+  // ("tos token must be created using an oauth token").
   const tosTokenRef = useRef<string | null>(null);
   useEffect(() => {
     if (!session?.token) return;
@@ -123,30 +125,12 @@ export default function RecipientPaymentSetup() {
       try {
         await loadMoovJs();
         if (cancelled) return;
-
-        // Existing recipients accept directly through Moov.js so token creation
-        // and the account PATCH use the same browser OAuth session. Passing a
-        // generated ToS token to a separately authenticated server PATCH causes
-        // the provider to reject it as not OAuth-created.
-        if (session.recipient.bank_linked && !replaceBank) {
-          setTosReady(typeof (window as any).Moov === "function");
-          return;
-        }
-
-        if (!tosMountRef.current) return;
-        const el = document.createElement("moov-terms-of-service") as any;
-
-        el.token = session.token;
-        el.onTermsOfServiceTokenReady = (t: any) => {
-          tosTokenRef.current = typeof t === "string" ? t : t?.token ?? null;
-          setTosReady(Boolean(tosTokenRef.current));
-        };
-        el.onTermsOfServiceTokenError = () => setTosReady(false);
-        tosMountRef.current.replaceChildren(el);
+        setTosReady(typeof (window as any).Moov === "function");
       } catch { /* leave ToS hidden; submit will surface an error */ }
     })();
     return () => { cancelled = true; };
   }, [session?.token, replaceBank]);
+
 
   // Recipients onboarded before the provider required terms already have a bank
   // on file — they only need to accept terms to be payable again.
@@ -178,6 +162,20 @@ export default function RecipientPaymentSetup() {
     setSaving(true);
     setError(null);
     try {
+      // Record the platform agreement in the browser, with the same OAuth
+      // session Moov.js was created with. Server-side patching of a separately
+      // minted token is rejected by the provider.
+      const createMoovClient = (window as any).Moov;
+      if (typeof createMoovClient !== "function" || !session?.account_id) {
+        throw new Error("The secure terms service did not load. Please refresh and try again.");
+      }
+      const moov = createMoovClient(session.token);
+      const acceptance = await moov.accounts.acceptTermsOfService({ accountID: session.account_id });
+      if (typeof acceptance === "string" && acceptance) throw new Error(acceptance);
+      if (acceptance?.error) {
+        throw new Error(typeof acceptance.error === "string" ? acceptance.error : "Could not record your acceptance.");
+      }
+
       const { data, error: fnErr } = await supabase.functions.invoke("moov-recipient-bank-add", {
         body: {
           token,
@@ -195,9 +193,11 @@ export default function RecipientPaymentSetup() {
           city: city.trim(),
           state: state.trim().toUpperCase(),
           postal_code: postalCode.trim(),
+          tos_accepted: true,
           tos_token: tosTokenRef.current,
         },
       });
+
       if (fnErr) {
         let message = "Could not save your bank account.";
         try {
@@ -518,14 +518,10 @@ export default function RecipientPaymentSetup() {
                   />
                 </div>
 
-                {/* The Moov ToS Drop only exists to mint the acceptance token — it
-                    renders an unthemeable white box, so it stays visually hidden
-                    and we show our own themed agreement text with the same links. */}
-                <div
-                  ref={tosMountRef}
-                  aria-hidden="true"
-                  style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clipPath: "inset(50%)" }}
-                />
+                {/* Terms are recorded with the provider in the browser when
+                    this form is submitted; we show our own themed agreement
+                    text with the same links. */}
+
                 <p className="text-[11px] leading-relaxed text-muted-foreground rounded-md border border-border/60 bg-muted/30 p-3">
                   By clicking continue, you agree to the terms of Moov's{" "}
                   <a

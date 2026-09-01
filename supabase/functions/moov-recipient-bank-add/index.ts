@@ -45,6 +45,8 @@ serve(async (req) => {
     const tosToken = typeof body?.tos_token === "string" && body.tos_token.length >= 8
       ? String(body.tos_token)
       : null;
+    const tosAccepted = body?.tos_accepted === true;
+
 
     if (!token) return json({ error: "token is required" }, 400);
     if (holderName.length < 2 || holderName.length > 128) {
@@ -74,9 +76,10 @@ serve(async (req) => {
     } else if (ein.length !== 9) {
       return json({ error: "Enter the business 9-digit EIN." }, 400);
     }
-    if (!tosToken) {
+    if (!tosAccepted && !tosToken) {
       return json({ error: "Please review and accept the payment provider's Terms of Service." }, 400);
     }
+
 
     const environment = moovEnvironment();
     const supabase = createClient(
@@ -100,39 +103,47 @@ serve(async (req) => {
     const accountId = recipient.provider_account_id as string | null;
     if (!accountId) return json({ error: "This payment setup is not ready yet." }, 409);
 
-    // 1. Record Terms of Service acceptance (token minted by the provider's
-    //    hosted component in the browser).
-    try {
-      await moovFetch<any>(`/accounts/${accountId}`, {
-        method: "PATCH",
-        scopes: scopes.accountWrite(accountId),
-        body: { termsOfService: { token: tosToken } },
-      });
-    } catch (e) {
-      console.error("[moov-recipient-bank-add] tos patch", (e as Error).message);
-
-      // A provider may reject a second application after terms are already on
-      // file. Verify the account before deciding whether onboarding can safely
-      // continue; never silently complete setup without a recorded agreement.
-      let termsOnFile = false;
+    // 1. Terms of Service. The browser records acceptance directly with the
+    //    provider using the same OAuth session it was issued (the provider
+    //    rejects a token minted in the browser but patched from the server:
+    //    "tos token must be created using an oauth token"). We only verify.
+    async function termsOutstanding(): Promise<boolean | null> {
       try {
-        const acct = await moovFetch<any>(`/accounts/${accountId}`, {
+        const caps = await moovFetch<any>(`/accounts/${accountId}/capabilities`, {
           method: "GET",
-          scopes: scopes.accountRead(accountId),
+          scopes: scopes.capabilitiesRead(accountId),
         });
-        termsOnFile = Boolean(
-          acct?.termsOfServiceAcceptance?.acceptedDate ??
-            acct?.termsOfService?.acceptedDate ??
-            acct?.termsOfServiceAcceptance?.acceptedOn,
-        );
-      } catch (verifyError) {
-        console.error("[moov-recipient-bank-add] tos verify", (verifyError as Error).message);
-      }
-
-      if (!termsOnFile) {
-        return json({ error: "The payment provider could not record your acceptance. Please try again." }, 502);
+        const list = Array.isArray(caps) ? caps : caps?.capabilities ?? [];
+        return /tos|terms/i.test(JSON.stringify(list ?? []));
+      } catch (e) {
+        console.error("[moov-recipient-bank-add] tos verify", (e as Error).message);
+        return null;
       }
     }
+
+    if (!tosAccepted && tosToken) {
+      // Legacy clients still send a ToS token — best effort only.
+      try {
+        await moovFetch<any>(`/accounts/${accountId}`, {
+          method: "PATCH",
+          scopes: scopes.accountWrite(accountId),
+          body: { termsOfService: { token: tosToken } },
+        });
+      } catch (e) {
+        console.error("[moov-recipient-bank-add] tos patch", (e as Error).message);
+      }
+    }
+
+    let outstanding = await termsOutstanding();
+    for (const delayMs of [750, 1_500, 2_500]) {
+      if (outstanding !== true) break;
+      await new Promise((r) => setTimeout(r, delayMs));
+      outstanding = await termsOutstanding();
+    }
+    if (outstanding === true) {
+      return json({ error: "The payment provider could not record your acceptance. Please try again." }, 502);
+    }
+
 
     // 2. Submit the identity profile the provider needs to pay this recipient.
     //    SSN/EIN are forwarded only — never persisted or logged.
