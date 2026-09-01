@@ -10,14 +10,36 @@ export const TARGET_RDS = {
   adminRole: 'checksops_admin',
 };
 
+export const LIVE_SOURCE_COUNTS = {
+  publicBaseTables: 166,
+  publicViews: 20,
+  publicRelationsTablesPlusViews: 186,
+  publicFunctions: 960,
+  publicTriggers: 211,
+  publicRlsPolicies: 380,
+  authUsers: 9,
+  storageObjects: 1335,
+  publicForeignKeysToAuthUsers: 0,
+  supabaseFunctionDependencies: {
+    authUid: 40,
+    authJwt: 0,
+    net: 4,
+    cron: 2,
+    vault: 5,
+    pgmq: 5,
+  },
+};
+
 export const SOURCE = {
   kind: 'live-supabase-lovable',
   projectRef: 'nbcqwpysqgyxrrbgtmkw',
   projectUrl: 'https://nbcqwpysqgyxrrbgtmkw.supabase.co',
-  priorLivePublicTableCount: 186,
+  inventoryFile: 'aws/db-copy/LIVE_SOURCE_INVENTORY.md',
+  ...LIVE_SOURCE_COUNTS,
+  twentyTableDiscrepancy: false,
   doNotUseProjectRef: 'sqyyvpaymashtdwjjmku',
-  generatedTypesLagNote:
-    'Generated src/integrations/supabase/types.ts is a conservative catalog (166 public tables). A prior live inspection found 186 public tables. The live database remains the source of truth. Do not treat the other Management-API-visible project named ChecksOps (sqyyvpaymashtdwjjmku) as live.',
+  generatedTypesNote:
+    'Generated src/integrations/supabase/types.ts lists the same 166 public tables and 20 views as the live catalog. 186 was tables+views, not a missing-table gap. PostgREST types list 358 functions (subset of live 960). Do not treat the other Management-API-visible project named ChecksOps (sqyyvpaymashtdwjjmku) as live.',
 };
 
 export const EXCLUDED_SCHEMAS = [
@@ -40,19 +62,19 @@ export const EXCLUDED_SCHEMAS = [
 ];
 
 export const RDS_SUPPORTED_EXTENSIONS = [
-  { name: 'pgcrypto', required: true, notes: 'Used by application hashing/token helpers.' },
-  { name: 'uuid-ossp', required: false, notes: 'Prefer gen_random_uuid() on PostgreSQL 18.' },
-  { name: 'pg_trgm', required: false, notes: 'Enable if live dump references it.' },
-  { name: 'citext', required: false, notes: 'Enable if live dump references it.' },
-  { name: 'unaccent', required: false, notes: 'Enable if live dump references it.' },
-  { name: 'btree_gin', required: false, notes: 'Enable if live dump references it.' },
-  { name: 'btree_gist', required: false, notes: 'Enable if live dump references it.' },
-  { name: 'pg_stat_statements', required: false, notes: 'Observability only.' },
+  { name: 'pgcrypto', required: true, notes: 'Live source has pgcrypto 1.3. Required for hashing/token helpers.' },
+  { name: 'uuid-ossp', required: true, notes: 'Live source has uuid-ossp 1.1.' },
+  { name: 'pg_stat_statements', required: false, notes: 'Live source has 1.11. Observability only.' },
+  { name: 'postgis', required: true, notes: 'Live source has postgis 3.3.7. Stop the first copy if RDS cannot enable it.' },
+  { name: 'vector', required: true, notes: 'Live source has vector 0.8.0. Stop the first copy if RDS cannot enable it.' },
 ];
 
 export const CONDITIONAL_RDS_EXTENSIONS = [
-  { name: 'postgis', reason: 'Public views geography_columns/geometry_columns exist in generated types. Enable only if live dump has PostGIS types.' },
-  { name: 'vector', reason: 'Darwin claim intelligence migrations create pgvector. Enable only if live dump has vector columns.' },
+  { name: 'pg_trgm', reason: 'Enable only if the live dump references it.' },
+  { name: 'citext', reason: 'Enable only if the live dump references it.' },
+  { name: 'unaccent', reason: 'Enable only if the live dump references it.' },
+  { name: 'btree_gin', reason: 'Enable only if the live dump references it.' },
+  { name: 'btree_gist', reason: 'Enable only if the live dump references it.' },
 ];
 
 export const UNSUPPORTED_OR_SUPABASE_EXTENSIONS = [
@@ -150,10 +172,20 @@ export const FINANCIAL_METRICS = [
   { table: 'deposit_batches', expr: 'coalesce(sum(total_amount), 0)', label: 'deposit_batches_total_amount' },
   { table: 'checkalt_deposits', expr: 'coalesce(sum(amount), 0)', label: 'checkalt_deposits_amount' },
   { table: 'disbursement_splits', expr: 'coalesce(sum(amount), 0)', label: 'disbursement_splits_amount' },
+  { table: 'disbursement_batches', expr: 'coalesce(sum(check_amount), 0)', label: 'disbursement_batches_check_amount' },
+  { table: 'disbursement_batches', expr: 'coalesce(sum(amount_reserved_cents), 0)', label: 'disbursement_batches_amount_reserved_cents' },
+  { table: 'claim_check_payments', expr: 'coalesce(sum(check_amount), 0)', label: 'claim_check_payments_check_amount' },
+  { table: 'claim_check_payments', expr: 'coalesce(sum(payment_amount), 0)', label: 'claim_check_payments_payment_amount' },
   { table: 'payment_transfers', expr: 'coalesce(sum(amount_cents), 0)', label: 'payment_transfers_amount_cents' },
   { table: 'payment_wallet_ledger', expr: 'coalesce(sum(amount_cents), 0)', label: 'payment_wallet_ledger_amount_cents' },
   { table: 'claim_payments', expr: 'coalesce(sum(amount), 0)', label: 'claim_payments_amount' },
   { table: 'homeowner_ledger_events', expr: 'coalesce(sum(amount), 0)', label: 'homeowner_ledger_amount' },
+  {
+    table: 'check_endorsements',
+    expr: 'coalesce(sum(i.amount), 0)',
+    label: 'endorsed_check_intake_amount',
+    note: 'Join check_endorsements to check_intake_items; endorsement tables have no amount columns.',
+  },
 ];
 
 export const SENSITIVE_PUBLIC_TABLES = [
@@ -179,6 +211,7 @@ export const STORAGE_BUCKETS = [
   'document-templates',
   'email-assets',
   'endorsement-packets',
+  'database_export_01_09_26',
 ];
 
 export const WEBHOOK_EDGE_FUNCTIONS = [

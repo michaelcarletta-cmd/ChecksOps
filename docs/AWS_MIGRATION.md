@@ -21,12 +21,15 @@ Payment provider calls, secrets, webhooks, tenant authorization, and money movem
 
 ## Current production inventory
 
-The live Lovable ChecksOps project is the migration source of truth. At inventory time it contains:
+The live Lovable ChecksOps project is the migration source of truth. Authoritative catalog: `aws/db-copy/LIVE_SOURCE_INVENTORY.md`.
 
-- 186 public tables
-- 9 auth users
-- 1,335 storage objects
-- 380 RLS policies
+- 166 public **base tables**
+- 20 public **views** (186 public relations = tables + views; there is no 20-table data gap)
+- 960 public functions
+- 211 public triggers
+- 380 RLS policies (extract, do not apply on first RDS restore)
+- 9 auth users (separate Cognito migration; do not dump password hashes)
+- 1,335 storage objects (separate S3 migration)
 
 Important functional domains include:
 

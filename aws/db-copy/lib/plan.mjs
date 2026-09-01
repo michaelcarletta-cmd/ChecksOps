@@ -3,6 +3,7 @@ import {
   EXECUTE_ENV,
   EXECUTE_VALUE,
   EXCLUDED_SCHEMAS,
+  LIVE_SOURCE_COUNTS,
   TARGET_RDS,
 } from './catalog.mjs';
 
@@ -23,51 +24,52 @@ export const buildDumpPlan = ({ artifactDir = '/var/lib/checksops/db-copy' } = {
   const schemaFile = path.posix.join(artifactDir, 'public-schema.dump');
   const dataFile = path.posix.join(artifactDir, 'public-data.dump');
   const rlsFile = path.posix.join(artifactDir, 'public-rls.sql');
-  const identityFile = path.posix.join(artifactDir, 'auth-identity-map.csv');
+  const schemaList = path.posix.join(artifactDir, 'public-schema.list');
   return {
     preparationOnly: true,
-    source: 'live ChecksOps Supabase/Lovable PostgreSQL (connection URI from env, never committed)',
+    apply: false,
+    source: {
+      kind: 'live ChecksOps Supabase/Lovable PostgreSQL',
+      inventory: 'aws/db-copy/LIVE_SOURCE_INVENTORY.md',
+      counts: LIVE_SOURCE_COUNTS,
+      dumpCredentials: 'operator-held read-only URI; never requested or logged by this tooling',
+    },
     target: TARGET_RDS,
+    restoreDatabase: TARGET_RDS.recommendedRestoreDatabase,
+    leaveUntouched: TARGET_RDS.defaultDatabase,
     envVarsRequiredLater: [
-      'SUPABASE_DB_URL',
-      'CHECKSOPS_RDS_ADMIN_URL',
+      'Operator-held read-only source URI (not stored in this Cloud Agent)',
+      'CHECKSOPS_RDS_ADMIN_URL on a host that can reach private RDS',
     ],
     notes: [
-      'Use pg_dump/pg_restore 16+ against the live source. PostgreSQL 18.3 can restore dumps from current Supabase major versions.',
+      `Authoritative inventory: ${LIVE_SOURCE_COUNTS.publicBaseTables} base tables, ${LIVE_SOURCE_COUNTS.publicViews} views, ${LIVE_SOURCE_COUNTS.publicFunctions} functions, ${LIVE_SOURCE_COUNTS.publicTriggers} triggers, ${LIVE_SOURCE_COUNTS.publicRlsPolicies} RLS policies.`,
+      '186 public relations = 166 tables + 20 views. There is no 20-table data gap.',
+      `Do not dump ${LIVE_SOURCE_COUNTS.authUsers} auth.users (Cognito later). Live catalog found ${LIVE_SOURCE_COUNTS.publicForeignKeysToAuthUsers} public FKs to auth.users.`,
+      `Do not dump ${LIVE_SOURCE_COUNTS.storageObjects} storage.objects (S3 later).`,
+      'Dump public schema only. Do not dump auth, storage, realtime, vault, cron, net, or pgmq.',
+      'Extract RLS policies to a sidecar SQL file and filter POLICY / ROW SECURITY from pg_restore -l. Do not apply them on RDS in the first restore.',
+      `Restore into isolated database ${TARGET_RDS.recommendedRestoreDatabase}. Leave ${TARGET_RDS.defaultDatabase} and /db-health untouched.`,
+      'Restore as checksops_admin. Keep checksops LOGIN with CONNECT + SELECT only.',
       'Never log, print, or commit connection URIs or passwords.',
-      'Dump public schema only. Do not dump auth, storage, realtime, vault, cron, or net.',
-      'Extract RLS policies to a sidecar SQL file. Do not apply them on RDS in the first restore.',
-      'Extract auth.users id,email into an identity map. Do not copy encrypted passwords.',
-      'Restore as checksops_admin. Keep checksops LOGIN with CONNECT + later SELECT only.',
     ],
     sequence: [
       {
         id: 1,
         lane: 'postgresql_schema',
-        title: 'Create restore database and RDS-safe extensions',
+        title: 'Create isolated restore database and RDS-supported extensions',
         role: TARGET_RDS.adminRole,
         apply: false,
         commands: [
-          `createdb --maintenance-db=${TARGET_RDS.defaultDatabase} ${TARGET_RDS.recommendedRestoreDatabase}`,
-          'psql --file aws/db-copy/sql/00_rds_supported_extensions.sql',
-          'psql --file aws/db-copy/sql/01_auth_compatibility_stubs.sql',
+          `psql --dbname=${TARGET_RDS.defaultDatabase} --command "CREATE DATABASE ${TARGET_RDS.recommendedRestoreDatabase};"`,
+          `psql --dbname=${TARGET_RDS.recommendedRestoreDatabase} --file aws/db-copy/sql/00_rds_supported_extensions.sql`,
+          `psql --dbname=${TARGET_RDS.recommendedRestoreDatabase} --file aws/db-copy/sql/01_auth_compatibility_stubs.sql`,
         ],
       },
       {
         id: 2,
-        lane: 'auth_users',
-        title: 'Export identity map only (id, email)',
-        role: 'supabase source, read-only',
-        apply: false,
-        commands: [
-          `psql --csv --command "copy (select id, email, created_at from auth.users) to stdout" > ${identityFile}`,
-        ],
-      },
-      {
-        id: 3,
         lane: 'postgresql_schema',
-        title: 'Dump public schema without owners, ACLs, or subscriptions',
-        role: 'supabase source, read-only',
+        title: 'Dump public schema without owners, ACLs, publications, or subscriptions',
+        role: 'operator, live source, read-only',
         apply: false,
         commands: [
           [
@@ -85,20 +87,21 @@ export const buildDumpPlan = ({ artifactDir = '/var/lib/checksops/db-copy' } = {
         ],
       },
       {
-        id: 4,
+        id: 3,
         lane: 'rls_security_policies',
-        title: 'Extract RLS policy SQL; do not restore it yet',
-        role: 'supabase source, read-only',
+        title: 'Extract RLS policy SQL and filter it out of the restore list; do not restore it',
+        role: 'operator, live source, read-only',
         apply: false,
         commands: [
           `pg_dump --schema=public --section=pre-data --section=post-data --no-owner --no-acl | awk '/CREATE POLICY|ENABLE ROW LEVEL SECURITY|FORCE ROW LEVEL SECURITY/ {print}' > ${rlsFile}`,
+          `pg_restore -l ${schemaFile} | grep -v -E 'POLICY|ROW SECURITY' > ${schemaList}`,
         ],
       },
       {
-        id: 5,
+        id: 4,
         lane: 'public_application_data',
-        title: 'Dump public data only',
-        role: 'supabase source, read-only',
+        title: 'Dump public data for all 166 base tables',
+        role: 'operator, live source, read-only',
         apply: false,
         commands: [
           [
@@ -113,48 +116,63 @@ export const buildDumpPlan = ({ artifactDir = '/var/lib/checksops/db-copy' } = {
         ],
       },
       {
-        id: 6,
+        id: 5,
         lane: 'postgresql_schema',
-        title: 'Restore schema then identity map then data as admin',
+        title: 'Restore schema then data into isolated database checksops (no Auth rows, no RLS)',
         role: TARGET_RDS.adminRole,
         apply: false,
         commands: [
-          `pg_restore --dbname=${TARGET_RDS.recommendedRestoreDatabase} --no-owner --no-acl --exit-on-error ${schemaFile}`,
-          `psql --command "\\copy auth.users (id, email, created_at) FROM '${identityFile}' CSV HEADER"`,
+          `pg_restore --dbname=${TARGET_RDS.recommendedRestoreDatabase} --no-owner --no-acl --use-list=${schemaList} --exit-on-error ${schemaFile}`,
           `pg_restore --dbname=${TARGET_RDS.recommendedRestoreDatabase} --data-only --disable-triggers --no-owner --exit-on-error ${dataFile}`,
         ],
       },
       {
-        id: 7,
+        id: 6,
         lane: 'database_functions_triggers',
-        title: 'Disable HTTP/cron/vault triggers; keep data-integrity triggers',
+        title: 'Inspect and disable net/cron/vault/pgmq behavior; keep data-integrity triggers',
         role: TARGET_RDS.adminRole,
         apply: false,
         commands: [
-          'Review restored functions for net.http_, cron.schedule, vault., and storage. calls. Drop or no-op those bodies. Stop rather than guessing.',
+          `psql --dbname=${TARGET_RDS.recommendedRestoreDatabase} --file aws/db-copy/sql/03_inspect_supabase_dependencies.sql`,
+          'Disable or no-op public functions/triggers that call net.*, cron.*, vault, or pgmq. Keep data-integrity triggers. Stop rather than guessing.',
         ],
       },
       {
-        id: 8,
+        id: 7,
         lane: 'public_application_data',
-        title: 'Grant least privilege to application role and reconcile',
+        title: 'Grant least privilege and reconcile all 166 tables plus financial metrics',
         role: TARGET_RDS.adminRole,
         apply: false,
         commands: [
-          'psql --file aws/db-copy/sql/02_grant_readonly_application_role.sql',
-          'psql --file aws/db-copy/sql/reconciliation_counts.sql',
-          'psql --file aws/db-copy/sql/reconciliation_financial.sql',
+          `psql --dbname=${TARGET_RDS.recommendedRestoreDatabase} --file aws/db-copy/sql/02_grant_readonly_application_role.sql`,
+          'psql --file aws/db-copy/sql/reconciliation_counts.sql  # run on source and target; 166 counts must match',
+          'psql --file aws/db-copy/sql/reconciliation_financial.sql  # payment/check/deposit/endorsement/disbursement',
         ],
       },
     ],
+    rollback: {
+      apply: false,
+      sql: 'aws/db-copy/sql/04_rollback_failed_staging_database.sql',
+      command: `psql --dbname=${TARGET_RDS.defaultDatabase} --command "DROP DATABASE ${TARGET_RDS.recommendedRestoreDatabase};"`,
+      never: [
+        `DROP DATABASE ${TARGET_RDS.defaultDatabase}`,
+        'DROP ROLE checksops',
+        'DROP ROLE checksops_admin',
+        'password changes',
+        'RDS instance create/replace/reboot/resize/delete',
+      ],
+    },
     neverInThisPhase: [
+      'auth.users dump or Cognito import',
       'storage object copy to S3',
-      'Cognito user import',
-      'RLS policy apply',
+      'RLS policy apply / ENABLE ROW LEVEL SECURITY',
+      'realtime publication restore',
+      'pg_cron / pg_net / supabase_vault / pgmq / pgsodium behavior',
       'Edge Function deploy as production webhook targets',
       'Moov / CheckAlt / Plaid / Resend webhook destination changes',
       'DNS cutover',
       'merge to main',
+      `restore into database ${TARGET_RDS.defaultDatabase}`,
     ],
   };
 };
@@ -163,8 +181,10 @@ export const renderPlanText = (plan) => {
   const lines = [
     'ChecksOps database copy PLAN (preparation only — not executed)',
     `Target RDS: ${plan.target.identifier} ${plan.target.engine} ${plan.target.engineVersion}`,
+    `Restore database: ${plan.restoreDatabase} (leave ${plan.leaveUntouched} untouched)`,
     `Application role: ${plan.target.applicationRole} (least privilege; not used for restore)`,
     `Admin role: ${plan.target.adminRole} (schema restore only, later phase)`,
+    `Live counts: ${plan.source.counts.publicBaseTables} tables, ${plan.source.counts.publicViews} views, ${plan.source.counts.publicFunctions} functions, ${plan.source.counts.publicTriggers} triggers, ${plan.source.counts.publicRlsPolicies} RLS (not applied)`,
     '',
   ];
   for (const step of plan.sequence) {
@@ -173,6 +193,10 @@ export const renderPlanText = (plan) => {
     for (const command of step.commands) lines.push(`   $ ${command}`);
     lines.push('');
   }
+  lines.push('Rollback if restore fails:');
+  lines.push(`   apply now: ${plan.rollback.apply}`);
+  lines.push(`   $ ${plan.rollback.command}`);
+  lines.push('');
   lines.push('Never in this phase:');
   for (const item of plan.neverInThisPhase) lines.push(`- ${item}`);
   return `${lines.join('\n')}\n`;

@@ -1,15 +1,15 @@
--- RDS-supported extensions for a future ChecksOps schema restore.
--- PREPARATION ONLY: do not run against live Supabase or staging RDS yet.
--- Execute later as checksops_admin only.
+-- Extensions for a future first copy into database checksops.
+-- PREPARATION ONLY: do not run yet. Execute later as checksops_admin.
+-- Stop rather than skipping if CREATE EXTENSION fails.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-CREATE EXTENSION IF NOT EXISTS citext;
-CREATE EXTENSION IF NOT EXISTS unaccent;
-CREATE EXTENSION IF NOT EXISTS btree_gin;
-CREATE EXTENSION IF NOT EXISTS btree_gist;
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 
--- Enable only if the live dump contains these types/operators:
--- CREATE EXTENSION IF NOT EXISTS postgis;
--- CREATE EXTENSION IF NOT EXISTS vector;
+-- Live source currently has these enabled. Enable on RDS only if this instance
+-- supports the required version. Stop the copy if either command fails.
+CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Do not enable on first copy:
+-- pg_cron, pg_net, pgmq, pgsodium, supabase_vault

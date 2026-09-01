@@ -1,12 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseGeneratedDatabaseTypes } from './parse-types.mjs';
+import { parseLiveSourceInventory } from './parse-live-inventory.mjs';
+import { describeLiveAccess } from './live-access.mjs';
 import {
   CONDITIONAL_RDS_EXTENSIONS,
   CRITICAL_TABLE_GROUPS,
   EXCLUDED_SCHEMAS,
   FINANCIAL_METRICS,
   LANES,
+  LIVE_SOURCE_COUNTS,
   POSTGIS_CATALOG_VIEWS,
   RDS_SUPPORTED_EXTENSIONS,
   SENSITIVE_PUBLIC_TABLES,
@@ -121,6 +124,54 @@ const classifyView = (name) => {
   };
 };
 
+export const liveInventoryPath = (repoRoot) =>
+  path.join(repoRoot, 'aws/db-copy/LIVE_SOURCE_INVENTORY.md');
+
+/**
+ * Load the authoritative live inventory from the committed markdown file.
+ * Does not contact Supabase or request credentials.
+ */
+export const loadCommittedLiveInventory = (repoRoot) => {
+  const inventoryPath = liveInventoryPath(repoRoot);
+  const live = parseLiveSourceInventory(inventoryPath);
+  const types = parseGeneratedDatabaseTypes(path.join(repoRoot, 'src/integrations/supabase/types.ts'));
+  const access = describeLiveAccess();
+
+  const tableCountMatch = live.public.baseTables === types.tables.length;
+  const viewCountMatch = live.public.views === types.views.length;
+
+  return {
+    status: 'ready',
+    apply: false,
+    source: 'LIVE_SOURCE_INVENTORY.md',
+    inventoryPath: 'aws/db-copy/LIVE_SOURCE_INVENTORY.md',
+    access,
+    live,
+    generatedTypes: {
+      tables: types.tables.length,
+      views: types.views.length,
+      functions: types.functions.length,
+      note: 'PostgREST types list 358 functions; live catalog has 960 public routines.',
+    },
+    alignment: {
+      tableCountMatch,
+      viewCountMatch,
+      noTwentyTableDiscrepancy: live.noTableGapVsViews,
+      explanation:
+        '186 public relations = 166 base tables + 20 views. Generated types match both counts.',
+    },
+    outOfScope: {
+      authUsers: { count: live.authUsers, destination: 'Cognito', dump: false },
+      storageObjects: { count: live.storageObjects, destination: 'S3', dump: false },
+      rlsActivation: { count: live.public.rlsPolicies, apply: false },
+      realtime: { copy: false },
+      cronNetVaultPgmq: { copyBehavior: false, inspectAfterRestore: true },
+      productionWebhooks: { copy: false },
+    },
+    expected: LIVE_SOURCE_COUNTS,
+  };
+};
+
 export const buildRepoInventory = (repoRoot) => {
   const typesPath = path.join(repoRoot, 'src/integrations/supabase/types.ts');
   const migrationsDir = path.join(repoRoot, 'supabase/migrations');
@@ -130,56 +181,55 @@ export const buildRepoInventory = (repoRoot) => {
   const edgeFunctions = listEdgeFunctions(functionsDir);
   const critical = allCriticalTables();
   const missingCritical = critical.filter((name) => !parsed.tables.includes(name));
+  const liveInventory = loadCommittedLiveInventory(repoRoot);
 
   const classifications = {
     migrate_directly: [],
     transform: [
       {
-        object: 'auth.users identity map (id, email only)',
-        lane: 'auth_users',
-        disposition: 'transform',
-        reason: 'Public FKs reference auth.users(id). Copy UUID/email into an RDS stub table so constraints succeed. Do not copy passwords, sessions, refresh tokens, or MFA factors. Cognito is a later phase.',
-      },
-      {
-        object: 'auth.uid()/auth.jwt() helpers',
+        object: 'auth.uid() compatibility stubs (no Auth user rows)',
         lane: 'database_functions_triggers',
         disposition: 'transform',
-        reason: 'Install no-op compatibility stubs so functions compile. They will not enforce Supabase JWT identity on RDS.',
+        reason:
+          'Live catalog found 0 public FKs to auth.users. First copy does not dump the 9 Auth users. Install no-op auth.uid()/auth.jwt() stubs so the 40 public functions that reference auth.uid() can compile. Cognito is a later phase.',
       },
       {
-        object: 'public functions/triggers that call net.http_*, vault, or cron',
+        object: 'public functions/triggers that call net.*, cron.*, vault, or pgmq',
         lane: 'database_functions_triggers',
         disposition: 'transform',
-        reason: 'Strip or disable HTTP/cron/vault bodies before restore. Replace with Lambda/EventBridge later.',
+        reason:
+          'Live inventory: 4 net.*, 2 cron.*, 5 vault, 5 pgmq public functions. Inspect after restore; disable those bodies. Do not enable pg_cron/pg_net/vault/pgmq behavior on RDS.',
       },
       {
         object: 'role owners and GRANTs (anon, authenticated, service_role)',
         lane: 'postgresql_schema',
         disposition: 'transform',
-        reason: 'Supabase roles do not exist on RDS. Restore with --no-owner --no-acl. Grant least privilege to checksops after restore.',
+        reason:
+          'Supabase roles do not exist on RDS. Restore with --no-owner --no-acl. Grant least privilege to checksops after restore.',
       },
     ],
     migrate_later: [
       {
-        object: 'Supabase Auth users/passwords/sessions',
+        object: 'Supabase Auth users (9) → Cognito',
         lane: 'auth_users',
         disposition: 'migrate_later',
-        reason: 'Cannot restore into Cognito. Requires a dedicated identity migration.',
+        reason: 'Out of first PostgreSQL copy. Do not dump password hashes, sessions, tokens, or identities.',
       },
       {
-        object: 'storage.objects and storage.buckets blobs',
+        object: 'storage.objects (1,335) → S3',
         lane: 'storage_objects',
         disposition: 'migrate_later',
         reason: 'Cannot restore into S3 by pg_restore. Copy objects in the storage phase with key mapping.',
       },
       {
-        object: 'RLS policies',
+        object: 'RLS policies (380)',
         lane: 'rls_security_policies',
         disposition: 'migrate_later',
-        reason: 'Policies depend on auth.uid() and would hide all rows from the least-privileged checksops role. Keep dumped SQL; do not apply until rewritten for the API.',
+        reason:
+          'Extract to a sidecar file. Do not ENABLE ROW LEVEL SECURITY on first restore; policies depend on auth.uid() and would hide rows from checksops.',
       },
       {
-        object: 'Edge Functions',
+        object: 'Edge Functions and production webhooks',
         lane: 'edge_functions_webhooks',
         disposition: 'migrate_later',
         reason: 'Rewrite as Lambda/API routes. Do not change Moov, CheckAlt, Plaid, or Resend production webhooks.',
@@ -203,10 +253,11 @@ export const buildRepoInventory = (repoRoot) => {
   }
 
   return {
-    generatedAt: 'repo-scan',
+    generatedAt: 'repo-scan+committed-live-inventory',
     source: SOURCE,
     target: TARGET_RDS,
     lanes: LANES,
+    liveInventory,
     generatedSchema: {
       tables: parsed.tables,
       views: parsed.views,
@@ -234,7 +285,9 @@ export const buildRepoInventory = (repoRoot) => {
     criticalTableGroups: CRITICAL_TABLE_GROUPS,
     criticalTables: critical,
     missingCriticalFromGeneratedTypes: missingCritical,
-    financialMetrics: FINANCIAL_METRICS.filter((metric) => parsed.tables.includes(metric.table)),
+    financialMetrics: FINANCIAL_METRICS.filter((metric) =>
+      metric.table ? parsed.tables.includes(metric.table) : true,
+    ),
     sensitivePublicTables: SENSITIVE_PUBLIC_TABLES.filter((name) => parsed.tables.includes(name)),
     classifications,
     safety: {
@@ -244,6 +297,9 @@ export const buildRepoInventory = (repoRoot) => {
       applicationRoleMustStayLeastPrivileged: true,
       doNotChangeProductionSupabase: true,
       doNotSwitchProviderWebhooks: true,
+      doNotRequestSupabaseToken: true,
+      restoreIntoIsolatedDatabase: TARGET_RDS.recommendedRestoreDatabase,
+      leavePostgresDatabaseUntouched: true,
     },
   };
 };

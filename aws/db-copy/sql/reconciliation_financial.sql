@@ -20,6 +20,22 @@ UNION ALL
 SELECT 'disbursement_splits_amount', coalesce(sum(amount), 0)
 FROM public.disbursement_splits
 UNION ALL
+SELECT 'disbursement_batches_check_amount', coalesce(sum(check_amount), 0)
+FROM public.disbursement_batches
+UNION ALL
+SELECT 'disbursement_batches_amount_reserved_cents', coalesce(sum(amount_reserved_cents), 0)
+FROM public.disbursement_batches
+UNION ALL
+SELECT 'claim_check_payments_check_amount', coalesce(sum(check_amount), 0)
+FROM public.claim_check_payments
+UNION ALL
+SELECT 'claim_check_payments_payment_amount', coalesce(sum(payment_amount), 0)
+FROM public.claim_check_payments
+UNION ALL
+SELECT 'endorsed_check_intake_amount', coalesce(sum(i.amount), 0)
+FROM public.check_endorsements e
+JOIN public.check_intake_items i ON i.id = e.check_id
+UNION ALL
 SELECT 'payment_transfers_amount_cents', coalesce(sum(amount_cents), 0)
 FROM public.payment_transfers
 UNION ALL
