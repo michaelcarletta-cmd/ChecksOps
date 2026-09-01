@@ -1316,14 +1316,8 @@ export default function CheckCommandCenter() {
           })()}
         </div>
 
-        {/* Returned Checks Tab — bank returns, including late ones after clearing */}
-        {activeTab === "returned" && (
-          <div className="mt-3">
-            <Suspense fallback={<TabLoader />}>
-              <ReturnedChecksPanel searchQuery={searchQuery} />
-            </Suspense>
-          </div>
-        )}
+        {/* Returned checks now live in Manager → Returned sub-tab. */}
+
 
         {/* Loss Draft Tab */}
         {activeTab === "lossdraft" && (
