@@ -1,29 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { moovConfigured, moovEnvironment, moovToken, scopes } from "../_shared/moovClient.ts";
+import { moovConfigured, moovEnvironment } from "../_shared/moovClient.ts";
 import { corsHeaders, json } from "../_shared/moovGuard.ts";
-
-function approvedBrowserOrigin(req: Request): string {
-  const fallback = "https://checksops.com";
-  const raw = req.headers.get("origin");
-  if (!raw) return fallback;
-  try {
-    const url = new URL(raw);
-    const host = url.hostname.toLowerCase();
-    const approved = host === "checksops.com"
-      || host === "www.checksops.com"
-      || host === "claim-buddy-crm.lovable.app"
-      || host.endsWith(".lovable.app")
-      // Lovable's authenticated preview is served from this separate domain.
-      // The provider binds browser OAuth tokens to the exact requesting origin,
-      // so falling back to checksops.com makes the browser-side ToS PATCH fail
-      // before our verification function is ever reached.
-      || host.endsWith(".lovableproject.com");
-    return approved ? `${url.protocol}//${url.host}` : fallback;
-  } catch {
-    return fallback;
-  }
-}
 
 // PUBLIC endpoint for the branded recipient-payment page.
 //
@@ -78,16 +56,6 @@ serve(async (req) => {
       .maybeSingle();
 
     const accountId = recipient.provider_account_id as string;
-    // Browser OAuth tokens are origin-bound by the provider. Mint against the
-    // exact approved domain where this public payment link is currently open.
-    const browserOrigin = approvedBrowserOrigin(req);
-    const [providerToken, tosToken] = await Promise.all([
-      moovToken(scopes.dropBankLink(accountId), browserOrigin),
-      // The hosted ToS Drop generates its acceptance token with a generic
-      // browser session. Keep this separate from account-scoped bank access;
-      // the acceptance token is applied later with server-side profile.write.
-      moovToken(["/ping.read"], browserOrigin),
-    ]);
 
     return json({
       success: true,
@@ -106,8 +74,6 @@ serve(async (req) => {
         secondary_color: (tenant as any)?.secondary_color ?? null,
       },
       account_id: accountId,
-      token: providerToken,
-      tos_token: tosToken,
       environment,
     });
   } catch (e) {
