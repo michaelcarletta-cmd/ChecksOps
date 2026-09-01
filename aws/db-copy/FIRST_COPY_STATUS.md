@@ -27,11 +27,13 @@ Isolated database `checksops` was restored from the approved S3 custom dump usin
 | Public base tables | 166 | 166 |
 | Public views | 22 | 20 |
 | Public functions (`prokind` f/p) | 965 | 960 |
-| Public non-internal triggers | 164 | 211 |
+| Public non-internal triggers (`pg_trigger`) | 164 | 211 `information_schema` event rows (same 164 triggers) |
 | RLS policies restored | 0 | 380 (intentionally not applied) |
 | RLS-enabled tables | 0 | n/a |
 
-Two extra views vs the live inventory are consistent with PostGIS catalog views (`geography_columns`, `geometry_columns`). Function/trigger deltas vs live include PostGIS objects plus skipped Supabase-only objects. Sentinel table `public._checksops_restore_complete` was written.
+Two extra views vs the live inventory are consistent with PostGIS catalog views (`geography_columns`, `geometry_columns`). The trigger 211 vs 164 gap is `information_schema` event expansion (47 extra rows from 37 multi-event triggers), not dropped public triggers. Sentinel table `public._checksops_restore_complete` was written.
+
+Post-restore FK/trigger/financial validation (no cutover): `aws/db-copy/POST_RESTORE_CLEANUP.md`.
 
 Extensions enabled: `plpgsql`, `pgcrypto` 1.4 (schema `extensions`), `uuid-ossp` 1.1 (schema `extensions`), `pg_stat_statements` 1.12, `postgis` 3.6.3, `vector` 0.8.1 (schema `extensions`).
 

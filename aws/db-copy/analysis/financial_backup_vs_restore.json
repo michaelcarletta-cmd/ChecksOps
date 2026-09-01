@@ -1,0 +1,109 @@
+{
+  "all_match": true,
+  "metrics": [
+    {
+      "metric": "check_intake_amount",
+      "backup": "1317000.53",
+      "restored_artifact": "1317000.53",
+      "match": true
+    },
+    {
+      "metric": "check_intake_pa_fee_amount",
+      "backup": "5393.27",
+      "restored_artifact": "5393.27",
+      "match": true
+    },
+    {
+      "metric": "checkalt_deposits_amount",
+      "backup": "380333.17",
+      "restored_artifact": "380333.17",
+      "match": true
+    },
+    {
+      "metric": "claim_check_payments_check_amount",
+      "backup": "0",
+      "restored_artifact": "0",
+      "match": true
+    },
+    {
+      "metric": "claim_check_payments_payment_amount",
+      "backup": "0",
+      "restored_artifact": "0",
+      "match": true
+    },
+    {
+      "metric": "claim_payments_amount",
+      "backup": "66003.92",
+      "restored_artifact": "66003.92",
+      "match": true
+    },
+    {
+      "metric": "deposit_batches_total_amount",
+      "backup": "964752.98",
+      "restored_artifact": "964752.98",
+      "match": true
+    },
+    {
+      "metric": "deposit_items_amount",
+      "backup": "963972.98",
+      "restored_artifact": "963972.98",
+      "match": true
+    },
+    {
+      "metric": "disbursement_batches_amount_reserved_cents",
+      "backup": "0",
+      "restored_artifact": "0",
+      "match": true
+    },
+    {
+      "metric": "disbursement_batches_check_amount",
+      "backup": "829768.914",
+      "restored_artifact": "829768.914",
+      "match": true
+    },
+    {
+      "metric": "disbursement_splits_amount",
+      "backup": "822212.97",
+      "restored_artifact": "822212.97",
+      "match": true
+    },
+    {
+      "metric": "endorsed_check_intake_amount",
+      "backup": "3924356.85",
+      "restored_artifact": "3924356.85",
+      "match": true
+    },
+    {
+      "metric": "homeowner_ledger_amount",
+      "backup": "2977337.23",
+      "restored_artifact": "2977337.23",
+      "match": true
+    },
+    {
+      "metric": "payment_transfers_amount_cents",
+      "backup": "0",
+      "restored_artifact": "0",
+      "match": true
+    },
+    {
+      "metric": "payment_wallet_ledger_amount_cents",
+      "backup": "0",
+      "restored_artifact": "0",
+      "match": true
+    }
+  ],
+  "backup_row_counts": {
+    "check_endorsements": 502,
+    "check_intake_items": 182,
+    "checkalt_deposits": 58,
+    "claim_check_payments": 0,
+    "claim_payments": 13,
+    "deposit_batches": 115,
+    "deposit_items": 114,
+    "disbursement_batches": 109,
+    "disbursement_splits": 108,
+    "homeowner_ledger_events": 657,
+    "payment_transfers": 0,
+    "payment_wallet_ledger": 0
+  }
+}
