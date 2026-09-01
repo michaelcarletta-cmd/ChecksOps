@@ -209,11 +209,13 @@ const App = () => (
         <OfflineIndicator />
         <BrowserRouter>
           <AuthProvider>
-            <ThemeScope>
-              <RecoveryHashRedirect />
-              <PlatformAnnouncementBanner />
-              <AppRoutes />
-            </ThemeScope>
+            <StepUpProvider>
+              <ThemeScope>
+                <RecoveryHashRedirect />
+                <PlatformAnnouncementBanner />
+                <AppRoutes />
+              </ThemeScope>
+            </StepUpProvider>
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>
