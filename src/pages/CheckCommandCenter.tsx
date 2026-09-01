@@ -1341,8 +1341,10 @@ export default function CheckCommandCenter() {
                     <TabsTrigger value="deposit_history" className="text-xs gap-1"><Banknote className="h-3 w-3" />Deposit History</TabsTrigger>
                   </>
                 )}
+                <TabsTrigger value="returned" className="text-xs gap-1"><RotateCcw className="h-3 w-3" />Returned{returnedCount > 0 ? ` (${returnedCount})` : ""}</TabsTrigger>
                 <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
                 <TabsTrigger value="mortgage_cos" className="text-xs gap-1"><Building2 className="h-3 w-3" />Mortgage Cos</TabsTrigger>
+
                 <TabsTrigger value="partners" className="text-xs gap-1"><Users className="h-3 w-3" />Partners</TabsTrigger>
                 <TabsTrigger value="homeowner_uploads" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3 rotate-180" />Homeowner Uploads</TabsTrigger>
                 <button
