@@ -72,7 +72,7 @@ export default function RecipientPaymentSetup() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsDone, setTermsDone] = useState(false);
   const [replaceBank, setReplaceBank] = useState(false);
-  const tosMountRef = useRef<HTMLDivElement | null>(null);
+  
 
 
 
