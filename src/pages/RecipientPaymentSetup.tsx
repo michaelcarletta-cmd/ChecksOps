@@ -215,30 +215,21 @@ export default function RecipientPaymentSetup() {
     }
   }
 
+  // Called by the hosted ToS Drop once the recipient clicks its agree button.
+  const handleDropToken = useCallback((acceptanceToken: string) => {
+    tosTokenRef.current = acceptanceToken;
+    setTosDropToken(acceptanceToken);
+    setTermsAccepted(true);
+  }, []);
+
   async function handleAcceptTermsOnly() {
-    if (!tosReady || !termsAccepted || saving || !session) return;
+    if (!tosDropToken || saving || !session) return;
     setSaving(true);
     setError(null);
     try {
-      const createMoovClient = (window as any).Moov;
-      if (typeof createMoovClient !== "function") {
-        throw new Error("The secure terms service did not load. Please refresh and try again.");
-      }
-      const moov = createMoovClient(session.token);
-      const acceptance = await moov.accounts.acceptTermsOfService({ accountID: session.account_id });
-       // Moov.js resolves some failures as a plain error string (not an Error
-       // and not `{ error }`). Treat that as a failure instead of continuing to
-       // backend verification and replacing the useful provider response with
-       // the generic "could not record" message.
-       if (typeof acceptance === "string") {
-         throw new Error(acceptance || "Could not record your acceptance.");
-       }
-      if (acceptance?.error) {
-        throw new Error(typeof acceptance.error === "string" ? acceptance.error : "Could not record your acceptance.");
-      }
-
+      // Patch the Drop's acceptance token onto the provider account server-side.
       const { data, error: fnErr } = await supabase.functions.invoke("moov-recipient-tos-accept", {
-        body: { token, verify_only: true },
+        body: { token, tos_token: tosDropToken },
       });
       if (fnErr) {
         let message = "Could not record your acceptance.";
