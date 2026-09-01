@@ -2877,6 +2877,7 @@ function CheckDetailPanel({
   checkId: string;
   onRefresh: () => void;
 }) {
+  const guardFinancial = useFinancialGuard();
   const [detailTab, setDetailTab] = useState("overview");
   const [undoing, setUndoing] = useState(false);
   const [reuploadingBack, setReuploadingBack] = useState(false);
