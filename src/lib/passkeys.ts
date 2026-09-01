@@ -96,6 +96,11 @@ export async function signInWithPasskey(
   const optionsRes = await client.functions.invoke("passkey-auth-options", {
     body: { email: email.trim().toLowerCase() },
   });
+  if ((optionsRes.data as any)?.error === "no_passkeys") {
+    throw new Error(
+      "No passkey is registered for this email yet. Use the email sign-in link below, then add a passkey from Account Security.",
+    );
+  }
   const { options } = unwrap<{ options: any }>(optionsRes, "Could not start passkey sign-in.");
 
   let assertion;
