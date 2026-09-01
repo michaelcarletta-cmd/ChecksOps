@@ -3,28 +3,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { moovConfigured, moovEnvironment } from "../_shared/moovClient.ts";
 import { corsHeaders, json } from "../_shared/moovGuard.ts";
 
-function approvedBrowserOrigin(req: Request): string {
-  const fallback = "https://checksops.com";
-  const raw = req.headers.get("origin");
-  if (!raw) return fallback;
-  try {
-    const url = new URL(raw);
-    const host = url.hostname.toLowerCase();
-    const approved = host === "checksops.com"
-      || host === "www.checksops.com"
-      || host === "claim-buddy-crm.lovable.app"
-      || host.endsWith(".lovable.app")
-      // Lovable's authenticated preview is served from this separate domain.
-      // The provider binds browser OAuth tokens to the exact requesting origin,
-      // so falling back to checksops.com makes the browser-side ToS PATCH fail
-      // before our verification function is ever reached.
-      || host.endsWith(".lovableproject.com");
-    return approved ? `${url.protocol}//${url.host}` : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 // PUBLIC endpoint for the branded recipient-payment page.
 //
 // The recipient has no ChecksOps login — they authenticate with the secure,
