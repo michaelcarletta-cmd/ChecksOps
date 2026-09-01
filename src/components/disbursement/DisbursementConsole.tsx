@@ -229,8 +229,11 @@ export function DisbursementConsole({
   }, [accounts, allocations]);
   const hasUnverifiedAllocations = unverifiedAllocated.length > 0;
 
+  const guardFinancial = useFinancialGuard(tenant?.id);
+
   const submitBatch = useMutation({
     mutationFn: async () => {
+      await guardFinancial("disbursement.send");
       if (!user || !tenant) throw new Error("Not authenticated");
       if (fundsHoldActive) {
         throw new Error(
