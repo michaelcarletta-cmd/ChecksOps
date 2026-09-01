@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
+
 import {
   Select,
   SelectContent,
@@ -561,6 +561,30 @@ export default function RecipientPaymentSetup() {
       </div>
     </main>
   );
+}
+
+/**
+ * The provider's hosted Terms of Service component (Moov Drop). When the
+ * recipient clicks its agree button, the component mints an acceptance token
+ * and hands it back through onTermsOfServiceTokenReady — that token is what
+ * our backend patches onto the account.
+ */
+function MoovTermsDrop({ oauthToken, onToken }: { oauthToken: string; onToken: (t: string) => void }) {
+  const elRef = useRef<HTMLElement | null>(null);
+  const onTokenRef = useRef(onToken);
+  onTokenRef.current = onToken;
+
+  useEffect(() => {
+    const el = elRef.current as any;
+    if (!el) return;
+    el.oauthToken = oauthToken;
+    el.onTermsOfServiceTokenReady = (acceptanceToken: string) => {
+      if (acceptanceToken) onTokenRef.current(acceptanceToken);
+    };
+  }, [oauthToken]);
+
+  // createElement so JSX doesn't warn on the unknown custom element.
+  return createElement("moov-terms-of-service", { ref: elRef });
 }
 
 let moovJsPromise: Promise<void> | null = null;
