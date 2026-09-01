@@ -116,10 +116,9 @@ export default function RecipientPaymentSetup() {
     return () => { cancelled = true; };
   }, [token]);
 
-  // Load the provider's browser SDK. Terms are ALWAYS accepted in the browser
-  // with the same OAuth session that Moov.js was created with — the provider
-  // rejects a ToS token minted in one context and patched from another
-  // ("tos token must be created using an oauth token").
+  // Load the provider's browser SDK for the hosted Terms of Service Drop.
+  // The Drop mints the acceptance token itself (onTermsOfServiceTokenReady);
+  // we forward that token to our backend, which patches it onto the account.
   const tosTokenRef = useRef<string | null>(null);
   useEffect(() => {
     if (!session?.token) return;
@@ -538,12 +537,6 @@ export default function RecipientPaymentSetup() {
                   </a>
                   .
                 </p>
-                {!tosReady && !done && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Loading the payment provider's Terms of Service…
-                  </p>
-                )}
-
                 <Button type="submit" className="w-full" disabled={!canSubmit}>
                   {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   Agree & save bank account
