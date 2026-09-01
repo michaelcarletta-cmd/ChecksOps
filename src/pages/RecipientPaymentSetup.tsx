@@ -44,6 +44,7 @@ interface SessionData {
   };
   account_id: string;
   token: string;
+  tos_token: string;
   environment: string;
 }
 
@@ -199,7 +200,6 @@ export default function RecipientPaymentSetup() {
           postal_code: postalCode.trim(),
           tos_accepted: true,
           tos_token: tosTokenRef.current,
-          browser_oauth_token: session.token,
         },
       });
 
@@ -238,7 +238,7 @@ export default function RecipientPaymentSetup() {
     try {
       // Patch the Drop's acceptance token onto the provider account server-side.
       const { data, error: fnErr } = await supabase.functions.invoke("moov-recipient-tos-accept", {
-        body: { token, tos_token: tosDropToken, browser_oauth_token: session.token },
+        body: { token, tos_token: tosDropToken },
       });
       if (fnErr) {
         let message = "Could not record your acceptance.";
@@ -346,9 +346,9 @@ export default function RecipientPaymentSetup() {
 
                     {/* Hosted terms component — clicking its agree button mints
                         the acceptance token we record with the provider. */}
-                    <div className="rounded-md border border-border/60 bg-muted/30 p-3">
+                    <div>
                       {tosReady && session ? (
-                        <MoovTermsDrop oauthToken={session.token} onToken={handleDropToken} />
+                        <MoovTermsDrop oauthToken={session.tos_token} onToken={handleDropToken} />
                       ) : (
                         <p className="text-[11px] text-muted-foreground">
                           Loading the payment provider's Terms of Service…
@@ -507,9 +507,9 @@ export default function RecipientPaymentSetup() {
 
                 {/* Hosted terms component — the acceptance token it returns is
                     sent with this form and recorded with the provider. */}
-                <div className="rounded-md border border-border/60 bg-muted/30 p-3">
+                <div>
                   {tosReady && session ? (
-                    <MoovTermsDrop oauthToken={session.token} onToken={handleDropToken} />
+                    <MoovTermsDrop oauthToken={session.tos_token} onToken={handleDropToken} />
                   ) : (
                     <p className="text-[11px] text-muted-foreground">
                       Loading the payment provider's Terms of Service…
@@ -517,27 +517,6 @@ export default function RecipientPaymentSetup() {
                   )}
                 </div>
 
-                <p className="text-[11px] leading-relaxed text-muted-foreground rounded-md border border-border/60 bg-muted/30 p-3">
-                  By clicking continue, you agree to the terms of Moov's{" "}
-                  <a
-                    href="https://moov.io/legal/privacy/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary underline underline-offset-2"
-                  >
-                    Privacy Policy
-                  </a>{" "}
-                  and{" "}
-                  <a
-                    href="https://moov.io/legal/platform-agreement/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary underline underline-offset-2"
-                  >
-                    Platform Agreement
-                  </a>
-                  .
-                </p>
                 <Button type="submit" className="w-full" disabled={!canSubmit}>
                   {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   Agree & save bank account
