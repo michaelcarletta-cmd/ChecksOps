@@ -1275,7 +1275,7 @@ export default function CheckCommandCenter() {
             { key: "endorsements", label: "Endorsing",         count: laneCount("endorsing", awaitingEndorsement), icon: Send,           gradient: "from-amber-500/20 to-orange-500/10",  accent: "text-amber-400",   ring: "ring-amber-500/30" },
             { key: "ready",        label: "Ready for Deposit", count: laneCount("ready", readyForDeposit),     icon: CheckCircle2,   gradient: "from-emerald-500/20 to-green-500/10", accent: "text-emerald-400", ring: "ring-emerald-500/30" },
             { key: "deposited",    label: "Deposited",         count: laneCount("deposited", depositedChecks),     icon: Banknote,       gradient: "from-primary/20 to-blue-500/10",      accent: "text-primary",     ring: "ring-primary/30" },
-            ...(returnedCount > 0 ? [{ key: "returned", label: "Returned", count: returnedCount, icon: RotateCcw, gradient: "from-orange-500/20 to-red-500/10", accent: "text-orange-400", ring: "ring-orange-500/30" }] : []),
+            { key: "returned",     label: "Returned",          count: returnedCount, icon: RotateCcw, gradient: "from-orange-500/20 to-red-500/10", accent: "text-orange-400", ring: "ring-orange-500/30" },
             { key: "lossdraft",    label: "Loss Draft",        count: useAggregate ? ((lossDraftCounts as any)?.total_active ?? lossDraftChecks.length) : lossDraftChecks.length, icon: Landmark,       gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400",  ring: "ring-purple-500/30" },
 
             // Bank Deposit card intentionally removed — users are pushed to CheckAlt for RDC.
@@ -2181,7 +2181,7 @@ export default function CheckCommandCenter() {
                                     <Share2 className="h-3.5 w-3.5" />
                                   </Button>
                                 )}
-                                {!isShared && activeTab === "deposited" && !(check as any).returned_at && (
+                                {!isShared && ["deposited", "fundsreleased", "fundsreceived"].includes(activeTab) && !(check as any).returned_at && (
                                   <Button
                                     variant="ghost"
                                     size="icon"
