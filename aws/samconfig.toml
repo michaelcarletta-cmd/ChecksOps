@@ -1,0 +1,11 @@
+version = 0.1
+
+[staging.deploy.parameters]
+stack_name = "checksops-staging"
+resolve_s3 = true
+s3_prefix = "checksops-staging"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "Environment=staging"
+disable_rollback = false
