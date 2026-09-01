@@ -76,9 +76,10 @@ serve(async (req) => {
     } else if (ein.length !== 9) {
       return json({ error: "Enter the business 9-digit EIN." }, 400);
     }
-    if (!tosToken) {
+    if (!tosAccepted && !tosToken) {
       return json({ error: "Please review and accept the payment provider's Terms of Service." }, 400);
     }
+
 
     const environment = moovEnvironment();
     const supabase = createClient(
