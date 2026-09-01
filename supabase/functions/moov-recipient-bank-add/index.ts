@@ -45,6 +45,8 @@ serve(async (req) => {
     const tosToken = typeof body?.tos_token === "string" && body.tos_token.length >= 8
       ? String(body.tos_token)
       : null;
+    const tosAccepted = body?.tos_accepted === true;
+
 
     if (!token) return json({ error: "token is required" }, 400);
     if (holderName.length < 2 || holderName.length > 128) {
