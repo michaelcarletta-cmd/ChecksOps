@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { createElement, useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -154,6 +154,7 @@ export default function RecipientPaymentSetup() {
     accountNumber.length >= 4 &&
     identityValid &&
     tosReady &&
+    Boolean(tosTokenRef.current) &&
     !saving;
 
   async function handleSubmit(e: React.FormEvent) {
