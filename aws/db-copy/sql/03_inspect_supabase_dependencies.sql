@@ -5,27 +5,27 @@
 SELECT n.nspname AS schema, p.proname AS function_name, 'auth.uid' AS dependency
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
-WHERE n.nspname = 'public' AND pg_get_functiondef(p.oid) ILIKE '%auth.uid%'
+WHERE n.nspname = 'public' AND p.prokind = 'f' AND pg_get_functiondef(p.oid) ILIKE '%auth.uid%'
 UNION ALL
 SELECT n.nspname, p.proname, 'net.*'
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
-WHERE n.nspname = 'public' AND pg_get_functiondef(p.oid) ~* 'net\.'
+WHERE n.nspname = 'public' AND p.prokind = 'f' AND pg_get_functiondef(p.oid) ~* 'net\.'
 UNION ALL
 SELECT n.nspname, p.proname, 'cron.*'
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
-WHERE n.nspname = 'public' AND pg_get_functiondef(p.oid) ~* 'cron\.'
+WHERE n.nspname = 'public' AND p.prokind = 'f' AND pg_get_functiondef(p.oid) ~* 'cron\.'
 UNION ALL
 SELECT n.nspname, p.proname, 'vault/decrypted_secrets'
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
-WHERE n.nspname = 'public' AND pg_get_functiondef(p.oid) ~* 'vault\.|decrypted_secrets'
+WHERE n.nspname = 'public' AND p.prokind = 'f' AND pg_get_functiondef(p.oid) ~* 'vault\.|decrypted_secrets'
 UNION ALL
 SELECT n.nspname, p.proname, 'pgmq.*'
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
-WHERE n.nspname = 'public' AND pg_get_functiondef(p.oid) ~* 'pgmq\.'
+WHERE n.nspname = 'public' AND p.prokind = 'f' AND pg_get_functiondef(p.oid) ~* 'pgmq\.'
 ORDER BY 3, 2;
 
 SELECT tgname AS trigger_name, relname AS table_name, pg_get_triggerdef(t.oid) AS definition
