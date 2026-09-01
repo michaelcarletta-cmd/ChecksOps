@@ -6038,6 +6038,42 @@ export type Database = {
           },
         ]
       }
+      financial_stepup_log: {
+        Row: {
+          action_key: string
+          created_at: string
+          factor_type: string
+          id: string
+          metadata: Json
+          succeeded: boolean
+          tenant_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          action_key: string
+          created_at?: string
+          factor_type?: string
+          id?: string
+          metadata?: Json
+          succeeded?: boolean
+          tenant_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          action_key?: string
+          created_at?: string
+          factor_type?: string
+          id?: string
+          metadata?: Json
+          succeeded?: boolean
+          tenant_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       glba_security_events: {
         Row: {
           actor_user_id: string | null
@@ -9842,9 +9878,13 @@ export type Database = {
           license_number: string | null
           license_state: string | null
           logo_url: string | null
+          passkey_enrolled_at: string | null
+          password_login_disabled: boolean
           phone: string | null
+          preferred_auth_method: string
           stripe_account_id: string | null
           title: string | null
+          totp_enrolled_at: string | null
           updated_at: string | null
         }
         Insert: {
@@ -9863,9 +9903,13 @@ export type Database = {
           license_number?: string | null
           license_state?: string | null
           logo_url?: string | null
+          passkey_enrolled_at?: string | null
+          password_login_disabled?: boolean
           phone?: string | null
+          preferred_auth_method?: string
           stripe_account_id?: string | null
           title?: string | null
+          totp_enrolled_at?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -9884,9 +9928,13 @@ export type Database = {
           license_number?: string | null
           license_state?: string | null
           logo_url?: string | null
+          passkey_enrolled_at?: string | null
+          password_login_disabled?: boolean
           phone?: string | null
+          preferred_auth_method?: string
           stripe_account_id?: string | null
           title?: string | null
+          totp_enrolled_at?: string | null
           updated_at?: string | null
         }
         Relationships: []
@@ -12405,6 +12453,48 @@ export type Database = {
           },
         ]
       }
+      user_passkeys: {
+        Row: {
+          backed_up: boolean
+          counter: number
+          created_at: string
+          credential_id: string
+          device_name: string
+          id: string
+          last_used_at: string | null
+          public_key: string
+          transports: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          backed_up?: boolean
+          counter?: number
+          created_at?: string
+          credential_id: string
+          device_name?: string
+          id?: string
+          last_used_at?: string | null
+          public_key: string
+          transports?: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          backed_up?: boolean
+          counter?: number
+          created_at?: string
+          credential_id?: string
+          device_name?: string
+          id?: string
+          last_used_at?: string | null
+          public_key?: string
+          transports?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -12673,6 +12763,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      webauthn_challenges: {
+        Row: {
+          challenge: string
+          consumed_at: string | null
+          created_at: string
+          email: string | null
+          expires_at: string
+          id: string
+          purpose: string
+          user_id: string | null
+        }
+        Insert: {
+          challenge: string
+          consumed_at?: string | null
+          created_at?: string
+          email?: string | null
+          expires_at?: string
+          id?: string
+          purpose: string
+          user_id?: string | null
+        }
+        Update: {
+          challenge?: string
+          consumed_at?: string | null
+          created_at?: string
+          email?: string | null
+          expires_at?: string
+          id?: string
+          purpose?: string
+          user_id?: string | null
+        }
+        Relationships: []
       }
       zip_geocache: {
         Row: {
