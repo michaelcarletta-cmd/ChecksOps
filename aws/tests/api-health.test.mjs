@@ -97,3 +97,51 @@ test('refuses the checksops_admin secret ARN', async () => {
     /checksops_admin/,
   );
 });
+
+test('GET /db-health reports a successful read-only probe without leaking secrets', async () => {
+  process.env.CHECKSOPS_ENV = 'staging';
+  process.env.DATABASE_SECRET_ARN = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops/example';
+  const { probeDatabase } = await import('../functions/api/db-health.mjs');
+  const probe = await probeDatabase({
+    loadCredentials: async () => ({
+      username: 'checksops',
+      password: 'unit-test-only-not-a-real-secret',
+      host: 'db.example.internal',
+      port: 5432,
+      database: 'checksops',
+    }),
+    createClient: () => ({
+      connect: async () => {},
+      query: async (sql) => {
+        if (sql === 'SELECT 1 AS ok') return { rows: [{ ok: 1 }] };
+        if (sql === 'SHOW server_version') return { rows: [{ server_version: '18.3' }] };
+        throw new Error(`unexpected query: ${sql}`);
+      },
+      end: async () => {},
+    }),
+  });
+  assert.equal(probe.secretsManager, 'ok');
+  assert.equal(probe.networkTls, 'ok');
+  assert.equal(probe.authentication, 'ok');
+  assert.equal(probe.select1, 'ok');
+  assert.equal(probe.postgresqlVersion, '18.3');
+  assert.equal(JSON.stringify(probe).includes('unit-test-only-not-a-real-secret'), false);
+});
+
+test('TLS client config verifies certificates', async () => {
+  const { tlsConfig, buildClientConfig } = await import('../functions/api/db-health.mjs');
+  const ssl = tlsConfig();
+  assert.equal(ssl.rejectUnauthorized, true);
+  assert.equal(typeof ssl.ca, 'string');
+  assert.match(ssl.ca, /BEGIN CERTIFICATE/);
+  const config = buildClientConfig({
+    username: 'checksops',
+    password: 'unit-test-only-not-a-real-secret',
+    host: 'db.example.internal',
+    port: 5432,
+    database: 'checksops',
+  });
+  assert.equal(config.ssl.rejectUnauthorized, true);
+  assert.equal(config.user, 'checksops');
+});
+
