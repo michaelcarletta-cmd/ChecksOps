@@ -28,6 +28,8 @@ const CheckOpsLanding = lazy(() => import("./pages/checkops/CheckOpsLanding"));
 const CheckOpsPricing = lazy(() => import("./pages/checkops/CheckOpsPricing"));
 const CheckOpsSecurity = lazy(() => import("./pages/checkops/CheckOpsSecurity"));
 const CheckOpsLogin = lazy(() => import("./pages/checkops/CheckOpsLogin"));
+const CheckOpsSignup = lazy(() => import("./pages/checkops/CheckOpsSignup"));
+const AccountSecurity = lazy(() => import("./pages/AccountSecurity"));
 const CheckOpsForgotPassword = lazy(() => import("./pages/checkops/CheckOpsForgotPassword"));
 const CheckOpsResetPassword = lazy(() => import("./pages/checkops/CheckOpsResetPassword"));
 const NotFound = lazy(() => import("./pages/NotFound"));
