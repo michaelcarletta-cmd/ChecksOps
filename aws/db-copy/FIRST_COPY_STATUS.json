@@ -1,0 +1,33 @@
+{
+  "attempt": "first-copy",
+  "apply": false,
+  "executed": false,
+  "stopped": true,
+  "reason": "live_source_cannot_be_exported_with_current_access",
+  "liveProjectRef": "nbcqwpysqgyxrrbgtmkw",
+  "didNotUseProjectRef": "sqyyvpaymashtdwjjmku",
+  "wroteToLiveSource": false,
+  "createdChecksopsDatabase": false,
+  "modifiedPostgresDatabase": false,
+  "pointedLambdaAtChecksops": false,
+  "source": {
+    "committedInventory": "aws/db-copy/LIVE_SOURCE_INVENTORY.md",
+    "supabaseDbUriInThisEnvironment": false,
+    "supabaseManagementTokenForLiveProject": false,
+    "publishableKeyCanDump": false,
+    "poolerTcp5432FromThisVm": "open",
+    "directDbHostResolves": false
+  },
+  "target": {
+    "rdsIdentifier": "checksops-staging",
+    "tcp5432FromThisVm": "timeout",
+    "lambdaInVpc": true,
+    "adminSecretRetrievable": true,
+    "dbHealthStillPostgres": true
+  },
+  "operatorActionRequired": [
+    "Provide a read-only Postgres URI for nbcqwpysqgyxrrbgtmkw as Cursor Cloud secret CHECKSOPS_LIVE_SUPABASE_DB_URL (do not paste into chat), then re-run.",
+    "Alternatively, produce public-schema.dump and public-data.dump per FIRST_COPY_PROCEDURE.md and place them in an S3 prefix this role can read.",
+    "Authorize restore from a VPC path: either a bastion/SSM host, or a temporary VPC Lambda using checksops_admin that is deleted after restore. Do not change Lambda DATABASE_SECRET_ARN."
+  ]
+}
