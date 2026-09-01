@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { moovFetch, moovConfigured, moovEnvironment, safeLastFour, scopes } from "../_shared/moovClient.ts";
+import { moovFetch, moovConfigured, moovEnvironment, moovHost, safeLastFour, scopes } from "../_shared/moovClient.ts";
 import { corsHeaders, json, sanitize } from "../_shared/moovGuard.ts";
 
 /**
@@ -45,6 +45,9 @@ serve(async (req) => {
     const tosToken = typeof body?.tos_token === "string" && body.tos_token.length >= 8
       ? String(body.tos_token)
       : null;
+    const browserOauthToken = typeof body?.browser_oauth_token === "string" && body.browser_oauth_token.length >= 20
+      ? String(body.browser_oauth_token)
+      : null;
     const tosAccepted = body?.tos_accepted === true;
 
 
@@ -76,7 +79,7 @@ serve(async (req) => {
     } else if (ein.length !== 9) {
       return json({ error: "Enter the business 9-digit EIN." }, 400);
     }
-    if (!tosAccepted && !tosToken) {
+    if (!tosAccepted || !tosToken || !browserOauthToken) {
       return json({ error: "Please review and accept the payment provider's Terms of Service." }, 400);
     }
 
@@ -103,10 +106,10 @@ serve(async (req) => {
     const accountId = recipient.provider_account_id as string | null;
     if (!accountId) return json({ error: "This payment setup is not ready yet." }, 409);
 
-    // 1. Terms of Service. The browser records acceptance directly with the
-    //    provider using the same OAuth session it was issued (the provider
-    //    rejects a token minted in the browser but patched from the server:
-    //    "tos token must be created using an oauth token"). We only verify.
+    // 1. Terms of Service. Moov requires the acceptance token to be applied
+    //    with the exact OAuth session that created it. The hosted Drop used the
+    //    short-lived, account-scoped browser token returned by recipient-session,
+    //    so applying it with our separate server credential is rejected.
     async function termsOutstanding(): Promise<boolean | null> {
       try {
         const caps = await moovFetch<any>(`/accounts/${accountId}/capabilities`, {
@@ -121,17 +124,21 @@ serve(async (req) => {
       }
     }
 
-    if (!tosAccepted && tosToken) {
-      // Legacy clients still send a ToS token — best effort only.
-      try {
-        await moovFetch<any>(`/accounts/${accountId}`, {
-          method: "PATCH",
-          scopes: scopes.accountWrite(accountId),
-          body: { termsOfService: { token: tosToken } },
-        });
-      } catch (e) {
-        console.error("[moov-recipient-bank-add] tos patch", (e as Error).message);
-      }
+    const tosResponse = await fetch(`${moovHost()}/accounts/${accountId}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${browserOauthToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Origin: req.headers.get("origin") ?? "https://checksops.com",
+        "x-moov-version": Deno.env.get("MOOV_API_VERSION") ?? "v2024.01.00",
+      },
+      body: JSON.stringify({ termsOfService: { token: tosToken } }),
+    });
+    if (!tosResponse.ok) {
+      const providerBody = await tosResponse.text();
+      console.error("[moov-recipient-bank-add] tos patch", tosResponse.status, providerBody);
+      return json({ error: "The payment provider could not record your acceptance. Please try again." }, 502);
     }
 
     let outstanding = await termsOutstanding();
