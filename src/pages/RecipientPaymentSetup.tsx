@@ -139,6 +139,15 @@ export default function RecipientPaymentSetup() {
   // on file — they only need to accept terms to be payable again.
   const showTermsOnly = Boolean(session?.recipient.bank_linked) && !replaceBank;
 
+  // Terms-only flow: as soon as the Drop hands us an acceptance token,
+  // record it with the provider without another click.
+  useEffect(() => {
+    if (showTermsOnly && tosDropToken && !termsDone && !saving) {
+      void handleAcceptTermsOnly();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showTermsOnly, tosDropToken, termsDone]);
+
   const digitsOnly = (value: string, max: number) => value.replace(/\D/g, "").slice(0, max);
 
 
@@ -496,9 +505,17 @@ export default function RecipientPaymentSetup() {
                   />
                 </div>
 
-                {/* Terms are recorded with the provider in the browser when
-                    this form is submitted; we show our own themed agreement
-                    text with the same links. */}
+                {/* Hosted terms component — the acceptance token it returns is
+                    sent with this form and recorded with the provider. */}
+                <div className="rounded-md border border-border/60 bg-muted/30 p-3">
+                  {tosReady && session ? (
+                    <MoovTermsDrop oauthToken={session.token} onToken={handleDropToken} />
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground">
+                      Loading the payment provider's Terms of Service…
+                    </p>
+                  )}
+                </div>
 
                 <p className="text-[11px] leading-relaxed text-muted-foreground rounded-md border border-border/60 bg-muted/30 p-3">
                   By clicking continue, you agree to the terms of Moov's{" "}
