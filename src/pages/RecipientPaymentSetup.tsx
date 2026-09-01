@@ -199,6 +199,7 @@ export default function RecipientPaymentSetup() {
           postal_code: postalCode.trim(),
           tos_accepted: true,
           tos_token: tosTokenRef.current,
+          browser_oauth_token: session.token,
         },
       });
 
@@ -237,7 +238,7 @@ export default function RecipientPaymentSetup() {
     try {
       // Patch the Drop's acceptance token onto the provider account server-side.
       const { data, error: fnErr } = await supabase.functions.invoke("moov-recipient-tos-accept", {
-        body: { token, tos_token: tosDropToken },
+        body: { token, tos_token: tosDropToken, browser_oauth_token: session.token },
       });
       if (fnErr) {
         let message = "Could not record your acceptance.";
@@ -570,7 +571,7 @@ function MoovTermsDrop({ oauthToken, onToken }: { oauthToken: string; onToken: (
   useEffect(() => {
     const el = elRef.current as any;
     if (!el) return;
-    el.oauthToken = oauthToken;
+    el.token = oauthToken;
     el.onTermsOfServiceTokenReady = (acceptanceToken: string) => {
       if (acceptanceToken) onTokenRef.current(acceptanceToken);
     };
