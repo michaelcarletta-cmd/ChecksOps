@@ -1,13 +1,15 @@
 {
-  "attempt": "first-copy-from-s3",
-  "apply": false,
-  "executed": false,
-  "stopped": true,
-  "reason": "missing_iam",
+  "attempt": "first-copy-from-s3-oneshot-lambda",
+  "apply": true,
+  "executed": true,
+  "stopped": false,
+  "ok": true,
   "wroteToLiveSource": false,
-  "createdChecksopsDatabase": false,
+  "createdChecksopsDatabase": true,
   "modifiedPostgresDatabase": false,
   "pointedLambdaAtChecksops": false,
+  "productionSupabaseChanged": false,
+  "rlsActivation": "not_enabled",
   "backup": {
     "requestedKey": "migration/checksops_260901.backup",
     "actualKey": "Migration/checksops_260901(1).backup",
@@ -15,15 +17,476 @@
     "bytes": 49100401,
     "megabytes": 49.1,
     "format": "PGDMP custom",
-    "downloadedIntoGit": false,
-    "lambdaGetObject": "ok"
+    "downloadedIntoGit": false
   },
-  "missingIam": {
-    "principal": "arn:aws:iam::806168576068:role/checksops-staging-ApiFunctionRole-7E7XRyLe3nyi",
-    "action": "secretsmanager:GetSecretValue",
-    "resource": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops_admin/1788286368527-Kv5tBt",
-    "awsCode": "AccessDeniedException"
+  "catalog": {
+    "tables": "166",
+    "views": "22",
+    "functions": "965",
+    "triggers": "164",
+    "rls_policies": "0",
+    "rls_enabled_tables": "0"
   },
-  "lambdaRestoredToOriginal": true,
-  "dbHealthStillPostgres": true
+  "liveInventoryExpected": {
+    "tables": 166,
+    "views": 20,
+    "functions": 960,
+    "triggers": 211,
+    "rlsPolicies": 380
+  },
+  "reconciliation": {
+    "tablesQueried": 166,
+    "expectedTables": 166,
+    "tablesMatchExpected": true
+  },
+  "tableCounts": {
+    "ach_authorizations": 10,
+    "actum_transactions": 6,
+    "ai_response_cache": 0,
+    "audit_logs": 344,
+    "cash_job_attachments": 0,
+    "cash_job_line_items": 0,
+    "cash_job_payments": 0,
+    "cash_jobs": 1,
+    "checkalt_config": 1,
+    "checkalt_deposits": 58,
+    "checkalt_tenant_accounts": 1,
+    "checkalt_webhook_events": 2,
+    "check_audit_log": 1924,
+    "check_billing_config": 1,
+    "check_billing_events": 115,
+    "check_cases": 139,
+    "check_deletion_log": 16,
+    "check_deposit_image_backfill_queue": 102,
+    "check_eligibility_results": 113,
+    "check_endorsement_events": 227,
+    "check_endorsements": 502,
+    "check_files": 11,
+    "check_intake_items": 182,
+    "check_intake_mortgage_draws": 0,
+    "check_message_reads": 19,
+    "check_messages": 7,
+    "check_payees": 493,
+    "check_payment_directions": 62,
+    "check_reconciliation_alerts": 98,
+    "check_reissue_requests": 1,
+    "check_review_decisions": 166,
+    "check_stakeholders": 1,
+    "check_status_audit": 0,
+    "claim_check_mortgage_draws": 0,
+    "claim_check_payments": 0,
+    "claim_checks": 75,
+    "claim_disbursements": 0,
+    "claim_files": 3,
+    "claim_folders": 1260,
+    "claim_operational_state": 180,
+    "claim_payments": 13,
+    "claim_project_plans": 0,
+    "claims": 180,
+    "claim_settlements": 61,
+    "company_branding": 0,
+    "contractor_profiles": 2,
+    "contractor_reviews": 0,
+    "deposit_attachments": 0,
+    "deposit_audit_log": 318,
+    "deposit_automation_runs": 0,
+    "deposit_automation_settings": 3,
+    "deposit_batches": 115,
+    "deposit_daily_digest": 0,
+    "deposit_digest_delivery_log": 0,
+    "deposit_escalation_events": 0,
+    "deposit_escalation_rules": 0,
+    "deposit_exceptions": 0,
+    "deposit_items": 114,
+    "deposit_manager_snapshots": 0,
+    "deposit_notification_prefs": 0,
+    "deposit_pending_approvals": 0,
+    "deposit_provider_attempts": 0,
+    "deposit_provider_config": 5,
+    "deposit_webhook_events": 0,
+    "disbursement_batches": 109,
+    "disbursement_splits": 108,
+    "document_templates": 0,
+    "emails": 0,
+    "email_send_log": 112,
+    "email_send_state": 1,
+    "email_templates": 0,
+    "email_unsubscribe_tokens": 9,
+    "endorsement_audit_log": 1331,
+    "endorsement_automated_reminders": 0,
+    "endorsement_requests": 389,
+    "esign_event_logs": 72,
+    "external_payment_recipients": 3,
+    "glba_security_events": 80,
+    "homeowner_bank_link_tokens": 4,
+    "homeowner_check_uploads": 0,
+    "homeowner_deductible_payments": 0,
+    "homeowner_directory_leads": 45,
+    "homeowner_intro_requests": 3,
+    "homeowner_ledger_check_uploads": 4,
+    "homeowner_ledger_events": 657,
+    "homeowner_ledger_tokens": 6,
+    "loss_draft_audit_log": 96,
+    "loss_draft_documents": 217,
+    "loss_draft_mortgage_intake": 0,
+    "loss_draft_releases": 0,
+    "loss_draft_tracking": 34,
+    "micro_deposit_verifications": 1,
+    "moov_invoice_customers": 0,
+    "moov_invoices": 0,
+    "mortgage_companies": 2,
+    "mortgage_desk_config": 1,
+    "mortgage_handling_requests": 2,
+    "mortgage_releases": 0,
+    "mortgage_request_library_documents": 0,
+    "notification_delivery_logs": 0,
+    "notification_preferences": 0,
+    "notifications": 0,
+    "payment_event_log": 243,
+    "payment_idempotency_keys": 4,
+    "payment_methods": 0,
+    "payment_method_verifications": 0,
+    "payment_provider_accounts": 3,
+    "payment_provider_files": 6,
+    "payment_provider_methods": 2,
+    "payment_sweep_configs": 0,
+    "payment_transfer_groups": 0,
+    "payment_transfers": 0,
+    "payment_wallet_ledger": 0,
+    "payment_wallets": 1,
+    "payment_wallet_sub_ledgers": 0,
+    "payment_webhook_events": 227,
+    "payroll_runs": 0,
+    "pii_reveal_logs": 0,
+    "plaid_transfer_events": 1,
+    "plaid_webhook_cursors": 1,
+    "platform_announcements": 0,
+    "platform_fee_line_items": 1,
+    "platform_fee_occurrences": 0,
+    "platform_fee_schedules": 0,
+    "privacy_notice_acknowledgments": 0,
+    "profiles": 8,
+    "recipient_tax_profiles": 0,
+    "referral_alerts": 0,
+    "referral_events": 2,
+    "referrers": 0,
+    "role_version_tracker": 9,
+    "shared_check_messages": 12,
+    "shared_checks": 102,
+    "signature_document_presets": 0,
+    "signature_fields": 2,
+    "signature_field_templates": 0,
+    "signature_field_values": 2,
+    "signature_requests": 6,
+    "signature_signers": 6,
+    "sms_messages": 0,
+    "spatial_ref_sys": 8500,
+    "stakeholder_accounts": 67,
+    "stakeholder_account_verification_log": 20,
+    "stakeholder_limit_requests": 0,
+    "storage_backup_log": 0,
+    "suppressed_emails": 0,
+    "tenant_bank_accounts": 1,
+    "tenant_billing_accounts": 0,
+    "tenant_credit_balances": 6,
+    "tenant_credit_transactions": 0,
+    "tenant_documents": 1,
+    "tenant_email_settings": 1,
+    "tenant_maintenance_payments": 1,
+    "tenant_openai_credentials": 1,
+    "tenant_partner_code_aliases": 1,
+    "tenant_partnerships": 3,
+    "tenants": 6,
+    "tenant_usage_logs": 21,
+    "tenant_users": 7,
+    "tenant_vetting_documents": 3,
+    "tenant_wallet_funding_settings": 1,
+    "user_roles": 10,
+    "user_sessions": 0,
+    "wallet_funding_queue": 0,
+    "wallet_funding_requests": 0,
+    "zip_geocache": 2
+  },
+  "tablesNonzero": 100,
+  "tablesZero": 66,
+  "financial": {
+    "checkalt_deposits_amount": "380333.17",
+    "check_intake_amount": "1317000.53",
+    "check_intake_pa_fee_amount": "5393.27",
+    "claim_check_payments_check_amount": "0",
+    "claim_check_payments_payment_amount": "0",
+    "claim_payments_amount": "66003.92",
+    "deposit_batches_total_amount": "964752.98",
+    "deposit_items_amount": "963972.98",
+    "disbursement_batches_amount_reserved_cents": "0",
+    "disbursement_batches_check_amount": "829768.914",
+    "disbursement_splits_amount": "822212.97",
+    "endorsed_check_intake_amount": "3924356.85",
+    "homeowner_ledger_amount": "2977337.23",
+    "payment_transfers_amount_cents": "0",
+    "payment_wallet_ledger_amount_cents": "0"
+  },
+  "extensionsEnabled": [
+    {
+      "extname": "pg_stat_statements",
+      "extversion": "1.12"
+    },
+    {
+      "extname": "pgcrypto",
+      "extversion": "1.4"
+    },
+    {
+      "extname": "plpgsql",
+      "extversion": "1.0"
+    },
+    {
+      "extname": "postgis",
+      "extversion": "3.6.3"
+    },
+    {
+      "extname": "uuid-ossp",
+      "extversion": "1.1"
+    },
+    {
+      "extname": "vector",
+      "extversion": "0.8.1"
+    }
+  ],
+  "grants": "CONNECT+SELECT to checksops on database checksops",
+  "excluded": {
+    "authUsersLoaded": false,
+    "storageCopied": false,
+    "rlsPoliciesRestored": 0,
+    "realtimeEnabled": false,
+    "droppedForeignKeysToAuthUsers": [
+      {
+        "table": "public.ach_authorizations",
+        "constraint": "ach_authorizations_authorized_by_fkey"
+      },
+      {
+        "table": "public.ach_authorizations",
+        "constraint": "ach_authorizations_revoked_by_fkey"
+      },
+      {
+        "table": "public.audit_logs",
+        "constraint": "audit_logs_user_id_fkey"
+      },
+      {
+        "table": "public.cash_job_attachments",
+        "constraint": "cash_job_attachments_uploaded_by_fkey"
+      },
+      {
+        "table": "public.cash_job_payments",
+        "constraint": "cash_job_payments_created_by_fkey"
+      },
+      {
+        "table": "public.cash_jobs",
+        "constraint": "cash_jobs_created_by_fkey"
+      },
+      {
+        "table": "public.check_audit_log",
+        "constraint": "check_audit_log_actor_id_fkey"
+      },
+      {
+        "table": "public.check_eligibility_results",
+        "constraint": "check_eligibility_results_evaluated_by_fkey"
+      },
+      {
+        "table": "public.check_endorsement_events",
+        "constraint": "check_endorsement_events_actor_id_fkey"
+      },
+      {
+        "table": "public.check_files",
+        "constraint": "check_files_uploaded_by_fkey"
+      },
+      {
+        "table": "public.check_intake_items",
+        "constraint": "check_intake_items_uploaded_by_fkey"
+      },
+      {
+        "table": "public.check_stakeholders",
+        "constraint": "check_stakeholders_added_by_fkey"
+      },
+      {
+        "table": "public.claim_check_payments",
+        "constraint": "claim_check_payments_sender_user_id_fkey"
+      },
+      {
+        "table": "public.claim_checks",
+        "constraint": "claim_checks_created_by_fkey"
+      },
+      {
+        "table": "public.claim_files",
+        "constraint": "claim_files_uploaded_by_fkey"
+      },
+      {
+        "table": "public.claim_folders",
+        "constraint": "claim_folders_created_by_fkey"
+      },
+      {
+        "table": "public.claim_payments",
+        "constraint": "claim_payments_created_by_fkey"
+      },
+      {
+        "table": "public.claim_settlements",
+        "constraint": "claim_settlements_created_by_fkey"
+      },
+      {
+        "table": "public.contractor_profiles",
+        "constraint": "contractor_profiles_user_id_fkey"
+      },
+      {
+        "table": "public.contractor_reviews",
+        "constraint": "contractor_reviews_author_user_id_fkey"
+      },
+      {
+        "table": "public.deposit_batches",
+        "constraint": "deposit_batches_created_by_fkey"
+      },
+      {
+        "table": "public.disbursement_batches",
+        "constraint": "disbursement_batches_created_by_fkey"
+      },
+      {
+        "table": "public.document_templates",
+        "constraint": "document_templates_created_by_fkey"
+      },
+      {
+        "table": "public.email_templates",
+        "constraint": "email_templates_created_by_fkey"
+      },
+      {
+        "table": "public.emails",
+        "constraint": "emails_sent_by_fkey"
+      },
+      {
+        "table": "public.homeowner_bank_link_tokens",
+        "constraint": "homeowner_bank_link_tokens_sent_by_user_id_fkey"
+      },
+      {
+        "table": "public.micro_deposit_verifications",
+        "constraint": "micro_deposit_verifications_initiated_by_fkey"
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "constraint": "mortgage_handling_requests_assigned_employee_id_fkey"
+      },
+      {
+        "table": "public.mortgage_handling_requests",
+        "constraint": "mortgage_handling_requests_requested_by_fkey"
+      },
+      {
+        "table": "public.notification_preferences",
+        "constraint": "notification_preferences_user_id_fkey"
+      },
+      {
+        "table": "public.payroll_runs",
+        "constraint": "payroll_runs_initiated_by_fkey"
+      },
+      {
+        "table": "public.pii_reveal_logs",
+        "constraint": "pii_reveal_logs_user_id_fkey"
+      },
+      {
+        "table": "public.platform_announcements",
+        "constraint": "platform_announcements_created_by_fkey"
+      },
+      {
+        "table": "public.profiles",
+        "constraint": "profiles_id_fkey"
+      },
+      {
+        "table": "public.referral_events",
+        "constraint": "referral_events_referred_user_id_fkey"
+      },
+      {
+        "table": "public.signature_document_presets",
+        "constraint": "signature_document_presets_created_by_fkey"
+      },
+      {
+        "table": "public.signature_requests",
+        "constraint": "signature_requests_created_by_fkey"
+      },
+      {
+        "table": "public.sms_messages",
+        "constraint": "sms_messages_user_id_fkey"
+      },
+      {
+        "table": "public.stakeholder_account_verification_log",
+        "constraint": "stakeholder_account_verification_log_actor_user_id_fkey"
+      },
+      {
+        "table": "public.stakeholder_accounts",
+        "constraint": "stakeholder_accounts_created_by_fkey"
+      },
+      {
+        "table": "public.stakeholder_limit_requests",
+        "constraint": "stakeholder_limit_requests_requested_by_fkey"
+      },
+      {
+        "table": "public.stakeholder_limit_requests",
+        "constraint": "stakeholder_limit_requests_reviewed_by_fkey"
+      },
+      {
+        "table": "public.tenant_billing_accounts",
+        "constraint": "tenant_billing_accounts_ach_authorized_by_fkey"
+      },
+      {
+        "table": "public.tenant_maintenance_payments",
+        "constraint": "tenant_maintenance_payments_recorded_by_fkey"
+      },
+      {
+        "table": "public.tenant_openai_credentials",
+        "constraint": "tenant_openai_credentials_created_by_fkey"
+      },
+      {
+        "table": "public.tenant_users",
+        "constraint": "tenant_users_user_id_fkey"
+      },
+      {
+        "table": "public.user_roles",
+        "constraint": "user_roles_user_id_fkey"
+      }
+    ],
+    "droppedForeignKeyCount": 47,
+    "tocSkippedApprox": 2542,
+    "tocKept": 1540,
+    "supabaseFunctionDependencies": {
+      "auth.uid": 40,
+      "net": 4,
+      "pgmq": 4,
+      "vault": 3
+    },
+    "disabledOperationalTriggers": []
+  },
+  "cleanup": {
+    "restoreLambdaDeleted": true,
+    "restoreLambdaName": "checksops-staging-restore-oneshot",
+    "restoreRoleDeleted": false,
+    "restoreRoleName": "checksops-staging-restore-oneshot",
+    "restoreRoleArn": "arn:aws:iam::806168576068:role/checksops-staging-restore-oneshot",
+    "blockedOn": {
+      "action": "iam:ListRolePolicies",
+      "resource": "arn:aws:iam::806168576068:role/checksops-staging-restore-oneshot",
+      "reason": "DeleteRole failed with DeleteConflict: must delete inline policies first. Policy name is unknown; ListRolePolicies is denied. GetRolePolicy brute-force of common names found none.",
+      "nextActionsAfterList": [
+        {
+          "action": "iam:DeleteRolePolicy",
+          "resource": "arn:aws:iam::806168576068:role/checksops-staging-restore-oneshot"
+        },
+        {
+          "action": "iam:DeleteRole",
+          "resource": "arn:aws:iam::806168576068:role/checksops-staging-restore-oneshot"
+        }
+      ]
+    },
+    "apiStillOnPostgres": true,
+    "apiDatabaseSecretArn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops/1788286468693-b4U0Rn",
+    "apiRoleAdminSecretGetDeniedPreviously": true,
+    "simulatePrincipalPolicyDeniedToOperator": true
+  },
+  "readyForNextPhase": {
+    "isolatedChecksopsDatabase": true,
+    "apiCutover": false
+  }
 }
