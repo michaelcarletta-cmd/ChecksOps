@@ -166,18 +166,10 @@ export default function RecipientPaymentSetup() {
     setSaving(true);
     setError(null);
     try {
-      // Record the platform agreement in the browser, with the same OAuth
-      // session Moov.js was created with. Server-side patching of a separately
-      // minted token is rejected by the provider.
-      const createMoovClient = (window as any).Moov;
-      if (typeof createMoovClient !== "function" || !session?.account_id) {
-        throw new Error("The secure terms service did not load. Please refresh and try again.");
-      }
-      const moov = createMoovClient(session.token);
-      const acceptance = await moov.accounts.acceptTermsOfService({ accountID: session.account_id });
-      if (typeof acceptance === "string" && acceptance) throw new Error(acceptance);
-      if (acceptance?.error) {
-        throw new Error(typeof acceptance.error === "string" ? acceptance.error : "Could not record your acceptance.");
+      // Terms acceptance comes from the hosted ToS Drop's acceptance token,
+      // captured before submit. The provider patches it server-side.
+      if (!tosDropToken) {
+        throw new Error("Please accept the payment provider's terms first.");
       }
 
       const { data, error: fnErr } = await supabase.functions.invoke("moov-recipient-bank-add", {
