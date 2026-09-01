@@ -2490,7 +2490,7 @@ function SummaryCard({
 function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
   const { toast } = useToast();
   const { tenantId } = useTenantFilter();
-  const guardFinancial = useFinancialGuard(tenantId);
+  
   const [frontFile, setFrontFile] = useState<File | null>(null);
   const [backFile, setBackFile] = useState<File | null>(null);
   const [pendingCrop, setPendingCrop] = useState<{ file: File; side: "front" | "back" } | null>(null);
