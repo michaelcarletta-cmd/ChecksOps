@@ -9,7 +9,7 @@ Production remains on the existing Supabase backend until AWS passes parity and 
 
 - Frontend: existing Vite/React app
 - API: Amazon API Gateway + AWS Lambda
-- Database: Amazon RDS for PostgreSQL 17
+- Database: Amazon RDS for PostgreSQL 18.3 (existing `checksops-staging` instance; do not create another)
 - Authentication: Amazon Cognito
 - Object storage: Amazon S3
 - Secrets: AWS Secrets Manager
@@ -86,12 +86,17 @@ No production DNS changes occur in this phase.
 
 ### Phase 2 - Database parity
 
-- export schema and data from the live ChecksOps Supabase database
-- restore to RDS
+Preparation tooling and the exact copy sequence live in `docs/AWS_DB_COPY_RUNBOOK.md` and `aws/db-copy/`. That phase is still **preparation only** until a copy is explicitly approved.
+
+When a copy is approved:
+
+- export schema and public data from the live ChecksOps Supabase database
+- restore to the existing `checksops-staging` RDS PostgreSQL 18.3 instance
 - recreate required PostgreSQL extensions supported by RDS
 - replace Supabase-specific auth/RLS dependencies where required
 - compare row counts and key financial aggregates
 - verify tenant/check/payment relationships
+- leave Auth→Cognito, Storage→S3, RLS apply, and Edge Function/webhook cutover for later phases
 
 High-risk tables requiring explicit reconciliation include:
 

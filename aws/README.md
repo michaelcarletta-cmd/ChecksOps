@@ -54,14 +54,18 @@ Do not point the production frontend at this API yet.
 
 ## Next migration step
 
-After AWS staging services are deployed:
+Staging PostgreSQL connectivity is confirmed. Database copy tooling is in `aws/db-copy/` with the runbook in `docs/AWS_DB_COPY_RUNBOOK.md`.
 
-1. verify RDS VPC/subnets/security group
-2. create a database credential secret in Secrets Manager
-3. allow only the Lambda security group to reach RDS on TCP 5432
-4. attach Lambda to the RDS VPC/subnets
-5. restore a copy of the live ChecksOps PostgreSQL database to RDS
-6. add read-only `/v1/tenants` and `/v1/checks` API routes
-7. reconcile AWS results against Supabase
+Do not export or restore yet. Validate offline:
+
+```bash
+node aws/db-copy/cli.mjs validate
+node --test aws/db-copy/tests/db-copy-offline.test.mjs
+```
+
+After an approved copy and reconciliation:
+
+1. add read-only `/v1/tenants` and `/v1/checks` API routes
+2. reconcile AWS results against Supabase
 
 Only after read parity is proven do we begin moving writes or provider webhooks.
