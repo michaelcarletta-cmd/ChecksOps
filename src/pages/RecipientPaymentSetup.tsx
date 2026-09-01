@@ -70,6 +70,9 @@ export default function RecipientPaymentSetup() {
   const [postalCode, setPostalCode] = useState("");
   const [tosReady, setTosReady] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  // Acceptance token minted by the hosted ToS Drop (onTermsOfServiceTokenReady).
+  // State (not just the ref) so the submit buttons re-render when it arrives.
+  const [tosDropToken, setTosDropToken] = useState<string | null>(null);
   const [termsDone, setTermsDone] = useState(false);
   const [replaceBank, setReplaceBank] = useState(false);
   
@@ -154,7 +157,7 @@ export default function RecipientPaymentSetup() {
     accountNumber.length >= 4 &&
     identityValid &&
     tosReady &&
-    Boolean(tosTokenRef.current) &&
+    Boolean(tosDropToken) &&
     !saving;
 
   async function handleSubmit(e: React.FormEvent) {
