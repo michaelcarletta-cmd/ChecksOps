@@ -335,32 +335,23 @@ export default function RecipientPaymentSetup() {
                       </p>
                     </div>
 
-                    <div className="flex items-start gap-3 rounded-md border border-border/60 bg-muted/30 p-3">
-                      <Checkbox
-                        id="accept-existing-recipient-terms"
-                        checked={termsAccepted}
-                        onCheckedChange={(checked) => setTermsAccepted(checked === true)}
-                        className="mt-0.5"
-                      />
-                      <Label htmlFor="accept-existing-recipient-terms" className="text-xs font-normal leading-relaxed cursor-pointer">
-                        I agree to Moov's{" "}
-                        <a href="https://moov.io/legal/privacy/" target="_blank" rel="noopener noreferrer"
-                          className="text-primary underline underline-offset-2">Privacy Policy</a>{" "}
-                        and{" "}
-                        <a href="https://moov.io/legal/platform-agreement/" target="_blank" rel="noopener noreferrer"
-                          className="text-primary underline underline-offset-2">Platform Agreement</a>.
-                      </Label>
+                    {/* Hosted terms component — clicking its agree button mints
+                        the acceptance token we record with the provider. */}
+                    <div className="rounded-md border border-border/60 bg-muted/30 p-3">
+                      {tosReady && session ? (
+                        <MoovTermsDrop oauthToken={session.token} onToken={handleDropToken} />
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground">
+                          Loading the payment provider's Terms of Service…
+                        </p>
+                      )}
                     </div>
-                    {!tosReady && (
-                      <p className="text-[11px] text-muted-foreground">
-                        Loading the payment provider's Terms of Service…
+
+                    {saving && (
+                      <p className="text-[11px] text-muted-foreground flex items-center gap-2 justify-center">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Recording your acceptance…
                       </p>
                     )}
-
-                    <Button className="w-full" disabled={!tosReady || !termsAccepted || saving} onClick={handleAcceptTermsOnly}>
-                      {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                      Accept terms
-                    </Button>
                     <button
                       type="button"
                       className="text-[11px] text-muted-foreground underline underline-offset-2 w-full text-center"
