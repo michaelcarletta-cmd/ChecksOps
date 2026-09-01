@@ -30,33 +30,50 @@ export default function MortgageOpsLogin() {
     }
   }, [user, userRole, authLoading, navigate]);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const enforceRole = async (userId: string) => {
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+    const roleSet = new Set((roles ?? []).map((r) => r.role));
+    if (!roleSet.has("mortgage_agent") && !roleSet.has("admin")) {
+      await supabase.auth.signOut();
+      toast.error("This account doesn't have access to the Mortgage Desk.");
+      return false;
+    }
+    return true;
+  };
+
+  const handlePasskey = async () => {
     setLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
+    try {
+      const result = await signInWithPasskey(email || undefined, supabase as any);
+      const userId = result.user?.id;
+      if (!userId) throw new Error("Unable to start your session");
+      await enforceRole(userId);
+      // useMortgageAuth effect will bounce to /queue.
+    } catch (err: any) {
+      toast.error(err.message || "Passkey sign-in failed");
+    } finally {
       setLoading(false);
-      toast.error(error.message);
+    }
+  };
+
+  const handleMagicLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      toast.error("Enter your email");
       return;
     }
-    // Verify role before allowing access — a ChecksOps-only user must not be
-    // able to enter the Mortgage Desk even if their credentials are valid.
-    const userId = data.user?.id;
-    if (userId) {
-      const { data: roles } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", userId);
-      const roleSet = new Set((roles ?? []).map((r) => r.role));
-      if (!roleSet.has("mortgage_agent") && !roleSet.has("admin")) {
-        await supabase.auth.signOut();
-        setLoading(false);
-        toast.error("This account doesn't have access to the Mortgage Desk.");
-        return;
-      }
+    setLoading(true);
+    try {
+      await sendMagicLink(email, `${window.location.origin}/mortgage-ops/login`, supabase as any);
+      setLinkSent(true);
+    } catch (err: any) {
+      toast.error(err.message || "Could not send sign-in link");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-    // useMortgageAuth effect will bounce to /queue.
   };
 
   return (
