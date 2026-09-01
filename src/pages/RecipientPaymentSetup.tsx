@@ -518,14 +518,10 @@ export default function RecipientPaymentSetup() {
                   />
                 </div>
 
-                {/* The Moov ToS Drop only exists to mint the acceptance token — it
-                    renders an unthemeable white box, so it stays visually hidden
-                    and we show our own themed agreement text with the same links. */}
-                <div
-                  ref={tosMountRef}
-                  aria-hidden="true"
-                  style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clipPath: "inset(50%)" }}
-                />
+                {/* Terms are recorded with the provider in the browser when
+                    this form is submitted; we show our own themed agreement
+                    text with the same links. */}
+
                 <p className="text-[11px] leading-relaxed text-muted-foreground rounded-md border border-border/60 bg-muted/30 p-3">
                   By clicking continue, you agree to the terms of Moov's{" "}
                   <a
