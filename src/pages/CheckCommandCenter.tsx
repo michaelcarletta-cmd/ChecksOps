@@ -1,4 +1,5 @@
 import { Fragment, lazy, Suspense, useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useFinancialGuard } from "@/hooks/useFinancialGuard";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
