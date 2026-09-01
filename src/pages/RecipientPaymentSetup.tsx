@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { createElement, useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
+
 import {
   Select,
   SelectContent,
@@ -70,6 +70,9 @@ export default function RecipientPaymentSetup() {
   const [postalCode, setPostalCode] = useState("");
   const [tosReady, setTosReady] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  // Acceptance token minted by the hosted ToS Drop (onTermsOfServiceTokenReady).
+  // State (not just the ref) so the submit buttons re-render when it arrives.
+  const [tosDropToken, setTosDropToken] = useState<string | null>(null);
   const [termsDone, setTermsDone] = useState(false);
   const [replaceBank, setReplaceBank] = useState(false);
   
@@ -113,10 +116,9 @@ export default function RecipientPaymentSetup() {
     return () => { cancelled = true; };
   }, [token]);
 
-  // Load the provider's browser SDK. Terms are ALWAYS accepted in the browser
-  // with the same OAuth session that Moov.js was created with — the provider
-  // rejects a ToS token minted in one context and patched from another
-  // ("tos token must be created using an oauth token").
+  // Load the provider's browser SDK for the hosted Terms of Service Drop.
+  // The Drop mints the acceptance token itself (onTermsOfServiceTokenReady);
+  // we forward that token to our backend, which patches it onto the account.
   const tosTokenRef = useRef<string | null>(null);
   useEffect(() => {
     if (!session?.token) return;
@@ -136,6 +138,15 @@ export default function RecipientPaymentSetup() {
   // on file — they only need to accept terms to be payable again.
   const showTermsOnly = Boolean(session?.recipient.bank_linked) && !replaceBank;
 
+  // Terms-only flow: as soon as the Drop hands us an acceptance token,
+  // record it with the provider without another click.
+  useEffect(() => {
+    if (showTermsOnly && tosDropToken && !termsDone && !saving) {
+      void handleAcceptTermsOnly();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showTermsOnly, tosDropToken, termsDone]);
+
   const digitsOnly = (value: string, max: number) => value.replace(/\D/g, "").slice(0, max);
 
 
@@ -154,6 +165,7 @@ export default function RecipientPaymentSetup() {
     accountNumber.length >= 4 &&
     identityValid &&
     tosReady &&
+    Boolean(tosDropToken) &&
     !saving;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -162,18 +174,10 @@ export default function RecipientPaymentSetup() {
     setSaving(true);
     setError(null);
     try {
-      // Record the platform agreement in the browser, with the same OAuth
-      // session Moov.js was created with. Server-side patching of a separately
-      // minted token is rejected by the provider.
-      const createMoovClient = (window as any).Moov;
-      if (typeof createMoovClient !== "function" || !session?.account_id) {
-        throw new Error("The secure terms service did not load. Please refresh and try again.");
-      }
-      const moov = createMoovClient(session.token);
-      const acceptance = await moov.accounts.acceptTermsOfService({ accountID: session.account_id });
-      if (typeof acceptance === "string" && acceptance) throw new Error(acceptance);
-      if (acceptance?.error) {
-        throw new Error(typeof acceptance.error === "string" ? acceptance.error : "Could not record your acceptance.");
+      // Terms acceptance comes from the hosted ToS Drop's acceptance token,
+      // captured before submit. The provider patches it server-side.
+      if (!tosDropToken) {
+        throw new Error("Please accept the payment provider's terms first.");
       }
 
       const { data, error: fnErr } = await supabase.functions.invoke("moov-recipient-bank-add", {
@@ -219,30 +223,21 @@ export default function RecipientPaymentSetup() {
     }
   }
 
+  // Called by the hosted ToS Drop once the recipient clicks its agree button.
+  const handleDropToken = useCallback((acceptanceToken: string) => {
+    tosTokenRef.current = acceptanceToken;
+    setTosDropToken(acceptanceToken);
+    setTermsAccepted(true);
+  }, []);
+
   async function handleAcceptTermsOnly() {
-    if (!tosReady || !termsAccepted || saving || !session) return;
+    if (!tosDropToken || saving || !session) return;
     setSaving(true);
     setError(null);
     try {
-      const createMoovClient = (window as any).Moov;
-      if (typeof createMoovClient !== "function") {
-        throw new Error("The secure terms service did not load. Please refresh and try again.");
-      }
-      const moov = createMoovClient(session.token);
-      const acceptance = await moov.accounts.acceptTermsOfService({ accountID: session.account_id });
-       // Moov.js resolves some failures as a plain error string (not an Error
-       // and not `{ error }`). Treat that as a failure instead of continuing to
-       // backend verification and replacing the useful provider response with
-       // the generic "could not record" message.
-       if (typeof acceptance === "string") {
-         throw new Error(acceptance || "Could not record your acceptance.");
-       }
-      if (acceptance?.error) {
-        throw new Error(typeof acceptance.error === "string" ? acceptance.error : "Could not record your acceptance.");
-      }
-
+      // Patch the Drop's acceptance token onto the provider account server-side.
       const { data, error: fnErr } = await supabase.functions.invoke("moov-recipient-tos-accept", {
-        body: { token, verify_only: true },
+        body: { token, tos_token: tosDropToken },
       });
       if (fnErr) {
         let message = "Could not record your acceptance.";
@@ -348,32 +343,23 @@ export default function RecipientPaymentSetup() {
                       </p>
                     </div>
 
-                    <div className="flex items-start gap-3 rounded-md border border-border/60 bg-muted/30 p-3">
-                      <Checkbox
-                        id="accept-existing-recipient-terms"
-                        checked={termsAccepted}
-                        onCheckedChange={(checked) => setTermsAccepted(checked === true)}
-                        className="mt-0.5"
-                      />
-                      <Label htmlFor="accept-existing-recipient-terms" className="text-xs font-normal leading-relaxed cursor-pointer">
-                        I agree to Moov's{" "}
-                        <a href="https://moov.io/legal/privacy/" target="_blank" rel="noopener noreferrer"
-                          className="text-primary underline underline-offset-2">Privacy Policy</a>{" "}
-                        and{" "}
-                        <a href="https://moov.io/legal/platform-agreement/" target="_blank" rel="noopener noreferrer"
-                          className="text-primary underline underline-offset-2">Platform Agreement</a>.
-                      </Label>
+                    {/* Hosted terms component — clicking its agree button mints
+                        the acceptance token we record with the provider. */}
+                    <div className="rounded-md border border-border/60 bg-muted/30 p-3">
+                      {tosReady && session ? (
+                        <MoovTermsDrop oauthToken={session.token} onToken={handleDropToken} />
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground">
+                          Loading the payment provider's Terms of Service…
+                        </p>
+                      )}
                     </div>
-                    {!tosReady && (
-                      <p className="text-[11px] text-muted-foreground">
-                        Loading the payment provider's Terms of Service…
+
+                    {saving && (
+                      <p className="text-[11px] text-muted-foreground flex items-center gap-2 justify-center">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Recording your acceptance…
                       </p>
                     )}
-
-                    <Button className="w-full" disabled={!tosReady || !termsAccepted || saving} onClick={handleAcceptTermsOnly}>
-                      {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                      Accept terms
-                    </Button>
                     <button
                       type="button"
                       className="text-[11px] text-muted-foreground underline underline-offset-2 w-full text-center"
@@ -518,9 +504,17 @@ export default function RecipientPaymentSetup() {
                   />
                 </div>
 
-                {/* Terms are recorded with the provider in the browser when
-                    this form is submitted; we show our own themed agreement
-                    text with the same links. */}
+                {/* Hosted terms component — the acceptance token it returns is
+                    sent with this form and recorded with the provider. */}
+                <div className="rounded-md border border-border/60 bg-muted/30 p-3">
+                  {tosReady && session ? (
+                    <MoovTermsDrop oauthToken={session.token} onToken={handleDropToken} />
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground">
+                      Loading the payment provider's Terms of Service…
+                    </p>
+                  )}
+                </div>
 
                 <p className="text-[11px] leading-relaxed text-muted-foreground rounded-md border border-border/60 bg-muted/30 p-3">
                   By clicking continue, you agree to the terms of Moov's{" "}
@@ -543,12 +537,6 @@ export default function RecipientPaymentSetup() {
                   </a>
                   .
                 </p>
-                {!tosReady && !done && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Loading the payment provider's Terms of Service…
-                  </p>
-                )}
-
                 <Button type="submit" className="w-full" disabled={!canSubmit}>
                   {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   Agree & save bank account
@@ -566,6 +554,30 @@ export default function RecipientPaymentSetup() {
       </div>
     </main>
   );
+}
+
+/**
+ * The provider's hosted Terms of Service component (Moov Drop). When the
+ * recipient clicks its agree button, the component mints an acceptance token
+ * and hands it back through onTermsOfServiceTokenReady — that token is what
+ * our backend patches onto the account.
+ */
+function MoovTermsDrop({ oauthToken, onToken }: { oauthToken: string; onToken: (t: string) => void }) {
+  const elRef = useRef<HTMLElement | null>(null);
+  const onTokenRef = useRef(onToken);
+  onTokenRef.current = onToken;
+
+  useEffect(() => {
+    const el = elRef.current as any;
+    if (!el) return;
+    el.oauthToken = oauthToken;
+    el.onTermsOfServiceTokenReady = (acceptanceToken: string) => {
+      if (acceptanceToken) onTokenRef.current(acceptanceToken);
+    };
+  }, [oauthToken]);
+
+  // createElement so JSX doesn't warn on the unknown custom element.
+  return createElement("moov-terms-of-service", { ref: elRef });
 }
 
 let moovJsPromise: Promise<void> | null = null;
