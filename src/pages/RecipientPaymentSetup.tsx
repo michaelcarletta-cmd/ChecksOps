@@ -113,8 +113,10 @@ export default function RecipientPaymentSetup() {
     return () => { cancelled = true; };
   }, [token]);
 
-  // Mount the provider's hosted Terms of Service component once the session
-  // token is available; it mints the acceptance token we submit with the form.
+  // Load the provider's browser SDK. Terms are ALWAYS accepted in the browser
+  // with the same OAuth session that Moov.js was created with — the provider
+  // rejects a ToS token minted in one context and patched from another
+  // ("tos token must be created using an oauth token").
   const tosTokenRef = useRef<string | null>(null);
   useEffect(() => {
     if (!session?.token) return;
@@ -123,30 +125,12 @@ export default function RecipientPaymentSetup() {
       try {
         await loadMoovJs();
         if (cancelled) return;
-
-        // Existing recipients accept directly through Moov.js so token creation
-        // and the account PATCH use the same browser OAuth session. Passing a
-        // generated ToS token to a separately authenticated server PATCH causes
-        // the provider to reject it as not OAuth-created.
-        if (session.recipient.bank_linked && !replaceBank) {
-          setTosReady(typeof (window as any).Moov === "function");
-          return;
-        }
-
-        if (!tosMountRef.current) return;
-        const el = document.createElement("moov-terms-of-service") as any;
-
-        el.token = session.token;
-        el.onTermsOfServiceTokenReady = (t: any) => {
-          tosTokenRef.current = typeof t === "string" ? t : t?.token ?? null;
-          setTosReady(Boolean(tosTokenRef.current));
-        };
-        el.onTermsOfServiceTokenError = () => setTosReady(false);
-        tosMountRef.current.replaceChildren(el);
+        setTosReady(typeof (window as any).Moov === "function");
       } catch { /* leave ToS hidden; submit will surface an error */ }
     })();
     return () => { cancelled = true; };
   }, [session?.token, replaceBank]);
+
 
   // Recipients onboarded before the provider required terms already have a bank
   // on file — they only need to accept terms to be payable again.
