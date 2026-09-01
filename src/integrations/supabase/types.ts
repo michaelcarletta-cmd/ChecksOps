@@ -1253,9 +1253,18 @@ export type Database = {
           payee_address: string | null
           payee_line: string | null
           payment_classification: string | null
+          pre_return_stage: Database["public"]["Enums"]["check_stage"] | null
           property_address: string | null
           raw_ocr_back: Json | null
           raw_ocr_front: Json | null
+          return_code: string | null
+          return_notes: string | null
+          return_reason: string | null
+          return_recorded_by: string | null
+          return_resolution: string | null
+          return_resolved_at: string | null
+          return_source: string | null
+          returned_at: string | null
           review_notes: string | null
           reviewed_at: string | null
           reviewed_by: string | null
@@ -1319,9 +1328,18 @@ export type Database = {
           payee_address?: string | null
           payee_line?: string | null
           payment_classification?: string | null
+          pre_return_stage?: Database["public"]["Enums"]["check_stage"] | null
           property_address?: string | null
           raw_ocr_back?: Json | null
           raw_ocr_front?: Json | null
+          return_code?: string | null
+          return_notes?: string | null
+          return_reason?: string | null
+          return_recorded_by?: string | null
+          return_resolution?: string | null
+          return_resolved_at?: string | null
+          return_source?: string | null
+          returned_at?: string | null
           review_notes?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -1385,9 +1403,18 @@ export type Database = {
           payee_address?: string | null
           payee_line?: string | null
           payment_classification?: string | null
+          pre_return_stage?: Database["public"]["Enums"]["check_stage"] | null
           property_address?: string | null
           raw_ocr_back?: Json | null
           raw_ocr_front?: Json | null
+          return_code?: string | null
+          return_notes?: string | null
+          return_reason?: string | null
+          return_recorded_by?: string | null
+          return_resolution?: string | null
+          return_resolved_at?: string | null
+          return_source?: string | null
+          returned_at?: string | null
           review_notes?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -2150,7 +2177,9 @@ export type Database = {
           last_status_payload: Json | null
           reject_code: number | null
           reject_notes: string | null
+          return_code: string | null
           return_reason: string | null
+          return_window_until: string | null
           returned_at: string | null
           status: string
           status_unresolved: boolean
@@ -2173,7 +2202,9 @@ export type Database = {
           last_status_payload?: Json | null
           reject_code?: number | null
           reject_notes?: string | null
+          return_code?: string | null
           return_reason?: string | null
+          return_window_until?: string | null
           returned_at?: string | null
           status?: string
           status_unresolved?: boolean
@@ -2196,7 +2227,9 @@ export type Database = {
           last_status_payload?: Json | null
           reject_code?: number | null
           reject_notes?: string | null
+          return_code?: string | null
           return_reason?: string | null
+          return_window_until?: string | null
           returned_at?: string | null
           status?: string
           status_unresolved?: boolean
@@ -14595,6 +14628,18 @@ export type Database = {
         Args: { p_contractor_id: string }
         Returns: undefined
       }
+      record_check_return: {
+        Args: {
+          p_actor_id?: string
+          p_check_id: string
+          p_notes?: string
+          p_return_code: string
+          p_return_reason: string
+          p_returned_at?: string
+          p_source?: string
+        }
+        Returns: Json
+      }
       refresh_all_deposit_next_actions: {
         Args: { p_actor_id?: string }
         Returns: Json
@@ -14618,6 +14663,15 @@ export type Database = {
           _tenant_id: string
         }
         Returns: string
+      }
+      resolve_check_return: {
+        Args: {
+          p_actor_id?: string
+          p_check_id: string
+          p_resolution: string
+          p_restore_stage?: boolean
+        }
+        Returns: Json
       }
       resolve_deposit_exception: {
         Args: {
@@ -15544,6 +15598,7 @@ export type Database = {
         | "deposited"
         | "funds_released"
         | "disbursed_externally"
+        | "returned"
       claim_doc_decision:
         | "deny_full"
         | "deny_partial"
@@ -15822,6 +15877,7 @@ export const Constants = {
         "deposited",
         "funds_released",
         "disbursed_externally",
+        "returned",
       ],
       claim_doc_decision: [
         "deny_full",

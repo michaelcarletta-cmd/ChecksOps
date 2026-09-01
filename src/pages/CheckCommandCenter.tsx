@@ -50,6 +50,7 @@ import { ListSkeleton } from "@/components/shell";
 
 // Help moved to Settings → ChecksOps Guide
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
+import { MarkCheckReturnedDialog } from "@/components/checks/MarkCheckReturnedDialog";
 import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
 import { DepositStatusPanel } from "@/components/check-review/DepositStatusPanel";
 import { SignatureStatusPanel } from "@/components/check-review/SignatureStatusPanel";
@@ -67,6 +68,9 @@ import { ClaimLedgerCard } from "@/components/payments/ClaimLedgerCard";
 
 
 // Lazy-loaded: heavy tab-only / dialog-only modules (each becomes its own JS chunk)
+const ReturnedChecksPanel = lazy(() =>
+  import("@/components/checks/ReturnedChecksPanel").then(m => ({ default: m.ReturnedChecksPanel }))
+);
 const LossDraftDashboard = lazy(() =>
   import("@/components/loss-draft/LossDraftDashboard").then(m => ({ default: m.LossDraftDashboard }))
 );
@@ -278,6 +282,7 @@ export default function CheckCommandCenter() {
   const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
   // helpOpen state removed — help moved to Settings → ChecksOps Guide
   const [shareCheckId, setShareCheckId] = useState<string | null>(null);
+  const [markReturnedCheck, setMarkReturnedCheck] = useState<{ id: string; label: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const [bulkRunning, setBulkRunning] = useState(false);
@@ -595,6 +600,23 @@ export default function CheckCommandCenter() {
     },
     enabled: !!tenantId,
     refetchOnWindowFocus: false, // Prevent page jump/refresh when switching tabs
+  });
+
+  // Open bank returns drive the Returned tab badge. Kept as a lightweight
+  // count query so the tab only appears when there is something to work.
+  const { data: returnedCount = 0 } = useQuery({
+    queryKey: ["returned-checks-count", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("check_intake_items")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId!)
+        .not("returned_at", "is", null)
+        .is("return_resolved_at", null);
+      if (error) throw error;
+      return count ?? 0;
+    },
   });
 
   // Phase 9: paginated deposited-checks history. Loaded only when the
@@ -1253,6 +1275,7 @@ export default function CheckCommandCenter() {
             { key: "endorsements", label: "Endorsing",         count: laneCount("endorsing", awaitingEndorsement), icon: Send,           gradient: "from-amber-500/20 to-orange-500/10",  accent: "text-amber-400",   ring: "ring-amber-500/30" },
             { key: "ready",        label: "Ready for Deposit", count: laneCount("ready", readyForDeposit),     icon: CheckCircle2,   gradient: "from-emerald-500/20 to-green-500/10", accent: "text-emerald-400", ring: "ring-emerald-500/30" },
             { key: "deposited",    label: "Deposited",         count: laneCount("deposited", depositedChecks),     icon: Banknote,       gradient: "from-primary/20 to-blue-500/10",      accent: "text-primary",     ring: "ring-primary/30" },
+            ...(returnedCount > 0 ? [{ key: "returned", label: "Returned", count: returnedCount, icon: RotateCcw, gradient: "from-orange-500/20 to-red-500/10", accent: "text-orange-400", ring: "ring-orange-500/30" }] : []),
             { key: "lossdraft",    label: "Loss Draft",        count: useAggregate ? ((lossDraftCounts as any)?.total_active ?? lossDraftChecks.length) : lossDraftChecks.length, icon: Landmark,       gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400",  ring: "ring-purple-500/30" },
 
             // Bank Deposit card intentionally removed — users are pushed to CheckAlt for RDC.
@@ -1292,6 +1315,15 @@ export default function CheckCommandCenter() {
           });
           })()}
         </div>
+
+        {/* Returned Checks Tab — bank returns, including late ones after clearing */}
+        {activeTab === "returned" && (
+          <div className="mt-3">
+            <Suspense fallback={<TabLoader />}>
+              <ReturnedChecksPanel searchQuery={searchQuery} />
+            </Suspense>
+          </div>
+        )}
 
         {/* Loss Draft Tab */}
         {activeTab === "lossdraft" && (
@@ -2149,6 +2181,24 @@ export default function CheckCommandCenter() {
                                     <Share2 className="h-3.5 w-3.5" />
                                   </Button>
                                 )}
+                                {!isShared && activeTab === "deposited" && !(check as any).returned_at && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-orange-400 hover:text-orange-300 hover:bg-orange-500/10"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setMarkReturnedCheck({
+                                        id: check.id,
+                                        label: check.check_number ? `Check #${check.check_number}` : "Check",
+                                      });
+                                    }}
+                                    aria-label="Mark check returned by bank"
+                                    title="Mark returned by bank"
+                                  >
+                                    <RotateCcw className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
                                 {canDelete && !isShared && (
                                   <Button
                                     variant="ghost"
@@ -2323,6 +2373,22 @@ export default function CheckCommandCenter() {
           </div>
         )}
       </Tabs>
+
+      {/* Bank return capture — deposited checks that came back */}
+      {markReturnedCheck && (
+        <MarkCheckReturnedDialog
+          checkId={markReturnedCheck.id}
+          checkLabel={markReturnedCheck.label}
+          open={!!markReturnedCheck}
+          onOpenChange={(open) => { if (!open) setMarkReturnedCheck(null); }}
+          onRecorded={() => {
+            qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+            qc.invalidateQueries({ queryKey: ["check-intake-items-deposited"] });
+            qc.invalidateQueries({ queryKey: ["returned-checks-count"] });
+            qc.invalidateQueries({ queryKey: ["returned-checks"] });
+          }}
+        />
+      )}
 
       {/* Share check dialog */}
       {shareCheckId && (

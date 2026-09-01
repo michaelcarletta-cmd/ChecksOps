@@ -16,6 +16,15 @@
 
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2/cors";
 import { getServiceClient, loadConfig, checkAltFetch, loadTenantAccount } from "../_shared/checkalt.ts";
+import { extractReturnInfo } from "../_shared/checkReturnCodes.ts";
+
+/**
+ * How long after a deposit clears we keep asking CheckAlt about it.
+ * Late returns (refer to sender, forgery, stop payment, unauthorized) are
+ * routinely reported well after settlement, so settlement is not the end of
+ * the story for a deposited check.
+ */
+const RETURN_WINDOW_DAYS = 60;
 
 const NUMERIC_STATUS_MAP: Record<number, string> = {
   40: "pending_approval",
@@ -70,6 +79,21 @@ Deno.serve(async (req) => {
       .not("checkalt_reference", "is", null)
       .limit(50);
     if (error) throw error;
+
+    // Return watch: cleared deposits stay under observation for the full
+    // return window, polled once a day, so a late return is caught instead of
+    // silently leaving the funds looking collected.
+    const clearedCutoff = new Date(Date.now() - 24 * 60 * 60_000).toISOString();
+    const { data: watched, error: watchErr } = await supabase
+      .from("checkalt_deposits")
+      .select("id, tenant_id, checkalt_reference, status, check_intake_item_id")
+      .eq("status", "cleared")
+      .not("checkalt_reference", "is", null)
+      .not("return_window_until", "is", null)
+      .gt("return_window_until", new Date().toISOString())
+      .or(`last_polled_at.is.null,last_polled_at.lt.${clearedCutoff}`)
+      .limit(50);
+    if (watchErr) throw watchErr;
 
     let reaped = 0,
       polled = 0,
@@ -163,7 +187,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    for (const dep of stale ?? []) {
+    for (const dep of [...(stale ?? []), ...(watched ?? [])]) {
       polled++;
       try {
         // POST /fincapture/deposit/item with { fiKey, referenceNumber }
@@ -247,6 +271,9 @@ Deno.serve(async (req) => {
         }
 
         const statusChanged = internal !== dep.status;
+        const returnInfo = internal === "returned" || internal === "rejected"
+          ? extractReturnInfo(statusPayload)
+          : { code: null, reason: null };
         const updates: Record<string, unknown> = {
           last_polled_at: new Date().toISOString(),
           last_status_payload: statusPayload,
@@ -254,10 +281,21 @@ Deno.serve(async (req) => {
         };
         if (statusChanged) {
           updates.status = internal;
-          if (internal === "cleared")
+          if (internal === "cleared") {
             updates.cleared_at = new Date().toISOString();
-          if (internal === "returned")
+            // Late returns ("refer to sender", forgery, stop payment) can land
+            // weeks after settlement, so keep watching this reference for the
+            // full return window instead of stopping at clear.
+            updates.return_window_until = new Date(
+              Date.now() + RETURN_WINDOW_DAYS * 86_400_000,
+            ).toISOString();
+          }
+          if (internal === "returned") {
             updates.returned_at = new Date().toISOString();
+            updates.return_code = returnInfo.code;
+            updates.return_reason = returnInfo.reason;
+            updates.return_window_until = null;
+          }
         }
         const { error: depUpdateErr } = await supabase
           .from("checkalt_deposits")
@@ -311,23 +349,48 @@ Deno.serve(async (req) => {
               .eq("check_intake_item_id", dep.check_intake_item_id);
             if (e2) throw new Error(`claim_checks update failed: ${e2.message}`);
           } else if (internal === "returned" || internal === "rejected") {
-            const { error: e1 } = await supabase
+            const { data: intake } = await supabase
               .from("check_intake_items")
-              .update({
-                check_stage: "ready_for_deposit",
-                status: "approved_for_deposit",
-                deposit_recommendation: "ready_for_deposit",
-                updated_at: new Date().toISOString(),
-              })
-              .eq("id", dep.check_intake_item_id);
-            if (e1) throw new Error(`check_intake_items update failed: ${e1.message}`);
-            const { error: e2 } = await supabase
-              .from("claim_checks")
-              .update({ deposit_status: "returned" })
-              .eq("check_intake_item_id", dep.check_intake_item_id);
-            if (e2) throw new Error(`claim_checks update failed: ${e2.message}`);
+              .select("check_stage")
+              .eq("id", dep.check_intake_item_id)
+              .maybeSingle();
+            const alreadySettled = ["deposited", "funds_released", "disbursed_externally"]
+              .includes(String(intake?.check_stage ?? ""));
+
+            if (internal === "returned" && alreadySettled) {
+              // Post-clear return: the money was already booked (and may have
+              // been disbursed), so this goes through the return workflow —
+              // it must NOT quietly drop back to "ready for deposit".
+              const { error: rpcErr } = await supabase.rpc("record_check_return", {
+                p_check_id: dep.check_intake_item_id,
+                p_return_code: returnInfo.code ?? "OTHER",
+                p_return_reason: returnInfo.reason ?? "Returned by paying bank",
+                p_returned_at: new Date().toISOString(),
+                p_notes: `CheckAlt reference ${dep.checkalt_reference}`,
+                p_actor_id: null,
+                p_source: "checkalt",
+              });
+              if (rpcErr) throw new Error(`record_check_return failed: ${rpcErr.message}`);
+            } else {
+              const { error: e1 } = await supabase
+                .from("check_intake_items")
+                .update({
+                  check_stage: "ready_for_deposit",
+                  status: "approved_for_deposit",
+                  deposit_recommendation: "ready_for_deposit",
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("id", dep.check_intake_item_id);
+              if (e1) throw new Error(`check_intake_items update failed: ${e1.message}`);
+              const { error: e2 } = await supabase
+                .from("claim_checks")
+                .update({ deposit_status: "returned" })
+                .eq("check_intake_item_id", dep.check_intake_item_id);
+              if (e2) throw new Error(`claim_checks update failed: ${e2.message}`);
+            }
           }
         }
+
       } catch (e) {
         errors++;
         console.error(

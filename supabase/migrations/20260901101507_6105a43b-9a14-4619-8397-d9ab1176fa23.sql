@@ -1,0 +1,1 @@
+ALTER TYPE public.check_stage ADD VALUE IF NOT EXISTS 'returned';

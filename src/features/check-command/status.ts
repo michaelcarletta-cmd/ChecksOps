@@ -225,6 +225,7 @@ export const statusColors: Record<string, string> = {
   loss_draft_required: "bg-purple-500/20 text-purple-400",
   reissue_requested: "bg-orange-500/20 text-orange-400",
   deposited: "bg-primary/20 text-primary",
+  returned: "bg-orange-500/20 text-orange-300",
   voided: "bg-destructive/20 text-destructive",
   ready: "bg-emerald-500/20 text-emerald-400",
 };
