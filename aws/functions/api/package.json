@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "ChecksOps AWS staging API entrypoint. No runtime npm dependencies yet.",
-  "main": "index.mjs"
+  "description": "ChecksOps AWS staging API entrypoint.",
+  "main": "index.mjs",
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "3.1124.0"
+  }
 }

@@ -1,3 +1,5 @@
+import { databaseSecretConfigured } from './secrets.mjs';
+
 const json = (statusCode, body) => ({
   statusCode,
   headers: {
@@ -38,6 +40,7 @@ export const handler = async (event) => {
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       status: 'ok',
       database: 'not-connected',
+      databaseSecretConfigured: databaseSecretConfigured(),
       productionSupabaseChanged: false,
     });
   }
