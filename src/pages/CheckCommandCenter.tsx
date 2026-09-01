@@ -2181,7 +2181,7 @@ export default function CheckCommandCenter() {
                                     <Share2 className="h-3.5 w-3.5" />
                                   </Button>
                                 )}
-                                {!isShared && activeTab === "deposited" && !(check as any).returned_at && (
+                                {!isShared && ["deposited", "fundsreleased", "fundsreceived"].includes(activeTab) && !(check as any).returned_at && (
                                   <Button
                                     variant="ghost"
                                     size="icon"
