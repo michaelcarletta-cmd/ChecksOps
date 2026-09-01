@@ -571,7 +571,7 @@ function MoovTermsDrop({ oauthToken, onToken }: { oauthToken: string; onToken: (
   useEffect(() => {
     const el = elRef.current as any;
     if (!el) return;
-    el.oauthToken = oauthToken;
+    el.token = oauthToken;
     el.onTermsOfServiceTokenReady = (acceptanceToken: string) => {
       if (acceptanceToken) onTokenRef.current(acceptanceToken);
     };
