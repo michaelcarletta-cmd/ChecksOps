@@ -89,9 +89,12 @@ export async function signInWithPasskey(
   if (!passkeysSupported()) {
     throw new Error("This browser does not support passkeys.");
   }
+  if (!email?.trim()) {
+    throw new Error("Enter your email first so we can find your passkey.");
+  }
 
   const optionsRes = await client.functions.invoke("passkey-auth-options", {
-    body: { email: email?.trim().toLowerCase() ?? "" },
+    body: { email: email.trim().toLowerCase() },
   });
   const { options } = unwrap<{ options: any }>(optionsRes, "Could not start passkey sign-in.");
 
