@@ -1,0 +1,162 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: ChecksOps AWS staging foundation
+
+Parameters:
+  Environment:
+    Type: String
+    Default: staging
+    AllowedValues:
+      - staging
+      - production
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Architectures:
+      - arm64
+    Timeout: 15
+    MemorySize: 512
+    Tracing: Active
+    Environment:
+      Variables:
+        CHECKSOPS_ENV: !Ref Environment
+        FILES_BUCKET: !Ref PrivateFilesBucket
+        PROVIDER_SECRETS_ARN: !Ref ProviderSecrets
+
+Resources:
+  ChecksOpsApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowHeaders:
+          - authorization
+          - content-type
+          - x-request-id
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub checksops-${Environment}-api
+      CodeUri: functions/api/
+      Handler: index.handler
+      Description: ChecksOps AWS API staging entrypoint
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref PrivateFilesBucket
+        - S3WritePolicy:
+            BucketName: !Ref PrivateFilesBucket
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref ProviderSecrets
+      Events:
+        Root:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ChecksOpsApi
+            Path: /
+            Method: ANY
+        Proxy:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ChecksOpsApi
+            Path: /{proxy+}
+            Method: ANY
+
+  PrivateFilesBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+
+  ChecksOpsUserPool:
+    Type: AWS::Cognito::UserPool
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      UserPoolName: !Sub checksops-${Environment}
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          TemporaryPasswordValidityDays: 7
+
+  ChecksOpsUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub checksops-${Environment}-web
+      UserPoolId: !Ref ChecksOpsUserPool
+      GenerateSecret: false
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      RefreshTokenValidity: 30
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+  ProviderSecrets:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: !Sub checksops/${Environment}/providers
+      Description: ChecksOps provider credentials. Populate values in AWS Secrets Manager; never commit credentials to Git.
+      SecretString: '{"MOOV_CLIENT_ID":"","MOOV_CLIENT_SECRET":"","CHECKALT_API_KEY":"","RESEND_API_KEY":"","PLAID_CLIENT_ID":"","PLAID_SECRET":"","CROSS_APP_BRIDGE_SECRET":""}'
+
+Outputs:
+  ApiUrl:
+    Description: ChecksOps staging API URL
+    Value: !Sub https://${ChecksOpsApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
+  ApiFunctionName:
+    Value: !Ref ApiFunction
+  FilesBucketName:
+    Value: !Ref PrivateFilesBucket
+  CognitoUserPoolId:
+    Value: !Ref ChecksOpsUserPool
+  CognitoWebClientId:
+    Value: !Ref ChecksOpsUserPoolClient
+  ProviderSecretsArn:
+    Value: !Ref ProviderSecrets
