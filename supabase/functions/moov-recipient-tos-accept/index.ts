@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { moovFetch, moovConfigured, moovEnvironment, moovHost, scopes } from "../_shared/moovClient.ts";
+import { moovFetch, moovConfigured, moovEnvironment, scopes } from "../_shared/moovClient.ts";
 import { corsHeaders, json, sanitize } from "../_shared/moovGuard.ts";
 
 /**
