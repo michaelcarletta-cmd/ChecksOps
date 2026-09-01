@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 .env
+.env.aws
+
+# AWS SAM build artifacts
+.aws-sam/
+aws/.aws-sam/
 
 # Editor directories and files
 .vscode/*

@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: ChecksOps AWS staging foundation
+Description: ChecksOps AWS staging foundation. Does not modify production Supabase.
 
 Parameters:
   Environment:
@@ -8,11 +8,11 @@ Parameters:
     Default: staging
     AllowedValues:
       - staging
-      - production
+    Description: Staging-only until cutover is explicitly approved. Production is not an allowed value.
 
 Globals:
   Function:
-    Runtime: nodejs20.x
+    Runtime: nodejs22.x
     Architectures:
       - arm64
     Timeout: 15
@@ -137,14 +137,14 @@ Resources:
         - ALLOW_USER_SRP_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
 
+  # Existing RDS instance checksops-staging is intentionally not declared here.
   ProviderSecrets:
     Type: AWS::SecretsManager::Secret
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
       Name: !Sub checksops/${Environment}/providers
-      Description: ChecksOps provider credentials. Populate values in AWS Secrets Manager; never commit credentials to Git.
-      SecretString: '{"MOOV_CLIENT_ID":"","MOOV_CLIENT_SECRET":"","CHECKALT_API_KEY":"","RESEND_API_KEY":"","PLAID_CLIENT_ID":"","PLAID_SECRET":"","CROSS_APP_BRIDGE_SECRET":""}'
+      Description: ChecksOps provider credentials. Populate JSON in Secrets Manager after deploy. Do not set SecretString in this template; stack updates would overwrite live values.
 
 Outputs:
   ApiUrl:
