@@ -1275,7 +1275,7 @@ export default function CheckCommandCenter() {
             { key: "endorsements", label: "Endorsing",         count: laneCount("endorsing", awaitingEndorsement), icon: Send,           gradient: "from-amber-500/20 to-orange-500/10",  accent: "text-amber-400",   ring: "ring-amber-500/30" },
             { key: "ready",        label: "Ready for Deposit", count: laneCount("ready", readyForDeposit),     icon: CheckCircle2,   gradient: "from-emerald-500/20 to-green-500/10", accent: "text-emerald-400", ring: "ring-emerald-500/30" },
             { key: "deposited",    label: "Deposited",         count: laneCount("deposited", depositedChecks),     icon: Banknote,       gradient: "from-primary/20 to-blue-500/10",      accent: "text-primary",     ring: "ring-primary/30" },
-            { key: "returned",     label: "Returned",          count: returnedCount, icon: RotateCcw, gradient: "from-orange-500/20 to-red-500/10", accent: "text-orange-400", ring: "ring-orange-500/30" },
+            // Returned moved into Manager → Returned sub-tab.
             { key: "lossdraft",    label: "Loss Draft",        count: useAggregate ? ((lossDraftCounts as any)?.total_active ?? lossDraftChecks.length) : lossDraftChecks.length, icon: Landmark,       gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400",  ring: "ring-purple-500/30" },
 
             // Bank Deposit card intentionally removed — users are pushed to CheckAlt for RDC.
@@ -1316,14 +1316,8 @@ export default function CheckCommandCenter() {
           })()}
         </div>
 
-        {/* Returned Checks Tab — bank returns, including late ones after clearing */}
-        {activeTab === "returned" && (
-          <div className="mt-3">
-            <Suspense fallback={<TabLoader />}>
-              <ReturnedChecksPanel searchQuery={searchQuery} />
-            </Suspense>
-          </div>
-        )}
+        {/* Returned checks now live in Manager → Returned sub-tab. */}
+
 
         {/* Loss Draft Tab */}
         {activeTab === "lossdraft" && (
@@ -1347,8 +1341,10 @@ export default function CheckCommandCenter() {
                     <TabsTrigger value="deposit_history" className="text-xs gap-1"><Banknote className="h-3 w-3" />Deposit History</TabsTrigger>
                   </>
                 )}
+                <TabsTrigger value="returned" className="text-xs gap-1"><RotateCcw className="h-3 w-3" />Returned{returnedCount > 0 ? ` (${returnedCount})` : ""}</TabsTrigger>
                 <TabsTrigger value="reports" className="text-xs gap-1"><FileBarChart className="h-3 w-3" />Reports</TabsTrigger>
                 <TabsTrigger value="mortgage_cos" className="text-xs gap-1"><Building2 className="h-3 w-3" />Mortgage Cos</TabsTrigger>
+
                 <TabsTrigger value="partners" className="text-xs gap-1"><Users className="h-3 w-3" />Partners</TabsTrigger>
                 <TabsTrigger value="homeowner_uploads" className="text-xs gap-1"><ArrowDownToLine className="h-3 w-3 rotate-180" />Homeowner Uploads</TabsTrigger>
                 <button
@@ -1384,7 +1380,13 @@ export default function CheckCommandCenter() {
                   </TabsContent>
                 </>
               )}
+              <TabsContent value="returned" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <ReturnedChecksPanel searchQuery={searchQuery} />
+                </Suspense>
+              </TabsContent>
               <TabsContent value="reports" className="mt-3">
+
                 <Suspense fallback={<TabLoader />}>
                   <DepositReports />
                 </Suspense>
