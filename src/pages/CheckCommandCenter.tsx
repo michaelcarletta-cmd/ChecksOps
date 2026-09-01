@@ -1380,7 +1380,13 @@ export default function CheckCommandCenter() {
                   </TabsContent>
                 </>
               )}
+              <TabsContent value="returned" className="mt-3">
+                <Suspense fallback={<TabLoader />}>
+                  <ReturnedChecksPanel searchQuery={searchQuery} />
+                </Suspense>
+              </TabsContent>
               <TabsContent value="reports" className="mt-3">
+
                 <Suspense fallback={<TabLoader />}>
                   <DepositReports />
                 </Suspense>
