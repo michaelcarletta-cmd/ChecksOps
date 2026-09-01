@@ -123,7 +123,10 @@ serve(async (req) => {
         ? {
           accountType: "business",
           profile: { business: { legalBusinessName: String(name).trim(), email: email ?? undefined } },
-          capabilities: ["send-funds"],
+          // Receive-only stakeholder accounts use the baseline transfers
+          // capability. Requesting send-funds incorrectly turns the recipient
+          // into a sender and adds platform-agreement/full-KYC requirements.
+          capabilities: ["transfers"],
           foreignID: recipient.id,
           metadata: { checksops_recipient_id: recipient.id, checksops_tenant_id: tenant_id },
         }
@@ -135,7 +138,7 @@ serve(async (req) => {
               email: email ?? undefined,
             },
           },
-          capabilities: ["send-funds"],
+          capabilities: ["transfers"],
           foreignID: recipient.id,
           metadata: { checksops_recipient_id: recipient.id, checksops_tenant_id: tenant_id },
         },

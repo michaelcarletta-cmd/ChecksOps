@@ -20,11 +20,6 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const token = String(body?.token ?? "");
-    const tosToken = typeof body?.tos_token === "string" && body.tos_token.length >= 8
-      ? String(body.tos_token)
-      : null;
-    const verifyOnly = body?.verify_only === true;
-
     if (!token) return json({ error: "token is required" }, 400);
 
     const environment = moovEnvironment();
@@ -48,82 +43,18 @@ serve(async (req) => {
     }
     const accountId = recipient.provider_account_id as string | null;
     if (!accountId) return json({ error: "This payment setup is not ready yet." }, 409);
-    let patchError: string | null = null;
-    if (!verifyOnly) {
-      if (!tosToken) {
-        return json({ error: "Terms acceptance session is required. Refresh the page and try again." }, 400);
-      }
-      try {
-        await moovFetch<any>(`/accounts/${accountId}`, {
-          method: "PATCH",
-          scopes: scopes.accountWrite(accountId),
-          body: { termsOfService: { token: tosToken } },
-        });
-      } catch (e) {
-        patchError = (e as Error).message ?? "patch failed";
-        console.error("[moov-recipient-tos-accept] patch failed", patchError);
-      }
-    }
-
-    // The provider does NOT return terms-of-service fields on GET /accounts.
-    // The only reliable signal is the payout capability's outstanding
-    // requirements: while terms are missing, "account.tos-acceptance" (or a
-    // similarly named terms requirement) stays in the requirement list.
-    async function termsRequirementOutstanding(): Promise<boolean | null> {
-      try {
-        const caps = await moovFetch<any>(`/accounts/${accountId}/capabilities`, {
-          method: "GET",
-          scopes: scopes.capabilitiesRead(accountId),
-        });
-        const list = Array.isArray(caps) ? caps : caps?.capabilities ?? [];
-        const raw = JSON.stringify(list ?? []);
-        console.log(
-          "[moov-recipient-tos-accept] capabilities",
-          JSON.stringify({ accountID: accountId, capabilities: list }),
-        );
-        return /tos|terms/i.test(raw);
-      } catch (e) {
-        console.error("[moov-recipient-tos-accept] capability read", (e as Error).message);
-        return null;
-      }
-    }
-
-    // Capability requirements can lag briefly after the browser-side account
-    // PATCH succeeds. Poll before reporting failure so a successful acceptance
-    // is not rejected because of provider-side eventual consistency.
-    let outstanding = await termsRequirementOutstanding();
-    if (verifyOnly && outstanding === true) {
-      for (const delayMs of [750, 1_500, 2_500]) {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-        outstanding = await termsRequirementOutstanding();
-        if (outstanding !== true) break;
-      }
-    }
-    if (outstanding === true) {
-      console.error(
-        "[moov-recipient-tos-accept] terms requirement still outstanding",
-        patchError ?? "client acceptance not recorded",
-      );
-      return json(
-        { error: "The payment provider could not record your acceptance. Please try again." },
-        502,
-      );
-    }
-
-
-    // Terms are a prerequisite for the payout capability — request it now so a
-    // previously blocked recipient becomes payable. Recipients only ever
-    // receive pushed funds, so "send-funds" is the only valid capability here.
+    // Legacy links may still call this endpoint. A receive-only stakeholder
+    // only needs transfers, which does not require a platform agreement.
     try {
       await moovFetch<any>(`/accounts/${accountId}/capabilities`, {
         method: "POST",
         scopes: scopes.capabilitiesWrite(accountId),
-        body: { capabilities: ["send-funds"] },
+        body: { capabilities: ["transfers"] },
       });
     } catch (e) {
       console.error("[moov-recipient-tos-accept] capabilities", (e as Error).message);
       return json(
-        { error: "Your agreement was recorded, but the payment provider could not finish enabling payments. Please try again." },
+        { error: "The payment provider could not finish enabling this recipient. Please try again." },
         502,
       );
     }
@@ -132,7 +63,7 @@ serve(async (req) => {
 
     await supabase.from("payment_event_log").insert(sanitize({
       tenant_id: recipient.tenant_id,
-      event_type: "recipient.terms.accepted",
+      event_type: "recipient.transfers.enabled",
       environment,
       provider_metadata: { recipient_id: recipient.id, source: "recipient_link" },
     }));

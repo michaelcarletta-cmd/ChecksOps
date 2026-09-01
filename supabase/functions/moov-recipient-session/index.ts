@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { moovConfigured, moovEnvironment, moovToken, scopes } from "../_shared/moovClient.ts";
+import { moovConfigured, moovEnvironment } from "../_shared/moovClient.ts";
 import { corsHeaders, json } from "../_shared/moovGuard.ts";
 
 function approvedBrowserOrigin(req: Request): string {
@@ -78,16 +78,6 @@ serve(async (req) => {
       .maybeSingle();
 
     const accountId = recipient.provider_account_id as string;
-    // Browser OAuth tokens are origin-bound by the provider. Mint against the
-    // exact approved domain where this public payment link is currently open.
-    const browserOrigin = approvedBrowserOrigin(req);
-    const [providerToken, tosToken] = await Promise.all([
-      moovToken(scopes.dropBankLink(accountId), browserOrigin),
-      // The hosted ToS Drop generates its acceptance token with a generic
-      // browser session. Keep this separate from account-scoped bank access;
-      // the acceptance token is applied later with server-side profile.write.
-      moovToken(["/ping.read"], browserOrigin),
-    ]);
 
     return json({
       success: true,
@@ -106,8 +96,6 @@ serve(async (req) => {
         secondary_color: (tenant as any)?.secondary_color ?? null,
       },
       account_id: accountId,
-      token: providerToken,
-      tos_token: tosToken,
       environment,
     });
   } catch (e) {
