@@ -146,6 +146,9 @@ export const scopes = {
     // account profile — without profile.write the token it returns is not
     // accepted when patched server-side.
     `/accounts/${id}/profile.write`,
+    // moov.accounts.acceptTermsOfService PATCHes the terms-of-service
+    // resource; without this scope the provider returns 401.
+    `/accounts/${id}/terms-of-service.write`,
     `/accounts/${id}/ping.read`,
   ],
 
