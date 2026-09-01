@@ -60,6 +60,18 @@ test('cli validate is offline and succeeds', () => {
   assert.doesNotMatch(`${result.stdout}${result.stderr}`, /postgresql:\/\//i);
 });
 
+test('cli live-inventory stops without live catalog credentials', () => {
+  const result = runCli(['live-inventory'], {
+    CHECKSOPS_LIVE_SUPABASE_ACCESS_TOKEN: '',
+    CHECKSOPS_LIVE_SUPABASE_DB_URL: '',
+  });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /LIVE INVENTORY STOPPED/);
+  assert.match(result.stderr, /nbcqwpysqgyxrrbgtmkw/);
+  assert.match(result.stderr, /CHECKSOPS_LIVE_SUPABASE_ACCESS_TOKEN/);
+  assert.doesNotMatch(result.stderr, /sqyyvpaymashtdwjjmku is live/);
+});
+
 test('cli dump and restore refuse without execute authorization', () => {
   const dump = runCli(['dump']);
   const restore = runCli(['restore', '--execute'], { CHECKSOPS_DB_COPY_EXECUTE: '' });

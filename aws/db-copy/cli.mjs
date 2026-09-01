@@ -3,6 +3,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildRepoInventory, summarizeClassification } from './lib/inventory.mjs';
 import {
+  hasLiveCatalogAccess,
+  liveInventoryBlockedMessage,
+} from './lib/live-access.mjs';
+import {
   buildDumpPlan,
   isExecuteAuthorized,
   refuseExecuteMessage,
@@ -25,8 +29,15 @@ if (['dump', 'restore', 'export', 'import'].includes(command)) {
   fail('Execute authorization is present, but this checkout still stops before any database copy. Remove this guard only in a later approved phase.');
 }
 
+if (command === 'live-inventory') {
+  if (!hasLiveCatalogAccess()) {
+    fail(liveInventoryBlockedMessage());
+  }
+  fail('Live catalog credentials are present, but this pass still stops before issuing SQL. Re-run live-inventory in a dedicated inventory turn.');
+}
+
 if (!['validate', 'plan', 'inventory'].includes(command)) {
-  fail(`Unknown command "${command}". Use validate, plan, or inventory. dump/restore are disabled.`);
+  fail(`Unknown command "${command}". Use validate, plan, inventory, or live-inventory. dump/restore are disabled.`);
 }
 
 const inventory = buildRepoInventory(repoRoot);

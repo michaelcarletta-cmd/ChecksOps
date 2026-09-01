@@ -1,0 +1,28 @@
+{
+  "status": "blocked",
+  "inventoriedAt": null,
+  "sourceOfTruth": "live-supabase-lovable",
+  "liveProjectRef": "nbcqwpysqgyxrrbgtmkw",
+  "liveProjectUrl": "https://nbcqwpysqgyxrrbgtmkw.supabase.co",
+  "priorLivePublicTableCount": 186,
+  "repositoryGeneratedPublicTableCount": 166,
+  "liveMinusRepoTableGap": 20,
+  "liveCatalog": null,
+  "missedByRepositoryScan": "unknown-until-live-catalog-access",
+  "doNotUseProjectRef": "sqyyvpaymashtdwjjmku",
+  "attemptedAt": "2026-09-01T20:09:00Z",
+  "attemptResult": "stopped-missing-database-read-on-live-project",
+  "accessChecked": {
+    "vitePublishableKeyForLiveProject": "present-insufficient-anon-api-only",
+    "managementApiTokenForLiveProject": "absent-403-access-control",
+    "managementApiTokenForOtherNamedChecksOpsProject": "present-wrong-project-not-used",
+    "liveReadOnlyDatabaseUri": "absent",
+    "pgDump": "not-run",
+    "rdsModified": false,
+    "sourceModified": false
+  },
+  "requiredNextAccess": [
+    "CHECKSOPS_LIVE_SUPABASE_ACCESS_TOKEN with database_read on nbcqwpysqgyxrrbgtmkw",
+    "or CHECKSOPS_LIVE_SUPABASE_DB_URL as a read-only Postgres URI for that same project"
+  ]
+}

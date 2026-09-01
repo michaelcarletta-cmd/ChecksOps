@@ -13,8 +13,11 @@ export const TARGET_RDS = {
 export const SOURCE = {
   kind: 'live-supabase-lovable',
   projectRef: 'nbcqwpysqgyxrrbgtmkw',
+  projectUrl: 'https://nbcqwpysqgyxrrbgtmkw.supabase.co',
+  priorLivePublicTableCount: 186,
+  doNotUseProjectRef: 'sqyyvpaymashtdwjjmku',
   generatedTypesLagNote:
-    'Generated src/integrations/supabase/types.ts is a conservative catalog. The live database remains the source of truth and may contain additional public tables.',
+    'Generated src/integrations/supabase/types.ts is a conservative catalog (166 public tables). A prior live inspection found 186 public tables. The live database remains the source of truth. Do not treat the other Management-API-visible project named ChecksOps (sqyyvpaymashtdwjjmku) as live.',
 };
 
 export const EXCLUDED_SCHEMAS = [

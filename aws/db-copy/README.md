@@ -11,4 +11,4 @@ node aws/db-copy/cli.mjs plan
 node --test aws/db-copy/tests/db-copy-offline.test.mjs
 ```
 
-`dump` and `restore` exit with an error unless a later phase explicitly authorizes them.
+`dump` / `restore` remain disabled. `live-inventory` stops unless dedicated live catalog credentials are provided.

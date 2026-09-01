@@ -14,16 +14,43 @@ Offline inventory and a dump/restore plan, derived from:
 - `supabase/migrations/` (extension, RLS, `auth.users`, `pg_net` / `pg_cron` / vault references)
 - `supabase/functions/` (151 Edge Functions)
 
-Generated types can lag the live database (inventory notes ~186 live public tables). When a copy is later approved, **pg_dump of the live database** is authoritative.
+Generated types can lag the live database. A prior direct inspection of live Lovable ChecksOps (`nbcqwpysqgyxrrbgtmkw`) found **186 public tables**; the repository scan has **166**. **The live catalog must control the migration inventory.** This environment could not complete that live inventory (see below).
 
 ```bash
 node aws/db-copy/cli.mjs validate
 node aws/db-copy/cli.mjs inventory
 node aws/db-copy/cli.mjs plan
+node aws/db-copy/cli.mjs live-inventory
 node --test aws/db-copy/tests/db-copy-offline.test.mjs
 ```
 
 `dump` and `restore` refuse unless `CHECKSOPS_DB_COPY_EXECUTE=I_UNDERSTAND_THIS_WRITES_DATA` and `--execute` are both set. This checkout still stops even then.
+
+## Live inventory status (2026-09-01)
+
+**Stopped. No live catalog was collected. No pg_dump, no application-row export, no RDS restore, no source or AWS changes.**
+
+| Item | Result |
+| --- | --- |
+| Live project | `nbcqwpysqgyxrrbgtmkw` (`https://nbcqwpysqgyxrrbgtmkw.supabase.co`) from `supabase/config.toml` and `.env.production` |
+| Repo generated public tables | 166 |
+| Prior live public tables | 186 |
+| Gap | 20 tables — **names unknown until live catalog access** |
+| Vite publishable key for live project | Present; Auth health works; cannot read `pg_catalog` / OpenAPI / all table counts |
+| Management API token for live project | **Missing** (403 access-control on `nbcqwpysqgyxrrbgtmkw`) |
+| Other project named ChecksOps | `sqyyvpaymashtdwjjmku` is visible to an existing PAT. **Do not inventory it as live.** |
+| Live read-only Postgres URI | Absent from this environment |
+
+Machine-readable copy: `aws/db-copy/live-inventory-status.json`.
+
+### Access required for the live inventory (do not paste a database password into chat)
+
+Store **one** of these as a Cursor Cloud environment secret, then re-run `node aws/db-copy/cli.mjs live-inventory`:
+
+1. `CHECKSOPS_LIVE_SUPABASE_ACCESS_TOKEN` — fine-grained Supabase token with **`database_read` on `nbcqwpysqgyxrrbgtmkw`**. Queries will use `POST /v1/projects/nbcqwpysqgyxrrbgtmkw/database/query` with `read_only=true`.
+2. `CHECKSOPS_LIVE_SUPABASE_DB_URL` — read-only Postgres URI for that same project (`default_transaction_read_only=on`). Direct `pg_dump` is still forbidden until a later approved copy phase.
+
+Not sufficient: the Vite publishable/anon key. Not acceptable: using `sqyyvpaymashtdwjjmku` as a stand-in for production.
 
 ## Lanes
 
@@ -119,11 +146,10 @@ Do not put these in Git.
 
 Current blockers for actually running the copy:
 
-1. No approved execute phase (this runbook forbids it).
-2. This environment cannot TCP to private RDS; restore must run from a VPC path.
-3. Operator-held live Supabase URI is not in this repo (correctly).
-4. Live dump may include extra tables beyond generated types; inventory must be refreshed from `pg_dump --schema-only` at copy time.
-5. PostGIS / pgvector availability on this RDS instance is unconfirmed until an admin `CREATE EXTENSION` attempt in the later phase.
+1. Live catalog inventory is blocked: this environment lacks `database_read` (or a read-only DB URI) on `nbcqwpysqgyxrrbgtmkw`. Repository types are 166 tables; live was 186.
+2. No approved execute phase (this runbook forbids dump/restore).
+3. This environment cannot TCP to private RDS; restore must run from a VPC path.
+4. PostGIS / pgvector availability on this RDS instance is unconfirmed until an admin `CREATE EXTENSION` attempt in the later phase.
 
 ## Safety
 
