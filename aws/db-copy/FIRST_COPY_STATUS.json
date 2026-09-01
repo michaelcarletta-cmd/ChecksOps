@@ -1,33 +1,29 @@
 {
-  "attempt": "first-copy",
+  "attempt": "first-copy-from-s3",
   "apply": false,
   "executed": false,
   "stopped": true,
-  "reason": "live_source_cannot_be_exported_with_current_access",
-  "liveProjectRef": "nbcqwpysqgyxrrbgtmkw",
-  "didNotUseProjectRef": "sqyyvpaymashtdwjjmku",
+  "reason": "missing_iam",
   "wroteToLiveSource": false,
   "createdChecksopsDatabase": false,
   "modifiedPostgresDatabase": false,
   "pointedLambdaAtChecksops": false,
-  "source": {
-    "committedInventory": "aws/db-copy/LIVE_SOURCE_INVENTORY.md",
-    "supabaseDbUriInThisEnvironment": false,
-    "supabaseManagementTokenForLiveProject": false,
-    "publishableKeyCanDump": false,
-    "poolerTcp5432FromThisVm": "open",
-    "directDbHostResolves": false
+  "backup": {
+    "requestedKey": "migration/checksops_260901.backup",
+    "actualKey": "Migration/checksops_260901(1).backup",
+    "bucket": "checksops-staging-privatefilesbucket-erzqsolpucjp",
+    "bytes": 49100401,
+    "megabytes": 49.1,
+    "format": "PGDMP custom",
+    "downloadedIntoGit": false,
+    "lambdaGetObject": "ok"
   },
-  "target": {
-    "rdsIdentifier": "checksops-staging",
-    "tcp5432FromThisVm": "timeout",
-    "lambdaInVpc": true,
-    "adminSecretRetrievable": true,
-    "dbHealthStillPostgres": true
+  "missingIam": {
+    "principal": "arn:aws:iam::806168576068:role/checksops-staging-ApiFunctionRole-7E7XRyLe3nyi",
+    "action": "secretsmanager:GetSecretValue",
+    "resource": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops_admin/1788286368527-Kv5tBt",
+    "awsCode": "AccessDeniedException"
   },
-  "operatorActionRequired": [
-    "Provide a read-only Postgres URI for nbcqwpysqgyxrrbgtmkw as Cursor Cloud secret CHECKSOPS_LIVE_SUPABASE_DB_URL (do not paste into chat), then re-run.",
-    "Alternatively, produce public-schema.dump and public-data.dump per FIRST_COPY_PROCEDURE.md and place them in an S3 prefix this role can read.",
-    "Authorize restore from a VPC path: either a bastion/SSM host, or a temporary VPC Lambda using checksops_admin that is deleted after restore. Do not change Lambda DATABASE_SECRET_ARN."
-  ]
+  "lambdaRestoredToOriginal": true,
+  "dbHealthStillPostgres": true
 }
