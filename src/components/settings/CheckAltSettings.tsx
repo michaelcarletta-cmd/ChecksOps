@@ -665,7 +665,7 @@ export function PendingApprovalDeposits() {
     refetchInterval: 30_000,
   });
 
-  const guardFinancial = useFinancialGuard(tenant?.id);
+  const guardFinancial = useFinancialGuard();
 
   const decide = useMutation({
     mutationFn: async (args: {
