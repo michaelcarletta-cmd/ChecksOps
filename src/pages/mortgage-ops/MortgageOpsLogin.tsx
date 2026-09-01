@@ -92,26 +92,68 @@ export default function MortgageOpsLogin() {
           <CardTitle>ChecksOps Mortgage Desk</CardTitle>
           <p className="text-sm text-muted-foreground">Employee sign-in</p>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-            </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Signing in…" : "Sign in"}
-            </Button>
-            {user && userRole && userRole !== "mortgage_agent" && userRole !== "admin" && (
-              <p className="text-sm text-destructive text-center">
-                This portal is for ChecksOps mortgage agents only.
+        <CardContent className="space-y-5">
+          {linkSent ? (
+            <div className="text-center space-y-3 py-4">
+              <CheckCircle2 className="h-10 w-10 mx-auto text-primary" />
+              <p className="font-medium">Check your email</p>
+              <p className="text-sm text-muted-foreground">
+                We sent a one-time sign-in link to {email}. It opens the Mortgage Desk directly.
               </p>
-            )}
-          </form>
+              <Button variant="ghost" onClick={() => setLinkSent(false)}>
+                Use a different email
+              </Button>
+            </div>
+          ) : (
+            <>
+              {canUsePasskeys && (
+                <div className="space-y-2">
+                  <Button type="button" className="w-full" disabled={loading} onClick={handlePasskey}>
+                    <Fingerprint className="mr-2 h-4 w-4" />
+                    {loading ? "Signing in…" : "Sign in with passkey"}
+                  </Button>
+                  <p className="text-xs text-center text-muted-foreground">
+                    Recommended — fastest and most secure
+                  </p>
+                </div>
+              )}
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">or email link</span>
+                </div>
+              </div>
+
+              <form onSubmit={handleMagicLink} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Work email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
+                <Button type="submit" variant="outline" className="w-full" disabled={loading}>
+                  <Mail className="mr-2 h-4 w-4" />
+                  {loading ? "Sending…" : "Email me a sign-in link"}
+                </Button>
+              </form>
+
+              {user && userRole && userRole !== "mortgage_agent" && userRole !== "admin" && (
+                <p className="text-sm text-destructive text-center">
+                  This portal is for ChecksOps mortgage agents only.
+                </p>
+              )}
+            </>
+          )}
         </CardContent>
+
       </Card>
     </div>
   );
