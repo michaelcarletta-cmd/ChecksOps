@@ -84,7 +84,9 @@ function CheckOpsRoutes() {
     <Routes>
       <Route path="/" element={<Suspense fallback={<PageLoader />}><CheckOpsLanding /></Suspense>} />
       <Route path="/login" element={<Suspense fallback={<PageLoader />}><CheckOpsLogin /></Suspense>} />
-      <Route path="/forgot-password" element={<Suspense fallback={<PageLoader />}><CheckOpsForgotPassword /></Suspense>} />
+      <Route path="/signup" element={<Suspense fallback={<PageLoader />}><CheckOpsSignup /></Suspense>} />
+      <Route path="/account/security" element={<Suspense fallback={<PageLoader />}><AccountSecurity /></Suspense>} />
+      <Route path="/forgot-password" element={<Navigate to="/login" replace />} />
       <Route path="/reset-password" element={<Suspense fallback={<PageLoader />}><CheckOpsResetPassword /></Suspense>} />
       <Route path="/auth" element={<Navigate to="/login" replace />} />
       <Route path="/sign" element={<Suspense fallback={<PageLoader />}><Sign /></Suspense>} />
