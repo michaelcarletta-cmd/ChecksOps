@@ -1,0 +1,9 @@
+GRANT EXECUTE ON FUNCTION public.aws_can_access_tenant(uuid) TO checksops;
+GRANT EXECUTE ON FUNCTION public.aws_can_access_claim(uuid) TO checksops;
+GRANT EXECUTE ON FUNCTION public.aws_can_access_check(uuid) TO checksops;
+GRANT EXECUTE ON FUNCTION public.aws_can_access_same_tenant_user(uuid) TO checksops;
+GRANT EXECUTE ON FUNCTION public.aws_can_access_deposit_item(uuid) TO checksops;
+GRANT EXECUTE ON FUNCTION public.aws_can_access_loss_draft(uuid) TO checksops;
+GRANT EXECUTE ON FUNCTION public.aws_can_access_signature_request(uuid) TO checksops;
+GRANT EXECUTE ON FUNCTION public.is_master_owner() TO checksops;
+GRANT EXECUTE ON FUNCTION public.is_platform_owner() TO checksops;
