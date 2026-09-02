@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { moovFetch, moovConfigured, moovEnvironment, scopes } from "../_shared/moovClient.ts";
-import { corsHeaders, json, sanitize } from "../_shared/moovGuard.ts";
+import { moovFetch, moovConfigured, scopes } from "../_shared/moovClient.ts";
+import { bindTenantMoovEnvironment, corsHeaders, json, sanitize } from "../_shared/moovGuard.ts";
 
 /**
  * Disconnects a stakeholder / recipient account at the payment provider.
@@ -23,8 +23,6 @@ serve(async (req) => {
     );
     const { data: userData, error: userErr } = await authClient.auth.getUser();
     if (userErr || !userData?.user) return json({ error: "Unauthorized" }, 401);
-
-    if (!moovConfigured()) return json({ error: "Payment provider is not configured." }, 503);
 
     const body = await req.json().catch(() => ({}));
     const stakeholderAccountId = String(body?.stakeholder_account_id ?? "");
@@ -49,6 +47,12 @@ serve(async (req) => {
       .eq("tenant_id", account.tenant_id)
       .maybeSingle();
     if (!membership) return json({ error: "Forbidden" }, 403);
+
+    // Test tenants disconnect against the sandbox ledger.
+    const environment = await bindTenantMoovEnvironment(supabase, account.tenant_id);
+    if (!moovConfigured(environment)) {
+      return json({ error: "Payment provider is not configured." }, 503);
+    }
 
     const { data: recipient } = await supabase
       .from("external_payment_recipients")
@@ -91,7 +95,7 @@ serve(async (req) => {
     await supabase.from("payment_event_log").insert(sanitize({
       tenant_id: account.tenant_id,
       event_type: "recipient.account.disconnected",
-      environment: moovEnvironment(),
+      environment,
       provider_metadata: { stakeholder_account_id: stakeholderAccountId, provider_account_id: providerAccountId },
     }));
 
