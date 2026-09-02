@@ -139,7 +139,7 @@ const tokenCache = new Map<string, CachedToken>();
 export async function moovToken(scopes: string[], requestOrigin?: string): Promise<string> {
   const scope = scopes.join(" ");
   const origin = requestOrigin ?? moovOrigin();
-  const cacheKey = `${origin}|${scope}`;
+  const cacheKey = `${moovEnvironment()}|${origin}|${scope}`;
   const cached = tokenCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now() + 30_000) return cached.token;
 
@@ -210,7 +210,7 @@ export const scopes = {
 
 /* ---------------- Facilitator account ---------------- */
 
-let facilitatorCache: string | null = null;
+const facilitatorCache = new Map<string, string>();
 
 /**
  * Moov creates transfers under the FACILITATOR (platform) account, not under
@@ -221,9 +221,13 @@ let facilitatorCache: string | null = null;
  * tenant's `moov-wallet` payment method -> the tenant account itself.
  */
 export async function facilitatorAccountId(hintAccountId?: string): Promise<string> {
-  const fromEnv = Deno.env.get("MOOV_PLATFORM_ACCOUNT_ID");
+  const env = moovEnvironment();
+  const fromEnv = env === "sandbox"
+    ? Deno.env.get("MOOV_SANDBOX_PLATFORM_ACCOUNT_ID")
+    : Deno.env.get("MOOV_PLATFORM_ACCOUNT_ID");
   if (fromEnv) return fromEnv;
-  if (facilitatorCache) return facilitatorCache;
+  const cached = facilitatorCache.get(env);
+  if (cached) return cached;
   if (!hintAccountId) throw new Error("Facilitator account id is not configured.");
 
   const methods = await moovFetch<any[]>(`/accounts/${hintAccountId}/payment-methods`, {
@@ -233,8 +237,9 @@ export async function facilitatorAccountId(hintAccountId?: string): Promise<stri
     .map((m: any) => m?.wallet?.partnerAccountID ?? m?.wallet?.partnerAccountId)
     .find(Boolean) as string | undefined;
 
-  facilitatorCache = partner ?? hintAccountId;
-  return facilitatorCache;
+  const resolved = partner ?? hintAccountId;
+  facilitatorCache.set(env, resolved);
+  return resolved;
 }
 
 
