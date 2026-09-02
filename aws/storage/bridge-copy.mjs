@@ -7,6 +7,7 @@
 import { mkdir, writeFile, readFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import {
   BRIDGE_TOKEN_SHA256,
@@ -93,15 +94,17 @@ const downloadSigned = async (url) => {
   };
 };
 
-const putObject = async (key, filePath, contentType, hash, bucket) => {
-  await run(AWS, [
+const putObject = async (key, filePath, contentType, hash, bucket, byteLength) => {
+  const args = [
     's3api', 'put-object',
     '--bucket', BUCKET,
     '--key', key,
-    '--body', filePath,
     '--content-type', contentType,
     '--metadata', `sha256=${hash},source-bucket=${bucket}`,
-  ]);
+  ];
+  // AWS CLI rejects --body for a zero-byte file ("Blob values must be a path to a file").
+  if (byteLength > 0) args.push('--body', filePath);
+  await run(AWS, args);
 };
 
 const copyOne = async (obj, signedUrl, stats) => {
@@ -142,12 +145,14 @@ const copyOne = async (obj, signedUrl, stats) => {
     stats.bytes += got.buf.length;
     return;
   }
-  const tmp = join(tmpdir(), `checksops-bridge-${hash}`);
-  await writeFile(tmp, got.buf);
+  // Unique temp path per put: identical source bytes share a sha256, and
+  // concurrent copies must not unlink each other's --body file.
+  const tmp = join(tmpdir(), `checksops-bridge-${hash.slice(0, 16)}-${randomUUID()}`);
+  if (got.buf.length > 0) await writeFile(tmp, got.buf);
   try {
-    await putObject(key, tmp, obj.mimetype || got.contentType, hash, obj.bucket);
+    await putObject(key, tmp, obj.mimetype || got.contentType, hash, obj.bucket, got.buf.length);
   } finally {
-    await unlink(tmp).catch(() => {});
+    if (got.buf.length > 0) await unlink(tmp).catch(() => {});
   }
   stats.copied.push({
     bucket: obj.bucket, name: obj.name, key, sha256: hash, bytes: got.buf.length, skippedExisting: false,
