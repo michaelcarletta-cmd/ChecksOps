@@ -592,14 +592,25 @@ export function createAwsStagingClient() {
   };
 
   const functions = {
-    invoke: async (name: string) => ({
-      data: null,
-      error: {
-        message: `provider_disabled:${name}`,
-        name: "FunctionsError",
-        context: { status: 403 },
-      },
-    }),
+    invoke: async (name: string, options: { body?: Record<string, unknown> } = {}) => {
+      const restored = await restoreSession();
+      const token = restored.session?.access_token;
+      const { response, body } = await apiFetch(`/functions/v1/${encodeURIComponent(name)}`, {
+        method: "POST",
+        body: JSON.stringify(options.body || {}),
+      }, token);
+      if (response.status === 200 && body?.ok) {
+        return { data: body, error: null };
+      }
+      return {
+        data: null,
+        error: {
+          message: String(body?.error || `provider_disabled:${name}`),
+          name: "FunctionsError",
+          context: { status: response.status || 403, body },
+        },
+      };
+    },
   };
 
   const channel = () => {

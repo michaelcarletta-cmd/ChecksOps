@@ -6,6 +6,7 @@ import { handleAuthorizationProbe, handleJwksCheck } from './authorization.mjs';
 import { AUTH_ROUTES } from './auth-cognito.mjs';
 import { handleDataQuery, handleDataRpc, handleWritesDisabled, handleFunctionsDisabled } from './data.mjs';
 import { handleWrite } from './write.mjs';
+import { handleProviderRequest } from './providers.mjs';
 import { handleTenantSecurityCompliance } from './tenant-security-compliance.mjs';
 import {
   handleStorageSign,
@@ -25,7 +26,7 @@ const json = (statusCode, body) => ({
     'content-type': 'application/json',
     'cache-control': 'no-store',
     'access-control-allow-origin': '*',
-    'access-control-allow-headers': 'authorization,content-type,x-request-id,x-user-id,x-tenant-id,x-role,x-cognito-sub',
+    'access-control-allow-headers': 'authorization,content-type,x-request-id,x-user-id,x-tenant-id,x-role,x-cognito-sub,x-signature,x-timestamp,x-nonce,x-webhook-id,webhook-id,webhook-timestamp,webhook-signature,x-moov-signature,x-moov-timestamp,x-moov-webhook-id',
     'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
   },
   body: JSON.stringify(body),
@@ -220,7 +221,7 @@ export const handler = async (event) => {
           'cache-control': 'no-store',
           location: result.location,
           'access-control-allow-origin': '*',
-          'access-control-allow-headers': 'authorization,content-type,x-request-id,x-user-id,x-tenant-id,x-role,x-cognito-sub',
+          'access-control-allow-headers': 'authorization,content-type,x-request-id,x-user-id,x-tenant-id,x-role,x-cognito-sub,x-signature,x-timestamp,x-nonce,x-webhook-id,webhook-id,webhook-timestamp,webhook-signature,x-moov-signature,x-moov-timestamp,x-moov-webhook-id',
           'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
         },
         body: JSON.stringify({
@@ -318,6 +319,17 @@ export const handler = async (event) => {
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
       ...result,
+    });
+  }
+
+  const provider = await handleProviderRequest(event, path, method);
+  if (provider) {
+    return json(provider.statusCode || (provider.ok ? 200 : 403), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      productionWebhooksRedirected: false,
+      ...provider,
     });
   }
 

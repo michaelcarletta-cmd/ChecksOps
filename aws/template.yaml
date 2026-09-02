@@ -52,6 +52,14 @@ Globals:
         DATABASE_NAME: checksops
         COGNITO_USER_POOL_ID: !Ref ChecksOpsUserPool
         COGNITO_CLIENT_ID: !Ref ChecksOpsUserPoolClient
+        AWS_PROVIDER_EXECUTION_ENABLED: "false"
+        AWS_MOOV_ENABLED: "false"
+        AWS_CHECKALT_ENABLED: "false"
+        AWS_PLAID_ENABLED: "false"
+        AWS_ACTUM_ENABLED: "false"
+        AWS_QUICKBOOKS_ENABLED: "false"
+        AWS_PROVIDER_LIVE_READS_ENABLED: "false"
+        AWS_PROVIDER_WEBHOOK_DRY_RUN: "true"
 
 Resources:
   ChecksOpsApi:
