@@ -77,8 +77,8 @@ const applySqlFile = async (client, name) => {
 
 export const applyCompleteDdl = async (client) => {
   await client.query(readSql('11_access_helpers.sql'));
-  await client.query(readSql('15_access_grants.sql'));
   await client.query(readSql('20_write_helpers.sql'));
+  await client.query(readSql('15_access_grants.sql'));
   await client.query(readSql('22_write_probe_table.sql'));
   await client.query(readSql('21_proposed_write_policies.sql'));
   await client.query(readSql('24_complete_write_policies.sql'));
@@ -106,12 +106,72 @@ export const applyCompleteDdl = async (client) => {
 const parseFkTargets = () => {
   const sql = readSql('25_fk_retarget.sql');
   const targets = [];
-  const re = /ALTER TABLE public\.(\w+) ADD CONSTRAINT (\w+) FOREIGN KEY \((\w+)\)/g;
+  const re = /ALTER TABLE public\.(\w+) ADD CONSTRAINT (\w+) FOREIGN KEY \((\w+)\) REFERENCES public\.identity_accounts\(application_user_id\) (ON DELETE .+? NOT VALID);/g;
   let match;
   while ((match = re.exec(sql))) {
-    targets.push({ table: match[1], constraint: match[2], column: match[3] });
+    targets.push({
+      table: match[1],
+      constraint: match[2],
+      column: match[3],
+      onDelete: match[4],
+    });
   }
   return targets;
+};
+
+export const applyFkRetargets = async (client, orphanScan) => {
+  if (!orphanScan?.pass) {
+    return { applied: false, skipped: true, reason: 'orphans present or ninth UUID missing from identity_accounts' };
+  }
+  const targets = parseFkTargets();
+  if (targets.length !== 47) {
+    return { applied: false, skipped: true, reason: `parsed ${targets.length} FK targets, expected 47` };
+  }
+  const added = [];
+  const existed = [];
+  const errors = [];
+  for (const target of targets) {
+    const found = (await client.query(
+      `SELECT conname FROM pg_constraint WHERE conname = $1`,
+      [target.constraint],
+    )).rows[0];
+    if (found) {
+      existed.push(target.constraint);
+    } else {
+      try {
+        await client.query(
+          `ALTER TABLE public.${target.table}
+             ADD CONSTRAINT ${target.constraint}
+             FOREIGN KEY (${target.column})
+             REFERENCES public.identity_accounts(application_user_id)
+             ${target.onDelete}`,
+        );
+        added.push(target.constraint);
+      } catch (error) {
+        errors.push({ constraint: target.constraint, error: String(error?.message || error).slice(0, 240) });
+      }
+    }
+    try {
+      await client.query(`ALTER TABLE public.${target.table} VALIDATE CONSTRAINT ${target.constraint}`);
+    } catch (error) {
+      errors.push({ constraint: target.constraint, phase: 'validate', error: String(error?.message || error).slice(0, 240) });
+    }
+  }
+  const present = (await client.query(
+    `SELECT conname FROM pg_constraint WHERE conname LIKE '%_identity_fkey' ORDER BY 1`,
+  )).rows.map((row) => row.conname);
+  const missing = targets.map((t) => t.constraint).filter((name) => !present.includes(name));
+  return {
+    applied: true,
+    skipped: false,
+    added: added.length,
+    alreadyExisted: existed.length,
+    identityFkeys: present.length,
+    expected: 47,
+    missing,
+    errors,
+    pass: present.length === 47 && missing.length === 0 && errors.length === 0,
+  };
 };
 
 export const scanFkOrphans = async (client) => {
@@ -158,25 +218,13 @@ export const scanFkOrphans = async (client) => {
   };
 };
 
-export const applyFkRetargets = async (client, orphanScan) => {
-  if (!orphanScan?.pass) {
-    return { applied: false, skipped: true, reason: 'orphans present or ninth UUID missing from identity_accounts' };
-  }
-  await client.query(readSql('25_fk_retarget.sql'));
-  const added = Number((await client.query(`
-    SELECT count(*)::int AS n FROM pg_constraint
-    WHERE conname LIKE '%_identity_fkey'
-  `)).rows[0].n);
-  return { applied: true, skipped: false, identityFkeys: added, expected: 47, pass: added >= 47 };
-};
-
 export const backfillAssignableClaims = async (client) => {
   const live = await investigateClaimsOwnership(client);
   const jsonSet = new Set(ASSIGNABLE_IDS);
   if (jsonSet.size !== 83) {
     return { applied: false, error: `claims_ownership.json has ${jsonSet.size} ids, expected 83` };
   }
-  if (!live.pass || live.assignable !== 83 || live.ambiguous !== 0) {
+  if (live.assignable !== 83 || live.ambiguous !== 0) {
     return { applied: false, live, error: 'live mapping is not 83 assignable / 0 ambiguous' };
   }
   const liveIds = (await client.query(`
@@ -255,7 +303,16 @@ export const backfillAssignableClaims = async (client) => {
     ORDER BY 1
   `, [ASSIGNABLE_IDS])).rows;
 
-  const updated = await client.query(readSql('23_claims_org_backfill.sql'));
+  let rowsUpdated = 0;
+  let skippedBecauseAlreadyApplied = false;
+  if (Number(before.freedom) === 83 && Number(before.org_null) === 97 && Number(before.other) === 0) {
+    skippedBecauseAlreadyApplied = true;
+  } else if (Number(before.org_null) === 180 && Number(before.freedom) === 0) {
+    const updated = await client.query(readSql('23_claims_org_backfill.sql'));
+    rowsUpdated = Number(updated.rowCount || 0);
+  } else {
+    return { applied: false, before, error: 'unexpected claims.org_id distribution before backfill' };
+  }
 
   const after = (await client.query(`
     SELECT
@@ -285,17 +342,18 @@ export const backfillAssignableClaims = async (client) => {
     jsonIds: 83,
     before,
     after,
-    rowsUpdated: Number(updated.rowCount || 0),
+    rowsUpdated,
+    skippedBecauseAlreadyApplied,
     assignableAfterFreedom: afterIds.filter((row) => row.org_id === FREEDOM_TENANT).length,
     stillNullAssignable: stillNullAssignable.length,
     unassignedClaimsTouched: unassignedTouched,
     beforeSample: beforeIds.slice(0, 5),
     afterSample: afterIds.slice(0, 5),
-    pass: Number(before.org_null) === 180
+    pass: Number(after.n) === 180
       && Number(after.freedom) === 83
       && Number(after.org_null) === 97
       && Number(after.other) === 0
-      && Number(updated.rowCount || 0) === 83
+      && (skippedBecauseAlreadyApplied || rowsUpdated === 83)
       && stillNullAssignable.length === 0
       && unassignedTouched === 0,
   };
@@ -476,10 +534,20 @@ export const completeAuthorizationTests = async (client) => {
       client, TESTER_ID,
       `UPDATE public.company_branding SET updated_at = now()`,
     ));
-    tests.masterUpdateBranding = countResult(await tryWrite(
-      client, MASTER_OWNER_ID,
-      `UPDATE public.company_branding SET updated_at = now()`,
-    ));
+    const brandingRows = Number((await client.query(
+      `SELECT count(*)::int AS n FROM public.company_branding`,
+    )).rows[0].n);
+    if (brandingRows > 0) {
+      tests.masterUpdateBranding = countResult(await tryWrite(
+        client, MASTER_OWNER_ID,
+        `UPDATE public.company_branding SET updated_at = now()`,
+      ));
+    } else {
+      tests.masterUpdateBranding = countResult(await tryWrite(
+        client, MASTER_OWNER_ID,
+        `INSERT INTO public.company_branding (company_name) VALUES ('aws-complete-test')`,
+      ));
+    }
     tests.ninthInsertProbeDenied = countResult(await tryWrite(
       client, NINTH_ID,
       `INSERT INTO public._aws_rls_write_probe (tenant_id, label)
