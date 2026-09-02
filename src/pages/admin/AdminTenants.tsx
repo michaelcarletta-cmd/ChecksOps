@@ -474,6 +474,7 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
             <Label>Test Account</Label>
             <p className="text-xs text-muted-foreground">
               Marks this organization as a demo account so prospects can explore the platform before purchasing.
+              Test accounts run on the payment provider's sandbox ledger — no real money moves.
             </p>
           </div>
           <Switch checked={isTest} onCheckedChange={setIsTest} />
@@ -489,7 +490,7 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
             </div>
           </div>
         )}
-        <Button onClick={() => save({ name, slug, custom_domain: customDomain || null, subscription_status: subStatus, is_test_account: isTest, max_checks_per_month: maxChecks } as any)} disabled={saving}>
+        <Button onClick={() => save({ name, slug, custom_domain: customDomain || null, subscription_status: subStatus, is_test_account: isTest, moov_environment: isTest ? "sandbox" : "production", max_checks_per_month: maxChecks } as any)} disabled={saving}>
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Changes
         </Button>
 
@@ -1397,8 +1398,13 @@ function TenantManagementTable({
       ? { is_founding_partner: true, monthly_rate_cents: 7500 }
       : { is_founding_partner: false });
 
+  // Test accounts also move to the payment provider's sandbox ledger, so
+  // nothing they do moves real money.
   const toggleTestAccount = (t: Tenant, on: boolean) =>
-    updateTenant(t.id, { is_test_account: on });
+    updateTenant(t.id, {
+      is_test_account: on,
+      moov_environment: on ? "sandbox" : "production",
+    } as any);
 
   const fmtMoney = (cents?: number | null) =>
     cents == null ? "—" : `$${(cents / 100).toFixed(2)}`;
