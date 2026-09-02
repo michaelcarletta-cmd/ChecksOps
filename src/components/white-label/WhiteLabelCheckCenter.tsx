@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { LogOut, Settings, BadgeCheck, Banknote, Receipt, Hammer, Wallet } from "lucide-react";
+import { LogOut, Settings, BadgeCheck, Banknote, Receipt, Hammer, Wallet, ShieldCheck } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 
 const CheckCommandCenter = lazy(() => import("@/pages/CheckCommandCenter"));
