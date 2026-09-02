@@ -376,7 +376,7 @@ function PreClaimView({ token, homeowner, pending, onRefresh }: {
   );
 }
 
-function PendingEndorsementsPanel({ pending }: { pending: PendingEndorsement[] }) {
+function PendingEndorsementsPanel({ pending, onRefresh }: { pending: PendingEndorsement[]; onRefresh?: () => void }) {
   if (!pending || pending.length === 0) return null;
   const partyLabel = (t: string) => t === "mortgage_company" ? "Mortgage company" : t === "insured" ? "Homeowner" : t;
   return (
@@ -385,6 +385,9 @@ function PendingEndorsementsPanel({ pending }: { pending: PendingEndorsement[] }
         <CardTitle className="text-base flex items-center gap-2">
           <PenTool className="h-4 w-4 text-amber-400" /> Checks awaiting signature
         </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          You can sign right here — or use the link we emailed you. Once signed either way, it will no longer show as awaiting your signature.
+        </p>
       </CardHeader>
       <CardContent className="space-y-3">
         {pending.map((chk) => (
@@ -406,7 +409,15 @@ function PendingEndorsementsPanel({ pending }: { pending: PendingEndorsement[] }
                     </div>
                   </div>
                   {p.sign_url ? (
-                    <Button size="sm" className="h-7 px-2 text-[11px] shrink-0" onClick={() => { window.location.href = p.sign_url!; }}>
+                    <Button
+                      size="sm"
+                      className="h-7 px-2 text-[11px] shrink-0"
+                      onClick={() => {
+                        window.open(p.sign_url!, "_blank", "noopener,noreferrer");
+                        toast.info("Signing opened in a new tab. Return here and refresh when done.");
+                        if (onRefresh) setTimeout(onRefresh, 15000);
+                      }}
+                    >
                       Sign now
                     </Button>
                   ) : (
@@ -423,6 +434,7 @@ function PendingEndorsementsPanel({ pending }: { pending: PendingEndorsement[] }
     </Card>
   );
 }
+
 
 function PendingSignaturesPanel({ token, pending }: { token: string; pending: PendingSignature[] }) {
   const [busyId, setBusyId] = useState<string | null>(null);
