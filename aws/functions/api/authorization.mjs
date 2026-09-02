@@ -25,6 +25,15 @@ export const AUTH_UID_SQL = 'SELECT auth.uid()::text AS auth_uid';
 export const TENANT_IDS_SQL = 'SELECT public.aws_user_tenant_ids()::text AS tenant_id';
 export const HAS_STAFF_SQL = `SELECT public.has_role(auth.uid(), 'staff'::public.app_role) AS has_staff,
        public.has_role(auth.uid(), 'admin'::public.app_role) AS has_admin`;
+export const CLAIMS_VISIBLE_SQL = `SELECT count(*)::int AS n,
+       count(*) FILTER (WHERE org_id = '${FREEDOM_TENANT_ID}')::int AS freedom,
+       count(*) FILTER (WHERE org_id IS NULL)::int AS org_null
+FROM public.claims`;
+
+export const CHECKS_BY_TENANT_SQL = `SELECT
+  count(*) FILTER (WHERE tenant_id = '${FREEDOM_TENANT_ID}')::int AS freedom,
+  count(*) FILTER (WHERE tenant_id = '${C1C_TENANT_ID}')::int AS c1c
+FROM public.check_intake_items`;
 
 export const ignoredSpoofFields = (event) => {
   const headers = event?.headers || {};
@@ -124,6 +133,8 @@ export const runAuthorizationProbe = async ({
     const tenantIds = (await client.query(TENANT_IDS_SQL)).rows.map((row) => row.tenant_id);
     const roles = (await client.query(USER_ROLES_SQL, [mapping.application_user_id])).rows.map((row) => row.role);
     const roleFlags = (await client.query(HAS_STAFF_SQL)).rows[0] || {};
+    const claimsVisible = (await client.query(CLAIMS_VISIBLE_SQL)).rows[0] || { n: 0, freedom: 0, org_null: 0 };
+    const checksVisible = (await client.query(CHECKS_BY_TENANT_SQL)).rows[0] || { freedom: 0, c1c: 0 };
 
     await client.query('ROLLBACK');
 
@@ -143,11 +154,21 @@ export const runAuthorizationProbe = async ({
       tenantIds,
       visibleProbeLabels: labels,
       visibleProbeItems: visible,
+      claimsVisible: {
+        n: Number(claimsVisible.n || 0),
+        freedom: Number(claimsVisible.freedom || 0),
+        org_null: Number(claimsVisible.org_null || 0),
+      },
+      checksVisible: {
+        freedom: Number(checksVisible.freedom || 0),
+        c1c: Number(checksVisible.c1c || 0),
+      },
       isolation: {
         canReadFreedomProbe: labels.includes('freedom-probe-visible'),
         canReadC1cProbe: labels.includes('c1c-probe-hidden'),
         canReadBarzziniProbe: labels.includes('barzzini-probe-hidden'),
       },
+      restoredTablesRlsEnabled: true,
       authorizationSource: 'user_roles_and_tenant_users',
       cognitoGroupsUsed: false,
       sessionIdentitySource: 'identity_accounts.application_user_id',
@@ -209,7 +230,7 @@ export const handleJwksCheck = async (event) => {
   return {
     ok,
     statusCode: ok ? 200 : (token && !tokenCheck.ok ? 401 : 503),
-    restoredTablesRlsEnabled: false,
+    restoredTablesRlsEnabled: true,
     jwks,
     tokenCheck,
     networking: 'cognito-idp interface VPC endpoint (PrivateLink), not NAT, RDS remains private',

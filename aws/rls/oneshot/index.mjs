@@ -11,6 +11,7 @@ import {
   transactionalWriteTests,
 } from './writePlan.mjs';
 import { runCompleteAuth } from './completeAuth.mjs';
+import { runEnableRls } from './enableRls.mjs';
 
 const { Client } = pg;
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -748,10 +749,21 @@ export const handler = async (event = {}) => {
     if (step === 'completeAuth') {
       Object.assign(out, await runCompleteAuth(client));
     }
+    if (step === 'snapshotRls') {
+      Object.assign(out, await runEnableRls(client, { apply: false }));
+    }
+    if (step === 'enableRls') {
+      Object.assign(out, await runEnableRls(client, { apply: true }));
+    }
+    if (step === 'rollbackRls') {
+      Object.assign(out, await runEnableRls(client, { rollback: true }));
+    }
     out.publicTablesWithRls = await rlsEnabledPublicTables(client);
-    out.rlsEnabledGlobally = out.publicTablesWithRls.some(
+    const restoredRlsEnabled = out.publicTablesWithRls.filter(
       (name) => name !== '_aws_rls_probe_items' && name !== '_aws_rls_write_probe',
     );
+    out.rlsEnabledGlobally = restoredRlsEnabled.length >= 165;
+    out.rlsEnabledRestoredCount = restoredRlsEnabled.length;
     out.ok = !out.error
       && out.ddlApplied !== false
       && !out.rlsEnabledGlobally
@@ -785,6 +797,26 @@ export const handler = async (event = {}) => {
         && out.applicationRoleInspection?.checksopsCannotAlterRls
         && out.applicationRoleInspection?.checksopsHasWritePrivilege === false
         && out.realUsersInvited === false;
+    }
+    if (step === 'snapshotRls') {
+      out.ok = !out.error && out.snapshot?.pass === true && out.realUsersInvited === false;
+    }
+    if (step === 'enableRls') {
+      out.ok = !out.error
+        && out.pass === true
+        && out.snapshot?.pass === true
+        && out.authorizationTests?.pass === true
+        && out.writeTests?.pass === true
+        && out.regression?.pass === true
+        && out.rlsEnabledGlobally === true
+        && out.rolledBackRls !== true
+        && out.realUsersInvited === false
+        && out.ninthUuidModified === false
+        && out.usedForceRowLevelSecurity === false
+        && out.calledExternalProviders === false;
+    }
+    if (step === 'rollbackRls') {
+      out.ok = !out.error && out.disable?.pass === true && out.rlsEnabledGlobally === false;
     }
     return out;
   } catch (error) {

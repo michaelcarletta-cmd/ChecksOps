@@ -110,7 +110,6 @@ export const handler = async (event) => {
       service: 'checksops-api',
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
-      restoredTablesRlsEnabled: false,
       ...probe,
     });
   }
