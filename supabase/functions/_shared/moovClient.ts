@@ -16,30 +16,82 @@ const MOOV_HOSTS: Record<string, string> = {
   production: "https://api.moov.io",
 };
 
+/**
+ * Per-request environment override.
+ *
+ * Tenants flagged as test accounts (`tenants.moov_environment = 'sandbox'`)
+ * run against Moov's sandbox credentials so no real money moves, while live
+ * tenants keep using production in the same deployment. `moovGuard` binds the
+ * value for the current request's async context; everything else in this
+ * module reads it through `moovEnvironment()`.
+ */
+import { AsyncLocalStorage } from "node:async_hooks";
+
+const envStore = new AsyncLocalStorage<string>();
+
+/** Binds the environment for the remainder of the current request. */
+export function bindMoovEnvironment(env: string): void {
+  const normalized = (env ?? "").toLowerCase();
+  if (!MOOV_HOSTS[normalized]) return;
+  envStore.enterWith(normalized);
+}
+
+/** Runs `fn` with an explicit environment (webhooks, cron, tests). */
+export function withMoovEnvironment<T>(env: string, fn: () => T): T {
+  const normalized = (env ?? "").toLowerCase();
+  return MOOV_HOSTS[normalized] ? envStore.run(normalized, fn) : fn();
+}
+
 export function moovEnvironment(): string {
-  const env = (Deno.env.get("MOOV_ENVIRONMENT") ?? "sandbox").toLowerCase();
+  const env = (
+    envStore.getStore() ?? Deno.env.get("MOOV_ENVIRONMENT") ?? "sandbox"
+  ).toLowerCase();
   if (!MOOV_HOSTS[env]) {
     throw new Error(`MOOV_ENVIRONMENT must be "sandbox" or "production", got "${env}"`);
   }
   return env;
 }
 
+/** True when the current request is running against Moov's sandbox ledger. */
+export function moovIsSandbox(): boolean {
+  return moovEnvironment() === "sandbox";
+}
+
 export function moovHost(): string {
   return MOOV_HOSTS[moovEnvironment()];
 }
 
-export function moovConfigured(): boolean {
-  return !!(Deno.env.get("MOOV_PUBLIC_KEY") && Deno.env.get("MOOV_SECRET_KEY"));
+/** Credentials for a given environment; sandbox uses its own key pair. */
+function credentialsFor(env: string): { key?: string; secret?: string } {
+  if (env === "sandbox") {
+    return {
+      key: Deno.env.get("MOOV_SANDBOX_PUBLIC_KEY") ?? undefined,
+      secret: Deno.env.get("MOOV_SANDBOX_SECRET_KEY") ?? undefined,
+    };
+  }
+  return {
+    key: Deno.env.get("MOOV_PUBLIC_KEY") ?? undefined,
+    secret: Deno.env.get("MOOV_SECRET_KEY") ?? undefined,
+  };
+}
+
+export function moovConfigured(env?: string): boolean {
+  const { key, secret } = credentialsFor(env ?? moovEnvironment());
+  return !!(key && secret);
 }
 
 function credentials(): { key: string; secret: string } {
-  const key = Deno.env.get("MOOV_PUBLIC_KEY");
-  const secret = Deno.env.get("MOOV_SECRET_KEY");
+  const env = moovEnvironment();
+  const { key, secret } = credentialsFor(env);
   if (!key || !secret) {
-    throw new Error("Moov is not configured. MOOV_PUBLIC_KEY and MOOV_SECRET_KEY must be set.");
+    const prefix = env === "sandbox" ? "MOOV_SANDBOX_" : "MOOV_";
+    throw new Error(
+      `Moov is not configured for the ${env} environment. ${prefix}PUBLIC_KEY and ${prefix}SECRET_KEY must be set.`,
+    );
   }
   return { key, secret };
 }
+
 
 /**
  * Moov ties every API key to an allowlisted domain list: requests to
@@ -48,10 +100,15 @@ function credentials(): { key: string; secret: string } {
  * Server-side fetch sends no Origin, so we set it explicitly.
  */
 export function moovOrigin(): string {
-  const raw = Deno.env.get("MOOV_ALLOWED_ORIGIN")
+  const sandbox = moovEnvironment() === "sandbox"
+    ? Deno.env.get("MOOV_SANDBOX_ALLOWED_ORIGIN")
+    : null;
+  const raw = sandbox
+    ?? Deno.env.get("MOOV_ALLOWED_ORIGIN")
     ?? Deno.env.get("CHECKSOPS_APP_URL")
     ?? "https://checksops.com";
   try {
+
     const u = new URL(raw);
     return `${u.protocol}//${u.host}`;
   } catch {
@@ -82,7 +139,7 @@ const tokenCache = new Map<string, CachedToken>();
 export async function moovToken(scopes: string[], requestOrigin?: string): Promise<string> {
   const scope = scopes.join(" ");
   const origin = requestOrigin ?? moovOrigin();
-  const cacheKey = `${origin}|${scope}`;
+  const cacheKey = `${moovEnvironment()}|${origin}|${scope}`;
   const cached = tokenCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now() + 30_000) return cached.token;
 
@@ -153,7 +210,7 @@ export const scopes = {
 
 /* ---------------- Facilitator account ---------------- */
 
-let facilitatorCache: string | null = null;
+const facilitatorCache = new Map<string, string>();
 
 /**
  * Moov creates transfers under the FACILITATOR (platform) account, not under
@@ -164,9 +221,13 @@ let facilitatorCache: string | null = null;
  * tenant's `moov-wallet` payment method -> the tenant account itself.
  */
 export async function facilitatorAccountId(hintAccountId?: string): Promise<string> {
-  const fromEnv = Deno.env.get("MOOV_PLATFORM_ACCOUNT_ID");
+  const env = moovEnvironment();
+  const fromEnv = env === "sandbox"
+    ? Deno.env.get("MOOV_SANDBOX_PLATFORM_ACCOUNT_ID")
+    : Deno.env.get("MOOV_PLATFORM_ACCOUNT_ID");
   if (fromEnv) return fromEnv;
-  if (facilitatorCache) return facilitatorCache;
+  const cached = facilitatorCache.get(env);
+  if (cached) return cached;
   if (!hintAccountId) throw new Error("Facilitator account id is not configured.");
 
   const methods = await moovFetch<any[]>(`/accounts/${hintAccountId}/payment-methods`, {
@@ -176,8 +237,9 @@ export async function facilitatorAccountId(hintAccountId?: string): Promise<stri
     .map((m: any) => m?.wallet?.partnerAccountID ?? m?.wallet?.partnerAccountId)
     .find(Boolean) as string | undefined;
 
-  facilitatorCache = partner ?? hintAccountId;
-  return facilitatorCache;
+  const resolved = partner ?? hintAccountId;
+  facilitatorCache.set(env, resolved);
+  return resolved;
 }
 
 

@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { moovConfigured, moovEnvironment } from "./moovClient.ts";
+import { bindMoovEnvironment, moovConfigured, moovEnvironment } from "./moovClient.ts";
 
 /**
  * Rollout safety for every Moov edge function.
@@ -56,9 +56,6 @@ export async function requireMoovCaller(
   if (!moovGloballyEnabled()) {
     return json({ error: "This payment provider is not enabled." }, 403);
   }
-  if (!moovConfigured()) {
-    return json({ error: "Payment provider credentials are not configured." }, 503);
-  }
 
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
@@ -105,14 +102,54 @@ export async function requireMoovCaller(
     return json({ error: "This organization is not enabled for this payment provider." }, 403);
   }
 
+  // Per-tenant environment: test tenants run against Moov's sandbox ledger so
+  // no real money moves, while live tenants stay on production credentials.
   let environment: string;
   try {
+    const tenantEnv = ((tenant as any).moov_environment ?? "").toLowerCase();
+    if (tenantEnv === "sandbox" || tenantEnv === "production") {
+      bindMoovEnvironment(tenantEnv);
+    }
     environment = moovEnvironment();
   } catch (e) {
     return json({ error: (e as Error).message }, 503);
   }
 
+  if (!moovConfigured(environment)) {
+    return json(
+      {
+        error: environment === "sandbox"
+          ? "Sandbox payment credentials are not configured for this test organization."
+          : "Payment provider credentials are not configured.",
+      },
+      503,
+    );
+  }
+
   return { userId, tenantId, isAdmin, environment, supabase };
+}
+
+/**
+ * Binds the Moov environment for flows that have no signed-in caller
+ * (recipient setup links, webhooks, background jobs). Test tenants resolve to
+ * the sandbox ledger; everyone else stays on production credentials.
+ */
+export async function bindTenantMoovEnvironment(
+  supabase: SupabaseClient,
+  tenantId: string | null | undefined,
+): Promise<string> {
+  if (tenantId) {
+    const { data } = await supabase
+      .from("tenants")
+      .select("moov_environment")
+      .eq("id", tenantId)
+      .maybeSingle();
+    const tenantEnv = ((data as any)?.moov_environment ?? "").toLowerCase();
+    if (tenantEnv === "sandbox" || tenantEnv === "production") {
+      bindMoovEnvironment(tenantEnv);
+    }
+  }
+  return moovEnvironment();
 }
 
 export function isResponse(v: unknown): v is Response {

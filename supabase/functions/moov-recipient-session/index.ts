@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { moovConfigured, moovEnvironment } from "../_shared/moovClient.ts";
+import { bindMoovEnvironment, moovConfigured, moovEnvironment } from "../_shared/moovClient.ts";
 import { corsHeaders, json } from "../_shared/moovGuard.ts";
 
 // PUBLIC endpoint for the branded recipient-payment page.
@@ -20,12 +20,10 @@ serve(async (req) => {
     if ((Deno.env.get("MOOV_ENABLED") ?? "false").toLowerCase() !== "true") {
       return json({ error: "This payment provider is not enabled." }, 403);
     }
-    if (!moovConfigured()) return json({ error: "Payment provider is not configured." }, 503);
 
     const { token } = await req.json();
     if (!token || typeof token !== "string") return json({ error: "token is required" }, 400);
 
-    const environment = moovEnvironment();
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -38,8 +36,13 @@ serve(async (req) => {
       .maybeSingle();
 
     if (!recipient) return json({ error: "This link is not valid." }, 404);
-    if (recipient.environment !== environment) {
-      return json({ error: "This link is not valid for this environment." }, 400);
+
+    // Test tenants run on the sandbox ledger; the recipient row records which
+    // ledger it was created on, so honour that for the rest of this request.
+    bindMoovEnvironment(String(recipient.environment ?? ""));
+    const environment = moovEnvironment();
+    if (!moovConfigured(environment)) {
+      return json({ error: "Payment provider is not configured." }, 503);
     }
     if (recipient.token_expires_at && new Date(recipient.token_expires_at) < new Date()) {
       return json({ error: "This link has expired. Ask the sender for a new one." }, 410);
