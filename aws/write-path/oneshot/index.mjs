@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import path from 'node:path';
+import path from 'path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
@@ -61,11 +61,29 @@ const tablePrivileges = async (client) => {
     SELECT grantee, table_name, privilege_type
     FROM information_schema.role_table_grants
     WHERE table_schema = 'public'
-      AND table_name IN ('check_message_reads', 'notification_preferences', 'check_intake_items', 'claim_payments')
+      AND table_name IN (
+        'check_message_reads', 'notification_preferences',
+        'check_intake_items', 'check_payees', 'check_endorsements',
+        'check_endorsement_events', 'check_audit_log', 'check_messages',
+        'claim_payments', 'homeowner_ledger_events'
+      )
       AND grantee IN ('checksops', 'authenticated')
     ORDER BY table_name, grantee, privilege_type
   `);
   return rows;
+};
+
+const intakeUpdateColumns = async (client) => {
+  const { rows } = await client.query(`
+    SELECT column_name
+    FROM information_schema.column_privileges
+    WHERE table_schema = 'public'
+      AND table_name = 'check_intake_items'
+      AND grantee = 'checksops'
+      AND privilege_type = 'UPDATE'
+    ORDER BY 1
+  `);
+  return rows.map((row) => row.column_name);
 };
 
 const financialAggregates = async (client) => {
@@ -81,13 +99,14 @@ const ninthWriteDenied = async (client) => {
   try {
     await client.query('SET LOCAL ROLE checksops');
     await client.query("SELECT set_config('request.app_user_id', $1, true)", [NINTH_ID]);
-    const inserted = await client.query(`
-      INSERT INTO public.notification_preferences (user_id, in_app_enabled, email_enabled, sms_enabled)
-      VALUES ($1::uuid, false, false, false)
-      RETURNING user_id
-    `, [NINTH_ID]);
+    const updated = await client.query(`
+      UPDATE public.check_intake_items
+      SET carrier_name = carrier_name
+      WHERE tenant_id = $1::uuid
+      RETURNING id
+    `, [FREEDOM_TENANT]);
     await client.query('ROLLBACK');
-    return { denied: false, n: inserted.rowCount };
+    return { denied: updated.rowCount === 0, n: updated.rowCount };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* ignore */ }
     return {
@@ -103,6 +122,23 @@ export const handler = async (event) => {
   try {
     if (step === 'financial') {
       return { ok: true, financial: await financialAggregates(client) };
+    }
+    if (step === 'cleanup-t2') {
+      const deleted = await client.query(`
+        DELETE FROM public.check_audit_log
+        WHERE event_type IN ('aws_tranche2_test', 'aws_tranche2_isolation')
+        RETURNING id
+      `);
+      const payees = await client.query(`
+        DELETE FROM public.check_payees
+        WHERE payee_name LIKE 'AWS T2 TEST%'
+        RETURNING id
+      `);
+      return {
+        ok: true,
+        auditDeleted: deleted.rowCount,
+        payeesDeleted: payees.rowCount,
+      };
     }
     if (step === 'sample-checks') {
       const rows = (await client.query(`
@@ -125,30 +161,36 @@ export const handler = async (event) => {
       };
     }
     if (step === 'revoke') {
-      await client.query(readSql(SQL_DIR, '32_tranche1_revoke_write_grants.sql'));
+      await client.query(readSql(SQL_DIR, '34_tranche2_revoke_write_grants.sql'));
       return { ok: true, revoked: true, privileges: await tablePrivileges(client) };
     }
     const before = await financialAggregates(client);
-    await client.query(readSql(SQL_DIR, '31_tranche1_write_grants.sql'));
+    await client.query(readSql(SQL_DIR, '33_tranche2_write_grants.sql'));
     const privileges = await tablePrivileges(client);
     const ninth = await ninthWriteDenied(client);
     const after = await financialAggregates(client);
     const financialUnchanged = JSON.stringify(before) === JSON.stringify(after);
-    const dmlGranted = privileges.filter((row) => (
-      ['check_message_reads', 'notification_preferences'].includes(row.table_name)
-      && row.grantee === 'checksops'
-      && ['INSERT', 'UPDATE', 'DELETE'].includes(row.privilege_type)
+    const intakeCols = await intakeUpdateColumns(client);
+    const amountNotGranted = !intakeCols.includes('amount') && !intakeCols.includes('routing_number') && !intakeCols.includes('status');
+    const payeeInsertGranted = privileges.some((row) => (
+      row.table_name === 'check_payees' && row.grantee === 'checksops' && row.privilege_type === 'INSERT'
+    ));
+    const messagesInsertNotGranted = !privileges.some((row) => (
+      row.table_name === 'check_messages' && row.grantee === 'checksops' && row.privilege_type === 'INSERT'
     ));
     const financialStillSelectOnly = !privileges.some((row) => (
-      ['check_intake_items', 'claim_payments'].includes(row.table_name)
+      ['claim_payments', 'homeowner_ledger_events'].includes(row.table_name)
       && ['INSERT', 'UPDATE', 'DELETE'].includes(row.privilege_type)
     ));
     return {
-      ok: dmlGranted.length >= 6 && ninth.denied && financialUnchanged && financialStillSelectOnly,
+      ok: payeeInsertGranted && ninth.denied && financialUnchanged && amountNotGranted
+        && messagesInsertNotGranted && financialStillSelectOnly,
       step,
-      dmlGranted: dmlGranted.length,
       ninth,
       financialUnchanged,
+      amountNotGranted,
+      intakeUpdateColumns: intakeCols,
+      messagesInsertNotGranted,
       financialStillSelectOnly,
       financial: after,
       privileges,

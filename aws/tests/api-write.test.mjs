@@ -59,6 +59,29 @@ const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null } = {}) 
       if (sql === LOOKUP_MAPPING_SQL) {
         return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
       }
+      if (/SELECT id, tenant_id FROM public.check_intake_items/.test(sql)) {
+        return { rows: [{ id: params[0], tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' }] };
+      }
+      if (/FROM public.check_payees p/.test(sql)) {
+        return {
+          rows: [{
+            id: params[0],
+            check_id: CHECK_ID,
+            payee_tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+            tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+          }],
+        };
+      }
+      if (/FROM public.check_endorsements e/.test(sql)) {
+        return {
+          rows: [{
+            id: params[0],
+            check_id: CHECK_ID,
+            endorsement_tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+            tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+          }],
+        };
+      }
       return { rows };
     },
     end: async () => {},
@@ -81,8 +104,17 @@ const depsFor = (client) => ({
 
 test('allowlist rejects financial tables and unknown columns; ignores spoof identity keys', () => {
   assert.equal(denyTableReason('claim_payments'), 'financial_or_provider');
-  assert.equal(denyTableReason('check_intake_items'), 'financial_or_provider');
+  assert.equal(denyTableReason('check_intake_items'), null);
+  assert.equal(WRITE_ALLOWLIST.check_intake_items.ops.has('insert'), false);
   assert.equal(denyTableReason('moov_unknown'), 'unknown_table');
+  const financialIntake = pickAllowlistedValues('check_intake_items', {
+    carrier_name: 'Test',
+    amount: 12,
+    routing_number: '123456789',
+  });
+  assert.equal(financialIntake.error, 'column_not_allowlisted');
+  assert.ok(financialIntake.columns.includes('amount'));
+  assert.ok(financialIntake.columns.includes('routing_number'));
   assert.equal(WRITE_ALLOWLIST.check_message_reads.ops.has('upsert'), true);
   const picked = pickAllowlistedValues('check_message_reads', {
     user_id: SPOOF_ID,
@@ -245,4 +277,154 @@ test('unmapped identity including ninth UUID cannot write', async () => {
   assert.equal(result.statusCode, 401);
   assert.equal(result.error, 'identity_not_linked');
   assert.equal(client.queries.some((q) => String(q.sql).includes('INSERT') || String(q.sql).includes('UPDATE')), false);
+});
+
+test('Tranche 2 updates descriptive check fields and ignores spoofed tenant/user', async () => {
+  const client = mockClient({
+    rows: [{ id: CHECK_ID, carrier_name: 'Safe Carrier', amount: 100 }],
+  });
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: {
+      carrier_name: 'Safe Carrier',
+      user_id: SPOOF_ID,
+      tenant_id: '4f172140-f57a-4744-8050-95f4f07b13b4',
+    },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  const update = client.queries.find((q) => String(q.sql).includes('UPDATE public.check_intake_items'));
+  assert.ok(update);
+  assert.equal(update.params.includes(SPOOF_ID), false);
+  assert.equal(String(update.sql).includes('amount'), false);
+});
+
+test('Tranche 2 denies financial intake columns, status, insert, and check_messages insert', async () => {
+  const client = mockClient();
+  const amount = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { amount: 50 },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(amount.statusCode, 403);
+  assert.equal(amount.error, 'column_not_allowlisted');
+
+  const status = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { status: 'deposited' },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(status.error, 'column_not_allowlisted');
+
+  const insert = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'insert',
+    values: { carrier_name: 'x' },
+  }), depsFor(client));
+  assert.equal(insert.error, 'operation_not_allowlisted');
+
+  const msg = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_messages',
+    op: 'insert',
+    values: { check_id: CHECK_ID, body: 'note' },
+  }), depsFor(client));
+  assert.equal(msg.error, 'operation_not_allowlisted');
+
+  const endorseStatus = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_endorsements',
+    op: 'update',
+    values: { status: 'signed', signed_at: '2026-09-02T00:00:00.000Z' },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(endorseStatus.statusCode, 403);
+  assert.equal(endorseStatus.error, 'column_not_allowlisted');
+  assert.ok(endorseStatus.columns.includes('status'));
+});
+
+test('Tranche 2 payee insert derives tenant from parent check and ignores client tenant', async () => {
+  const client = mockClient({
+    rows: [{ id: '11111111-1111-4111-8111-111111111111', payee_name: 'Pat Payee', check_id: CHECK_ID }],
+  });
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_payees',
+    op: 'insert',
+    values: {
+      check_id: CHECK_ID,
+      payee_name: 'Pat Payee',
+      payee_type: 'insured',
+      tenant_id: '4f172140-f57a-4744-8050-95f4f07b13b4',
+      endorsement_status: 'signed',
+      endorsed_at: '2026-09-02T00:00:00.000Z',
+    },
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  const insert = client.queries.find((q) => String(q.sql).includes('INSERT INTO public.check_payees'));
+  assert.ok(insert);
+  assert.equal(insert.params[0], CHECK_ID);
+  assert.equal(insert.params[1], '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a');
+  assert.equal(insert.params.includes('4f172140-f57a-4744-8050-95f4f07b13b4'), false);
+  assert.equal(String(insert.sql).includes('endorsed_at'), false);
+});
+
+test('Tranche 2 audit insert forces actor_id to mapped UUID', async () => {
+  const client = mockClient({
+    rows: [{ id: '22222222-2222-4222-8222-222222222222', actor_id: APP_ID, check_id: CHECK_ID }],
+  });
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_audit_log',
+    op: 'insert',
+    values: {
+      check_id: CHECK_ID,
+      event_type: 'aws_tranche2_test',
+      event_description: 'unit',
+      actor_id: SPOOF_ID,
+      tenant_id: '4f172140-f57a-4744-8050-95f4f07b13b4',
+    },
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  const insert = client.queries.find((q) => String(q.sql).includes('INSERT INTO public.check_audit_log'));
+  assert.equal(insert.params[2], APP_ID);
+  assert.equal(insert.params.includes(SPOOF_ID), false);
+});
+
+test('Tranche 2 flag disables check workflow without disabling Tranche 1', async () => {
+  const previous = process.env.AWS_CHECK_WORKFLOW_WRITES_ENABLED;
+  process.env.AWS_CHECK_WORKFLOW_WRITES_ENABLED = 'false';
+  try {
+    const client = mockClient();
+    const deniedT2 = await handleWrite(jwtEvent('/data/write', 'POST', {
+      table: 'check_intake_items',
+      op: 'update',
+      values: { carrier_name: 'x' },
+      filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+    }), { ...depsFor(client), forceCheckWorkflow: false });
+    assert.equal(deniedT2.statusCode, 403);
+    assert.equal(deniedT2.error, 'check_workflow_writes_disabled');
+
+    const t1 = await handleWrite(jwtEvent('/data/write', 'POST', {
+      table: 'check_message_reads',
+      op: 'upsert',
+      values: { check_id: CHECK_ID },
+    }), { ...depsFor(client), forceCheckWorkflow: false });
+    assert.equal(t1.ok, true);
+  } finally {
+    if (previous === undefined) delete process.env.AWS_CHECK_WORKFLOW_WRITES_ENABLED;
+    else process.env.AWS_CHECK_WORKFLOW_WRITES_ENABLED = previous;
+  }
+});
+
+test('malformed check id is 400 and does not UPDATE', async () => {
+  const client = mockClient();
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { carrier_name: 'x' },
+    filters: [{ column: 'id', op: 'eq', value: 'not-a-uuid' }],
+  }), depsFor(client));
+  assert.equal(result.statusCode, 400);
+  assert.equal(result.error, 'invalid_uuid');
+  assert.equal(client.queries.some((q) => String(q.sql).includes('UPDATE public.check_intake_items')), false);
 });

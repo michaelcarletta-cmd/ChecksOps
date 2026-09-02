@@ -23,7 +23,16 @@ type QueryState = {
   onConflict: string | null;
 };
 
-const AWS_WRITE_TABLES = new Set(["check_message_reads", "notification_preferences"]);
+const AWS_WRITE_TABLES = new Set([
+  "check_message_reads",
+  "notification_preferences",
+  "check_intake_items",
+  "check_payees",
+  "check_endorsements",
+  "check_endorsement_events",
+  "check_audit_log",
+  "check_messages",
+]);
 
 const listeners = new Set<AuthListener>();
 
@@ -240,7 +249,7 @@ function createBuilder(table: string) {
         return {
           data: null,
           error: postgrestError("writes_disabled", "42501", {
-            hint: "This table is not in the AWS Tranche 1 write allowlist",
+            hint: "This table is not in the AWS write allowlist",
           }),
           count: null,
           status: 403,

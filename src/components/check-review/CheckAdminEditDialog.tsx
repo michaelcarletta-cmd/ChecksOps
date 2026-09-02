@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/select";
 import { Loader2, Pencil, ShieldAlert, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { isAwsStaging } from "@/lib/awsStaging";
+import { pickAwsSafeIntakeUpdates } from "@/integrations/aws/safeIntakeFields";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -226,10 +228,16 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
       }
 
       if (Object.keys(intakeUpdates).length > 0) {
-        intakeUpdates.updated_at = new Date().toISOString();
+        const persist = isAwsStaging()
+          ? pickAwsSafeIntakeUpdates(intakeUpdates)
+          : { safe: intakeUpdates, skipped: [] };
+        if (Object.keys(persist.safe).length === 0) {
+          throw new Error("AWS staging cannot save status, amount, routing, account, or mortgage fields");
+        }
+        persist.safe.updated_at = new Date().toISOString();
         const { error } = await supabase
           .from("check_intake_items")
-          .update(intakeUpdates)
+          .update(persist.safe)
           .eq("id", checkId);
         if (error) throw error;
 
@@ -237,15 +245,16 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
           check_id: checkId,
           event_type: "admin_correction",
           actor_id: user?.id ?? null,
-          event_description: `Admin edit: ${Object.entries(intakeUpdates)
+          event_description: `Admin edit: ${Object.entries(persist.safe)
             .filter(([k]) => k !== "updated_at")
             .map(([k, v]) => `${k}=${v}`).join(", ")}`,
-          event_data: intakeUpdates as Record<string, any>,
+          event_data: persist.safe as Record<string, any>,
         }]);
       }
 
-      // 3. Mirror to claim_checks if the row exists
-      if (data.claimCheck?.id) {
+      // 3. Mirror to claim_checks if the row exists.
+      // AWS staging does not allow claim_checks DML in Tranche 2 (financial/mortgage fields live there).
+      if (data.claimCheck?.id && !isAwsStaging()) {
         const ccUpdates: Record<string, unknown> = {};
         if (form.mortgage_flag !== data.claimCheck.mortgage_flag) {
           ccUpdates.mortgage_flag = form.mortgage_flag;
