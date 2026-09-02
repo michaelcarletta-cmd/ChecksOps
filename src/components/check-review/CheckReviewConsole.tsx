@@ -3,6 +3,8 @@ import { format } from "date-fns";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isAwsStaging } from "@/lib/awsStaging";
+import { pickAwsSafeIntakeUpdates } from "@/integrations/aws/safeIntakeFields";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
@@ -821,17 +823,28 @@ export function ReviewDecisionPanel({
 
       if (Object.keys(updates).length === 0) throw new Error("No field changes to save");
 
+      const persist = isAwsStaging() ? pickAwsSafeIntakeUpdates(updates) : { safe: updates, skipped: [] };
+      if (Object.keys(persist.safe).length === 0) {
+        throw new Error("AWS staging cannot save amount, routing, or account fields");
+      }
+
       const { error } = await supabase
         .from("check_intake_items")
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update({ ...persist.safe, updated_at: new Date().toISOString() })
         .eq("id", checkId);
       if (error) throw error;
 
+      const persistedChanges = fieldChanges.filter((change) => change.field in persist.safe);
       await supabase.from("check_audit_log").insert({
         check_id: checkId,
         event_type: "review_fields_saved",
-        event_description: "Review fields updated without moving workflow status",
-        event_data: { field_changes: fieldChanges },
+        event_description: persist.skipped.length
+          ? "Review fields updated without moving workflow status (AWS staging skipped financial fields)"
+          : "Review fields updated without moving workflow status",
+        event_data: {
+          field_changes: persistedChanges,
+          skipped_fields: persist.skipped,
+        },
         actor_id: user?.id ?? null,
       });
     },

@@ -2,10 +2,12 @@ import { ident, ignoredSpoof, parseBody, withIdentity, withIdentityWrite } from 
 import {
   CLIENT_IDENTITY_KEYS,
   WRITE_ALLOWLIST,
+  checkWorkflowWritesEnabled,
   denyTableReason,
   pickAllowlistedValues,
   writesEnabled,
 } from './write-allowlist.mjs';
+import { executeCheckWorkflowWrite } from './write-check-workflow.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -14,7 +16,7 @@ const isUuid = (value) => UUID_RE.test(String(value || ''));
 const firstRow = (payload) => {
   if (Array.isArray(payload)) {
     if (payload.length > 1) {
-      return { error: 'batch_writes_disabled', message: 'Tranche 1 accepts a single row per request' };
+      return { error: 'batch_writes_disabled', message: 'AWS writes accept a single row per request' };
     }
     return { row: payload[0] || {} };
   }
@@ -155,7 +157,7 @@ const executeNotificationPreferences = async ({ client, mapping, op, values, fil
   return { rows };
 };
 
-export const executeAllowlistedWrite = async ({ client, mapping, body }) => {
+export const executeAllowlistedWrite = async ({ client, mapping, body, checkWorkflowEnabled = true }) => {
   let table;
   try {
     table = ident(body.table, 'table');
@@ -173,6 +175,13 @@ export const executeAllowlistedWrite = async ({ client, mapping, body }) => {
   }
   if (!spec.ops.has(op)) {
     return { error: 'operation_not_allowlisted', table, op };
+  }
+  if (spec.tranche === 2 && !checkWorkflowEnabled) {
+    return {
+      error: 'check_workflow_writes_disabled',
+      message: 'Tranche 2 check-workflow writes are disabled by AWS_CHECK_WORKFLOW_WRITES_ENABLED',
+      table,
+    };
   }
 
   if (op === 'get_or_create') {
@@ -209,6 +218,16 @@ export const executeAllowlistedWrite = async ({ client, mapping, body }) => {
       filters: body.filters || [],
     });
   }
+  if (spec.tranche === 2) {
+    return executeCheckWorkflowWrite({
+      client,
+      mapping,
+      table,
+      op,
+      values: picked.values,
+      filters: body.filters || [],
+    });
+  }
   return { error: 'table_not_allowlisted', table };
 };
 
@@ -239,9 +258,12 @@ export const handleWrite = async (event, deps = {}) => {
       }
     }
 
-    const executed = await executeAllowlistedWrite({ client, mapping, body });
+    const checkWorkflowEnabled = deps.forceCheckWorkflow === false
+      ? false
+      : (deps.forceEnabled === true || checkWorkflowWritesEnabled());
+    const executed = await executeAllowlistedWrite({ client, mapping, body, checkWorkflowEnabled });
     if (executed.error) {
-      const status = executed.error === 'invalid_uuid' || executed.error === 'missing_required_field'
+      const status = ['invalid_uuid', 'missing_required_field', 'invalid_field'].includes(executed.error)
         ? 400
         : 403;
       return denied(spoof, { statusCode: status, ...executed });
@@ -267,5 +289,6 @@ const specFilterDenied = (table, column) => {
   const spec = WRITE_ALLOWLIST[table];
   if (!spec) return true;
   if (CLIENT_IDENTITY_KEYS.has(column) || column === spec.identityColumn) return false;
+  if (spec.clientIgnored?.has(column)) return false;
   return !spec.filterColumns.has(column) && !spec.columns.has(column);
 };
