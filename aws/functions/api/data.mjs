@@ -183,8 +183,21 @@ export const belongsToEmbed = (table, embedTable) => (
   || embedTable === 'profiles'
 );
 
-export const childFk = (parentTable) => {
-  if (parentTable === 'check_intake_items') return 'check_intake_item_id';
+const CHECK_ID_CHILDREN = new Set([
+  'check_payees',
+  'check_messages',
+  'check_endorsement_events',
+  'check_eligibility_results',
+  'check_audit_log',
+  'check_payment_directions',
+  'check_endorsements',
+  'shared_checks',
+]);
+
+export const childFk = (parentTable, childTable) => {
+  if (parentTable === 'check_intake_items') {
+    return CHECK_ID_CHILDREN.has(childTable) ? 'check_id' : 'check_intake_item_id';
+  }
   if (parentTable.endsWith('s')) return `${parentTable.slice(0, -1)}_id`;
   return `${parentTable}_id`;
 };
@@ -401,7 +414,7 @@ const runSelect = async (client, body) => {
       rows.push(...next);
     } else {
       const parentIds = [...new Set(rows.map((row) => row.id).filter(Boolean))];
-      const childKey = childFk(table);
+      const childKey = childFk(table, relTable);
       if (!parentIds.length) {
         for (const row of rows) row[relTable] = [];
         continue;

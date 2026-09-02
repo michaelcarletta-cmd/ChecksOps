@@ -215,7 +215,8 @@ test('check queue has-many embeds do not select nonexistent parent FKs', async (
   assert.equal(belongsToEmbed('check_intake_items', 'checkalt_deposits'), false);
   assert.equal(belongsToEmbed('check_intake_items', 'tenants'), true);
   assert.equal(relatedFk('check_intake_items', 'check_payees'), 'check_payee_id');
-  assert.equal(childFk('check_intake_items'), 'check_intake_item_id');
+  assert.equal(childFk('check_intake_items', 'check_payees'), 'check_id');
+  assert.equal(childFk('check_intake_items', 'checkalt_deposits'), 'check_intake_item_id');
 
   const parentId = '7dbb3009-f059-4767-b5dc-1c5c72379330';
   const client = {
@@ -247,7 +248,7 @@ test('check queue has-many embeds do not select nonexistent parent FKs', async (
           payee_name: 'Freedom Insured',
           payee_type: 'insured',
           endorsement_status: 'pending',
-          check_intake_item_id: parentId,
+          check_id: parentId,
         }] };
       }
       if (sql.includes('FROM public.checkalt_deposits')) {
@@ -271,7 +272,8 @@ test('check queue has-many embeds do not select nonexistent parent FKs', async (
   assert.equal(String(parentSelect.sql).includes('check_payee_id'), false);
   assert.equal(String(parentSelect.sql).includes('checkalt_deposit_id'), false);
   const payeeSelect = client.queries.find((q) => String(q.sql).includes('FROM public.check_payees'));
-  assert.match(String(payeeSelect.sql), /check_intake_item_id/);
+  assert.match(String(payeeSelect.sql), /check_id/);
+  assert.equal(String(payeeSelect.sql).includes('check_intake_item_id'), false);
   assert.equal(Array.isArray(result.data[0].check_payees), true);
   assert.equal(result.data[0].check_payees[0].payee_name, 'Freedom Insured');
   assert.deepEqual(result.data[0].checkalt_deposits, []);

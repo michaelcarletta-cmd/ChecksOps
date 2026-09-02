@@ -245,8 +245,14 @@ export const handleStorageList = async (event, deps = {}) => withIdentity(event,
   const queries = LIST_SQL[bucket] || [];
   const rows = [];
   for (const sql of queries) {
-    const result = await client.query(sql, [prefix]);
-    rows.push(...result.rows);
+    await client.query('SAVEPOINT storage_list');
+    try {
+      const result = await client.query(sql, [prefix]);
+      rows.push(...result.rows);
+      await client.query('RELEASE SAVEPOINT storage_list');
+    } catch {
+      await client.query('ROLLBACK TO SAVEPOINT storage_list');
+    }
   }
   const data = rows.map((row) => {
     const rel = normalizePath(row.path, bucket) || String(row.path || '');
