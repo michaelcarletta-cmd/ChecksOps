@@ -167,6 +167,30 @@ const intakeCoerce = (values) => {
   for (const column of IMAGE_PATH_COLUMNS) {
     if (column in values) out[column] = values[column];
   }
+  if ('mortgage_monitoring_type' in values) {
+    const text = asText(values.mortgage_monitoring_type, 40);
+    if (text.error) return text;
+    const next = (text.value || 'not_set').toLowerCase();
+    if (!['not_set', 'not_monitored', 'monitored'].includes(next)) {
+      return { error: 'invalid_field', field: 'mortgage_monitoring_type' };
+    }
+    out.mortgage_monitoring_type = next;
+  }
+  for (const column of ['mortgage_sent_at', 'mortgage_received_at']) {
+    if (column in values) {
+      if (values[column] === null || values[column] === '') out[column] = null;
+      else {
+        const ts = Date.parse(String(values[column]));
+        if (Number.isNaN(ts)) return { error: 'invalid_field', field: column };
+        out[column] = new Date(ts).toISOString();
+      }
+    }
+  }
+  if ('mortgage_tracking_number' in values) {
+    const text = asText(values.mortgage_tracking_number, 80);
+    if (text.error) return text;
+    out.mortgage_tracking_number = text.value;
+  }
   return { values: out };
 };
 
@@ -272,6 +296,8 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
     expiration_days: 'int',
     is_multi_payee: 'boolean',
     issue_date: 'date',
+    mortgage_sent_at: 'timestamptz',
+    mortgage_received_at: 'timestamptz',
   });
   built.params.push(checkId);
   const rows = (await client.query(
@@ -696,6 +722,241 @@ const executeClaimChecks = async ({ client, values, filters }) => {
   return { rows };
 };
 
+const LOSS_DRAFT_ESCROW = new Set([
+  'pending_send',
+  'pending',
+  'in_progress',
+  'waiting',
+  'documentation',
+  'requested',
+  'received',
+  'endorsing',
+  'follow_up',
+]);
+
+const MORTGAGE_REQUEST_STATUS = new Set(['requested', 'in_progress', 'cancelled']);
+
+const lookupLossDraft = async (client, id) => {
+  const invalid = requireUuid('id', id);
+  if (invalid) return invalid;
+  const rows = (await client.query(
+    `SELECT d.id, d.check_intake_item_id, c.tenant_id
+     FROM public.loss_draft_tracking d
+     JOIN public.check_intake_items c ON c.id = d.check_intake_item_id
+     WHERE d.id = $1::uuid`,
+    [id],
+  )).rows;
+  if (!rows.length) return { error: 'rls_denied', message: 'loss draft not found or not writable' };
+  return { draft: rows[0] };
+};
+
+const executeLossDraft = async ({ client, mapping, op, values, filters }) => {
+  if (op === 'insert') {
+    const looked = await lookupCheck(client, values.check_intake_item_id);
+    if (looked.error) return looked;
+    const servicer = asText(values.mortgage_servicer, 200);
+    if (servicer.error) return servicer;
+    if (!servicer.value) return { error: 'missing_required_field', field: 'mortgage_servicer' };
+    const notes = asText(values.notes, 2000);
+    if (notes.error) return notes;
+    const loan = asText(values.loan_number, 80);
+    if (loan.error) return loan;
+    const rows = (await client.query(
+      `INSERT INTO public.loss_draft_tracking (
+         check_intake_item_id, mortgage_servicer, loan_number, notes,
+         escrow_status, created_by, total_escrowed, holdback_amount
+       ) VALUES (
+         $1::uuid, $2::text, $3::text, $4::text,
+         'pending_send', $5::uuid, 0, 0
+       ) RETURNING *`,
+      [looked.check.id, servicer.value, loan.value, notes.value, mapping.application_user_id],
+    )).rows;
+    return { rows };
+  }
+
+  const id = eqFilter(filters, 'id');
+  const looked = await lookupLossDraft(client, id);
+  if (looked.error) return looked;
+  const out = {};
+  for (const [column, max] of [
+    ['mortgage_servicer', 200],
+    ['loan_number', 80],
+    ['lender_website_url', 500],
+    ['loss_draft_contact', 200],
+    ['loss_draft_email', 200],
+    ['loss_draft_phone', 40],
+    ['loss_draft_fax', 40],
+    ['notes', 2000],
+    ['monitoring_type', 40],
+    ['tracking_number_sent', 80],
+    ['tracking_number_return', 80],
+    ['shipping_method_sent', 40],
+    ['shipping_method_return', 40],
+  ]) {
+    if (column in values) {
+      const text = asText(values[column], max);
+      if (text.error) return text;
+      out[column] = text.value;
+    }
+  }
+  if ('mortgage_company_id' in values) {
+    if (values.mortgage_company_id === null || values.mortgage_company_id === '') out.mortgage_company_id = null;
+    else {
+      const invalid = requireUuid('mortgage_company_id', values.mortgage_company_id);
+      if (invalid) return invalid;
+      out.mortgage_company_id = values.mortgage_company_id;
+    }
+  }
+  if ('escrow_status' in values) {
+    const text = asText(values.escrow_status, 40);
+    if (text.error) return text;
+    const status = (text.value || '').toLowerCase();
+    if (!LOSS_DRAFT_ESCROW.has(status)) {
+      return { error: 'column_not_allowlisted', columns: ['escrow_status'] };
+    }
+    out.escrow_status = status;
+  }
+  for (const column of ['check_sent_date', 'check_received_date', 'check_received_back_date', 'follow_up_date']) {
+    if (column in values) {
+      if (values[column] === null || values[column] === '') out[column] = null;
+      else if (!DATE_RE.test(String(values[column]))) return { error: 'invalid_field', field: column };
+      else out[column] = String(values[column]);
+    }
+  }
+  if ('last_contact_at' in values) {
+    if (values.last_contact_at === null || values.last_contact_at === '') out.last_contact_at = null;
+    else {
+      const ts = Date.parse(String(values.last_contact_at));
+      if (Number.isNaN(ts)) return { error: 'invalid_field', field: 'last_contact_at' };
+      out.last_contact_at = new Date(ts).toISOString();
+    }
+  }
+  if (!Object.keys(out).length) {
+    return { error: 'missing_required_field', field: 'values', table: 'loss_draft_tracking', op: 'update' };
+  }
+  const built = buildSet(out, {
+    check_sent_date: 'date',
+    check_received_date: 'date',
+    check_received_back_date: 'date',
+    follow_up_date: 'date',
+    last_contact_at: 'timestamptz',
+  });
+  built.params.push(looked.draft.id);
+  const rows = (await client.query(
+    `UPDATE public.loss_draft_tracking
+     SET ${built.sets.join(', ')}
+     WHERE id = $${built.next}::uuid
+     RETURNING *`,
+    built.params,
+  )).rows;
+  if (!rows.length) return { error: 'rls_denied', message: 'loss draft not writable' };
+  return { rows };
+};
+
+const executeMortgageRequests = async ({ client, mapping, op, values, filters }) => {
+  if (op === 'insert') {
+    const looked = await lookupCheck(client, values.check_intake_item_id);
+    if (looked.error) return looked;
+    const company = asText(values.mortgage_company || values.mortgage_servicer, 200);
+    if (company.error) return company;
+    const loan = asText(values.loan_number, 80);
+    if (loan.error) return loan;
+    const note = asText(values.note, 2000);
+    if (note.error) return note;
+    const rows = (await client.query(
+      `INSERT INTO public.mortgage_handling_requests (
+         tenant_id, check_intake_item_id, mortgage_company, loan_number, note,
+         requested_by, status
+       ) VALUES (
+         $1::uuid, $2::uuid, $3::text, $4::text, $5::text,
+         $6::uuid, 'requested'
+       ) RETURNING *`,
+      [
+        looked.check.tenant_id,
+        looked.check.id,
+        company.value,
+        loan.value,
+        note.value,
+        mapping.application_user_id,
+      ],
+    )).rows;
+    return { rows };
+  }
+
+  const id = eqFilter(filters, 'id');
+  const invalid = requireUuid('id', id);
+  if (invalid) return invalid;
+  const existing = (await client.query(
+    `SELECT r.id, r.check_intake_item_id, c.tenant_id
+     FROM public.mortgage_handling_requests r
+     JOIN public.check_intake_items c ON c.id = r.check_intake_item_id
+     WHERE r.id = $1::uuid`,
+    [id],
+  )).rows;
+  if (!existing.length) return { error: 'rls_denied', message: 'mortgage request not found or not writable' };
+  const out = {};
+  for (const [column, max] of [
+    ['mortgage_company', 200],
+    ['mortgage_servicer', 200],
+    ['loan_number', 80],
+    ['note', 2000],
+    ['work_notes', 2000],
+    ['property_address', 2000],
+    ['claim_number', 80],
+    ['insurance_company', 200],
+    ['homeowner_name', 200],
+    ['homeowner_email', 200],
+    ['homeowner_phone', 40],
+  ]) {
+    if (column in values) {
+      const text = asText(values[column], max);
+      if (text.error) return text;
+      out[column] = text.value;
+    }
+  }
+  if ('status' in values) {
+    const text = asText(values.status, 40);
+    if (text.error) return text;
+    const status = (text.value || '').toLowerCase();
+    if (!MORTGAGE_REQUEST_STATUS.has(status)) {
+      return { error: 'column_not_allowlisted', columns: ['status'] };
+    }
+    out.status = status;
+  }
+  if (!Object.keys(out).length) {
+    return { error: 'missing_required_field', field: 'values', table: 'mortgage_handling_requests', op: 'update' };
+  }
+  const built = buildSet(out, {});
+  built.params.push(id);
+  const rows = (await client.query(
+    `UPDATE public.mortgage_handling_requests
+     SET ${built.sets.join(', ')}
+     WHERE id = $${built.next}::uuid
+     RETURNING *`,
+    built.params,
+  )).rows;
+  if (!rows.length) return { error: 'rls_denied', message: 'mortgage request not writable' };
+  return { rows };
+};
+
+const executeLossDraftAudit = async ({ client, mapping, values }) => {
+  const draftId = values.loss_draft_id;
+  const looked = await lookupLossDraft(client, draftId);
+  if (looked.error) return looked;
+  const action = asText(values.action, 80);
+  if (action.error) return action;
+  if (!action.value) return { error: 'missing_required_field', field: 'action' };
+  const notes = asText(values.notes, 2000);
+  if (notes.error) return notes;
+  const rows = (await client.query(
+    `INSERT INTO public.loss_draft_audit_log (loss_draft_id, action, notes, actor_id)
+     VALUES ($1::uuid, $2::text, $3::text, $4::uuid)
+     RETURNING *`,
+    [looked.draft.id, action.value, notes.value, mapping.application_user_id],
+  )).rows;
+  return { rows };
+};
+
 export const executeCheckWorkflowWrite = async ({ client, mapping, table, op, values, filters }) => {
   const spec = WRITE_ALLOWLIST[table];
   const badFilters = rejectNonEqFilters(filters, spec);
@@ -709,5 +970,8 @@ export const executeCheckWorkflowWrite = async ({ client, mapping, table, op, va
   if (table === 'check_messages') return executeMessages({ client, mapping, op, values, filters });
   if (table === 'check_files') return executeCheckFiles({ client, mapping, op, values, filters });
   if (table === 'claim_checks') return executeClaimChecks({ client, values, filters });
+  if (table === 'loss_draft_tracking') return executeLossDraft({ client, mapping, op, values, filters });
+  if (table === 'mortgage_handling_requests') return executeMortgageRequests({ client, mapping, op, values, filters });
+  if (table === 'loss_draft_audit_log') return executeLossDraftAudit({ client, mapping, values });
   return { error: 'table_not_allowlisted', table };
 };

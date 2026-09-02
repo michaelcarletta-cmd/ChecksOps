@@ -1,7 +1,9 @@
 import { ident, ignoredSpoof, parseBody, withIdentity, withIdentityWrite } from './data.mjs';
 import {
   CLIENT_IDENTITY_KEYS,
+  T5_INTAKE_COLUMNS,
   WRITE_ALLOWLIST,
+  applicationWorkflowWritesEnabled,
   checkWorkflowWritesEnabled,
   denyTableReason,
   pickAllowlistedValues,
@@ -157,7 +159,13 @@ const executeNotificationPreferences = async ({ client, mapping, op, values, fil
   return { rows };
 };
 
-export const executeAllowlistedWrite = async ({ client, mapping, body, checkWorkflowEnabled = true }) => {
+export const executeAllowlistedWrite = async ({
+  client,
+  mapping,
+  body,
+  checkWorkflowEnabled = true,
+  applicationWorkflowEnabled = false,
+}) => {
   let table;
   try {
     table = ident(body.table, 'table');
@@ -180,6 +188,13 @@ export const executeAllowlistedWrite = async ({ client, mapping, body, checkWork
     return {
       error: 'check_workflow_writes_disabled',
       message: 'Check-workflow writes are disabled by AWS_CHECK_WORKFLOW_WRITES_ENABLED',
+      table,
+    };
+  }
+  if (spec.tranche === 5 && !applicationWorkflowEnabled) {
+    return {
+      error: 'application_workflow_writes_disabled',
+      message: 'Application-workflow writes are disabled by AWS_APPLICATION_WORKFLOW_WRITES_ENABLED',
       table,
     };
   }
@@ -218,7 +233,18 @@ export const executeAllowlistedWrite = async ({ client, mapping, body, checkWork
       filters: body.filters || [],
     });
   }
-  if (spec.tranche === 2 || spec.tranche === 3) {
+  const t5ColumnsUsed = Object.keys(picked.values || {}).some((column) => (
+    (spec.t5Columns && spec.t5Columns.has(column)) || T5_INTAKE_COLUMNS.has(column)
+  ));
+  if (t5ColumnsUsed && !applicationWorkflowEnabled) {
+    return {
+      error: 'application_workflow_writes_disabled',
+      message: 'Mortgage/loss-draft columns require AWS_APPLICATION_WORKFLOW_WRITES_ENABLED',
+      columns: Object.keys(picked.values).filter((column) => T5_INTAKE_COLUMNS.has(column)),
+      table,
+    };
+  }
+  if (spec.tranche === 2 || spec.tranche === 3 || spec.tranche === 5) {
     return executeCheckWorkflowWrite({
       client,
       mapping,
@@ -261,7 +287,16 @@ export const handleWrite = async (event, deps = {}) => {
     const checkWorkflowEnabled = deps.forceCheckWorkflow === false
       ? false
       : (deps.forceEnabled === true || checkWorkflowWritesEnabled());
-    const executed = await executeAllowlistedWrite({ client, mapping, body, checkWorkflowEnabled });
+    const applicationWorkflowEnabled = deps.forceWorkflow === false
+      ? false
+      : (deps.forceWorkflow === true || applicationWorkflowWritesEnabled());
+    const executed = await executeAllowlistedWrite({
+      client,
+      mapping,
+      body,
+      checkWorkflowEnabled,
+      applicationWorkflowEnabled,
+    });
     if (executed.error) {
       const status = ['invalid_uuid', 'missing_required_field', 'invalid_field'].includes(executed.error)
         ? 400

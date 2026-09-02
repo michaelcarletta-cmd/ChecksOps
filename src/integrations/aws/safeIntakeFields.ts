@@ -16,6 +16,10 @@ export const AWS_SAFE_INTAKE_COLUMNS = new Set([
   "front_image_path",
   "back_image_path",
   "back_image_original_path",
+  "mortgage_monitoring_type",
+  "mortgage_sent_at",
+  "mortgage_tracking_number",
+  "mortgage_received_at",
   "updated_at",
 ]);
 

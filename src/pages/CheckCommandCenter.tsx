@@ -2535,10 +2535,30 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Store clean originals — VOID watermark is rendered as CSS overlay in UI
+      const { data: session } = await supabase.auth.getSession();
+      const aws = isAwsStaging();
+
+      // AWS staging creates the internal check first so images can use the
+      // validated check-scoped S3 prefix (checks/{checkId}/). Production still
+      // uploads under checks/{userId}/{claimDir} then inserts.
+      let check: { id: string } | null = null;
+      let prefix: string;
       const ts = Date.now();
-      const claimDir = claimId || "unclaimed";
-      const prefix = `checks/${user.id}/${claimDir}`;
+
+      if (aws) {
+        const { createAwsCheck } = await import("@/integrations/aws/workflow");
+        const token = session.session?.access_token;
+        if (!token) throw new Error("Not authenticated");
+        const created = await createAwsCheck(token, {
+          review_notes: skipAi ? "AWS staging intake — manual entry (OCR skipped)" : "AWS staging intake — OCR not invoked",
+        });
+        check = created.check as { id: string };
+        prefix = created.imagePrefix.replace(/\/$/, "");
+      } else {
+        const claimDir = claimId || "unclaimed";
+        prefix = `checks/${user.id}/${claimDir}`;
+      }
+
       const frontPath = `${prefix}/${ts}_front_${frontFile.name}`;
 
       const { error: fErr } = await supabase.storage
@@ -2555,11 +2575,21 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
         if (bErr) throw new Error(`Back upload failed: ${bErr.message}`);
       }
 
+      if (aws && check) {
+        const { error: pathErr } = await supabase
+          .from("check_intake_items")
+          .update({
+            front_image_path: frontPath,
+            back_image_path: backPath,
+          })
+          .eq("id", check.id);
+        if (pathErr) throw new Error(pathErr.message);
+      } else {
       // If loaded inside Freedom CRM (?embed=1&freedom_claim_id=...), tag the
       // check so Freedom can later list it via partner-checks-by-claim.
       const embedCtx = (await import("@/lib/embedContext")).getEmbedContext();
 
-      const { data: check, error: insErr } = await supabase
+      const { data: inserted, error: insErr } = await supabase
         .from("check_intake_items")
         .insert({
           front_image_path: frontPath,
@@ -2573,14 +2603,26 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
         .select()
         .single();
 
-      if (insErr || !check) throw new Error(insErr?.message ?? "Insert failed");
+      if (insErr || !inserted) throw new Error(insErr?.message ?? "Insert failed");
+      check = inserted;
+      }
 
       // NOTE: Loss draft tracking rows are intentionally NOT created here.
       // They are auto-created by the DB trigger (trg_auto_create_loss_draft)
       // when the check is routed to Loss Draft during review. Creating them
       // at upload time caused duplicate rows in the Loss Draft dashboard.
 
-      const { data: session } = await supabase.auth.getSession();
+      if (!check?.id) throw new Error("Insert failed");
+
+      if (aws) {
+        toast({
+          title: "Check uploaded for manual entry",
+          description: "AWS staging created an internal check. OCR and provider submission were not invoked.",
+        });
+        onSuccess();
+        return;
+      }
+
       const { data: ocrResult, error: fnErr } = await supabase.functions.invoke("check-ocr-intake", {
         body: { checkId: check.id, skipAi },
         headers: { Authorization: `Bearer ${session.session?.access_token}` },

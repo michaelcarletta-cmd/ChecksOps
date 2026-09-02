@@ -34,6 +34,14 @@ const AWS_WRITE_TABLES = new Set([
   "check_messages",
   "check_files",
   "claim_checks",
+  "loss_draft_tracking",
+  "mortgage_handling_requests",
+  "loss_draft_audit_log",
+]);
+
+const REVIEW_DECISION_RPCS = new Set([
+  "submit_check_review_decision_safe",
+  "submit_check_review_decision",
 ]);
 
 const listeners = new Set<AuthListener>();
@@ -636,6 +644,24 @@ export function createAwsStagingClient() {
       const token = restored.session?.access_token;
       if (!token) {
         return { data: null, error: postgrestError("JWT expired", "PGRST301") };
+      }
+      if (REVIEW_DECISION_RPCS.has(name)) {
+        const { response, body } = await apiFetch("/workflow/transition", {
+          method: "POST",
+          body: JSON.stringify({
+            check_id: args.p_check_id,
+            p_deposit_path: args.p_deposit_path,
+            review_notes: args.p_reviewer_notes,
+          }),
+        }, token);
+        if (response.status === 401) {
+          writeStored(null);
+          emit("SIGNED_OUT", null);
+        }
+        if (!response.ok) {
+          return { data: null, error: postgrestError(String(body.message || body.error || "rpc_failed"), String(body.error || "42501")) };
+        }
+        return { data: body.data ?? body, error: null };
       }
       if (name === "get_or_create_notification_preferences") {
         const { response, body } = await apiFetch("/data/write", {
