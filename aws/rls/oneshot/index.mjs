@@ -73,7 +73,7 @@ const adminClient = async (database) => {
     database,
     ssl: { rejectUnauthorized: true, ca: fs.readFileSync(CA_PATH, 'utf8') },
     connectionTimeoutMillis: 8000,
-    query_timeout: 25000,
+    query_timeout: 120000,
   });
   await client.connect();
   return client;
