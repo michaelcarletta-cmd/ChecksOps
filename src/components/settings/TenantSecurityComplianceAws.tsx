@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { TenantSecurityCompliance } from "./TenantSecurityCompliance";
+import { TenantSecurityComplianceView } from "./TenantSecurityComplianceView";
 import {
   getTenantComplianceSnapshot,
   isAwsComplianceApiConfigured,
@@ -37,7 +37,7 @@ export function TenantSecurityComplianceAws({ tenantId, tenantName }: TenantSecu
             </div>
           </CardContent>
         </Card>
-        <TenantSecurityCompliance tenantId={tenantId} tenantName={tenantName} />
+        <TenantSecurityComplianceView tenantId={tenantId} tenantName={tenantName} />
       </div>
     );
   }
@@ -77,7 +77,7 @@ export function TenantSecurityComplianceAws({ tenantId, tenantName }: TenantSecu
 
   const snapshot = query.data;
   return (
-    <TenantSecurityCompliance
+    <TenantSecurityComplianceView
       tenantId={tenantId}
       tenantName={tenantName}
       overview={snapshot.overview}
