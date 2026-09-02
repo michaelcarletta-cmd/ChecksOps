@@ -3,10 +3,13 @@ import { test } from 'node:test';
 import { handler } from '../functions/api/index.mjs';
 import {
   applyFilters,
+  belongsToEmbed,
+  childFk,
   handleDataQuery,
   handleDataRpc,
   parseOrExpr,
   parseSelect,
+  relatedFk,
 } from '../functions/api/data.mjs';
 import { LOOKUP_MAPPING_SQL } from '../functions/api/identity.mjs';
 import {
@@ -205,6 +208,73 @@ test('forgot-password is Tester mailbox only and does not call Cognito for C1C',
   } finally {
     globalThis.fetch = original;
   }
+});
+
+test('check queue has-many embeds do not select nonexistent parent FKs', async () => {
+  assert.equal(belongsToEmbed('check_intake_items', 'check_payees'), false);
+  assert.equal(belongsToEmbed('check_intake_items', 'checkalt_deposits'), false);
+  assert.equal(belongsToEmbed('check_intake_items', 'tenants'), true);
+  assert.equal(relatedFk('check_intake_items', 'check_payees'), 'check_payee_id');
+  assert.equal(childFk('check_intake_items'), 'check_intake_item_id');
+
+  const parentId = '7dbb3009-f059-4767-b5dc-1c5c72379330';
+  const client = {
+    queries: [],
+    connect: async () => {},
+    query: async (sql, params) => {
+      client.queries.push({ sql, params });
+      if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rows: [] };
+      if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
+      if (sql === LOOKUP_MAPPING_SQL) {
+        return { rows: params[0] === COGNITO_SUB ? [{
+          application_user_id: APP_ID,
+          cognito_sub: COGNITO_SUB,
+          email: 'checksops-tester@freedomadj.com',
+          status: 'active',
+        }] : [] };
+      }
+      if (sql.includes('count(*)')) return { rows: [{ n: 1 }] };
+      if (sql.includes('FROM public.check_intake_items')) {
+        return { rows: [{
+          id: parentId,
+          check_number: '0044343937',
+          front_image_path: 'checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/front.jpg',
+          endorsement_packet_path: 'packets/93fa0063-3a1c-4f47-b679-26357b3ac163/packet.svg',
+        }] };
+      }
+      if (sql.includes('FROM public.check_payees')) {
+        return { rows: [{
+          payee_name: 'Freedom Insured',
+          payee_type: 'insured',
+          endorsement_status: 'pending',
+          check_intake_item_id: parentId,
+        }] };
+      }
+      if (sql.includes('FROM public.checkalt_deposits')) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+    end: async () => {},
+  };
+
+  const result = await handleDataQuery(jwtEvent('/data/query', 'POST', {
+    table: 'check_intake_items',
+    select: 'id, check_number, front_image_path, endorsement_packet_path, check_payees(payee_name, payee_type, endorsement_status), checkalt_deposits(id, status)',
+    filters: [{ column: 'tenant_id', op: 'eq', value: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' }],
+    limit: 2000,
+  }), depsFor(client));
+
+  assert.equal(result.ok, true);
+  const parentSelect = client.queries.find((q) => String(q.sql).includes('FROM public.check_intake_items') && !String(q.sql).includes('count(*)'));
+  assert.ok(parentSelect, 'parent SELECT must run');
+  assert.equal(String(parentSelect.sql).includes('check_payee_id'), false);
+  assert.equal(String(parentSelect.sql).includes('checkalt_deposit_id'), false);
+  const payeeSelect = client.queries.find((q) => String(q.sql).includes('FROM public.check_payees'));
+  assert.match(String(payeeSelect.sql), /check_intake_item_id/);
+  assert.equal(Array.isArray(result.data[0].check_payees), true);
+  assert.equal(result.data[0].check_payees[0].payee_name, 'Freedom Insured');
+  assert.deepEqual(result.data[0].checkalt_deposits, []);
 });
 
 test('login challenge is returned without treating Cognito sub as the application UUID', async () => {

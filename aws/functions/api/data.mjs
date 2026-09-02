@@ -177,6 +177,12 @@ export const relatedFk = (table, embedTable) => {
   return `${embedTable}_id`;
 };
 
+export const belongsToEmbed = (table, embedTable) => (
+  embedTable === 'tenants'
+  || embedTable === 'tenants_public'
+  || embedTable === 'profiles'
+);
+
 export const childFk = (parentTable) => {
   if (parentTable === 'check_intake_items') return 'check_intake_item_id';
   if (parentTable.endsWith('s')) return `${parentTable.slice(0, -1)}_id`;
@@ -342,8 +348,15 @@ const runSelect = async (client, body) => {
   const offset = Number.isFinite(Number(body.offset)) ? Math.max(Number(body.offset), 0) : 0;
   const needed = new Set(parsed.columns[0] === '*' ? ['*'] : parsed.columns);
   if (needed.has('*') === false) {
+    needed.add('id');
     for (const embed of parsed.embeds) {
-      needed.add(relatedFk(table, embed.table));
+      // Parent-side FKs only for belongs-to embeds (tenants, profiles).
+      // Has-many embeds such as check_payees / checkalt_deposits live on the
+      // child row (check_intake_item_id). Guessing check_payee_id onto the
+      // parent SELECT makes PostgreSQL fail before the child-array path runs.
+      if (belongsToEmbed(table, embed.table)) {
+        needed.add(relatedFk(table, embed.table));
+      }
     }
   }
   const cols = needed.has('*') ? '*' : [...needed].map((c) => ident(c, 'column')).join(', ');
