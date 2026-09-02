@@ -16,30 +16,82 @@ const MOOV_HOSTS: Record<string, string> = {
   production: "https://api.moov.io",
 };
 
+/**
+ * Per-request environment override.
+ *
+ * Tenants flagged as test accounts (`tenants.moov_environment = 'sandbox'`)
+ * run against Moov's sandbox credentials so no real money moves, while live
+ * tenants keep using production in the same deployment. `moovGuard` binds the
+ * value for the current request's async context; everything else in this
+ * module reads it through `moovEnvironment()`.
+ */
+import { AsyncLocalStorage } from "node:async_hooks";
+
+const envStore = new AsyncLocalStorage<string>();
+
+/** Binds the environment for the remainder of the current request. */
+export function bindMoovEnvironment(env: string): void {
+  const normalized = (env ?? "").toLowerCase();
+  if (!MOOV_HOSTS[normalized]) return;
+  envStore.enterWith(normalized);
+}
+
+/** Runs `fn` with an explicit environment (webhooks, cron, tests). */
+export function withMoovEnvironment<T>(env: string, fn: () => T): T {
+  const normalized = (env ?? "").toLowerCase();
+  return MOOV_HOSTS[normalized] ? envStore.run(normalized, fn) : fn();
+}
+
 export function moovEnvironment(): string {
-  const env = (Deno.env.get("MOOV_ENVIRONMENT") ?? "sandbox").toLowerCase();
+  const env = (
+    envStore.getStore() ?? Deno.env.get("MOOV_ENVIRONMENT") ?? "sandbox"
+  ).toLowerCase();
   if (!MOOV_HOSTS[env]) {
     throw new Error(`MOOV_ENVIRONMENT must be "sandbox" or "production", got "${env}"`);
   }
   return env;
 }
 
+/** True when the current request is running against Moov's sandbox ledger. */
+export function moovIsSandbox(): boolean {
+  return moovEnvironment() === "sandbox";
+}
+
 export function moovHost(): string {
   return MOOV_HOSTS[moovEnvironment()];
 }
 
-export function moovConfigured(): boolean {
-  return !!(Deno.env.get("MOOV_PUBLIC_KEY") && Deno.env.get("MOOV_SECRET_KEY"));
+/** Credentials for a given environment; sandbox uses its own key pair. */
+function credentialsFor(env: string): { key?: string; secret?: string } {
+  if (env === "sandbox") {
+    return {
+      key: Deno.env.get("MOOV_SANDBOX_PUBLIC_KEY") ?? undefined,
+      secret: Deno.env.get("MOOV_SANDBOX_SECRET_KEY") ?? undefined,
+    };
+  }
+  return {
+    key: Deno.env.get("MOOV_PUBLIC_KEY") ?? undefined,
+    secret: Deno.env.get("MOOV_SECRET_KEY") ?? undefined,
+  };
+}
+
+export function moovConfigured(env?: string): boolean {
+  const { key, secret } = credentialsFor(env ?? moovEnvironment());
+  return !!(key && secret);
 }
 
 function credentials(): { key: string; secret: string } {
-  const key = Deno.env.get("MOOV_PUBLIC_KEY");
-  const secret = Deno.env.get("MOOV_SECRET_KEY");
+  const env = moovEnvironment();
+  const { key, secret } = credentialsFor(env);
   if (!key || !secret) {
-    throw new Error("Moov is not configured. MOOV_PUBLIC_KEY and MOOV_SECRET_KEY must be set.");
+    const prefix = env === "sandbox" ? "MOOV_SANDBOX_" : "MOOV_";
+    throw new Error(
+      `Moov is not configured for the ${env} environment. ${prefix}PUBLIC_KEY and ${prefix}SECRET_KEY must be set.`,
+    );
   }
   return { key, secret };
 }
+
 
 /**
  * Moov ties every API key to an allowlisted domain list: requests to
