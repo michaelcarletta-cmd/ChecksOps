@@ -4,7 +4,11 @@ No API/Auth/Storage/RLS/webhook/DNS/frontend/`main` cutover.
 
 ## 1. Temporary restore IAM role
 
-Lambda deleted. Role `checksops-staging-restore-oneshot` still exists. Exact least-privilege additions: `analysis/IAM_ROLE_CLEANUP.md`. **STOP** on role deletion until those actions are granted on that role only.
+Lambda `checksops-staging-restore-oneshot` does not exist (`ResourceNotFoundException`).
+
+Role `checksops-staging-restore-oneshot` was deleted: listed inline policy `oneshot-restore-least-privilege`, deleted that policy, listed attached managed policies (none), deleted the role (`iam:GetRole` → `NoSuchEntity`).
+
+Staging API still uses the application DB secret (not `checksops_admin`). `/db-health` remains 200. No other AWS or database changes.
 
 ## 2. Skipped `auth.users` FKs
 
@@ -19,3 +23,5 @@ Not 47 missing public triggers. Live 211 is `information_schema.triggers` event 
 Restored RDS was not modified. Dump `TABLE DATA` recomputed the same 15 financial metrics (all match). 165/166 application table row counts match; `spatial_ref_sys` is 0 in dump data and 8500 on RDS from `CREATE EXTENSION postgis`.
 
 JSON: `analysis/financial_backup_vs_restore.json`, `analysis/table_counts_backup_vs_restore.json`.
+
+Cognito identity mapping (planning only; no user import, API still on `postgres`): `analysis/COGNITO_IDENTITY_MAPPING.md`.

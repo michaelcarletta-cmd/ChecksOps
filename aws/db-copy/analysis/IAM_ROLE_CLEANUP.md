@@ -78,3 +78,7 @@ Resource:  arn:aws:iam::806168576068:role/checksops-staging-restore-oneshot
 ```
 
 After this is attached, a later pass can list the inline policy name, delete it, detach any managed policies, and delete the role. No other IAM roles should be in scope.
+
+## Completed 2026-09-02
+
+Inline policy `oneshot-restore-least-privilege` deleted. No managed policies were attached. Role deleted (`NoSuchEntity`). Lambda still absent.

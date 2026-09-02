@@ -462,31 +462,22 @@
   "cleanup": {
     "restoreLambdaDeleted": true,
     "restoreLambdaName": "checksops-staging-restore-oneshot",
-    "restoreRoleDeleted": false,
+    "restoreRoleDeleted": true,
     "restoreRoleName": "checksops-staging-restore-oneshot",
-    "restoreRoleArn": "arn:aws:iam::806168576068:role/checksops-staging-restore-oneshot",
-    "blockedOn": {
-      "action": "iam:ListRolePolicies",
-      "resource": "arn:aws:iam::806168576068:role/checksops-staging-restore-oneshot",
-      "reason": "DeleteRole failed with DeleteConflict: must delete inline policies first. Policy name is unknown; ListRolePolicies is denied. GetRolePolicy brute-force of common names found none.",
-      "nextActionsAfterList": [
-        {
-          "action": "iam:DeleteRolePolicy",
-          "resource": "arn:aws:iam::806168576068:role/checksops-staging-restore-oneshot"
-        },
-        {
-          "action": "iam:DeleteRole",
-          "resource": "arn:aws:iam::806168576068:role/checksops-staging-restore-oneshot"
-        }
-      ]
-    },
+    "deletedInlinePolicy": "oneshot-restore-least-privilege",
+    "detachedManagedPolicies": [],
     "apiStillOnPostgres": true,
     "apiDatabaseSecretArn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops/1788286468693-b4U0Rn",
-    "apiRoleAdminSecretGetDeniedPreviously": true,
-    "simulatePrincipalPolicyDeniedToOperator": true
+    "apiRoleHasAdminSecret": false,
+    "dbHealthHttp": 200
   },
   "readyForNextPhase": {
     "isolatedChecksopsDatabase": true,
     "apiCutover": false
+  },
+  "cognitoPlanning": {
+    "usersImported": false,
+    "apiDatabaseTargetUnchanged": true,
+    "design": "aws/db-copy/analysis/COGNITO_IDENTITY_MAPPING.md"
   }
 }

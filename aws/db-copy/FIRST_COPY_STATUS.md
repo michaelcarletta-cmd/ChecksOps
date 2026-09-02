@@ -99,38 +99,14 @@ From `sql/reconciliation_financial.sql`:
 
 ## Cleanup
 
-- Deleted Lambda `checksops-staging-restore-oneshot` (`ResourceNotFoundException` on subsequent get)
-- Temporary IAM role `checksops-staging-restore-oneshot` **still exists**. `iam:DeleteRole` returns `DeleteConflict: must delete policies first`. `iam:ListRolePolicies` is denied, so the inline policy name cannot be read and `iam:DeleteRolePolicy` cannot be targeted. Common policy names were tried via `GetRolePolicy` and were `NoSuchEntity`.
+- Deleted Lambda `checksops-staging-restore-oneshot` (`ResourceNotFoundException`)
+- Deleted IAM role `checksops-staging-restore-oneshot`: removed inline policy `oneshot-restore-least-privilege`, no managed policies attached, `iam:GetRole` is `NoSuchEntity`
+- Staging API `DATABASE_SECRET_ARN` remains the application secret (not `checksops_admin`). Inline `ApiFunctionRolePolicy4` grants `GetSecretValue` only on that app secret; none of the API role policies mention the admin secret
+- `/db-health` 200 (PostgreSQL 18.3, `select1` ok)
 
-**STOP — additional IAM required to finish role deletion (do not grant broader IAM):**
-
-```
-Principal: arn:aws:iam::806168576068:role/ChecksOpsCursorCloudStaging
-Action:    iam:ListRolePolicies
-Resource:  arn:aws:iam::806168576068:role/checksops-staging-restore-oneshot
-```
-
-After that name is known, the same principal also needs:
-
-```
-Action:    iam:DeleteRolePolicy
-Resource:  arn:aws:iam::806168576068:role/checksops-staging-restore-oneshot
-
-Action:    iam:DeleteRole
-Resource:  arn:aws:iam::806168576068:role/checksops-staging-restore-oneshot
-```
-
-If a managed policy is attached, also:
-
-```
-Action:    iam:ListAttachedRolePolicies
-Action:    iam:DetachRolePolicy
-Resource:  arn:aws:iam::806168576068:role/checksops-staging-restore-oneshot
-```
-
-Until the role is deleted, it still has least-privilege access to the RDS admin secret and the one backup object. It has no Lambda attached.
+Cognito identity mapping (planning only, no user import): `aws/db-copy/analysis/COGNITO_IDENTITY_MAPPING.md`.
 
 ## Ready for next phase?
 
-- **Isolated AWS staging database `checksops`:** yes — schema/data restored, 166 tables reconciled as present, financial aggregates computed, API not pointed at it
-- **API cutover / Auth / Storage / RLS / webhooks / DNS / frontend / `main`:** no, not started, as instructed
+- **Isolated AWS staging database `checksops`:** yes
+- **API cutover / Auth import / Storage / RLS / webhooks / DNS / frontend / `main`:** no
