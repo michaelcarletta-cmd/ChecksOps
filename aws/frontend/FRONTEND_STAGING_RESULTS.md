@@ -43,7 +43,10 @@ Identity chain holds: Cognito sub → `identity_accounts.application_user_id` �
 - `POST /data/query` (allowlisted SELECT, filters, embeds)
 - `POST /data/rpc` (read RPC allowlist)
 - `POST/PUT/PATCH/DELETE /data/*` → `writes_disabled`
-- `/storage*` → `s3_migration_required`
+- `/storage/sign`, `/storage/sign-many`, `/storage/list`, `/storage/download` → authenticated S3 presign after RLS
+- `GET /storage/public` → branding only
+- other `/storage*` → `uploads_disabled`
+- `POST /public/signature-document`, `/public/endorsement` → token pages (submit `writes_disabled`)
 - `/functions*` → `provider_disabled`
 - Unauthenticated `tenants_public` SELECT only
 
@@ -57,10 +60,10 @@ See `aws/frontend/SUPABASE_FRONTEND_INVENTORY.md`. Totals from `src/`:
 - 649 `.from()` table reads / 125 tables → `/data/query` (no Supabase fallback in AWS mode)
 - 87 `.rpc()` / 61 names → read allowlist or `rpc_disabled`
 - 123 `functions.invoke` / 75 names → `provider_disabled`
-- 18 `storage.from` / 7 buckets → S3 stub
+- 18 `storage.from` / 7 buckets → AWS Storage API in Cognito mode (uploads gated)
 - 293 browser DML → `writes_disabled`
 - 23 realtime → no-op
-- Public token pages `Sign.tsx` / `Endorse.tsx` still contain a hardcoded production Supabase URL fallback for endorsement/signing links (not used in this authenticated ChecksOps path)
+- Public token pages `Sign.tsx` / `Endorse.tsx` use AWS `/public/*` in Cognito mode; production keeps the hardcoded Supabase URL fallback
 
 Nothing was deleted because AWS coverage is incomplete.
 

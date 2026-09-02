@@ -69,7 +69,7 @@ Identity preserved: `Cognito sub -> identity_accounts.application_user_id -> exi
 
 Read RPCs not on the allowlist; complex PostgREST embeds beyond FK object/array; realtime; write RPCs listed below; storage uploads/deletes after authorization validation.
 
-UI is **not** removed. Staging returns structured errors (`rpc_disabled`, `writes_disabled`, `s3_migration_required`, `provider_disabled`).
+UI is **not** removed. Staging returns structured errors (`rpc_disabled`, `writes_disabled`, `uploads_disabled`, `provider_disabled`).
 
 ### S3 / storage migration required (18 `storage.from` + 7 bucket names)
 
