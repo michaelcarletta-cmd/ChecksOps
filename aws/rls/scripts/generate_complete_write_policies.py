@@ -196,11 +196,14 @@ def write_fk() -> int:
     ]
     validates = []
     for sql in alters:
-        lines.append(sql)
-        # extract constraint name
         m = re.search(r"ADD CONSTRAINT (\w+)", sql)
         table = re.search(r"ALTER TABLE public\.(\w+)", sql).group(1)
         name = m.group(1)
+        if len(name) > 63:
+            short = name[: 63 - len("_identity_fkey")] + "_identity_fkey"
+            sql = sql.replace(name, short)
+            name = short
+        lines.append(sql)
         validates.append(f"ALTER TABLE public.{table} VALIDATE CONSTRAINT {name};")
     lines.append("")
     lines.extend(validates)

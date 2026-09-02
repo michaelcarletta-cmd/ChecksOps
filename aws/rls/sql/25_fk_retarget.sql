@@ -36,7 +36,7 @@ ALTER TABLE public.homeowner_bank_link_tokens ADD CONSTRAINT homeowner_bank_link
 ALTER TABLE public.micro_deposit_verifications ADD CONSTRAINT micro_deposit_verifications_initiated_by_identity_fkey FOREIGN KEY (initiated_by) REFERENCES public.identity_accounts(application_user_id) ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
 ALTER TABLE public.mortgage_handling_requests ADD CONSTRAINT mortgage_handling_requests_assigned_employee_id_identity_fkey FOREIGN KEY (assigned_employee_id) REFERENCES public.identity_accounts(application_user_id) ON DELETE SET NULL ON UPDATE NO ACTION NOT VALID;
 ALTER TABLE public.mortgage_handling_requests ADD CONSTRAINT mortgage_handling_requests_requested_by_identity_fkey FOREIGN KEY (requested_by) REFERENCES public.identity_accounts(application_user_id) ON DELETE SET NULL ON UPDATE NO ACTION NOT VALID;
-ALTER TABLE public.stakeholder_account_verification_log ADD CONSTRAINT stakeholder_account_verification_log_actor_user_id_identity_fkey FOREIGN KEY (actor_user_id) REFERENCES public.identity_accounts(application_user_id) ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+ALTER TABLE public.stakeholder_account_verification_log ADD CONSTRAINT stakeholder_account_verification_log_actor_user_i_identity_fkey FOREIGN KEY (actor_user_id) REFERENCES public.identity_accounts(application_user_id) ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
 ALTER TABLE public.stakeholder_accounts ADD CONSTRAINT stakeholder_accounts_created_by_identity_fkey FOREIGN KEY (created_by) REFERENCES public.identity_accounts(application_user_id) ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
 ALTER TABLE public.tenant_maintenance_payments ADD CONSTRAINT tenant_maintenance_payments_recorded_by_identity_fkey FOREIGN KEY (recorded_by) REFERENCES public.identity_accounts(application_user_id) ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
 ALTER TABLE public.tenant_openai_credentials ADD CONSTRAINT tenant_openai_credentials_created_by_identity_fkey FOREIGN KEY (created_by) REFERENCES public.identity_accounts(application_user_id) ON DELETE SET NULL ON UPDATE NO ACTION NOT VALID;
@@ -84,7 +84,7 @@ ALTER TABLE public.homeowner_bank_link_tokens VALIDATE CONSTRAINT homeowner_bank
 ALTER TABLE public.micro_deposit_verifications VALIDATE CONSTRAINT micro_deposit_verifications_initiated_by_identity_fkey;
 ALTER TABLE public.mortgage_handling_requests VALIDATE CONSTRAINT mortgage_handling_requests_assigned_employee_id_identity_fkey;
 ALTER TABLE public.mortgage_handling_requests VALIDATE CONSTRAINT mortgage_handling_requests_requested_by_identity_fkey;
-ALTER TABLE public.stakeholder_account_verification_log VALIDATE CONSTRAINT stakeholder_account_verification_log_actor_user_id_identity_fkey;
+ALTER TABLE public.stakeholder_account_verification_log VALIDATE CONSTRAINT stakeholder_account_verification_log_actor_user_i_identity_fkey;
 ALTER TABLE public.stakeholder_accounts VALIDATE CONSTRAINT stakeholder_accounts_created_by_identity_fkey;
 ALTER TABLE public.tenant_maintenance_payments VALIDATE CONSTRAINT tenant_maintenance_payments_recorded_by_identity_fkey;
 ALTER TABLE public.tenant_openai_credentials VALIDATE CONSTRAINT tenant_openai_credentials_created_by_identity_fkey;

@@ -127,6 +127,18 @@ export const applyFkRetargets = async (client, orphanScan) => {
   if (targets.length !== 47) {
     return { applied: false, skipped: true, reason: `parsed ${targets.length} FK targets, expected 47` };
   }
+  const truncated = (await client.query(`
+    SELECT n.nspname AS schema_name, c.relname AS table_name, con.conname
+    FROM pg_constraint con
+    JOIN pg_class c ON c.oid = con.conrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND con.conname LIKE '%identity_fke'
+      AND con.conname NOT LIKE '%_identity_fkey'
+  `)).rows;
+  for (const row of truncated) {
+    await client.query(`ALTER TABLE public.${row.table_name} DROP CONSTRAINT IF EXISTS ${row.conname}`);
+  }
   const added = [];
   const existed = [];
   const errors = [];
@@ -164,6 +176,7 @@ export const applyFkRetargets = async (client, orphanScan) => {
   return {
     applied: true,
     skipped: false,
+    droppedTruncated: truncated.map((row) => row.conname),
     added: added.length,
     alreadyExisted: existed.length,
     identityFkeys: present.length,
