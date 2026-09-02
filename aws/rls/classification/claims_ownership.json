@@ -1,6 +1,6 @@
 {
   "backfill_applied": false,
-  "source": "approved dump COPY data; live oneshot will confirm counts",
+  "source": "approved dump COPY data; live oneshot 2026-09-02 confirmed 83/0/97",
   "rules": {
     "deterministic": "exactly one tenant_id from tenant-keyed child rows (intake.claim_id, intake.freedom_claim_id, exact claim_number match to detected/freedom_claim_number, ledger.claim_id, deposit_items via check tenant, claim_payments via check_intake_item_id)",
     "not_used": [

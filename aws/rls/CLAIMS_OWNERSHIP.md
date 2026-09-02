@@ -12,6 +12,8 @@
 | Ambiguous (conflicting tenants) | **0** | — |
 | No evidence of ownership | **97** | leave NULL |
 
+Live oneshot (restricted to rows in `public.claims`) confirmed the same counts. Intake+ledger alone cover 81 Freedom claims; the remaining 2 assignable claims use the other tenant-keyed signals.
+
 JSON: `aws/rls/classification/claims_ownership.json`.
 
 ## Deterministic evidence (used)
