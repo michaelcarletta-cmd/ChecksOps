@@ -98,7 +98,7 @@ export async function signInWithPasskey(
   });
   if ((optionsRes.data as any)?.error === "no_passkeys") {
     throw new Error(
-      "No passkey is registered for this email yet. Use the email sign-in link below, then add a passkey from Account Security.",
+      "No passkey is registered for this email yet. Sign in with the email link below, then open the shield icon in the header (Sign-in security) to add a passkey.",
     );
   }
   const { options } = unwrap<{ options: any }>(optionsRes, "Could not start passkey sign-in.");
