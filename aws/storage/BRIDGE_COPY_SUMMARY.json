@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "blocked": "bridge_not_deployed",
+  "message": "Production Edge Function aws-staging-storage-bridge is not deployed. Management PAT is unauthorized; service-role key was not requested.",
+  "healthStatus": 404,
+  "healthError": "NOT_FOUND"
+}
