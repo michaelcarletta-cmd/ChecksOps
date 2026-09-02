@@ -45,7 +45,7 @@ SPECIAL = {
     "profiles": "public.aws_can_access_same_tenant_user(id)",
     "role_version_tracker": "public.aws_can_access_same_tenant_user(user_id)",
     "contractor_profiles": "user_id = auth.uid() OR public.aws_is_cross_tenant_reader() OR (is_directory_listed = true AND directory_opt_in = true)",
-    "claims": "public.aws_can_access_claim(id)",
+    "claims": "public.aws_can_access_tenant(org_id)",
     "contractor_reviews": "public.aws_can_access_tenant(org_id) OR public.aws_is_cross_tenant_reader()",
     "deposit_batches": (
         "public.aws_is_cross_tenant_reader() OR EXISTS ("

@@ -423,7 +423,7 @@
       "roles": "authenticated",
       "access_kind": "special",
       "remediated_global_admin_staff": true,
-      "using": "public.aws_can_access_claim(id)"
+      "using": "public.aws_can_access_tenant(org_id)"
     },
     {
       "table": "public.company_branding",

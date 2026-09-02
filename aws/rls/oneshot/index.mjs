@@ -549,18 +549,26 @@ const expandedIsolation = async (client) => {
     };
     const tables = {};
     for (const spec of REPRESENTATIVE_TABLES) {
-      const sql = countSql(spec);
-      const baseline = summarize((await client.query(sql)).rows);
-      const perActor = {};
-      for (const [name, id] of Object.entries(actors)) {
-        perActor[name] = summarize(await asChecksops(client, id, sql));
+      try {
+        const sql = countSql(spec);
+        const baseline = summarize((await client.query(sql)).rows);
+        const perActor = {};
+        for (const [name, id] of Object.entries(actors)) {
+          perActor[name] = summarize(await asChecksops(client, id, sql));
+        }
+        tables[spec.table] = {
+          kind: spec.kind,
+          baseline,
+          ...perActor,
+          pass: tablePass(spec, baseline, perActor),
+        };
+      } catch (error) {
+        tables[spec.table] = {
+          kind: spec.kind,
+          pass: false,
+          error: String(error?.message || error).slice(0, 400),
+        };
       }
-      tables[spec.table] = {
-        kind: spec.kind,
-        baseline,
-        ...perActor,
-        pass: tablePass(spec, baseline, perActor),
-      };
     }
 
     const uuidOracleFor = async (table, idSql, params) => {

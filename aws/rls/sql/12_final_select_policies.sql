@@ -228,7 +228,7 @@ CREATE POLICY aws_select_claim_settlements ON public.claim_settlements
 DROP POLICY IF EXISTS aws_select_claims ON public.claims;
 CREATE POLICY aws_select_claims ON public.claims
   FOR SELECT TO authenticated
-  USING (public.aws_can_access_claim(id));
+  USING (public.aws_can_access_tenant(org_id));
 
 DROP POLICY IF EXISTS aws_select_company_branding ON public.company_branding;
 CREATE POLICY aws_select_company_branding ON public.company_branding

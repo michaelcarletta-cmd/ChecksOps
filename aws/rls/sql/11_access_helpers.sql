@@ -1,12 +1,16 @@
 -- Tenant-scoped access helpers for the AWS SELECT policy set.
 -- Cross-tenant reads require is_master_owner() or is_platform_owner() only.
+-- SECURITY DEFINER + row_security=off so policy helpers can read mapping
+-- tables without re-entering RLS (claims policy must not recurse through
+-- aws_can_access_claim on public.claims itself).
 
 CREATE OR REPLACE FUNCTION public.aws_can_access_tenant(_tenant_id uuid)
 RETURNS boolean
 LANGUAGE sql
 STABLE
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
+SET row_security = off
 AS $$
   SELECT _tenant_id IS NOT NULL
      AND (
@@ -22,8 +26,9 @@ CREATE OR REPLACE FUNCTION public.aws_can_access_claim(_claim_id uuid)
 RETURNS boolean
 LANGUAGE sql
 STABLE
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
+SET row_security = off
 AS $$
   SELECT public.aws_is_cross_tenant_reader()
       OR EXISTS (
@@ -43,8 +48,9 @@ CREATE OR REPLACE FUNCTION public.aws_can_access_check(_check_id uuid)
 RETURNS boolean
 LANGUAGE sql
 STABLE
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
+SET row_security = off
 AS $$
   SELECT public.aws_is_cross_tenant_reader()
       OR EXISTS (
@@ -64,8 +70,9 @@ CREATE OR REPLACE FUNCTION public.aws_can_access_same_tenant_user(_user_id uuid)
 RETURNS boolean
 LANGUAGE sql
 STABLE
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
+SET row_security = off
 AS $$
   SELECT _user_id IS NOT NULL AND (
     _user_id = auth.uid()
@@ -85,8 +92,9 @@ CREATE OR REPLACE FUNCTION public.aws_can_access_deposit_item(_item_id uuid)
 RETURNS boolean
 LANGUAGE sql
 STABLE
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
+SET row_security = off
 AS $$
   SELECT EXISTS (
     SELECT 1
@@ -100,8 +108,9 @@ CREATE OR REPLACE FUNCTION public.aws_can_access_loss_draft(_loss_draft_id uuid)
 RETURNS boolean
 LANGUAGE sql
 STABLE
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
+SET row_security = off
 AS $$
   SELECT EXISTS (
     SELECT 1
@@ -115,8 +124,9 @@ CREATE OR REPLACE FUNCTION public.aws_can_access_signature_request(_request_id u
 RETURNS boolean
 LANGUAGE sql
 STABLE
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
+SET row_security = off
 AS $$
   SELECT EXISTS (
     SELECT 1
@@ -128,3 +138,11 @@ AS $$
       )
   );
 $$;
+
+REVOKE ALL ON FUNCTION public.aws_can_access_tenant(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.aws_can_access_claim(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.aws_can_access_check(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.aws_can_access_same_tenant_user(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.aws_can_access_deposit_item(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.aws_can_access_loss_draft(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.aws_can_access_signature_request(uuid) FROM PUBLIC;
