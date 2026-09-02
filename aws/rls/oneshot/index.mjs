@@ -428,28 +428,82 @@ const probeIsolation = async (client) => withTxn(client, async () => {
 });
 
 const REPRESENTATIVE_TABLES = [
-  { table: 'check_intake_items', tenantCol: 'tenant_id' },
-  { table: 'check_endorsements', tenantCol: 'tenant_id' },
-  { table: 'disbursement_batches', tenantCol: 'tenant_id' },
-  { table: 'payment_provider_accounts', tenantCol: 'tenant_id' },
-  { table: 'payment_webhook_events', tenantCol: 'tenant_id' },
-  { table: 'homeowner_ledger_events', tenantCol: 'tenant_id' },
-  { table: 'claims', tenantCol: 'org_id' },
-  { table: 'tenants', tenantCol: 'id' },
-  { table: 'payment_idempotency_keys', tenantCol: 'tenant_id' },
-  { table: 'user_roles', tenantCol: null },
-  { table: 'profiles', tenantCol: null },
-  { table: 'claim_files', tenantCol: null },
-  { table: 'check_files', tenantCol: null },
-  { table: 'deposit_items', tenantCol: null },
-  { table: 'plaid_webhook_cursors', tenantCol: null },
+  { table: 'check_intake_items', kind: 'tenant', tenantCol: 'tenant_id' },
+  { table: 'check_endorsements', kind: 'tenant', tenantCol: 'tenant_id' },
+  { table: 'disbursement_batches', kind: 'tenant', tenantCol: 'tenant_id' },
+  { table: 'payment_provider_accounts', kind: 'tenant', tenantCol: 'tenant_id' },
+  { table: 'payment_webhook_events', kind: 'tenant', tenantCol: 'tenant_id' },
+  { table: 'homeowner_ledger_events', kind: 'tenant', tenantCol: 'tenant_id' },
+  { table: 'claims', kind: 'tenant', tenantCol: 'org_id' },
+  { table: 'tenants', kind: 'tenant', tenantCol: 'id' },
+  { table: 'tenant_email_settings', kind: 'tenant', tenantCol: 'tenant_id' },
+  { table: 'payment_idempotency_keys', kind: 'tenant', tenantCol: 'tenant_id' },
+  { table: 'user_roles', kind: 'same_tenant_user', userCol: 'user_id' },
+  { table: 'profiles', kind: 'same_tenant_user', userCol: 'id' },
+  { table: 'claim_files', kind: 'claim_join' },
+  { table: 'check_files', kind: 'check_file_join' },
+  { table: 'deposit_items', kind: 'deposit_join' },
+  { table: 'plaid_webhook_cursors', kind: 'platform_only' },
 ];
 
-const countSql = (table, tenantCol) => {
-  if (tenantCol) {
-    return `SELECT ${tenantCol}::text AS tenant_id, count(*)::int AS n FROM public.${table} GROUP BY 1`;
+const countSql = (spec) => {
+  if (spec.kind === 'same_tenant_user') {
+    return `SELECT CASE
+      WHEN EXISTS (
+        SELECT 1 FROM public.tenant_users tu
+        WHERE tu.user_id = t.${spec.userCol} AND tu.tenant_id = '${FREEDOM_TENANT}'::uuid
+      ) THEN '${FREEDOM_TENANT}'
+      WHEN EXISTS (
+        SELECT 1 FROM public.tenant_users tu
+        WHERE tu.user_id = t.${spec.userCol} AND tu.tenant_id = '${C1C_TENANT}'::uuid
+      ) THEN '${C1C_TENANT}'
+      ELSE 'other'
+    END AS tenant_id, count(*)::int AS n
+    FROM public.${spec.table} t
+    GROUP BY 1`;
   }
-  return `SELECT 'all'::text AS tenant_id, count(*)::int AS n FROM public.${table}`;
+  if (spec.kind === 'claim_join') {
+    return `SELECT c.org_id::text AS tenant_id, count(*)::int AS n
+      FROM public.claim_files cf
+      JOIN public.claims c ON c.id = cf.claim_id
+      GROUP BY 1`;
+  }
+  if (spec.kind === 'check_file_join') {
+    return `SELECT ci.tenant_id::text AS tenant_id, count(*)::int AS n
+      FROM public.check_files f
+      JOIN public.check_intake_items ci ON ci.id = f.check_intake_item_id
+      GROUP BY 1`;
+  }
+  if (spec.kind === 'deposit_join') {
+    return `SELECT ci.tenant_id::text AS tenant_id, count(*)::int AS n
+      FROM public.deposit_items di
+      JOIN public.check_intake_items ci ON ci.id = di.check_id
+      GROUP BY 1`;
+  }
+  if (spec.kind === 'platform_only' || !spec.tenantCol) {
+    return `SELECT 'all'::text AS tenant_id, count(*)::int AS n FROM public.${spec.table}`;
+  }
+  return `SELECT ${spec.tenantCol}::text AS tenant_id, count(*)::int AS n FROM public.${spec.table} GROUP BY 1`;
+};
+
+const tablePass = (spec, baseline, perActor) => {
+  const staff = perActor.testerStaff;
+  const admin = perActor.tenantAdminC1c;
+  const master = perActor.masterOwner;
+  const ninth = perActor.ninth;
+  const sub = perActor.cognitoSub;
+  const unauth = perActor.unauthenticated;
+  if (unauth.all !== 0 || sub.all !== 0) return false;
+  if (spec.kind === 'platform_only') {
+    return staff.all === 0 && admin.all === 0 && ninth.all === 0 && master.all === baseline.all;
+  }
+  if (staff.c1c !== 0 || admin.freedom !== 0) return false;
+  if (ninth.freedom !== 0 || ninth.c1c !== 0) return false;
+  if (baseline.freedom > 0 && staff.freedom === 0) return false;
+  if (baseline.c1c > 0 && admin.c1c === 0) return false;
+  if (baseline.freedom > 0 && master.freedom !== baseline.freedom) return false;
+  if (baseline.c1c > 0 && master.c1c !== baseline.c1c) return false;
+  return true;
 };
 
 const summarize = (rows) => {
@@ -495,49 +549,55 @@ const expandedIsolation = async (client) => {
     };
     const tables = {};
     for (const spec of REPRESENTATIVE_TABLES) {
-      const sql = countSql(spec.table, spec.tenantCol);
+      const sql = countSql(spec);
       const baseline = summarize((await client.query(sql)).rows);
       const perActor = {};
       for (const [name, id] of Object.entries(actors)) {
         perActor[name] = summarize(await asChecksops(client, id, sql));
       }
-      const staffOk = perActor.testerStaff.c1c === 0 && (spec.tenantCol ? perActor.testerStaff.freedom >= 0 : true);
-      const adminOk = perActor.tenantAdminC1c.freedom === 0;
-      const masterSeesC1c = !spec.tenantCol
-        || baseline.c1c === 0
-        || perActor.masterOwner.c1c === baseline.c1c;
-      const masterSeesFreedom = !spec.tenantCol
-        || baseline.freedom === 0
-        || perActor.masterOwner.freedom === baseline.freedom;
-      const unauthZero = perActor.unauthenticated.all === 0;
-      const subZero = perActor.cognitoSub.all === 0;
       tables[spec.table] = {
+        kind: spec.kind,
         baseline,
         ...perActor,
-        pass: staffOk && adminOk && masterSeesC1c && masterSeesFreedom && unauthZero && subZero,
+        pass: tablePass(spec, baseline, perActor),
       };
     }
 
-    const freedomCheck = (await client.query(
-      `SELECT id::text AS id FROM public.check_intake_items
-       WHERE tenant_id = $1::uuid LIMIT 1`,
-      [FREEDOM_TENANT],
-    )).rows[0];
-    let uuidOracle = { skipped: true };
-    if (freedomCheck) {
-      const sql = `SELECT count(*)::int AS n FROM public.check_intake_items WHERE id = '${freedomCheck.id}'::uuid`;
+    const uuidOracleFor = async (table, idSql, params) => {
+      const row = (await client.query(idSql, params)).rows[0];
+      if (!row) return { table, skipped: true };
+      const sql = `SELECT count(*)::int AS n FROM public.${table} WHERE id = '${row.id}'::uuid`;
       const asC1c = await asChecksops(client, C1C_ADMIN_ID, sql);
       const asStaff = await asChecksops(client, TESTER_ID, sql);
       const asUnauth = await asChecksops(client, null, sql);
-      uuidOracle = {
+      return {
+        table,
         skipped: false,
-        recordId: freedomCheck.id,
+        recordId: row.id,
         c1cAdminRows: Number(asC1c[0].n),
         sameTenantStaffRows: Number(asStaff[0].n),
         unauthenticatedRows: Number(asUnauth[0].n),
         pass: Number(asC1c[0].n) === 0 && Number(asStaff[0].n) === 1 && Number(asUnauth[0].n) === 0,
       };
-    }
+    };
+    const uuidOracle = {
+      checkIntakeItems: await uuidOracleFor(
+        'check_intake_items',
+        `SELECT id::text AS id FROM public.check_intake_items WHERE tenant_id = $1::uuid LIMIT 1`,
+        [FREEDOM_TENANT],
+      ),
+      depositItems: await uuidOracleFor(
+        'deposit_items',
+        `SELECT di.id::text AS id
+         FROM public.deposit_items di
+         JOIN public.check_intake_items ci ON ci.id = di.check_id
+         WHERE ci.tenant_id = $1::uuid LIMIT 1`,
+        [FREEDOM_TENANT],
+      ),
+    };
+    uuidOracle.pass = Object.values(uuidOracle)
+      .filter((row) => row && typeof row === 'object' && row.pass !== undefined)
+      .every((row) => row.skipped || row.pass);
 
     await client.query('ROLLBACK');
     const stillOn = [];
@@ -550,14 +610,33 @@ const expandedIsolation = async (client) => {
       )).rows[0]?.relrowsecurity;
       if (enabled) stillOn.push(spec.table);
     }
+    const applicationRole = (await client.query(
+      `SELECT rolname, rolsuper, rolbypassrls
+       FROM pg_roles
+       WHERE rolname IN ('checksops', 'authenticated', 'anon')
+       ORDER BY 1`,
+    )).rows;
+    const tableOwner = (await client.query(
+      `SELECT c.relname AS table_name, pg_get_userbyid(c.relowner) AS owner
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'public' AND c.relname = 'check_intake_items'`,
+    )).rows[0];
+    const applicationRoleCannotBypassRls = applicationRole.every(
+      (row) => row.rolname !== 'checksops' || (!row.rolsuper && !row.rolbypassrls),
+    ) && tableOwner?.owner !== 'checksops';
     const pass = Object.values(tables).every((row) => row.pass)
       && uuidOracle.pass !== false
-      && stillOn.length === 0;
+      && stillOn.length === 0
+      && applicationRoleCannotBypassRls;
     return {
       skipped: false,
       rolledBack: true,
       rlsLeftEnabled: stillOn,
       uuidOracle,
+      applicationRole,
+      tableOwner,
+      applicationRoleCannotBypassRls,
       tables,
       pass,
     };
@@ -595,6 +674,15 @@ export const handler = async (event = {}) => {
       await client.query(readSql('04_probe_table.sql'));
       await client.query(readSql('16_probe_policy_remediate.sql'));
       await client.query(readSql('12_final_select_policies.sql'));
+      out.dumpPoliciesBeforeDrop = Number((await client.query(
+        `SELECT count(*)::int AS n FROM pg_policies
+         WHERE schemaname = 'public' AND policyname NOT LIKE 'aws_%'`,
+      )).rows[0].n);
+      await client.query(readSql('13_drop_dump_policies.sql'));
+      out.dumpPoliciesAfterDrop = Number((await client.query(
+        `SELECT count(*)::int AS n FROM pg_policies
+         WHERE schemaname = 'public' AND policyname NOT LIKE 'aws_%'`,
+      )).rows[0].n);
       out.ddlApplied = true;
       out.policiesPrepared = Number((await client.query(
         `SELECT count(*)::int AS n FROM pg_policies WHERE schemaname = 'public' AND policyname LIKE 'aws_select_%'`,
