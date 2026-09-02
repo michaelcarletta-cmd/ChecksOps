@@ -397,20 +397,25 @@ export const loginVerify = async (client) => {
   )).rows[0];
 
   const subAsAppUuid = [];
-  for (const expected of EXPECTED_EIGHT) {
-    const claims = await trySelect(
-      client,
-      expected.cognitoSub,
-      `SELECT count(*)::int AS n FROM public.claims`,
-    );
-    const tenants = await trySelect(
-      client,
-      expected.cognitoSub,
-      `SELECT count(*)::int AS n FROM public.tenants`,
-    );
-    const pass = Number(claims.n || 0) === 0 && Number(tenants.n || 0) === 0 && !claims.error;
-    if (!pass) subAsAppUuid.push({ cognitoSub: expected.cognitoSub, claims: claims.n, tenants: tenants.n, error: claims.error });
-    else subAsAppUuid.push({ email: expected.email, pass: true, claims: 0, tenants: 0 });
+  await client.query('BEGIN');
+  try {
+    for (const expected of EXPECTED_EIGHT) {
+      const claims = await trySelect(
+        client,
+        expected.cognitoSub,
+        `SELECT count(*)::int AS n FROM public.claims`,
+      );
+      const tenants = await trySelect(
+        client,
+        expected.cognitoSub,
+        `SELECT count(*)::int AS n FROM public.tenants`,
+      );
+      const pass = Number(claims.n || 0) === 0 && Number(tenants.n || 0) === 0 && !claims.error;
+      if (!pass) subAsAppUuid.push({ cognitoSub: expected.cognitoSub, claims: claims.n, tenants: tenants.n, error: claims.error });
+      else subAsAppUuid.push({ email: expected.email, pass: true, claims: 0, tenants: 0 });
+    }
+  } finally {
+    try { await client.query('ROLLBACK'); } catch { /* ignore */ }
   }
 
   const uuidUnchanged = mismatches.filter((item) => item.includes('uuid changed')).length === 0;
