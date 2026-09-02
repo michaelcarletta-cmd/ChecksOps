@@ -71,6 +71,28 @@ const classifyQueryIssue = (error, extra = {}) => {
 
 const quoteIdent = (name) => `"${String(name).replaceAll('"', '""')}"`;
 
+const isExpectedAuthPermission = (error) => {
+  const code = error?.code || '';
+  const message = String(error?.message || '');
+  return code === '42501' && /schema auth|function uid|function auth\.uid/i.test(message);
+};
+
+const withSavepoint = async (client, name, fn) => {
+  await client.query(`SAVEPOINT ${name}`);
+  try {
+    const value = await fn();
+    await client.query(`RELEASE SAVEPOINT ${name}`);
+    return value;
+  } catch (error) {
+    try {
+      await client.query(`ROLLBACK TO SAVEPOINT ${name}`);
+    } catch {
+      // keep the original error if rollback itself fails
+    }
+    throw error;
+  }
+};
+
 export const validateReadonlyCoreTables = async ({
   loadCredentials = loadDatabaseCredentials,
   createClient = (config) => new Client(config),
@@ -215,6 +237,7 @@ export const validateReadonlyCoreTables = async ({
 
     const catalog = {
       sentinelPresent: null,
+      schemaUsage: {},
       authUsersPresent: null,
       restoredAuthUsersForeignKeys: null,
       skippedAuthUsersForeignKeysExpected: EXPECTED_SKIPPED_AUTH_USERS_FKS,
@@ -241,8 +264,39 @@ export const validateReadonlyCoreTables = async ({
         },
       },
       {
+        key: 'schema_usage',
+        sql: `SELECT nspname AS schema_name,
+                     has_schema_privilege(current_user, n.oid, 'USAGE') AS can_usage
+              FROM pg_namespace n
+              WHERE nspname IN ('public', 'auth', 'storage', 'extensions')
+              ORDER BY nspname`,
+        applyMany: (rows) => {
+          catalog.schemaUsage = Object.fromEntries(rows.map((row) => [row.schema_name, row.can_usage === true]));
+          if (catalog.schemaUsage.public !== true) {
+            result.issues.push(issue('permission', 'error', 'USAGE denied on schema public'));
+          }
+          if (catalog.schemaUsage.auth) {
+            result.issues.push(issue('permission', 'error', 'USAGE unexpectedly granted on schema auth'));
+          } else {
+            result.issues.push(issue(
+              'permission',
+              'expected',
+              'USAGE denied on schema auth (Auth/Cognito is not in this phase; least-privilege)',
+            ));
+          }
+          if (catalog.schemaUsage.storage) {
+            result.issues.push(issue('permission', 'error', 'USAGE unexpectedly granted on schema storage'));
+          }
+        },
+      },
+      {
         key: 'auth_users',
-        sql: "SELECT to_regclass('auth.users') IS NOT NULL AS present",
+        sql: `SELECT EXISTS (
+                SELECT 1
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'auth' AND c.relname = 'users' AND c.relkind = 'r'
+              ) AS present`,
         apply: (row) => {
           catalog.authUsersPresent = row.present === true;
           if (!catalog.authUsersPresent) {
@@ -257,9 +311,12 @@ export const validateReadonlyCoreTables = async ({
       {
         key: 'auth_users_fks',
         sql: `SELECT count(*)::int AS fk_count
-              FROM pg_constraint
-              WHERE contype = 'f'
-                AND confrelid = to_regclass('auth.users')`,
+              FROM pg_constraint con
+              JOIN pg_class ref ON ref.oid = con.confrelid
+              JOIN pg_namespace n ON n.oid = ref.relnamespace
+              WHERE con.contype = 'f'
+                AND n.nspname = 'auth'
+                AND ref.relname = 'users'`,
         apply: (row) => {
           catalog.restoredAuthUsersForeignKeys = Number(row.fk_count || 0);
           if (catalog.restoredAuthUsersForeignKeys === 0) {
@@ -356,13 +413,14 @@ export const validateReadonlyCoreTables = async ({
 
     for (const probe of catalogProbes) {
       try {
-        const rows = (await client.query(probe.sql)).rows[0] || {};
-        probe.apply(rows);
+        const queryResult = await withSavepoint(client, `p_${probe.key}`, () => client.query(probe.sql));
+        if (probe.applyMany) probe.applyMany(queryResult.rows);
+        else probe.apply(queryResult.rows[0] || {});
       } catch (error) {
         const classified = classifyQueryIssue(error, { probe: probe.key });
-        if (probe.key === 'auth_uid_privilege' && error?.code === '42501') {
+        if (isExpectedAuthPermission(error) || (probe.key === 'auth_uid_privilege' && error?.code === '42501')) {
           classified.severity = 'expected';
-          classified.kind = 'function';
+          classified.kind = probe.key.includes('auth') ? 'supabase_dependency' : classified.kind;
         }
         if (probe.key === 'auth_users_fks' && (error?.code === '42P01' || /does not exist/i.test(String(error?.message || '')))) {
           classified.kind = 'missing_fk';
@@ -373,12 +431,12 @@ export const validateReadonlyCoreTables = async ({
     }
 
     try {
-      const uidResult = await client.query('SELECT auth.uid() AS auth_uid');
+      const uidResult = await withSavepoint(client, 'p_auth_uid', () => client.query('SELECT auth.uid() AS auth_uid'));
       catalog.authUidResult = uidResult.rows[0]?.auth_uid ?? null;
     } catch (error) {
       catalog.authUidResult = null;
       result.issues.push(issue(
-        'function',
+        isExpectedAuthPermission(error) ? 'supabase_dependency' : 'function',
         error?.code === '42501' ? 'expected' : 'error',
         sanitizePublicError(error),
         { code: error?.code || '', probe: 'auth.uid()' },

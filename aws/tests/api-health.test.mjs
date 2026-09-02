@@ -251,8 +251,9 @@ const mockValidateClient = ({
     connect: async () => {},
     query: async (sql, params) => {
       queries.push({ sql, params });
-      if (sql === 'BEGIN READ ONLY') return { rows: [] };
-      if (sql === 'ROLLBACK') return { rows: [] };
+      if (sql === 'BEGIN READ ONLY' || sql === 'ROLLBACK' || sql.startsWith('SAVEPOINT ') || sql.startsWith('RELEASE SAVEPOINT ') || sql.startsWith('ROLLBACK TO SAVEPOINT ')) {
+        return { rows: [] };
+      }
       if (sql === IDENTITY_PROBE) return { rows: [identityRow] };
       if (sql.startsWith('SELECT to_regclass($1)')) {
         const name = params[0];
@@ -280,7 +281,17 @@ const mockValidateClient = ({
       if (sql.includes("_checksops_restore_complete")) {
         return { rows: [{ present: true }] };
       }
-      if (sql.includes("to_regclass('auth.users')")) {
+      if (sql.includes('has_schema_privilege')) {
+        return {
+          rows: [
+            { schema_name: 'auth', can_usage: false },
+            { schema_name: 'extensions', can_usage: false },
+            { schema_name: 'public', can_usage: true },
+            { schema_name: 'storage', can_usage: false },
+          ],
+        };
+      }
+      if (sql.includes("c.relname = 'users'") && sql.includes("n.nspname = 'auth'")) {
         return { rows: [{ present: true }] };
       }
       if (sql.includes('pg_constraint')) {
@@ -336,8 +347,11 @@ test('read-only core table validation matches expected counts and reports skippe
   assert.equal(validation.privileges.every((row) => row.canSelect && !row.canInsert), true);
   assert.equal(validation.catalog.restoredAuthUsersForeignKeys, 0);
   assert.equal(validation.catalog.canExecuteAuthUid, false);
+  assert.equal(validation.catalog.schemaUsage.public, true);
+  assert.equal(validation.catalog.schemaUsage.auth, false);
   assert.equal(validation.issues.some((item) => item.kind === 'missing_fk' && item.severity === 'expected'), true);
   assert.equal(validation.issues.some((item) => item.kind === 'function' && item.severity === 'expected'), true);
+  assert.equal(validation.issues.some((item) => item.kind === 'permission' && item.severity === 'expected'), true);
   assert.equal(validation.issues.some((item) => item.severity === 'error'), false);
   assert.equal(client.queries.some((item) => /INSERT|UPDATE|DELETE/i.test(item.sql) && !item.sql.includes('has_table_privilege')), false);
   assert.equal(JSON.stringify(validation).includes('unit-test-only-not-a-real-secret'), false);
