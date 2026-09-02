@@ -368,7 +368,7 @@ const probeIsolation = async (client) => withTxn(client, async () => {
       && unauthenticated.length === 0
       && testerRoles.map((row) => row.role).includes('staff'),
   };
-};
+});
 
 export const handler = async (event = {}) => {
   const step = event.step || 'all';
