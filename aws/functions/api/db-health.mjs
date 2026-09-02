@@ -48,7 +48,7 @@ export const classifyDbError = (error, stage) => {
   return { stage: stage || 'unknown', message };
 };
 
-export const buildClientConfig = (credentials, { queryTimeoutMillis = 5000 } = {}) => {
+export const buildClientConfig = (credentials, { queryTimeoutMillis = 5000, readOnly = true } = {}) => {
   if (/checksops_admin/i.test(credentials.username || '')) {
     throw new Error('refusing to authenticate as checksops_admin');
   }
@@ -61,9 +61,13 @@ export const buildClientConfig = (credentials, { queryTimeoutMillis = 5000 } = {
     ssl: tlsConfig(),
     connectionTimeoutMillis: 8000,
     query_timeout: queryTimeoutMillis,
-    options: '-c default_transaction_read_only=on',
+    ...(readOnly ? { options: '-c default_transaction_read_only=on' } : {}),
   };
 };
+
+export const buildWriteClientConfig = (credentials, { queryTimeoutMillis = 12000 } = {}) => (
+  buildClientConfig(credentials, { queryTimeoutMillis, readOnly: false })
+);
 
 export const probeIsHealthy = (probe) => {
   const expectedDatabase = String(process.env.DATABASE_NAME || '').trim();

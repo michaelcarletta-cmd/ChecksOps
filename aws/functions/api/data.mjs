@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { loadDatabaseCredentials } from './secrets.mjs';
-import { buildClientConfig, sanitizePublicError } from './db-health.mjs';
+import { buildClientConfig, buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import {
   APP_USER_EMAIL_GUC,
   APP_USER_ID_GUC,
@@ -88,7 +88,7 @@ export const ignoredSpoof = (event, body) => {
   };
 };
 
-const resolveClaims = async (event) => {
+export const resolveClaims = async (event) => {
   let claims = cognitoClaimsFromEvent(event);
   if (!claims?.sub) {
     const token = bearerToken(event);
@@ -109,12 +109,21 @@ export const withIdentity = async (event, fn, deps = {}) => {
   const spoof = ignoredSpoof(event, body);
   const loadCredentials = deps.loadDatabaseCredentials || loadDatabaseCredentials;
   const createClient = deps.createClient || ((config) => new Client(config));
+  const write = deps.write === true;
+  const commit = deps.commit === true;
   let client;
+  let didCommit = false;
   try {
     const credentials = await loadCredentials();
-    client = createClient(buildClientConfig(credentials, { queryTimeoutMillis: 12000 }));
+    const config = write
+      ? buildWriteClientConfig(credentials, { queryTimeoutMillis: 12000 })
+      : buildClientConfig(credentials, { queryTimeoutMillis: 12000 });
+    client = createClient(config);
     await client.connect();
     await client.query('BEGIN');
+    if (write) {
+      await client.query('SET TRANSACTION READ WRITE');
+    }
     const mapping = (await client.query(LOOKUP_MAPPING_SQL, [claimsResult.claims.sub])).rows[0];
     if (!mapping) {
       await client.query('ROLLBACK');
@@ -124,16 +133,24 @@ export const withIdentity = async (event, fn, deps = {}) => {
     await client.query('SELECT set_config($1, $2, true)', [APP_USER_ID_GUC, mapping.application_user_id]);
     await client.query('SELECT set_config($1, $2, true)', [APP_USER_EMAIL_GUC, mapping.email || claimsResult.claims.email || '']);
     const result = await fn({ client, mapping, claims: claimsResult.claims, body, spoof });
-    await client.query('ROLLBACK');
+    const status = Number(result?.statusCode || (result?.ok === false ? 400 : 200));
+    if (commit && result?.ok !== false && status < 400) {
+      await client.query('COMMIT');
+      didCommit = true;
+    } else {
+      await client.query('ROLLBACK');
+    }
     return result;
   } catch (error) {
-    if (client) {
+    if (client && !didCommit) {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }
     }
+    const pgCode = error?.code || null;
+    const rlsDenied = pgCode === '42501' || /row-level security/i.test(String(error?.message || ''));
     return {
       ok: false,
-      statusCode: 503,
-      error: 'data_query_failed',
+      statusCode: rlsDenied ? 403 : 503,
+      error: rlsDenied ? 'rls_denied' : 'data_query_failed',
       message: sanitizePublicError(error),
     };
   } finally {
@@ -142,6 +159,10 @@ export const withIdentity = async (event, fn, deps = {}) => {
     }
   }
 };
+
+export const withIdentityWrite = (event, fn, deps = {}) => (
+  withIdentity(event, fn, { ...deps, write: true, commit: true })
+);
 
 export const parseSelect = (select) => {
   const raw = String(select || '*').trim() || '*';

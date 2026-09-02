@@ -5,6 +5,7 @@ import { handleIdentityMe } from './identity.mjs';
 import { handleAuthorizationProbe, handleJwksCheck } from './authorization.mjs';
 import { AUTH_ROUTES } from './auth-cognito.mjs';
 import { handleDataQuery, handleDataRpc, handleWritesDisabled, handleFunctionsDisabled } from './data.mjs';
+import { handleWrite } from './write.mjs';
 import { handleTenantSecurityCompliance } from './tenant-security-compliance.mjs';
 import {
   handleStorageSign,
@@ -181,6 +182,16 @@ export const handler = async (event) => {
 
   if (method === 'POST' && path === '/data/rpc') {
     const result = await handleDataRpc(event);
+    return json(result.statusCode || (result.ok ? 200 : 401), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/data/write') {
+    const result = await handleWrite(event);
     return json(result.statusCode || (result.ok ? 200 : 401), {
       service: 'checksops-api',
       environment: process.env.CHECKSOPS_ENV || 'unknown',
