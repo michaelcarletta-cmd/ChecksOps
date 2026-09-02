@@ -103,6 +103,11 @@ export function WhiteLabelCheckCenter() {
               </Link>
             </Button>
           )}
+          <Button variant="ghost" size="icon" className="h-8 w-8" asChild title="Sign-in security (passkeys & 2FA)">
+            <Link to="/account/security">
+              <ShieldCheck className="h-4 w-4" />
+            </Link>
+          </Button>
           <ThemeToggle />
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleSignOut} title="Sign Out">
             <LogOut className="h-4 w-4" />
