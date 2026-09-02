@@ -421,9 +421,8 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
         </Card>
       )}
 
-      {claimId && tenant?.id && (
-        <ProjectPlanCard claimId={claimId} tenantId={tenant.id} />
-      )}
+
+
 
       {/* Homeowner links */}
 
@@ -500,6 +499,12 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
           )}
         </div>
       )}
+
+      {claimId && tenant?.id && (
+        <ProjectPlanCard claimId={claimId} tenantId={tenant.id} />
+      )}
+
+
 
       {disburseMode === "platform" && (
         <div className="space-y-2">
