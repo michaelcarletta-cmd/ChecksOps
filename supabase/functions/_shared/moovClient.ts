@@ -100,10 +100,15 @@ function credentials(): { key: string; secret: string } {
  * Server-side fetch sends no Origin, so we set it explicitly.
  */
 export function moovOrigin(): string {
-  const raw = Deno.env.get("MOOV_ALLOWED_ORIGIN")
+  const sandbox = moovEnvironment() === "sandbox"
+    ? Deno.env.get("MOOV_SANDBOX_ALLOWED_ORIGIN")
+    : null;
+  const raw = sandbox
+    ?? Deno.env.get("MOOV_ALLOWED_ORIGIN")
     ?? Deno.env.get("CHECKSOPS_APP_URL")
     ?? "https://checksops.com";
   try {
+
     const u = new URL(raw);
     return `${u.protocol}//${u.host}`;
   } catch {
