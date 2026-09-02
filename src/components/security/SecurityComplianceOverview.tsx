@@ -10,13 +10,14 @@ interface StatusCardProps {
 }
 
 const StatusCard: React.FC<StatusCardProps> = ({ title, status, description }) => {
-  const statusVariant: Record<Status, "default" | "destructive" | "secondary" | "warning" | "outline"> = {
+  const statusVariant: Record<Status, "default" | "destructive" | "secondary" | "outline"> = {
     "Compliant": "default",
     "Action Required": "destructive",
     "Pending": "secondary",
-    "Review Due": "warning",
+    "Review Due": "secondary",
     "Restricted": "outline",
   };
+
 
   return (
     <Card>

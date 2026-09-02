@@ -51,17 +51,28 @@ export function SendPaymentPanel({
     queryKey: ["contractor-primary-account", contractorTenantId],
     enabled: !!contractorTenantId,
     queryFn: async () => {
+      // Prefer the flagged primary account, but fall back to any active
+      // account (e.g. the provider-connected payment account) so recipients
+      // who onboarded through the payment provider aren't reported as missing.
       const { data, error } = await supabase
         .from("stakeholder_accounts")
-        .select("id, nickname, chk_acct, acct_type, custname, consumer_unique, verification_status")
+        .select("id, nickname, chk_acct, acct_type, custname, consumer_unique, verification_status, is_primary, origin")
         .eq("tenant_id", contractorTenantId)
-        .eq("is_primary", true)
         .eq("is_active", true)
-        .single();
+        .order("is_primary", { ascending: false })
+        .order("updated_at", { ascending: false });
       if (error) throw error;
-      return data;
+      const rows = data ?? [];
+      return (
+        rows.find((r: any) => r.is_primary) ??
+        rows.find((r: any) => r.origin === "provider_connected") ??
+        rows.find((r: any) => r.verification_status === "verified") ??
+        rows[0] ??
+        null
+      );
     },
   });
+
 
   // Load existing payment for this check if already sent
   const { data: existingPayment } = useQuery({
