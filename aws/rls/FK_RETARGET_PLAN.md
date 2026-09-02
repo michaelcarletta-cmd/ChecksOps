@@ -1,6 +1,6 @@
 # 47 skipped `auth.users` FK retargeting plan
 
-**Status: proposed only. Not applied.**
+**Status: applied in AWS staging.** 47 FKs now reference `public.identity_accounts(application_user_id)`. Orphan scan was empty. Ninth UUID required no Cognito sub. One constraint name was shortened to fit Postgres’ 63-character identifier limit.
 
 Original parent: `auth.users(id)` (Supabase Auth). AWS staging does not use `auth.users` as the application identity.
 

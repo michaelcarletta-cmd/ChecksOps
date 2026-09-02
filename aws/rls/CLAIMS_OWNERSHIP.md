@@ -1,6 +1,6 @@
 # Claims org_id ownership (planning only)
 
-**Backfill is not applied.** All 180 restored `claims.org_id` values are NULL. `workspace_id`, `client_id`, and `referrer_id` are also NULL. The original `org_members` backfill path cannot run.
+**Backfill applied for 83 Freedom claims only.** The remaining **97** restored `claims.org_id` values are still NULL. `workspace_id`, `client_id`, and `referrer_id` are also NULL.
 
 `claims.org_id` is the tenant key (`is_tenant_member(user, cl.org_id)`).
 
