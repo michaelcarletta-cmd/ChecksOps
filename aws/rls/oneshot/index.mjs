@@ -3,7 +3,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
-
 import {
   applyWriteDdl,
   inspectApplicationRole,
@@ -11,6 +10,8 @@ import {
   investigateNinthLive,
   transactionalWriteTests,
 } from './writePlan.mjs';
+
+const { Client } = pg;
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const SQL_DIR = path.join(ROOT, '..', 'sql');
 const CA_PATH = path.join(ROOT, 'rds-global-bundle.pem');
