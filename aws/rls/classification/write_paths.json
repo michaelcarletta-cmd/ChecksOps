@@ -1,0 +1,46 @@
+{
+  "source": "src/ + supabase/functions/ client writes; dump RLS classification",
+  "identity": "Cognito sub -> identity_accounts.application_user_id -> request.app_user_id -> auth.uid()",
+  "select_policies_preserved": 165,
+  "counts": {
+    "frontend_tables": 81,
+    "edge_tables": 96,
+    "frontend_rpcs": 61,
+    "edge_rpcs": 21,
+    "too_broad_write_all_policies": 46,
+    "server_side_open_write_policies": 10,
+    "obsolete_service_role_or_anon": 6
+  },
+  "representative_aws_write_policies": [
+    "check_intake_items",
+    "check_endorsements",
+    "deposit_items",
+    "disbursement_batches",
+    "claims",
+    "claim_files",
+    "claim_folders",
+    "payment_provider_accounts",
+    "homeowner_ledger_events",
+    "tenant_email_settings",
+    "user_roles",
+    "tenants"
+  ],
+  "server_side_api_only_writes": [
+    "payment_webhook_events",
+    "payment_idempotency_keys",
+    "checkalt_config",
+    "checkalt_webhook_events",
+    "checkalt_deposits",
+    "plaid_webhook_cursors",
+    "deposit_provider_config",
+    "homeowner_directory_leads",
+    "signature_signers.public_complete",
+    "homeowner_intro_requests.anon_insert"
+  ],
+  "do_not_restore": {
+    "service_role": true,
+    "anon": true,
+    "using_true_writes": true,
+    "with_check_true": true
+  }
+}

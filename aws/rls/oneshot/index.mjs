@@ -4,7 +4,13 @@ import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 
-const { Client } = pg;
+import {
+  applyWriteDdl,
+  inspectApplicationRole,
+  investigateClaimsOwnership,
+  investigateNinthLive,
+  transactionalWriteTests,
+} from './writePlan.mjs';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const SQL_DIR = path.join(ROOT, '..', 'sql');
 const CA_PATH = path.join(ROOT, 'rds-global-bundle.pem');
@@ -725,16 +731,35 @@ export const handler = async (event = {}) => {
     if (step === 'expanded' || step === 'all' || step === 'remediate') {
       out.expandedIsolation = await expandedIsolation(client);
     }
+    if (step === 'writePlan' || step === 'all') {
+      out.writeDdl = await applyWriteDdl(client);
+      out.claimsOwnership = await investigateClaimsOwnership(client);
+      out.ninthUuidLive = await investigateNinthLive(client);
+      out.applicationRoleInspection = await inspectApplicationRole(client);
+      out.writeAuthorization = await transactionalWriteTests(client);
+    }
     out.publicTablesWithRls = await rlsEnabledPublicTables(client);
-    out.rlsEnabledGlobally = out.publicTablesWithRls.some((name) => name !== '_aws_rls_probe_items');
+    out.rlsEnabledGlobally = out.publicTablesWithRls.some(
+      (name) => name !== '_aws_rls_probe_items' && name !== '_aws_rls_write_probe',
+    );
     out.ok = !out.error
       && out.ddlApplied !== false
       && !out.rlsEnabledGlobally
-      && (step === 'ddl' || (
+      && (step === 'ddl' || step === 'writePlan' || (
         (out.probeIsolation ? out.probeIsolation.pass : true)
         && (out.expandedIsolation ? out.expandedIsolation.pass : true)
         && (out.transactionalIntakeIsolation ? out.transactionalIntakeIsolation.pass !== false : true)
       ));
+    if (step === 'writePlan') {
+      out.ok = !out.error
+        && !out.rlsEnabledGlobally
+        && out.writeDdl?.selectPoliciesUnchanged === 165
+        && out.claimsOwnership?.pass
+        && out.writeAuthorization?.pass
+        && out.applicationRoleInspection?.checksopsCannotAlterRls
+        && out.applicationRoleInspection?.checksopsCannotCreatePolicy
+        && out.applicationRoleInspection?.checkIntakeOwner !== 'checksops';
+    }
     return out;
   } catch (error) {
     out.error = String(error?.message || error)
