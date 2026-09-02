@@ -16,6 +16,9 @@ This replaces counts in `aws/frontend/SUPABASE_FRONTEND_INVENTORY.md` (293 DML /
 
 Highest-volume DML tables: `check_intake_items` (32), `tenants` (18), `check_audit_log` (13), `profiles` (12), `check_payees` (11), `mortgage_handling_requests` (11).
 
+Tranche 1 live on AWS: `check_message_reads`, `notification_preferences`.
+Tranche 2 live on AWS (column-scoped): descriptive `check_intake_items` UPDATE, `check_payees` record CRUD, endorsement metadata UPDATE/DELETE, `check_audit_log` INSERT, `check_endorsement_events` DELETE, `check_messages` soft-delete.
+
 ## Risk classification
 
 ### 1. Low-risk application CRUD
@@ -34,26 +37,45 @@ Non-financial notes/settings/read-receipts. No money movement, no provider calls
 
 ### 2. Claim/check workflow writes
 
-Do **not** migrate in Tranche 1. Includes check stage changes, payees, endorsements, messages (INSERT mirrors `homeowner_ledger_events`), audit log, files, stakeholders, shared checks, claims, mortgage handling, loss draft, signatures, homeowner ledger tokens/uploads.
+**Tranche 2 (this phase)** migrates a **column-scoped** subset of operational check workflow. It does **not** migrate deposits, status/stage changes that write the homeowner ledger or partner HTTP, amount/routing, mortgage release, image paths, or provider sends.
 
-| Table | Total DML |
-| --- | ---: |
-| `check_intake_items` | 32 |
-| `check_audit_log` | 13 |
-| `check_payees` | 11 |
-| `mortgage_handling_requests` | 11 |
-| `claim_checks` | 9 |
-| `check_endorsements` | 8 |
-| `check_messages` | 7 |
-| `signature_requests` | 7 |
-| `claims` | 5 |
-| `check_stakeholders` | 5 |
-| `loss_draft_documents` / `loss_draft_tracking` / `loss_draft_audit_log` | 14 combined |
-| `shared_checks` / `shared_check_messages` | 4 |
-| `homeowner_ledger_events` | 3 |
-| `check_files`, `check_endorsement_events`, `check_payment_directions`, `check_intake_mortgage_draws` | remaining |
+| Table | Total DML | Tranche 2 |
+| --- | ---: | --- |
+| `check_intake_items` | 32 | **UPDATE only** of descriptive columns (see plan). INSERT/DELETE and financial/status/deposit columns stay denied |
+| `check_audit_log` | 13 | **INSERT** operational events. actor_id/tenant_id server-derived |
+| `check_payees` | 11 | **INSERT/UPDATE/DELETE** name/type/contact. endorsement_status/endorsed_at ignored. No Moov/email send |
+| `check_endorsements` | 8 | **UPDATE** contact/name/notes; **DELETE** by id/payee_id. `status`/`signed_at` denied |
+| `check_endorsement_events` | remaining | **DELETE** only (payee-remove cleanup) |
+| `check_messages` | 7 | **UPDATE `is_deleted` only**. INSERT remains disabled (ledger trigger) |
+| `mortgage_handling_requests` | 11 | later |
+| `claim_checks` | 9 | later (mirrors amount/mortgage) |
+| `signature_requests` | 7 | later (packet/email/signature provider) |
+| `claims` | 5 | later |
+| `check_stakeholders` | 5 | later |
+| `loss_draft_documents` / `loss_draft_tracking` / `loss_draft_audit_log` | 14 combined | later |
+| `shared_checks` / `shared_check_messages` | 4 | later |
+| `homeowner_ledger_events` | 3 | never from browser |
+| `check_files`, `check_payment_directions`, `check_intake_mortgage_draws` | remaining | later / storage write |
 
-`check_messages` INSERT is blocked for AWS writes: trigger `trg_mirror_check_message_to_homeowner_ledger` writes `homeowner_ledger_events` on INSERT and would change ledger aggregates.
+#### `check_messages` / ledger investigation (current `main`)
+
+`trg_mirror_check_message_to_homeowner_ledger` is **AFTER INSERT** on `check_messages` and inserts `homeowner_ledger_events` (`event_type='ops_note'`) when the parent check has `claim_id` + `tenant_id` (`supabase/migrations/20260717193324_2a3e315b-a40a-474e-9eac-5e37824da513.sql`).
+
+Option B: **do not enable INSERT**. Soft-delete (`UPDATE is_deleted`) does not fire that trigger and is allowed. Do not drop or bypass the ledger trigger.
+
+#### `check_intake_items` triggers that block wholesale UPDATE
+
+| Trigger | Fires on | Tranche 2 |
+| --- | --- | --- |
+| `trg_sync_homeowner_ledger_upd` | `UPDATE OF status` | deny `status` |
+| `trg_sync_homeowner_ledger_ins` | INSERT | deny INSERT |
+| `tr_record_mortgage_handling_billing` | `UPDATE OF check_stage` | deny `check_stage` |
+| `trg_notify_freedom_status_change` | UPDATE when `partner_status` changes (HTTP POST) | deny status/stage that would advance partner_status |
+| `trg_auto_create_loss_draft` | UPDATE to `loss_draft_required` | deny `status` |
+| `trg_auto_seed_endorsements_upd` | `UPDATE OF payee_line` for `external_origin` checks | `payee_line` allowed for local checks; shared-check seed is existing DB semantics |
+| `trg_advance_on_endorsement_complete` | endorsement `status` signed/waived | deny endorsement `status` |
+
+`funds_type`, `property_address`, `carrier_name`, `check_number`, `issue_date`, `review_notes`, `expiration_days`, `is_multi_payee` do not match those column-scoped ledger/billing triggers.
 
 ### 3. Storage writes
 
