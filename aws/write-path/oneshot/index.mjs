@@ -124,6 +124,18 @@ export const handler = async (event) => {
     if (step === 'financial') {
       return { ok: true, financial: await financialAggregates(client) };
     }
+    if (step === 'columns') {
+      const { rows } = await client.query(`
+        SELECT table_name, column_name, privilege_type
+        FROM information_schema.column_privileges
+        WHERE table_schema = 'public'
+          AND table_name IN ('claim_checks', 'check_intake_items', 'check_files', 'check_messages')
+          AND grantee = 'checksops'
+          AND privilege_type IN ('UPDATE', 'INSERT')
+        ORDER BY 1, 3, 2
+      `);
+      return { ok: true, columns: rows };
+    }
     if (step === 'cleanup-t2') {
       const deleted = await client.query(`
         DELETE FROM public.check_audit_log
@@ -193,6 +205,16 @@ export const handler = async (event) => {
           RETURNING id
         `, [fileIds.map(String)]);
       }
+      const leftoverLedger = await client.query(`
+        DELETE FROM public.homeowner_ledger_events
+        WHERE event_type IN ('ops_note', 'document_uploaded')
+          AND (
+            payload_json->>'note' LIKE 'AWS T3 TEST%'
+            OR payload_json->>'file_name' LIKE 'aws-t3-test%'
+            OR payload_json->>'document_name' LIKE 'aws-t3-test%'
+          )
+        RETURNING id
+      `);
       const audit = await client.query(`
         DELETE FROM public.check_audit_log
         WHERE event_type LIKE 'aws_tranche3%'
@@ -204,6 +226,7 @@ export const handler = async (event) => {
         noteLedgerDeleted: ledgerFromNotes.rowCount,
         filesDeleted: files.rowCount,
         fileLedgerDeleted: ledgerFromFiles.rowCount,
+        leftoverLedgerDeleted: leftoverLedger.rowCount,
         auditDeleted: audit.rowCount,
       };
     }

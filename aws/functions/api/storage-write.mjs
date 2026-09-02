@@ -167,7 +167,6 @@ export const handleStorageUploadUrl = async (event, deps = {}) => {
       Bucket: filesBucket(),
       Key: auth.key,
       ContentType: contentType,
-      ServerSideEncryption: 'AES256',
     });
     const uploadUrl = await sign(s3, command, { expiresIn: 60 });
     return {
@@ -210,7 +209,17 @@ export const handleStorageDelete = async (event, deps = {}) => {
     for (const objectPath of paths) {
       const auth = await authorizeDeletePath(client, bucket, objectPath);
       if (!auth.ok) return { ...auth, spoofFieldsIgnored: spoof };
-      await s3.send(new DeleteObjectCommand({ Bucket: filesBucket(), Key: auth.key }));
+      try {
+        await s3.send(new DeleteObjectCommand({ Bucket: filesBucket(), Key: auth.key }));
+      } catch {
+        return {
+          ok: false,
+          statusCode: 503,
+          error: 'storage_delete_failed',
+          message: 'Authorized delete could not be completed',
+          spoofFieldsIgnored: spoof,
+        };
+      }
       deleted.push(auth.rel);
     }
     return {
@@ -255,13 +264,22 @@ export const handleStorageMove = async (event, deps = {}) => {
     }
     const s3 = defaultS3(deps);
     const copySource = `${filesBucket()}/${fromAuth.key}`;
-    await s3.send(new CopyObjectCommand({
-      Bucket: filesBucket(),
-      CopySource: encodeURI(copySource),
-      Key: toAuth.key,
-      ServerSideEncryption: 'AES256',
-    }));
-    await s3.send(new DeleteObjectCommand({ Bucket: filesBucket(), Key: fromAuth.key }));
+    try {
+      await s3.send(new CopyObjectCommand({
+        Bucket: filesBucket(),
+        CopySource: encodeURI(copySource),
+        Key: toAuth.key,
+      }));
+      await s3.send(new DeleteObjectCommand({ Bucket: filesBucket(), Key: fromAuth.key }));
+    } catch {
+      return {
+        ok: false,
+        statusCode: 503,
+        error: 'storage_move_failed',
+        message: 'Authorized move could not be completed',
+        spoofFieldsIgnored: spoof,
+      };
+    }
     return {
       ok: true,
       statusCode: 200,
