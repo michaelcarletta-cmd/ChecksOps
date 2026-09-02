@@ -70,6 +70,37 @@ export function ProjectPlanCard({ claimId, tenantId }: Props) {
     },
   });
 
+  // Claim ledger amounts — single source of truth for project total + deductible.
+  const { data: settlement } = useQuery({
+    queryKey: ["claim-ledger-settlement", claimId],
+    enabled: !!claimId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("claim_settlements")
+        .select("*")
+        .eq("claim_id", claimId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const ledgerTotal =
+    settlement
+      ? Number(settlement.rcv || 0)
+        + Number(settlement.other_structures_rcv || 0)
+        + Number(settlement.personal_property_rcv || 0)
+        + Number(settlement.ale_rcv || 0)
+        + Number(settlement.ordinance_law_rcv || 0)
+        + Number(settlement.supplement_expected || 0)
+      : 0;
+
+  const ledgerDeductible = settlement
+    ? Number(settlement.deductible || 0) + Number(settlement.other_structures_deductible || 0)
+    : 0;
+
+  const linked = ledgerTotal > 0 || ledgerDeductible > 0;
+
   const { data: paid = 0 } = useQuery({
     queryKey: ["claim-deductible-paid", claimId],
     enabled: !!claimId,
@@ -99,6 +130,17 @@ export function ProjectPlanCard({ claimId, tenantId }: Props) {
       allow_deductible_payment: plan.allow_deductible_payment ?? true,
     });
   }, [plan]);
+
+  // Keep the plan amounts in sync with the claim ledger so nothing is entered twice.
+  useEffect(() => {
+    if (!linked) return;
+    setForm((f) => ({
+      ...f,
+      contract_total: ledgerTotal > 0 ? String(ledgerTotal) : f.contract_total,
+      deductible_amount: ledgerDeductible > 0 ? String(ledgerDeductible) : f.deductible_amount,
+    }));
+  }, [linked, ledgerTotal, ledgerDeductible]);
+
 
   const save = async () => {
     setSaving(true);
