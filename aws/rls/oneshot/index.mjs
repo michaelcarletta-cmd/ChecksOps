@@ -183,11 +183,11 @@ const investigateNinth = async (client) => {
   )).rows[0] || null;
 
   out.vettingUploads = (await client.query(
-    `SELECT id::text AS id, tenant_id::text AS tenant_id, t.name AS tenant_name,
-            doc_type, file_name, review_status, created_at
+    `SELECT d.id::text AS id, d.tenant_id::text AS tenant_id, t.name AS tenant_name,
+            d.doc_type, d.file_name, d.review_status, d.created_at
      FROM public.tenant_vetting_documents d
      LEFT JOIN public.tenants t ON t.id = d.tenant_id
-     WHERE uploaded_by = $1::uuid`,
+     WHERE d.uploaded_by = $1::uuid`,
     [id],
   )).rows;
 
