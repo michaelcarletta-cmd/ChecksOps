@@ -9,7 +9,7 @@ Production remains on the existing Supabase backend until AWS passes parity and 
 
 - Frontend: existing Vite/React app
 - API: Amazon API Gateway + AWS Lambda
-- Database: Amazon RDS for PostgreSQL 17
+- Database: Amazon RDS for PostgreSQL 18.3 (existing `checksops-staging` instance; do not create another)
 - Authentication: Amazon Cognito
 - Object storage: Amazon S3
 - Secrets: AWS Secrets Manager
@@ -21,12 +21,15 @@ Payment provider calls, secrets, webhooks, tenant authorization, and money movem
 
 ## Current production inventory
 
-The live Lovable ChecksOps project is the migration source of truth. At inventory time it contains:
+The live Lovable ChecksOps project is the migration source of truth. Authoritative catalog: `aws/db-copy/LIVE_SOURCE_INVENTORY.md`.
 
-- 186 public tables
-- 9 auth users
-- 1,335 storage objects
-- 380 RLS policies
+- 166 public **base tables**
+- 20 public **views** (186 public relations = tables + views; there is no 20-table data gap)
+- 960 public functions
+- 211 public triggers
+- 380 RLS policies (extract, do not apply on first RDS restore)
+- 9 auth users (separate Cognito migration; do not dump password hashes)
+- 1,335 storage objects (separate S3 migration)
 
 Important functional domains include:
 
@@ -84,14 +87,21 @@ Provision a non-production AWS environment first:
 
 No production DNS changes occur in this phase.
 
+The SAM stack in `aws/template.yaml` is staging-only. It creates the HTTP API, Lambda, private S3 bucket, Cognito user pool, and Secrets Manager container. It attaches the API Lambda to the existing RDS VPC and adds a 5432 rule from a dedicated Lambda security group. It does not create, import, or modify the `checksops-staging` RDS instance. The API reads the application database secret ARN from Secrets Manager; passwords never go in Git or plaintext environment variables. Provider credentials are populated in Secrets Manager after deploy, never in CloudFormation `SecretString`.
+
 ### Phase 2 - Database parity
 
-- export schema and data from the live ChecksOps Supabase database
-- restore to RDS
+Preparation tooling and the exact copy sequence live in `docs/AWS_DB_COPY_RUNBOOK.md` and `aws/db-copy/`. That phase is still **preparation only** until a copy is explicitly approved.
+
+When a copy is approved:
+
+- export schema and public data from the live ChecksOps Supabase database
+- restore to the existing `checksops-staging` RDS PostgreSQL 18.3 instance
 - recreate required PostgreSQL extensions supported by RDS
 - replace Supabase-specific auth/RLS dependencies where required
 - compare row counts and key financial aggregates
 - verify tenant/check/payment relationships
+- leave Auth→Cognito, Storage→S3, RLS apply, and Edge Function/webhook cutover for later phases
 
 High-risk tables requiring explicit reconciliation include:
 

@@ -1,0 +1,22 @@
+{
+  "status": "ready",
+  "apply": false,
+  "inventoryFile": "aws/db-copy/LIVE_SOURCE_INVENTORY.md",
+  "publicBaseTables": 166,
+  "publicViews": 20,
+  "publicRelationsTablesPlusViews": 186,
+  "twentyTableDiscrepancy": false,
+  "discrepancyExplanation": "Earlier 186 count mixed 166 base tables with 20 views.",
+  "publicFunctions": 960,
+  "publicTriggers": 211,
+  "publicRlsPolicies": 380,
+  "authUsers": 9,
+  "authUsersMigration": "Cognito — out of scope for first PostgreSQL copy",
+  "storageObjects": 1335,
+  "storageMigration": "S3 — out of scope for first PostgreSQL copy",
+  "directForeignKeysFromPublicToAuthUsers": 0,
+  "requestSupabaseAccessToken": false,
+  "requestDatabasePassword": false,
+  "dumpExecuted": false,
+  "restoreExecuted": false
+}

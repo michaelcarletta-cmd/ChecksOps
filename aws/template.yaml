@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: ChecksOps AWS staging foundation
+Description: ChecksOps AWS staging foundation. Does not modify production Supabase. Does not create or import the existing checksops-staging RDS instance.
 
 Parameters:
   Environment:
@@ -8,11 +8,35 @@ Parameters:
     Default: staging
     AllowedValues:
       - staging
-      - production
+    Description: Staging-only until cutover is explicitly approved. Production is not an allowed value.
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Default: vpc-09f2268778966ce97
+    Description: Existing VPC that already hosts the checksops-staging RDS instance.
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Default: subnet-092e4e41821fba6c4,subnet-0df2518070c5b9ff0
+    Description: Existing subnets for the API Lambda ENIs. Includes us-east-1f (RDS AZ) and us-east-1a.
+  ExistingRdsSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Default: sg-0e9332faa87c1d059
+    Description: Existing RDS security group rds-ec2-1. This stack only adds a 5432 ingress rule from the Lambda SG.
+  DatabaseSecretArn:
+    Type: String
+    Default: arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops/1788286468693-b4U0Rn
+    Description: Application DB credential secret ARN (checksops user). Do not use the checksops_admin secret. This is an ARN, not a password.
+  S3RouteTableId:
+    Type: String
+    Default: rtb-0b92eeeb4ce2759c8
+    Description: Existing main route table for the RDS VPC. Used by the S3 gateway endpoint.
+  S3ManagedPrefixListId:
+    Type: String
+    Default: pl-63a5400a
+    Description: AWS-managed prefix list for com.amazonaws.us-east-1.s3. Used for Lambda HTTPS egress to S3 via the gateway endpoint.
 
 Globals:
   Function:
-    Runtime: nodejs20.x
+    Runtime: nodejs22.x
     Architectures:
       - arm64
     Timeout: 15
@@ -23,7 +47,8 @@ Globals:
         CHECKSOPS_ENV: !Ref Environment
         FILES_BUCKET: !Ref PrivateFilesBucket
         PROVIDER_SECRETS_ARN: !Ref ProviderSecrets
-        # Override secret dbname without mutating the application secret or using checksops_admin.
+        DATABASE_SECRET_ARN: !Ref DatabaseSecretArn
+        # Staging restored DB target; keep app role secret unchanged.
         DATABASE_NAME: checksops
 
 Resources:
@@ -46,20 +71,130 @@ Resources:
           - DELETE
           - OPTIONS
 
+  ApiLambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Dedicated checksops-staging-api Lambda SG. No inbound. Egress only to RDS 5432, Secrets Manager endpoint, and S3 prefix list.
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          DestinationSecurityGroupId: !Ref ExistingRdsSecurityGroupId
+          Description: PostgreSQL to existing RDS security group
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          DestinationPrefixListId: !Ref S3ManagedPrefixListId
+          Description: HTTPS to S3 via gateway endpoint prefix list
+      Tags:
+        - Key: Name
+          Value: !Sub checksops-${Environment}-api-lambda
+        - Key: Environment
+          Value: !Ref Environment
+
+  VpcEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: HTTPS 443 from checksops-staging-api Lambda to the Secrets Manager VPC endpoint.
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub checksops-${Environment}-vpce-secrets
+        - Key: Environment
+          Value: !Ref Environment
+
+  LambdaToSecretsEndpointEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref ApiLambdaSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      DestinationSecurityGroupId: !Ref VpcEndpointSecurityGroup
+      Description: HTTPS to Secrets Manager interface endpoint
+
+  SecretsEndpointFromLambdaIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref VpcEndpointSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !Ref ApiLambdaSecurityGroup
+      Description: HTTPS from API Lambda
+
+  RdsFromLambdaIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ExistingRdsSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref ApiLambdaSecurityGroup
+      Description: PostgreSQL from checksops-staging-api Lambda only
+
+  SecretsManagerVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.secretsmanager
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+
+  S3VpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref S3RouteTableId
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+              - s3:ListBucket
+              - s3:AbortMultipartUpload
+            Resource:
+              - !GetAtt PrivateFilesBucket.Arn
+              - !Sub ${PrivateFilesBucket.Arn}/*
+
   ApiFunction:
     Type: AWS::Serverless::Function
+    DependsOn:
+      - SecretsManagerVpcEndpoint
+      - S3VpcEndpoint
+      - RdsFromLambdaIngress
+      - LambdaToSecretsEndpointEgress
+      - SecretsEndpointFromLambdaIngress
     Properties:
       FunctionName: !Sub checksops-${Environment}-api
       CodeUri: functions/api/
       Handler: index.handler
       Description: ChecksOps AWS API staging entrypoint
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ApiLambdaSecurityGroup
+        SubnetIds: !Ref SubnetIds
       Policies:
         - S3ReadPolicy:
             BucketName: !Ref PrivateFilesBucket
         - S3WritePolicy:
             BucketName: !Ref PrivateFilesBucket
+        - VPCAccessPolicy: {}
         - AWSSecretsManagerGetSecretValuePolicy:
             SecretArn: !Ref ProviderSecrets
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref DatabaseSecretArn
       Events:
         Root:
           Type: HttpApi
@@ -139,14 +274,14 @@ Resources:
         - ALLOW_USER_SRP_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
 
+  # Existing RDS instance checksops-staging is intentionally not declared here.
   ProviderSecrets:
     Type: AWS::SecretsManager::Secret
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
       Name: !Sub checksops/${Environment}/providers
-      Description: ChecksOps provider credentials. Populate values in AWS Secrets Manager; never commit credentials to Git.
-      SecretString: '{"MOOV_CLIENT_ID":"","MOOV_CLIENT_SECRET":"","CHECKALT_API_KEY":"","RESEND_API_KEY":"","PLAID_CLIENT_ID":"","PLAID_SECRET":"","CROSS_APP_BRIDGE_SECRET":""}'
+      Description: ChecksOps provider credentials. Populate JSON in Secrets Manager after deploy. Do not set SecretString in this template; stack updates would overwrite live values.
 
 Outputs:
   ApiUrl:
@@ -162,3 +297,13 @@ Outputs:
     Value: !Ref ChecksOpsUserPoolClient
   ProviderSecretsArn:
     Value: !Ref ProviderSecrets
+  ApiLambdaSecurityGroupId:
+    Description: Dedicated Lambda security group. Use this as the only source for RDS 5432.
+    Value: !Ref ApiLambdaSecurityGroup
+  DatabaseSecretArnOutput:
+    Description: Application database secret ARN referenced by Lambda. Not a password.
+    Value: !Ref DatabaseSecretArn
+  SecretsManagerVpcEndpointId:
+    Value: !Ref SecretsManagerVpcEndpoint
+  S3VpcEndpointId:
+    Value: !Ref S3VpcEndpoint
