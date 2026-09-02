@@ -59,39 +59,43 @@ export const investigateClaimsOwnership = async (client) => {
     FROM public.claims
   `)).rows[0];
 
-  const assignable = (await client.query(`
+  const grouped = (await client.query(`
     WITH signals AS (
-      SELECT ci.claim_id AS claim_id, ci.tenant_id, 'intake.claim_id'::text AS src
-      FROM public.check_intake_items ci
-      WHERE ci.claim_id IS NOT NULL AND ci.tenant_id IS NOT NULL
-      UNION ALL
-      SELECT ci.freedom_claim_id, ci.tenant_id, 'intake.freedom_claim_id'
-      FROM public.check_intake_items ci
-      WHERE ci.freedom_claim_id IS NOT NULL AND ci.tenant_id IS NOT NULL
-      UNION ALL
-      SELECT c.id, ci.tenant_id, 'intake.detected_claim_number'
-      FROM public.check_intake_items ci
-      JOIN public.claims c ON c.claim_number = ci.detected_claim_number
-      WHERE ci.detected_claim_number IS NOT NULL AND ci.tenant_id IS NOT NULL
-      UNION ALL
-      SELECT c.id, ci.tenant_id, 'intake.freedom_claim_number'
-      FROM public.check_intake_items ci
-      JOIN public.claims c ON c.claim_number = ci.freedom_claim_number
-      WHERE ci.freedom_claim_number IS NOT NULL AND ci.tenant_id IS NOT NULL
-      UNION ALL
-      SELECT le.claim_id, le.tenant_id, 'homeowner_ledger_events.claim_id'
-      FROM public.homeowner_ledger_events le
-      WHERE le.claim_id IS NOT NULL AND le.tenant_id IS NOT NULL
-      UNION ALL
-      SELECT di.claim_id, ci.tenant_id, 'deposit_items.check_tenant'
-      FROM public.deposit_items di
-      JOIN public.check_intake_items ci ON ci.id = di.check_id
-      WHERE di.claim_id IS NOT NULL AND ci.tenant_id IS NOT NULL
-      UNION ALL
-      SELECT cp.claim_id, ci.tenant_id, 'claim_payments.check_intake'
-      FROM public.claim_payments cp
-      JOIN public.check_intake_items ci ON ci.id = cp.check_intake_item_id
-      WHERE cp.claim_id IS NOT NULL AND ci.tenant_id IS NOT NULL
+      SELECT c.id AS claim_id, s.tenant_id, s.src
+      FROM public.claims c
+      JOIN (
+        SELECT ci.claim_id AS claim_id, ci.tenant_id, 'intake.claim_id'::text AS src
+        FROM public.check_intake_items ci
+        WHERE ci.claim_id IS NOT NULL AND ci.tenant_id IS NOT NULL
+        UNION ALL
+        SELECT ci.freedom_claim_id, ci.tenant_id, 'intake.freedom_claim_id'
+        FROM public.check_intake_items ci
+        WHERE ci.freedom_claim_id IS NOT NULL AND ci.tenant_id IS NOT NULL
+        UNION ALL
+        SELECT c2.id, ci.tenant_id, 'intake.detected_claim_number'
+        FROM public.check_intake_items ci
+        JOIN public.claims c2 ON c2.claim_number = ci.detected_claim_number
+        WHERE ci.detected_claim_number IS NOT NULL AND ci.tenant_id IS NOT NULL
+        UNION ALL
+        SELECT c2.id, ci.tenant_id, 'intake.freedom_claim_number'
+        FROM public.check_intake_items ci
+        JOIN public.claims c2 ON c2.claim_number = ci.freedom_claim_number
+        WHERE ci.freedom_claim_number IS NOT NULL AND ci.tenant_id IS NOT NULL
+        UNION ALL
+        SELECT le.claim_id, le.tenant_id, 'homeowner_ledger_events.claim_id'
+        FROM public.homeowner_ledger_events le
+        WHERE le.claim_id IS NOT NULL AND le.tenant_id IS NOT NULL
+        UNION ALL
+        SELECT di.claim_id, ci.tenant_id, 'deposit_items.check_tenant'
+        FROM public.deposit_items di
+        JOIN public.check_intake_items ci ON ci.id = di.check_id
+        WHERE di.claim_id IS NOT NULL AND ci.tenant_id IS NOT NULL
+        UNION ALL
+        SELECT cp.claim_id, ci.tenant_id, 'claim_payments.check_intake'
+        FROM public.claim_payments cp
+        JOIN public.check_intake_items ci ON ci.id = cp.check_intake_item_id
+        WHERE cp.claim_id IS NOT NULL AND ci.tenant_id IS NOT NULL
+      ) s ON s.claim_id = c.id
     ),
     per_claim AS (
       SELECT claim_id, array_agg(DISTINCT tenant_id) AS tenants
@@ -104,28 +108,35 @@ export const investigateClaimsOwnership = async (client) => {
     FROM per_claim
   `)).rows[0];
 
-  const none = Number(totals.n) - Number(assignable.assignable) - Number(assignable.ambiguous);
+  const none = Number(totals.n) - Number(grouped.assignable) - Number(grouped.ambiguous);
   const tenantDist = (await client.query(`
-    WITH signals AS (
-      SELECT ci.claim_id AS claim_id, ci.tenant_id
-      FROM public.check_intake_items ci
-      WHERE ci.claim_id IS NOT NULL AND ci.tenant_id IS NOT NULL
+    WITH per_claim AS (
+      SELECT c.id AS claim_id, array_agg(DISTINCT s.tenant_id) AS tenants
+      FROM public.claims c
+      JOIN (
+        SELECT claim_id, tenant_id FROM public.check_intake_items WHERE claim_id IS NOT NULL AND tenant_id IS NOT NULL
+        UNION ALL
+        SELECT claim_id, tenant_id FROM public.homeowner_ledger_events WHERE claim_id IS NOT NULL AND tenant_id IS NOT NULL
+      ) s ON s.claim_id = c.id
+      GROUP BY c.id
+      HAVING cardinality(array_agg(DISTINCT s.tenant_id)) = 1
     )
-    SELECT tenant_id::text AS tenant_id, count(DISTINCT claim_id)::int AS n
-    FROM signals GROUP BY 1
+    SELECT tenants[1]::text AS tenant_id, count(*)::int AS n
+    FROM per_claim
+    GROUP BY 1
   `)).rows;
 
   return {
     backfillApplied: false,
     claims: Number(totals.n),
     orgIdNull: Number(totals.org_null),
-    assignable: Number(assignable.assignable),
-    ambiguous: Number(assignable.ambiguous),
+    assignable: Number(grouped.assignable),
+    ambiguous: Number(grouped.ambiguous),
     none,
     assignableTenantDist: tenantDist,
     pass: Number(totals.n) === 180
       && Number(totals.org_null) === 180
-      && Number(assignable.ambiguous) === 0,
+      && Number(grouped.ambiguous) === 0,
   };
 };
 
@@ -145,13 +156,34 @@ export const investigateNinthLive = async (client) => {
     tenantUsers: await q(`SELECT tenant_id::text, role FROM public.tenant_users WHERE user_id = $1::uuid`),
     roleVersion: (await q(`SELECT version, updated_at FROM public.role_version_tracker WHERE user_id = $1::uuid`))[0] || null,
     vettingUploads: await q(`
-      SELECT id::text, tenant_id::text, doc_type, file_name, review_status, created_at
+      SELECT id::text, tenant_id::text, doc_type, file_name, file_path, file_size_bytes, content_type,
+             review_status, created_at
       FROM public.tenant_vetting_documents WHERE uploaded_by = $1::uuid`),
     referrers: await q(`SELECT id::text, name, company, email, user_id::text FROM public.referrers WHERE id = $1::uuid OR user_id = $1::uuid`),
     auditLogs: Number((await q(`SELECT count(*)::int AS n FROM public.audit_logs WHERE user_id = $1::uuid`))[0].n),
     checkAuditLog: Number((await q(
       `SELECT count(*)::int AS n FROM public.check_audit_log WHERE actor_id = $1::uuid`,
     ))[0].n),
+    createdByChecks: Number((await q(
+      `SELECT count(*)::int AS n FROM public.check_intake_items WHERE uploaded_by = $1::uuid OR reviewed_by = $1::uuid`,
+    ))[0].n),
+    createdByFolders: Number((await q(
+      `SELECT count(*)::int AS n FROM public.claim_folders WHERE created_by = $1::uuid`,
+    ))[0].n),
+    uploadedClaimFiles: Number((await q(
+      `SELECT count(*)::int AS n FROM public.claim_files WHERE uploaded_by = $1::uuid`,
+    ))[0].n),
+    authUsersCount: Number((await client.query('SELECT count(*)::int AS n FROM auth.users')).rows[0].n),
+    uuidColumnHitsConfirmed: [
+      { table: 'identity_accounts', column: 'application_user_id' },
+      { table: 'role_version_tracker', column: 'user_id' },
+      { table: 'tenant_vetting_documents', column: 'uploaded_by' },
+      { table: 'user_roles', column: 'user_id' },
+    ],
+    emailGuessed: false,
+    cognitoCreated: false,
+    merged: false,
+    deleted: false,
   };
 };
 
@@ -166,6 +198,16 @@ export const inspectApplicationRole = async (client) => {
     SELECT tableowner FROM pg_tables
     WHERE schemaname='public' AND tablename='check_intake_items'
   `)).rows[0];
+  const privileges = (await client.query(`
+    SELECT
+      has_table_privilege('checksops', 'public.check_intake_items', 'SELECT') AS sel,
+      has_table_privilege('checksops', 'public.check_intake_items', 'INSERT') AS ins,
+      has_table_privilege('checksops', 'public.check_intake_items', 'UPDATE') AS upd,
+      has_table_privilege('checksops', 'public.check_intake_items', 'DELETE') AS del,
+      has_table_privilege('checksops', 'public.check_intake_items', 'TRUNCATE') AS trunc,
+      has_table_privilege('checksops', 'public.check_intake_items', 'REFERENCES') AS refs
+  `)).rows[0];
+  await client.query('BEGIN');
   const canAlter = await asRole(client, TESTER_ID, async () => {
     await client.query('ALTER TABLE public.check_intake_items DISABLE ROW LEVEL SECURITY');
     return { rowCount: 1 };
@@ -174,13 +216,22 @@ export const inspectApplicationRole = async (client) => {
     await client.query(`CREATE POLICY aws_should_not_exist ON public.check_intake_items FOR SELECT USING (true)`);
     return { rowCount: 1 };
   });
+  const canBecomeAdmin = await asRole(client, TESTER_ID, async () => {
+    await client.query('SET LOCAL ROLE checksops_admin');
+    return { rowCount: 1 };
+  });
+  await client.query('ROLLBACK');
   return {
     roles,
     checkIntakeOwner: grants?.tableowner || null,
+    checksopsTablePrivileges: privileges,
+    checksopsHasWritePrivilege: Boolean(privileges?.ins || privileges?.upd || privileges?.del),
     checksopsCannotAlterRls: Boolean(canAlter.error),
     checksopsCannotCreatePolicy: Boolean(canCreatePolicy.error),
+    checksopsCannotBecomeAdmin: Boolean(canBecomeAdmin.error),
     alterError: canAlter.error || null,
     createPolicyError: canCreatePolicy.error || null,
+    becomeAdminError: canBecomeAdmin.error || null,
   };
 };
 
@@ -199,8 +250,12 @@ export const applyWriteDdl = async (client) => {
   return { writePoliciesPrepared: policies, selectPoliciesUnchanged: selectPolicies };
 };
 
-const tryWrite = async (client, appUserId, sql, params = []) => asRole(client, appUserId, async () => {
-  const result = await client.query(sql, params);
+const tryWrite = async (client, appUserId, sqlOrFn, params = []) => asRole(client, appUserId, async () => {
+  if (typeof sqlOrFn === 'function') {
+    const result = await sqlOrFn(client);
+    return { rowCount: result?.rowCount ?? result?.n ?? 0 };
+  }
+  const result = await client.query(sqlOrFn, params);
   return { rowCount: result.rowCount };
 });
 
@@ -240,6 +295,25 @@ export const transactionalWriteTests = async (client) => {
     for (const table of rlsTables) {
       await client.query(`ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY`);
     }
+    // Temporary DML grants for this transaction only. checksops remains SELECT-only after ROLLBACK.
+    await client.query(`
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
+        public.check_intake_items,
+        public.check_endorsements,
+        public.deposit_items,
+        public.disbursement_batches,
+        public.claims,
+        public.claim_files,
+        public.claim_folders,
+        public.payment_provider_accounts,
+        public.payment_webhook_events,
+        public.payment_idempotency_keys,
+        public.homeowner_ledger_events,
+        public.tenant_email_settings,
+        public.user_roles,
+        public.tenants
+      TO checksops
+    `);
 
     const freedomCheck = (await client.query(
       `SELECT id::text AS id FROM public.check_intake_items WHERE tenant_id=$1::uuid LIMIT 1`,
@@ -257,6 +331,12 @@ export const transactionalWriteTests = async (client) => {
     )).rows[0];
 
     const tests = {};
+
+    await client.query(
+      `INSERT INTO public._aws_rls_write_probe (tenant_id, label)
+       VALUES ($1::uuid, 'owner-seed-freedom')`,
+      [FREEDOM_TENANT],
+    );
 
     tests.staffInsertFreedomProbe = countResult(await tryWrite(
       client, TESTER_ID,
@@ -306,6 +386,23 @@ export const transactionalWriteTests = async (client) => {
        VALUES ($1::uuid, 'master-c1c-write')`,
       [C1C_TENANT],
     ));
+    tests.staffDeleteFreedomProbe = countResult(await tryWrite(
+      client, TESTER_ID,
+      async () => {
+        await client.query(
+          `INSERT INTO public._aws_rls_write_probe (tenant_id, label)
+           VALUES ($1::uuid, 'staff-freedom-delete')`,
+          [FREEDOM_TENANT],
+        );
+        return client.query(
+          `DELETE FROM public._aws_rls_write_probe WHERE label = 'staff-freedom-delete'`,
+        );
+      },
+    ));
+    tests.tenantAdminDeleteFreedomProbeDenied = countResult(await tryWrite(
+      client, C1C_ADMIN_ID,
+      `DELETE FROM public._aws_rls_write_probe WHERE label = 'owner-seed-freedom'`,
+    ));
 
     if (freedomCheck) {
       tests.staffUpdateFreedomCheck = countResult(await tryWrite(
@@ -322,6 +419,11 @@ export const transactionalWriteTests = async (client) => {
         client, null,
         `UPDATE public.check_intake_items SET review_notes = 'unauth' WHERE id=$1::uuid`,
         [freedomCheck.id],
+      ));
+      tests.staffRekeyFreedomCheckDenied = countResult(await tryWrite(
+        client, TESTER_ID,
+        `UPDATE public.check_intake_items SET tenant_id = $1::uuid WHERE id=$2::uuid`,
+        [C1C_TENANT, freedomCheck.id],
       ));
     }
     if (freedomDeposit) {
@@ -397,9 +499,12 @@ export const transactionalWriteTests = async (client) => {
       && expectDenied(tests.unauthenticatedInsertDenied)
       && expectDenied(tests.cognitoSubInsertDenied)
       && expectOk(tests.masterInsertC1c)
+      && expectOk(tests.staffDeleteFreedomProbe)
+      && expectDenied(tests.tenantAdminDeleteFreedomProbeDenied)
       && (!tests.staffUpdateFreedomCheck || expectOk(tests.staffUpdateFreedomCheck))
       && (!tests.tenantAdminUpdateFreedomCheckDenied || expectDenied(tests.tenantAdminUpdateFreedomCheckDenied))
       && (!tests.unauthUpdateFreedomCheckDenied || expectDenied(tests.unauthUpdateFreedomCheckDenied))
+      && (!tests.staffRekeyFreedomCheckDenied || expectDenied(tests.staffRekeyFreedomCheckDenied))
       && (!tests.uuidOracleDepositUpdateDenied || expectDenied(tests.uuidOracleDepositUpdateDenied))
       && (!tests.staffUpdateFreedomDeposit || expectOk(tests.staffUpdateFreedomDeposit))
       && (!tests.staffUpdateC1cProviderDenied || expectDenied(tests.staffUpdateC1cProviderDenied))
