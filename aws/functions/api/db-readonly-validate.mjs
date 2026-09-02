@@ -329,7 +329,11 @@ export const validateReadonlyCoreTables = async ({
             result.issues.push(issue('permission', 'error', 'USAGE denied on schema public'));
           }
           if (catalog.schemaUsage.auth) {
-            result.issues.push(issue('permission', 'error', 'USAGE unexpectedly granted on schema auth'));
+            result.issues.push(issue(
+              'permission',
+              'expected',
+              'USAGE granted on schema auth for the identity-phase auth.uid() shim; auth.users remains unrestored',
+            ));
           } else {
             result.issues.push(issue(
               'permission',
