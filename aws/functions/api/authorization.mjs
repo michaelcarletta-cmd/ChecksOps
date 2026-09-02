@@ -10,6 +10,7 @@ import {
   verifyCognitoIdToken,
 } from './cognito.mjs';
 import { LOOKUP_MAPPING_SQL, USER_ROLES_SQL } from './identity.mjs';
+import { fetchCognitoJwks } from './jwks.mjs';
 
 const { Client } = pg;
 
@@ -178,4 +179,39 @@ export const handleAuthorizationProbe = async (event) => {
     cognitoEmail: claimsResult.claims.email,
     spoof: ignoredSpoofFields(event),
   });
+};
+
+export const handleJwksCheck = async (event) => {
+  const jwks = await fetchCognitoJwks();
+  const token = bearerToken(event);
+  let tokenCheck = { attempted: false };
+  if (token) {
+    tokenCheck.attempted = true;
+    try {
+      const claims = await verifyCognitoIdToken(token);
+      tokenCheck = {
+        attempted: true,
+        ok: true,
+        sub: claims.sub,
+        tokenUse: claims.tokenUse,
+        verifiedInLambda: true,
+      };
+    } catch (error) {
+      tokenCheck = {
+        attempted: true,
+        ok: false,
+        verifiedInLambda: false,
+        error: String(error?.message || error).slice(0, 200),
+      };
+    }
+  }
+  const ok = jwks.ok && (!tokenCheck.attempted || tokenCheck.ok);
+  return {
+    ok,
+    statusCode: ok ? 200 : (token && !tokenCheck.ok ? 401 : 503),
+    restoredTablesRlsEnabled: false,
+    jwks,
+    tokenCheck,
+    networking: 'cognito-idp interface VPC endpoint (PrivateLink), not NAT, RDS remains private',
+  };
 };

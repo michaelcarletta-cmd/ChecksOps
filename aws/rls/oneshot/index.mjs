@@ -12,6 +12,7 @@ const CA_PATH = path.join(ROOT, 'rds-global-bundle.pem');
 const TESTER_ID = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
 const NINTH_ID = 'dd24eea5-5d12-47d1-999e-d5930c278b7d';
 const C1C_ADMIN_ID = 'fd857564-9534-4b0f-95ac-624ed1273725';
+const MASTER_OWNER_ID = '7dbb3009-f059-4767-b5dc-1c5c72379330';
 const FREEDOM_TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const C1C_TENANT = '4f172140-f57a-4744-8050-95f4f07b13b4';
 const COGNITO_SUB = '2418c458-c011-70b7-07ac-6b9da2d9415d';
@@ -37,6 +38,13 @@ const HELPER_NAMES = [
   'user_has_role',
   'aws_user_tenant_ids',
   'aws_is_cross_tenant_reader',
+  'aws_can_access_tenant',
+  'aws_can_access_claim',
+  'aws_can_access_check',
+  'aws_can_access_same_tenant_user',
+  'aws_can_access_deposit_item',
+  'aws_can_access_loss_draft',
+  'aws_can_access_signature_request',
 ];
 
 const readSql = (name) => fs.readFileSync(path.join(SQL_DIR, name), 'utf8');
@@ -65,7 +73,7 @@ const adminClient = async (database) => {
     database,
     ssl: { rejectUnauthorized: true, ca: fs.readFileSync(CA_PATH, 'utf8') },
     connectionTimeoutMillis: 8000,
-    query_timeout: 25000,
+    query_timeout: 120000,
   });
   await client.connect();
   return client;
@@ -371,30 +379,279 @@ const probeIsolation = async (client) => withTxn(client, async () => {
   const ninth = (await asChecksops(client, NINTH_ID, sql)).map((row) => row.label);
   const cognitoSub = (await asChecksops(client, COGNITO_SUB, sql)).map((row) => row.label);
   const unauthenticated = (await asChecksops(client, null, sql)).map((row) => row.label);
+  const masterOwner = (await asChecksops(client, MASTER_OWNER_ID, sql)).map((row) => row.label);
   const testerRoles = await asChecksops(
     client,
     TESTER_ID,
     `SELECT role::text AS role FROM public.user_roles WHERE user_id = auth.uid() ORDER BY 1`,
   );
+  const ownerFlags = {};
+  for (const [name, id] of [
+    ['tester', TESTER_ID],
+    ['c1cAdmin', C1C_ADMIN_ID],
+    ['masterOwner', MASTER_OWNER_ID],
+    ['ninth', NINTH_ID],
+  ]) {
+    const rows = await asChecksops(
+      client,
+      id,
+      `SELECT public.is_master_owner() AS master, public.is_platform_owner() AS platform`,
+    );
+    ownerFlags[name] = rows[0];
+  }
   return {
     adminSeesAllLabels: asAdmin,
     tester,
     c1cAdmin,
+    masterOwner,
     ninth,
     cognitoSubAsAppId: cognitoSub,
     unauthenticated,
     testerRolesFromUserRoles: testerRoles.map((row) => row.role),
+    ownerFlags,
     pass: tester.includes('freedom-probe-visible')
       && !tester.includes('c1c-probe-hidden')
       && !tester.includes('barzzini-probe-hidden')
       && c1cAdmin.includes('c1c-probe-hidden')
       && !c1cAdmin.includes('freedom-probe-visible')
+      && masterOwner.includes('freedom-probe-visible')
+      && masterOwner.includes('c1c-probe-hidden')
       && ninth.length === 0
       && cognitoSub.length === 0
       && unauthenticated.length === 0
-      && testerRoles.map((row) => row.role).includes('staff'),
+      && testerRoles.map((row) => row.role).includes('staff')
+      && ownerFlags.masterOwner?.master === true
+      && ownerFlags.tester?.master === false
+      && ownerFlags.c1cAdmin?.master === false
+      && ownerFlags.c1cAdmin?.platform === false,
   };
 });
+
+const REPRESENTATIVE_TABLES = [
+  { table: 'check_intake_items', kind: 'tenant', tenantCol: 'tenant_id' },
+  { table: 'check_endorsements', kind: 'tenant', tenantCol: 'tenant_id' },
+  { table: 'disbursement_batches', kind: 'tenant', tenantCol: 'tenant_id' },
+  { table: 'payment_provider_accounts', kind: 'tenant', tenantCol: 'tenant_id' },
+  { table: 'payment_webhook_events', kind: 'tenant', tenantCol: 'tenant_id' },
+  { table: 'homeowner_ledger_events', kind: 'tenant', tenantCol: 'tenant_id' },
+  { table: 'claims', kind: 'tenant', tenantCol: 'org_id' },
+  { table: 'tenants', kind: 'tenant', tenantCol: 'id' },
+  { table: 'tenant_email_settings', kind: 'tenant', tenantCol: 'tenant_id' },
+  { table: 'payment_idempotency_keys', kind: 'tenant', tenantCol: 'tenant_id' },
+  { table: 'user_roles', kind: 'same_tenant_user', userCol: 'user_id' },
+  { table: 'profiles', kind: 'same_tenant_user', userCol: 'id' },
+  { table: 'claim_files', kind: 'claim_join' },
+  { table: 'check_files', kind: 'check_file_join' },
+  { table: 'deposit_items', kind: 'deposit_join' },
+  { table: 'plaid_webhook_cursors', kind: 'platform_only' },
+];
+
+const countSql = (spec) => {
+  if (spec.kind === 'same_tenant_user') {
+    return `SELECT CASE
+      WHEN EXISTS (
+        SELECT 1 FROM public.tenant_users tu
+        WHERE tu.user_id = t.${spec.userCol} AND tu.tenant_id = '${FREEDOM_TENANT}'::uuid
+      ) THEN '${FREEDOM_TENANT}'
+      WHEN EXISTS (
+        SELECT 1 FROM public.tenant_users tu
+        WHERE tu.user_id = t.${spec.userCol} AND tu.tenant_id = '${C1C_TENANT}'::uuid
+      ) THEN '${C1C_TENANT}'
+      ELSE 'other'
+    END AS tenant_id, count(*)::int AS n
+    FROM public.${spec.table} t
+    GROUP BY 1`;
+  }
+  if (spec.kind === 'claim_join') {
+    return `SELECT COALESCE(c.org_id::text, 'other') AS tenant_id, count(*)::int AS n
+      FROM public.claim_files cf
+      LEFT JOIN public.claims c ON c.id = cf.claim_id
+      GROUP BY 1`;
+  }
+  if (spec.kind === 'check_file_join') {
+    return `SELECT COALESCE(ci.tenant_id::text, 'other') AS tenant_id, count(*)::int AS n
+      FROM public.check_files f
+      LEFT JOIN public.check_intake_items ci ON ci.id = f.check_intake_item_id
+      GROUP BY 1`;
+  }
+  if (spec.kind === 'deposit_join') {
+    return `SELECT COALESCE(ci.tenant_id::text, 'other') AS tenant_id, count(*)::int AS n
+      FROM public.deposit_items di
+      LEFT JOIN public.check_intake_items ci ON ci.id = di.check_id
+      GROUP BY 1`;
+  }
+  if (spec.kind === 'platform_only' || !spec.tenantCol) {
+    return `SELECT 'all'::text AS tenant_id, count(*)::int AS n FROM public.${spec.table}`;
+  }
+  return `SELECT ${spec.tenantCol}::text AS tenant_id, count(*)::int AS n FROM public.${spec.table} GROUP BY 1`;
+};
+
+const tablePass = (spec, baseline, perActor) => {
+  const staff = perActor.testerStaff;
+  const admin = perActor.tenantAdminC1c;
+  const master = perActor.masterOwner;
+  const ninth = perActor.ninth;
+  const sub = perActor.cognitoSub;
+  const unauth = perActor.unauthenticated;
+  if (unauth.all !== 0 || sub.all !== 0) return false;
+  if (spec.kind === 'platform_only') {
+    return staff.all === 0 && admin.all === 0 && ninth.all === 0 && master.all === baseline.all;
+  }
+  if (staff.c1c !== 0 || admin.freedom !== 0) return false;
+  if (ninth.freedom !== 0 || ninth.c1c !== 0) return false;
+  if (baseline.freedom > 0 && staff.freedom === 0) return false;
+  if (baseline.c1c > 0 && admin.c1c === 0) return false;
+  if (master.all !== baseline.all) return false;
+  return true;
+};
+
+const summarize = (rows) => {
+  const by = {};
+  for (const row of rows) by[row.tenant_id] = Number(row.n);
+  const freedom = by[FREEDOM_TENANT] || 0;
+  const c1c = by[C1C_TENANT] || 0;
+  const all = by.all;
+  const other = Object.entries(by)
+    .filter(([id]) => id !== FREEDOM_TENANT && id !== C1C_TENANT && id !== 'all')
+    .reduce((sum, [, n]) => sum + n, 0);
+  return { freedom, c1c, other, all: all ?? (freedom + c1c + other), raw: by };
+};
+
+const expandedIsolation = async (client) => {
+  const alreadyOn = [];
+  for (const spec of REPRESENTATIVE_TABLES) {
+    const enabled = (await client.query(
+      `SELECT c.relrowsecurity
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'public' AND c.relname = $1`,
+      [spec.table],
+    )).rows[0]?.relrowsecurity;
+    if (enabled) alreadyOn.push(spec.table);
+  }
+  if (alreadyOn.length) {
+    return { skipped: true, reason: `RLS already enabled: ${alreadyOn.join(',')}` };
+  }
+
+  await client.query('BEGIN');
+  try {
+    for (const spec of REPRESENTATIVE_TABLES) {
+      await client.query(`ALTER TABLE public.${spec.table} ENABLE ROW LEVEL SECURITY`);
+    }
+
+    const actors = {
+      testerStaff: TESTER_ID,
+      tenantAdminC1c: C1C_ADMIN_ID,
+      masterOwner: MASTER_OWNER_ID,
+      ninth: NINTH_ID,
+      cognitoSub: COGNITO_SUB,
+      unauthenticated: null,
+    };
+    const tables = {};
+    for (const spec of REPRESENTATIVE_TABLES) {
+      try {
+        const sql = countSql(spec);
+        const baseline = summarize((await client.query(sql)).rows);
+        const perActor = {};
+        for (const [name, id] of Object.entries(actors)) {
+          perActor[name] = summarize(await asChecksops(client, id, sql));
+        }
+        tables[spec.table] = {
+          kind: spec.kind,
+          baseline,
+          ...perActor,
+          pass: tablePass(spec, baseline, perActor),
+        };
+      } catch (error) {
+        tables[spec.table] = {
+          kind: spec.kind,
+          pass: false,
+          error: String(error?.message || error).slice(0, 400),
+        };
+      }
+    }
+
+    const uuidOracleFor = async (table, idSql, params) => {
+      const row = (await client.query(idSql, params)).rows[0];
+      if (!row) return { table, skipped: true };
+      const sql = `SELECT count(*)::int AS n FROM public.${table} WHERE id = '${row.id}'::uuid`;
+      const asC1c = await asChecksops(client, C1C_ADMIN_ID, sql);
+      const asStaff = await asChecksops(client, TESTER_ID, sql);
+      const asUnauth = await asChecksops(client, null, sql);
+      return {
+        table,
+        skipped: false,
+        recordId: row.id,
+        c1cAdminRows: Number(asC1c[0].n),
+        sameTenantStaffRows: Number(asStaff[0].n),
+        unauthenticatedRows: Number(asUnauth[0].n),
+        pass: Number(asC1c[0].n) === 0 && Number(asStaff[0].n) === 1 && Number(asUnauth[0].n) === 0,
+      };
+    };
+    const uuidOracle = {
+      checkIntakeItems: await uuidOracleFor(
+        'check_intake_items',
+        `SELECT id::text AS id FROM public.check_intake_items WHERE tenant_id = $1::uuid LIMIT 1`,
+        [FREEDOM_TENANT],
+      ),
+      depositItems: await uuidOracleFor(
+        'deposit_items',
+        `SELECT di.id::text AS id
+         FROM public.deposit_items di
+         JOIN public.check_intake_items ci ON ci.id = di.check_id
+         WHERE ci.tenant_id = $1::uuid LIMIT 1`,
+        [FREEDOM_TENANT],
+      ),
+    };
+    uuidOracle.pass = Object.values(uuidOracle)
+      .filter((row) => row && typeof row === 'object' && row.pass !== undefined)
+      .every((row) => row.skipped || row.pass);
+
+    await client.query('ROLLBACK');
+    const stillOn = [];
+    for (const spec of REPRESENTATIVE_TABLES) {
+      const enabled = (await client.query(
+        `SELECT c.relrowsecurity
+         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public' AND c.relname = $1`,
+        [spec.table],
+      )).rows[0]?.relrowsecurity;
+      if (enabled) stillOn.push(spec.table);
+    }
+    const applicationRole = (await client.query(
+      `SELECT rolname, rolsuper, rolbypassrls
+       FROM pg_roles
+       WHERE rolname IN ('checksops', 'authenticated', 'anon')
+       ORDER BY 1`,
+    )).rows;
+    const tableOwner = (await client.query(
+      `SELECT c.relname AS table_name, pg_get_userbyid(c.relowner) AS owner
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'public' AND c.relname = 'check_intake_items'`,
+    )).rows[0];
+    const applicationRoleCannotBypassRls = applicationRole.every(
+      (row) => row.rolname !== 'checksops' || (!row.rolsuper && !row.rolbypassrls),
+    ) && tableOwner?.owner !== 'checksops';
+    const pass = Object.values(tables).every((row) => row.pass)
+      && uuidOracle.pass !== false
+      && stillOn.length === 0
+      && applicationRoleCannotBypassRls;
+    return {
+      skipped: false,
+      rolledBack: true,
+      rlsLeftEnabled: stillOn,
+      uuidOracle,
+      applicationRole,
+      tableOwner,
+      applicationRoleCannotBypassRls,
+      tables,
+      pass,
+    };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    return { skipped: false, rolledBack: true, error: String(error?.message || error).slice(0, 500) };
+  }
+};
 
 export const handler = async (event = {}) => {
   const step = event.step || 'all';
@@ -413,33 +670,71 @@ export const handler = async (event = {}) => {
     if (db.d !== 'checksops') throw new Error(`connected to ${db.d}, expected checksops`);
     out.connectedAs = db.u;
 
-    if (step === 'ddl' || step === 'all') {
-      await client.query(readSql('01_role_shim.sql'));
-      await client.query(readSql('02_helpers.sql'));
-      await client.query(readSql('03_grants.sql'));
+    if (step === 'ddl' || step === 'all' || step === 'remediate') {
+      const applySql = async (name) => {
+        try {
+          await client.query(readSql(name));
+        } catch (error) {
+          throw new Error(`${name}: ${error?.message || error}`);
+        }
+      };
+      await applySql('01_role_shim.sql');
+      await applySql('02_helpers.sql');
+      await applySql('03_grants.sql');
+      await applySql('10_owner_helpers_from_identity.sql');
+      await applySql('11_access_helpers.sql');
+      await applySql('15_access_grants.sql');
       out.helpersGranted = await grantHelperExecute(client);
-      await client.query(readSql('04_probe_table.sql'));
+      await applySql('04_probe_table.sql');
+      await applySql('16_probe_policy_remediate.sql');
+      const policySql = readSql('12_final_select_policies.sql');
+      const dropAt = policySql.indexOf('DROP POLICY');
+      if (dropAt < 0) throw new Error('12_final_select_policies.sql: missing DROP POLICY');
+      await client.query(policySql.slice(0, dropAt));
+      const policyStmts = policySql.slice(dropAt).split(/;\n+/).map((s) => s.trim()).filter(Boolean);
+      for (const stmt of policyStmts) {
+        try {
+          await client.query(`${stmt};`);
+        } catch (error) {
+          throw new Error(`12_final_select_policies.sql near ${stmt.slice(0, 160)}: ${error?.message || error}`);
+        }
+      }
+      out.dumpPoliciesBeforeDrop = Number((await client.query(
+        `SELECT count(*)::int AS n FROM pg_policies
+         WHERE schemaname = 'public' AND policyname NOT LIKE 'aws_%'`,
+      )).rows[0].n);
+      await client.query(readSql('13_drop_dump_policies.sql'));
+      out.dumpPoliciesAfterDrop = Number((await client.query(
+        `SELECT count(*)::int AS n FROM pg_policies
+         WHERE schemaname = 'public' AND policyname NOT LIKE 'aws_%'`,
+      )).rows[0].n);
       out.ddlApplied = true;
+      out.policiesPrepared = Number((await client.query(
+        `SELECT count(*)::int AS n FROM pg_policies WHERE schemaname = 'public' AND policyname LIKE 'aws_select_%'`,
+      )).rows[0].n);
     }
     if (step === 'ninth' || step === 'all') {
       out.ninthUuid = await investigateNinth(client);
     }
-    if (step === 'probe' || step === 'all') {
+    if (step === 'probe' || step === 'all' || step === 'remediate') {
       out.probeIsolation = await probeIsolation(client);
     }
     if (step === 'transactional' || step === 'all') {
       out.transactionalIntakeIsolation = await transactionalIntakeIsolation(client);
     }
+    if (step === 'expanded' || step === 'all' || step === 'remediate') {
+      out.expandedIsolation = await expandedIsolation(client);
+    }
     out.publicTablesWithRls = await rlsEnabledPublicTables(client);
     out.rlsEnabledGlobally = out.publicTablesWithRls.some((name) => name !== '_aws_rls_probe_items');
-    out.ok = true
+    out.ok = !out.error
       && out.ddlApplied !== false
-      && out.publicTablesWithRls.length === 1
-      && out.publicTablesWithRls[0] === '_aws_rls_probe_items'
-      && (step === 'ddl' || (out.probeIsolation?.pass && out.transactionalIntakeIsolation?.pass));
-    if (step === 'ddl') {
-      out.ok = out.ddlApplied === true && !out.rlsEnabledGlobally;
-    }
+      && !out.rlsEnabledGlobally
+      && (step === 'ddl' || (
+        (out.probeIsolation ? out.probeIsolation.pass : true)
+        && (out.expandedIsolation ? out.expandedIsolation.pass : true)
+        && (out.transactionalIntakeIsolation ? out.transactionalIntakeIsolation.pass !== false : true)
+      ));
     return out;
   } catch (error) {
     out.error = String(error?.message || error)

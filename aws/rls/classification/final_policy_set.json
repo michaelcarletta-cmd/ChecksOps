@@ -1,0 +1,1518 @@
+{
+  "policy_count": 165,
+  "command": "SELECT",
+  "write_policies": 0,
+  "obsolete_excluded": 6,
+  "server_side_open_write_excluded": 10,
+  "jwt_or_open_select_rewritten": 8,
+  "global_admin_staff_remediated": 70,
+  "rls_tables_in_dump": 165,
+  "empty_policy_tables": [
+    "payment_idempotency_keys",
+    "plaid_webhook_cursors"
+  ],
+  "access_kind_totals": {
+    "tenant_id": 72,
+    "platform_owner_only": 6,
+    "special": 28,
+    "catalog_authenticated": 8,
+    "check_id": 16,
+    "check_intake_item_id": 7,
+    "claim_id": 9,
+    "platform_owner_only_fallback": 15,
+    "deposit_batch_join": 1,
+    "homeowner_email": 2,
+    "user_id": 1
+  },
+  "notes": {
+    "payment_idempotency_keys": "tenant_id scoped SELECT (safer than dump deny-all with no policies)",
+    "plaid_webhook_cursors": "platform-owner only; no tenant key; API/webhook cursor"
+  },
+  "policies": [
+    {
+      "table": "public.ach_authorizations",
+      "policy": "aws_select_ach_authorizations",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.actum_transactions",
+      "policy": "aws_select_actum_transactions",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.ai_response_cache",
+      "policy": "aws_select_ai_response_cache",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.audit_logs",
+      "policy": "aws_select_audit_logs",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": true,
+      "using": "user_id = auth.uid() OR public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.cash_job_attachments",
+      "policy": "aws_select_cash_job_attachments",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.cash_job_line_items",
+      "policy": "aws_select_cash_job_line_items",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.cash_job_payments",
+      "policy": "aws_select_cash_job_payments",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.cash_jobs",
+      "policy": "aws_select_cash_jobs",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.check_audit_log",
+      "policy": "aws_select_check_audit_log",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.check_billing_config",
+      "policy": "aws_select_check_billing_config",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "catalog_authenticated",
+      "remediated_global_admin_staff": true,
+      "using": "(active = true) OR public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.check_billing_events",
+      "policy": "aws_select_check_billing_events",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.check_cases",
+      "policy": "aws_select_check_cases",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.check_deletion_log",
+      "policy": "aws_select_check_deletion_log",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_check(check_id)"
+    },
+    {
+      "table": "public.check_deposit_image_backfill_queue",
+      "policy": "aws_select_check_deposit_image_backfill_queue",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_check(check_id)"
+    },
+    {
+      "table": "public.check_eligibility_results",
+      "policy": "aws_select_check_eligibility_results",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_check(check_id)"
+    },
+    {
+      "table": "public.check_endorsement_events",
+      "policy": "aws_select_check_endorsement_events",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_check(check_id)"
+    },
+    {
+      "table": "public.check_endorsements",
+      "policy": "aws_select_check_endorsements",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.check_files",
+      "policy": "aws_select_check_files",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_intake_item_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_can_access_check(check_intake_item_id)"
+    },
+    {
+      "table": "public.check_intake_items",
+      "policy": "aws_select_check_intake_items",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.check_intake_mortgage_draws",
+      "policy": "aws_select_check_intake_mortgage_draws",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_can_access_check(check_id)"
+    },
+    {
+      "table": "public.check_message_reads",
+      "policy": "aws_select_check_message_reads",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_can_access_check(check_id)"
+    },
+    {
+      "table": "public.check_messages",
+      "policy": "aws_select_check_messages",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_can_access_check(check_id)"
+    },
+    {
+      "table": "public.check_payees",
+      "policy": "aws_select_check_payees",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.check_payment_directions",
+      "policy": "aws_select_check_payment_directions",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_can_access_check(check_id)"
+    },
+    {
+      "table": "public.check_reconciliation_alerts",
+      "policy": "aws_select_check_reconciliation_alerts",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_intake_item_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_check(check_intake_item_id)"
+    },
+    {
+      "table": "public.check_reissue_requests",
+      "policy": "aws_select_check_reissue_requests",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.check_review_decisions",
+      "policy": "aws_select_check_review_decisions",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.check_stakeholders",
+      "policy": "aws_select_check_stakeholders",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.check_status_audit",
+      "policy": "aws_select_check_status_audit",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_intake_item_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_check(check_intake_item_id)"
+    },
+    {
+      "table": "public.checkalt_config",
+      "policy": "aws_select_checkalt_config",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.checkalt_deposits",
+      "policy": "aws_select_checkalt_deposits",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.checkalt_tenant_accounts",
+      "policy": "aws_select_checkalt_tenant_accounts",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.checkalt_webhook_events",
+      "policy": "aws_select_checkalt_webhook_events",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.claim_check_mortgage_draws",
+      "policy": "aws_select_claim_check_mortgage_draws",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_can_access_check(check_id)"
+    },
+    {
+      "table": "public.claim_check_payments",
+      "policy": "aws_select_claim_check_payments",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.claim_checks",
+      "policy": "aws_select_claim_checks",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_intake_item_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_check(check_intake_item_id)"
+    },
+    {
+      "table": "public.claim_disbursements",
+      "policy": "aws_select_claim_disbursements",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_can_access_check(check_id)"
+    },
+    {
+      "table": "public.claim_files",
+      "policy": "aws_select_claim_files",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "claim_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_claim(claim_id)"
+    },
+    {
+      "table": "public.claim_folders",
+      "policy": "aws_select_claim_folders",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "claim_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_claim(claim_id)"
+    },
+    {
+      "table": "public.claim_operational_state",
+      "policy": "aws_select_claim_operational_state",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "claim_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_can_access_claim(claim_id)"
+    },
+    {
+      "table": "public.claim_payments",
+      "policy": "aws_select_claim_payments",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_intake_item_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_check(check_intake_item_id)"
+    },
+    {
+      "table": "public.claim_project_plans",
+      "policy": "aws_select_claim_project_plans",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.claim_settlements",
+      "policy": "aws_select_claim_settlements",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "claim_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_claim(claim_id)"
+    },
+    {
+      "table": "public.claims",
+      "policy": "aws_select_claims",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(org_id)"
+    },
+    {
+      "table": "public.company_branding",
+      "policy": "aws_select_company_branding",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only_fallback",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.contractor_profiles",
+      "policy": "aws_select_contractor_profiles",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": true,
+      "using": "user_id = auth.uid() OR public.aws_is_cross_tenant_reader() OR (is_directory_listed = true AND directory_opt_in = true)"
+    },
+    {
+      "table": "public.contractor_reviews",
+      "policy": "aws_select_contractor_reviews",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_tenant(org_id) OR public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.deposit_attachments",
+      "policy": "aws_select_deposit_attachments",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_deposit_item(deposit_item_id)"
+    },
+    {
+      "table": "public.deposit_audit_log",
+      "policy": "aws_select_deposit_audit_log",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "deposit_batch_join",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader() OR EXISTS ( SELECT 1 FROM public.deposit_items di JOIN public.check_intake_items ci ON ci.id = di.check_id WHERE di.batch_id = deposit_audit_log.batch_id   AND public.aws_can_access_tenant(ci.tenant_id))"
+    },
+    {
+      "table": "public.deposit_automation_runs",
+      "policy": "aws_select_deposit_automation_runs",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only_fallback",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.deposit_automation_settings",
+      "policy": "aws_select_deposit_automation_settings",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only_fallback",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.deposit_batches",
+      "policy": "aws_select_deposit_batches",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader() OR EXISTS ( SELECT 1 FROM public.deposit_items di JOIN public.check_intake_items ci ON ci.id = di.check_id WHERE di.batch_id = deposit_batches.id   AND public.aws_can_access_tenant(ci.tenant_id))"
+    },
+    {
+      "table": "public.deposit_daily_digest",
+      "policy": "aws_select_deposit_daily_digest",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only_fallback",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.deposit_digest_delivery_log",
+      "policy": "aws_select_deposit_digest_delivery_log",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only_fallback",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.deposit_escalation_events",
+      "policy": "aws_select_deposit_escalation_events",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only_fallback",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.deposit_escalation_rules",
+      "policy": "aws_select_deposit_escalation_rules",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only_fallback",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.deposit_exceptions",
+      "policy": "aws_select_deposit_exceptions",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_deposit_item(deposit_item_id)"
+    },
+    {
+      "table": "public.deposit_items",
+      "policy": "aws_select_deposit_items",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_check(check_id)"
+    },
+    {
+      "table": "public.deposit_manager_snapshots",
+      "policy": "aws_select_deposit_manager_snapshots",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only_fallback",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.deposit_notification_prefs",
+      "policy": "aws_select_deposit_notification_prefs",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": false,
+      "using": "user_id = auth.uid() OR public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.deposit_pending_approvals",
+      "policy": "aws_select_deposit_pending_approvals",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only_fallback",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.deposit_provider_attempts",
+      "policy": "aws_select_deposit_provider_attempts",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only_fallback",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.deposit_provider_config",
+      "policy": "aws_select_deposit_provider_config",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only_fallback",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.deposit_webhook_events",
+      "policy": "aws_select_deposit_webhook_events",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_deposit_item(deposit_item_id)"
+    },
+    {
+      "table": "public.disbursement_batches",
+      "policy": "aws_select_disbursement_batches",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.disbursement_splits",
+      "policy": "aws_select_disbursement_splits",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.document_templates",
+      "policy": "aws_select_document_templates",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "catalog_authenticated",
+      "remediated_global_admin_staff": true,
+      "using": "(is_active = true) OR public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.email_send_log",
+      "policy": "aws_select_email_send_log",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.email_send_state",
+      "policy": "aws_select_email_send_state",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only_fallback",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.email_templates",
+      "policy": "aws_select_email_templates",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "catalog_authenticated",
+      "remediated_global_admin_staff": true,
+      "using": "(is_active = true) OR public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.email_unsubscribe_tokens",
+      "policy": "aws_select_email_unsubscribe_tokens",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only_fallback",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.emails",
+      "policy": "aws_select_emails",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "claim_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_claim(claim_id)"
+    },
+    {
+      "table": "public.endorsement_audit_log",
+      "policy": "aws_select_endorsement_audit_log",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_check(check_id)"
+    },
+    {
+      "table": "public.endorsement_automated_reminders",
+      "policy": "aws_select_endorsement_automated_reminders",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.endorsement_requests",
+      "policy": "aws_select_endorsement_requests",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_check(check_id)"
+    },
+    {
+      "table": "public.esign_event_logs",
+      "policy": "aws_select_esign_event_logs",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "claim_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_claim(claim_id)"
+    },
+    {
+      "table": "public.external_payment_recipients",
+      "policy": "aws_select_external_payment_recipients",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.glba_security_events",
+      "policy": "aws_select_glba_security_events",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.homeowner_bank_link_tokens",
+      "policy": "aws_select_homeowner_bank_link_tokens",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.homeowner_check_uploads",
+      "policy": "aws_select_homeowner_check_uploads",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "homeowner_email",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR contractor_user_id = auth.uid() OR lower(homeowner_email) = lower(COALESCE(auth.email(), ''))"
+    },
+    {
+      "table": "public.homeowner_deductible_payments",
+      "policy": "aws_select_homeowner_deductible_payments",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.homeowner_directory_leads",
+      "policy": "aws_select_homeowner_directory_leads",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only_fallback",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.homeowner_intro_requests",
+      "policy": "aws_select_homeowner_intro_requests",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "homeowner_email",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR contractor_user_id = auth.uid() OR lower(homeowner_email) = lower(COALESCE(auth.email(), ''))"
+    },
+    {
+      "table": "public.homeowner_ledger_check_uploads",
+      "policy": "aws_select_homeowner_ledger_check_uploads",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.homeowner_ledger_events",
+      "policy": "aws_select_homeowner_ledger_events",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.homeowner_ledger_tokens",
+      "policy": "aws_select_homeowner_ledger_tokens",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.loss_draft_audit_log",
+      "policy": "aws_select_loss_draft_audit_log",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_loss_draft(loss_draft_id)"
+    },
+    {
+      "table": "public.loss_draft_documents",
+      "policy": "aws_select_loss_draft_documents",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_loss_draft(loss_draft_id)"
+    },
+    {
+      "table": "public.loss_draft_mortgage_intake",
+      "policy": "aws_select_loss_draft_mortgage_intake",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_can_access_loss_draft(loss_draft_id)"
+    },
+    {
+      "table": "public.loss_draft_releases",
+      "policy": "aws_select_loss_draft_releases",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_loss_draft(loss_draft_id)"
+    },
+    {
+      "table": "public.loss_draft_tracking",
+      "policy": "aws_select_loss_draft_tracking",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_intake_item_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_check(check_intake_item_id)"
+    },
+    {
+      "table": "public.micro_deposit_verifications",
+      "policy": "aws_select_micro_deposit_verifications",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.moov_invoice_customers",
+      "policy": "aws_select_moov_invoice_customers",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.moov_invoices",
+      "policy": "aws_select_moov_invoices",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.mortgage_companies",
+      "policy": "aws_select_mortgage_companies",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "catalog_authenticated",
+      "remediated_global_admin_staff": true,
+      "using": "true OR public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.mortgage_desk_config",
+      "policy": "aws_select_mortgage_desk_config",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "catalog_authenticated",
+      "remediated_global_admin_staff": true,
+      "using": "true OR public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.mortgage_handling_requests",
+      "policy": "aws_select_mortgage_handling_requests",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.mortgage_releases",
+      "policy": "aws_select_mortgage_releases",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_can_access_check(check_id)"
+    },
+    {
+      "table": "public.mortgage_request_library_documents",
+      "policy": "aws_select_mortgage_request_library_documents",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.notification_delivery_logs",
+      "policy": "aws_select_notification_delivery_logs",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "user_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_can_access_same_tenant_user(user_id)"
+    },
+    {
+      "table": "public.notification_preferences",
+      "policy": "aws_select_notification_preferences",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": false,
+      "using": "user_id = auth.uid() OR public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.notifications",
+      "policy": "aws_select_notifications",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "claim_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_can_access_claim(claim_id)"
+    },
+    {
+      "table": "public.payment_event_log",
+      "policy": "aws_select_payment_event_log",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.payment_idempotency_keys",
+      "policy": "aws_select_payment_idempotency_keys",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.payment_method_verifications",
+      "policy": "aws_select_payment_method_verifications",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.payment_methods",
+      "policy": "aws_select_payment_methods",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only_fallback",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.payment_provider_accounts",
+      "policy": "aws_select_payment_provider_accounts",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.payment_provider_files",
+      "policy": "aws_select_payment_provider_files",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.payment_provider_methods",
+      "policy": "aws_select_payment_provider_methods",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.payment_sweep_configs",
+      "policy": "aws_select_payment_sweep_configs",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.payment_transfer_groups",
+      "policy": "aws_select_payment_transfer_groups",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.payment_transfers",
+      "policy": "aws_select_payment_transfers",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.payment_wallet_ledger",
+      "policy": "aws_select_payment_wallet_ledger",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.payment_wallet_sub_ledgers",
+      "policy": "aws_select_payment_wallet_sub_ledgers",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.payment_wallets",
+      "policy": "aws_select_payment_wallets",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.payment_webhook_events",
+      "policy": "aws_select_payment_webhook_events",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.payroll_runs",
+      "policy": "aws_select_payroll_runs",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.pii_reveal_logs",
+      "policy": "aws_select_pii_reveal_logs",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": true,
+      "using": "user_id = auth.uid() OR public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.plaid_transfer_events",
+      "policy": "aws_select_plaid_transfer_events",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.plaid_webhook_cursors",
+      "policy": "aws_select_plaid_webhook_cursors",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.platform_announcements",
+      "policy": "aws_select_platform_announcements",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "catalog_authenticated",
+      "remediated_global_admin_staff": false,
+      "using": "(is_active = true) OR public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.platform_fee_line_items",
+      "policy": "aws_select_platform_fee_line_items",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.platform_fee_occurrences",
+      "policy": "aws_select_platform_fee_occurrences",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.platform_fee_schedules",
+      "policy": "aws_select_platform_fee_schedules",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.privacy_notice_acknowledgments",
+      "policy": "aws_select_privacy_notice_acknowledgments",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.profiles",
+      "policy": "aws_select_profiles",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_same_tenant_user(id)"
+    },
+    {
+      "table": "public.recipient_tax_profiles",
+      "policy": "aws_select_recipient_tax_profiles",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.referral_alerts",
+      "policy": "aws_select_referral_alerts",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "claim_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_claim(claim_id)"
+    },
+    {
+      "table": "public.referral_events",
+      "policy": "aws_select_referral_events",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_can_access_tenant(referrer_tenant_id) OR public.aws_can_access_tenant(referred_tenant_id)"
+    },
+    {
+      "table": "public.referrers",
+      "policy": "aws_select_referrers",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": true,
+      "using": "user_id = auth.uid() OR public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.role_version_tracker",
+      "policy": "aws_select_role_version_tracker",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_same_tenant_user(user_id)"
+    },
+    {
+      "table": "public.shared_check_messages",
+      "policy": "aws_select_shared_check_messages",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_can_access_check(check_id)"
+    },
+    {
+      "table": "public.shared_checks",
+      "policy": "aws_select_shared_checks",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_can_access_check(check_id)"
+    },
+    {
+      "table": "public.signature_document_presets",
+      "policy": "aws_select_signature_document_presets",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "catalog_authenticated",
+      "remediated_global_admin_staff": false,
+      "using": "true OR public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.signature_field_templates",
+      "policy": "aws_select_signature_field_templates",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.signature_field_values",
+      "policy": "aws_select_signature_field_values",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": false,
+      "using": "EXISTS (SELECT 1 FROM public.signature_fields sf  WHERE sf.id = signature_field_values.field_id    AND public.aws_can_access_signature_request(sf.signature_request_id))"
+    },
+    {
+      "table": "public.signature_fields",
+      "policy": "aws_select_signature_fields",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_can_access_signature_request(signature_request_id)"
+    },
+    {
+      "table": "public.signature_requests",
+      "policy": "aws_select_signature_requests",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "check_intake_item_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_check(check_intake_item_id)"
+    },
+    {
+      "table": "public.signature_signers",
+      "policy": "aws_select_signature_signers",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_signature_request(signature_request_id)"
+    },
+    {
+      "table": "public.sms_messages",
+      "policy": "aws_select_sms_messages",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "claim_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_claim(claim_id)"
+    },
+    {
+      "table": "public.stakeholder_account_verification_log",
+      "policy": "aws_select_stakeholder_account_verification_log",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.stakeholder_accounts",
+      "policy": "aws_select_stakeholder_accounts",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.stakeholder_limit_requests",
+      "policy": "aws_select_stakeholder_limit_requests",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.storage_backup_log",
+      "policy": "aws_select_storage_backup_log",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.suppressed_emails",
+      "policy": "aws_select_suppressed_emails",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.tenant_bank_accounts",
+      "policy": "aws_select_tenant_bank_accounts",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.tenant_billing_accounts",
+      "policy": "aws_select_tenant_billing_accounts",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.tenant_credit_balances",
+      "policy": "aws_select_tenant_credit_balances",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.tenant_credit_transactions",
+      "policy": "aws_select_tenant_credit_transactions",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.tenant_documents",
+      "policy": "aws_select_tenant_documents",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.tenant_email_settings",
+      "policy": "aws_select_tenant_email_settings",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.tenant_maintenance_payments",
+      "policy": "aws_select_tenant_maintenance_payments",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.tenant_openai_credentials",
+      "policy": "aws_select_tenant_openai_credentials",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.tenant_partner_code_aliases",
+      "policy": "aws_select_tenant_partner_code_aliases",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "platform_owner_only",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.tenant_partnerships",
+      "policy": "aws_select_tenant_partnerships",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_tenant(inviter_tenant_id) OR public.aws_can_access_tenant(invitee_tenant_id)"
+    },
+    {
+      "table": "public.tenant_usage_logs",
+      "policy": "aws_select_tenant_usage_logs",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.tenant_users",
+      "policy": "aws_select_tenant_users",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_can_access_tenant(tenant_id) OR user_id = auth.uid()"
+    },
+    {
+      "table": "public.tenant_vetting_documents",
+      "policy": "aws_select_tenant_vetting_documents",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.tenant_wallet_funding_settings",
+      "policy": "aws_select_tenant_wallet_funding_settings",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.tenants",
+      "policy": "aws_select_tenants",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_can_access_tenant(id)"
+    },
+    {
+      "table": "public.user_roles",
+      "policy": "aws_select_user_roles",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": true,
+      "using": "public.aws_can_access_same_tenant_user(user_id)"
+    },
+    {
+      "table": "public.user_sessions",
+      "policy": "aws_select_user_sessions",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "special",
+      "remediated_global_admin_staff": false,
+      "using": "user_id = auth.uid() OR public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "public.wallet_funding_queue",
+      "policy": "aws_select_wallet_funding_queue",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.wallet_funding_requests",
+      "policy": "aws_select_wallet_funding_requests",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "tenant_id",
+      "remediated_global_admin_staff": false,
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
+    },
+    {
+      "table": "public.zip_geocache",
+      "policy": "aws_select_zip_geocache",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "access_kind": "catalog_authenticated",
+      "remediated_global_admin_staff": false,
+      "using": "true OR public.aws_is_cross_tenant_reader()"
+    }
+  ]
+}

@@ -2,7 +2,7 @@ import { databaseSecretConfigured } from './secrets.mjs';
 import { probeDatabase, probeIsHealthy } from './db-health.mjs';
 import { validateReadonlyCoreTables } from './db-readonly-validate.mjs';
 import { handleIdentityMe } from './identity.mjs';
-import { handleAuthorizationProbe } from './authorization.mjs';
+import { handleAuthorizationProbe, handleJwksCheck } from './authorization.mjs';
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -101,6 +101,27 @@ export const handler = async (event) => {
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
       ...probe,
+    });
+  }
+
+  if ((method === 'GET' || method === 'POST') && path === '/authorization/isolation') {
+    const probe = await handleAuthorizationProbe(event);
+    return json(probe.statusCode || (probe.ok ? 200 : 401), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      restoredTablesRlsEnabled: false,
+      ...probe,
+    });
+  }
+
+  if (method === 'GET' && path === '/authorization/jwks-check') {
+    const jwks = await handleJwksCheck(event);
+    return json(jwks.statusCode || (jwks.ok ? 200 : 503), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...jwks,
     });
   }
 
