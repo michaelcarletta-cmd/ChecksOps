@@ -98,12 +98,72 @@ export function createAwsStorageAdapter(opts: { getToken?: TokenGetter } = {}) {
 
     return {
       bucket,
-      upload: async () => ({
-        data: null,
-        error: storageError(`uploads_disabled:${bucket}`, 403),
-      }),
-      update: async () => ({ data: null, error: storageError("uploads_disabled", 403) }),
-      remove: async () => ({ data: null, error: storageError("uploads_disabled", 403) }),
+      upload: async (rawPath: string, file: Blob, options?: { contentType?: string; upsert?: boolean }) => {
+        const path = toStorageObjectPath(rawPath, bucket) || rawPath;
+        const token = await getToken();
+        if (!token) {
+          return { data: null, error: storageError("JWT expired", 401) };
+        }
+        const contentType = options?.contentType || (file as File).type || "application/octet-stream";
+        const upsert = options?.upsert === true;
+        const { response, body } = await apiFetch("/storage/upload-url", {
+          method: "POST",
+          body: JSON.stringify({
+            bucket,
+            path,
+            contentType,
+            upsert,
+            contentLength: typeof file.size === "number" ? file.size : undefined,
+          }),
+        }, token);
+        if (!response.ok || !body.uploadUrl) {
+          return {
+            data: null,
+            error: storageError(String(body.message || body.error || "uploads_disabled"), Number(body.statusCode || response.status)),
+          };
+        }
+        const headers: Record<string, string> = { "content-type": contentType };
+        const put = await fetch(String(body.uploadUrl), { method: "PUT", headers, body: file });
+        if (!put.ok) {
+          return { data: null, error: storageError("upload_failed", put.status) };
+        }
+        const storedPath = String(body.path || path);
+        return {
+          data: { path: storedPath, id: storedPath, fullPath: `${bucket}/${storedPath}` },
+          error: null,
+        };
+      },
+      update: async (rawPath: string, file: Blob, options?: { contentType?: string }) =>
+        from(bucket).upload(rawPath, file, { ...options, upsert: true }),
+      remove: async (paths: string[]) => {
+        const token = await getToken();
+        if (!token) return { data: null, error: storageError("JWT expired", 401) };
+        const normalized = (paths || []).map((p) => toStorageObjectPath(p, bucket) || p);
+        const { response, body } = await apiFetch("/storage/delete", {
+          method: "POST",
+          body: JSON.stringify({ bucket, paths: normalized }),
+        }, token);
+        if (!response.ok) {
+          return { data: null, error: storageError(String(body.message || body.error || "uploads_disabled"), Number(body.statusCode || response.status)) };
+        }
+        return { data: (body.deleted as unknown[]) || normalized, error: null };
+      },
+      move: async (fromPath: string, toPath: string) => {
+        const token = await getToken();
+        if (!token) return { data: null, error: storageError("JWT expired", 401) };
+        const { response, body } = await apiFetch("/storage/move", {
+          method: "POST",
+          body: JSON.stringify({
+            bucket,
+            from: toStorageObjectPath(fromPath, bucket) || fromPath,
+            to: toStorageObjectPath(toPath, bucket) || toPath,
+          }),
+        }, token);
+        if (!response.ok) {
+          return { data: null, error: storageError(String(body.message || body.error || "uploads_disabled"), Number(body.statusCode || response.status)) };
+        }
+        return { data: { path: String(body.to || toPath) }, error: null };
+      },
       download: async (rawPath: string) => {
         const signed = await signOne(rawPath, 300);
         if (signed.error || !signed.data?.signedUrl) {

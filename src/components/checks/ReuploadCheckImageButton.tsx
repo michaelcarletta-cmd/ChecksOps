@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Upload, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { compressCheckImage } from "@/lib/compressCheckImage";
+import { isAwsStaging } from "@/lib/awsStaging";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
@@ -82,9 +83,11 @@ export function ReuploadCheckImageButton({
       const updatePayload: Record<string, unknown> = { [column]: path };
       if (side === "back") {
         updatePayload.back_image_original_path = path;
-        updatePayload.back_image_deposit_path = null;
-        updatePayload.endorsement_render_status = "idle";
-        updatePayload.endorsement_render_meta = null;
+        if (!isAwsStaging()) {
+          updatePayload.back_image_deposit_path = null;
+          updatePayload.endorsement_render_status = "idle";
+          updatePayload.endorsement_render_meta = null;
+        }
       }
 
       const { error: updErr } = await supabase

@@ -32,6 +32,8 @@ const AWS_WRITE_TABLES = new Set([
   "check_endorsement_events",
   "check_audit_log",
   "check_messages",
+  "check_files",
+  "claim_checks",
 ]);
 
 const listeners = new Set<AuthListener>();

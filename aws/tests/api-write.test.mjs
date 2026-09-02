@@ -82,6 +82,15 @@ const mockClient = ({ rows = [], mapping = mappingFor(), throwOn = null } = {}) 
           }],
         };
       }
+      if (/FROM public.check_files f/.test(sql) || /FROM public.claim_checks cc/.test(sql)) {
+        return {
+          rows: [{
+            id: params[0],
+            check_intake_item_id: CHECK_ID,
+            tenant_id: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a',
+          }],
+        };
+      }
       return { rows };
     },
     end: async () => {},
@@ -300,7 +309,7 @@ test('Tranche 2 updates descriptive check fields and ignores spoofed tenant/user
   assert.equal(String(update.sql).includes('amount'), false);
 });
 
-test('Tranche 2 denies financial intake columns, status, insert, and check_messages insert', async () => {
+test('Tranche 2 denies financial intake columns, status, insert, and endorsement signed status', async () => {
   const client = mockClient();
   const amount = await handleWrite(jwtEvent('/data/write', 'POST', {
     table: 'check_intake_items',
@@ -325,13 +334,6 @@ test('Tranche 2 denies financial intake columns, status, insert, and check_messa
     values: { carrier_name: 'x' },
   }), depsFor(client));
   assert.equal(insert.error, 'operation_not_allowlisted');
-
-  const msg = await handleWrite(jwtEvent('/data/write', 'POST', {
-    table: 'check_messages',
-    op: 'insert',
-    values: { check_id: CHECK_ID, body: 'note' },
-  }), depsFor(client));
-  assert.equal(msg.error, 'operation_not_allowlisted');
 
   const endorseStatus = await handleWrite(jwtEvent('/data/write', 'POST', {
     table: 'check_endorsements',
@@ -428,3 +430,106 @@ test('malformed check id is 400 and does not UPDATE', async () => {
   assert.equal(result.error, 'invalid_uuid');
   assert.equal(client.queries.some((q) => String(q.sql).includes('UPDATE public.check_intake_items')), false);
 });
+
+test('Tranche 3 inserts check notes with mapped sender_id and ignores spoofed identity', async () => {
+  const client = mockClient({
+    rows: [{ id: '33333333-3333-4333-8333-333333333333', check_id: CHECK_ID, sender_id: APP_ID, body: 'AWS T3 TEST note' }],
+  });
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_messages',
+    op: 'insert',
+    values: {
+      check_id: CHECK_ID,
+      body: 'AWS T3 TEST note',
+      sender_id: SPOOF_ID,
+      user_id: SPOOF_ID,
+      tenant_id: '4f172140-f57a-4744-8050-95f4b07b13b4',
+    },
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  const insert = client.queries.find((q) => String(q.sql).includes('INSERT INTO public.check_messages'));
+  assert.ok(insert);
+  assert.equal(insert.params[0], CHECK_ID);
+  assert.equal(insert.params[1], APP_ID);
+  assert.equal(insert.params.includes(SPOOF_ID), false);
+});
+
+test('Tranche 3 updates descriptive claim_checks and denies amount/deposit/endorsement_status', async () => {
+  const client = mockClient({
+    rows: [{ id: '44444444-4444-4444-8444-444444444444', carrier_name: 'Safe', check_intake_item_id: CHECK_ID }],
+  });
+  const ok = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'claim_checks',
+    op: 'update',
+    values: { carrier_name: 'Safe', tenant_id: '4f172140-f57a-4744-8050-95f4f07b13b4' },
+    filters: [{ column: 'id', op: 'eq', value: '44444444-4444-4444-8444-444444444444' }],
+  }), depsFor(client));
+  assert.equal(ok.ok, true);
+  const amount = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'claim_checks',
+    op: 'update',
+    values: { amount: 99 },
+    filters: [{ column: 'id', op: 'eq', value: '44444444-4444-4444-8444-444444444444' }],
+  }), depsFor(client));
+  assert.equal(amount.statusCode, 403);
+  assert.equal(amount.error, 'column_not_allowlisted');
+  const deposit = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'claim_checks',
+    op: 'update',
+    values: { deposit_status: 'deposited', endorsement_status: 'signed' },
+    filters: [{ column: 'id', op: 'eq', value: '44444444-4444-4444-8444-444444444444' }],
+  }), depsFor(client));
+  assert.equal(deposit.error, 'column_not_allowlisted');
+});
+
+test('Tranche 3 check_files insert requires a check-scoped path and mapped uploaded_by', async () => {
+  const client = mockClient({
+    rows: [{ id: '55555555-5555-4555-8555-555555555555', file_path: `check-intake/${CHECK_ID}/files/a.pdf` }],
+  });
+  const result = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_files',
+    op: 'insert',
+    values: {
+      check_intake_item_id: CHECK_ID,
+      file_name: 'aws-t3-test.pdf',
+      file_path: `check-intake/${CHECK_ID}/files/a.pdf`,
+      category: 'other',
+      source: 'manual',
+      uploaded_by: SPOOF_ID,
+    },
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  const insert = client.queries.find((q) => String(q.sql).includes('INSERT INTO public.check_files'));
+  assert.equal(insert.params[insert.params.length - 1], APP_ID);
+
+  const crossed = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_files',
+    op: 'insert',
+    values: {
+      check_intake_item_id: CHECK_ID,
+      file_name: 'x.pdf',
+      file_path: 'check-intake/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/files/x.pdf',
+    },
+  }), depsFor(client));
+  assert.equal(crossed.statusCode, 403);
+});
+
+test('Tranche 3 intake image path must be scoped to the same check', async () => {
+  const client = mockClient({ rows: [{ id: CHECK_ID, front_image_path: `checks/${CHECK_ID}/front.jpg` }] });
+  const ok = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { front_image_path: `checks/${CHECK_ID}/front.jpg` },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(ok.ok, true);
+
+  const denied = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'check_intake_items',
+    op: 'update',
+    values: { front_image_path: 'checks/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/front.jpg' },
+    filters: [{ column: 'id', op: 'eq', value: CHECK_ID }],
+  }), depsFor(client));
+  assert.equal(denied.statusCode, 403);
+});
+

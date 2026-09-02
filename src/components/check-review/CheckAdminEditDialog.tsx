@@ -13,6 +13,7 @@ import { Loader2, Pencil, ShieldAlert, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { isAwsStaging } from "@/lib/awsStaging";
 import { pickAwsSafeIntakeUpdates } from "@/integrations/aws/safeIntakeFields";
+import { pickAwsSafeClaimCheckUpdates } from "@/integrations/aws/safeClaimCheckFields";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -252,29 +253,34 @@ export function CheckAdminEditDialog({ checkId, open, onOpenChange, onSaved }: P
         }]);
       }
 
-      // 3. Mirror to claim_checks if the row exists.
-      // AWS staging does not allow claim_checks DML in Tranche 2 (financial/mortgage fields live there).
-      if (data.claimCheck?.id && !isAwsStaging()) {
+      // 3. Mirror descriptive fields to claim_checks if the row exists.
+      // AWS staging persists only non-financial columns (no amount/mortgage/deposit/stage).
+      if (data.claimCheck?.id) {
         const ccUpdates: Record<string, unknown> = {};
-        if (form.mortgage_flag !== data.claimCheck.mortgage_flag) {
-          ccUpdates.mortgage_flag = form.mortgage_flag;
+        if (!isAwsStaging()) {
+          if (form.mortgage_flag !== data.claimCheck.mortgage_flag) {
+            ccUpdates.mortgage_flag = form.mortgage_flag;
+          }
+          const ccCurrent = data.claimCheck.mortgage_monitoring_type ?? "not_set";
+          if (desiredIntakeMonitoring !== ccCurrent) {
+            ccUpdates.mortgage_monitoring_type = desiredIntakeMonitoring;
+          }
+          if (intakeUpdates.amount !== undefined) ccUpdates.amount = intakeUpdates.amount;
+          if (intakeUpdates.routing_number !== undefined) ccUpdates.routing_number = intakeUpdates.routing_number;
+          if (intakeUpdates.account_number !== undefined) ccUpdates.account_number = intakeUpdates.account_number;
         }
-        const ccCurrent = data.claimCheck.mortgage_monitoring_type ?? "not_set";
-        if (desiredIntakeMonitoring !== ccCurrent) {
-          ccUpdates.mortgage_monitoring_type = desiredIntakeMonitoring;
-        }
-        // Mirror manual OCR field corrections
         if (intakeUpdates.check_number !== undefined) ccUpdates.check_number = intakeUpdates.check_number;
-        if (intakeUpdates.amount !== undefined) ccUpdates.amount = intakeUpdates.amount;
         if (intakeUpdates.payee_line !== undefined) ccUpdates.payee_line = intakeUpdates.payee_line;
         if (intakeUpdates.carrier_name !== undefined) ccUpdates.carrier_name = intakeUpdates.carrier_name;
         if (intakeUpdates.issue_date !== undefined) ccUpdates.check_date = intakeUpdates.issue_date;
-        if (intakeUpdates.routing_number !== undefined) ccUpdates.routing_number = intakeUpdates.routing_number;
-        if (intakeUpdates.account_number !== undefined) ccUpdates.account_number = intakeUpdates.account_number;
-        if (Object.keys(ccUpdates).length > 0) {
+        const persistCc = isAwsStaging()
+          ? pickAwsSafeClaimCheckUpdates(ccUpdates)
+          : { safe: ccUpdates, skipped: [] };
+        if (Object.keys(persistCc.safe).length > 0) {
+          persistCc.safe.updated_at = new Date().toISOString();
           const { error } = await supabase
             .from("claim_checks")
-            .update(ccUpdates)
+            .update(persistCc.safe)
             .eq("id", data.claimCheck.id);
           if (error) throw error;
         }

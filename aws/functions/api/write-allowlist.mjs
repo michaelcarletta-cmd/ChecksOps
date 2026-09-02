@@ -1,8 +1,15 @@
 export const writesEnabled = () => String(process.env.AWS_WRITES_ENABLED || '') === 'true';
 
-/** Independent T2 kill switch. Unset inherits AWS_WRITES_ENABLED. Explicit false disables check-workflow writes only. */
+/** Independent T2/T3 kill switch. Unset inherits AWS_WRITES_ENABLED. Explicit false disables check-workflow writes only. */
 export const checkWorkflowWritesEnabled = () => {
   const value = process.env.AWS_CHECK_WORKFLOW_WRITES_ENABLED;
+  if (value === undefined || value === '') return writesEnabled();
+  return String(value) === 'true';
+};
+
+/** Storage upload/delete/move. Unset inherits AWS_WRITES_ENABLED. Explicit false disables storage writes only. */
+export const storageWritesEnabled = () => {
+  const value = process.env.AWS_STORAGE_WRITES_ENABLED;
   if (value === undefined || value === '') return writesEnabled();
   return String(value) === 'true';
 };
@@ -35,6 +42,9 @@ const INTAKE_SAFE_COLUMNS = [
   'payee_address',
   'expiration_days',
   'is_multi_payee',
+  'front_image_path',
+  'back_image_path',
+  'back_image_original_path',
   'updated_at',
 ];
 
@@ -55,9 +65,10 @@ export const INTAKE_PROHIBITED_COLUMNS = new Set([
   'mortgage_monitoring_type',
   'mortgage_received_at',
   'mortgage_final_released_at',
-  'front_image_path',
-  'back_image_path',
   'endorsement_packet_path',
+  'back_image_deposit_path',
+  'endorsement_render_status',
+  'endorsement_render_meta',
   'endorsement_override',
   'partner_status',
   'partner_status_label',
@@ -109,7 +120,7 @@ export const WRITE_ALLOWLIST = {
     frontend: {
       file: 'CheckCommandCenter EditableField / ReviewDecisionPanel persistMeta / CheckAdminEditDialog (safe fields only)',
       op: 'update',
-      reason: 'Descriptive/workflow metadata only. Status, amounts, routing, deposit, and mortgage fields stay denied.',
+      reason: 'Descriptive/workflow metadata and existing-check image paths. Status, amounts, routing, deposit, and mortgage fields stay denied.',
     },
   },
   check_payees: {
@@ -183,17 +194,66 @@ export const WRITE_ALLOWLIST = {
     },
   },
   check_messages: {
-    tranche: 2,
-    ops: new Set(['update']),
-    columns: new Set(['is_deleted', 'updated_at']),
+    tranche: 3,
+    ops: new Set(['insert', 'update']),
+    columns: new Set(['check_id', 'body', 'is_deleted', 'updated_at']),
     identityColumn: 'sender_id',
-    requiredForWrite: { update: [] },
+    requiredForWrite: { insert: ['check_id', 'body'], update: [] },
     filterColumns: new Set(['id', 'check_id']),
     resource: 'check',
+    clientIgnored: new Set(['id', 'created_at']),
     frontend: {
-      file: 'CheckMessageThread deleteMutation',
-      op: 'update is_deleted',
-      reason: 'Soft-delete only. INSERT stays disabled because trg_mirror_check_message_to_homeowner_ledger writes homeowner_ledger_events.',
+      file: 'CheckMessageThread sendMutation / deleteMutation',
+      op: 'insert + update is_deleted',
+      reason: 'Internal check notes. INSERT keeps trg_mirror_check_message_to_homeowner_ledger (ops_note, no amount). sender_id is server-derived.',
+    },
+  },
+  check_files: {
+    tranche: 3,
+    ops: new Set(['insert', 'update', 'delete']),
+    columns: new Set([
+      'check_intake_item_id',
+      'file_name',
+      'file_path',
+      'file_type',
+      'file_size',
+      'category',
+      'source',
+      'description',
+    ]),
+    identityColumn: 'uploaded_by',
+    requiredForWrite: { insert: ['check_intake_item_id', 'file_name', 'file_path'] },
+    filterColumns: new Set(['id', 'check_intake_item_id']),
+    resource: 'check',
+    clientIgnored: new Set(['id', 'created_at', 'signature_request_id']),
+    frontend: {
+      file: 'CheckFilesSection upload/delete',
+      op: 'insert/update/delete',
+      reason: 'Metadata for S3 objects under check-scoped prefixes. INSERT keeps trg_mirror_check_file_to_homeowner_ledger (document_uploaded, no amount).',
+    },
+  },
+  claim_checks: {
+    tranche: 3,
+    ops: new Set(['update']),
+    columns: new Set([
+      'carrier_name',
+      'check_number',
+      'payee_line',
+      'notes',
+      'check_date',
+      'received_date',
+      'ocr_needs_verification',
+      'updated_at',
+    ]),
+    identityColumn: null,
+    requiredForWrite: { update: [] },
+    filterColumns: new Set(['id', 'check_intake_item_id']),
+    resource: 'check',
+    clientIgnored: new Set(['id', 'claim_id', 'created_by']),
+    frontend: {
+      file: 'CheckAdminEditDialog descriptive OCR mirror',
+      op: 'update',
+      reason: 'Descriptive mirrors only. Amount, deposit, mortgage, stage, and endorsement_status stay denied.',
     },
   },
 };

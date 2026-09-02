@@ -65,6 +65,7 @@ const tablePrivileges = async (client) => {
         'check_message_reads', 'notification_preferences',
         'check_intake_items', 'check_payees', 'check_endorsements',
         'check_endorsement_events', 'check_audit_log', 'check_messages',
+        'check_files', 'claim_checks',
         'claim_payments', 'homeowner_ledger_events'
       )
       AND grantee IN ('checksops', 'authenticated')
@@ -123,6 +124,18 @@ export const handler = async (event) => {
     if (step === 'financial') {
       return { ok: true, financial: await financialAggregates(client) };
     }
+    if (step === 'columns') {
+      const { rows } = await client.query(`
+        SELECT table_name, column_name, privilege_type
+        FROM information_schema.column_privileges
+        WHERE table_schema = 'public'
+          AND table_name IN ('claim_checks', 'check_intake_items', 'check_files', 'check_messages')
+          AND grantee = 'checksops'
+          AND privilege_type IN ('UPDATE', 'INSERT')
+        ORDER BY 1, 3, 2
+      `);
+      return { ok: true, columns: rows };
+    }
     if (step === 'cleanup-t2') {
       const deleted = await client.query(`
         DELETE FROM public.check_audit_log
@@ -160,37 +173,107 @@ export const handler = async (event) => {
         c1c: samples.find((row) => row.tenant_id === C1C_TENANT) || null,
       };
     }
+    if (step === 'cleanup-t3') {
+      const notes = await client.query(`
+        DELETE FROM public.check_messages
+        WHERE body LIKE 'AWS T3 TEST%'
+        RETURNING id
+      `);
+      const noteIds = notes.rows.map((row) => row.id);
+      let ledgerFromNotes = { rowCount: 0 };
+      if (noteIds.length) {
+        ledgerFromNotes = await client.query(`
+          DELETE FROM public.homeowner_ledger_events
+          WHERE event_type = 'ops_note'
+            AND payload_json->>'check_message_id' = ANY($1::text[])
+          RETURNING id
+        `, [noteIds.map(String)]);
+      }
+      const files = await client.query(`
+        DELETE FROM public.check_files
+        WHERE file_path LIKE '%/aws-t3-test/%'
+           OR file_name LIKE 'aws-t3-test%'
+        RETURNING id
+      `);
+      const fileIds = files.rows.map((row) => row.id);
+      let ledgerFromFiles = { rowCount: 0 };
+      if (fileIds.length) {
+        ledgerFromFiles = await client.query(`
+          DELETE FROM public.homeowner_ledger_events
+          WHERE event_type = 'document_uploaded'
+            AND payload_json->>'check_file_id' = ANY($1::text[])
+          RETURNING id
+        `, [fileIds.map(String)]);
+      }
+      const leftoverLedger = await client.query(`
+        DELETE FROM public.homeowner_ledger_events
+        WHERE event_type IN ('ops_note', 'document_uploaded')
+          AND (
+            payload_json->>'note' LIKE 'AWS T3 TEST%'
+            OR payload_json->>'file_name' LIKE 'aws-t3-test%'
+            OR payload_json->>'document_name' LIKE 'aws-t3-test%'
+          )
+        RETURNING id
+      `);
+      const audit = await client.query(`
+        DELETE FROM public.check_audit_log
+        WHERE event_type LIKE 'aws_tranche3%'
+        RETURNING id
+      `);
+      return {
+        ok: true,
+        messagesDeleted: notes.rowCount,
+        noteLedgerDeleted: ledgerFromNotes.rowCount,
+        filesDeleted: files.rowCount,
+        fileLedgerDeleted: ledgerFromFiles.rowCount,
+        leftoverLedgerDeleted: leftoverLedger.rowCount,
+        auditDeleted: audit.rowCount,
+      };
+    }
     if (step === 'revoke') {
+      await client.query(readSql(SQL_DIR, '36_tranche3_revoke_write_grants.sql'));
+      return { ok: true, revoked: true, privileges: await tablePrivileges(client) };
+    }
+    if (step === 'revoke-t2') {
       await client.query(readSql(SQL_DIR, '34_tranche2_revoke_write_grants.sql'));
       return { ok: true, revoked: true, privileges: await tablePrivileges(client) };
     }
     const before = await financialAggregates(client);
     await client.query(readSql(SQL_DIR, '33_tranche2_write_grants.sql'));
+    await client.query(readSql(SQL_DIR, '35_tranche3_write_grants.sql'));
     const privileges = await tablePrivileges(client);
     const ninth = await ninthWriteDenied(client);
     const after = await financialAggregates(client);
     const financialUnchanged = JSON.stringify(before) === JSON.stringify(after);
     const intakeCols = await intakeUpdateColumns(client);
     const amountNotGranted = !intakeCols.includes('amount') && !intakeCols.includes('routing_number') && !intakeCols.includes('status');
-    const payeeInsertGranted = privileges.some((row) => (
-      row.table_name === 'check_payees' && row.grantee === 'checksops' && row.privilege_type === 'INSERT'
-    ));
-    const messagesInsertNotGranted = !privileges.some((row) => (
+    const imagePathsGranted = intakeCols.includes('front_image_path') && intakeCols.includes('back_image_path');
+    const messagesInsertGranted = privileges.some((row) => (
       row.table_name === 'check_messages' && row.grantee === 'checksops' && row.privilege_type === 'INSERT'
+    ));
+    const filesInsertGranted = privileges.some((row) => (
+      row.table_name === 'check_files' && row.grantee === 'checksops' && row.privilege_type === 'INSERT'
+    ));
+    const claimChecksUpdateGranted = privileges.some((row) => (
+      row.table_name === 'claim_checks' && row.grantee === 'checksops' && row.privilege_type === 'UPDATE'
     ));
     const financialStillSelectOnly = !privileges.some((row) => (
       ['claim_payments', 'homeowner_ledger_events'].includes(row.table_name)
       && ['INSERT', 'UPDATE', 'DELETE'].includes(row.privilege_type)
     ));
     return {
-      ok: payeeInsertGranted && ninth.denied && financialUnchanged && amountNotGranted
-        && messagesInsertNotGranted && financialStillSelectOnly,
+      ok: ninth.denied && financialUnchanged && amountNotGranted
+        && messagesInsertGranted && filesInsertGranted && claimChecksUpdateGranted
+        && imagePathsGranted && financialStillSelectOnly,
       step,
       ninth,
       financialUnchanged,
       amountNotGranted,
+      imagePathsGranted,
       intakeUpdateColumns: intakeCols,
-      messagesInsertNotGranted,
+      messagesInsertGranted,
+      filesInsertGranted,
+      claimChecksUpdateGranted,
       financialStillSelectOnly,
       financial: after,
       privileges,
@@ -199,3 +282,4 @@ export const handler = async (event) => {
     await client.end();
   }
 };
+

@@ -4,6 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isAwsStaging } from "@/lib/awsStaging";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { FunctionsHttpError, FunctionsRelayError, FunctionsFetchError } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
@@ -4168,15 +4169,18 @@ function CheckDetailPanel({
                                 .from("claim-files")
                                 .upload(newPath, file, { cacheControl: "31536000", upsert: false, contentType: file.type || "image/jpeg" });
                               if (uploadErr) throw uploadErr;
+                              const backUpdate: Record<string, unknown> = {
+                                back_image_path: newPath,
+                                back_image_original_path: newPath,
+                              };
+                              if (!isAwsStaging()) {
+                                backUpdate.back_image_deposit_path = null;
+                                backUpdate.endorsement_render_status = "idle";
+                                backUpdate.endorsement_render_meta = null;
+                              }
                               const { error: updateErr } = await supabase
                                 .from("check_intake_items")
-                                .update({
-                                  back_image_path: newPath,
-                                  back_image_original_path: newPath,
-                                  back_image_deposit_path: null,
-                                  endorsement_render_status: "idle",
-                                  endorsement_render_meta: null,
-                                })
+                                .update(backUpdate)
                                 .eq("id", check.id);
                               if (updateErr) throw updateErr;
                               await supabase.from("check_audit_log").insert({
