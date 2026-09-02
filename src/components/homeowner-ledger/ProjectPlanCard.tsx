@@ -224,11 +224,15 @@ export function ProjectPlanCard({ claimId, tenantId }: Props) {
               <div className="space-y-1">
                 <Label className="text-[11px]">Total project / claim amount</Label>
                 <Input type="number" step="0.01" className="h-8 text-xs" placeholder="0.00"
+                  readOnly={ledgerTotal > 0}
+                  title={ledgerTotal > 0 ? "Pulled from the claim ledger" : undefined}
                   value={form.contract_total} onChange={(e) => setForm({ ...form, contract_total: e.target.value })} />
               </div>
               <div className="space-y-1">
                 <Label className="text-[11px]">Deductible</Label>
                 <Input type="number" step="0.01" className="h-8 text-xs" placeholder="0.00"
+                  readOnly={ledgerDeductible > 0}
+                  title={ledgerDeductible > 0 ? "Pulled from the claim ledger" : undefined}
                   value={form.deductible_amount} onChange={(e) => setForm({ ...form, deductible_amount: e.target.value })} />
               </div>
               <div className="space-y-1">
@@ -237,6 +241,13 @@ export function ProjectPlanCard({ claimId, tenantId }: Props) {
                   value={form.other_out_of_pocket} onChange={(e) => setForm({ ...form, other_out_of_pocket: e.target.value })} />
               </div>
             </div>
+
+            {linked && (
+              <p className="text-[11px] text-muted-foreground">
+                Total and deductible are linked to the claim ledger — update them in Claim Ledger and they sync here.
+              </p>
+            )}
+
 
             {deductible > 0 && (
               <p className="text-[11px] text-muted-foreground">
