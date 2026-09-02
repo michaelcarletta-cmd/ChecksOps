@@ -6,9 +6,17 @@ import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-sec
 
 const { Client } = pg;
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const SQL_DIR = path.join(ROOT, '..', 'sql');
-const RLS_SQL_DIR = path.join(ROOT, '..', '..', 'rls', 'sql');
-const CA_PATH = path.join(ROOT, '..', '..', 'functions', 'api', 'rds-global-bundle.pem');
+const SQL_DIR = fs.existsSync(path.join(ROOT, 'sql'))
+  ? path.join(ROOT, 'sql')
+  : path.join(ROOT, '..', 'sql');
+const RLS_SQL_DIR = fs.existsSync(path.join(ROOT, 'rls-sql'))
+  ? path.join(ROOT, 'rls-sql')
+  : path.join(ROOT, '..', '..', 'rls', 'sql');
+const CA_PATH = [
+  path.join(ROOT, 'rds-global-bundle.pem'),
+  path.join(ROOT, '..', '..', 'functions', 'api', 'rds-global-bundle.pem'),
+  path.join(ROOT, '..', 'oneshot', 'rds-global-bundle.pem'),
+].find((p) => fs.existsSync(p));
 
 export const TESTER_ID = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
 export const C1C_ADMIN_ID = 'fd857564-9534-4b0f-95ac-624ed1273725';
@@ -95,6 +103,26 @@ export const handler = async (event) => {
   try {
     if (step === 'financial') {
       return { ok: true, financial: await financialAggregates(client) };
+    }
+    if (step === 'sample-checks') {
+      const rows = (await client.query(`
+        SELECT tenant_id::text AS tenant_id, count(*)::int AS n
+        FROM public.check_intake_items
+        GROUP BY 1
+        ORDER BY 2 DESC
+      `)).rows;
+      const samples = (await client.query(`
+        SELECT DISTINCT ON (tenant_id) id::text AS id, tenant_id::text AS tenant_id
+        FROM public.check_intake_items
+        ORDER BY tenant_id, id
+      `)).rows;
+      return {
+        ok: true,
+        byTenant: rows,
+        samples,
+        freedom: samples.find((row) => row.tenant_id === FREEDOM_TENANT) || null,
+        c1c: samples.find((row) => row.tenant_id === C1C_TENANT) || null,
+      };
     }
     if (step === 'revoke') {
       await client.query(readSql(SQL_DIR, '32_tranche1_revoke_write_grants.sql'));
