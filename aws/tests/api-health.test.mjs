@@ -244,6 +244,7 @@ const mockValidateClient = ({
   authUsersFkCount = 0,
   triggerCount = 164,
   writePrivilege = false,
+  rlsEnabled = false,
 } = {}) => {
   const queries = [];
   return {
@@ -273,7 +274,7 @@ const mockValidateClient = ({
             can_insert: writePrivilege,
             can_update: false,
             can_delete: false,
-            rls_enabled: false,
+            rls_enabled: rlsEnabled,
             rls_forced: false,
           })),
         };
@@ -370,4 +371,40 @@ test('read-only validation fails closed on a count mismatch', async () => {
   });
   assert.equal(validation.ok, false);
   assert.equal(validation.issues.some((item) => item.kind === 'count_mismatch' && item.table === 'tenants'), true);
+});
+
+test('read-only validation accepts global RLS fail-closed counts without identity', async () => {
+  const zeroCounts = Object.fromEntries(CORE_TABLES.map((table) => [table, 0]));
+  const validation = await validateReadonlyCoreTables({
+    loadCredentials: async () => ({
+      username: 'checksops',
+      password: 'unit-test-only-not-a-real-secret',
+      host: 'db.example.internal',
+      database: 'checksops',
+      secretDatabase: 'postgres',
+    }),
+    createClient: () => mockValidateClient({ counts: zeroCounts, rlsEnabled: true }),
+  });
+  assert.equal(validation.ok, true);
+  assert.equal(validation.rlsMode, 'on');
+  assert.equal(validation.restoredTablesRlsEnabled, true);
+  assert.equal(validation.failClosedWithoutIdentity, true);
+  assert.equal(validation.issues.some((item) => item.severity === 'error'), false);
+});
+
+test('read-only validation fails open if RLS is on and restore rows are still visible', async () => {
+  const validation = await validateReadonlyCoreTables({
+    loadCredentials: async () => ({
+      username: 'checksops',
+      password: 'unit-test-only-not-a-real-secret',
+      host: 'db.example.internal',
+      database: 'checksops',
+      secretDatabase: 'postgres',
+    }),
+    createClient: () => mockValidateClient({ rlsEnabled: true }),
+  });
+  assert.equal(validation.ok, false);
+  assert.equal(validation.rlsMode, 'on');
+  assert.equal(validation.failClosedWithoutIdentity, false);
+  assert.equal(validation.issues.some((item) => /without request.app_user_id/.test(item.message)), true);
 });

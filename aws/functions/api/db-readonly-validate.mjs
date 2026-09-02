@@ -107,6 +107,9 @@ export const validateReadonlyCoreTables = async ({
     defaultTransactionReadOnly: null,
     connectedDatabase: null,
     secretDatabase: null,
+    rlsMode: null,
+    restoredTablesRlsEnabled: false,
+    failClosedWithoutIdentity: false,
     tables: [],
     privileges: [],
     catalog: {},
@@ -151,6 +154,8 @@ export const validateReadonlyCoreTables = async ({
         rowCount: null,
         expectedCount: expected,
         countMatches: false,
+        countMatchesRestore: false,
+        failClosedWithoutIdentity: false,
         error: null,
       };
       try {
@@ -168,15 +173,8 @@ export const validateReadonlyCoreTables = async ({
           `SELECT count(*)::bigint AS row_count FROM public.${quoteIdent(table)}`,
         );
         row.rowCount = Number(countResult.rows[0]?.row_count ?? 0);
-        row.countMatches = row.rowCount === expected;
-        if (!row.countMatches) {
-          result.issues.push(issue(
-            'count_mismatch',
-            'error',
-            `public.${table} count ${row.rowCount} != expected ${expected}`,
-            { table, rowCount: row.rowCount, expectedCount: expected },
-          ));
-        }
+        row.countMatchesRestore = row.rowCount === expected;
+        row.countMatches = row.countMatchesRestore;
       } catch (error) {
         row.error = sanitizePublicError(error);
         result.issues.push(classifyQueryIssue(error, { table }));
@@ -210,6 +208,14 @@ export const validateReadonlyCoreTables = async ({
         rlsEnabled: row.rls_enabled === true,
         rlsForced: row.rls_forced === true,
       }));
+      const enabledCount = result.privileges.filter((row) => row.rlsEnabled).length;
+      result.rlsMode = enabledCount === 0
+        ? 'off'
+        : enabledCount === result.privileges.length
+          ? 'on'
+          : 'partial';
+      result.restoredTablesRlsEnabled = result.rlsMode === 'on';
+      result.failClosedWithoutIdentity = false;
       for (const row of result.privileges) {
         if (!row.canSelect) {
           result.issues.push(issue('permission', 'error', `SELECT denied on public.${row.table}`, { table: row.table }));
@@ -222,12 +228,59 @@ export const validateReadonlyCoreTables = async ({
             { table: row.table, canInsert: row.canInsert, canUpdate: row.canUpdate, canDelete: row.canDelete },
           ));
         }
-        if (row.rlsEnabled || row.rlsForced) {
+        if (row.rlsForced) {
           result.issues.push(issue(
             'permission',
             'error',
-            `RLS unexpectedly enabled on public.${row.table}`,
+            `FORCE ROW LEVEL SECURITY is set on public.${row.table}`,
             { table: row.table },
+          ));
+        }
+      }
+      if (result.rlsMode === 'partial') {
+        result.issues.push(issue(
+          'permission',
+          'error',
+          `RLS enablement is incomplete on core tables (${enabledCount}/${result.privileges.length})`,
+        ));
+      }
+      if (result.rlsMode === 'off') {
+        for (const row of result.tables) {
+          if (row.present && !row.countMatchesRestore) {
+            result.issues.push(issue(
+              'count_mismatch',
+              'error',
+              `public.${row.table} count ${row.rowCount} != expected ${row.expectedCount}`,
+              { table: row.table, rowCount: row.rowCount, expectedCount: row.expectedCount },
+            ));
+          }
+        }
+      }
+      if (result.rlsMode === 'on') {
+        let failClosed = true;
+        for (const row of result.tables) {
+          if (!row.present) continue;
+          if (row.rowCount === 0) {
+            row.countMatches = true;
+            row.failClosedWithoutIdentity = true;
+            continue;
+          }
+          failClosed = false;
+          row.countMatches = false;
+          row.failClosedWithoutIdentity = false;
+          result.issues.push(issue(
+            'permission',
+            'error',
+            `public.${row.table} is visible to checksops without request.app_user_id after RLS (${row.rowCount} rows)`,
+            { table: row.table, rowCount: row.rowCount, expectedCount: row.expectedCount },
+          ));
+        }
+        result.failClosedWithoutIdentity = failClosed;
+        if (failClosed) {
+          result.issues.push(issue(
+            'permission',
+            'expected',
+            'Application role without identity sees 0 core-table rows (global RLS fail-closed). Restore counts are reconciled as table owner, not here.',
           ));
         }
       }

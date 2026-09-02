@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { handler } from '../functions/api/index.mjs';
-import { ignoredSpoofFields, PROBE_ITEMS_SQL, runAuthorizationProbe } from '../functions/api/authorization.mjs';
+import { ignoredSpoofFields, PROBE_ITEMS_SQL, CLAIMS_VISIBLE_SQL, CHECKS_BY_TENANT_SQL, runAuthorizationProbe } from '../functions/api/authorization.mjs';
 import { LOOKUP_MAPPING_SQL, USER_ROLES_SQL } from '../functions/api/identity.mjs';
 
 const APP_ID = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
@@ -70,6 +70,12 @@ const mockProbeClient = () => {
         assert.equal(params[0], APP_ID);
         return { rows: [{ role: 'staff' }] };
       }
+      if (sql === CLAIMS_VISIBLE_SQL) {
+        return { rows: [{ n: 83, freedom: 83, org_null: 0 }] };
+      }
+      if (sql === CHECKS_BY_TENANT_SQL) {
+        return { rows: [{ freedom: 10, c1c: 0 }] };
+      }
       throw new Error(`unexpected query: ${sql}`);
     },
     end: async () => {},
@@ -101,7 +107,9 @@ test('authorization probe uses mapped application UUID and ignores spoofed ids',
   assert.deepEqual(result.visibleProbeLabels, ['freedom-probe-visible']);
   assert.equal(result.isolation.canReadFreedomProbe, true);
   assert.equal(result.isolation.canReadC1cProbe, false);
-  assert.equal(result.cognitoGroupsUsed, false);
+  assert.deepEqual(result.claimsVisible, { n: 83, freedom: 83, org_null: 0 });
+  assert.equal(result.checksVisible.c1c, 0);
+  assert.equal(result.restoredTablesRlsEnabled, true);
   assert.deepEqual(result.roles, ['staff']);
   assert.equal(result.spoofFieldsIgnored.queryUserId, OTHER_UUID);
   assert.equal(JSON.stringify(result).includes('unit-test-only-not-a-real-secret'), false);
