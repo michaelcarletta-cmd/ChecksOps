@@ -18,6 +18,11 @@ import {
   handlePublicEndorsement,
   handlePublicWritesDisabled,
 } from './storage.mjs';
+import {
+  handleStorageUploadUrl,
+  handleStorageDelete,
+  handleStorageMove,
+} from './storage-write.mjs';
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -273,6 +278,36 @@ export const handler = async (event) => {
 
   if (method === 'POST' && path === '/storage/download') {
     const result = await handleStorageDownload(event);
+    return json(result.statusCode || (result.ok ? 200 : 401), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && (path === '/storage/upload-url' || path === '/storage/upload')) {
+    const result = await handleStorageUploadUrl(event);
+    return json(result.statusCode || (result.ok ? 200 : 401), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/storage/delete') {
+    const result = await handleStorageDelete(event);
+    return json(result.statusCode || (result.ok ? 200 : 401), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/storage/move') {
+    const result = await handleStorageMove(event);
     return json(result.statusCode || (result.ok ? 200 : 401), {
       service: 'checksops-api',
       environment: process.env.CHECKSOPS_ENV || 'unknown',

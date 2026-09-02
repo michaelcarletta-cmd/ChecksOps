@@ -89,6 +89,46 @@ export const s3KeyFor = (bucket, objectPath) => {
   return `${FILES_PREFIX}${bucket}/${rel}`;
 };
 
+const CHECK_UUID_RE = '[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
+
+const CHECK_WRITE_PREFIXES = [
+  new RegExp(`^check-intake/(${CHECK_UUID_RE})/files/`, 'i'),
+  new RegExp(`^checks/reupload/(${CHECK_UUID_RE})/`, 'i'),
+  new RegExp(`^checks/(${CHECK_UUID_RE})/`, 'i'),
+];
+
+export const STORAGE_WRITE_BUCKETS = Object.freeze(['claim-files']);
+
+export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+export const ALLOWED_UPLOAD_CONTENT_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/heic',
+  'image/heif',
+  'application/pdf',
+  'application/octet-stream',
+  'text/plain',
+]);
+
+/** Return the check UUID encoded in an allowlisted write prefix, or null. */
+export const matchCheckScopedPath = (rel) => {
+  const path = String(rel || '');
+  for (const pattern of CHECK_WRITE_PREFIXES) {
+    const match = path.match(pattern);
+    if (match) return match[1].toLowerCase();
+  }
+  return null;
+};
+
+export const isCheckScopedPathFor = (rel, checkId) => {
+  const scoped = matchCheckScopedPath(rel);
+  return Boolean(scoped && checkId && scoped === String(checkId).toLowerCase());
+};
+
 export const parsePublicQuery = (event) => {
   const query = event?.queryStringParameters || {};
   const body = (() => {

@@ -176,10 +176,10 @@ export const executeAllowlistedWrite = async ({ client, mapping, body, checkWork
   if (!spec.ops.has(op)) {
     return { error: 'operation_not_allowlisted', table, op };
   }
-  if (spec.tranche === 2 && !checkWorkflowEnabled) {
+  if ((spec.tranche === 2 || spec.tranche === 3) && !checkWorkflowEnabled) {
     return {
       error: 'check_workflow_writes_disabled',
-      message: 'Tranche 2 check-workflow writes are disabled by AWS_CHECK_WORKFLOW_WRITES_ENABLED',
+      message: 'Check-workflow writes are disabled by AWS_CHECK_WORKFLOW_WRITES_ENABLED',
       table,
     };
   }
@@ -218,7 +218,7 @@ export const executeAllowlistedWrite = async ({ client, mapping, body, checkWork
       filters: body.filters || [],
     });
   }
-  if (spec.tranche === 2) {
+  if (spec.tranche === 2 || spec.tranche === 3) {
     return executeCheckWorkflowWrite({
       client,
       mapping,

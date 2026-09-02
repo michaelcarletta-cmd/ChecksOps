@@ -13,6 +13,9 @@ export const AWS_SAFE_INTAKE_COLUMNS = new Set([
   "payee_address",
   "expiration_days",
   "is_multi_payee",
+  "front_image_path",
+  "back_image_path",
+  "back_image_original_path",
   "updated_at",
 ]);
 
@@ -33,9 +36,10 @@ export const AWS_PROHIBITED_INTAKE_COLUMNS = new Set([
   "mortgage_monitoring_type",
   "mortgage_received_at",
   "mortgage_final_released_at",
-  "front_image_path",
-  "back_image_path",
   "endorsement_packet_path",
+  "back_image_deposit_path",
+  "endorsement_render_status",
+  "endorsement_render_meta",
   "endorsement_override",
   "partner_status",
   "partner_status_label",

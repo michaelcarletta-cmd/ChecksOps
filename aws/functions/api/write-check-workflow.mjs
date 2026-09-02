@@ -1,5 +1,6 @@
 import { ident } from './data.mjs';
 import { WRITE_ALLOWLIST } from './write-allowlist.mjs';
+import { isCheckScopedPathFor, normalizePath } from './storage-paths.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -80,6 +81,20 @@ const lookupPayee = async (client, payeeId) => {
   return { payee: rows[0] };
 };
 
+const IMAGE_PATH_COLUMNS = new Set(['front_image_path', 'back_image_path', 'back_image_original_path']);
+
+const asImagePath = (checkId, value) => {
+  if (value === undefined) return { skip: true };
+  if (value === null || value === '') return { value: null };
+  const rel = normalizePath(value, 'claim-files');
+  if (!rel) return { error: 'invalid_field', field: 'file_path', message: 'invalid storage path' };
+  if (!isCheckScopedPathFor(rel, checkId)) {
+    return { error: 'rls_denied', message: 'image path is not scoped to this check' };
+  }
+  if (rel.length > 512) return { error: 'invalid_field', field: 'file_path' };
+  return { value: rel };
+};
+
 const lookupEndorsement = async (client, endorsementId) => {
   const invalid = requireUuid('id', endorsementId);
   if (invalid) return invalid;
@@ -148,6 +163,9 @@ const intakeCoerce = (values) => {
     const flag = asBool(values.is_multi_payee);
     if (flag && flag.error) return flag;
     out.is_multi_payee = flag;
+  }
+  for (const column of IMAGE_PATH_COLUMNS) {
+    if (column in values) out[column] = values[column];
   }
   return { values: out };
 };
@@ -238,10 +256,19 @@ const executeIntakeUpdate = async ({ client, values, filters }) => {
   if (looked.error) return looked;
   const coerced = intakeCoerce(values);
   if (coerced.error) return coerced;
-  if (!Object.keys(coerced.values).length) {
+  const nextValues = { ...coerced.values };
+  for (const column of IMAGE_PATH_COLUMNS) {
+    if (column in nextValues) {
+      const path = asImagePath(checkId, nextValues[column]);
+      if (path.error) return path;
+      if (path.skip) delete nextValues[column];
+      else nextValues[column] = path.value;
+    }
+  }
+  if (!Object.keys(nextValues).length) {
     return { error: 'missing_required_field', field: 'values', table: 'check_intake_items', op: 'update' };
   }
-  const built = buildSet(coerced.values, {
+  const built = buildSet(nextValues, {
     expiration_days: 'int',
     is_multi_payee: 'boolean',
     issue_date: 'date',
@@ -448,7 +475,22 @@ const executeAuditLog = async ({ client, mapping, values }) => {
   return { rows };
 };
 
-const executeMessages = async ({ client, values, filters }) => {
+const executeMessages = async ({ client, mapping, op, values, filters }) => {
+  if (op === 'insert') {
+    const looked = await lookupCheck(client, values.check_id);
+    if (looked.error) return looked;
+    const bodyText = asText(values.body, 5000);
+    if (bodyText.error) return bodyText;
+    if (!bodyText.value) return { error: 'missing_required_field', field: 'body', table: 'check_messages', op: 'insert' };
+    const rows = (await client.query(
+      `INSERT INTO public.check_messages (check_id, sender_id, body, is_deleted)
+       VALUES ($1::uuid, $2::uuid, $3::text, false)
+       RETURNING *`,
+      [looked.check.id, mapping.application_user_id, bodyText.value],
+    )).rows;
+    return { rows };
+  }
+
   const id = eqFilter(filters, 'id');
   const invalid = requireUuid('id', id);
   if (invalid) return invalid;
@@ -472,6 +514,188 @@ const executeMessages = async ({ client, values, filters }) => {
   return { rows };
 };
 
+const FILE_CATEGORIES = new Set(['other', 'supporting', 'manual', 'check_image']);
+const FILE_SOURCES = new Set(['manual', 'reupload']);
+
+const executeCheckFiles = async ({ client, mapping, op, values, filters }) => {
+  if (op === 'insert') {
+    const checkId = values.check_intake_item_id;
+    const looked = await lookupCheck(client, checkId);
+    if (looked.error) return looked;
+    const name = asText(values.file_name, 240);
+    if (name.error) return name;
+    if (!name.value) return { error: 'missing_required_field', field: 'file_name' };
+    const path = asImagePath(checkId, values.file_path);
+    if (path.error) return path;
+    if (!path.value) return { error: 'missing_required_field', field: 'file_path' };
+    const fileType = asText(values.file_type, 120);
+    if (fileType.error) return fileType;
+    const description = asText(values.description, 2000);
+    if (description.error) return description;
+    let fileSize = null;
+    if (values.file_size != null && values.file_size !== '') {
+      const n = Number(values.file_size);
+      if (!Number.isFinite(n) || n < 0 || n > 50 * 1024 * 1024) {
+        return { error: 'invalid_field', field: 'file_size' };
+      }
+      fileSize = Math.floor(n);
+    }
+    const categoryRaw = asText(values.category, 40);
+    if (categoryRaw.error) return categoryRaw;
+    const category = (categoryRaw.value || 'other').toLowerCase();
+    if (!FILE_CATEGORIES.has(category)) {
+      return { error: 'column_not_allowlisted', columns: ['category'] };
+    }
+    const sourceRaw = asText(values.source, 40);
+    if (sourceRaw.error) return sourceRaw;
+    const source = (sourceRaw.value || 'manual').toLowerCase();
+    if (!FILE_SOURCES.has(source)) {
+      return { error: 'column_not_allowlisted', columns: ['source'] };
+    }
+    const rows = (await client.query(
+      `INSERT INTO public.check_files (
+         check_intake_item_id, file_name, file_path, file_type, file_size,
+         category, source, description, uploaded_by
+       ) VALUES (
+         $1::uuid, $2::text, $3::text, $4::text, $5::bigint,
+         $6::text, $7::text, $8::text, $9::uuid
+       ) RETURNING *`,
+      [
+        looked.check.id,
+        name.value,
+        path.value,
+        fileType.value,
+        fileSize,
+        category,
+        source,
+        description.value,
+        mapping.application_user_id,
+      ],
+    )).rows;
+    return { rows };
+  }
+
+  const id = eqFilter(filters, 'id');
+  const invalid = requireUuid('id', id);
+  if (invalid) return invalid;
+  const existing = (await client.query(
+    `SELECT f.id, f.check_intake_item_id, c.tenant_id
+     FROM public.check_files f
+     JOIN public.check_intake_items c ON c.id = f.check_intake_item_id
+     WHERE f.id = $1::uuid`,
+    [id],
+  )).rows;
+  if (!existing.length) return { error: 'rls_denied', message: 'file not found or not writable' };
+
+  if (op === 'delete') {
+    const rows = (await client.query(
+      'DELETE FROM public.check_files WHERE id = $1::uuid RETURNING *',
+      [id],
+    )).rows;
+    if (!rows.length) return { error: 'rls_denied', message: 'file not writable' };
+    return { rows };
+  }
+
+  const out = {};
+  if ('description' in values) {
+    const description = asText(values.description, 2000);
+    if (description.error) return description;
+    out.description = description.value;
+  }
+  if ('category' in values) {
+    const categoryRaw = asText(values.category, 40);
+    if (categoryRaw.error) return categoryRaw;
+    const category = (categoryRaw.value || '').toLowerCase();
+    if (!FILE_CATEGORIES.has(category)) {
+      return { error: 'column_not_allowlisted', columns: ['category'] };
+    }
+    out.category = category;
+  }
+  if (!Object.keys(out).length) {
+    return { error: 'missing_required_field', field: 'values', table: 'check_files', op: 'update' };
+  }
+  const built = buildSet(out, {});
+  // check_files has no updated_at; strip the extra set from buildSet
+  built.sets = built.sets.filter((part) => !part.startsWith('updated_at'));
+  built.params.push(id);
+  const rows = (await client.query(
+    `UPDATE public.check_files
+     SET ${built.sets.join(', ')}
+     WHERE id = $${built.params.length}::uuid
+     RETURNING *`,
+    built.params,
+  )).rows;
+  if (!rows.length) return { error: 'rls_denied', message: 'file not writable' };
+  return { rows };
+};
+
+const executeClaimChecks = async ({ client, values, filters }) => {
+  const id = eqFilter(filters, 'id');
+  const intakeId = eqFilter(filters, 'check_intake_item_id');
+  let checkId = intakeId;
+  if (id) {
+    const invalid = requireUuid('id', id);
+    if (invalid) return invalid;
+    const rows = (await client.query(
+      `SELECT cc.id, cc.check_intake_item_id, c.tenant_id
+       FROM public.claim_checks cc
+       JOIN public.check_intake_items c ON c.id = cc.check_intake_item_id
+       WHERE cc.id = $1::uuid`,
+      [id],
+    )).rows;
+    if (!rows.length) return { error: 'rls_denied', message: 'claim_checks row not found or not writable' };
+    checkId = rows[0].check_intake_item_id;
+  }
+  if (!checkId) return { error: 'missing_required_field', field: 'id', table: 'claim_checks', op: 'update' };
+  const looked = await lookupCheck(client, checkId);
+  if (looked.error) return looked;
+
+  const out = {};
+  for (const column of ['carrier_name', 'check_number', 'payee_line', 'notes']) {
+    if (column in values) {
+      const text = asText(values[column], column === 'notes' || column === 'payee_line' ? 2000 : 200);
+      if (text.error) return text;
+      out[column] = text.value;
+    }
+  }
+  if ('check_date' in values) {
+    if (values.check_date === null || values.check_date === '') out.check_date = null;
+    else if (!DATE_RE.test(String(values.check_date))) return { error: 'invalid_field', field: 'check_date' };
+    else out.check_date = String(values.check_date);
+  }
+  if ('received_date' in values) {
+    if (values.received_date === null || values.received_date === '') out.received_date = null;
+    else if (!DATE_RE.test(String(values.received_date))) return { error: 'invalid_field', field: 'received_date' };
+    else out.received_date = String(values.received_date);
+  }
+  if ('ocr_needs_verification' in values) {
+    const flag = asBool(values.ocr_needs_verification);
+    if (flag && flag.error) return flag;
+    out.ocr_needs_verification = flag;
+  }
+  if (!Object.keys(out).length) {
+    return { error: 'missing_required_field', field: 'values', table: 'claim_checks', op: 'update' };
+  }
+  const built = buildSet(out, {
+    ocr_needs_verification: 'boolean',
+    check_date: 'date',
+    received_date: 'date',
+  });
+  const params = [...built.params];
+  let sql = `UPDATE public.claim_checks SET ${built.sets.join(', ')} WHERE `;
+  if (id) {
+    params.push(id);
+    sql += `id = $${params.length}::uuid`;
+  } else {
+    params.push(looked.check.id);
+    sql += `check_intake_item_id = $${params.length}::uuid`;
+  }
+  sql += ' RETURNING *';
+  const rows = (await client.query(sql, params)).rows;
+  if (!rows.length) return { error: 'rls_denied', message: 'claim_checks row not writable' };
+  return { rows };
+};
+
 export const executeCheckWorkflowWrite = async ({ client, mapping, table, op, values, filters }) => {
   const spec = WRITE_ALLOWLIST[table];
   const badFilters = rejectNonEqFilters(filters, spec);
@@ -482,6 +706,8 @@ export const executeCheckWorkflowWrite = async ({ client, mapping, table, op, va
   if (table === 'check_endorsements') return executeEndorsements({ client, op, values, filters });
   if (table === 'check_endorsement_events') return executeEndorsementEvents({ client, op, filters });
   if (table === 'check_audit_log') return executeAuditLog({ client, mapping, values });
-  if (table === 'check_messages') return executeMessages({ client, values, filters });
+  if (table === 'check_messages') return executeMessages({ client, mapping, op, values, filters });
+  if (table === 'check_files') return executeCheckFiles({ client, mapping, op, values, filters });
+  if (table === 'claim_checks') return executeClaimChecks({ client, values, filters });
   return { error: 'table_not_allowlisted', table };
 };
