@@ -61,9 +61,6 @@ serve(async (req) => {
     if (!moovConfigured(environment)) {
       return json({ error: "Payment provider is not configured." }, 503);
     }
-    if (false) {
-      return json({ error: "This link is not valid for this environment." }, 400);
-    }
     if (recipient.token_expires_at && new Date(recipient.token_expires_at) < new Date()) {
       return json({ error: "This link has expired. Ask the sender for a new one." }, 410);
     }
