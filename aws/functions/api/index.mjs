@@ -3,6 +3,7 @@ import { probeDatabase, probeIsHealthy } from './db-health.mjs';
 import { validateReadonlyCoreTables } from './db-readonly-validate.mjs';
 import { handleIdentityMe } from './identity.mjs';
 import { handleAuthorizationProbe, handleJwksCheck } from './authorization.mjs';
+import { handleTenantSecurityCompliance } from './tenant-security-compliance.mjs';
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -41,11 +42,14 @@ const READ_ONLY_PATHS = new Set([
   '/identity/session',
 ]);
 
+const tenantComplianceMatch = (path) => path.match(/^\/tenants\/([^/]+)\/security-compliance$/);
+
 export const handler = async (event) => {
   const method = (event?.requestContext?.http?.method || event?.httpMethod || 'GET').toUpperCase();
   const path = requestPath(event);
+  const complianceRoute = tenantComplianceMatch(path);
 
-  if (READ_ONLY_PATHS.has(path) && method !== 'GET') {
+  if ((READ_ONLY_PATHS.has(path) || complianceRoute) && method !== 'GET') {
     return json(405, {
       error: 'method_not_allowed',
       message: 'This staging validation route is GET-only. No writes.',
@@ -92,6 +96,17 @@ export const handler = async (event) => {
       productionSupabaseChanged: false,
       ...identity,
     });
+  }
+
+  if (method === 'GET' && complianceRoute) {
+    const result = await handleTenantSecurityCompliance(event, decodeURIComponent(complianceRoute[1]));
+    if (!result.ok) {
+      return json(result.statusCode || 500, {
+        error: result.error || 'tenant_compliance_read_failed',
+        message: result.message || null,
+      });
+    }
+    return json(200, result.snapshot);
   }
 
   if ((method === 'GET' || method === 'POST') && path === '/authorization/probe') {
