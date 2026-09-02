@@ -64,3 +64,5 @@ JSON: `aws/rls/classification/write_paths.json`.
 Inside `BEGIN`: ENABLE RLS on representative tables, GRANT DML to `checksops`, run DML as `SET LOCAL ROLE checksops` + `request.app_user_id`, then `ROLLBACK`. No Moov/CheckAlt calls. No persisted financial rows.
 
 Cases: same-tenant staff/admin allowed; cross-tenant denied; ninth UUID denied; unauthenticated denied; Cognito sub as app UUID denied; master owner allowed; UUID-guess deposit update denied; tenant rekey denied; webhook/idempotency INSERT denied; synthetic check INSERT rolled back.
+
+Live oneshot: `ok: true`. Details: `aws/rls/WRITE_PLAN_RESULTS.md`.
