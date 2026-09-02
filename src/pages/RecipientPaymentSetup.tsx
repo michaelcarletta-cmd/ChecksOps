@@ -5,45 +5,28 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { applyMoovTheme } from "@/lib/payments/moovTheme";
-import { Loader2, ShieldCheck, Landmark, AlertCircle, CheckCircle2 } from "lucide-react";
-
-
-
-/**
- * Branded, login-free recipient payment setup page.
- *
- * A homeowner, subcontractor, or one-time vendor arrives here from a secure,
- * expiring link. Their bank details are collected by the provider's hosted
- * component and travel straight from this browser to the provider — routing
- * and account numbers never pass through or get stored by ChecksOps.
- */
+import { Loader2, ShieldCheck, Landmark, AlertCircle, CheckCircle2, UserRound } from "lucide-react";
 
 interface SessionData {
-  recipient: {
-    id: string;
-    name: string;
-    status: string;
-    bank_linked?: boolean;
-    bank_name?: string | null;
-    last_four?: string | null;
-  };
-  payer: {
-    name: string;
-    logo_url: string | null;
-    primary_color?: string | null;
-    secondary_color?: string | null;
-  };
+  recipient: { id: string; name: string; status: string; bank_linked?: boolean; bank_name?: string | null; last_four?: string | null };
+  onboarding?: { terms_accepted?: boolean; verification_status?: string };
+  payer: { name: string; logo_url: string | null; primary_color?: string | null; secondary_color?: string | null };
   account_id: string;
   environment: string;
+}
+
+async function invoke(fn: string, body: Record<string, unknown>) {
+  const { data, error } = await supabase.functions.invoke(fn, { body });
+  if (error) {
+    let message = error.message ?? "Request failed";
+    try { const parsed = await (error as any).context?.json?.(); if (parsed?.error) message = parsed.error; } catch { /* noop */ }
+    throw new Error(message);
+  }
+  if ((data as any)?.error) throw new Error((data as any).error);
+  return data as any;
 }
 
 export default function RecipientPaymentSetup() {
@@ -51,251 +34,74 @@ export default function RecipientPaymentSetup() {
   const [session, setSession] = useState<SessionData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [done, setDone] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [holderName, setHolderName] = useState("");
-  const [holderType, setHolderType] = useState("individual");
-  const [bankAccountType, setBankAccountType] = useState("checking");
-  const [routingNumber, setRoutingNumber] = useState("");
-  const [accountNumber, setAccountNumber] = useState("");
+  const [done, setDone] = useState(false);
   const [replaceBank, setReplaceBank] = useState(false);
-  
+  const [accepted, setAccepted] = useState(false);
+  const [identity, setIdentity] = useState({ first_name: "", last_name: "", email: "", phone: "", address_line1: "", address_line2: "", city: "", state: "", postal_code: "", birth_date: "", ssn: "" });
+  const [bank, setBank] = useState({ holder_name: "", holder_type: "individual", bank_account_type: "checking", routing_number: "", account_number: "" });
 
+  useEffect(() => applyMoovTheme({ primary: session?.payer.primary_color ?? null, secondary: session?.payer.secondary_color ?? null }), [session?.payer.primary_color, session?.payer.secondary_color]);
 
+  async function load() {
+    setLoading(true); setError(null);
+    try { setSession(await invoke("moov-recipient-session", { token })); }
+    catch (e: any) { setError(e.message); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { void load(); }, [token]);
 
-  // Brand the hosted Moov component so it matches the payer's look.
-  useEffect(
-    () =>
-      applyMoovTheme({
-        primary: session?.payer.primary_color ?? null,
-        secondary: session?.payer.secondary_color ?? null,
-      }),
-    [session?.payer.primary_color, session?.payer.secondary_color],
-  );
-
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data, error: fnErr } = await supabase.functions.invoke("moov-recipient-session", {
-          body: { token },
-        });
-        if (fnErr) {
-          let message = "This link is not valid.";
-          try {
-            const parsed = await (fnErr as any).context?.json?.();
-            if (parsed?.error) message = parsed.error;
-          } catch { /* keep default */ }
-          throw new Error(message);
-        }
-        if ((data as any)?.error) throw new Error((data as any).error);
-        if (!cancelled) setSession(data as SessionData);
-      } catch (e: any) {
-        if (!cancelled) setError(e.message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [token]);
-
+  const verified = session?.onboarding?.verification_status === "verified";
+  const termsAccepted = Boolean(session?.onboarding?.terms_accepted);
   const bankAlreadyLinked = Boolean(session?.recipient.bank_linked) && !replaceBank;
+  const digits = (v: string, max: number) => v.replace(/\D/g, "").slice(0, max);
 
-  const digitsOnly = (value: string, max: number) => value.replace(/\D/g, "").slice(0, max);
-
-
-  const canSubmit =
-    holderName.trim().length >= 2 &&
-    routingNumber.length === 9 &&
-    accountNumber.length >= 4 &&
-    !saving;
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!canSubmit) return;
-    setSaving(true);
-    setError(null);
+  async function submitIdentity(e: React.FormEvent) {
+    e.preventDefault(); setSaving(true); setError(null);
     try {
-      const { data, error: fnErr } = await supabase.functions.invoke("moov-recipient-bank-add", {
-        body: {
-          token,
-          holder_name: holderName.trim(),
-          holder_type: holderType,
-          bank_account_type: bankAccountType,
-          routing_number: routingNumber,
-          account_number: accountNumber,
-        },
-      });
-
-      if (fnErr) {
-        let message = "Could not save your bank account.";
-        try {
-          const parsed = await (fnErr as any).context?.json?.();
-          if (parsed?.error) message = parsed.error;
-        } catch { /* keep default */ }
-        throw new Error(message);
-      }
-      if ((data as any)?.error) throw new Error((data as any).error);
-      setAccountNumber("");
-      setRoutingNumber("");
-      setDone(true);
-    } catch (err: any) {
-      setError(err?.message ?? "Could not save your bank account.");
-    } finally {
-      setSaving(false);
-    }
+      await invoke("moov-recipient-kyc-update", { token, ...identity });
+      if (!termsAccepted) await invoke("moov-recipient-tos-accept", { token, accepted: true });
+      setAccepted(false); await load();
+    } catch (e: any) { setError(e.message); }
+    finally { setSaving(false); }
   }
 
-  return (
-    <main className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-4">
-        <header className="text-center space-y-2">
-          {session?.payer.logo_url ? (
-            <img
-              src={session.payer.logo_url}
-              alt={`${session.payer.name} logo`}
-              className="h-10 mx-auto object-contain"
-            />
-          ) : null}
-          <h1 className="text-xl font-semibold tracking-tight">
-            Set up your payment details
-          </h1>
-          {session ? (
-            <p className="text-sm text-muted-foreground">
-              {session.payer.name} is sending you a payment.
-            </p>
-          ) : null}
-        </header>
+  async function submitTerms() {
+    setSaving(true); setError(null);
+    try { await invoke("moov-recipient-tos-accept", { token, accepted: true }); await load(); }
+    catch (e: any) { setError(e.message); }
+    finally { setSaving(false); }
+  }
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Landmark className="h-4 w-4 text-primary" />
-              Where should we send your money?
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Your bank details go directly to our payment provider over a secure connection.
-              They are never stored on ChecksOps servers.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading && (
-              <div className="flex items-center gap-2 py-6 justify-center text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading secure form…
-              </div>
-            )}
+  async function submitBank(e: React.FormEvent) {
+    e.preventDefault(); setSaving(true); setError(null);
+    try { await invoke("moov-recipient-bank-add", { token, ...bank }); setDone(true); }
+    catch (e: any) { setError(e.message); }
+    finally { setSaving(false); }
+  }
 
-            {error && (
-              <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-                <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
-                <p className="text-xs text-destructive">{error}</p>
-              </div>
-            )}
-
-            {done && (
-              <div className="flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
-                <p className="text-xs text-emerald-500">
-                  Your bank account is connected. You can close this page — the payment will arrive
-                  in your account.
-                </p>
-              </div>
-            )}
-
-            {!loading && session && !done && bankAlreadyLinked && (
-              <div className="space-y-4 pt-1">
-                <div className="flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
-                  <p className="text-xs text-emerald-500">
-                    {session.recipient.bank_name ?? "Your bank"}
-                    {session.recipient.last_four ? ` ••••${session.recipient.last_four}` : ""} is connected.
-                    You can close this page.
-                  </p>
-                </div>
-                <Button type="button" variant="outline" className="w-full" onClick={() => setReplaceBank(true)}>
-                  Use a different bank account
-                </Button>
-              </div>
-            )}
-
-            {!loading && session && !done && !bankAlreadyLinked && (
-              <form onSubmit={handleSubmit} className="space-y-4 pt-1">
-
-                <div className="space-y-2">
-                  <Label htmlFor="holder-name">Account holder name</Label>
-                  <Input
-                    id="holder-name"
-                    value={holderName}
-                    onChange={(e) => setHolderName(e.target.value.slice(0, 128))}
-                    placeholder="Exactly as it appears at your bank"
-                    autoComplete="off"
-                  />
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Account owner</Label>
-                    <Select value={holderType} onValueChange={setHolderType}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="individual">Individual</SelectItem>
-                        <SelectItem value="business">Business</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Account type</Label>
-                    <Select value={bankAccountType} onValueChange={setBankAccountType}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="checking">Checking</SelectItem>
-                        <SelectItem value="savings">Savings</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="routing">Routing number</Label>
-                  <Input
-                    id="routing"
-                    inputMode="numeric"
-                    value={routingNumber}
-                    onChange={(e) => setRoutingNumber(digitsOnly(e.target.value, 9))}
-                    placeholder="9 digits"
-                    autoComplete="off"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="account">Account number</Label>
-                  <Input
-                    id="account"
-                    inputMode="numeric"
-                    value={accountNumber}
-                    onChange={(e) => setAccountNumber(digitsOnly(e.target.value, 17))}
-                    placeholder="4–17 digits"
-                    autoComplete="off"
-                  />
-                </div>
-
-                <Button type="submit" className="w-full" disabled={!canSubmit}>
-                  {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Save bank account
-                </Button>
-              </form>
-            )}
-
-          </CardContent>
-        </Card>
-
-        <p className="text-[11px] text-muted-foreground text-center flex items-center justify-center gap-1.5">
-          <ShieldCheck className="h-3 w-3" />
-          Secured by ChecksOps. This link expires and can only be used by you.
-        </p>
-      </div>
-    </main>
-  );
+  return <main className="min-h-screen bg-background flex items-center justify-center p-4"><div className="w-full max-w-lg space-y-4">
+    <header className="text-center space-y-2">{session?.payer.logo_url && <img src={session.payer.logo_url} alt={`${session.payer.name} logo`} className="h-10 mx-auto object-contain" />}<h1 className="text-xl font-semibold">Secure payment setup</h1>{session && <p className="text-sm text-muted-foreground">{session.payer.name} is setting you up to receive a payment.</p>}</header>
+    <Card><CardHeader><CardTitle className="text-sm flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-primary" /> Recipient verification</CardTitle><CardDescription className="text-xs">Your existing secure link resumes the same payment-provider account. Completed steps will not be repeated.</CardDescription></CardHeader><CardContent className="space-y-4">
+      {loading && <div className="flex justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading secure setup…</div>}
+      {error && <div className="flex gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3"><AlertCircle className="h-4 w-4 text-destructive shrink-0" /><p className="text-xs text-destructive">{error}</p></div>}
+      {!loading && session && !verified && <form onSubmit={submitIdentity} className="space-y-4">
+        <div className="flex items-center gap-2 text-sm font-medium"><UserRound className="h-4 w-4" /> Verify your identity</div>
+        <div className="grid grid-cols-2 gap-3"><div><Label>First name</Label><Input required value={identity.first_name} onChange={e=>setIdentity({...identity,first_name:e.target.value})}/></div><div><Label>Last name</Label><Input required value={identity.last_name} onChange={e=>setIdentity({...identity,last_name:e.target.value})}/></div></div>
+        <div><Label>Email</Label><Input type="email" required value={identity.email} onChange={e=>setIdentity({...identity,email:e.target.value})}/></div>
+        <div><Label>Mobile phone</Label><Input inputMode="numeric" required value={identity.phone} onChange={e=>setIdentity({...identity,phone:digits(e.target.value,10)})}/></div>
+        <div><Label>Residential address</Label><Input required value={identity.address_line1} onChange={e=>setIdentity({...identity,address_line1:e.target.value})}/></div>
+        <div><Label>Address line 2</Label><Input value={identity.address_line2} onChange={e=>setIdentity({...identity,address_line2:e.target.value})}/></div>
+        <div className="grid grid-cols-3 gap-3"><div><Label>City</Label><Input required value={identity.city} onChange={e=>setIdentity({...identity,city:e.target.value})}/></div><div><Label>State</Label><Input required maxLength={2} value={identity.state} onChange={e=>setIdentity({...identity,state:e.target.value.toUpperCase()})}/></div><div><Label>ZIP</Label><Input required inputMode="numeric" value={identity.postal_code} onChange={e=>setIdentity({...identity,postal_code:digits(e.target.value,5)})}/></div></div>
+        <div className="grid grid-cols-2 gap-3"><div><Label>Date of birth</Label><Input type="date" required value={identity.birth_date} onChange={e=>setIdentity({...identity,birth_date:e.target.value})}/></div><div><Label>SSN</Label><Input type="password" inputMode="numeric" required placeholder="9 digits" value={identity.ssn} onChange={e=>setIdentity({...identity,ssn:digits(e.target.value,9)})}/></div></div>
+        {!termsAccepted && <div className="flex items-start gap-2 rounded-md border p-3"><Checkbox id="terms" checked={accepted} onCheckedChange={v=>setAccepted(v===true)} /><Label htmlFor="terms" className="text-xs leading-5">I agree to Moov's <a className="underline" href="https://moov.io/legal/platform-agreement/" target="_blank" rel="noreferrer">Platform Agreement</a> and <a className="underline" href="https://moov.io/legal/privacy-policy/" target="_blank" rel="noreferrer">Privacy Policy</a>.</Label></div>}
+        <Button className="w-full" disabled={saving || (!termsAccepted && !accepted)}>{saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Continue securely</Button>
+      </form>}
+      {!loading && session && verified && !termsAccepted && <div className="space-y-3"><div className="flex gap-2 rounded-md border border-emerald-500/30 p-3"><CheckCircle2 className="h-4 w-4 text-emerald-500"/><p className="text-xs">Identity verification is complete.</p></div><div className="flex items-start gap-2"><Checkbox id="terms-only" checked={accepted} onCheckedChange={v=>setAccepted(v===true)}/><Label htmlFor="terms-only" className="text-xs leading-5">I agree to Moov's Platform Agreement and Privacy Policy.</Label></div><Button className="w-full" disabled={!accepted||saving} onClick={submitTerms}>Accept agreement and continue</Button></div>}
+      {!loading && session && verified && termsAccepted && !done && bankAlreadyLinked && <div className="space-y-3"><div className="flex gap-2 rounded-md border border-emerald-500/30 p-3"><CheckCircle2 className="h-4 w-4 text-emerald-500"/><p className="text-xs">Identity and agreement are complete. {session.recipient.bank_name ?? "Your bank"}{session.recipient.last_four ? ` ••••${session.recipient.last_four}` : ""} is connected.</p></div><Button variant="outline" className="w-full" onClick={()=>setReplaceBank(true)}>Use a different bank account</Button></div>}
+      {!loading && session && verified && termsAccepted && !done && !bankAlreadyLinked && <form onSubmit={submitBank} className="space-y-4"><div className="flex items-center gap-2 text-sm font-medium"><Landmark className="h-4 w-4"/> Connect your payout bank</div><div><Label>Account holder name</Label><Input required value={bank.holder_name} onChange={e=>setBank({...bank,holder_name:e.target.value})}/></div><div className="grid grid-cols-2 gap-3"><div><Label>Owner</Label><Select value={bank.holder_type} onValueChange={v=>setBank({...bank,holder_type:v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="individual">Individual</SelectItem><SelectItem value="business">Business</SelectItem></SelectContent></Select></div><div><Label>Account type</Label><Select value={bank.bank_account_type} onValueChange={v=>setBank({...bank,bank_account_type:v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="checking">Checking</SelectItem><SelectItem value="savings">Savings</SelectItem></SelectContent></Select></div></div><div><Label>Routing number</Label><Input required inputMode="numeric" value={bank.routing_number} onChange={e=>setBank({...bank,routing_number:digits(e.target.value,9)})}/></div><div><Label>Account number</Label><Input required type="password" inputMode="numeric" value={bank.account_number} onChange={e=>setBank({...bank,account_number:digits(e.target.value,17)})}/></div><Button className="w-full" disabled={saving||bank.routing_number.length!==9||bank.account_number.length<4}>{saving&&<Loader2 className="h-4 w-4 mr-2 animate-spin"/>}Connect bank account</Button></form>}
+      {done && <div className="flex gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3"><CheckCircle2 className="h-4 w-4 text-emerald-500"/><p className="text-xs text-emerald-600">Setup is complete. You can close this page.</p></div>}
+    </CardContent></Card>
+    <p className="text-[11px] text-muted-foreground text-center">Sensitive identity and bank information is submitted only for payment-provider verification and is not displayed back in this setup flow.</p>
+  </div></main>;
 }
-
