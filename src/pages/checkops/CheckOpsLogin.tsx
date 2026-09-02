@@ -10,6 +10,7 @@ import { Loader2, ArrowLeft } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { isPlatformOwner } from "@/lib/masterMerchant";
+import { isAwsStaging } from "@/lib/awsStaging";
 
 /**
  * Generic ChecksOps sign-in page at checkops.com/login.
@@ -24,7 +25,10 @@ export default function CheckOpsLogin() {
   const { user, loading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [challengeSession, setChallengeSession] = useState<string | null>(null);
 
   // If already signed in, resolve and redirect to their tenant.
   useEffect(() => {
@@ -94,6 +98,46 @@ export default function CheckOpsLogin() {
     navigate(`/${slug}/checks`, { replace: true });
   };
 
+  const finishLogin = async (authedId: string, authedEmail?: string | null) => {
+    if (!authedId) throw new Error("Unable to start your session");
+    await resolveAndRedirect(authedId, authedEmail ?? email);
+  };
+
+  const handleChallenge = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmNewPassword) {
+      toast({ title: "Passwords don't match", variant: "destructive" });
+      return;
+    }
+    if (newPassword.length < 12) {
+      toast({
+        title: "Password too short",
+        description: "Use at least 12 characters with upper, lower, number, and symbol.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data, error } = await (supabase.auth as any).completeNewPassword({
+        email: email.trim().toLowerCase(),
+        session: challengeSession,
+        newPassword,
+      });
+      if (error) throw error;
+      setChallengeSession(null);
+      await finishLogin(data.user?.id, data.user?.email ?? email);
+    } catch (err: any) {
+      toast({
+        title: "Couldn't set password",
+        description: err.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -102,6 +146,14 @@ export default function CheckOpsLogin() {
         email: email.trim().toLowerCase(),
         password: password.trim(),
       });
+      if (error && (error as any).code === "NEW_PASSWORD_REQUIRED") {
+        setChallengeSession((error as any).session);
+        toast({
+          title: "Create a new password",
+          description: "This account must set a permanent password before continuing.",
+        });
+        return;
+      }
       if (error) throw error;
       const authedId = data.user?.id;
       if (!authedId) throw new Error("Unable to start your session");
@@ -127,45 +179,81 @@ export default function CheckOpsLogin() {
           <CardTitle className="text-xl md:text-2xl">Sign in to ChecksOps</CardTitle>
           <p className="text-xs text-muted-foreground">
             Access your organization's check workflows.
+            {isAwsStaging() ? " AWS staging." : ""}
           </p>
         </CardHeader>
         <CardContent className="pt-2">
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <Link
-                  to="/forgot-password"
-                  className="text-xs text-muted-foreground hover:text-primary transition-colors"
-                >
-                  Forgot password?
-                </Link>
+          {challengeSession ? (
+            <form onSubmit={handleChallenge} className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Enter a new password for <strong>{email}</strong>. Use at least 12 characters
+                with upper, lower, number, and symbol.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="new-password">New password</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                />
               </div>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Sign In
-            </Button>
-          </form>
+              <div className="space-y-2">
+                <Label htmlFor="confirm-new-password">Confirm password</Label>
+                <Input
+                  id="confirm-new-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmNewPassword}
+                  onChange={(e) => setConfirmNewPassword(e.target.value)}
+                  required
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Set password and continue
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password</Label>
+                  <Link
+                    to="/forgot-password"
+                    className="text-xs text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+                <Input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Sign In
+              </Button>
+            </form>
+          )}
           <div className="mt-6 pt-4 border-t border-border/40 text-center">
             <Button variant="ghost" size="sm" asChild className="text-xs text-muted-foreground">
               <Link to="/"><ArrowLeft className="h-3 w-3 mr-1" /> Back to checksops.com</Link>

@@ -8,19 +8,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
+import { isAwsStaging } from "@/lib/awsStaging";
 
 export default function CheckOpsForgotPassword() {
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const aws = isAwsStaging();
 
   const sendResetEmail = async () => {
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(
         email.trim().toLowerCase(),
-        { redirectTo: `${window.location.origin}/reset-password` }
+        aws ? undefined : { redirectTo: `${window.location.origin}/reset-password` }
       );
       if (error) throw error;
       setSent(true);
@@ -40,6 +46,40 @@ export default function CheckOpsForgotPassword() {
     await sendResetEmail();
   };
 
+  const handleConfirmCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password.length < 12) {
+      toast({
+        title: "Password too short",
+        description: "Use at least 12 characters with upper, lower, number, and symbol.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (password !== confirm) {
+      toast({ title: "Passwords don't match", variant: "destructive" });
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error } = await (supabase.auth as any).confirmForgotPassword({
+        email: email.trim().toLowerCase(),
+        code: code.trim(),
+        password,
+      });
+      if (error) throw error;
+      setConfirmed(true);
+    } catch (err: any) {
+      toast({
+        title: "Couldn't reset password",
+        description: err.message || "Check the code and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md border-border/50">
@@ -49,11 +89,67 @@ export default function CheckOpsForgotPassword() {
           </div>
           <CardTitle className="text-xl md:text-2xl">Reset your password</CardTitle>
           <p className="text-xs text-muted-foreground">
-            Enter your email and we'll send you a link to reset it.
+            {aws
+              ? "Enter your email and we'll send a confirmation code to the approved Tester mailbox."
+              : "Enter your email and we'll send you a link to reset it."}
           </p>
         </CardHeader>
         <CardContent className="pt-2">
-          {sent ? (
+          {aws && confirmed ? (
+            <div className="space-y-4 text-center py-4">
+              <CheckCircle2 className="h-10 w-10 mx-auto text-primary" />
+              <p className="text-sm font-medium">Password updated</p>
+              <Button className="w-full" asChild>
+                <Link to="/login">Back to sign in</Link>
+              </Button>
+            </div>
+          ) : aws && sent ? (
+            <form onSubmit={handleConfirmCode} className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                If a code was sent to <strong>{email}</strong>, enter it below with a new password.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="code">Confirmation code</Label>
+                <Input
+                  id="code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">New password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirm">Confirm password</Label>
+                <Input
+                  id="confirm"
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  required
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Confirm new password
+              </Button>
+              <Button variant="outline" className="w-full" type="button" onClick={sendResetEmail} disabled={loading}>
+                Resend code
+              </Button>
+            </form>
+          ) : sent ? (
             <div className="space-y-4 text-center py-4">
               <CheckCircle2 className="h-10 w-10 mx-auto text-primary" />
               <div>
@@ -86,7 +182,7 @@ export default function CheckOpsForgotPassword() {
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Send reset link
+                {aws ? "Send confirmation code" : "Send reset link"}
               </Button>
             </form>
           )}

@@ -3,6 +3,8 @@ import { probeDatabase, probeIsHealthy } from './db-health.mjs';
 import { validateReadonlyCoreTables } from './db-readonly-validate.mjs';
 import { handleIdentityMe } from './identity.mjs';
 import { handleAuthorizationProbe, handleJwksCheck } from './authorization.mjs';
+import { AUTH_ROUTES } from './auth-cognito.mjs';
+import { handleDataQuery, handleDataRpc, handleWritesDisabled, handleStorageStub, handleFunctionsDisabled } from './data.mjs';
 import { handleTenantSecurityCompliance } from './tenant-security-compliance.mjs';
 
 const json = (statusCode, body) => ({
@@ -10,6 +12,9 @@ const json = (statusCode, body) => ({
   headers: {
     'content-type': 'application/json',
     'cache-control': 'no-store',
+    'access-control-allow-origin': '*',
+    'access-control-allow-headers': 'authorization,content-type,x-request-id,x-user-id,x-tenant-id,x-role,x-cognito-sub',
+    'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
   },
   body: JSON.stringify(body),
 });
@@ -47,6 +52,10 @@ const tenantComplianceMatch = (path) => path.match(/^\/tenants\/([^/]+)\/securit
 export const handler = async (event) => {
   const method = (event?.requestContext?.http?.method || event?.httpMethod || 'GET').toUpperCase();
   const path = requestPath(event);
+
+  if (method === 'OPTIONS') {
+    return json(204, {});
+  }
   const complianceRoute = tenantComplianceMatch(path);
 
   if ((READ_ONLY_PATHS.has(path) || complianceRoute) && method !== 'GET') {
@@ -136,6 +145,66 @@ export const handler = async (event) => {
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
       ...jwks,
+    });
+  }
+
+  if (method === 'POST' && AUTH_ROUTES[path]) {
+    const result = await AUTH_ROUTES[path](event);
+    return json(result.statusCode || (result.ok ? 200 : 400), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/data/query') {
+    const result = await handleDataQuery(event);
+    return json(result.statusCode || (result.ok ? 200 : 401), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/data/rpc') {
+    const result = await handleDataRpc(event);
+    return json(result.statusCode || (result.ok ? 200 : 401), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && path.startsWith('/data/')) {
+    const result = await handleWritesDisabled(event);
+    return json(403, {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  if (path.startsWith('/storage')) {
+    const result = await handleStorageStub(event);
+    return json(501, {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  if (path.startsWith('/functions')) {
+    const result = await handleFunctionsDisabled(event);
+    return json(403, {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
     });
   }
 
