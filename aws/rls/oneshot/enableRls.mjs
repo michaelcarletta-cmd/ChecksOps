@@ -73,7 +73,7 @@ const countResult = (result) => {
 };
 
 const rlsDenied = (t) => Boolean(t?.error && /row-level security|permission denied/i.test(t.error));
-const expectOk = (t) => t && t.ok === true && !t.error && t.n > 0;
+const expectOk = (t) => t && !t.error && Number(t.n) > 0;
 const expectDenied = (t) => {
   if (!t) return false;
   if (rlsDenied(t)) return true;
@@ -89,7 +89,7 @@ const tryWrite = async (client, appUserId, sql, params = []) => asRole(client, a
 const trySelect = async (client, appUserId, sql, params = []) => asRole(client, appUserId, async () => {
   const result = await client.query(sql, params);
   const row = result.rows[0] || {};
-  return { ...row, n: Number(row.n || 0), rowCount: Number(row.n || 0) };
+  return { ok: true, ...row, n: Number(row.n || 0), rowCount: Number(row.n || 0) };
 });
 
 const applySqlStatements = async (client, name) => {
