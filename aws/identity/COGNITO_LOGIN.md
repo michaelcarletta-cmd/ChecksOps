@@ -52,4 +52,4 @@ Users are `FORCE_CHANGE_PASSWORD` with discarded temps. Do **not** call `ForgotP
 
 ## STOP
 
-Do not wire the production frontend. Do not change DNS. Live results: `aws/identity/COGNITO_LOGIN_RESULTS.md`.
+Live results: `aws/identity/COGNITO_LOGIN_RESULTS.md`. Do not wire the production frontend. Do not change DNS.
