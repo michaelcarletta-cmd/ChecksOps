@@ -185,6 +185,12 @@ export function WhiteLabelSettings() {
             <ChangePasswordCard />
           </TabsContent>
 
+          <TabsContent value="security" className="space-y-6">
+            <PasskeyManagerCard />
+            <TotpManagerCard />
+          </TabsContent>
+
+
           <TabsContent value="usage" className="space-y-4">
             <TenantUsageTracker />
             <TenantBillingAccountPanel />
