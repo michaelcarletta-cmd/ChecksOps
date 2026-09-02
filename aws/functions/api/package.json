@@ -1,0 +1,12 @@
+{
+  "name": "checksops-staging-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ChecksOps AWS staging API entrypoint.",
+  "main": "index.mjs",
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "3.1124.0",
+    "pg": "8.23.0"
+  }
+}

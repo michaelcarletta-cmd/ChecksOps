@@ -50,6 +50,8 @@ After deployment, record the CloudFormation outputs (API URL, S3 bucket name, Co
 
 Call the API `/health` endpoint. It should return a JSON response showing `status: ok` and `database: not-connected`.
 
+Staging Lambda points at restored database `checksops` via env `DATABASE_NAME=checksops` while still using the application role secret (`checksops`, not `checksops_admin`). Verify `GET /db-health` reports `currentDatabase=checksops` and `currentUser=checksops`, then `GET /db-readonly-validate` for core-table SELECT counts. Do not SAM-deploy this template over the live stack; update the existing `checksops-staging-api` function in place.
+
 Do not point the production frontend at this API yet.
 
 ## Next migration step

@@ -23,6 +23,8 @@ Globals:
         CHECKSOPS_ENV: !Ref Environment
         FILES_BUCKET: !Ref PrivateFilesBucket
         PROVIDER_SECRETS_ARN: !Ref ProviderSecrets
+        # Override secret dbname without mutating the application secret or using checksops_admin.
+        DATABASE_NAME: checksops
 
 Resources:
   ChecksOpsApi:
