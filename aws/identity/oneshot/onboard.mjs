@@ -2,14 +2,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { EXPECTED_EIGHT, NINTH_ID as MAPPED_NINTH, PROBE_SUB as MAPPED_PROBE } from '../expected-mappings.mjs';
+
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const SQL_DIR = path.join(ROOT, '..', 'sql');
 const readSql = (name) => fs.readFileSync(path.join(SQL_DIR, name), 'utf8');
 
-export const NINTH_ID = 'dd24eea5-5d12-47d1-999e-d5930c278b7d';
+export const NINTH_ID = MAPPED_NINTH;
 export const TESTER_ID = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
 export const MASTER_OWNER_ID = '7dbb3009-f059-4767-b5dc-1c5c72379330';
-export const PROBE_SUB = '2418c458-c011-70b7-07ac-6b9da2d9415d';
+export const PROBE_SUB = MAPPED_PROBE;
 export const FREEDOM_TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 export const C1C_TENANT = '4f172140-f57a-4744-8050-95f4f07b13b4';
 
@@ -349,4 +351,95 @@ export const isolationMatrix = async (client, users) => {
     try { await client.query('ROLLBACK'); } catch { /* ignore */ }
     return { pass: false, error: String(error?.message || error).slice(0, 800) };
   }
+};
+
+export const loginVerify = async (client) => {
+  const rows = (await client.query(readSql('10_login_verify.sql'))).rows;
+  const byEmail = new Map(rows.filter((row) => row.email).map((row) => [row.email, row]));
+  const mismatches = [];
+  for (const expected of EXPECTED_EIGHT) {
+    const row = byEmail.get(expected.email);
+    if (!row) {
+      mismatches.push(`missing ${expected.email}`);
+      continue;
+    }
+    if (row.application_user_id !== expected.applicationUserId) {
+      mismatches.push(`uuid changed for ${expected.email}`);
+    }
+    if (row.cognito_sub !== expected.cognitoSub) {
+      mismatches.push(`cognito_sub changed for ${expected.email}`);
+    }
+    if (row.status !== 'active') mismatches.push(`status ${row.status} for ${expected.email}`);
+    if (row.application_user_id === row.cognito_sub) {
+      mismatches.push(`sub equals application UUID for ${expected.email}`);
+    }
+  }
+  const probeRows = rows.filter((row) => row.cognito_sub === PROBE_SUB);
+  const isolated = Number((await client.query(
+    `SELECT count(*)::int AS n FROM public.identity_accounts WHERE status = 'isolated_test'`,
+  )).rows[0].n);
+  const ninth = await ninthStatus(client);
+  const fkCount = Number((await client.query(
+    `SELECT count(*)::int AS n
+     FROM pg_constraint c
+     JOIN pg_class t ON t.oid = c.conrelid
+     JOIN pg_namespace n ON n.oid = t.relnamespace
+     JOIN pg_class ft ON ft.oid = c.confrelid
+     WHERE c.contype = 'f'
+       AND n.nspname = 'public'
+       AND ft.relname = 'identity_accounts'`,
+  )).rows[0].n);
+  const claimCounts = (await client.query(
+    `SELECT count(*)::int AS n,
+            count(*) FILTER (WHERE org_id = '${FREEDOM_TENANT}')::int AS freedom,
+            count(*) FILTER (WHERE org_id IS NULL)::int AS org_null
+     FROM public.claims`,
+  )).rows[0];
+
+  const subAsAppUuid = [];
+  for (const expected of EXPECTED_EIGHT) {
+    const claims = await trySelect(
+      client,
+      expected.cognitoSub,
+      `SELECT count(*)::int AS n FROM public.claims`,
+    );
+    const tenants = await trySelect(
+      client,
+      expected.cognitoSub,
+      `SELECT count(*)::int AS n FROM public.tenants`,
+    );
+    const pass = Number(claims.n || 0) === 0 && Number(tenants.n || 0) === 0 && !claims.error;
+    if (!pass) subAsAppUuid.push({ cognitoSub: expected.cognitoSub, claims: claims.n, tenants: tenants.n, error: claims.error });
+    else subAsAppUuid.push({ email: expected.email, pass: true, claims: 0, tenants: 0 });
+  }
+
+  const uuidUnchanged = mismatches.filter((item) => item.includes('uuid changed')).length === 0;
+  return {
+    mappings: rows,
+    mismatches,
+    probeSubRows: probeRows.length,
+    isolatedTestRows: isolated,
+    ninth,
+    identityFks: fkCount,
+    claims: {
+      n: Number(claimCounts.n || 0),
+      freedom: Number(claimCounts.freedom || 0),
+      org_null: Number(claimCounts.org_null || 0),
+    },
+    subUsedAsApplicationUuid: {
+      rows: subAsAppUuid,
+      pass: subAsAppUuid.every((row) => row.pass),
+    },
+    applicationUuidsUnchanged: uuidUnchanged,
+    pass: mismatches.length === 0
+      && probeRows.length === 0
+      && isolated === 0
+      && ninth.pass
+      && fkCount === 47
+      && Number(claimCounts.freedom || 0) === 83
+      && Number(claimCounts.org_null || 0) === 97
+      && Number(claimCounts.n || 0) === 180
+      && subAsAppUuid.every((row) => row.pass)
+      && uuidUnchanged,
+  };
 };

@@ -3,12 +3,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+import { EXPECTED_EIGHT } from '../expected-mappings.mjs';
 import {
   NINTH_ID,
   PROBE_SUB,
   applyLinks,
   clearIsolatedTest,
   isolationMatrix,
+  loginVerify,
   ninthStatus,
   policySnapshot,
   reconcileKnownUsers,
@@ -105,6 +107,18 @@ export const handler = async (event = {}) => {
       )).rows[0].n);
       out.probeGone = { probeSubRows: probe, isolatedTestRows: isolated, pass: probe.length === 0 && isolated === 0 };
     }
+    if (step === 'loginVerify') {
+      out.loginVerify = await loginVerify(client);
+      const reconcile = await reconcileKnownUsers(client);
+      out.reconcile = {
+        eligibleCount: reconcile.eligible.length,
+        abortedCount: reconcile.aborted.length,
+        pass: reconcile.pass,
+      };
+      out.isolation = await isolationMatrix(client, reconcile.eligible);
+      out.ninth = await ninthStatus(client);
+      out.expectedEightCount = EXPECTED_EIGHT.length;
+    }
 
     out.ninthUuidModified = out.ninth?.identity?.cognito_sub != null
       || out.ninth?.identity?.email != null
@@ -117,6 +131,7 @@ export const handler = async (event = {}) => {
       && (out.links ? out.links.pass : true)
       && (out.isolation ? out.isolation.pass : true)
       && (out.probeGone ? out.probeGone.pass : true)
+      && (out.loginVerify ? out.loginVerify.pass : true)
       && out.realInvitationEmailsSent === false
       && out.ninthUuidModified === false;
     return out;
