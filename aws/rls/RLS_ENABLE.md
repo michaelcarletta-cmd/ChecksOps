@@ -51,4 +51,4 @@ If a rollback condition hits (unexpected cross-tenant access, NULL-org leak to o
 
 `GET /db-readonly-validate` is dual-mode: RLS off still reconciles restore counts; RLS on expects fail-closed zero rows for `checksops` without `request.app_user_id`. Restore financial totals are reconciled by the oneshot as table owner.
 
-`/authorization/isolation` reports claims/check visibility under the mapped application UUID. Spoofed headers/query/body remain ignored. Unauthenticated calls stay 401.
+Live results: `aws/rls/RLS_ENABLE_RESULTS.md`. Global RLS is **on** for the 165 restored tables. The 8 production users are still not invited.
