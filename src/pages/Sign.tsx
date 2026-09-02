@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, FileSignature, Check, AlertTriangle, Clock, Eye, Send } from "lucide-react";
 import { resolveFieldDisplay, detectDocumentType } from "@/lib/signer-display-templates";
+import { publicWorkflowRequest } from "@/lib/publicWorkflowApi";
 
 export default function Sign() {
   const [searchParams] = useSearchParams();
@@ -79,15 +80,10 @@ export default function Sign() {
 
   const fetchSignerData = async () => {
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://nbcqwpysqgyxrrbgtmkw.supabase.co";
-      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5iY3F3cHlzcWd5eHJyYmd0bWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxNDQ2NTgsImV4cCI6MjA5MjcyMDY1OH0.9GNh6OK6l6vSIBgkDY-bJuqNtfHJsLNW-dc7jfRUwgw";
-      
-      const response = await fetch(`${supabaseUrl}/functions/v1/get-signature-document`, {
+      const { url, headers } = publicWorkflowRequest("get-signature-document");
+      const response = await fetch(url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": anonKey,
-        },
+        headers,
         body: JSON.stringify({ token }),
       });
 
@@ -255,15 +251,10 @@ export default function Sign() {
     
     setSigning(true);
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://nbcqwpysqgyxrrbgtmkw.supabase.co";
-      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5iY3F3cHlzcWd5eHJyYmd0bWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxNDQ2NTgsImV4cCI6MjA5MjcyMDY1OH0.9GNh6OK6l6vSIBgkDY-bJuqNtfHJsLNW-dc7jfRUwgw";
-      
-      const response = await fetch(`${supabaseUrl}/functions/v1/submit-signature`, {
+      const { url, headers } = publicWorkflowRequest("submit-signature");
+      const response = await fetch(url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": anonKey,
-        },
+        headers,
         body: JSON.stringify({ token, fieldValues: collectedValues, eSignConsentAccepted, consentText: eSignConsentText }),
       });
 

@@ -1,0 +1,213 @@
+{
+  "generatedAt": "2026-09-02T16:13:11.320Z",
+  "filesBucket": "checksops-staging-privatefilesbucket-erzqsolpucjp",
+  "source": "https://nbcqwpysqgyxrrbgtmkw.supabase.co",
+  "copyMode": "public_only",
+  "sourceObjectCount": 1334,
+  "selectedCount": 6,
+  "copiedCount": 6,
+  "failedCount": 1328,
+  "skippedCount": 0,
+  "conflictCount": 0,
+  "copiedBytes": 3702461,
+  "copied": [
+    {
+      "bucket": "email-assets",
+      "name": "checksops-logo.png",
+      "key": "files/email-assets/checksops-logo.png",
+      "sha256": "d181965d732760b2e03a62efd607e6f41968ef4936f4bc1d16fd462df2e3b421",
+      "bytes": 1015445
+    },
+    {
+      "bucket": "tenant-logos",
+      "name": "4f172140-f57a-4744-8050-95f4f07b13b4/1778078357240.png",
+      "key": "files/tenant-logos/4f172140-f57a-4744-8050-95f4f07b13b4/1778078357240.png",
+      "sha256": "0b1c3b9bc7d3e746441140c78172ef8c844d5344e0a0cad3f150b14891b2299c",
+      "bytes": 103746
+    },
+    {
+      "bucket": "tenant-logos",
+      "name": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo-1779930456979.png",
+      "key": "files/tenant-logos/2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo-1779930456979.png",
+      "sha256": "933431f9e5060a8b0d58b42c0d1ef007bee25b828fa958132cff1b81f986bbf9",
+      "bytes": 858805
+    },
+    {
+      "bucket": "tenant-logos",
+      "name": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/1779902892400.jpg",
+      "key": "files/tenant-logos/2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/1779902892400.jpg",
+      "sha256": "3c07aeb20e36ed8a2830d99070a0a9e58cc1914856a4e808df71ff1f06bae38d",
+      "bytes": 60877
+    },
+    {
+      "bucket": "tenant-logos",
+      "name": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo-1779935280832.png",
+      "key": "files/tenant-logos/2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo-1779935280832.png",
+      "sha256": "d6c520dca18dbca38388a91a1e42332192a8a81f03cb33dcc28841cf8f9a205f",
+      "bytes": 778153
+    },
+    {
+      "bucket": "tenant-logos",
+      "name": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo-1780430426935.png",
+      "key": "files/tenant-logos/2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo-1780430426935.png",
+      "sha256": "fedb664cdb46dee94d9abd49a8085feec672a17346a1e15c1f30bd4e9f70e547",
+      "bytes": 885435
+    }
+  ],
+  "failedSample": [
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1777199954800_front_IMG_0368.jpeg",
+      "reason": "private_requires_service_role",
+      "size": 2435765
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1779911018979_front_image.jpg",
+      "reason": "private_requires_service_role",
+      "size": 4523962
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1777199954800_back_IMG_2417.jpeg",
+      "reason": "private_requires_service_role",
+      "size": 6642349
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1779980493435_front_image.jpg",
+      "reason": "private_requires_service_role",
+      "size": 5169874
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1777200096927_front_IMG_0414.jpeg",
+      "reason": "private_requires_service_role",
+      "size": 2636634
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1779911018979_back_image.jpg",
+      "reason": "private_requires_service_role",
+      "size": 4447026
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1777200096927_back_IMG_2417.jpeg",
+      "reason": "private_requires_service_role",
+      "size": 6642349
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/shared/73239c54-07ee-4d56-9cfc-276e8c030ce6/front-1781277791269.jpg",
+      "reason": "private_requires_service_role",
+      "size": 4003726
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1779932972946_front_IMG_0548.jpeg",
+      "reason": "private_requires_service_role",
+      "size": 1828263
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/48a99d60-a8ed-4e0a-99ea-57d3aee792b7/front-legacy-1778090515776.jpeg",
+      "reason": "private_requires_service_role",
+      "size": 345733
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/48a99d60-a8ed-4e0a-99ea-57d3aee792b7/back-legacy-1778090518386.png",
+      "reason": "private_requires_service_role",
+      "size": 1399239
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1779980493435_back_image.jpg",
+      "reason": "private_requires_service_role",
+      "size": 4677521
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/1db95df0-d12f-4e4c-ae7e-d198f7a7dde8/front-legacy-1778094367964.jpeg",
+      "reason": "private_requires_service_role",
+      "size": 269765
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/1db95df0-d12f-4e4c-ae7e-d198f7a7dde8/front-legacy-1778094368021.jpeg",
+      "reason": "private_requires_service_role",
+      "size": 269765
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1779916827683_front_IMG_0571.jpeg",
+      "reason": "private_requires_service_role",
+      "size": 1112508
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/1db95df0-d12f-4e4c-ae7e-d198f7a7dde8/back-legacy-1778094369813.png",
+      "reason": "private_requires_service_role",
+      "size": 1181133
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/1db95df0-d12f-4e4c-ae7e-d198f7a7dde8/back-legacy-1778094369892.png",
+      "reason": "private_requires_service_role",
+      "size": 1181133
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1779916827683_back_IMG_0572.jpeg",
+      "reason": "private_requires_service_role",
+      "size": 879943
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1779980766583_front_image.jpg",
+      "reason": "private_requires_service_role",
+      "size": 5004936
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/e5125c96-954d-4283-8a01-5bba33bfbbc3/front-legacy-1778266837345.jpeg",
+      "reason": "private_requires_service_role",
+      "size": 1151811
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/e5125c96-954d-4283-8a01-5bba33bfbbc3/front-legacy-1778266837329.jpeg",
+      "reason": "private_requires_service_role",
+      "size": 1151811
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/e5125c96-954d-4283-8a01-5bba33bfbbc3/back-legacy-1778266838967.jpeg",
+      "reason": "private_requires_service_role",
+      "size": 943175
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/e5125c96-954d-4283-8a01-5bba33bfbbc3/back-legacy-1778266839152.jpeg",
+      "reason": "private_requires_service_role",
+      "size": 943175
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/3cbbbafd-3301-412f-b87b-4682cc24fd76/front-legacy-1778266839914.jpeg",
+      "reason": "private_requires_service_role",
+      "size": 261031
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/3cbbbafd-3301-412f-b87b-4682cc24fd76/front-legacy-1778266840150.jpeg",
+      "reason": "private_requires_service_role",
+      "size": 261031
+    }
+  ],
+  "failedByReason": {
+    "private_requires_service_role": 1328
+  },
+  "conflicts": []
+}

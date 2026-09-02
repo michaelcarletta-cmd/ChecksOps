@@ -102,7 +102,7 @@ const resolveClaims = async (event) => {
   return { ok: true, claims };
 };
 
-const withIdentity = async (event, fn, deps = {}) => {
+export const withIdentity = async (event, fn, deps = {}) => {
   const claimsResult = await resolveClaims(event);
   if (!claimsResult.ok) return claimsResult;
   const body = parseBody(event);

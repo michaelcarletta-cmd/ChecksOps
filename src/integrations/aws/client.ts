@@ -1,6 +1,6 @@
 import type { Session, User } from "@supabase/supabase-js";
 import { awsApiBaseUrl } from "@/lib/awsStaging";
-import { createAwsStorageAdapter } from "./storage";
+import { createAwsStorageAdapter, rewriteStorageFields } from "./storage";
 
 const SESSION_KEY = "checksops.aws.staging.auth";
 const TESTER_EMAIL = "checksops-tester@freedomadj.com";
@@ -248,7 +248,7 @@ function createBuilder(table: string) {
       };
     }
     return {
-      data: body.data ?? null,
+      data: rewriteStorageFields(body.data ?? null),
       error: null,
       count: body.count ?? null,
       status: 200,
@@ -573,7 +573,9 @@ export function createAwsStagingClient() {
       }
       return { data: body.data ?? null, error: null };
     },
-    storage: createAwsStorageAdapter(),
+    storage: createAwsStorageAdapter({
+      getToken: async () => (await restoreSession()).session?.access_token ?? null,
+    }),
     functions,
     channel,
     removeChannel() {},

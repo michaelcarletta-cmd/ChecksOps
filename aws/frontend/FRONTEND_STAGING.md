@@ -46,7 +46,7 @@ node --test aws/tests/api-auth-data.test.mjs
 
 Authenticated reads use `POST /data/query` and `POST /data/rpc`. Lambda sets `request.app_user_id` from `identity_accounts` and RLS is the database authorization boundary.
 
-Writes return `writes_disabled`. Provider functions return `provider_disabled`. Storage returns `s3_migration_required`.
+Writes return `writes_disabled`. Provider functions return `provider_disabled`. Storage reads use authenticated S3 presigns after RLS; uploads return `uploads_disabled`.
 
 ## Do not
 

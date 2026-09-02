@@ -166,8 +166,8 @@ test('handler CORS preflight and storage/function stubs', async () => {
     rawPath: '/storage/sign',
     requestContext: { stage: 'staging', http: { method: 'GET', path: '/storage/sign' } },
   });
-  assert.equal(storage.statusCode, 501);
-  assert.equal(JSON.parse(storage.body).error, 's3_migration_required');
+  assert.equal(storage.statusCode, 403);
+  assert.equal(JSON.parse(storage.body).error, 'uploads_disabled');
 
   const fn = await handler({
     rawPath: '/functions/invoke',
