@@ -114,3 +114,28 @@ test('unmapped Cognito sub is 401 and does not mint an application UUID', async 
   assert.equal(result.statusCode, 401);
   assert.equal(result.error, 'identity_not_linked');
 });
+
+test('active identity mappings resolve without using isolated_test', async () => {
+  const client = mockIdentityClient({
+    mapping: {
+      application_user_id: APP_ID,
+      cognito_sub: COGNITO_SUB,
+      email: 'existing@example.com',
+      status: 'active',
+    },
+  });
+  const result = await resolveIdentitySession({
+    cognitoSub: COGNITO_SUB,
+    loadCredentials: async () => ({
+      username: 'checksops',
+      password: 'unit-test-only-not-a-real-secret',
+      host: 'db.example.internal',
+      database: 'checksops',
+    }),
+    createClient: () => client,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.applicationUserId, APP_ID);
+  assert.notEqual(result.applicationUserId, result.cognitoSub);
+  assert.match(LOOKUP_MAPPING_SQL, /status IN \('active', 'isolated_test'\)/);
+});
