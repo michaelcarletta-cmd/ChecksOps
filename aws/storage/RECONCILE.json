@@ -1,0 +1,25 @@
+{
+  "generatedAt": "2026-09-02T18:35:39.656Z",
+  "sourceApplicationObjects": 1334,
+  "sourceBytes": 2501472395,
+  "s3ObjectCount": 1334,
+  "s3Bytes": 2501472395,
+  "isTruncated": false,
+  "keyCount": 1334,
+  "missingCount": 0,
+  "extraCount": 0,
+  "sizeMismatchCount": 0,
+  "conflictCount": 0,
+  "pass1Copied": 1312,
+  "pass1Failed": 16,
+  "retryCopied": 16,
+  "retryFailed": 0,
+  "combinedCopiedPrivate": 1328,
+  "missing": [],
+  "extra": [],
+  "sizeMismatch": [],
+  "zeroByteExpected": [
+    "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1784235588930_front_80539082710__F7A28C61-DDC8-4A2F-AD84-D7771B818AF2_cropped.jpg",
+    "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1784235588930_back_80539084248__0D208796-3B0B-4983-B886-2694300E079F_cropped.jpg"
+  ]
+}
