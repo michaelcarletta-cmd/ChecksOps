@@ -87,13 +87,14 @@ export function ProjectPlanCard({ claimId, tenantId }: Props) {
 
   const ledgerTotal =
     settlement
-      ? Number(settlement.rcv || 0)
+      ? Number(settlement.replacement_cost_value || 0)
         + Number(settlement.other_structures_rcv || 0)
+        + Number(settlement.pwi_rcv || 0)
         + Number(settlement.personal_property_rcv || 0)
         + Number(settlement.ale_rcv || 0)
-        + Number(settlement.ordinance_law_rcv || 0)
         + Number(settlement.supplement_expected || 0)
       : 0;
+
 
   const ledgerDeductible = settlement
     ? Number(settlement.deductible || 0) + Number(settlement.other_structures_deductible || 0)
