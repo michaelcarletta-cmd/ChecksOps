@@ -24,6 +24,7 @@ import {
   handleStorageDelete,
   handleStorageMove,
 } from './storage-write.mjs';
+import { handleWorkflowRequest } from './workflow.mjs';
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -354,6 +355,17 @@ export const handler = async (event) => {
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
       ...result,
+    });
+  }
+
+  const workflow = await handleWorkflowRequest(event, path, method);
+  if (workflow) {
+    return json(workflow.statusCode || (workflow.ok ? 200 : 403), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      productionWebhooksRedirected: false,
+      ...workflow,
     });
   }
 
