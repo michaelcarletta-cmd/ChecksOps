@@ -27,4 +27,4 @@ Identity remains:
 
 ## STOP
 
-Do not send invitation or password-reset emails. Do not enable normal writes. Next phase is controlled login/password activation.
+Live results: `aws/identity/COGNITO_ONBOARD_RESULTS.md`. Eight identities are mapped. Invitation emails were not sent.
