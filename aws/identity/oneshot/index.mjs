@@ -6,7 +6,7 @@ import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-sec
 
 const { Client } = pg;
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const SQL_DIR = path.join(ROOT, '../sql');
+const SQL_DIR = path.join(ROOT, 'sql');
 const CA_PATH = path.join(ROOT, 'rds-global-bundle.pem');
 
 const readSql = (name) => fs.readFileSync(path.join(SQL_DIR, name), 'utf8');
@@ -21,8 +21,12 @@ const adminClient = async (database) => {
   if (!/checksops_admin/i.test(parsed.username || '')) {
     throw new Error('secret username is not checksops_admin');
   }
+  const host = parsed.host || parsed.hostname || process.env.RDS_HOST;
+  if (!host || host === 'localhost' || host === '127.0.0.1') {
+    throw new Error('admin secret host is missing or loopback');
+  }
   const client = new Client({
-    host: parsed.host,
+    host,
     port: Number(parsed.port || 5432),
     user: parsed.username,
     password: parsed.password,
