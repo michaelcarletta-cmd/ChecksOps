@@ -129,6 +129,29 @@ export async function requireMoovCaller(
   return { userId, tenantId, isAdmin, environment, supabase };
 }
 
+/**
+ * Binds the Moov environment for flows that have no signed-in caller
+ * (recipient setup links, webhooks, background jobs). Test tenants resolve to
+ * the sandbox ledger; everyone else stays on production credentials.
+ */
+export async function bindTenantMoovEnvironment(
+  supabase: SupabaseClient,
+  tenantId: string | null | undefined,
+): Promise<string> {
+  if (tenantId) {
+    const { data } = await supabase
+      .from("tenants")
+      .select("moov_environment")
+      .eq("id", tenantId)
+      .maybeSingle();
+    const tenantEnv = ((data as any)?.moov_environment ?? "").toLowerCase();
+    if (tenantEnv === "sandbox" || tenantEnv === "production") {
+      bindMoovEnvironment(tenantEnv);
+    }
+  }
+  return moovEnvironment();
+}
+
 export function isResponse(v: unknown): v is Response {
   return v instanceof Response;
 }
