@@ -64,6 +64,8 @@ Call the API `/health` endpoint. It should return JSON with `status: ok` and `da
 
 Call `/db-health` for a read-only `SELECT 1` over TLS. It must not return passwords.
 
+Staging Lambda points at restored database `checksops` via env `DATABASE_NAME=checksops` while still using the application role secret (`checksops`, not `checksops_admin`). Verify `GET /db-health` reports `currentDatabase=checksops` and `currentUser=checksops`, then `GET /db-readonly-validate` for core-table SELECT counts. Do not SAM-deploy this template over the live stack; update the existing `checksops-staging-api` function in place.
+
 Do not point the production frontend at this API yet.
 
 ## Next migration step

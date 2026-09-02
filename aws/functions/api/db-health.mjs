@@ -5,8 +5,10 @@ import pg from 'pg';
 import { loadDatabaseCredentials } from './secrets.mjs';
 
 const { Client } = pg;
-const READ_ONLY_PROBE = 'SELECT 1 AS ok';
-const VERSION_PROBE = 'SHOW server_version';
+export const READ_ONLY_PROBE = 'SELECT 1 AS ok';
+export const VERSION_PROBE = 'SHOW server_version';
+export const IDENTITY_PROBE = "SELECT current_database() AS current_database, current_user AS current_user, current_setting('transaction_read_only') AS transaction_read_only, current_setting('default_transaction_read_only') AS default_transaction_read_only";
+export const EXPECTED_APPLICATION_ROLE = 'checksops';
 const CA_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'rds-global-bundle.pem');
 
 export const tlsConfig = () => ({
@@ -46,7 +48,7 @@ export const classifyDbError = (error, stage) => {
   return { stage: stage || 'unknown', message };
 };
 
-export const buildClientConfig = (credentials) => {
+export const buildClientConfig = (credentials, { queryTimeoutMillis = 5000 } = {}) => {
   if (/checksops_admin/i.test(credentials.username || '')) {
     throw new Error('refusing to authenticate as checksops_admin');
   }
@@ -58,8 +60,21 @@ export const buildClientConfig = (credentials) => {
     database: credentials.database || 'postgres',
     ssl: tlsConfig(),
     connectionTimeoutMillis: 8000,
-    query_timeout: 5000,
+    query_timeout: queryTimeoutMillis,
+    options: '-c default_transaction_read_only=on',
   };
+};
+
+export const probeIsHealthy = (probe) => {
+  const expectedDatabase = String(process.env.DATABASE_NAME || '').trim();
+  const databaseMatches = !expectedDatabase || probe.currentDatabase === expectedDatabase;
+  const userMatches = probe.currentUser === EXPECTED_APPLICATION_ROLE;
+  return probe.secretsManager === 'ok'
+    && probe.networkTls === 'ok'
+    && probe.authentication === 'ok'
+    && probe.select1 === 'ok'
+    && databaseMatches
+    && userMatches;
 };
 
 export const probeDatabase = async ({
@@ -72,11 +87,20 @@ export const probeDatabase = async ({
     authentication: 'not-run',
     postgresqlVersion: null,
     select1: 'not-run',
+    currentDatabase: null,
+    currentUser: null,
+    transactionReadOnly: null,
+    defaultTransactionReadOnly: null,
+    connectedDatabase: null,
+    secretDatabase: null,
+    databaseNameOverride: String(process.env.DATABASE_NAME || '').trim() || null,
   };
   let client;
   try {
     const credentials = await loadCredentials();
     result.secretsManager = 'ok';
+    result.connectedDatabase = credentials.database || null;
+    result.secretDatabase = credentials.secretDatabase || null;
     client = createClient(buildClientConfig(credentials));
     await client.connect();
     result.networkTls = 'ok';
@@ -88,6 +112,19 @@ export const probeDatabase = async ({
     result.select1 = 'ok';
     const versionResult = await client.query(VERSION_PROBE);
     result.postgresqlVersion = versionResult?.rows?.[0]?.server_version || null;
+    const identityResult = await client.query(IDENTITY_PROBE);
+    const identity = identityResult?.rows?.[0] || {};
+    result.currentDatabase = identity.current_database || null;
+    result.currentUser = identity.current_user || null;
+    result.transactionReadOnly = identity.transaction_read_only || null;
+    result.defaultTransactionReadOnly = identity.default_transaction_read_only || null;
+    if (result.currentUser && result.currentUser !== EXPECTED_APPLICATION_ROLE) {
+      throw Object.assign(new Error(`connected as unexpected role ${result.currentUser}`), { stage: 'query' });
+    }
+    const expectedDatabase = String(process.env.DATABASE_NAME || '').trim();
+    if (expectedDatabase && result.currentDatabase !== expectedDatabase) {
+      throw Object.assign(new Error(`connected to ${result.currentDatabase}, expected ${expectedDatabase}`), { stage: 'query' });
+    }
     return result;
   } catch (error) {
     const classified = classifyDbError(error, error.stage);

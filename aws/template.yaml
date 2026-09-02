@@ -48,6 +48,8 @@ Globals:
         FILES_BUCKET: !Ref PrivateFilesBucket
         PROVIDER_SECRETS_ARN: !Ref ProviderSecrets
         DATABASE_SECRET_ARN: !Ref DatabaseSecretArn
+        # Staging restored DB target; keep app role secret unchanged.
+        DATABASE_NAME: checksops
 
 Resources:
   ChecksOpsApi:
