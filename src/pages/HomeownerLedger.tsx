@@ -258,7 +258,7 @@ function ClaimView({ data, onRefresh, token }: { data: Summary; onRefresh: () =>
       <CollapsibleUpload token={token} onDone={onRefresh} />
 
 
-      <PendingEndorsementsPanel pending={data.pending_endorsements ?? []} />
+      <PendingEndorsementsPanel pending={data.pending_endorsements ?? []} onRefresh={onRefresh} />
       <PendingSignaturesPanel token={token} pending={data.pending_signatures ?? []} />
       <SharedDocumentsPanel documents={data.shared_documents ?? []} />
 
