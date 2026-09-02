@@ -100,6 +100,21 @@ Freedom paths used:
 
 `ViewCheckImageButton` previously always called `get-check-image-urls` when `checkId` was set. AWS staging returns `provider_disabled` for Edge Functions, so the button could not preview even after S3 COPY. Staging-only: skip that invoke when `VITE_AUTH_PROVIDER=cognito` and sign `front_image_path` / `back_image_path` through the Storage API. Production still uses the Edge Function. Packet preview already used `storage.createSignedUrl`.
 
+Check detail `select('*, check_payees(*)')` was returning Lambda `503 data_query_failed` / `invalid column` because embed `*` was passed through `ident()`. Staging API now treats has-many embed `*` as a star. Live `checksops-staging-api` was updated in place (no SAM stack replace).
+
+### UI (local `npm run preview:aws` on port 4173)
+
+| Probe | Result |
+| --- | --- |
+| Tester login, Freedom checks list | Loaded (Endorsing 22, Ready for Deposit 9, Deposited 14) |
+| Tester check #237413 **View Check Images** | Modal **Check #237413 — Front** with State Farm check photo (3000×599, API-presigned S3) |
+| Tester endorsement packet Preview button | Not captured in GUI (Audit tab not activated in the packet pass). Same packet path **API 200** / 60,283 bytes |
+| C1C `/c1c/checks` | Condition One branding; Endorsing **0**; no Freedom rows |
+| C1C `/freedom/checks` | **Access Denied** |
+| Unauthenticated `/freedom/checks` | Freedom **Sign In** login wall |
+
+Uploads remain disabled (Upload Check button was not used). Regen/Generate packet was not clicked.
+
 ## 7. What was not done
 
 - Lovable bridge and migration token **not** removed (operator asked to verify reconcile first).
@@ -109,4 +124,6 @@ Freedom paths used:
 
 ## Completion
 
-Private Storage COPY and byte/key reconciliation are **complete** (1,334 / 1,334 objects, 2,501,472,395 / 2,501,472,395 bytes). API file access for Freedom preview/download and C1C isolation is **complete**. Storage can be declared **copy-complete** after the operator confirms this reconcile; do not tear down the bridge until then.
+Private Storage COPY and byte/key reconciliation are **complete** (1,334 / 1,334 objects, 2,501,472,395 / 2,501,472,395 bytes). Freedom Tester can preview authorized check images in the staging UI and via API; C1C cannot access Freedom objects (API 403, UI Access Denied). Unauthenticated protected access fails. Spoofed tenant/application UUIDs do not change authorization.
+
+Storage COPY can be declared **complete** after the operator confirms this reconcile. Do **not** tear down the Lovable bridge or migration token until that verification.
