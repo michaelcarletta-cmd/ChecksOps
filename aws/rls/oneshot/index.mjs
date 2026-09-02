@@ -237,19 +237,28 @@ const investigateNinth = async (client) => {
   const usersReg = (await client.query(`SELECT to_regclass('auth.users') AS r`)).rows[0].r;
   if (usersReg) {
     out.authUsersRestored = true;
+    const cols = (await client.query(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = 'auth' AND table_name = 'users'`,
+    )).rows.map((row) => row.column_name);
+    out.authUsersColumns = cols;
+    const select = [
+      'id::text AS id',
+      cols.includes('email') ? 'email' : 'NULL::text AS email',
+      cols.includes('created_at') ? 'created_at' : 'NULL::timestamptz AS created_at',
+      cols.includes('last_sign_in_at') ? 'last_sign_in_at' : 'NULL::timestamptz AS last_sign_in_at',
+      cols.includes('email_confirmed_at') ? 'email_confirmed_at' : 'NULL::timestamptz AS email_confirmed_at',
+      cols.includes('banned_until') ? 'banned_until' : 'NULL::timestamptz AS banned_until',
+      cols.includes('deleted_at') ? 'deleted_at' : 'NULL::timestamptz AS deleted_at',
+      cols.includes('raw_user_meta_data')
+        ? "raw_user_meta_data->>'full_name' AS full_name, raw_user_meta_data->>'name' AS name"
+        : 'NULL::text AS full_name, NULL::text AS name',
+      cols.includes('raw_app_meta_data')
+        ? "raw_app_meta_data->>'provider' AS provider"
+        : 'NULL::text AS provider',
+    ].join(', ');
     const { rows } = await client.query(
-      `SELECT id::text AS id,
-              email,
-              created_at,
-              last_sign_in_at,
-              email_confirmed_at,
-              banned_until,
-              deleted_at,
-              raw_user_meta_data->>'full_name' AS full_name,
-              raw_user_meta_data->>'name' AS name,
-              raw_app_meta_data->>'provider' AS provider
-       FROM auth.users
-       WHERE id = $1::uuid`,
+      `SELECT ${select} FROM auth.users WHERE id = $1::uuid`,
       [id],
     );
     out.authUsersRow = rows[0] || null;
@@ -257,10 +266,18 @@ const investigateNinth = async (client) => {
 
   const identitiesReg = (await client.query(`SELECT to_regclass('auth.identities') AS r`)).rows[0].r;
   if (identitiesReg) {
+    const icols = (await client.query(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = 'auth' AND table_name = 'identities'`,
+    )).rows.map((row) => row.column_name);
+    const identitySelect = [
+      icols.includes('provider') ? 'provider' : "'unknown'::text AS provider",
+      icols.includes('email') ? 'email' : 'NULL::text AS email',
+      icols.includes('identity_data') ? "identity_data->>'email' AS identity_email" : 'NULL::text AS identity_email',
+      icols.includes('created_at') ? 'created_at' : 'NULL::timestamptz AS created_at',
+    ].join(', ');
     out.authIdentities = (await client.query(
-      `SELECT provider, email, created_at
-       FROM auth.identities
-       WHERE user_id = $1::uuid`,
+      `SELECT ${identitySelect} FROM auth.identities WHERE user_id = $1::uuid`,
       [id],
     )).rows;
   } else {
