@@ -57,23 +57,41 @@ export interface TenantFinancialPermissions {
   permissions: Record<FinancialPermissionKey, boolean>;
 }
 
+export interface TenantSecurityReadiness {
+  userId: string;
+  userName: string;
+  email: string;
+  loginMethod: "Passkey" | "Magic Link" | "Pending";
+  totpEnrolled: boolean;
+  passkeyEnrolled: boolean;
+  financialActionsEnabled: boolean;
+  stepUpRequired: boolean;
+  actionRequired?: string;
+}
+
 interface TenantSecurityComplianceProps {
   tenantId: string;
   tenantName: string;
   overview?: TenantComplianceOverview;
   accessRecords?: TenantAccessRecord[];
   financialPermissions?: TenantFinancialPermissions[];
+  securityReadiness?: TenantSecurityReadiness[];
   onViewAccess?: (record: TenantAccessRecord) => void;
   onEditPermissions?: (record: TenantAccessRecord) => void;
   onRestrictFinancialAccess?: (record: TenantAccessRecord) => void;
   onRevokeAccess?: (record: TenantAccessRecord) => void;
   onRequireSecuritySetup?: (record: TenantAccessRecord) => void;
   onEditFinancialPermissions?: (record: TenantFinancialPermissions) => void;
+  onSendSecuritySetup?: (record: TenantSecurityReadiness) => void;
 }
 
 const placeholderOverview: TenantComplianceOverview = {
-  securityStatus: "Pending", usersAndAccess: "Pending", mfaEnrollment: "Pending", agreementsAndPolicies: "Pending",
-  complianceIssues: "Pending", nextReview: "Pending",
+  securityStatus: "Pending",
+  usersAndAccess: "Pending",
+  mfaEnrollment: "Pending",
+  agreementsAndPolicies: "Pending",
+  complianceIssues: "Pending",
+  nextReview: "Pending",
   actionItems: ["Compliance data will populate when the AWS compliance API is connected."],
 };
 
@@ -103,7 +121,32 @@ const formatDate = (value?: string) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 };
 
-export function TenantSecurityCompliance({ tenantId, tenantName, overview = placeholderOverview, accessRecords = [], financialPermissions = [], onViewAccess, onEditPermissions, onRestrictFinancialAccess, onRevokeAccess, onRequireSecuritySetup, onEditFinancialPermissions }: TenantSecurityComplianceProps) {
+const yesNoBadge = (ready: boolean, yesLabel: string, noLabel: string) => (
+  <Badge
+    variant="outline"
+    className={ready
+      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+      : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"}
+  >
+    {ready ? yesLabel : noLabel}
+  </Badge>
+);
+
+export function TenantSecurityCompliance({
+  tenantId,
+  tenantName,
+  overview = placeholderOverview,
+  accessRecords = [],
+  financialPermissions = [],
+  securityReadiness = [],
+  onViewAccess,
+  onEditPermissions,
+  onRestrictFinancialAccess,
+  onRevokeAccess,
+  onRequireSecuritySetup,
+  onEditFinancialPermissions,
+  onSendSecuritySetup,
+}: TenantSecurityComplianceProps) {
   const cards = [
     { label: "Security Status", status: overview.securityStatus, icon: ShieldCheck },
     { label: "Users & Access", status: overview.usersAndAccess, icon: Users },
@@ -113,17 +156,111 @@ export function TenantSecurityCompliance({ tenantId, tenantName, overview = plac
     { label: "Next Review", status: overview.nextReview, icon: CalendarClock },
   ];
 
-  return <div className="space-y-6" data-tenant-id={tenantId}>
-    <div><h3 className="text-lg font-semibold">Security & Compliance</h3><p className="text-sm text-muted-foreground">Tenant-specific security, access, agreements, and compliance readiness for {tenantName}.</p></div>
+  return (
+    <div className="space-y-6" data-tenant-id={tenantId}>
+      <div>
+        <h3 className="text-lg font-semibold">Security & Compliance</h3>
+        <p className="text-sm text-muted-foreground">
+          Tenant-specific security, access, agreements, and compliance readiness for {tenantName}.
+        </p>
+      </div>
 
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{cards.map(({ label, status, icon: Icon }) => <Card key={label}><CardContent className="flex items-center justify-between gap-4 p-4"><div className="flex min-w-0 items-center gap-3"><div className="rounded-lg border border-border bg-muted/40 p-2"><Icon className="h-4 w-4 text-muted-foreground" /></div><div className="min-w-0"><p className="truncate text-xs font-medium text-muted-foreground">{label}</p><p className="mt-1 text-sm font-semibold">{status}</p></div></div><Badge variant="outline" className={statusClasses[status]}>{status}</Badge></CardContent></Card>)}</div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {cards.map(({ label, status, icon: Icon }) => (
+          <Card key={label}>
+            <CardContent className="flex items-center justify-between gap-4 p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="rounded-lg border border-border bg-muted/40 p-2"><Icon className="h-4 w-4 text-muted-foreground" /></div>
+                <div className="min-w-0"><p className="truncate text-xs font-medium text-muted-foreground">{label}</p><p className="mt-1 text-sm font-semibold">{status}</p></div>
+              </div>
+              <Badge variant="outline" className={statusClasses[status]}>{status}</Badge>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
-    <Card><CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><AlertTriangle className="h-4 w-4" /> Compliance Health</CardTitle></CardHeader><CardContent className="space-y-3">{overview.actionItems.length === 0 ? <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm"><ShieldCheck className="h-4 w-4" /> No outstanding tenant compliance actions.</div> : overview.actionItems.map((item, index) => <div key={`${item}-${index}`} className="flex items-start gap-3 rounded-lg border border-border bg-muted/20 p-3"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" /><div><p className="text-sm font-medium">Action Required</p><p className="text-sm text-muted-foreground">{item}</p></div></div>)}</CardContent></Card>
+      <Card>
+        <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><AlertTriangle className="h-4 w-4" /> Compliance Health</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          {overview.actionItems.length === 0 ? (
+            <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm"><ShieldCheck className="h-4 w-4" /> No outstanding tenant compliance actions.</div>
+          ) : overview.actionItems.map((item, index) => (
+            <div key={`${item}-${index}`} className="flex items-start gap-3 rounded-lg border border-border bg-muted/20 p-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              <div><p className="text-sm font-medium">Action Required</p><p className="text-sm text-muted-foreground">{item}</p></div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
-    <Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Users className="h-4 w-4" /> Users & Access / ACL</CardTitle></CardHeader><CardContent>{accessRecords.length === 0 ? <div className="rounded-lg border border-dashed border-border p-6 text-center"><p className="text-sm font-medium">No AWS access-control records connected yet.</p><p className="mt-1 text-xs text-muted-foreground">This table is ready for the tenant ACL API. Existing Supabase authorization is not modified.</p></div> : <div className="overflow-x-auto"><table className="w-full min-w-[1100px] text-sm"><thead className="border-b text-left text-xs text-muted-foreground"><tr><th className="px-3 py-2">User</th><th className="px-3 py-2">Role</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Access</th><th className="px-3 py-2">Financial</th><th className="px-3 py-2">TOTP</th><th className="px-3 py-2">Passkey</th><th className="px-3 py-2">Granted</th><th className="px-3 py-2">Last Login</th><th className="px-3 py-2">Last Review</th><th className="px-3 py-2">Actions</th></tr></thead><tbody className="divide-y divide-border">{accessRecords.map(record => <tr key={record.id} className="align-top"><td className="px-3 py-3"><p className="font-medium">{record.name}</p><p className="text-xs text-muted-foreground">{record.email}</p></td><td className="px-3 py-3">{record.role}</td><td className="px-3 py-3"><Badge variant="outline">{record.accountStatus}</Badge></td><td className="px-3 py-3">{record.accessLevel}</td><td className="px-3 py-3">{record.financialAccess ? "Enabled" : "Restricted"}</td><td className="px-3 py-3">{record.totpEnrolled ? "Enrolled" : "Required"}</td><td className="px-3 py-3">{record.passkeyEnrolled ? "Enrolled" : "Not enrolled"}</td><td className="px-3 py-3 text-xs">{formatDate(record.accessGrantedAt)}</td><td className="px-3 py-3 text-xs">{formatDate(record.lastLoginAt)}</td><td className="px-3 py-3 text-xs">{formatDate(record.lastAccessReviewAt)}</td><td className="px-3 py-3"><div className="flex flex-wrap gap-1"><Button size="sm" variant="outline" onClick={() => onViewAccess?.(record)} disabled={!onViewAccess}>View</Button><Button size="sm" variant="outline" onClick={() => onEditPermissions?.(record)} disabled={!onEditPermissions}>Permissions</Button><Button size="sm" variant="outline" onClick={() => onRestrictFinancialAccess?.(record)} disabled={!onRestrictFinancialAccess}>Restrict Financial</Button><Button size="sm" variant="outline" onClick={() => onRequireSecuritySetup?.(record)} disabled={!onRequireSecuritySetup}>Require Security</Button><Button size="sm" variant="destructive" onClick={() => onRevokeAccess?.(record)} disabled={!onRevokeAccess}>Revoke</Button></div></td></tr>)}</tbody></table></div>}</CardContent></Card>
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Users className="h-4 w-4" /> Users & Access / ACL</CardTitle></CardHeader>
+        <CardContent>
+          {accessRecords.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border p-6 text-center"><p className="text-sm font-medium">No AWS access-control records connected yet.</p><p className="mt-1 text-xs text-muted-foreground">This table is ready for the tenant ACL API. Existing Supabase authorization is not modified.</p></div>
+          ) : (
+            <div className="overflow-x-auto"><table className="w-full min-w-[1100px] text-sm"><thead className="border-b text-left text-xs text-muted-foreground"><tr><th className="px-3 py-2">User</th><th className="px-3 py-2">Role</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Access</th><th className="px-3 py-2">Financial</th><th className="px-3 py-2">TOTP</th><th className="px-3 py-2">Passkey</th><th className="px-3 py-2">Granted</th><th className="px-3 py-2">Last Login</th><th className="px-3 py-2">Last Review</th><th className="px-3 py-2">Actions</th></tr></thead><tbody className="divide-y divide-border">{accessRecords.map(record => <tr key={record.id} className="align-top"><td className="px-3 py-3"><p className="font-medium">{record.name}</p><p className="text-xs text-muted-foreground">{record.email}</p></td><td className="px-3 py-3">{record.role}</td><td className="px-3 py-3"><Badge variant="outline">{record.accountStatus}</Badge></td><td className="px-3 py-3">{record.accessLevel}</td><td className="px-3 py-3">{record.financialAccess ? "Enabled" : "Restricted"}</td><td className="px-3 py-3">{record.totpEnrolled ? "Enrolled" : "Required"}</td><td className="px-3 py-3">{record.passkeyEnrolled ? "Enrolled" : "Not enrolled"}</td><td className="px-3 py-3 text-xs">{formatDate(record.accessGrantedAt)}</td><td className="px-3 py-3 text-xs">{formatDate(record.lastLoginAt)}</td><td className="px-3 py-3 text-xs">{formatDate(record.lastAccessReviewAt)}</td><td className="px-3 py-3"><div className="flex flex-wrap gap-1"><Button size="sm" variant="outline" onClick={() => onViewAccess?.(record)} disabled={!onViewAccess}>View</Button><Button size="sm" variant="outline" onClick={() => onEditPermissions?.(record)} disabled={!onEditPermissions}>Permissions</Button><Button size="sm" variant="outline" onClick={() => onRestrictFinancialAccess?.(record)} disabled={!onRestrictFinancialAccess}>Restrict Financial</Button><Button size="sm" variant="outline" onClick={() => onRequireSecuritySetup?.(record)} disabled={!onRequireSecuritySetup}>Require Security</Button><Button size="sm" variant="destructive" onClick={() => onRevokeAccess?.(record)} disabled={!onRevokeAccess}>Revoke</Button></div></td></tr>)}</tbody></table></div>
+          )}
+        </CardContent>
+      </Card>
 
-    <Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Landmark className="h-4 w-4" /> Financial Access</CardTitle></CardHeader><CardContent className="space-y-4"><div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3"><p className="text-sm font-medium">Backend-enforced permissions</p><p className="mt-1 text-xs text-muted-foreground">These settings describe financial authority. AWS must validate the tenant, user, role, MFA/step-up state, and permission on every protected request. Hiding a button in the UI is never authorization.</p></div>{financialPermissions.length === 0 ? <div className="rounded-lg border border-dashed border-border p-6 text-center"><p className="text-sm font-medium">No financial permission records connected yet.</p><p className="mt-1 text-xs text-muted-foreground">Ready for the AWS authorization API. No current Moov, CheckAlt, bank, deposit, or disbursement behavior is changed.</p></div> : <div className="space-y-3">{financialPermissions.map(record => <div key={record.userId} className="rounded-lg border border-border p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-medium">{record.userName}</p><p className="text-xs text-muted-foreground">{record.role}</p></div><Button size="sm" variant="outline" onClick={() => onEditFinancialPermissions?.(record)} disabled={!onEditFinancialPermissions}>Edit Financial Permissions</Button></div><div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{(Object.keys(financialPermissionLabels) as FinancialPermissionKey[]).map(key => <div key={key} className="flex items-center justify-between rounded-md border border-border bg-muted/20 px-3 py-2"><span className="text-xs font-medium">{financialPermissionLabels[key]}</span><Badge variant="outline" className={record.permissions[key] ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "border-border bg-muted text-muted-foreground"}>{record.permissions[key] ? "Allowed" : "Denied"}</Badge></div>)}</div></div>)}</div>}</CardContent></Card>
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Landmark className="h-4 w-4" /> Financial Access</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3"><p className="text-sm font-medium">Backend-enforced permissions</p><p className="mt-1 text-xs text-muted-foreground">These settings describe financial authority. AWS must validate the tenant, user, role, MFA/step-up state, and permission on every protected request. Hiding a button in the UI is never authorization.</p></div>
+          {financialPermissions.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border p-6 text-center"><p className="text-sm font-medium">No financial permission records connected yet.</p><p className="mt-1 text-xs text-muted-foreground">Ready for the AWS authorization API. No current Moov, CheckAlt, bank, deposit, or disbursement behavior is changed.</p></div>
+          ) : (
+            <div className="space-y-3">{financialPermissions.map(record => <div key={record.userId} className="rounded-lg border border-border p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-medium">{record.userName}</p><p className="text-xs text-muted-foreground">{record.role}</p></div><Button size="sm" variant="outline" onClick={() => onEditFinancialPermissions?.(record)} disabled={!onEditFinancialPermissions}>Edit Financial Permissions</Button></div><div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{(Object.keys(financialPermissionLabels) as FinancialPermissionKey[]).map(key => <div key={key} className="flex items-center justify-between rounded-md border border-border bg-muted/20 px-3 py-2"><span className="text-xs font-medium">{financialPermissionLabels[key]}</span><Badge variant="outline" className={record.permissions[key] ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "border-border bg-muted text-muted-foreground"}>{record.permissions[key] ? "Allowed" : "Denied"}</Badge></div>)}</div></div>)}</div>
+          )}
+        </CardContent>
+      </Card>
 
-    <p className="text-xs text-muted-foreground">AWS-ready interface only. Security enforcement, authorization, audit authority, and sensitive data remain backend responsibilities. No frontend control grants financial authority.</p>
-  </div>;
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2 text-base"><KeyRound className="h-4 w-4" /> Security Requirements</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-lg border border-border bg-muted/20 p-3">
+            <p className="text-sm font-medium">Financial actions require security readiness</p>
+            <p className="mt-1 text-xs text-muted-foreground">Target state: passkey or magic-link login, TOTP enrollment before financial access, and step-up authentication on every check deposit or disbursement submission. AWS will be the source of truth.</p>
+          </div>
+
+          {securityReadiness.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border p-6 text-center">
+              <p className="text-sm font-medium">No AWS authentication-readiness records connected yet.</p>
+              <p className="mt-1 text-xs text-muted-foreground">The interface is ready for Cognito/AWS authentication status without changing the current login system.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {securityReadiness.map(record => {
+                const readyForFinancial = record.totpEnrolled && record.financialActionsEnabled && record.stepUpRequired;
+                return (
+                  <div key={record.userId} className="rounded-lg border border-border p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div><p className="font-medium">{record.userName}</p><p className="text-xs text-muted-foreground">{record.email}</p></div>
+                      <Badge variant="outline" className={readyForFinancial ? statusClasses.Compliant : statusClasses["Action Required"]}>{readyForFinancial ? "Ready" : "Action Required"}</Badge>
+                    </div>
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                      <div className="rounded-md border border-border bg-muted/20 px-3 py-2"><p className="text-xs text-muted-foreground">Login Method</p><p className="mt-1 text-sm font-medium">{record.loginMethod}</p></div>
+                      <div className="rounded-md border border-border bg-muted/20 px-3 py-2"><p className="text-xs text-muted-foreground">TOTP</p><div className="mt-1">{yesNoBadge(record.totpEnrolled, "Enrolled", "Required")}</div></div>
+                      <div className="rounded-md border border-border bg-muted/20 px-3 py-2"><p className="text-xs text-muted-foreground">Passkey</p><div className="mt-1">{yesNoBadge(record.passkeyEnrolled, "Enrolled", "Not enrolled")}</div></div>
+                      <div className="rounded-md border border-border bg-muted/20 px-3 py-2"><p className="text-xs text-muted-foreground">Financial Actions</p><div className="mt-1">{yesNoBadge(record.financialActionsEnabled, "Enabled", "Disabled")}</div></div>
+                      <div className="rounded-md border border-border bg-muted/20 px-3 py-2"><p className="text-xs text-muted-foreground">Step-Up</p><div className="mt-1">{yesNoBadge(record.stepUpRequired, "Required", "Not configured")}</div></div>
+                    </div>
+                    {record.actionRequired && (
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-500/20 bg-amber-500/5 p-3">
+                        <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" /><div><p className="text-sm font-medium">Action Required</p><p className="text-xs text-muted-foreground">{record.actionRequired}</p></div></div>
+                        <Button size="sm" variant="outline" onClick={() => onSendSecuritySetup?.(record)} disabled={!onSendSecuritySetup}>Require Security Setup</Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <p className="text-xs text-muted-foreground">AWS-ready interface only. Security enforcement, authorization, audit authority, and sensitive data remain backend responsibilities. No frontend control grants financial authority.</p>
+    </div>
+  );
 }
