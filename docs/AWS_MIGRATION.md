@@ -84,6 +84,8 @@ Provision a non-production AWS environment first:
 
 No production DNS changes occur in this phase.
 
+The first SAM stack in `aws/template.yaml` is staging-only. It creates the HTTP API, Lambda, private S3 bucket, Cognito user pool, and Secrets Manager container. It does not create another RDS instance; the existing `checksops-staging` database stays outside the template until networking is verified. Provider credentials are populated in Secrets Manager after deploy, never in Git or CloudFormation `SecretString`.
+
 ### Phase 2 - Database parity
 
 - export schema and data from the live ChecksOps Supabase database

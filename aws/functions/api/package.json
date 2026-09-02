@@ -1,0 +1,8 @@
+{
+  "name": "checksops-staging-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ChecksOps AWS staging API entrypoint. No runtime npm dependencies yet.",
+  "main": "index.mjs"
+}

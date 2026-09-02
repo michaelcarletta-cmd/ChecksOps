@@ -1,5 +1,8 @@
 version = 0.1
 
+[staging.global.parameters]
+region = "us-east-1"
+
 [staging.deploy.parameters]
 stack_name = "checksops-staging"
 resolve_s3 = true
