@@ -1,0 +1,4420 @@
+{
+  "source": "dump POLICY TOC + src/ + supabase/functions/ client writes",
+  "identity": "Cognito sub -> identity_accounts.application_user_id -> request.app_user_id -> auth.uid()",
+  "select_policies_preserved": 165,
+  "counts": {
+    "frontend_write_tables": 68,
+    "edge_write_tables": 83,
+    "frontend_rpcs": 61,
+    "edge_rpcs": 21,
+    "dump_tables_with_write_policies": 142,
+    "dump_write_policies": 226,
+    "too_broad_write_all_policies": 46,
+    "server_side_open_write_policies": 10,
+    "obsolete_service_role_or_anon": 6
+  },
+  "dump_write_tables": [
+    {
+      "table": "ach_authorizations",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "actum_transactions",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "ai_response_cache",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "platform_owner_or_api",
+      "policy_count": 1
+    },
+    {
+      "table": "audit_logs",
+      "commands": [
+        "INSERT"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "cash_job_attachments",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "cash_job_line_items",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "cash_job_payments",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "cash_jobs",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "check_audit_log",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "check_billing_config",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "check_billing_events",
+      "commands": [
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "check_cases",
+      "commands": [
+        "DELETE",
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 3
+    },
+    {
+      "table": "check_eligibility_results",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "check_endorsement_events",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "check_endorsements",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "representative_aws_write_rls",
+      "policy_count": 1
+    },
+    {
+      "table": "check_files",
+      "commands": [
+        "DELETE",
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 3
+    },
+    {
+      "table": "check_intake_items",
+      "commands": [
+        "DELETE",
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "representative_aws_write_rls",
+      "policy_count": 3
+    },
+    {
+      "table": "check_intake_mortgage_draws",
+      "commands": [
+        "DELETE",
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 3
+    },
+    {
+      "table": "check_message_reads",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "check_messages",
+      "commands": [
+        "DELETE",
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 3
+    },
+    {
+      "table": "check_payees",
+      "commands": [
+        "DELETE",
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 3
+    },
+    {
+      "table": "check_payment_directions",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "check_reconciliation_alerts",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable",
+        "server_side_api"
+      ],
+      "proposed": "server_side_api",
+      "policy_count": 2
+    },
+    {
+      "table": "check_reissue_requests",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "check_review_decisions",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "check_stakeholders",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "checkalt_config",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "server_side_api",
+      "policy_count": 2
+    },
+    {
+      "table": "checkalt_deposits",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "obsolete"
+      ],
+      "proposed": "server_side_api",
+      "policy_count": 1
+    },
+    {
+      "table": "checkalt_tenant_accounts",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "checkalt_webhook_events",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "obsolete"
+      ],
+      "proposed": "server_side_api",
+      "policy_count": 1
+    },
+    {
+      "table": "claim_check_mortgage_draws",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "claim_check_payments",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "claim_checks",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "claim_disbursements",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "claim_files",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "representative_aws_write_rls",
+      "policy_count": 1
+    },
+    {
+      "table": "claim_folders",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "representative_aws_write_rls",
+      "policy_count": 1
+    },
+    {
+      "table": "claim_operational_state",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "claim_payments",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "claim_project_plans",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "claim_settlements",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "claims",
+      "commands": [
+        "ALL",
+        "DELETE",
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable",
+        "server_side_api"
+      ],
+      "proposed": "representative_aws_write_rls",
+      "policy_count": 7
+    },
+    {
+      "table": "company_branding",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "platform_owner_or_api",
+      "policy_count": 2
+    },
+    {
+      "table": "contractor_profiles",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "contractor_reviews",
+      "commands": [
+        "DELETE",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "deposit_attachments",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "deposit_audit_log",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "deposit_automation_settings",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "platform_owner_or_api",
+      "policy_count": 2
+    },
+    {
+      "table": "deposit_batches",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "deposit_daily_digest",
+      "commands": [
+        "INSERT"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "deposit_digest_delivery_log",
+      "commands": [
+        "INSERT"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "deposit_escalation_events",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "deposit_escalation_rules",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "platform_owner_or_api",
+      "policy_count": 1
+    },
+    {
+      "table": "deposit_exceptions",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "deposit_items",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "representative_aws_write_rls",
+      "policy_count": 1
+    },
+    {
+      "table": "deposit_manager_snapshots",
+      "commands": [
+        "INSERT"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "deposit_notification_prefs",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "deposit_pending_approvals",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "deposit_provider_attempts",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "deposit_provider_config",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "server_side_api",
+      "policy_count": 1
+    },
+    {
+      "table": "deposit_webhook_events",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "disbursement_batches",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "representative_aws_write_rls",
+      "policy_count": 1
+    },
+    {
+      "table": "disbursement_splits",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "document_templates",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "email_send_log",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "email_send_state",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "platform_owner_or_api",
+      "policy_count": 1
+    },
+    {
+      "table": "email_templates",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "email_unsubscribe_tokens",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "platform_owner_or_api",
+      "policy_count": 2
+    },
+    {
+      "table": "emails",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "endorsement_audit_log",
+      "commands": [
+        "INSERT"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "endorsement_automated_reminders",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "server_side_api"
+      ],
+      "proposed": "server_side_api",
+      "policy_count": 1
+    },
+    {
+      "table": "endorsement_requests",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "esign_event_logs",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "external_payment_recipients",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "homeowner_bank_link_tokens",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "homeowner_check_uploads",
+      "commands": [
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "homeowner_directory_leads",
+      "commands": [
+        "INSERT"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "server_side_api"
+      ],
+      "proposed": "server_side_api",
+      "policy_count": 1
+    },
+    {
+      "table": "homeowner_intro_requests",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable",
+        "server_side_api"
+      ],
+      "proposed": "server_side_api",
+      "policy_count": 2
+    },
+    {
+      "table": "homeowner_ledger_check_uploads",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "homeowner_ledger_events",
+      "commands": [
+        "INSERT"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "representative_aws_write_rls",
+      "policy_count": 1
+    },
+    {
+      "table": "homeowner_ledger_tokens",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "loss_draft_audit_log",
+      "commands": [
+        "INSERT"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "loss_draft_documents",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "loss_draft_releases",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "loss_draft_tracking",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "micro_deposit_verifications",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "moov_invoice_customers",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "moov_invoices",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "mortgage_companies",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "mortgage_desk_config",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "mortgage_handling_requests",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 3
+    },
+    {
+      "table": "mortgage_releases",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "server_side_api"
+      ],
+      "proposed": "server_side_api",
+      "policy_count": 1
+    },
+    {
+      "table": "mortgage_request_library_documents",
+      "commands": [
+        "DELETE",
+        "INSERT"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "notification_delivery_logs",
+      "commands": [
+        "INSERT"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "notification_preferences",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "notifications",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "payment_method_verifications",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "payment_methods",
+      "commands": [
+        "DELETE",
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "platform_owner_or_api",
+      "policy_count": 3
+    },
+    {
+      "table": "payment_provider_accounts",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "representative_aws_write_rls",
+      "policy_count": 1
+    },
+    {
+      "table": "payment_provider_methods",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "payment_sweep_configs",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "payment_transfer_groups",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "payment_transfers",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "payment_wallet_sub_ledgers",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "payment_wallets",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "payroll_runs",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "pii_reveal_logs",
+      "commands": [
+        "INSERT"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "platform_announcements",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "platform_fee_schedules",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "privacy_notice_acknowledgments",
+      "commands": [
+        "INSERT"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "obsolete",
+        "server_side_api"
+      ],
+      "proposed": "server_side_api",
+      "policy_count": 2
+    },
+    {
+      "table": "profiles",
+      "commands": [
+        "DELETE",
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 4
+    },
+    {
+      "table": "recipient_tax_profiles",
+      "commands": [
+        "DELETE",
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 3
+    },
+    {
+      "table": "referral_alerts",
+      "commands": [
+        "ALL",
+        "INSERT"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable",
+        "server_side_api"
+      ],
+      "proposed": "server_side_api",
+      "policy_count": 2
+    },
+    {
+      "table": "referral_events",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "referrers",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "role_version_tracker",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "shared_check_messages",
+      "commands": [
+        "INSERT"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "shared_checks",
+      "commands": [
+        "DELETE",
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 3
+    },
+    {
+      "table": "signature_document_presets",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "server_side_api"
+      ],
+      "proposed": "server_side_api",
+      "policy_count": 1
+    },
+    {
+      "table": "signature_field_templates",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "signature_field_values",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "obsolete"
+      ],
+      "proposed": "do_not_restore",
+      "policy_count": 1
+    },
+    {
+      "table": "signature_fields",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "obsolete"
+      ],
+      "proposed": "do_not_restore",
+      "policy_count": 1
+    },
+    {
+      "table": "signature_requests",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "signature_signers",
+      "commands": [
+        "ALL",
+        "UPDATE"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable",
+        "server_side_api"
+      ],
+      "proposed": "server_side_api",
+      "policy_count": 3
+    },
+    {
+      "table": "sms_messages",
+      "commands": [
+        "INSERT"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "stakeholder_accounts",
+      "commands": [
+        "DELETE",
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 3
+    },
+    {
+      "table": "stakeholder_limit_requests",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "suppressed_emails",
+      "commands": [
+        "INSERT"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "tenant_bank_accounts",
+      "commands": [
+        "DELETE",
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 3
+    },
+    {
+      "table": "tenant_billing_accounts",
+      "commands": [
+        "ALL",
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 3
+    },
+    {
+      "table": "tenant_credit_balances",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "tenant_credit_transactions",
+      "commands": [
+        "INSERT"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "tenant_documents",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "tenant_email_settings",
+      "commands": [
+        "DELETE",
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "representative_aws_write_rls",
+      "policy_count": 3
+    },
+    {
+      "table": "tenant_maintenance_payments",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "tenant_partner_code_aliases",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 1
+    },
+    {
+      "table": "tenant_partnerships",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 4
+    },
+    {
+      "table": "tenant_users",
+      "commands": [
+        "DELETE",
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 3
+    },
+    {
+      "table": "tenant_vetting_documents",
+      "commands": [
+        "DELETE",
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 3
+    },
+    {
+      "table": "tenant_wallet_funding_settings",
+      "commands": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 2
+    },
+    {
+      "table": "tenants",
+      "commands": [
+        "ALL",
+        "DELETE",
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "representative_aws_write_rls",
+      "policy_count": 4
+    },
+    {
+      "table": "user_roles",
+      "commands": [
+        "ALL"
+      ],
+      "too_broad_global_role": true,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "representative_aws_write_rls",
+      "policy_count": 4
+    },
+    {
+      "table": "user_sessions",
+      "commands": [
+        "DELETE",
+        "INSERT",
+        "UPDATE"
+      ],
+      "too_broad_global_role": false,
+      "dump_classes": [
+        "directly_portable"
+      ],
+      "proposed": "tenant_scoped_write_rls_needed",
+      "policy_count": 3
+    }
+  ],
+  "frontend_table_writes": {
+    "ach_authorizations": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/disbursement/AchAuthorizationForm.tsx"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/disbursement/AchAuthorizationForm.tsx"
+        ]
+      }
+    },
+    "cash_job_line_items": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/cash-jobs/CashJobForm.tsx"
+        ]
+      }
+    },
+    "cash_job_payments": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/cash-jobs/CashJobDetail.tsx"
+        ]
+      },
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "src/components/cash-jobs/CashJobDetail.tsx"
+        ]
+      }
+    },
+    "cash_jobs": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/cash-jobs/CashJobForm.tsx"
+        ]
+      },
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "src/components/cash-jobs/CashJobForm.tsx"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/cash-jobs/CashJobForm.tsx"
+        ]
+      }
+    },
+    "check_audit_log": {
+      "insert": {
+        "file_count": 4,
+        "files": [
+          "src/components/check-review/AdminCheckTracker.tsx",
+          "src/components/check-review/EndorsementChecklist.tsx",
+          "src/components/loss-draft/detail/LossDraftActionsTab.tsx",
+          "src/pages/CheckCommandCenter.tsx"
+        ]
+      }
+    },
+    "check_billing_config": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/billing/BillingConfigPanel.tsx"
+        ]
+      }
+    },
+    "check_endorsement_events": {
+      "delete": {
+        "file_count": 3,
+        "files": [
+          "src/components/check-review/CheckReviewConsole.tsx",
+          "src/components/check-review/EndorsementChecklist.tsx",
+          "src/pages/CheckCommandCenter.tsx"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/check-review/CheckReviewConsole.tsx"
+        ]
+      }
+    },
+    "check_endorsements": {
+      "update": {
+        "file_count": 2,
+        "files": [
+          "src/components/check-review/EndorsementChecklist.tsx",
+          "src/pages/CheckCommandCenter.tsx"
+        ]
+      },
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "src/components/check-review/EndorsementChecklist.tsx"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/check-review/EndorsementChecklist.tsx"
+        ]
+      }
+    },
+    "check_files": {
+      "insert": {
+        "file_count": 2,
+        "files": [
+          "src/components/check-review/CheckFilesSection.tsx",
+          "src/pages/mortgage-ops/MortgageOpsRequestDetail.tsx"
+        ]
+      },
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "src/components/check-review/CheckFilesSection.tsx"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/pages/mortgage-ops/MortgageOpsRequestDetail.tsx"
+        ]
+      }
+    },
+    "check_intake_items": {
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "src/pages/CheckCommandCenter.tsx"
+        ]
+      },
+      "insert": {
+        "file_count": 5,
+        "files": [
+          "src/components/cash-jobs/CashJobCheckUpload.tsx",
+          "src/components/check-review/CheckAdminEditDialog.tsx",
+          "src/components/check-review/CheckReviewConsole.tsx",
+          "src/components/checks/ReuploadCheckImageButton.tsx",
+          "src/pages/CheckCommandCenter.tsx"
+        ]
+      },
+      "update": {
+        "file_count": 11,
+        "files": [
+          "src/components/check-review/CheckAdminEditDialog.tsx",
+          "src/components/check-review/CheckReviewConsole.tsx",
+          "src/components/check-review/EndorsementChecklist.tsx",
+          "src/components/checks/CheckMortgageMonitoring.tsx",
+          "src/components/checks/EndorsementAdjuster.tsx",
+          "src/components/checks/ReuploadCheckImageButton.tsx",
+          "src/components/disbursement/DisbursementConsole.tsx",
+          "src/components/loss-draft/detail/LossDraftActionsTab.tsx"
+        ]
+      }
+    },
+    "check_intake_mortgage_draws": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/checks/CheckMortgageMonitoring.tsx"
+        ]
+      }
+    },
+    "check_messages": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/check-messages/CheckMessageThread.tsx"
+        ]
+      },
+      "insert": {
+        "file_count": 2,
+        "files": [
+          "src/pages/mortgage-ops/MortgageOpsQueue.tsx",
+          "src/pages/mortgage-ops/MortgageOpsRequestDetail.tsx"
+        ]
+      }
+    },
+    "check_payees": {
+      "insert": {
+        "file_count": 3,
+        "files": [
+          "src/components/check-review/CheckReviewConsole.tsx",
+          "src/components/check-review/EndorsementChecklist.tsx",
+          "src/pages/CheckCommandCenter.tsx"
+        ]
+      },
+      "update": {
+        "file_count": 2,
+        "files": [
+          "src/components/check-review/CheckReviewConsole.tsx",
+          "src/pages/CheckCommandCenter.tsx"
+        ]
+      }
+    },
+    "check_payment_directions": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/lib/paymentDirection.ts"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/lib/paymentDirection.ts"
+        ]
+      }
+    },
+    "check_stakeholders": {
+      "insert": {
+        "file_count": 2,
+        "files": [
+          "src/components/disbursement/AddExternalStakeholderDialog.tsx",
+          "src/components/disbursement/CheckStakeholdersManager.tsx"
+        ]
+      },
+      "delete": {
+        "file_count": 3,
+        "files": [
+          "src/components/disbursement/CheckStakeholdersManager.tsx",
+          "src/components/disbursement/StakeholderAccountSettings.tsx",
+          "src/components/settings/TenantBankAccountSettings.tsx"
+        ]
+      },
+      "update": {
+        "file_count": 2,
+        "files": [
+          "src/components/disbursement/StakeholderAccountSettings.tsx",
+          "src/components/settings/TenantBankAccountSettings.tsx"
+        ]
+      }
+    },
+    "checkalt_config": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/settings/CheckAltSettings.tsx"
+        ]
+      }
+    },
+    "checkalt_tenant_accounts": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/billing/TenantAutoApproveCard.tsx"
+        ]
+      }
+    },
+    "claim_check_payments": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/payments/SendPaymentPanel.tsx"
+        ]
+      }
+    },
+    "claim_checks": {
+      "update": {
+        "file_count": 4,
+        "files": [
+          "src/components/check-review/AdminCheckTracker.tsx",
+          "src/components/check-review/CheckAdminEditDialog.tsx",
+          "src/lib/endorsementWorkflow.ts",
+          "src/pages/CheckCommandCenter.tsx"
+        ]
+      },
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "src/pages/CheckCommandCenter.tsx"
+        ]
+      }
+    },
+    "claim_disbursements": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/lib/paymentDirection.ts"
+        ]
+      }
+    },
+    "claim_project_plans": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/homeowner-ledger/ProjectPlanCard.tsx"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/homeowner-ledger/ProjectPlanCard.tsx"
+        ]
+      }
+    },
+    "claim_settlements": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/payments/ClaimSettlementEditor.tsx"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/payments/ClaimSettlementEditor.tsx"
+        ]
+      }
+    },
+    "claims": {
+      "update": {
+        "file_count": 2,
+        "files": [
+          "src/components/check-review/EndorsementChecklist.tsx",
+          "src/components/payments/ClaimLedgerCard.tsx"
+        ]
+      },
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "src/components/claim-detail/DeleteClaimDialog.tsx"
+        ]
+      },
+      "insert": {
+        "file_count": 2,
+        "files": [
+          "src/components/payments/ClaimLedgerCard.tsx",
+          "src/components/settings/ImportSettings.tsx"
+        ]
+      }
+    },
+    "contractor_profiles": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/networking/ContractorServiceAreaCard.tsx"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/networking/ContractorServiceAreaCard.tsx"
+        ]
+      }
+    },
+    "deposit_attachments": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/deposit-ops/DepositOperationsConsole.tsx"
+        ]
+      }
+    },
+    "deposit_automation_settings": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/deposit-ops/DepositAutomationHealth.tsx"
+        ]
+      }
+    },
+    "deposit_digest_delivery_log": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/deposit-ops/DepositAutomationHealth.tsx"
+        ]
+      }
+    },
+    "deposit_escalation_events": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/deposit-ops/DepositManagerWorkflows.tsx"
+        ]
+      }
+    },
+    "deposit_escalation_rules": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/deposit-ops/DepositManagerWorkflows.tsx"
+        ]
+      }
+    },
+    "deposit_items": {
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "src/components/check-review/AdminCheckTracker.tsx"
+        ]
+      }
+    },
+    "deposit_notification_prefs": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/deposit-ops/DepositManagerWorkflows.tsx"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/deposit-ops/DepositManagerWorkflows.tsx"
+        ]
+      }
+    },
+    "disbursement_batches": {
+      "insert": {
+        "file_count": 3,
+        "files": [
+          "src/components/disbursement/DisbursementConsole.tsx",
+          "src/components/payments/FundsTab.tsx",
+          "src/components/payroll/RunPayrollDialog.tsx"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/disbursement/DisbursementConsole.tsx"
+        ]
+      }
+    },
+    "disbursement_splits": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/disbursement/DisbursementConsole.tsx"
+        ]
+      },
+      "update": {
+        "file_count": 3,
+        "files": [
+          "src/components/disbursement/DisbursementConsole.tsx",
+          "src/components/ledger/PaymentLedger.tsx",
+          "src/components/ledger/RecipientReport.tsx"
+        ]
+      }
+    },
+    "homeowner_intro_requests": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/networking/ContractorLeadsCard.tsx"
+        ]
+      }
+    },
+    "homeowner_ledger_check_uploads": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/homeowner-ledger/HomeownerSubmittedChecksInbox.tsx"
+        ]
+      }
+    },
+    "homeowner_ledger_events": {
+      "insert": {
+        "file_count": 2,
+        "files": [
+          "src/components/homeowner-ledger/PostHomeownerUpdateCard.tsx",
+          "src/pages/mortgage-ops/MortgageOpsRequestDetail.tsx"
+        ]
+      }
+    },
+    "homeowner_ledger_tokens": {
+      "update": {
+        "file_count": 2,
+        "files": [
+          "src/components/homeowner-ledger/HomeownerLedgerPanel.tsx",
+          "src/components/homeowner-ledger/SendHomeownerUploadLink.tsx"
+        ]
+      }
+    },
+    "loss_draft_audit_log": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/loss-draft/NewLossDraftDialog.tsx"
+        ]
+      }
+    },
+    "loss_draft_documents": {
+      "insert": {
+        "file_count": 2,
+        "files": [
+          "src/components/loss-draft/LossDraftDocsManager.tsx",
+          "src/pages/mortgage-ops/MortgageOpsRequestDetail.tsx"
+        ]
+      },
+      "update": {
+        "file_count": 2,
+        "files": [
+          "src/components/loss-draft/LossDraftDocsManager.tsx",
+          "src/pages/mortgage-ops/MortgageOpsRequestDetail.tsx"
+        ]
+      },
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "src/components/loss-draft/LossDraftDocsManager.tsx"
+        ]
+      }
+    },
+    "loss_draft_tracking": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/loss-draft/MortgageContactCard.tsx"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/loss-draft/NewLossDraftDialog.tsx"
+        ]
+      }
+    },
+    "mortgage_companies": {
+      "update": {
+        "file_count": 2,
+        "files": [
+          "src/components/checks/MortgageCompanyEditorDialog.tsx",
+          "src/pages/mortgage-ops/MortgageOpsDirectory.tsx"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/checks/MortgageCompanyEditorDialog.tsx"
+        ]
+      }
+    },
+    "mortgage_handling_requests": {
+      "insert": {
+        "file_count": 2,
+        "files": [
+          "src/components/checks/CheckMortgageMonitoring.tsx",
+          "src/components/loss-draft/SendToMortgageDeskButton.tsx"
+        ]
+      },
+      "update": {
+        "file_count": 3,
+        "files": [
+          "src/components/loss-draft/SendToMortgageDeskButton.tsx",
+          "src/pages/admin/AdminMortgageOps.tsx",
+          "src/pages/mortgage-ops/MortgageOpsRequestDetail.tsx"
+        ]
+      },
+      "upsert": {
+        "file_count": 1,
+        "files": [
+          "src/components/settings/TenantDocumentLibrary.tsx"
+        ]
+      }
+    },
+    "notification_preferences": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/settings/NotificationPreferencesSettings.tsx"
+        ]
+      }
+    },
+    "notifications": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/NotificationPopover.tsx"
+        ]
+      }
+    },
+    "payment_wallet_sub_ledgers": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/lib/payments/wallets.ts"
+        ]
+      }
+    },
+    "payroll_runs": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/payroll/RunPayrollDialog.tsx"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/payroll/RunPayrollDialog.tsx"
+        ]
+      }
+    },
+    "pii_reveal_logs": {
+      "insert": {
+        "file_count": 2,
+        "files": [
+          "src/components/ui/masked-field.tsx",
+          "src/hooks/usePIIMasking.tsx"
+        ]
+      }
+    },
+    "privacy_notice_acknowledgments": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/pages/PrivacyNotice.tsx"
+        ]
+      }
+    },
+    "profiles": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/settings/UserManagementSettings.tsx"
+        ]
+      }
+    },
+    "recipient_tax_profiles": {
+      "upsert": {
+        "file_count": 1,
+        "files": [
+          "src/components/ledger/TaxSummary.tsx"
+        ]
+      }
+    },
+    "referral_alerts": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/hooks/useReferralAlerts.ts"
+        ]
+      }
+    },
+    "shared_check_messages": {
+      "insert": {
+        "file_count": 2,
+        "files": [
+          "src/components/check-messages/CheckMessageThread.tsx",
+          "src/components/check-review/SharedCheckThread.tsx"
+        ]
+      }
+    },
+    "shared_checks": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/check-review/ShareCheckDialog.tsx"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/check-review/ShareCheckDialog.tsx"
+        ]
+      }
+    },
+    "signature_document_presets": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/settings/SignaturePresetsSettings.tsx"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/settings/SignaturePresetsSettings.tsx"
+        ]
+      },
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "src/components/settings/SignaturePresetsSettings.tsx"
+        ]
+      }
+    },
+    "signature_field_templates": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/claim-detail/FieldPlacementEditor.tsx"
+        ]
+      }
+    },
+    "signature_fields": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/check-review/SharedCheckPaymentDirection.tsx"
+        ]
+      }
+    },
+    "signature_requests": {
+      "insert": {
+        "file_count": 4,
+        "files": [
+          "src/components/check-review/SharedCheckEndorsements.tsx",
+          "src/components/check-review/SharedCheckPaymentDirection.tsx",
+          "src/components/claim-detail/SignatureRequests.tsx",
+          "src/pages/mortgage-ops/MortgageOpsRequestDetail.tsx"
+        ]
+      },
+      "delete": {
+        "file_count": 2,
+        "files": [
+          "src/components/check-review/SharedCheckPaymentDirection.tsx",
+          "src/components/claim-detail/SignatureRequests.tsx"
+        ]
+      }
+    },
+    "signature_signers": {
+      "insert": {
+        "file_count": 3,
+        "files": [
+          "src/components/check-review/SharedCheckEndorsements.tsx",
+          "src/components/check-review/SharedCheckPaymentDirection.tsx",
+          "src/components/claim-detail/SignatureRequests.tsx"
+        ]
+      },
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "src/components/check-review/SharedCheckPaymentDirection.tsx"
+        ]
+      }
+    },
+    "stakeholder_accounts": {
+      "insert": {
+        "file_count": 3,
+        "files": [
+          "src/components/disbursement/AddExternalStakeholderDialog.tsx",
+          "src/components/disbursement/StakeholderAccountSettings.tsx",
+          "src/components/settings/TenantBankAccountSettings.tsx"
+        ]
+      },
+      "update": {
+        "file_count": 2,
+        "files": [
+          "src/components/disbursement/StakeholderAccountSettings.tsx",
+          "src/components/settings/TenantBankAccountSettings.tsx"
+        ]
+      }
+    },
+    "stakeholder_limit_requests": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/disbursement/RequestStakeholderLimitDialog.tsx"
+        ]
+      }
+    },
+    "tenant_bank_accounts": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/white-label/WhiteLabelSettings.tsx"
+        ]
+      },
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "src/components/white-label/WhiteLabelSettings.tsx"
+        ]
+      }
+    },
+    "tenant_billing_accounts": {
+      "update": {
+        "file_count": 2,
+        "files": [
+          "src/components/settings/TenantBillingAccountPanel.tsx",
+          "src/pages/admin/AdminTenants.tsx"
+        ]
+      },
+      "insert": {
+        "file_count": 2,
+        "files": [
+          "src/components/settings/TenantBillingAccountPanel.tsx",
+          "src/pages/admin/AdminTenants.tsx"
+        ]
+      }
+    },
+    "tenant_maintenance_payments": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/settings/MaintenancePaymentsTracker.tsx"
+        ]
+      },
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "src/components/settings/MaintenancePaymentsTracker.tsx"
+        ]
+      }
+    },
+    "tenant_partnerships": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/white-label/TenantPartnerManager.tsx"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "src/components/white-label/TenantPartnerManager.tsx"
+        ]
+      }
+    },
+    "tenant_users": {
+      "update": {
+        "file_count": 3,
+        "files": [
+          "src/components/settings/CompanyBrandingSettings.tsx",
+          "src/components/settings/TenantUserManagement.tsx",
+          "src/pages/admin/AdminTenants.tsx"
+        ]
+      },
+      "delete": {
+        "file_count": 3,
+        "files": [
+          "src/components/settings/TenantUserManagement.tsx",
+          "src/components/white-label/TenantUserManager.tsx",
+          "src/pages/admin/AdminTenants.tsx"
+        ]
+      }
+    },
+    "tenant_wallet_funding_settings": {
+      "upsert": {
+        "file_count": 1,
+        "files": [
+          "src/hooks/useAutoFunding.ts"
+        ]
+      }
+    },
+    "tenants": {
+      "update": {
+        "file_count": 6,
+        "files": [
+          "src/components/admin/AdminStakeholderLimitRequests.tsx",
+          "src/components/settings/ComplianceSettings.tsx",
+          "src/components/settings/TenantManagement.tsx",
+          "src/components/settings/TenantPaymentAccountPanel.tsx",
+          "src/components/white-label/WhiteLabelSettings.tsx",
+          "src/pages/admin/AdminTenants.tsx"
+        ]
+      },
+      "upsert": {
+        "file_count": 1,
+        "files": [
+          "src/components/check-messages/CheckMessageThread.tsx"
+        ]
+      },
+      "insert": {
+        "file_count": 3,
+        "files": [
+          "src/components/settings/ComplianceSettings.tsx",
+          "src/components/settings/TenantManagement.tsx",
+          "src/pages/admin/AdminTenants.tsx"
+        ]
+      },
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "src/components/settings/TenantManagement.tsx"
+        ]
+      }
+    },
+    "user_roles": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "src/components/settings/UserManagementSettings.tsx"
+        ]
+      },
+      "delete": {
+        "file_count": 2,
+        "files": [
+          "src/components/settings/UserManagementSettings.tsx",
+          "src/pages/admin/AdminMortgageOps.tsx"
+        ]
+      }
+    }
+  },
+  "edge_table_writes": {
+    "ai_response_cache": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/_shared/ai/dbResponseCache.ts"
+        ]
+      },
+      "upsert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/_shared/ai/dbResponseCache.ts"
+        ]
+      }
+    },
+    "check_audit_log": {
+      "insert": {
+        "file_count": 2,
+        "files": [
+          "supabase/functions/check-endorsement/index.ts",
+          "supabase/functions/check-ocr-intake/index.ts"
+        ]
+      }
+    },
+    "check_billing_events": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/report-check-usage-to-stripe/index.ts"
+        ]
+      }
+    },
+    "check_deposit_image_backfill_queue": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/backfill-check-deposit-images-worker/index.ts"
+        ]
+      }
+    },
+    "check_eligibility_results": {
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/check-ocr-intake/index.ts"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/check-ocr-intake/index.ts"
+        ]
+      }
+    },
+    "check_endorsements": {
+      "update": {
+        "file_count": 3,
+        "files": [
+          "supabase/functions/check-endorsement/index.ts",
+          "supabase/functions/endorsement-reminders/index.ts",
+          "supabase/functions/sync-check-payees/index.ts"
+        ]
+      },
+      "insert": {
+        "file_count": 4,
+        "files": [
+          "supabase/functions/check-endorsement/index.ts",
+          "supabase/functions/endorsement-reminders/index.ts",
+          "supabase/functions/ingest-shared-check/index.ts",
+          "supabase/functions/sync-check-payees/index.ts"
+        ]
+      },
+      "upsert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/ingest-shared-check/index.ts"
+        ]
+      }
+    },
+    "check_files": {
+      "insert": {
+        "file_count": 2,
+        "files": [
+          "supabase/functions/retry-pdf-generation/index.ts",
+          "supabase/functions/submit-signature/index.ts"
+        ]
+      }
+    },
+    "check_intake_items": {
+      "update": {
+        "file_count": 13,
+        "files": [
+          "supabase/functions/backfill-check-images/index.ts",
+          "supabase/functions/check-endorsement/index.ts",
+          "supabase/functions/check-ocr-intake/index.ts",
+          "supabase/functions/checkalt-approve-deposit/index.ts",
+          "supabase/functions/checkalt-poll-status/index.ts",
+          "supabase/functions/checkalt-submit-deposit/index.ts",
+          "supabase/functions/composite-endorsement-signatures/index.ts",
+          "supabase/functions/generate-endorsement-packet/index.ts"
+        ]
+      },
+      "insert": {
+        "file_count": 8,
+        "files": [
+          "supabase/functions/check-endorsement/index.ts",
+          "supabase/functions/check-ocr-intake/ocr-rerun-stability.test.ts",
+          "supabase/functions/composite-endorsement-signatures/index.ts",
+          "supabase/functions/generate-endorsement-packet/index.ts",
+          "supabase/functions/get-check-image-urls/index.ts",
+          "supabase/functions/homeowner-bank-link-send/index.ts",
+          "supabase/functions/homeowner-ledger-attach-upload/index.ts",
+          "supabase/functions/ingest-shared-check/index.ts"
+        ]
+      },
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/delete-shared-check/index.ts"
+        ]
+      }
+    },
+    "check_payees": {
+      "update": {
+        "file_count": 2,
+        "files": [
+          "supabase/functions/check-endorsement/index.ts",
+          "supabase/functions/check-ocr-intake/index.ts"
+        ]
+      },
+      "insert": {
+        "file_count": 5,
+        "files": [
+          "supabase/functions/check-endorsement/index.ts",
+          "supabase/functions/check-ocr-intake/index.ts",
+          "supabase/functions/check-ocr-intake/ocr-rerun-stability.test.ts",
+          "supabase/functions/ingest-shared-check/index.ts",
+          "supabase/functions/sync-check-payees/index.ts"
+        ]
+      },
+      "delete": {
+        "file_count": 4,
+        "files": [
+          "supabase/functions/check-ocr-intake/index.ts",
+          "supabase/functions/check-ocr-intake/ocr-rerun-stability.test.ts",
+          "supabase/functions/ingest-shared-check/index.ts",
+          "supabase/functions/sync-check-payees/index.ts"
+        ]
+      }
+    },
+    "check_payment_directions": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/check-endorsement/index.ts"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/check-endorsement/index.ts"
+        ]
+      }
+    },
+    "check_reconciliation_alerts": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/check-reconciliation/index.ts"
+        ]
+      }
+    },
+    "check_stakeholders": {
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/homeowner-bank-link-send/index.ts"
+        ]
+      }
+    },
+    "checkalt_config": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/_shared/checkalt.ts"
+        ]
+      }
+    },
+    "checkalt_deposits": {
+      "update": {
+        "file_count": 4,
+        "files": [
+          "supabase/functions/checkalt-account-status/index.ts",
+          "supabase/functions/checkalt-approve-deposit/index.ts",
+          "supabase/functions/checkalt-poll-status/index.ts",
+          "supabase/functions/checkalt-submit-deposit/index.ts"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/checkalt-submit-deposit/index.ts"
+        ]
+      }
+    },
+    "checkalt_tenant_accounts": {
+      "upsert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/checkalt-register-account/index.ts"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/checkalt-submit-deposit/index.ts"
+        ]
+      }
+    },
+    "claim_checks": {
+      "update": {
+        "file_count": 4,
+        "files": [
+          "supabase/functions/check-endorsement/index.ts",
+          "supabase/functions/checkalt-approve-deposit/index.ts",
+          "supabase/functions/checkalt-poll-status/index.ts",
+          "supabase/functions/checkalt-submit-deposit/index.ts"
+        ]
+      },
+      "insert": {
+        "file_count": 2,
+        "files": [
+          "supabase/functions/check-endorsement/index.ts",
+          "supabase/functions/check-ocr-intake/index.ts"
+        ]
+      }
+    },
+    "claim_files": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/submit-signature/index.ts"
+        ]
+      }
+    },
+    "claim_folders": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/generate-pol-docx/index.ts"
+        ]
+      }
+    },
+    "claims": {
+      "update": {
+        "file_count": 5,
+        "files": [
+          "supabase/functions/geocode-claim/index.ts",
+          "supabase/functions/geocode-claims-batch/index.ts",
+          "supabase/functions/glba-retention-purge/index.ts",
+          "supabase/functions/send-signature-request/index.ts",
+          "supabase/functions/signature-webhook/index.ts"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/glba-retention-purge/index.ts"
+        ]
+      }
+    },
+    "deposit_automation_runs": {
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/deposit-daily-automation/index.ts"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/deposit-daily-automation/index.ts"
+        ]
+      }
+    },
+    "deposit_digest_delivery_log": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/deposit-daily-automation/index.ts"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/deposit-daily-automation/index.ts"
+        ]
+      }
+    },
+    "deposit_escalation_events": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/deposit-daily-automation/index.ts"
+        ]
+      }
+    },
+    "deposit_items": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/checkalt-approve-deposit/index.ts"
+        ]
+      }
+    },
+    "disbursement_batches": {
+      "update": {
+        "file_count": 6,
+        "files": [
+          "supabase/functions/cancel-wallet-funding/index.ts",
+          "supabase/functions/initiate-wallet-funding/index.ts",
+          "supabase/functions/moov-disburse/index.ts",
+          "supabase/functions/moov-webhook/index.ts",
+          "supabase/functions/plaid-disburse/index.ts",
+          "supabase/functions/process-funded-payment/index.ts"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/moov-webhook/index.ts"
+        ]
+      }
+    },
+    "disbursement_splits": {
+      "update": {
+        "file_count": 3,
+        "files": [
+          "supabase/functions/moov-disburse/index.ts",
+          "supabase/functions/plaid-disburse/index.ts",
+          "supabase/functions/plaid-transfer-webhook/index.ts"
+        ]
+      },
+      "upsert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/plaid-transfer-webhook/index.ts"
+        ]
+      }
+    },
+    "email_send_log": {
+      "insert": {
+        "file_count": 5,
+        "files": [
+          "supabase/functions/auth-email-hook/index.ts",
+          "supabase/functions/handle-email-suppression/index.ts",
+          "supabase/functions/process-email-queue/index.ts",
+          "supabase/functions/resend-webhook/index.ts",
+          "supabase/functions/send-transactional-email/index.ts"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/process-email-queue/index.ts"
+        ]
+      }
+    },
+    "email_unsubscribe_tokens": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/handle-email-unsubscribe/index.ts"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/send-transactional-email/index.ts"
+        ]
+      },
+      "upsert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/send-transactional-email/index.ts"
+        ]
+      }
+    },
+    "emails": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/send-email/index.ts"
+        ]
+      }
+    },
+    "endorsement_audit_log": {
+      "insert": {
+        "file_count": 3,
+        "files": [
+          "supabase/functions/check-endorsement/index.ts",
+          "supabase/functions/endorsement-reminders/index.ts",
+          "supabase/functions/generate-endorsement-packet/index.ts"
+        ]
+      }
+    },
+    "endorsement_requests": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/check-endorsement/index.ts"
+        ]
+      }
+    },
+    "esign_event_logs": {
+      "insert": {
+        "file_count": 3,
+        "files": [
+          "supabase/functions/get-signature-document/index.ts",
+          "supabase/functions/send-signature-request/index.ts",
+          "supabase/functions/submit-signature/index.ts"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/send-signature-request/index.ts"
+        ]
+      }
+    },
+    "external_payment_recipients": {
+      "insert": {
+        "file_count": 4,
+        "files": [
+          "supabase/functions/_shared/moovPlaidBridge.ts",
+          "supabase/functions/homeowner-deductible-pay/index.ts",
+          "supabase/functions/moov-recipient-create/index.ts",
+          "supabase/functions/moov-recipient-disconnect/index.ts"
+        ]
+      },
+      "update": {
+        "file_count": 6,
+        "files": [
+          "supabase/functions/_shared/moovPlaidBridge.ts",
+          "supabase/functions/homeowner-deductible-pay/index.ts",
+          "supabase/functions/moov-recipient-bank-add/index.ts",
+          "supabase/functions/moov-recipient-create/index.ts",
+          "supabase/functions/moov-recipient-disconnect/index.ts",
+          "supabase/functions/stakeholder-resend-verification/index.ts"
+        ]
+      }
+    },
+    "glba_security_events": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/glba-retention-purge/index.ts"
+        ]
+      }
+    },
+    "homeowner_bank_link_tokens": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/homeowner-bank-link-send/index.ts"
+        ]
+      }
+    },
+    "homeowner_check_uploads": {
+      "insert": {
+        "file_count": 2,
+        "files": [
+          "supabase/functions/homeowner-claim-portal/index.ts",
+          "supabase/functions/homeowner-upload-check/index.ts"
+        ]
+      }
+    },
+    "homeowner_deductible_payments": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/homeowner-deductible-pay/index.ts"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/homeowner-deductible-pay/index.ts"
+        ]
+      }
+    },
+    "homeowner_directory_leads": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/public-contractor-directory/index.ts"
+        ]
+      }
+    },
+    "homeowner_intro_requests": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/homeowner-claim-portal/index.ts"
+        ]
+      }
+    },
+    "homeowner_ledger_check_uploads": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/homeowner-ledger-upload/index.ts"
+        ]
+      }
+    },
+    "homeowner_ledger_events": {
+      "insert": {
+        "file_count": 5,
+        "files": [
+          "supabase/functions/check-endorsement/index.ts",
+          "supabase/functions/homeowner-ledger-upload/index.ts",
+          "supabase/functions/send-file-to-homeowner/index.ts",
+          "supabase/functions/send-signature-request/index.ts",
+          "supabase/functions/submit-signature/index.ts"
+        ]
+      }
+    },
+    "homeowner_ledger_tokens": {
+      "update": {
+        "file_count": 3,
+        "files": [
+          "supabase/functions/homeowner-ledger-attach-upload/index.ts",
+          "supabase/functions/homeowner-ledger-send/index.ts",
+          "supabase/functions/homeowner-ledger-view/index.ts"
+        ]
+      },
+      "insert": {
+        "file_count": 2,
+        "files": [
+          "supabase/functions/homeowner-ledger-attach-upload/index.ts",
+          "supabase/functions/homeowner-ledger-send/index.ts"
+        ]
+      }
+    },
+    "loss_draft_documents": {
+      "update": {
+        "file_count": 2,
+        "files": [
+          "supabase/functions/homeowner-claim-portal/index.ts",
+          "supabase/functions/submit-signature/index.ts"
+        ]
+      }
+    },
+    "loss_draft_mortgage_intake": {
+      "upsert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/homeowner-claim-portal/index.ts"
+        ]
+      }
+    },
+    "loss_draft_tracking": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/homeowner-claim-portal/index.ts"
+        ]
+      }
+    },
+    "moov_invoice_customers": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/moov-invoice/index.ts"
+        ]
+      }
+    },
+    "moov_invoices": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/moov-invoice/index.ts"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/moov-invoice/index.ts"
+        ]
+      },
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/moov-invoice/index.ts"
+        ]
+      }
+    },
+    "mortgage_handling_requests": {
+      "update": {
+        "file_count": 2,
+        "files": [
+          "supabase/functions/bill-mortgage-handling/index.ts",
+          "supabase/functions/send-mortgage-ops-invoice/index.ts"
+        ]
+      }
+    },
+    "payment_event_log": {
+      "insert": {
+        "file_count": 4,
+        "files": [
+          "supabase/functions/_shared/moovGuard.ts",
+          "supabase/functions/moov-recipient-bank-add/index.ts",
+          "supabase/functions/moov-recipient-tos-accept/index.ts",
+          "supabase/functions/moov-webhook/index.ts"
+        ]
+      }
+    },
+    "payment_idempotency_keys": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/moov-account-create/index.ts"
+        ]
+      }
+    },
+    "payment_method_verifications": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/moov-micro-deposit-confirm/index.ts"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/moov-micro-deposit-initiate/index.ts"
+        ]
+      }
+    },
+    "payment_provider_accounts": {
+      "update": {
+        "file_count": 10,
+        "files": [
+          "supabase/functions/_shared/moovPlaidBridge.ts",
+          "supabase/functions/moov-account-discover/index.ts",
+          "supabase/functions/moov-account-onboard/index.ts",
+          "supabase/functions/moov-bank-account-add/index.ts",
+          "supabase/functions/moov-onboarding-link/index.ts",
+          "supabase/functions/moov-readiness/index.ts",
+          "supabase/functions/moov-sync/index.ts",
+          "supabase/functions/moov-tos-accept/index.ts"
+        ]
+      },
+      "upsert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/moov-account-create/index.ts"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/moov-account-discover/index.ts"
+        ]
+      }
+    },
+    "payment_provider_files": {
+      "upsert": {
+        "file_count": 2,
+        "files": [
+          "supabase/functions/moov-account-file-upload/index.ts",
+          "supabase/functions/moov-account-files/index.ts"
+        ]
+      }
+    },
+    "payment_provider_methods": {
+      "update": {
+        "file_count": 5,
+        "files": [
+          "supabase/functions/_shared/moovRails.ts",
+          "supabase/functions/moov-micro-deposit-confirm/index.ts",
+          "supabase/functions/moov-micro-deposit-initiate/index.ts",
+          "supabase/functions/moov-platform-bank/index.ts",
+          "supabase/functions/moov-webhook/index.ts"
+        ]
+      },
+      "upsert": {
+        "file_count": 3,
+        "files": [
+          "supabase/functions/moov-bank-account-add/index.ts",
+          "supabase/functions/moov-platform-bank/index.ts",
+          "supabase/functions/moov-sync/index.ts"
+        ]
+      }
+    },
+    "payment_sweep_configs": {
+      "upsert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/moov-sweep-config/index.ts"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/moov-sweep-config/index.ts"
+        ]
+      }
+    },
+    "payment_transfer_groups": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/moov-transfer-group-create/index.ts"
+        ]
+      },
+      "update": {
+        "file_count": 2,
+        "files": [
+          "supabase/functions/moov-transfer-group-create/index.ts",
+          "supabase/functions/moov-webhook/index.ts"
+        ]
+      }
+    },
+    "payment_transfers": {
+      "insert": {
+        "file_count": 5,
+        "files": [
+          "supabase/functions/_shared/moovWalletFunding.ts",
+          "supabase/functions/initiate-wallet-funding/index.ts",
+          "supabase/functions/moov-transfer-create/index.ts",
+          "supabase/functions/moov-transfer-group-create/index.ts",
+          "supabase/functions/moov-wallet-fund/index.ts"
+        ]
+      },
+      "update": {
+        "file_count": 8,
+        "files": [
+          "supabase/functions/_shared/moovWalletFunding.ts",
+          "supabase/functions/cancel-wallet-funding/index.ts",
+          "supabase/functions/initiate-wallet-funding/index.ts",
+          "supabase/functions/moov-transfer-create/index.ts",
+          "supabase/functions/moov-transfer-group-create/index.ts",
+          "supabase/functions/moov-transfer-status/index.ts",
+          "supabase/functions/moov-wallet-fund/index.ts",
+          "supabase/functions/moov-webhook/index.ts"
+        ]
+      }
+    },
+    "payment_wallet_ledger": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/_shared/moovWallet.ts"
+        ]
+      }
+    },
+    "payment_wallets": {
+      "upsert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/_shared/moovWallet.ts"
+        ]
+      }
+    },
+    "payment_webhook_events": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/moov-webhook/index.ts"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/moov-webhook/index.ts"
+        ]
+      }
+    },
+    "platform_fee_line_items": {
+      "upsert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/bill-mortgage-handling/index.ts"
+        ]
+      },
+      "update": {
+        "file_count": 2,
+        "files": [
+          "supabase/functions/bill-mortgage-handling/index.ts",
+          "supabase/functions/moov-fee-rollup/index.ts"
+        ]
+      }
+    },
+    "platform_fee_occurrences": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/moov-fee-rollup/index.ts"
+        ]
+      }
+    },
+    "platform_fee_schedules": {
+      "update": {
+        "file_count": 2,
+        "files": [
+          "supabase/functions/moov-fee-schedule-cancel/index.ts",
+          "supabase/functions/moov-fee-schedule-upsert/index.ts"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/moov-fee-schedule-upsert/index.ts"
+        ]
+      }
+    },
+    "profiles": {
+      "upsert": {
+        "file_count": 3,
+        "files": [
+          "supabase/functions/create-tenant-user/index.ts",
+          "supabase/functions/hire-mortgage-agent/index.ts",
+          "supabase/functions/tenant-invite-user/index.ts"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/hire-mortgage-agent/index.ts"
+        ]
+      }
+    },
+    "signature_field_values": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/submit-signature/index.ts"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/submit-signature/index.ts"
+        ]
+      }
+    },
+    "signature_fields": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/send-signature-request/index.ts"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/send-signature-request/index.ts"
+        ]
+      }
+    },
+    "signature_requests": {
+      "update": {
+        "file_count": 3,
+        "files": [
+          "supabase/functions/retry-pdf-generation/index.ts",
+          "supabase/functions/send-signature-request/index.ts",
+          "supabase/functions/submit-signature/index.ts"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/retry-pdf-generation/index.ts"
+        ]
+      }
+    },
+    "signature_signers": {
+      "update": {
+        "file_count": 3,
+        "files": [
+          "supabase/functions/get-signature-document/index.ts",
+          "supabase/functions/homeowner-ledger-sign-link/index.ts",
+          "supabase/functions/send-signature-request/index.ts"
+        ]
+      }
+    },
+    "sms_messages": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/send-sms/index.ts"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/telnyx-sms-status/index.ts"
+        ]
+      }
+    },
+    "stakeholder_account_verification_log": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/stakeholder-resend-verification/index.ts"
+        ]
+      }
+    },
+    "stakeholder_accounts": {
+      "insert": {
+        "file_count": 2,
+        "files": [
+          "supabase/functions/homeowner-bank-link-send/index.ts",
+          "supabase/functions/plaid-exchange/index.ts"
+        ]
+      },
+      "update": {
+        "file_count": 5,
+        "files": [
+          "supabase/functions/homeowner-bank-link-send/index.ts",
+          "supabase/functions/moov-webhook/index.ts",
+          "supabase/functions/plaid-exchange/index.ts",
+          "supabase/functions/plaid-link-token-create-public/index.ts",
+          "supabase/functions/plaid-link-token-create/index.ts"
+        ]
+      }
+    },
+    "storage_backup_log": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/storage-backup/index.ts"
+        ]
+      }
+    },
+    "suppressed_emails": {
+      "upsert": {
+        "file_count": 3,
+        "files": [
+          "supabase/functions/handle-email-suppression/index.ts",
+          "supabase/functions/handle-email-unsubscribe/index.ts",
+          "supabase/functions/resend-webhook/index.ts"
+        ]
+      }
+    },
+    "tenant_billing_accounts": {
+      "upsert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/save-tenant-billing-account/index.ts"
+        ]
+      }
+    },
+    "tenant_credit_balances": {
+      "update": {
+        "file_count": 3,
+        "files": [
+          "supabase/functions/tenant-billing-webhook/index.ts",
+          "supabase/functions/tenant-credit-topup/index.ts",
+          "supabase/functions/tenant-maintenance-subscription/index.ts"
+        ]
+      }
+    },
+    "tenant_credit_transactions": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/tenant-billing-webhook/index.ts"
+        ]
+      }
+    },
+    "tenant_email_settings": {
+      "update": {
+        "file_count": 2,
+        "files": [
+          "supabase/functions/tenant-domain-check/index.ts",
+          "supabase/functions/tenant-domain-recheck-cron/index.ts"
+        ]
+      },
+      "upsert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/tenant-domain-verify/index.ts"
+        ]
+      }
+    },
+    "tenant_maintenance_payments": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/moov-tenant-fee-charge/index.ts"
+        ]
+      },
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/moov-tenant-fee-charge/index.ts"
+        ]
+      }
+    },
+    "tenant_openai_credentials": {
+      "update": {
+        "file_count": 2,
+        "files": [
+          "supabase/functions/check-ocr-intake/index.ts",
+          "supabase/functions/tenant-validate-openai-key/index.ts"
+        ]
+      },
+      "upsert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/tenant-set-openai-key/index.ts"
+        ]
+      }
+    },
+    "tenant_users": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/create-tenant-user/index.ts"
+        ]
+      },
+      "upsert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/create-tenant-user/index.ts"
+        ]
+      },
+      "delete": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/tenant-remove-openai-key/index.ts"
+        ]
+      }
+    },
+    "tenant_wallet_funding_settings": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/_shared/walletFunding.ts"
+        ]
+      }
+    },
+    "tenants": {
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/ingest-shared-check/index.ts"
+        ]
+      },
+      "update": {
+        "file_count": 4,
+        "files": [
+          "supabase/functions/moov-account-create/index.ts",
+          "supabase/functions/moov-account-discover/index.ts",
+          "supabase/functions/moov-sync/index.ts",
+          "supabase/functions/wallet-fund-on-clear/index.ts"
+        ]
+      }
+    },
+    "wallet_funding_queue": {
+      "update": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/wallet-fund-on-clear/index.ts"
+        ]
+      }
+    },
+    "wallet_funding_requests": {
+      "update": {
+        "file_count": 3,
+        "files": [
+          "supabase/functions/cancel-wallet-funding/index.ts",
+          "supabase/functions/initiate-wallet-funding/index.ts",
+          "supabase/functions/moov-webhook/index.ts"
+        ]
+      },
+      "insert": {
+        "file_count": 1,
+        "files": [
+          "supabase/functions/initiate-wallet-funding/index.ts"
+        ]
+      }
+    }
+  },
+  "frontend_rpcs": {
+    "accept_mortgage_handling_request": {
+      "file_count": 1,
+      "files": [
+        "src/pages/mortgage-ops/MortgageOpsQueue.tsx"
+      ]
+    },
+    "add_partner_stakeholder_to_check": {
+      "file_count": 1,
+      "files": [
+        "src/components/disbursement/CheckStakeholdersManager.tsx"
+      ]
+    },
+    "admin_delete_check": {
+      "file_count": 1,
+      "files": [
+        "src/components/checks/AdminDeleteCheckButton.tsx"
+      ]
+    },
+    "admin_override_check_status": {
+      "file_count": 2,
+      "files": [
+        "src/components/check-review/AdminCheckTracker.tsx",
+        "src/pages/CheckCommandCenter.tsx"
+      ]
+    },
+    "admin_set_contractor_pro": {
+      "file_count": 2,
+      "files": [
+        "src/components/networking/ContractorVerificationStatusCard.tsx",
+        "src/components/settings/TenantProBadgeManagement.tsx"
+      ]
+    },
+    "apply_referral_code": {
+      "file_count": 1,
+      "files": [
+        "src/components/settings/ReferralSettings.tsx"
+      ]
+    },
+    "assign_deposit_owner": {
+      "file_count": 1,
+      "files": [
+        "src/components/deposit-ops/DepositOwnerQueue.tsx"
+      ]
+    },
+    "backfill_check_billing_events": {
+      "file_count": 1,
+      "files": [
+        "src/components/billing/BillingConfigPanel.tsx"
+      ]
+    },
+    "bulk_deposit_closeout": {
+      "file_count": 1,
+      "files": [
+        "src/components/deposit-ops/DepositOwnerQueue.tsx"
+      ]
+    },
+    "bulk_resolve_deposit_exceptions": {
+      "file_count": 1,
+      "files": [
+        "src/components/deposit-ops/DepositOwnerQueue.tsx"
+      ]
+    },
+    "bulk_sync_deposit_accounting": {
+      "file_count": 1,
+      "files": [
+        "src/components/deposit-ops/DepositOwnerQueue.tsx"
+      ]
+    },
+    "contractor_verification_status": {
+      "file_count": 2,
+      "files": [
+        "src/components/networking/ContractorVerificationStatusCard.tsx",
+        "src/components/settings/TenantProBadgeManagement.tsx"
+      ]
+    },
+    "decide_stakeholder_limit_request": {
+      "file_count": 1,
+      "files": [
+        "src/components/disbursement/TenantStakeholderLimitRequests.tsx"
+      ]
+    },
+    "deposit_action": {
+      "file_count": 2,
+      "files": [
+        "src/components/deposit-ops/DepositOperationsConsole.tsx",
+        "src/pages/CheckCommandCenter.tsx"
+      ]
+    },
+    "ensure_partner_stakeholders": {
+      "file_count": 1,
+      "files": [
+        "src/components/disbursement/DisbursementConsole.tsx"
+      ]
+    },
+    "generate_deposit_daily_digest": {
+      "file_count": 1,
+      "files": [
+        "src/components/deposit-ops/DepositManagerCommandCenter.tsx"
+      ]
+    },
+    "generate_next_deposit_action": {
+      "file_count": 1,
+      "files": [
+        "src/components/deposit-ops/DepositOwnerQueue.tsx"
+      ]
+    },
+    "get_all_checks_safety_net": {
+      "file_count": 1,
+      "files": [
+        "src/components/check-review/LossPreventionPanel.tsx"
+      ]
+    },
+    "get_check_claim_settlement": {
+      "file_count": 1,
+      "files": [
+        "src/components/payments/ClaimLedgerCard.tsx"
+      ]
+    },
+    "get_check_dashboard_counts_for_tenant": {
+      "file_count": 1,
+      "files": [
+        "src/components/check-review/CheckDashboardCards.tsx"
+      ]
+    },
+    "get_check_stage_totals": {
+      "file_count": 1,
+      "files": [
+        "src/pages/CheckCommandCenter.tsx"
+      ]
+    },
+    "get_check_unread_counts": {
+      "file_count": 1,
+      "files": [
+        "src/components/check-messages/CheckMessagesPanel.tsx"
+      ]
+    },
+    "get_deposit_aging_summary": {
+      "file_count": 1,
+      "files": [
+        "src/components/deposit-ops/DepositAgingDashboard.tsx"
+      ]
+    },
+    "get_deposit_exception_kpis": {
+      "file_count": 1,
+      "files": [
+        "src/components/deposit-ops/DepositManagerWorkflows.tsx"
+      ]
+    },
+    "get_deposit_ops_kpis": {
+      "file_count": 1,
+      "files": [
+        "src/components/deposit-ops/DepositManagerWorkflows.tsx"
+      ]
+    },
+    "get_loss_draft_dashboard_counts_for_tenant": {
+      "file_count": 1,
+      "files": [
+        "src/pages/CheckCommandCenter.tsx"
+      ]
+    },
+    "get_my_tenant_partner_codes": {
+      "file_count": 1,
+      "files": [
+        "src/components/homeowner-ledger/SendHomeownerUploadLink.tsx"
+      ]
+    },
+    "get_or_create_notification_preferences": {
+      "file_count": 1,
+      "files": [
+        "src/components/settings/NotificationPreferencesSettings.tsx"
+      ]
+    },
+    "get_payment_direction_by_token": {
+      "file_count": 1,
+      "files": [
+        "src/lib/paymentDirection.ts"
+      ]
+    },
+    "get_stuck_checks": {
+      "file_count": 1,
+      "files": [
+        "src/components/check-review/LossPreventionPanel.tsx"
+      ]
+    },
+    "get_tenant_check_usage": {
+      "file_count": 4,
+      "files": [
+        "src/components/billing/CheckUsageCard.tsx",
+        "src/components/billing/TenantUsageTracker.tsx",
+        "src/components/settings/TenantUsageDashboard.tsx",
+        "src/pages/admin/AdminTenants.tsx"
+      ]
+    },
+    "get_tenant_funds_received": {
+      "file_count": 1,
+      "files": [
+        "src/pages/CheckCommandCenter.tsx"
+      ]
+    },
+    "get_tenant_users_with_profiles": {
+      "file_count": 1,
+      "files": [
+        "src/components/white-label/TenantUserManager.tsx"
+      ]
+    },
+    "get_total_unread_check_messages": {
+      "file_count": 1,
+      "files": [
+        "src/pages/CheckCommandCenter.tsx"
+      ]
+    },
+    "has_permission": {
+      "file_count": 1,
+      "files": [
+        "src/hooks/usePermissions.tsx"
+      ]
+    },
+    "init_loss_draft_documents": {
+      "file_count": 1,
+      "files": [
+        "src/components/loss-draft/NewLossDraftDialog.tsx"
+      ]
+    },
+    "invalidate_session": {
+      "file_count": 1,
+      "files": [
+        "src/hooks/useSessionSecurity.tsx"
+      ]
+    },
+    "is_approval_required": {
+      "file_count": 2,
+      "files": [
+        "src/components/deposit-ops/DepositManagerCommandCenter.tsx",
+        "src/components/deposit-ops/DepositOwnerQueue.tsx"
+      ]
+    },
+    "is_checkalt_enabled_for_tenant": {
+      "file_count": 1,
+      "files": [
+        "src/pages/CheckCommandCenter.tsx"
+      ]
+    },
+    "list_partner_payout_options": {
+      "file_count": 1,
+      "files": [
+        "src/components/disbursement/CheckStakeholdersManager.tsx"
+      ]
+    },
+    "log_audit": {
+      "file_count": 3,
+      "files": [
+        "src/components/ui/masked-field.tsx",
+        "src/hooks/useAuditLog.tsx",
+        "src/hooks/usePIIMasking.tsx"
+      ]
+    },
+    "lookup_tenant_by_partner_code": {
+      "file_count": 1,
+      "files": [
+        "src/components/white-label/TenantPartnerManager.tsx"
+      ]
+    },
+    "loss_draft_action": {
+      "file_count": 1,
+      "files": [
+        "src/components/loss-draft/detail/LossDraftActionsTab.tsx"
+      ]
+    },
+    "loss_draft_set_lender": {
+      "file_count": 1,
+      "files": [
+        "src/components/loss-draft/LossDraftDetailPanel.tsx"
+      ]
+    },
+    "mark_deposit_closeout": {
+      "file_count": 1,
+      "files": [
+        "src/components/deposit-ops/DepositAgingDashboard.tsx"
+      ]
+    },
+    "rebalance_deposit_workload": {
+      "file_count": 1,
+      "files": [
+        "src/components/deposit-ops/DepositManagerCommandCenter.tsx"
+      ]
+    },
+    "record_check_return": {
+      "file_count": 1,
+      "files": [
+        "src/components/checks/MarkCheckReturnedDialog.tsx"
+      ]
+    },
+    "refresh_all_deposit_next_actions": {
+      "file_count": 1,
+      "files": [
+        "src/components/deposit-ops/DepositManagerCommandCenter.tsx"
+      ]
+    },
+    "register_session": {
+      "file_count": 1,
+      "files": [
+        "src/hooks/useSessionSecurity.tsx"
+      ]
+    },
+    "resolve_check_case": {
+      "file_count": 1,
+      "files": [
+        "src/lib/checkCases.ts"
+      ]
+    },
+    "resolve_check_return": {
+      "file_count": 1,
+      "files": [
+        "src/components/checks/ReturnedChecksPanel.tsx"
+      ]
+    },
+    "resolve_deposit_exception": {
+      "file_count": 1,
+      "files": [
+        "src/components/deposit-ops/ExceptionResolutionPanel.tsx"
+      ]
+    },
+    "review_manager_approval": {
+      "file_count": 1,
+      "files": [
+        "src/components/deposit-ops/DepositManagerWorkflows.tsx"
+      ]
+    },
+    "run_deposit_escalation_check": {
+      "file_count": 1,
+      "files": [
+        "src/components/deposit-ops/DepositManagerCommandCenter.tsx"
+      ]
+    },
+    "save_deposit_manager_snapshot": {
+      "file_count": 1,
+      "files": [
+        "src/components/deposit-ops/DepositManagerCommandCenter.tsx"
+      ]
+    },
+    "submit_check_review_decision_safe": {
+      "file_count": 3,
+      "files": [
+        "src/components/check-review/CheckReviewConsole.tsx",
+        "src/lib/fixes/kalyanAdvanceFix.ts",
+        "src/pages/CheckCommandCenter.tsx"
+      ]
+    },
+    "submit_homeowner_intro_request": {
+      "file_count": 1,
+      "files": [
+        "src/components/networking/HomeownerIntroRequestModal.tsx"
+      ]
+    },
+    "submit_manager_approval": {
+      "file_count": 3,
+      "files": [
+        "src/components/deposit-ops/DepositManagerCommandCenter.tsx",
+        "src/components/deposit-ops/DepositManagerWorkflows.tsx",
+        "src/components/deposit-ops/DepositOwnerQueue.tsx"
+      ]
+    },
+    "submit_payment_direction_by_token": {
+      "file_count": 1,
+      "files": [
+        "src/lib/paymentDirection.ts"
+      ]
+    },
+    "update_mortgage_handling_request_status": {
+      "file_count": 1,
+      "files": [
+        "src/pages/mortgage-ops/MortgageOpsQueue.tsx"
+      ]
+    },
+    "validate_session": {
+      "file_count": 1,
+      "files": [
+        "src/hooks/useSessionSecurity.tsx"
+      ]
+    }
+  },
+  "edge_rpcs": {
+    "create_endorsements_from_payees": {
+      "file_count": 1,
+      "files": [
+        "supabase/functions/check-ocr-intake/index.ts"
+      ]
+    },
+    "decrypt_tenant_openai_key": {
+      "file_count": 2,
+      "files": [
+        "supabase/functions/_shared/ai/tenantKeyResolver.ts",
+        "supabase/functions/tenant-validate-openai-key/index.ts"
+      ]
+    },
+    "delete_email": {
+      "file_count": 1,
+      "files": [
+        "supabase/functions/process-email-queue/index.ts"
+      ]
+    },
+    "encrypt_tenant_openai_key": {
+      "file_count": 1,
+      "files": [
+        "supabase/functions/tenant-set-openai-key/index.ts"
+      ]
+    },
+    "enqueue_email": {
+      "file_count": 2,
+      "files": [
+        "supabase/functions/auth-email-hook/index.ts",
+        "supabase/functions/send-transactional-email/index.ts"
+      ]
+    },
+    "generate_deposit_daily_digest": {
+      "file_count": 1,
+      "files": [
+        "supabase/functions/deposit-daily-automation/index.ts"
+      ]
+    },
+    "get_stuck_checks": {
+      "file_count": 1,
+      "files": [
+        "supabase/functions/check-reconciliation/index.ts"
+      ]
+    },
+    "has_role": {
+      "file_count": 4,
+      "files": [
+        "supabase/functions/checkalt-account-status/index.ts",
+        "supabase/functions/checkalt-register-account/index.ts",
+        "supabase/functions/checkalt-test-connection/index.ts",
+        "supabase/functions/checkalt-verify-account/index.ts"
+      ]
+    },
+    "is_tenant_admin": {
+      "file_count": 3,
+      "files": [
+        "supabase/functions/checkalt-account-status/index.ts",
+        "supabase/functions/checkalt-register-account/index.ts",
+        "supabase/functions/checkalt-verify-account/index.ts"
+      ]
+    },
+    "is_tenant_member": {
+      "file_count": 1,
+      "files": [
+        "supabase/functions/checkalt-account-status/index.ts"
+      ]
+    },
+    "list_checks_by_freedom_claim": {
+      "file_count": 1,
+      "files": [
+        "supabase/functions/partner-checks-by-claim/index.ts"
+      ]
+    },
+    "lookup_tenant_by_partner_code": {
+      "file_count": 2,
+      "files": [
+        "supabase/functions/ingest-shared-check/index.ts",
+        "supabase/functions/lookup-partner-code-public/index.ts"
+      ]
+    },
+    "move_to_dlq": {
+      "file_count": 1,
+      "files": [
+        "supabase/functions/process-email-queue/index.ts"
+      ]
+    },
+    "ocr_commit_results": {
+      "file_count": 2,
+      "files": [
+        "supabase/functions/check-ocr-intake/index.ts",
+        "supabase/functions/check-ocr-intake/ocr-rerun-stability.test.ts"
+      ]
+    },
+    "read_email_batch": {
+      "file_count": 1,
+      "files": [
+        "supabase/functions/process-email-queue/index.ts"
+      ]
+    },
+    "record_check_return": {
+      "file_count": 1,
+      "files": [
+        "supabase/functions/checkalt-poll-status/index.ts"
+      ]
+    },
+    "refresh_all_deposit_next_actions": {
+      "file_count": 1,
+      "files": [
+        "supabase/functions/deposit-daily-automation/index.ts"
+      ]
+    },
+    "run_deposit_escalation_check": {
+      "file_count": 1,
+      "files": [
+        "supabase/functions/deposit-daily-automation/index.ts"
+      ]
+    },
+    "save_deposit_manager_snapshot": {
+      "file_count": 1,
+      "files": [
+        "supabase/functions/deposit-daily-automation/index.ts"
+      ]
+    },
+    "search_public_contractors": {
+      "file_count": 1,
+      "files": [
+        "supabase/functions/public-contractor-directory/index.ts"
+      ]
+    },
+    "set_vault_secret": {
+      "file_count": 1,
+      "files": [
+        "supabase/functions/setup-email-queue-secrets/index.ts"
+      ]
+    }
+  },
+  "representative_aws_write_policies": [
+    "check_endorsements",
+    "check_intake_items",
+    "claim_files",
+    "claim_folders",
+    "claims",
+    "deposit_items",
+    "disbursement_batches",
+    "homeowner_ledger_events",
+    "payment_provider_accounts",
+    "tenant_email_settings",
+    "tenants",
+    "user_roles"
+  ],
+  "server_side_api_only_writes": [
+    "check_reconciliation_alerts",
+    "checkalt_config",
+    "checkalt_deposits",
+    "checkalt_webhook_events",
+    "deposit_provider_config",
+    "endorsement_automated_reminders",
+    "homeowner_directory_leads",
+    "homeowner_intro_requests",
+    "mortgage_releases",
+    "payment_idempotency_keys",
+    "payment_webhook_events",
+    "plaid_webhook_cursors",
+    "privacy_notice_acknowledgments",
+    "referral_alerts",
+    "signature_document_presets",
+    "signature_signers"
+  ],
+  "platform_owner_or_api_writes": [
+    "ai_response_cache",
+    "company_branding",
+    "deposit_automation_digests",
+    "deposit_automation_runs",
+    "deposit_automation_settings",
+    "deposit_escalation_rules",
+    "email_send_state",
+    "email_unsubscribe_tokens",
+    "payment_methods",
+    "storage_backup_log"
+  ],
+  "do_not_restore": {
+    "service_role": true,
+    "anon": true,
+    "using_true_writes": true,
+    "with_check_true": true
+  },
+  "rpc_classification": {
+    "server_side_api_only": [
+      "deposit_action",
+      "bulk_deposit_closeout",
+      "bulk_resolve_deposit_exceptions",
+      "bulk_sync_deposit_accounting",
+      "generate_deposit_daily_digest",
+      "generate_next_deposit_action",
+      "refresh_all_deposit_next_actions",
+      "run_deposit_escalation_check",
+      "save_deposit_manager_snapshot",
+      "ocr_commit_results",
+      "enqueue_email",
+      "read_email_batch",
+      "move_to_dlq",
+      "delete_email",
+      "encrypt_tenant_openai_key",
+      "decrypt_tenant_openai_key",
+      "set_vault_secret",
+      "admin_delete_check",
+      "admin_override_check_status",
+      "backfill_check_billing_events",
+      "record_check_return",
+      "resolve_check_return"
+    ],
+    "tenant_scoped_write_rpc": [
+      "submit_check_review_decision_safe",
+      "assign_deposit_owner",
+      "rebalance_deposit_workload",
+      "mark_deposit_closeout",
+      "resolve_deposit_exception",
+      "create_endorsements_from_payees",
+      "add_partner_stakeholder_to_check",
+      "ensure_partner_stakeholders",
+      "init_loss_draft_documents",
+      "loss_draft_action",
+      "loss_draft_set_lender",
+      "submit_manager_approval",
+      "review_manager_approval",
+      "decide_stakeholder_limit_request",
+      "accept_mortgage_handling_request",
+      "update_mortgage_handling_request_status",
+      "admin_set_contractor_pro",
+      "apply_referral_code",
+      "submit_homeowner_intro_request",
+      "submit_payment_direction_by_token"
+    ],
+    "read_or_session": [
+      "has_role",
+      "has_permission",
+      "is_tenant_admin",
+      "is_tenant_member",
+      "get_check_dashboard_counts_for_tenant",
+      "get_deposit_ops_kpis",
+      "validate_session",
+      "register_session",
+      "invalidate_session",
+      "lookup_tenant_by_partner_code",
+      "get_my_tenant_partner_codes",
+      "search_public_contractors",
+      "contractor_verification_status",
+      "list_checks_by_freedom_claim",
+      "get_all_checks_safety_net"
+    ]
+  },
+  "dump_write_table_class_counts": {
+    "tenant_scoped_write_rls_needed": 108,
+    "platform_owner_or_api": 7,
+    "representative_aws_write_rls": 12,
+    "server_side_api": 13,
+    "do_not_restore": 2
+  }
+}

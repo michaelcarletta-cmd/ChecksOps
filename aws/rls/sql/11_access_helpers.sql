@@ -30,17 +30,21 @@ SECURITY DEFINER
 SET search_path = public
 SET row_security = off
 AS $$
+  -- NULL org_id claims are owner-only until deterministic ownership exists.
   SELECT public.aws_is_cross_tenant_reader()
       OR EXISTS (
         SELECT 1
         FROM public.claims c
         WHERE c.id = _claim_id
-          AND public.aws_can_access_tenant(c.org_id)
-      )
-      OR public.current_tenant_is_claim_funds_recipient(_claim_id)
-      OR (
-        public.has_role(auth.uid(), 'mortgage_agent'::public.app_role)
-        AND public.mortgage_agent_can_view_claim(_claim_id)
+          AND c.org_id IS NOT NULL
+          AND (
+            public.aws_can_access_tenant(c.org_id)
+            OR public.current_tenant_is_claim_funds_recipient(_claim_id)
+            OR (
+              public.has_role(auth.uid(), 'mortgage_agent'::public.app_role)
+              AND public.mortgage_agent_can_view_claim(_claim_id)
+            )
+          )
       );
 $$;
 
