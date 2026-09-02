@@ -11,13 +11,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Building2, ExternalLink, Loader2, Pencil, Power, Upload, X, Trash2, Users, Receipt, Eye, Crosshair, Landmark } from "lucide-react";
+import { Plus, Building2, ExternalLink, Loader2, Pencil, Power, Upload, X, Trash2, Users, Receipt, Eye, Crosshair, Landmark, ShieldCheck } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { TenantUserManagement } from "./TenantUserManagement";
 import { TenantUsageDashboard } from "./TenantUsageDashboard";
 import { TenantProBadgeManagement } from "./TenantProBadgeManagement";
 import { TenantPaymentAccountPanel } from "./TenantPaymentAccountPanel";
-
+import { TenantSecurityCompliance } from "./TenantSecurityCompliance";
 
 interface TenantForm {
   name: string;
@@ -66,6 +66,7 @@ export function TenantManagement() {
   const [usageTarget, setUsageTarget] = useState<{ id: string; name: string } | null>(null);
   const [proTarget, setProTarget] = useState<{ id: string; name: string } | null>(null);
   const [payTarget, setPayTarget] = useState<{ id: string; name: string } | null>(null);
+  const [securityTarget, setSecurityTarget] = useState<{ id: string; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: tenants, isLoading } = useQuery({
@@ -228,7 +229,6 @@ export function TenantManagement() {
   };
 
   const getPreviewUrl = (t: any) => {
-    // Always preview via the slug route — custom domains may not have DNS configured yet.
     if (typeof window !== "undefined" && isCheckOpsHost(window.location.hostname)) {
       return `${window.location.origin}/${t.slug}/checks`;
     }
@@ -243,7 +243,6 @@ export function TenantManagement() {
       description: "Opened tenant portal in a new tab. You are viewing what their users see.",
     });
   };
-
 
   const updateConfigField = (field: string, value: string) => {
     setForm((prev) => ({ ...prev, email_provider_config: { ...prev.email_provider_config, [field]: value } }));
@@ -309,29 +308,17 @@ export function TenantManagement() {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>From Name</Label>
-          <Input
-            value={form.email_from_name}
-            onChange={(e) => updateField("email_from_name", e.target.value)}
-            placeholder="Acme Insurance"
-          />
+          <Input value={form.email_from_name} onChange={(e) => updateField("email_from_name", e.target.value)} placeholder="Acme Insurance" />
         </div>
         <div className="space-y-2">
           <Label>From Email</Label>
-          <Input
-            value={form.email_from_address}
-            onChange={(e) => updateField("email_from_address", e.target.value)}
-            placeholder="checks@acme.com"
-          />
+          <Input value={form.email_from_address} onChange={(e) => updateField("email_from_address", e.target.value)} placeholder="checks@acme.com" />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Reply-To</Label>
-          <Input
-            value={form.email_reply_to}
-            onChange={(e) => updateField("email_reply_to", e.target.value)}
-            placeholder="support@acme.com"
-          />
+          <Input value={form.email_reply_to} onChange={(e) => updateField("email_reply_to", e.target.value)} placeholder="support@acme.com" />
         </div>
         <div className="space-y-2">
           <Label>Email Provider</Label>
@@ -350,52 +337,31 @@ export function TenantManagement() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>SMTP Host</Label>
-              <Input
-                value={form.email_provider_config.host || ""}
-                onChange={(e) => updateConfigField("host", e.target.value)}
-                placeholder="smtp.example.com"
-              />
+              <Input value={form.email_provider_config.host || ""} onChange={(e) => updateConfigField("host", e.target.value)} placeholder="smtp.example.com" />
             </div>
             <div className="space-y-2">
               <Label>SMTP Port</Label>
-              <Input
-                value={form.email_provider_config.port || ""}
-                onChange={(e) => updateConfigField("port", e.target.value)}
-                placeholder="587"
-              />
+              <Input value={form.email_provider_config.port || ""} onChange={(e) => updateConfigField("port", e.target.value)} placeholder="587" />
             </div>
             <div className="space-y-2">
               <Label>Username</Label>
-              <Input
-                value={form.email_provider_config.username || ""}
-                onChange={(e) => updateConfigField("username", e.target.value)}
-              />
+              <Input value={form.email_provider_config.username || ""} onChange={(e) => updateConfigField("username", e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>Password</Label>
-              <Input
-                type="password"
-                value={form.email_provider_config.password || ""}
-                onChange={(e) => updateConfigField("password", e.target.value)}
-              />
+              <Input type="password" value={form.email_provider_config.password || ""} onChange={(e) => updateConfigField("password", e.target.value)} />
             </div>
           </div>
           <div className="rounded-md bg-muted p-3 space-y-1">
             <p className="text-xs font-medium text-foreground">Quick Setup for Gmail / Outlook:</p>
-            <p className="text-xs text-muted-foreground">
-              <strong>Gmail:</strong> Host: smtp.gmail.com · Port: 587 · Username: your Gmail · Password: <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener" className="underline">App Password</a> (requires 2FA enabled)
-            </p>
-            <p className="text-xs text-muted-foreground">
-              <strong>Outlook:</strong> Host: smtp.office365.com · Port: 587 · Username: your Outlook email · Password: your account password
-            </p>
+            <p className="text-xs text-muted-foreground"><strong>Gmail:</strong> Host: smtp.gmail.com · Port: 587 · Username: your Gmail · Password: <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener" className="underline">App Password</a> (requires 2FA enabled)</p>
+            <p className="text-xs text-muted-foreground"><strong>Outlook:</strong> Host: smtp.office365.com · Port: 587 · Username: your Outlook email · Password: your account password</p>
           </div>
         </div>
       )}
 
       {form.email_provider !== "none" && (
-        <p className="text-xs text-muted-foreground">
-          This tenant's endorsement requests and notifications will be sent from their configured email.
-        </p>
+        <p className="text-xs text-muted-foreground">This tenant's endorsement requests and notifications will be sent from their configured email.</p>
       )}
     </div>
   );
@@ -409,13 +375,7 @@ export function TenantManagement() {
         </div>
         <div className="space-y-2">
           <Label>URL Slug</Label>
-          <Input
-            value={form.slug}
-            onChange={(e) => updateField("slug", e.target.value)}
-            placeholder="my-company"
-            required
-            disabled={isEdit}
-          />
+          <Input value={form.slug} onChange={(e) => updateField("slug", e.target.value)} placeholder="my-company" required disabled={isEdit} />
           {!isEdit && <p className="text-xs text-muted-foreground">Used in the URL: /wl/my-company</p>}
         </div>
       </div>
@@ -484,9 +444,7 @@ export function TenantManagement() {
         </TabsList>
         <TabsContent value="branding" className="mt-4 space-y-6">
           {renderBrandingFields(isEdit)}
-          <div className="pt-4 border-t border-border/60">
-            {renderEmailConfig()}
-          </div>
+          <div className="pt-4 border-t border-border/60">{renderEmailConfig()}</div>
         </TabsContent>
       </Tabs>
       <Button type="submit" className="w-full" disabled={isPending}>
@@ -504,9 +462,7 @@ export function TenantManagement() {
           <p className="text-sm text-muted-foreground">Manage organizations using ChecksOps</p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Add Tenant</Button>
-          </DialogTrigger>
+          <DialogTrigger asChild><Button size="sm"><Plus className="h-4 w-4 mr-1" /> Add Tenant</Button></DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle>Create New Tenant</DialogTitle></DialogHeader>
             {renderFormContent(false, () => createTenant.mutate(form), createTenant.isPending)}
@@ -514,7 +470,6 @@ export function TenantManagement() {
         </Dialog>
       </div>
 
-      {/* Edit dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Edit Tenant</DialogTitle></DialogHeader>
@@ -522,21 +477,15 @@ export function TenantManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirmation */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Tenant</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete <strong>{deleteTarget?.name}</strong>? This will permanently remove the tenant and all associated users, checks, and endorsement data. This action cannot be undone.
-            </AlertDialogDescription>
+            <AlertDialogDescription>Are you sure you want to delete <strong>{deleteTarget?.name}</strong>? This will permanently remove the tenant and all associated users, checks, and endorsement data. This action cannot be undone.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => { if (deleteTarget) deleteTenant.mutate(deleteTarget.id); }}
-            >
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => { if (deleteTarget) deleteTenant.mutate(deleteTarget.id); }}>
               {deleteTenant.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Delete
             </AlertDialogAction>
@@ -545,111 +494,57 @@ export function TenantManagement() {
       </AlertDialog>
 
       {isLoading ? (
-        <div className="flex justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
+        <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
       ) : (
         <div className="grid gap-3">
           {tenants?.map((t) => (
             <Card key={t.id}>
               <CardContent className="p-4 flex items-center gap-4">
                 <div className="p-2 rounded-lg bg-muted">
-                  {t.logo_url ? (
-                    <img src={t.logo_url} alt={t.name} className="h-5 w-5 object-contain" />
-                  ) : (
-                    <Building2 className="h-5 w-5 text-muted-foreground" />
-                  )}
+                  {t.logo_url ? <img src={t.logo_url} alt={t.name} className="h-5 w-5 object-contain" /> : <Building2 className="h-5 w-5 text-muted-foreground" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium truncate">{t.name}</span>
                     {t.is_system_tenant && <Badge variant="outline" className="text-xs">System</Badge>}
-                    <Badge className={`text-xs ${getStatusColor(t.subscription_status)}`}>
-                      {t.subscription_status}
-                    </Badge>
+                    <Badge className={`text-xs ${getStatusColor(t.subscription_status)}`}>{t.subscription_status}</Badge>
                     <Badge variant="outline" className="text-xs">{t.plan_tier}</Badge>
-                    {t.email_provider && t.email_provider !== "none" && (
-                      <Badge variant="outline" className="text-xs text-blue-400">✉ {t.email_provider}</Badge>
-                    )}
+                    {t.email_provider && t.email_provider !== "none" && <Badge variant="outline" className="text-xs text-blue-400">✉ {t.email_provider}</Badge>}
                   </div>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
                     <span>/wl/{t.slug}</span>
-                    {t.custom_domain && (
-                      <span className="flex items-center gap-1">
-                        <ExternalLink className="h-3 w-3" /> {t.custom_domain}
-                      </span>
-                    )}
+                    {t.custom_domain && <span className="flex items-center gap-1"><ExternalLink className="h-3 w-3" /> {t.custom_domain}</span>}
                   </div>
                 </div>
                 <div className="w-6 h-6 rounded-full border" style={{ backgroundColor: t.primary_color }} title={`Primary: ${t.primary_color}`} />
                 <div className="flex items-center gap-1">
                   {!t.is_system_tenant && (
                     <>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        title={t.subscription_status === "active" ? "Deactivate" : "Activate"}
-                        onClick={() => toggleStatus.mutate({ id: t.id, currentStatus: t.subscription_status })}
-                      >
+                      <Button variant="ghost" size="icon" className="h-8 w-8" title={t.subscription_status === "active" ? "Deactivate" : "Activate"} onClick={() => toggleStatus.mutate({ id: t.id, currentStatus: t.subscription_status })}>
                         <Power className={`h-4 w-4 ${t.subscription_status === "active" ? "text-emerald-400" : "text-muted-foreground"}`} />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        title="Delete"
-                        onClick={() => setDeleteTarget({ id: t.id, name: t.name })}
-                      >
+                      <Button variant="ghost" size="icon" className="h-8 w-8" title="Delete" onClick={() => setDeleteTarget({ id: t.id, name: t.name })}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </>
                   )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    title="Preview as this tenant (opens their portal in a new tab)"
-                    onClick={() => previewAsTenant(t)}
-                  >
+                  <Button variant="ghost" size="icon" className="h-8 w-8" title="Preview as this tenant (opens their portal in a new tab)" onClick={() => previewAsTenant(t)}>
                     <Eye className="h-4 w-4 text-blue-400" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    title="Manage Users"
-                    onClick={() => setUsersTarget({ id: t.id, name: t.name })}
-                  >
+                  <Button variant="ghost" size="icon" className="h-8 w-8" title="Manage Users" onClick={() => setUsersTarget({ id: t.id, name: t.name })}>
                     <Users className="h-4 w-4" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    title="Usage Tracking"
-                    onClick={() => setUsageTarget({ id: t.id, name: t.name })}
-                  >
+                  <Button variant="ghost" size="icon" className="h-8 w-8" title="Usage Tracking" onClick={() => setUsageTarget({ id: t.id, name: t.name })}>
                     <Receipt className="h-4 w-4 text-primary" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    title="Payment Account"
-                    onClick={() => setPayTarget({ id: t.id, name: t.name })}
-                  >
+                  <Button variant="ghost" size="icon" className="h-8 w-8" title="Payment Account" onClick={() => setPayTarget({ id: t.id, name: t.name })}>
                     <Landmark className="h-4 w-4 text-emerald-400" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    title="Manage OPS Badge"
-                    onClick={() => setProTarget({ id: t.id, name: t.name })}
-                  >
+                  <Button variant="ghost" size="icon" className="h-8 w-8" title="Security & Compliance" onClick={() => setSecurityTarget({ id: t.id, name: t.name })}>
+                    <ShieldCheck className="h-4 w-4 text-cyan-400" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" title="Manage OPS Badge" onClick={() => setProTarget({ id: t.id, name: t.name })}>
                     <Crosshair className="h-4 w-4 text-primary" strokeWidth={2.5} />
-
                   </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={() => openEdit(t)}>
                     <Pencil className="h-4 w-4" />
@@ -661,38 +556,21 @@ export function TenantManagement() {
         </div>
       )}
 
-      {usersTarget && (
-        <TenantUserManagement
-          tenantId={usersTarget.id}
-          tenantName={usersTarget.name}
-          isOpen={true}
-          onClose={() => setUsersTarget(null)}
-        />
-      )}
-      {usageTarget && (
-        <TenantUsageDashboard
-          tenantId={usageTarget.id}
-          tenantName={usageTarget.name}
-          isOpen={true}
-          onClose={() => setUsageTarget(null)}
-        />
-      )}
-      {proTarget && (
-        <TenantProBadgeManagement
-          tenantId={proTarget.id}
-          tenantName={proTarget.name}
-          isOpen={true}
-          onClose={() => setProTarget(null)}
-        />
-      )}
-      {payTarget && (
-        <TenantPaymentAccountPanel
-          tenantId={payTarget.id}
-          tenantName={payTarget.name}
-          isOpen={true}
-          onClose={() => setPayTarget(null)}
-        />
-      )}
+      {usersTarget && <TenantUserManagement tenantId={usersTarget.id} tenantName={usersTarget.name} isOpen={true} onClose={() => setUsersTarget(null)} />}
+      {usageTarget && <TenantUsageDashboard tenantId={usageTarget.id} tenantName={usageTarget.name} isOpen={true} onClose={() => setUsageTarget(null)} />}
+      {proTarget && <TenantProBadgeManagement tenantId={proTarget.id} tenantName={proTarget.name} isOpen={true} onClose={() => setProTarget(null)} />}
+      {payTarget && <TenantPaymentAccountPanel tenantId={payTarget.id} tenantName={payTarget.name} isOpen={true} onClose={() => setPayTarget(null)} />}
+
+      <Dialog open={!!securityTarget} onOpenChange={(open) => { if (!open) setSecurityTarget(null); }}>
+        <DialogContent className="w-[95vw] max-w-[1400px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Security & Compliance — {securityTarget?.name}</DialogTitle>
+          </DialogHeader>
+          {securityTarget && (
+            <TenantSecurityCompliance tenantId={securityTarget.id} tenantName={securityTarget.name} />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

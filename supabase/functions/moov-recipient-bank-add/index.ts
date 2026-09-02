@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { moovFetch, moovConfigured, moovEnvironment, safeLastFour, scopes } from "../_shared/moovClient.ts";
+import { moovFetch, bindMoovEnvironment, moovConfigured, moovEnvironment, safeLastFour, scopes } from "../_shared/moovClient.ts";
 import { corsHeaders, json, sanitize } from "../_shared/moovGuard.ts";
 
 /**
@@ -22,7 +22,6 @@ serve(async (req) => {
     if ((Deno.env.get("MOOV_ENABLED") ?? "false").toLowerCase() !== "true") {
       return json({ error: "This payment provider is not enabled." }, 403);
     }
-    if (!moovConfigured()) return json({ error: "Payment provider is not configured." }, 503);
 
     const body = await req.json().catch(() => ({}));
     const token = String(body?.token ?? "");
@@ -43,7 +42,7 @@ serve(async (req) => {
       return json({ error: "Account number must be between 4 and 17 digits." }, 400);
     }
 
-    const environment = moovEnvironment();
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -56,8 +55,11 @@ serve(async (req) => {
       .maybeSingle();
 
     if (!recipient) return json({ error: "This link is not valid." }, 404);
-    if (recipient.environment !== environment) {
-      return json({ error: "This link is not valid for this environment." }, 400);
+    // Honour the ledger the recipient was created on (sandbox for test tenants).
+    bindMoovEnvironment(String((recipient as any).environment ?? ""));
+    const environment = moovEnvironment();
+    if (!moovConfigured(environment)) {
+      return json({ error: "Payment provider is not configured." }, 503);
     }
     if (recipient.token_expires_at && new Date(recipient.token_expires_at) < new Date()) {
       return json({ error: "This link has expired. Ask the sender for a new one." }, 410);

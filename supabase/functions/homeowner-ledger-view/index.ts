@@ -267,7 +267,11 @@ Deno.serve(async (req) => {
         const byCheck = new Map<string, any>()
         for (const e of (endorsements ?? []) as any[]) {
           if (isDone(e)) continue
-          if (!isSent(e)) continue
+          // The homeowner can always self-sign their own endorsement from this
+          // page, even if no email request has been sent yet. Other parties
+          // (mortgage company) only appear once a request has gone out.
+          if (!isSent(e) && !isHomeownerParty(e)) continue
+
           const meta = checkMeta.get(e.check_id)
           if (!byCheck.has(e.check_id)) {
             byCheck.set(e.check_id, {
