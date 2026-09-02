@@ -87,6 +87,8 @@ Provision a non-production AWS environment first:
 
 No production DNS changes occur in this phase.
 
+The SAM stack in `aws/template.yaml` is staging-only. It creates the HTTP API, Lambda, private S3 bucket, Cognito user pool, and Secrets Manager container. It attaches the API Lambda to the existing RDS VPC and adds a 5432 rule from a dedicated Lambda security group. It does not create, import, or modify the `checksops-staging` RDS instance. The API reads the application database secret ARN from Secrets Manager; passwords never go in Git or plaintext environment variables. Provider credentials are populated in Secrets Manager after deploy, never in CloudFormation `SecretString`.
+
 ### Phase 2 - Database parity
 
 Preparation tooling and the exact copy sequence live in `docs/AWS_DB_COPY_RUNBOOK.md` and `aws/db-copy/`. That phase is still **preparation only** until a copy is explicitly approved.
