@@ -237,6 +237,7 @@ const investigateNinth = async (client) => {
   const usersReg = (await client.query(`SELECT to_regclass('auth.users') AS r`)).rows[0].r;
   if (usersReg) {
     out.authUsersRestored = true;
+    out.authUsersCount = Number((await client.query('SELECT count(*)::int AS n FROM auth.users')).rows[0].n);
     const cols = (await client.query(
       `SELECT column_name FROM information_schema.columns
        WHERE table_schema = 'auth' AND table_name = 'users'`,
@@ -298,6 +299,12 @@ const transactionalIntakeIsolation = async (client) => {
     return { skipped: true, reason: 'check_intake_items already has RLS; refusing to alter' };
   }
 
+  const baseline = countsByTenant((await client.query(`
+      SELECT tenant_id::text AS tenant_id, count(*)::int AS n
+      FROM public.check_intake_items
+      GROUP BY tenant_id
+    `)).rows);
+
   await client.query('BEGIN');
   try {
     await client.query('ALTER TABLE public.check_intake_items ENABLE ROW LEVEL SECURITY');
@@ -327,6 +334,7 @@ const transactionalIntakeIsolation = async (client) => {
       skipped: false,
       rolledBack: true,
       checkIntakeItemsRlsAfterRollback: Boolean(after),
+      baselineAdminCounts: baseline,
       tester,
       c1cAdmin,
       ninthNoTenant: ninth,
@@ -334,8 +342,9 @@ const transactionalIntakeIsolation = async (client) => {
       unauthenticated,
       pass: tester.freedom > 0
         && tester.c1c === 0
-        && c1cAdmin.c1c > 0
+        && tester.other === 0
         && c1cAdmin.freedom === 0
+        && c1cAdmin.c1c === baseline.c1c
         && ninth.freedom === 0
         && ninth.c1c === 0
         && cognitoSub.freedom === 0
