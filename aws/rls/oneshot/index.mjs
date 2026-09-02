@@ -463,21 +463,21 @@ const countSql = (spec) => {
     GROUP BY 1`;
   }
   if (spec.kind === 'claim_join') {
-    return `SELECT c.org_id::text AS tenant_id, count(*)::int AS n
+    return `SELECT COALESCE(c.org_id::text, 'other') AS tenant_id, count(*)::int AS n
       FROM public.claim_files cf
-      JOIN public.claims c ON c.id = cf.claim_id
+      LEFT JOIN public.claims c ON c.id = cf.claim_id
       GROUP BY 1`;
   }
   if (spec.kind === 'check_file_join') {
-    return `SELECT ci.tenant_id::text AS tenant_id, count(*)::int AS n
+    return `SELECT COALESCE(ci.tenant_id::text, 'other') AS tenant_id, count(*)::int AS n
       FROM public.check_files f
-      JOIN public.check_intake_items ci ON ci.id = f.check_intake_item_id
+      LEFT JOIN public.check_intake_items ci ON ci.id = f.check_intake_item_id
       GROUP BY 1`;
   }
   if (spec.kind === 'deposit_join') {
-    return `SELECT ci.tenant_id::text AS tenant_id, count(*)::int AS n
+    return `SELECT COALESCE(ci.tenant_id::text, 'other') AS tenant_id, count(*)::int AS n
       FROM public.deposit_items di
-      JOIN public.check_intake_items ci ON ci.id = di.check_id
+      LEFT JOIN public.check_intake_items ci ON ci.id = di.check_id
       GROUP BY 1`;
   }
   if (spec.kind === 'platform_only' || !spec.tenantCol) {
@@ -501,8 +501,7 @@ const tablePass = (spec, baseline, perActor) => {
   if (ninth.freedom !== 0 || ninth.c1c !== 0) return false;
   if (baseline.freedom > 0 && staff.freedom === 0) return false;
   if (baseline.c1c > 0 && admin.c1c === 0) return false;
-  if (baseline.freedom > 0 && master.freedom !== baseline.freedom) return false;
-  if (baseline.c1c > 0 && master.c1c !== baseline.c1c) return false;
+  if (master.all !== baseline.all) return false;
   return true;
 };
 

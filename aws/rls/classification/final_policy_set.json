@@ -36,7 +36,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.actum_transactions",
@@ -45,7 +45,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.ai_response_cache",
@@ -72,7 +72,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.cash_job_line_items",
@@ -81,7 +81,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.cash_job_payments",
@@ -90,7 +90,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.cash_jobs",
@@ -99,7 +99,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.check_audit_log",
@@ -108,7 +108,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": true,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.check_billing_config",
@@ -126,7 +126,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.check_cases",
@@ -135,7 +135,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.check_deletion_log",
@@ -180,7 +180,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": true,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.check_files",
@@ -198,7 +198,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.check_intake_mortgage_draws",
@@ -234,7 +234,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.check_payment_directions",
@@ -261,7 +261,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": true,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.check_review_decisions",
@@ -270,7 +270,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": true,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.check_stakeholders",
@@ -279,7 +279,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.check_status_audit",
@@ -306,7 +306,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.checkalt_tenant_accounts",
@@ -315,7 +315,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": true,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.checkalt_webhook_events",
@@ -342,7 +342,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.claim_checks",
@@ -405,7 +405,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.claim_settlements",
@@ -423,7 +423,7 @@
       "roles": "authenticated",
       "access_kind": "special",
       "remediated_global_admin_staff": true,
-      "using": "public.aws_can_access_tenant(org_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(org_id)"
     },
     {
       "table": "public.company_branding",
@@ -612,7 +612,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.disbursement_splits",
@@ -621,7 +621,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.document_templates",
@@ -639,7 +639,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.email_send_state",
@@ -693,7 +693,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.endorsement_requests",
@@ -720,7 +720,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.glba_security_events",
@@ -729,7 +729,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.homeowner_bank_link_tokens",
@@ -738,7 +738,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.homeowner_check_uploads",
@@ -756,7 +756,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.homeowner_directory_leads",
@@ -783,7 +783,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.homeowner_ledger_events",
@@ -792,7 +792,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.homeowner_ledger_tokens",
@@ -801,7 +801,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.loss_draft_audit_log",
@@ -855,7 +855,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.moov_invoice_customers",
@@ -864,7 +864,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.moov_invoices",
@@ -873,7 +873,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.mortgage_companies",
@@ -900,7 +900,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.mortgage_releases",
@@ -918,7 +918,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.notification_delivery_logs",
@@ -954,7 +954,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.payment_idempotency_keys",
@@ -963,7 +963,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.payment_method_verifications",
@@ -972,7 +972,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.payment_methods",
@@ -990,7 +990,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": true,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.payment_provider_files",
@@ -999,7 +999,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.payment_provider_methods",
@@ -1008,7 +1008,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": true,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.payment_sweep_configs",
@@ -1017,7 +1017,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": true,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.payment_transfer_groups",
@@ -1026,7 +1026,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.payment_transfers",
@@ -1035,7 +1035,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": true,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.payment_wallet_ledger",
@@ -1044,7 +1044,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.payment_wallet_sub_ledgers",
@@ -1053,7 +1053,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.payment_wallets",
@@ -1062,7 +1062,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.payment_webhook_events",
@@ -1071,7 +1071,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": true,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.payroll_runs",
@@ -1080,7 +1080,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.pii_reveal_logs",
@@ -1098,7 +1098,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.plaid_webhook_cursors",
@@ -1125,7 +1125,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.platform_fee_occurrences",
@@ -1134,7 +1134,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.platform_fee_schedules",
@@ -1143,7 +1143,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": true,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.privacy_notice_acknowledgments",
@@ -1152,7 +1152,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.profiles",
@@ -1170,7 +1170,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.referral_alerts",
@@ -1296,7 +1296,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.stakeholder_accounts",
@@ -1305,7 +1305,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.stakeholder_limit_requests",
@@ -1314,7 +1314,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.storage_backup_log",
@@ -1332,7 +1332,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.tenant_bank_accounts",
@@ -1341,7 +1341,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.tenant_billing_accounts",
@@ -1350,7 +1350,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.tenant_credit_balances",
@@ -1359,7 +1359,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.tenant_credit_transactions",
@@ -1368,7 +1368,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.tenant_documents",
@@ -1377,7 +1377,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": true,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.tenant_email_settings",
@@ -1386,7 +1386,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.tenant_maintenance_payments",
@@ -1395,7 +1395,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.tenant_openai_credentials",
@@ -1404,7 +1404,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.tenant_partner_code_aliases",
@@ -1431,7 +1431,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.tenant_users",
@@ -1449,7 +1449,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.tenant_wallet_funding_settings",
@@ -1458,7 +1458,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.tenants",
@@ -1494,7 +1494,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.wallet_funding_requests",
@@ -1503,7 +1503,7 @@
       "roles": "authenticated",
       "access_kind": "tenant_id",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_tenant(tenant_id)"
+      "using": "public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id)"
     },
     {
       "table": "public.zip_geocache",
