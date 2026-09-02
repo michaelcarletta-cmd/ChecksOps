@@ -37,7 +37,7 @@ import { ContractorLeadsCard } from "@/components/networking/ContractorLeadsCard
 import { ContractorVerificationStatusCard } from "@/components/networking/ContractorVerificationStatusCard";
 import { Search as SearchIcon } from "lucide-react";
 
-import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
+
 import { PasskeyManagerCard } from "@/components/auth/PasskeyManagerCard";
 import { TotpManagerCard } from "@/components/auth/TotpManagerCard";
 import { CheckUsageCard } from "@/components/billing/CheckUsageCard";
