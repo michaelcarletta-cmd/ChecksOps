@@ -130,11 +130,11 @@ const main = async () => {
     token: freedom,
     body: { bucket: 'claim-files', path: frontPath, contentType: 'image/jpeg', contentLength: tinyJpeg.length },
   });
-  record('S3 upload-url for new-check image', upload.status === 200 && Boolean(upload.json.signedUrl), {
+  record('S3 upload-url for new-check image', upload.status === 200 && Boolean(upload.json.uploadUrl), {
     detail: `status=${upload.status} error=${upload.json.error || ''}`,
   });
-  if (upload.json.signedUrl) {
-    const put = await fetch(upload.json.signedUrl, {
+  if (upload.json.uploadUrl) {
+    const put = await fetch(upload.json.uploadUrl, {
       method: 'PUT',
       headers: { 'content-type': 'image/jpeg' },
       body: tinyJpeg,
@@ -158,11 +158,11 @@ const main = async () => {
   const payee = await write(freedom, {
     table: 'check_payees',
     op: 'insert',
-    values: { check_id: check.id, payee_name: `${MARKER} payee`, payee_type: 'homeowner' },
+    values: { check_id: check.id, payee_name: `${MARKER} payee`, payee_type: 'insured' },
     single: true,
   });
   record('add payee', payee.status === 200 && rowOf(payee.json.data)?.check_id === check.id, {
-    detail: `status=${payee.status}`,
+    detail: `status=${payee.status} error=${payee.json.error || ''} msg=${payee.json.message || ''}`,
   });
 
   const note = await write(freedom, {

@@ -6,8 +6,12 @@ import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-sec
 
 const { Client } = pg;
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const SQL_DIR = path.join(ROOT, '..', 'sql');
-const RLS_SQL_DIR = path.join(ROOT, '..', '..', 'rls', 'sql');
+const SQL_DIR = fs.existsSync(path.join(ROOT, 'sql'))
+  ? path.join(ROOT, 'sql')
+  : path.join(ROOT, '..', 'sql');
+const RLS_SQL_DIR = fs.existsSync(path.join(ROOT, 'rls-sql'))
+  ? path.join(ROOT, 'rls-sql')
+  : path.join(ROOT, '..', '..', 'rls', 'sql');
 const CA_PATH = [
   path.join(ROOT, 'rds-global-bundle.pem'),
   path.join(ROOT, '..', '..', 'functions', 'api', 'rds-global-bundle.pem'),
@@ -149,20 +153,47 @@ export const handler = async (event) => {
     const ninth = await ninthWriteDenied(client);
     const after = await financialAggregates(client);
     const financialUnchanged = JSON.stringify(before) === JSON.stringify(after);
-    const insertGranted = privileges.some((row) => (
-      row.table_name === 'check_intake_items' && row.grantee === 'checksops' && row.privilege_type === 'INSERT'
-    ));
+    const insertCols = (await client.query(`
+      SELECT column_name
+      FROM information_schema.column_privileges
+      WHERE table_schema = 'public'
+        AND table_name = 'check_intake_items'
+        AND grantee = 'checksops'
+        AND privilege_type = 'INSERT'
+      ORDER BY 1
+    `)).rows.map((row) => row.column_name);
+    const updateCols = (await client.query(`
+      SELECT column_name
+      FROM information_schema.column_privileges
+      WHERE table_schema = 'public'
+        AND table_name = 'check_intake_items'
+        AND grantee = 'checksops'
+        AND privilege_type = 'UPDATE'
+      ORDER BY 1
+    `)).rows.map((row) => row.column_name);
+    const insertGranted = insertCols.includes('front_image_path')
+      && insertCols.includes('tenant_id')
+      && insertCols.includes('status');
+    const statusGranted = updateCols.includes('status') && updateCols.includes('check_stage');
+    const amountNotUpdatable = !updateCols.includes('amount') && !updateCols.includes('routing_number');
+    const releaseNotGranted = !updateCols.includes('mortgage_final_released_at');
     const financialStillSelectOnly = !privileges.some((row) => (
       ['claim_payments', 'homeowner_ledger_events', 'checkalt_deposits', 'payment_transfers'].includes(row.table_name)
       && ['INSERT', 'UPDATE', 'DELETE'].includes(row.privilege_type)
     ));
     return {
-      ok: ninth.denied && financialUnchanged && insertGranted && financialStillSelectOnly,
+      ok: ninth.denied && financialUnchanged && insertGranted && statusGranted
+        && amountNotUpdatable && releaseNotGranted && financialStillSelectOnly,
       step,
       ninth,
       financialUnchanged,
       insertGranted,
+      statusGranted,
+      amountNotUpdatable,
+      releaseNotGranted,
       financialStillSelectOnly,
+      insertColumns: insertCols,
+      intakeUpdateColumns: updateCols,
       financial: after,
       privileges,
     };
