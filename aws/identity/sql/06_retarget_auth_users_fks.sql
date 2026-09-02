@@ -27,9 +27,6 @@
 -- audit_actor_has_data (20) and audit_actor_currently_empty (20)
 -- Same UUID columns, FK to identity_accounts(application_user_id), keep dump ON DELETE.
 
--- Unresolved before attaching FKs:
--- 1. Invite/import the 9 users and set identity_accounts.cognito_sub (status=active).
--- 2. Decide whether the user with roles and no profile gets a profiles row with the
---    existing UUID (do not mint a new id).
--- 3. Do not enable RLS until auth.uid() GUC is set on every request path that hits
---    those tables.
+-- Exact commented ALTER TABLE list: aws/rls/sql/07_fk_retarget_plan.md
+-- Narrative table: aws/rls/FK_RETARGET_PLAN.md
+-- This phase does not ADD any of these constraints.

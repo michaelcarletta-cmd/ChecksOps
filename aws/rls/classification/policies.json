@@ -1,0 +1,3351 @@
+{
+  "source": "approved backup /tmp/checksops_260901.backup public POLICY TOC",
+  "policy_count": 380,
+  "parse_errors": 0,
+  "classification_totals": {
+    "directly_portable": 356,
+    "requires_modification": 8,
+    "server_side_api": 10,
+    "obsolete": 6
+  },
+  "command_totals": {
+    "INSERT": 65,
+    "ALL": 89,
+    "UPDATE": 51,
+    "SELECT": 154,
+    "DELETE": 21
+  },
+  "role_totals": {
+    "public": 89,
+    "authenticated": 281,
+    "authenticated, anon": 4,
+    "service_role": 4,
+    "anon": 2
+  },
+  "tables_with_policies": 163,
+  "public_rls_enabled_in_dump": 165,
+  "auth_rls_enabled_in_dump": 16,
+  "storage_or_other_rls_enabled_in_dump": 9,
+  "rls_enabled_public_tables_without_policies": [
+    "payment_idempotency_keys",
+    "plaid_webhook_cursors"
+  ],
+  "too_broad_global_role_count": 75,
+  "cannot_restore_blindly": {
+    "obsolete": [
+      {
+        "policy": "Backend service manages signature field values",
+        "table": "public.signature_field_values",
+        "command": "ALL",
+        "roles": "service_role",
+        "class": "obsolete",
+        "note": "service_role USING/WITH CHECK true \u2014 AWS Lambda uses checksops, not service_role"
+      },
+      {
+        "policy": "Backend service manages signature fields",
+        "table": "public.signature_fields",
+        "command": "ALL",
+        "roles": "service_role",
+        "class": "obsolete",
+        "note": "service_role USING/WITH CHECK true \u2014 AWS Lambda uses checksops, not service_role"
+      },
+      {
+        "policy": "Public can read listed directory profiles",
+        "table": "public.contractor_profiles",
+        "command": "SELECT",
+        "roles": "anon",
+        "class": "obsolete",
+        "note": "anon-only; staging API has no anonymous JWT role"
+      },
+      {
+        "policy": "Service role manages checkalt deposits",
+        "table": "public.checkalt_deposits",
+        "command": "ALL",
+        "roles": "service_role",
+        "class": "obsolete",
+        "note": "service_role USING/WITH CHECK true \u2014 AWS Lambda uses checksops, not service_role"
+      },
+      {
+        "policy": "Service role writes webhook events",
+        "table": "public.checkalt_webhook_events",
+        "command": "ALL",
+        "roles": "service_role",
+        "class": "obsolete",
+        "note": "service_role USING/WITH CHECK true \u2014 AWS Lambda uses checksops, not service_role"
+      },
+      {
+        "policy": "anon can record acknowledgment",
+        "table": "public.privacy_notice_acknowledgments",
+        "command": "INSERT",
+        "roles": "anon",
+        "class": "obsolete",
+        "note": "anon-only; staging API has no anonymous JWT role"
+      }
+    ],
+    "server_side_api": [
+      {
+        "policy": "Anyone can submit a homeowner lead",
+        "table": "public.homeowner_directory_leads",
+        "command": "INSERT",
+        "roles": "authenticated, anon",
+        "class": "server_side_api",
+        "note": "open write/ALL USING(true) \u2014 keep in API authorization, do not restore as open RLS"
+      },
+      {
+        "policy": "Authenticated users can manage mortgage releases",
+        "table": "public.mortgage_releases",
+        "command": "ALL",
+        "roles": "authenticated",
+        "class": "server_side_api",
+        "note": "open write/ALL USING(true) \u2014 keep in API authorization, do not restore as open RLS"
+      },
+      {
+        "policy": "Authenticated users can manage presets",
+        "table": "public.signature_document_presets",
+        "command": "ALL",
+        "roles": "authenticated",
+        "class": "server_side_api",
+        "note": "open write/ALL USING(true) \u2014 keep in API authorization, do not restore as open RLS"
+      },
+      {
+        "policy": "Guided users can create guided claims",
+        "table": "public.claims",
+        "command": "INSERT",
+        "roles": "authenticated",
+        "class": "server_side_api",
+        "note": "INSERT WITH CHECK(is_guided_mode) has no auth.uid(); keep in API"
+      },
+      {
+        "policy": "Public can complete signatures",
+        "table": "public.signature_signers",
+        "command": "UPDATE",
+        "roles": "public",
+        "class": "server_side_api",
+        "note": "unauthenticated-style UPDATE by status; validate signature tokens in API"
+      },
+      {
+        "policy": "Public can submit intro requests to listed pros",
+        "table": "public.homeowner_intro_requests",
+        "command": "INSERT",
+        "roles": "authenticated, anon",
+        "class": "server_side_api",
+        "note": "INSERT TO authenticated, anon; public lead capture belongs in API"
+      },
+      {
+        "policy": "Service role can insert recon alerts",
+        "table": "public.check_reconciliation_alerts",
+        "command": "INSERT",
+        "roles": "public",
+        "class": "server_side_api",
+        "note": "open write/ALL USING(true) \u2014 keep in API authorization, do not restore as open RLS"
+      },
+      {
+        "policy": "Service role can manage reminders",
+        "table": "public.endorsement_automated_reminders",
+        "command": "ALL",
+        "roles": "public",
+        "class": "server_side_api",
+        "note": "open write/ALL USING(true) \u2014 keep in API authorization, do not restore as open RLS"
+      },
+      {
+        "policy": "System can insert alerts",
+        "table": "public.referral_alerts",
+        "command": "INSERT",
+        "roles": "authenticated",
+        "class": "server_side_api",
+        "note": "open write/ALL USING(true) \u2014 keep in API authorization, do not restore as open RLS"
+      },
+      {
+        "policy": "authenticated can record acknowledgment",
+        "table": "public.privacy_notice_acknowledgments",
+        "command": "INSERT",
+        "roles": "authenticated",
+        "class": "server_side_api",
+        "note": "open write/ALL USING(true) \u2014 keep in API authorization, do not restore as open RLS"
+      }
+    ],
+    "requires_modification": [
+      {
+        "policy": "Anyone authenticated can read billing config",
+        "table": "public.check_billing_config",
+        "command": "SELECT",
+        "roles": "authenticated",
+        "class": "requires_modification",
+        "note": "SELECT USING(true) reference/config; rewrite to authenticated + confirm non-sensitive before restore"
+      },
+      {
+        "policy": "Anyone can read active announcements",
+        "table": "public.platform_announcements",
+        "command": "SELECT",
+        "roles": "authenticated, anon",
+        "class": "requires_modification",
+        "note": "no auth.uid()/helper predicate; review before restore"
+      },
+      {
+        "policy": "Authenticated users can read presets",
+        "table": "public.signature_document_presets",
+        "command": "SELECT",
+        "roles": "authenticated",
+        "class": "requires_modification",
+        "note": "SELECT USING(true) is not tenant-scoped; do not restore as-is"
+      },
+      {
+        "policy": "Authenticated users can view active templates",
+        "table": "public.document_templates",
+        "command": "SELECT",
+        "roles": "public",
+        "class": "requires_modification",
+        "note": "no auth.uid()/helper predicate; review before restore"
+      },
+      {
+        "policy": "Authenticated users can view active templates",
+        "table": "public.email_templates",
+        "command": "SELECT",
+        "roles": "public",
+        "class": "requires_modification",
+        "note": "no auth.uid()/helper predicate; review before restore"
+      },
+      {
+        "policy": "Homeowner reads own intro request by email",
+        "table": "public.homeowner_intro_requests",
+        "command": "SELECT",
+        "roles": "authenticated",
+        "class": "requires_modification",
+        "note": "depends on JWT claims/email; set auth.email() from identity_accounts/profiles, never Cognito probe email"
+      },
+      {
+        "policy": "Homeowner reads own uploads by email",
+        "table": "public.homeowner_check_uploads",
+        "command": "SELECT",
+        "roles": "authenticated",
+        "class": "requires_modification",
+        "note": "depends on JWT claims/email; set auth.email() from identity_accounts/profiles, never Cognito probe email"
+      },
+      {
+        "policy": "zip cache readable by all",
+        "table": "public.zip_geocache",
+        "command": "SELECT",
+        "roles": "public",
+        "class": "requires_modification",
+        "note": "SELECT USING(true) reference/config; rewrite to authenticated + confirm non-sensitive before restore"
+      }
+    ]
+  },
+  "policies": [
+    {
+      "policy": "Admin can insert company branding",
+      "table": "public.company_branding",
+      "command": "INSERT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Admin can insert settings",
+      "table": "public.deposit_automation_settings",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Admin can manage escalation rules",
+      "table": "public.deposit_escalation_rules",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admin can manage provider config",
+      "table": "public.deposit_provider_config",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admin can update approvals",
+      "table": "public.deposit_pending_approvals",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Admin can update company branding",
+      "table": "public.company_branding",
+      "command": "UPDATE",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Admin can update settings",
+      "table": "public.deposit_automation_settings",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Admin manages any profile",
+      "table": "public.contractor_profiles",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins and staff can manage files",
+      "table": "public.claim_files",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins and staff can manage folders",
+      "table": "public.claim_folders",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins and staff can manage payments",
+      "table": "public.claim_payments",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins and staff can manage referrers",
+      "table": "public.referrers",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins and staff can manage templates",
+      "table": "public.document_templates",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins and staff can read check status audit",
+      "table": "public.check_status_audit",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim); WARNING original staff/admin role checks are global (tenant admins have user_roles.admin)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins and staff can read recon alerts",
+      "table": "public.check_reconciliation_alerts",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim); WARNING original staff/admin role checks are global (tenant admins have user_roles.admin)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins and staff can resolve recon alerts",
+      "table": "public.check_reconciliation_alerts",
+      "command": "UPDATE",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Admins and staff can send SMS messages",
+      "table": "public.sms_messages",
+      "command": "INSERT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Admins and staff can view all SMS messages",
+      "table": "public.sms_messages",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim); WARNING original staff/admin role checks are global (tenant admins have user_roles.admin)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins can create any partnership",
+      "table": "public.tenant_partnerships",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Admins can delete claims",
+      "table": "public.claims",
+      "command": "DELETE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Admins can delete profiles",
+      "table": "public.profiles",
+      "command": "DELETE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Admins can insert checkalt config",
+      "table": "public.checkalt_config",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Admins can manage alerts",
+      "table": "public.referral_alerts",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins can manage all claims",
+      "table": "public.claims",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins can manage all user roles",
+      "table": "public.user_roles",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins can manage fee schedules",
+      "table": "public.platform_fee_schedules",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins can manage mortgage companies",
+      "table": "public.mortgage_companies",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins can manage role versions",
+      "table": "public.role_version_tracker",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins can manage settlements",
+      "table": "public.claim_settlements",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins can read check deletion log",
+      "table": "public.check_deletion_log",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins can update any partnership",
+      "table": "public.tenant_partnerships",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Admins can update checkalt config",
+      "table": "public.checkalt_config",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Admins can update profiles",
+      "table": "public.profiles",
+      "command": "UPDATE",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Admins can view all claims",
+      "table": "public.claims",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins can view any partnership",
+      "table": "public.tenant_partnerships",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins can view backup logs",
+      "table": "public.storage_backup_log",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins can view checkalt config",
+      "table": "public.checkalt_config",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins manage all user roles",
+      "table": "public.user_roles",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Admins manage payment methods",
+      "table": "public.payment_provider_methods",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins manage provider accounts",
+      "table": "public.payment_provider_accounts",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins manage sweep configs",
+      "table": "public.payment_sweep_configs",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins manage transfers",
+      "table": "public.payment_transfers",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins read webhook events",
+      "table": "public.payment_webhook_events",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Admins view webhook events",
+      "table": "public.checkalt_webhook_events",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Anyone authenticated can read billing config",
+      "table": "public.check_billing_config",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "requires_modification",
+      "note": "SELECT USING(true) reference/config; rewrite to authenticated + confirm non-sensitive before restore"
+    },
+    {
+      "policy": "Anyone can read active announcements",
+      "table": "public.platform_announcements",
+      "command": "SELECT",
+      "roles": "authenticated, anon",
+      "class": "requires_modification",
+      "note": "no auth.uid()/helper predicate; review before restore"
+    },
+    {
+      "policy": "Anyone can submit a homeowner lead",
+      "table": "public.homeowner_directory_leads",
+      "command": "INSERT",
+      "roles": "authenticated, anon",
+      "class": "server_side_api",
+      "note": "open write/ALL USING(true) \u2014 keep in API authorization, do not restore as open RLS"
+    },
+    {
+      "policy": "Authenticated users can insert disbursements",
+      "table": "public.claim_disbursements",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authenticated users can insert mortgage draws",
+      "table": "public.claim_check_mortgage_draws",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authenticated users can insert operational state",
+      "table": "public.claim_operational_state",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authenticated users can manage mortgage releases",
+      "table": "public.mortgage_releases",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "server_side_api",
+      "note": "open write/ALL USING(true) \u2014 keep in API authorization, do not restore as open RLS"
+    },
+    {
+      "policy": "Authenticated users can manage presets",
+      "table": "public.signature_document_presets",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "server_side_api",
+      "note": "open write/ALL USING(true) \u2014 keep in API authorization, do not restore as open RLS"
+    },
+    {
+      "policy": "Authenticated users can read presets",
+      "table": "public.signature_document_presets",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "requires_modification",
+      "note": "SELECT USING(true) is not tenant-scoped; do not restore as-is"
+    },
+    {
+      "policy": "Authenticated users can update disbursements",
+      "table": "public.claim_disbursements",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authenticated users can update mortgage draws",
+      "table": "public.claim_check_mortgage_draws",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authenticated users can update operational state",
+      "table": "public.claim_operational_state",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authenticated users can view active templates",
+      "table": "public.document_templates",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "requires_modification",
+      "note": "no auth.uid()/helper predicate; review before restore"
+    },
+    {
+      "policy": "Authenticated users can view active templates",
+      "table": "public.email_templates",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "requires_modification",
+      "note": "no auth.uid()/helper predicate; review before restore"
+    },
+    {
+      "policy": "Authenticated users can view disbursements",
+      "table": "public.claim_disbursements",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authenticated users can view mortgage draws",
+      "table": "public.claim_check_mortgage_draws",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authenticated users can view operational state",
+      "table": "public.claim_operational_state",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authenticated users with roles can view claims",
+      "table": "public.claims",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; WARNING original staff/admin role checks are global (tenant admins have user_roles.admin)"
+    },
+    {
+      "policy": "Authorized senders can update their messages",
+      "table": "public.check_messages",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authorized senders or admins can delete messages",
+      "table": "public.check_messages",
+      "command": "DELETE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authorized uploader or admin can delete check files",
+      "table": "public.check_files",
+      "command": "DELETE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authorized users can delete mortgage draws",
+      "table": "public.check_intake_mortgage_draws",
+      "command": "DELETE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authorized users can insert check files",
+      "table": "public.check_files",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authorized users can insert mortgage draws",
+      "table": "public.check_intake_mortgage_draws",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authorized users can insert payment directions",
+      "table": "public.check_payment_directions",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authorized users can post check messages",
+      "table": "public.check_messages",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authorized users can read check messages",
+      "table": "public.check_messages",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authorized users can update check files",
+      "table": "public.check_files",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authorized users can update mortgage draws",
+      "table": "public.check_intake_mortgage_draws",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authorized users can update payment directions",
+      "table": "public.check_payment_directions",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authorized users can view check files",
+      "table": "public.check_files",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authorized users can view mortgage draws",
+      "table": "public.check_intake_mortgage_draws",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authorized users can view payment directions",
+      "table": "public.check_payment_directions",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authorized users can view signature field values",
+      "table": "public.signature_field_values",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authorized users can view signature fields",
+      "table": "public.signature_fields",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authors or admin delete reviews",
+      "table": "public.contractor_reviews",
+      "command": "DELETE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Authors update own reviews",
+      "table": "public.contractor_reviews",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Backend service manages signature field values",
+      "table": "public.signature_field_values",
+      "command": "ALL",
+      "roles": "service_role",
+      "class": "obsolete",
+      "note": "service_role USING/WITH CHECK true \u2014 AWS Lambda uses checksops, not service_role"
+    },
+    {
+      "policy": "Backend service manages signature fields",
+      "table": "public.signature_fields",
+      "command": "ALL",
+      "roles": "service_role",
+      "class": "obsolete",
+      "note": "service_role USING/WITH CHECK true \u2014 AWS Lambda uses checksops, not service_role"
+    },
+    {
+      "policy": "Clients can view SMS for their claims",
+      "table": "public.sms_messages",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Contractor manages own profile",
+      "table": "public.contractor_profiles",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Contractor reads own uploads",
+      "table": "public.homeowner_check_uploads",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Contractor updates own uploads",
+      "table": "public.homeowner_check_uploads",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Contractors read own leads",
+      "table": "public.homeowner_intro_requests",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Contractors update own leads",
+      "table": "public.homeowner_intro_requests",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Delete tenant users",
+      "table": "public.tenant_users",
+      "command": "DELETE",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Directory profiles readable by authenticated",
+      "table": "public.contractor_profiles",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Guided users can create guided claims",
+      "table": "public.claims",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "server_side_api",
+      "note": "INSERT WITH CHECK(is_guided_mode) has no auth.uid(); keep in API"
+    },
+    {
+      "policy": "Homeowner reads own intro request by email",
+      "table": "public.homeowner_intro_requests",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "requires_modification",
+      "note": "depends on JWT claims/email; set auth.email() from identity_accounts/profiles, never Cognito probe email"
+    },
+    {
+      "policy": "Homeowner reads own uploads by email",
+      "table": "public.homeowner_check_uploads",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "requires_modification",
+      "note": "depends on JWT claims/email; set auth.email() from identity_accounts/profiles, never Cognito probe email"
+    },
+    {
+      "policy": "Insert tenant users",
+      "table": "public.tenant_users",
+      "command": "INSERT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Inviter can create partnerships",
+      "table": "public.tenant_partnerships",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Managers write sub ledgers",
+      "table": "public.payment_wallet_sub_ledgers",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Managers write transfer groups",
+      "table": "public.payment_transfer_groups",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Managers write verifications",
+      "table": "public.payment_method_verifications",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Managers write wallets",
+      "table": "public.payment_wallets",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Master owner can manage all tenants",
+      "table": "public.tenants",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Members create own tenant recipients",
+      "table": "public.external_payment_recipients",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Members read own tenant payment events",
+      "table": "public.payment_event_log",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Members read own tenant payment methods",
+      "table": "public.payment_provider_methods",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Members read own tenant provider account",
+      "table": "public.payment_provider_accounts",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Members read own tenant recipients",
+      "table": "public.external_payment_recipients",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Members read own tenant transfers",
+      "table": "public.payment_transfers",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Members read sub ledgers",
+      "table": "public.payment_wallet_sub_ledgers",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Members read sweep configs",
+      "table": "public.payment_sweep_configs",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Members read transfer groups",
+      "table": "public.payment_transfer_groups",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Members read verifications",
+      "table": "public.payment_method_verifications",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Members read wallet ledger",
+      "table": "public.payment_wallet_ledger",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Members read wallets",
+      "table": "public.payment_wallets",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Members update own tenant recipients",
+      "table": "public.external_payment_recipients",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Mortgage agents can manage loss draft documents",
+      "table": "public.loss_draft_documents",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Mortgage agents can view active mortgage companies",
+      "table": "public.mortgage_companies",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Mortgage agents manage signature requests",
+      "table": "public.signature_requests",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Mortgage agents manage signature signers",
+      "table": "public.signature_signers",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Mortgage agents view checks with active request",
+      "table": "public.check_intake_items",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Mortgage agents view claim files for active request",
+      "table": "public.claim_files",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Mortgage agents view claims with active request",
+      "table": "public.claims",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Mortgage agents view endorsements for active request checks",
+      "table": "public.check_endorsements",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Mortgage agents view files for active request checks",
+      "table": "public.check_files",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Mortgage agents view loss draft docs for active request",
+      "table": "public.loss_draft_documents",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Mortgage agents view loss draft tracking for active request",
+      "table": "public.loss_draft_tracking",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Mortgage agents view messages for active request checks",
+      "table": "public.check_messages",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Mortgage agents view mortgage intake for active request",
+      "table": "public.loss_draft_mortgage_intake",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Mortgage agents view payees for active request checks",
+      "table": "public.check_payees",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Mortgage agents view payment directions for active request chec",
+      "table": "public.check_payment_directions",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Mortgage agents view stakeholders for active request checks",
+      "table": "public.check_stakeholders",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "No direct access to tenant partner code aliases",
+      "table": "public.tenant_partner_code_aliases",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "RESTRICTIVE USING(false); portable deny-all, rewrite TO authenticated"
+    },
+    {
+      "policy": "Only admins can manage checks",
+      "table": "public.claim_checks",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Only admins can modify billing config",
+      "table": "public.check_billing_config",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Only admins can update billing events",
+      "table": "public.check_billing_events",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Owner tenant staff can delete check cases",
+      "table": "public.check_cases",
+      "command": "DELETE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Owner tenant staff can delete checks",
+      "table": "public.check_intake_items",
+      "command": "DELETE",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Owner tenant staff can delete payees",
+      "table": "public.check_payees",
+      "command": "DELETE",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Owner tenant staff can insert check cases",
+      "table": "public.check_cases",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Owner tenant staff can insert checks",
+      "table": "public.check_intake_items",
+      "command": "INSERT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Owner tenant staff can insert payees",
+      "table": "public.check_payees",
+      "command": "INSERT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Owner tenant staff can update check cases",
+      "table": "public.check_cases",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Owner tenant staff can update checks",
+      "table": "public.check_intake_items",
+      "command": "UPDATE",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Owner tenant staff can update payees",
+      "table": "public.check_payees",
+      "command": "UPDATE",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Owner tenant staff can view check cases",
+      "table": "public.check_cases",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Owner tenant staff can view checks",
+      "table": "public.check_intake_items",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Owner tenant staff can view payees",
+      "table": "public.check_payees",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Partners can update partnerships",
+      "table": "public.tenant_partnerships",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Partners can view own partnerships",
+      "table": "public.tenant_partnerships",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Platform admin manages all billing accounts",
+      "table": "public.tenant_billing_accounts",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Platform owner manages announcements",
+      "table": "public.platform_announcements",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Primary admin can manage roles",
+      "table": "public.user_roles",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Public can complete signatures",
+      "table": "public.signature_signers",
+      "command": "UPDATE",
+      "roles": "public",
+      "class": "server_side_api",
+      "note": "unauthenticated-style UPDATE by status; validate signature tokens in API"
+    },
+    {
+      "policy": "Public can read listed directory profiles",
+      "table": "public.contractor_profiles",
+      "command": "SELECT",
+      "roles": "anon",
+      "class": "obsolete",
+      "note": "anon-only; staging API has no anonymous JWT role"
+    },
+    {
+      "policy": "Public can submit intro requests to listed pros",
+      "table": "public.homeowner_intro_requests",
+      "command": "INSERT",
+      "roles": "authenticated, anon",
+      "class": "server_side_api",
+      "note": "INSERT TO authenticated, anon; public lead capture belongs in API"
+    },
+    {
+      "policy": "Read reviews for directory contractors",
+      "table": "public.contractor_reviews",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Read-only can view check cases",
+      "table": "public.check_cases",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Read-only can view check_audit_log",
+      "table": "public.check_audit_log",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Read-only can view check_intake_items",
+      "table": "public.check_intake_items",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Read-only can view check_payees",
+      "table": "public.check_payees",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Read-only can view draft docs",
+      "table": "public.loss_draft_documents",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Read-only can view loss drafts",
+      "table": "public.loss_draft_tracking",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Read-only can view releases",
+      "table": "public.loss_draft_releases",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Recipient tenant can view check funds received",
+      "table": "public.check_intake_items",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Recipient tenant can view claim of funds received",
+      "table": "public.claims",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Referrers can view their own record",
+      "table": "public.referrers",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Referrers can view their referred claims",
+      "table": "public.claims",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Service role can insert recon alerts",
+      "table": "public.check_reconciliation_alerts",
+      "command": "INSERT",
+      "roles": "public",
+      "class": "server_side_api",
+      "note": "open write/ALL USING(true) \u2014 keep in API authorization, do not restore as open RLS"
+    },
+    {
+      "policy": "Service role can insert send log",
+      "table": "public.email_send_log",
+      "command": "INSERT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Service role can insert suppressed emails",
+      "table": "public.suppressed_emails",
+      "command": "INSERT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Service role can insert tokens",
+      "table": "public.email_unsubscribe_tokens",
+      "command": "INSERT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Service role can manage reminders",
+      "table": "public.endorsement_automated_reminders",
+      "command": "ALL",
+      "roles": "public",
+      "class": "server_side_api",
+      "note": "open write/ALL USING(true) \u2014 keep in API authorization, do not restore as open RLS"
+    },
+    {
+      "policy": "Service role can manage send state",
+      "table": "public.email_send_state",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Service role can mark tokens as used",
+      "table": "public.email_unsubscribe_tokens",
+      "command": "UPDATE",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Service role can read send log",
+      "table": "public.email_send_log",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Service role can read suppressed emails",
+      "table": "public.suppressed_emails",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Service role can read tokens",
+      "table": "public.email_unsubscribe_tokens",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Service role can update send log",
+      "table": "public.email_send_log",
+      "command": "UPDATE",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Service role manages checkalt deposits",
+      "table": "public.checkalt_deposits",
+      "command": "ALL",
+      "roles": "service_role",
+      "class": "obsolete",
+      "note": "service_role USING/WITH CHECK true \u2014 AWS Lambda uses checksops, not service_role"
+    },
+    {
+      "policy": "Service role writes webhook events",
+      "table": "public.checkalt_webhook_events",
+      "command": "ALL",
+      "roles": "service_role",
+      "class": "obsolete",
+      "note": "service_role USING/WITH CHECK true \u2014 AWS Lambda uses checksops, not service_role"
+    },
+    {
+      "policy": "Source tenant can create shares",
+      "table": "public.shared_checks",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Source tenant can delete shares",
+      "table": "public.shared_checks",
+      "command": "DELETE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Source tenant can update shares",
+      "table": "public.shared_checks",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Source tenant can view own shares",
+      "table": "public.shared_checks",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Staff and admin can read company branding",
+      "table": "public.company_branding",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Staff and admin can view automation runs",
+      "table": "public.deposit_automation_runs",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; WARNING original staff/admin role checks are global (tenant admins have user_roles.admin)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff and admin can view settings",
+      "table": "public.deposit_automation_settings",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; WARNING original staff/admin role checks are global (tenant admins have user_roles.admin)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff and admins can delete claims",
+      "table": "public.claims",
+      "command": "DELETE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Staff and admins can insert claims",
+      "table": "public.claims",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Staff and admins can update claims",
+      "table": "public.claims",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Staff can create approvals",
+      "table": "public.deposit_pending_approvals",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Staff can create claims",
+      "table": "public.claims",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Staff can create notifications",
+      "table": "public.notifications",
+      "command": "INSERT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Staff can insert endorsement audit log",
+      "table": "public.endorsement_audit_log",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Staff can manage all signature signers",
+      "table": "public.signature_signers",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can manage check_audit_log",
+      "table": "public.check_audit_log",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can manage check_eligibility_results",
+      "table": "public.check_eligibility_results",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can manage check_endorsement_events",
+      "table": "public.check_endorsement_events",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can manage deposit attachments",
+      "table": "public.deposit_attachments",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can manage deposit batches",
+      "table": "public.deposit_batches",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can manage deposit items",
+      "table": "public.deposit_items",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can manage email templates",
+      "table": "public.email_templates",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can manage emails",
+      "table": "public.emails",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can manage endorsement requests",
+      "table": "public.endorsement_requests",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can manage endorsements",
+      "table": "public.check_endorsements",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can manage esign event logs",
+      "table": "public.esign_event_logs",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can manage exceptions",
+      "table": "public.deposit_exceptions",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can manage field templates",
+      "table": "public.signature_field_templates",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can manage loss draft documents",
+      "table": "public.loss_draft_documents",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can manage loss draft releases",
+      "table": "public.loss_draft_releases",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can manage loss drafts",
+      "table": "public.loss_draft_tracking",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can manage reissue requests",
+      "table": "public.check_reissue_requests",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can manage review decisions",
+      "table": "public.check_review_decisions",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can manage signature requests",
+      "table": "public.signature_requests",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can read approvals",
+      "table": "public.deposit_pending_approvals",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; WARNING original staff/admin role checks are global (tenant admins have user_roles.admin)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can read delivery logs",
+      "table": "public.deposit_digest_delivery_log",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; WARNING original staff/admin role checks are global (tenant admins have user_roles.admin)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can read digests",
+      "table": "public.deposit_daily_digest",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; WARNING original staff/admin role checks are global (tenant admins have user_roles.admin)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can read escalation events",
+      "table": "public.deposit_escalation_events",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; WARNING original staff/admin role checks are global (tenant admins have user_roles.admin)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can read escalation rules",
+      "table": "public.deposit_escalation_rules",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; WARNING original staff/admin role checks are global (tenant admins have user_roles.admin)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can read mortgage desk config",
+      "table": "public.mortgage_desk_config",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; WARNING original staff/admin role checks are global (tenant admins have user_roles.admin)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can read provider config",
+      "table": "public.deposit_provider_config",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; WARNING original staff/admin role checks are global (tenant admins have user_roles.admin)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can read snapshots",
+      "table": "public.deposit_manager_snapshots",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; WARNING original staff/admin role checks are global (tenant admins have user_roles.admin)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can update escalation events",
+      "table": "public.deposit_escalation_events",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Staff can view active mortgage companies",
+      "table": "public.mortgage_companies",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim); WARNING original staff/admin role checks are global (tenant admins have user_roles.admin)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can view all profiles",
+      "table": "public.profiles",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; WARNING original staff/admin role checks are global (tenant admins have user_roles.admin)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can view deposit audit",
+      "table": "public.deposit_audit_log",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can view endorsement audit log",
+      "table": "public.endorsement_audit_log",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; WARNING original staff/admin role checks are global (tenant admins have user_roles.admin)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can view loss draft audit",
+      "table": "public.loss_draft_audit_log",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; WARNING original staff/admin role checks are global (tenant admins have user_roles.admin)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can view mortgage intake for their tenant loss drafts",
+      "table": "public.loss_draft_mortgage_intake",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Staff can view provider attempts",
+      "table": "public.deposit_provider_attempts",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Staff can view webhook events",
+      "table": "public.deposit_webhook_events",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "System admins can create tenants",
+      "table": "public.tenants",
+      "command": "INSERT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "System admins can delete tenants",
+      "table": "public.tenants",
+      "command": "DELETE",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "System admins can update tenants",
+      "table": "public.tenants",
+      "command": "UPDATE",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "System can insert alerts",
+      "table": "public.referral_alerts",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "server_side_api",
+      "note": "open write/ALL USING(true) \u2014 keep in API authorization, do not restore as open RLS"
+    },
+    {
+      "policy": "System can insert delivery logs",
+      "table": "public.deposit_digest_delivery_log",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "System can insert digests",
+      "table": "public.deposit_daily_digest",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "System can insert escalation events",
+      "table": "public.deposit_escalation_events",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "System can insert loss draft audit",
+      "table": "public.loss_draft_audit_log",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "System can insert snapshots",
+      "table": "public.deposit_manager_snapshots",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Target tenant can view active shares",
+      "table": "public.shared_checks",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Target tenant can view shared checks",
+      "table": "public.check_intake_items",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Target tenant can view shared endorsement events",
+      "table": "public.check_endorsement_events",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Target tenant can view shared endorsements",
+      "table": "public.check_endorsements",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Target tenant can view shared loss draft documents",
+      "table": "public.loss_draft_documents",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Target tenant can view shared loss draft releases",
+      "table": "public.loss_draft_releases",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Target tenant can view shared loss drafts",
+      "table": "public.loss_draft_tracking",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Target tenant can view shared payees",
+      "table": "public.check_payees",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Tenant admins can delete email settings",
+      "table": "public.tenant_email_settings",
+      "command": "DELETE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant admins can insert email settings",
+      "table": "public.tenant_email_settings",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant admins can update email settings",
+      "table": "public.tenant_email_settings",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant admins delete vetting documents",
+      "table": "public.tenant_vetting_documents",
+      "command": "DELETE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant admins insert funding settings",
+      "table": "public.tenant_wallet_funding_settings",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant admins insert vetting documents",
+      "table": "public.tenant_vetting_documents",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant admins manage documents",
+      "table": "public.tenant_documents",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Tenant admins manage own checkalt account",
+      "table": "public.checkalt_tenant_accounts",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Tenant admins update funding settings",
+      "table": "public.tenant_wallet_funding_settings",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant admins update vetting documents",
+      "table": "public.tenant_vetting_documents",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant admins view own checkalt account",
+      "table": "public.checkalt_tenant_accounts",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "Tenant members can delete own bank accounts",
+      "table": "public.tenant_bank_accounts",
+      "command": "DELETE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members can insert own credit balance",
+      "table": "public.tenant_credit_balances",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members can insert own credit transactions",
+      "table": "public.tenant_credit_transactions",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members can manage own bank accounts",
+      "table": "public.tenant_bank_accounts",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members can update own bank accounts",
+      "table": "public.tenant_bank_accounts",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members can update own credit balance",
+      "table": "public.tenant_credit_balances",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members can view email settings",
+      "table": "public.tenant_email_settings",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members can view own bank accounts",
+      "table": "public.tenant_bank_accounts",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members can view own billing events",
+      "table": "public.check_billing_events",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members can view own credit balance",
+      "table": "public.tenant_credit_balances",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members can view own credit transactions",
+      "table": "public.tenant_credit_transactions",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members can view their checkalt deposits",
+      "table": "public.checkalt_deposits",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members can view their fee line items",
+      "table": "public.platform_fee_line_items",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members can view their fee occurrences",
+      "table": "public.platform_fee_occurrences",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members can view their fee schedules",
+      "table": "public.platform_fee_schedules",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members can view their funding queue",
+      "table": "public.wallet_funding_queue",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members can view their plaid transfer events",
+      "table": "public.plaid_transfer_events",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members manage project plans",
+      "table": "public.claim_project_plans",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members manage their invoice customers",
+      "table": "public.moov_invoice_customers",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members manage their invoices",
+      "table": "public.moov_invoices",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members read funding requests",
+      "table": "public.wallet_funding_requests",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members read funding settings",
+      "table": "public.tenant_wallet_funding_settings",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members read own openai cred status",
+      "table": "public.tenant_openai_credentials",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members read their own verification file metadata",
+      "table": "public.payment_provider_files",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members read vetting documents",
+      "table": "public.tenant_vetting_documents",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members view deductible payments",
+      "table": "public.homeowner_deductible_payments",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant members view documents",
+      "table": "public.tenant_documents",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Tenant staff can add stakeholder accounts",
+      "table": "public.stakeholder_accounts",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant staff can delete stakeholder accounts",
+      "table": "public.stakeholder_accounts",
+      "command": "DELETE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant staff can update stakeholder accounts",
+      "table": "public.stakeholder_accounts",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant staff can view stakeholder accounts",
+      "table": "public.stakeholder_accounts",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant staff can view their tenant",
+      "table": "public.tenants",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant users manage own billing account",
+      "table": "public.tenant_billing_accounts",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant users update own billing account",
+      "table": "public.tenant_billing_accounts",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenant users view own billing account",
+      "table": "public.tenant_billing_accounts",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenants can read their own email logs",
+      "table": "public.email_send_log",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Tenants can read their own suppressed emails",
+      "table": "public.suppressed_emails",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Update tenant users",
+      "table": "public.tenant_users",
+      "command": "UPDATE",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Users can create own methods",
+      "table": "public.payment_methods",
+      "command": "INSERT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Users can create own sessions",
+      "table": "public.user_sessions",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Users can delete own methods",
+      "table": "public.payment_methods",
+      "command": "DELETE",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Users can delete own sessions",
+      "table": "public.user_sessions",
+      "command": "DELETE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Users can insert own notification logs",
+      "table": "public.notification_delivery_logs",
+      "command": "INSERT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Users can insert own preferences",
+      "table": "public.notification_preferences",
+      "command": "INSERT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Users can insert own profile",
+      "table": "public.profiles",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Users can read own prefs",
+      "table": "public.deposit_notification_prefs",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Users can update own methods",
+      "table": "public.payment_methods",
+      "command": "UPDATE",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Users can update own preferences",
+      "table": "public.notification_preferences",
+      "command": "UPDATE",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Users can update own prefs",
+      "table": "public.deposit_notification_prefs",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Users can update own profile",
+      "table": "public.profiles",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Users can update own sessions",
+      "table": "public.user_sessions",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Users can update their own notifications",
+      "table": "public.notifications",
+      "command": "UPDATE",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Users can upsert own prefs",
+      "table": "public.deposit_notification_prefs",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Users can view own methods",
+      "table": "public.payment_methods",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Users can view own notification logs",
+      "table": "public.notification_delivery_logs",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Users can view own preferences",
+      "table": "public.notification_preferences",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Users can view own profile",
+      "table": "public.profiles",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Users can view own role version",
+      "table": "public.role_version_tracker",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Users can view own roles",
+      "table": "public.user_roles",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Users can view own sessions",
+      "table": "public.user_sessions",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Users can view their own notifications",
+      "table": "public.notifications",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "Users can view their own tenant usage logs",
+      "table": "public.tenant_usage_logs",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Users manage their own read receipts (insert)",
+      "table": "public.check_message_reads",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Users manage their own read receipts (select)",
+      "table": "public.check_message_reads",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "Users manage their own read receipts (update)",
+      "table": "public.check_message_reads",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "View tenant users",
+      "table": "public.tenant_users",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "admins can insert mortgage desk config",
+      "table": "public.mortgage_desk_config",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "admins can update mortgage desk config",
+      "table": "public.mortgage_desk_config",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "admins read backfill queue",
+      "table": "public.check_deposit_image_backfill_queue",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "ai_response_cache_no_client_access",
+      "table": "public.ai_response_cache",
+      "command": "ALL",
+      "roles": "authenticated, anon",
+      "class": "directly_portable",
+      "note": "USING(false) deny-all; portable, rewrite TO authenticated"
+    },
+    {
+      "policy": "anon can record acknowledgment",
+      "table": "public.privacy_notice_acknowledgments",
+      "command": "INSERT",
+      "roles": "anon",
+      "class": "obsolete",
+      "note": "anon-only; staging API has no anonymous JWT role"
+    },
+    {
+      "policy": "audit_logs_admin_read",
+      "table": "public.audit_logs",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "audit_logs_insert_self",
+      "table": "public.audit_logs",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "authenticated can record acknowledgment",
+      "table": "public.privacy_notice_acknowledgments",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "server_side_api",
+      "note": "open write/ALL USING(true) \u2014 keep in API authorization, do not restore as open RLS"
+    },
+    {
+      "policy": "claim_check_payments_visibility",
+      "table": "public.claim_check_payments",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "delete shared library docs",
+      "table": "public.mortgage_request_library_documents",
+      "command": "DELETE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "manage shared library docs",
+      "table": "public.mortgage_request_library_documents",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "payroll_runs_admin_insert",
+      "table": "public.payroll_runs",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "payroll_runs_admin_select",
+      "table": "public.payroll_runs",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "payroll_runs_admin_update",
+      "table": "public.payroll_runs",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "pii_reveal_logs_admin_read",
+      "table": "public.pii_reveal_logs",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers",
+      "too_broad_global_role": true
+    },
+    {
+      "policy": "pii_reveal_logs_insert",
+      "table": "public.pii_reveal_logs",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "platform_admin_manage_maintenance_payments",
+      "table": "public.tenant_maintenance_payments",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "post shared check messages",
+      "table": "public.shared_check_messages",
+      "command": "INSERT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "primary_admin_manage_roles_bootstrap",
+      "table": "public.user_roles",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "read mortgage handling requests",
+      "table": "public.mortgage_handling_requests",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "read shared check messages",
+      "table": "public.shared_check_messages",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "read shared library docs",
+      "table": "public.mortgage_request_library_documents",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "recipient_tenant_read_disbursement_batches",
+      "table": "public.disbursement_batches",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "recipient_tenant_read_disbursement_splits",
+      "table": "public.disbursement_splits",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "referral_events_admin_view",
+      "table": "public.referral_events",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "referral_events_referrer_view",
+      "table": "public.referral_events",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "staff can update all mortgage handling requests",
+      "table": "public.mortgage_handling_requests",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "system admins review",
+      "table": "public.stakeholder_limit_requests",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "tenant admins read glba events",
+      "table": "public.glba_security_events",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "tenant can cancel own requested rows",
+      "table": "public.mortgage_handling_requests",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "tenant can create mortgage handling requests",
+      "table": "public.mortgage_handling_requests",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "tenant members create own requests",
+      "table": "public.stakeholder_limit_requests",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "tenant members delete recipient_tax_profiles",
+      "table": "public.recipient_tax_profiles",
+      "command": "DELETE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "tenant members insert recipient_tax_profiles",
+      "table": "public.recipient_tax_profiles",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "tenant members manage own bank links",
+      "table": "public.homeowner_bank_link_tokens",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "tenant members read pna",
+      "table": "public.privacy_notice_acknowledgments",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "tenant members read recipient_tax_profiles",
+      "table": "public.recipient_tax_profiles",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "tenant members see own requests",
+      "table": "public.stakeholder_limit_requests",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "tenant members update recipient_tax_profiles",
+      "table": "public.recipient_tax_profiles",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "tenant staff insert ledger events",
+      "table": "public.homeowner_ledger_events",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "tenant staff manage ledger check uploads",
+      "table": "public.homeowner_ledger_check_uploads",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "tenant staff manage ledger tokens",
+      "table": "public.homeowner_ledger_tokens",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "tenant staff read ledger events",
+      "table": "public.homeowner_ledger_events",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "tenant_isolation_ach_authorizations",
+      "table": "public.ach_authorizations",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "tenant_isolation_actum_transactions",
+      "table": "public.actum_transactions",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "tenant_isolation_cash_job_attachments",
+      "table": "public.cash_job_attachments",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "tenant_isolation_cash_job_line_items",
+      "table": "public.cash_job_line_items",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "tenant_isolation_cash_job_payments",
+      "table": "public.cash_job_payments",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "tenant_isolation_cash_jobs",
+      "table": "public.cash_jobs",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "tenant_isolation_check_stakeholders",
+      "table": "public.check_stakeholders",
+      "command": "ALL",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "tenant_isolation_disbursement_batches",
+      "table": "public.disbursement_batches",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "tenant_isolation_disbursement_splits",
+      "table": "public.disbursement_splits",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "tenant_isolation_micro_deposits",
+      "table": "public.micro_deposit_verifications",
+      "command": "ALL",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "tenant_users_read_verification_log",
+      "table": "public.stakeholder_account_verification_log",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers"
+    },
+    {
+      "policy": "tenants_view_own_maintenance_payments",
+      "table": "public.tenant_maintenance_payments",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "directly_portable",
+      "note": "portable with request.app_user_id GUC + existing helpers; rewrite TO authenticated (RDS has no Supabase anon/authenticated until role shim)"
+    },
+    {
+      "policy": "zip cache readable by all",
+      "table": "public.zip_geocache",
+      "command": "SELECT",
+      "roles": "public",
+      "class": "requires_modification",
+      "note": "SELECT USING(true) reference/config; rewrite to authenticated + confirm non-sensitive before restore"
+    }
+  ]
+}
