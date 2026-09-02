@@ -421,9 +421,8 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
         </Card>
       )}
 
-      {claimId && tenant?.id && (
-        <ProjectPlanCard claimId={claimId} tenantId={tenant.id} />
-      )}
+
+
 
       {/* Homeowner links */}
 
