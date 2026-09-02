@@ -7,3 +7,4 @@ GRANT EXECUTE ON FUNCTION public.aws_can_access_loss_draft(uuid) TO checksops, a
 GRANT EXECUTE ON FUNCTION public.aws_can_access_signature_request(uuid) TO checksops, authenticated;
 GRANT EXECUTE ON FUNCTION public.is_master_owner() TO checksops, authenticated;
 GRANT EXECUTE ON FUNCTION public.is_platform_owner() TO checksops, authenticated;
+GRANT EXECUTE ON FUNCTION public.aws_can_write_same_tenant_user(uuid) TO checksops, authenticated;

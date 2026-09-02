@@ -69,11 +69,38 @@ AS $$
       );
 $$;
 
+CREATE OR REPLACE FUNCTION public.aws_can_write_same_tenant_user(_user_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+SET row_security = off
+AS $$
+  SELECT public.aws_is_authenticated()
+     AND _user_id IS NOT NULL
+     AND (
+       public.aws_is_cross_tenant_reader()
+       OR (
+         public.aws_can_access_same_tenant_user(_user_id)
+         AND (
+           public.has_role(auth.uid(), 'admin'::public.app_role)
+           OR public.has_role(auth.uid(), 'staff'::public.app_role)
+         )
+       )
+     );
+$$;
+
+COMMENT ON FUNCTION public.aws_can_write_same_tenant_user(uuid) IS
+  'Write another user-scoped row only when authenticated, same-tenant (or platform owner), and admin/staff. Global admin without tenant_users is denied.';
+
 REVOKE ALL ON FUNCTION public.aws_is_authenticated() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.aws_can_write_tenant(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.aws_can_write_check(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.aws_can_write_claim(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.aws_can_write_same_tenant_user(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.aws_is_authenticated() TO checksops, authenticated;
 GRANT EXECUTE ON FUNCTION public.aws_can_write_tenant(uuid) TO checksops, authenticated;
 GRANT EXECUTE ON FUNCTION public.aws_can_write_check(uuid) TO checksops, authenticated;
 GRANT EXECUTE ON FUNCTION public.aws_can_write_claim(uuid) TO checksops, authenticated;
+GRANT EXECUTE ON FUNCTION public.aws_can_write_same_tenant_user(uuid) TO checksops, authenticated;

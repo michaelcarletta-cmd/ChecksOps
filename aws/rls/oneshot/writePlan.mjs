@@ -19,6 +19,7 @@ export const WRITE_HELPER_NAMES = [
   'aws_can_write_tenant',
   'aws_can_write_check',
   'aws_can_write_claim',
+  'aws_can_write_same_tenant_user',
 ];
 
 const asRole = async (client, appUserId, fn) => {

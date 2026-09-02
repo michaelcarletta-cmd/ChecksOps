@@ -10,6 +10,7 @@ import {
   investigateNinthLive,
   transactionalWriteTests,
 } from './writePlan.mjs';
+import { runCompleteAuth } from './completeAuth.mjs';
 
 const { Client } = pg;
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -52,6 +53,11 @@ const HELPER_NAMES = [
   'aws_can_access_deposit_item',
   'aws_can_access_loss_draft',
   'aws_can_access_signature_request',
+  'aws_is_authenticated',
+  'aws_can_write_tenant',
+  'aws_can_write_check',
+  'aws_can_write_claim',
+  'aws_can_write_same_tenant_user',
 ];
 
 const readSql = (name) => fs.readFileSync(path.join(SQL_DIR, name), 'utf8');
@@ -739,6 +745,9 @@ export const handler = async (event = {}) => {
       out.applicationRoleInspection = await inspectApplicationRole(client);
       out.writeAuthorization = await transactionalWriteTests(client);
     }
+    if (step === 'completeAuth') {
+      Object.assign(out, await runCompleteAuth(client));
+    }
     out.publicTablesWithRls = await rlsEnabledPublicTables(client);
     out.rlsEnabledGlobally = out.publicTablesWithRls.some(
       (name) => name !== '_aws_rls_probe_items' && name !== '_aws_rls_write_probe',
@@ -746,7 +755,7 @@ export const handler = async (event = {}) => {
     out.ok = !out.error
       && out.ddlApplied !== false
       && !out.rlsEnabledGlobally
-      && (step === 'ddl' || step === 'writePlan' || (
+      && (step === 'ddl' || step === 'writePlan' || step === 'completeAuth' || (
         (out.probeIsolation ? out.probeIsolation.pass : true)
         && (out.expandedIsolation ? out.expandedIsolation.pass : true)
         && (out.transactionalIntakeIsolation ? out.transactionalIntakeIsolation.pass !== false : true)
@@ -763,6 +772,19 @@ export const handler = async (event = {}) => {
         && out.applicationRoleInspection?.checksopsMemberOfAdmin === false
         && out.applicationRoleInspection?.checksopsHasWritePrivilege === false
         && out.applicationRoleInspection?.checkIntakeOwner !== 'checksops';
+    }
+    if (step === 'completeAuth') {
+      out.ok = !out.error
+        && !out.rlsEnabledGlobally
+        && out.writeDdl?.selectPoliciesUnchanged === true
+        && out.writeDdl?.writePolicies === 127
+        && out.claimsBackfill?.pass
+        && out.fkOrphans?.pass
+        && out.fkRetarget?.pass
+        && out.authorizationTests?.pass
+        && out.applicationRoleInspection?.checksopsCannotAlterRls
+        && out.applicationRoleInspection?.checksopsHasWritePrivilege === false
+        && out.realUsersInvited === false;
     }
     return out;
   } catch (error) {
