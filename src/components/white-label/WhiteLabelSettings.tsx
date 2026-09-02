@@ -37,7 +37,7 @@ import { ContractorLeadsCard } from "@/components/networking/ContractorLeadsCard
 import { ContractorVerificationStatusCard } from "@/components/networking/ContractorVerificationStatusCard";
 import { Search as SearchIcon } from "lucide-react";
 
-import { ChangePasswordCard } from "@/components/settings/ChangePasswordCard";
+
 import { PasskeyManagerCard } from "@/components/auth/PasskeyManagerCard";
 import { TotpManagerCard } from "@/components/auth/TotpManagerCard";
 import { CheckUsageCard } from "@/components/billing/CheckUsageCard";
@@ -169,7 +169,6 @@ export function WhiteLabelSettings() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
             <TabsTrigger value="profile" className="text-xs gap-1"><Building2 className="h-3 w-3" />Profile</TabsTrigger>
-            <TabsTrigger value="security" className="text-xs gap-1"><ShieldCheck className="h-3 w-3" />Sign-in Security</TabsTrigger>
             <TabsTrigger value="usage" className="text-xs gap-1"><Receipt className="h-3 w-3" />Usage</TabsTrigger>
             {canManageTenant && <TabsTrigger value="ai-key" className="text-xs gap-1"><KeyRound className="h-3 w-3" />AI Key</TabsTrigger>}
             {canManageTenant && <TabsTrigger value="users" className="text-xs gap-1"><Users className="h-3 w-3" />Users</TabsTrigger>}
@@ -184,13 +183,10 @@ export function WhiteLabelSettings() {
 
           <TabsContent value="profile" className="space-y-6">
             {tenant && <ProfileSettings tenant={tenant} />}
-            <ChangePasswordCard />
-          </TabsContent>
-
-          <TabsContent value="security" className="space-y-6">
             <PasskeyManagerCard />
             <TotpManagerCard />
           </TabsContent>
+
 
 
           <TabsContent value="usage" className="space-y-4">
