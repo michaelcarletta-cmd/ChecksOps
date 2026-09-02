@@ -28,3 +28,6 @@ aws/.aws-sam/
 *.njsproj
 *.sln
 *.sw?
+
+# AWS SAM build output
+aws/.aws-sam/

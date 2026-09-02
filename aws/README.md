@@ -68,10 +68,20 @@ Do not point the production frontend at this API yet.
 
 ## Next migration step
 
-After this private-network update is deployed and `/health` still succeeds:
+Staging PostgreSQL connectivity is confirmed. Database copy tooling is in `aws/db-copy/` with the runbook in `docs/AWS_DB_COPY_RUNBOOK.md`.
 
-1. restore a copy of the live ChecksOps PostgreSQL database to the existing RDS instance
-2. add read-only `/v1/tenants` and `/v1/checks` API routes that open a Postgres connection using the application secret
-3. reconcile AWS results against Supabase
+After this private-network update is deployed and `/health` still succeeds, restore a copy of the live ChecksOps PostgreSQL database to the existing RDS instance.
+
+Validate offline first:
+
+```bash
+node aws/db-copy/cli.mjs validate
+node --test aws/db-copy/tests/db-copy-offline.test.mjs
+```
+
+After an approved copy and reconciliation:
+
+1. add read-only `/v1/tenants` and `/v1/checks` API routes that open a Postgres connection using the application secret
+2. reconcile AWS results against Supabase
 
 Only after read parity is proven do we begin moving writes or provider webhooks.

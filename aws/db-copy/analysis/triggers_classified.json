@@ -1,0 +1,2672 @@
+{
+  "public": [
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "assign_case_on_check_intake",
+      "function": "public.tg_check_intake_assign_case",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "homeowner_ledger_events",
+      "trigger": "assign_case_on_ledger_events",
+      "function": "public.tg_claim_id_assign_case",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "homeowner_ledger_tokens",
+      "trigger": "assign_case_on_ledger_tokens",
+      "function": "public.tg_claim_id_assign_case",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "homeowner_ledger_check_uploads",
+      "trigger": "assign_case_on_ledger_uploads",
+      "function": "public.tg_claim_id_assign_case",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "loss_draft_tracking",
+      "trigger": "assign_case_on_loss_draft",
+      "function": "public.tg_loss_draft_assign_case",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "claim_check_mortgage_draws",
+      "trigger": "assign_case_on_mortgage_draws",
+      "function": "public.tg_claim_id_assign_case",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "mortgage_releases",
+      "trigger": "assign_case_on_mortgage_releases",
+      "function": "public.tg_claim_id_assign_case",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "signature_requests",
+      "trigger": "assign_case_on_signature_requests",
+      "function": "public.tg_claim_id_assign_case",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "check_intake_contact_carryover",
+      "function": "public.trg_check_contact_carryover",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "check_payees",
+      "trigger": "check_payee_contact_carryover",
+      "function": "public.trg_payee_contact_carryover",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "checkalt_deposits",
+      "trigger": "checkalt_deposits_fund_on_clear",
+      "function": "public.enqueue_wallet_funding_on_clear",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "contractor_profiles",
+      "trigger": "contractor_profiles_updated_at",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "contractor_reviews",
+      "trigger": "contractor_reviews_updated_at",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "moov_invoice_customers",
+      "trigger": "moov_invoice_customers_set_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "moov_invoices",
+      "trigger": "moov_invoices_set_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "mortgage_desk_config",
+      "trigger": "mortgage_desk_config_set_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "mortgage_handling_requests",
+      "trigger": "mortgage_handling_requests_set_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "user_roles",
+      "trigger": "on_role_change",
+      "function": "public.increment_role_version",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "event_count": 3,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "RLS/security-related"
+    },
+    {
+      "schema": "public",
+      "table": "payment_provider_files",
+      "trigger": "payment_provider_files_set_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "payroll_runs",
+      "trigger": "payroll_runs_set_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "recipient_tax_profiles",
+      "trigger": "recipient_tax_profiles_set_updated_at",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "contractor_profiles",
+      "trigger": "recompute_tier_on_profile",
+      "function": "public._trg_recompute_contractor_tier_from_profile",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "contractor_reviews",
+      "trigger": "recompute_tier_on_reviews",
+      "function": "public._trg_recompute_contractor_tier_from_reviews",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "event_count": 3,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_cases",
+      "trigger": "set_check_cases_updated_at",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "check_messages",
+      "trigger": "set_check_messages_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "claim_project_plans",
+      "trigger": "set_claim_project_plans_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "external_payment_recipients",
+      "trigger": "set_external_payment_recipients_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "homeowner_deductible_payments",
+      "trigger": "set_homeowner_deductible_payments_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "mortgage_request_library_documents",
+      "trigger": "set_mortgage_request_library_documents_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "payment_idempotency_keys",
+      "trigger": "set_payment_idempotency_keys_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "payment_provider_accounts",
+      "trigger": "set_payment_provider_accounts_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "payment_provider_methods",
+      "trigger": "set_payment_provider_methods_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "payment_sweep_configs",
+      "trigger": "set_payment_sweep_configs_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "payment_transfers",
+      "trigger": "set_payment_transfers_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "plaid_transfer_events",
+      "trigger": "set_plaid_transfer_events_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "plaid_webhook_cursors",
+      "trigger": "set_plaid_webhook_cursors_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "disbursement_splits",
+      "trigger": "set_split_recipient_tenant",
+      "function": "public.trg_set_split_recipient_tenant",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "tenant_email_settings",
+      "trigger": "tenant_email_settings_updated_at",
+      "function": "public.tenant_email_settings_touch_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "tenant_maintenance_payments",
+      "trigger": "tenant_maintenance_payments_set_updated_at",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "tenant_vetting_documents",
+      "trigger": "tenant_vetting_documents_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "claim_checks",
+      "trigger": "touch_claim_on_check",
+      "function": "public.touch_claim_updated_at",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "event_count": 3,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "emails",
+      "trigger": "touch_claim_on_email",
+      "function": "public.touch_claim_updated_at",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "event_count": 3,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "claim_files",
+      "trigger": "touch_claim_on_file",
+      "function": "public.touch_claim_updated_at",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "event_count": 3,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "claim_payments",
+      "trigger": "touch_claim_on_payment",
+      "function": "public.touch_claim_updated_at",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "event_count": 3,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "claim_settlements",
+      "trigger": "touch_claim_on_settlement",
+      "function": "public.touch_claim_updated_at",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "event_count": 3,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "signature_requests",
+      "trigger": "touch_claim_on_signature",
+      "function": "public.touch_claim_updated_at",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "event_count": 3,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "sms_messages",
+      "trigger": "touch_claim_on_sms",
+      "function": "public.touch_claim_updated_at",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "event_count": 3,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "tr_record_mortgage_handling_billing",
+      "function": "public.tg_record_mortgage_handling_billing",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_endorsements",
+      "trigger": "trg_advance_on_endorsement_complete",
+      "function": "public.advance_check_on_endorsement_complete",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "disbursement_batches",
+      "trigger": "trg_advance_stage_on_batch_complete",
+      "function": "public.advance_check_stage_on_batch_complete",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "disbursement_splits",
+      "trigger": "trg_advance_stage_on_disbursement",
+      "function": "public.advance_check_stage_on_disbursement",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "payment_wallet_ledger",
+      "trigger": "trg_apply_wallet_ledger_entry",
+      "function": "public.apply_wallet_ledger_entry",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "tenants",
+      "trigger": "trg_assign_tenant_partner_code",
+      "function": "public.assign_tenant_partner_code",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "claim_check_payments",
+      "trigger": "trg_auto_add_partner_stakeholder",
+      "function": "public.auto_add_partner_stakeholder",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "trg_auto_create_loss_draft",
+      "function": "public.trg_auto_create_loss_draft",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "trg_auto_link_check_to_claim",
+      "function": "public.auto_link_check_to_claim",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "trg_auto_link_check_to_claim_ins",
+      "function": "public.tg_auto_link_check_to_claim",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "trg_auto_link_check_to_claim_upd",
+      "function": "public.tg_auto_link_check_to_claim",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "tenants",
+      "trigger": "trg_auto_referral_code",
+      "function": "public.auto_generate_referral_code",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "trg_auto_seed_endorsements_ins",
+      "function": "public.tg_auto_seed_endorsements",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "trg_auto_seed_endorsements_upd",
+      "function": "public.tg_auto_seed_endorsements",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "shared_checks",
+      "trigger": "trg_autoadd_partner_stakeholder",
+      "function": "public.autoadd_partner_stakeholder_on_share",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "stakeholder_accounts",
+      "trigger": "trg_autoattach_homeowner_bank",
+      "function": "public.autoattach_homeowner_bank_on_verify",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "payment_wallet_ledger",
+      "trigger": "trg_block_wallet_ledger_mutation",
+      "function": "public.block_wallet_ledger_mutation",
+      "events": [
+        "DELETE",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "cash_job_payments",
+      "trigger": "trg_cash_job_payments_updated_at",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "cash_jobs",
+      "trigger": "trg_cash_jobs_updated_at",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "check_billing_config",
+      "trigger": "trg_check_billing_config_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "check_billing_events",
+      "trigger": "trg_check_billing_events_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "check_payment_directions",
+      "trigger": "trg_check_payment_directions_updated_at",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "check_stakeholders",
+      "trigger": "trg_check_stakeholders_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "claim_check_payments",
+      "trigger": "trg_claim_check_payments_updated_at",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "claim_disbursements",
+      "trigger": "trg_claim_disbursements_updated_at",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "claims",
+      "trigger": "trg_claims_status_change_activity",
+      "function": "public.bump_claim_activity_on_status_change",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "disbursement_batches",
+      "trigger": "trg_disbursement_batches_updated_at",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "disbursement_splits",
+      "trigger": "trg_disbursement_splits_updated_at",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "stakeholder_accounts",
+      "trigger": "trg_enforce_single_primary",
+      "function": "public.enforce_single_primary_account",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "stakeholder_accounts",
+      "trigger": "trg_enforce_stakeholder_caps",
+      "function": "public.enforce_stakeholder_caps",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "homeowner_check_uploads",
+      "trigger": "trg_hcu_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "homeowner_intro_requests",
+      "trigger": "trg_hir_set_accepted_at",
+      "function": "public.homeowner_lead_set_accepted_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "homeowner_intro_requests",
+      "trigger": "trg_hir_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "homeowner_ledger_check_uploads",
+      "trigger": "trg_hlcu_updated_at",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "trg_hle_check_intake_deposited",
+      "function": "public.hle_on_check_intake_deposited",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "trg_hle_check_intake_insert",
+      "function": "public.hle_on_check_intake_insert",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "claim_disbursements",
+      "trigger": "trg_hle_disbursement_ins",
+      "function": "public.hle_on_disbursement_sent",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "claim_disbursements",
+      "trigger": "trg_hle_disbursement_upd",
+      "function": "public.hle_on_disbursement_sent",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_endorsements",
+      "trigger": "trg_hle_endorsement_insert",
+      "function": "public.hle_on_endorsement_change",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_endorsements",
+      "trigger": "trg_hle_endorsement_update",
+      "function": "public.hle_on_endorsement_change",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "homeowner_ledger_tokens",
+      "trigger": "trg_hlt_updated_at",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "homeowner_bank_link_tokens",
+      "trigger": "trg_homeowner_bank_link_tokens_updated_at",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "check_payees",
+      "trigger": "trg_hydrate_payee_contact_from_claim",
+      "function": "public.tg_hydrate_payee_contact_from_claim",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "tenants",
+      "trigger": "trg_init_tenant_credits",
+      "function": "public.init_tenant_credit_balance",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "claim_checks",
+      "trigger": "trg_lock_stage_on_deposit",
+      "function": "public.lock_stage_on_deposit",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "claim_checks",
+      "trigger": "trg_log_check_usage",
+      "function": "public.log_usage_event",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "trg_log_intake_usage",
+      "function": "public.log_usage_event",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "moov_invoices",
+      "trigger": "trg_log_invoice_usage",
+      "function": "public.log_usage_event",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "loss_draft_tracking",
+      "trigger": "trg_loss_draft_auto_link_company",
+      "function": "public.auto_link_loss_draft_mortgage_company",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "loss_draft_mortgage_intake",
+      "trigger": "trg_loss_draft_mortgage_intake_updated",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "micro_deposit_verifications",
+      "trigger": "trg_micro_deposit_verifications_updated_at",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "check_files",
+      "trigger": "trg_mirror_check_file_to_homeowner_ledger",
+      "function": "public.mirror_check_file_to_homeowner_ledger",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_messages",
+      "trigger": "trg_mirror_check_message_to_homeowner_ledger",
+      "function": "public.mirror_check_message_to_homeowner_ledger",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "loss_draft_documents",
+      "trigger": "trg_mirror_loss_draft_upload",
+      "function": "public.mirror_loss_draft_upload_to_ledger",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "mortgage_handling_requests",
+      "trigger": "trg_mirror_mortgage_dates",
+      "function": "public.mirror_mortgage_dates_to_ledger",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_payees",
+      "trigger": "trg_mirror_payee_to_endorsement_del",
+      "function": "public.tg_mirror_payee_to_endorsement",
+      "events": [
+        "DELETE"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_payees",
+      "trigger": "trg_mirror_payee_to_endorsement_ins",
+      "function": "public.tg_mirror_payee_to_endorsement",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_payees",
+      "trigger": "trg_mirror_payee_to_endorsement_upd",
+      "function": "public.tg_mirror_payee_to_endorsement",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "signature_requests",
+      "trigger": "trg_mirror_signature_request_to_homeowner_ledger",
+      "function": "public.mirror_signature_request_to_homeowner_ledger",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "signature_signers",
+      "trigger": "trg_mirror_signature_signer_to_homeowner_ledger",
+      "function": "public.mirror_signature_signer_to_homeowner_ledger",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "trg_notify_freedom_status_change",
+      "function": "public.notify_freedom_status_change",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "platform_fee_line_items",
+      "trigger": "trg_platform_fee_line_items_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "platform_fee_occurrences",
+      "trigger": "trg_platform_fee_occurrences_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "platform_fee_schedules",
+      "trigger": "trg_platform_fee_schedules_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "payment_method_verifications",
+      "trigger": "trg_pmv_updated",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "user_roles",
+      "trigger": "trg_prevent_mortgage_agent_role_conflict",
+      "function": "public.prevent_mortgage_agent_role_conflict",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "RLS/security-related"
+    },
+    {
+      "schema": "public",
+      "table": "payment_transfer_groups",
+      "trigger": "trg_ptg_updated",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "payment_wallets",
+      "trigger": "trg_pw_updated",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "payment_wallet_sub_ledgers",
+      "trigger": "trg_pwsl_updated",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "trg_record_check_billing_event",
+      "function": "public.record_check_billing_event",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "referral_events",
+      "trigger": "trg_referral_events_updated_at",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "trg_return_to_review_on_release",
+      "function": "public.return_check_to_review_on_mortgage_release",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "claims",
+      "trigger": "trg_set_claim_retention",
+      "function": "public.set_claim_retention_purge_after",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "trg_set_deposited_metadata",
+      "function": "public.tg_set_deposited_metadata",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "mortgage_handling_requests",
+      "trigger": "trg_share_library_docs_to_mortgage_request",
+      "function": "public.share_library_docs_to_mortgage_request",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "stakeholder_accounts",
+      "trigger": "trg_stakeholder_accounts_updated_at",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "stakeholder_limit_requests",
+      "trigger": "trg_stakeholder_limit_requests_updated_at",
+      "function": "public.set_updated_at",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "trg_sync_accounting_deposit_status",
+      "function": "public.sync_accounting_deposit_status",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "trg_sync_cash_job_check_payment",
+      "function": "public.sync_cash_job_check_payment",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "cash_jobs",
+      "trigger": "trg_sync_cash_job_status",
+      "function": "public.sync_cash_job_status",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "cash_job_payments",
+      "trigger": "trg_sync_cash_job_total_paid",
+      "function": "public.sync_cash_job_total_paid",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "event_count": 3,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "claims",
+      "trigger": "trg_sync_claim_ops_on_status_change",
+      "function": "public.sync_claim_operational_state",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "trg_sync_homeowner_ledger_ins",
+      "function": "public.sync_homeowner_ledger_from_check",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "trg_sync_homeowner_ledger_upd",
+      "function": "public.sync_homeowner_ledger_from_check",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "check_intake_items",
+      "trigger": "trg_sync_partner_status_from_local",
+      "function": "public.sync_partner_status_from_local",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "payment_provider_accounts",
+      "trigger": "trg_sync_provider_stakeholder_acct",
+      "function": "public.trg_sync_provider_stakeholder_account",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "payment_provider_methods",
+      "trigger": "trg_sync_provider_stakeholder_bank",
+      "function": "public.trg_sync_provider_stakeholder_account",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "tenant_users",
+      "trigger": "trg_sync_tenant_user_role",
+      "function": "public.sync_tenant_user_role",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "application/business logic"
+    },
+    {
+      "schema": "public",
+      "table": "tenant_documents",
+      "trigger": "trg_tenant_documents_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "tenant_openai_credentials",
+      "trigger": "trg_tenant_openai_creds_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "tenant_wallet_funding_settings",
+      "trigger": "trg_twfs_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "wallet_funding_requests",
+      "trigger": "trg_wfr_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "claims",
+      "trigger": "trigger_create_predefined_folders",
+      "function": "public.create_predefined_folders",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "checkalt_config",
+      "trigger": "update_checkalt_config_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "checkalt_deposits",
+      "trigger": "update_checkalt_deposits_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "claim_check_mortgage_draws",
+      "trigger": "update_claim_check_mortgage_draws_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "claim_checks",
+      "trigger": "update_claim_checks_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "claim_operational_state",
+      "trigger": "update_claim_ops_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "claim_payments",
+      "trigger": "update_claim_payments_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "claim_settlements",
+      "trigger": "update_claim_settlements_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "claims",
+      "trigger": "update_claims_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "document_templates",
+      "trigger": "update_document_templates_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "email_templates",
+      "trigger": "update_email_templates_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "mortgage_companies",
+      "trigger": "update_mortgage_companies_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "notification_preferences",
+      "trigger": "update_notification_preferences_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "payment_methods",
+      "trigger": "update_payment_methods_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "platform_announcements",
+      "trigger": "update_platform_announcements_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "profiles",
+      "trigger": "update_profiles_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "referral_alerts",
+      "trigger": "update_referral_alerts_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "referrers",
+      "trigger": "update_referrers_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "signature_field_templates",
+      "trigger": "update_signature_field_templates_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "signature_requests",
+      "trigger": "update_signature_requests_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "sms_messages",
+      "trigger": "update_sms_messages_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "tenant_billing_accounts",
+      "trigger": "update_tenant_billing_accounts_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "tenant_users",
+      "trigger": "update_tenant_users_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "tenants",
+      "trigger": "update_tenants_updated_at",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    },
+    {
+      "schema": "public",
+      "table": "wallet_funding_queue",
+      "trigger": "wallet_funding_queue_touch",
+      "function": "public.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "postgres",
+      "category": "data-integrity"
+    }
+  ],
+  "nonpublic": [
+    {
+      "schema": "pgmq",
+      "table": "q_auth_emails",
+      "trigger": "email_queue_wake_auth",
+      "function": "public.email_queue_wake",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "cron/net/vault/pgmq-specific"
+    },
+    {
+      "schema": "pgmq",
+      "table": "q_transactional_emails",
+      "trigger": "email_queue_wake_transactional",
+      "function": "public.email_queue_wake",
+      "events": [
+        "INSERT"
+      ],
+      "event_count": 1,
+      "timing": "AFTER",
+      "owner": "postgres",
+      "category": "cron/net/vault/pgmq-specific"
+    },
+    {
+      "schema": "realtime",
+      "table": "subscription",
+      "trigger": "tr_check_filters",
+      "function": "realtime.subscription_check_filters",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "BEFORE",
+      "owner": "supabase_realtime_admin",
+      "category": "realtime-specific"
+    },
+    {
+      "schema": "storage",
+      "table": "buckets",
+      "trigger": "enforce_bucket_name_length_trigger",
+      "function": "storage.enforce_bucket_name_length",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "event_count": 2,
+      "timing": "BEFORE",
+      "owner": "supabase_storage_admin",
+      "category": "other",
+      "category_note": "Supabase Storage; S3 phase, not Auth"
+    },
+    {
+      "schema": "storage",
+      "table": "buckets",
+      "trigger": "protect_buckets_delete",
+      "function": "storage.protect_delete",
+      "events": [
+        "DELETE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "supabase_storage_admin",
+      "category": "other",
+      "category_note": "Supabase Storage; S3 phase, not Auth"
+    },
+    {
+      "schema": "storage",
+      "table": "objects",
+      "trigger": "protect_objects_delete",
+      "function": "storage.protect_delete",
+      "events": [
+        "DELETE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "supabase_storage_admin",
+      "category": "other",
+      "category_note": "Supabase Storage; S3 phase, not Auth"
+    },
+    {
+      "schema": "storage",
+      "table": "objects",
+      "trigger": "update_objects_updated_at",
+      "function": "storage.update_updated_at_column",
+      "events": [
+        "UPDATE"
+      ],
+      "event_count": 1,
+      "timing": "BEFORE",
+      "owner": "supabase_storage_admin",
+      "category": "other",
+      "category_note": "Supabase Storage; S3 phase, not Auth"
+    }
+  ],
+  "counts": {
+    "data-integrity": 98,
+    "application/business logic": 62,
+    "RLS/security-related": 2,
+    "other": 2
+  },
+  "information_schema_event_rows": 211,
+  "pg_trigger_rows": 164,
+  "multi_event_triggers": [
+    {
+      "table": "check_intake_items",
+      "trigger": "assign_case_on_check_intake",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "data-integrity"
+    },
+    {
+      "table": "homeowner_ledger_events",
+      "trigger": "assign_case_on_ledger_events",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "data-integrity"
+    },
+    {
+      "table": "homeowner_ledger_tokens",
+      "trigger": "assign_case_on_ledger_tokens",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "data-integrity"
+    },
+    {
+      "table": "homeowner_ledger_check_uploads",
+      "trigger": "assign_case_on_ledger_uploads",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "data-integrity"
+    },
+    {
+      "table": "loss_draft_tracking",
+      "trigger": "assign_case_on_loss_draft",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "data-integrity"
+    },
+    {
+      "table": "claim_check_mortgage_draws",
+      "trigger": "assign_case_on_mortgage_draws",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "data-integrity"
+    },
+    {
+      "table": "mortgage_releases",
+      "trigger": "assign_case_on_mortgage_releases",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "data-integrity"
+    },
+    {
+      "table": "signature_requests",
+      "trigger": "assign_case_on_signature_requests",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "data-integrity"
+    },
+    {
+      "table": "check_intake_items",
+      "trigger": "check_intake_contact_carryover",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "data-integrity"
+    },
+    {
+      "table": "user_roles",
+      "trigger": "on_role_change",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 2,
+      "category": "RLS/security-related"
+    },
+    {
+      "table": "contractor_reviews",
+      "trigger": "recompute_tier_on_reviews",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 2,
+      "category": "other"
+    },
+    {
+      "table": "disbursement_splits",
+      "trigger": "set_split_recipient_tenant",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "application/business logic"
+    },
+    {
+      "table": "claim_checks",
+      "trigger": "touch_claim_on_check",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 2,
+      "category": "application/business logic"
+    },
+    {
+      "table": "emails",
+      "trigger": "touch_claim_on_email",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 2,
+      "category": "application/business logic"
+    },
+    {
+      "table": "claim_files",
+      "trigger": "touch_claim_on_file",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 2,
+      "category": "application/business logic"
+    },
+    {
+      "table": "claim_payments",
+      "trigger": "touch_claim_on_payment",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 2,
+      "category": "application/business logic"
+    },
+    {
+      "table": "claim_settlements",
+      "trigger": "touch_claim_on_settlement",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 2,
+      "category": "application/business logic"
+    },
+    {
+      "table": "signature_requests",
+      "trigger": "touch_claim_on_signature",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 2,
+      "category": "application/business logic"
+    },
+    {
+      "table": "sms_messages",
+      "trigger": "touch_claim_on_sms",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 2,
+      "category": "application/business logic"
+    },
+    {
+      "table": "check_endorsements",
+      "trigger": "trg_advance_on_endorsement_complete",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "application/business logic"
+    },
+    {
+      "table": "disbursement_batches",
+      "trigger": "trg_advance_stage_on_batch_complete",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "application/business logic"
+    },
+    {
+      "table": "disbursement_splits",
+      "trigger": "trg_advance_stage_on_disbursement",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "application/business logic"
+    },
+    {
+      "table": "tenants",
+      "trigger": "trg_assign_tenant_partner_code",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "application/business logic"
+    },
+    {
+      "table": "check_intake_items",
+      "trigger": "trg_auto_link_check_to_claim",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "application/business logic"
+    },
+    {
+      "table": "payment_wallet_ledger",
+      "trigger": "trg_block_wallet_ledger_mutation",
+      "events": [
+        "DELETE",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "application/business logic"
+    },
+    {
+      "table": "stakeholder_accounts",
+      "trigger": "trg_enforce_single_primary",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "data-integrity"
+    },
+    {
+      "table": "claim_checks",
+      "trigger": "trg_log_check_usage",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "application/business logic"
+    },
+    {
+      "table": "loss_draft_tracking",
+      "trigger": "trg_loss_draft_auto_link_company",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "application/business logic"
+    },
+    {
+      "table": "loss_draft_documents",
+      "trigger": "trg_mirror_loss_draft_upload",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "application/business logic"
+    },
+    {
+      "table": "signature_requests",
+      "trigger": "trg_mirror_signature_request_to_homeowner_ledger",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "application/business logic"
+    },
+    {
+      "table": "signature_signers",
+      "trigger": "trg_mirror_signature_signer_to_homeowner_ledger",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "application/business logic"
+    },
+    {
+      "table": "user_roles",
+      "trigger": "trg_prevent_mortgage_agent_role_conflict",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "RLS/security-related"
+    },
+    {
+      "table": "cash_job_payments",
+      "trigger": "trg_sync_cash_job_total_paid",
+      "events": [
+        "INSERT",
+        "DELETE",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 2,
+      "category": "application/business logic"
+    },
+    {
+      "table": "claims",
+      "trigger": "trg_sync_claim_ops_on_status_change",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "application/business logic"
+    },
+    {
+      "table": "payment_provider_accounts",
+      "trigger": "trg_sync_provider_stakeholder_acct",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "application/business logic"
+    },
+    {
+      "table": "payment_provider_methods",
+      "trigger": "trg_sync_provider_stakeholder_bank",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "application/business logic"
+    },
+    {
+      "table": "tenant_users",
+      "trigger": "trg_sync_tenant_user_role",
+      "events": [
+        "INSERT",
+        "UPDATE"
+      ],
+      "extra_information_schema_rows": 1,
+      "category": "application/business logic"
+    }
+  ]
+}
