@@ -45,3 +45,5 @@ project_id = "nbcqwpysqgyxrrbgtmkw"
     verify_jwt = false
   [functions.moov-webhook]
     verify_jwt = false
+  [functions.aws-staging-storage-bridge]
+    verify_jwt = false

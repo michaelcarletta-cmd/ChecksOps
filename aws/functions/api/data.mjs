@@ -102,7 +102,7 @@ const resolveClaims = async (event) => {
   return { ok: true, claims };
 };
 
-const withIdentity = async (event, fn, deps = {}) => {
+export const withIdentity = async (event, fn, deps = {}) => {
   const claimsResult = await resolveClaims(event);
   if (!claimsResult.ok) return claimsResult;
   const body = parseBody(event);
@@ -164,6 +164,11 @@ export const parseSelect = (select) => {
   return { columns, embeds };
 };
 
+export const embedColumnSql = (columns) => {
+  if (!columns?.length || columns.includes('*')) return '*';
+  return columns.map((c) => ident(c, 'column')).join(', ');
+};
+
 export const relatedFk = (table, embedTable) => {
   if (embedTable === 'tenants' || embedTable === 'tenants_public') {
     if (table === 'claims') return 'org_id';
@@ -177,8 +182,27 @@ export const relatedFk = (table, embedTable) => {
   return `${embedTable}_id`;
 };
 
-export const childFk = (parentTable) => {
-  if (parentTable === 'check_intake_items') return 'check_intake_item_id';
+export const belongsToEmbed = (table, embedTable) => (
+  embedTable === 'tenants'
+  || embedTable === 'tenants_public'
+  || embedTable === 'profiles'
+);
+
+const CHECK_ID_CHILDREN = new Set([
+  'check_payees',
+  'check_messages',
+  'check_endorsement_events',
+  'check_eligibility_results',
+  'check_audit_log',
+  'check_payment_directions',
+  'check_endorsements',
+  'shared_checks',
+]);
+
+export const childFk = (parentTable, childTable) => {
+  if (parentTable === 'check_intake_items') {
+    return CHECK_ID_CHILDREN.has(childTable) ? 'check_id' : 'check_intake_item_id';
+  }
   if (parentTable.endsWith('s')) return `${parentTable.slice(0, -1)}_id`;
   return `${parentTable}_id`;
 };
@@ -342,8 +366,15 @@ const runSelect = async (client, body) => {
   const offset = Number.isFinite(Number(body.offset)) ? Math.max(Number(body.offset), 0) : 0;
   const needed = new Set(parsed.columns[0] === '*' ? ['*'] : parsed.columns);
   if (needed.has('*') === false) {
+    needed.add('id');
     for (const embed of parsed.embeds) {
-      needed.add(relatedFk(table, embed.table));
+      // Parent-side FKs only for belongs-to embeds (tenants, profiles).
+      // Has-many embeds such as check_payees / checkalt_deposits live on the
+      // child row (check_intake_item_id). Guessing check_payee_id onto the
+      // parent SELECT makes PostgreSQL fail before the child-array path runs.
+      if (belongsToEmbed(table, embed.table)) {
+        needed.add(relatedFk(table, embed.table));
+      }
     }
   }
   const cols = needed.has('*') ? '*' : [...needed].map((c) => ident(c, 'column')).join(', ');
@@ -360,7 +391,7 @@ const runSelect = async (client, body) => {
     if (!ALLOWED.has(relTable) && relTable !== 'tenants') continue;
     const fk = relatedFk(table, relTable);
     const parentHasFk = rows.some((row) => Object.prototype.hasOwnProperty.call(row, fk));
-    const embedCols = embed.columns.length ? embed.columns.map((c) => ident(c, 'column')).join(', ') : '*';
+    const embedCols = embedColumnSql(embed.columns);
     if (parentHasFk) {
       const ids = [...new Set(rows.map((row) => row[fk]).filter(Boolean))];
       if (!ids.length) {
@@ -388,7 +419,7 @@ const runSelect = async (client, body) => {
       rows.push(...next);
     } else {
       const parentIds = [...new Set(rows.map((row) => row.id).filter(Boolean))];
-      const childKey = childFk(table);
+      const childKey = childFk(table, relTable);
       if (!parentIds.length) {
         for (const row of rows) row[relTable] = [];
         continue;

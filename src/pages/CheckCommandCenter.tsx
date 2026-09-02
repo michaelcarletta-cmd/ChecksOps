@@ -3861,6 +3861,7 @@ function CheckDetailPanel({
           <ViewCheckImageButton
             checkId={checkId}
             frontImagePath={check.front_image_path}
+            backImagePath={check.back_image_path}
             checkNumber={check.check_number}
             size="sm"
             variant="outline"

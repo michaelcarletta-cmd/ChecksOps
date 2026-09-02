@@ -59,27 +59,29 @@ Identity preserved: `Cognito sub -> identity_accounts.application_user_id -> exi
 - `POST /data/query` (allowlisted SELECT + filters + embeds)
 - `POST /data/rpc` (read RPC allowlist)
 - `POST/PUT/PATCH/DELETE /data/*` → `writes_disabled`
-- `/storage*` → `s3_migration_required`
+- `/storage/sign`, `/storage/sign-many`, `/storage/list`, `/storage/download` → authenticated S3 presign after RLS
+- `GET /storage/public` → branding objects only
+- other `/storage*` → `uploads_disabled`
 - `/functions*` → `provider_disabled`
 - Unauthenticated `tenants_public` SELECT only (white-label slug resolution)
 
 ### AWS API route still required (later phases)
 
-Read RPCs not on the allowlist; complex PostgREST embeds beyond FK object/array; realtime; write RPCs listed below; storage signed URLs after S3 copy.
+Read RPCs not on the allowlist; complex PostgREST embeds beyond FK object/array; realtime; write RPCs listed below; storage uploads/deletes after authorization validation.
 
-UI is **not** removed. Staging returns structured errors (`rpc_disabled`, `writes_disabled`, `s3_migration_required`, `provider_disabled`).
+UI is **not** removed. Staging returns structured errors (`rpc_disabled`, `writes_disabled`, `uploads_disabled`, `provider_disabled`).
 
 ### S3 / storage migration required (18 `storage.from` + 7 bucket names)
 
 | Bucket | Current ops | Staging |
 | --- | --- | --- |
-| `claim-files` | upload, signed URL, download, remove | stub |
-| `deposit-attachments` | upload / signed URL | stub |
-| `loss-draft-documents` | upload / signed URL | stub |
-| `company-branding` | upload / public URL | stub |
-| `tenant-logos` | upload / public URL | stub |
-| `endorsement-packets` | path via `.from` | stub |
-| `homeowner-uploads` | path via `.from` | stub |
+| `claim-files` | upload, signed URL, download, remove | signed URL / download / list via AWS API; upload/remove gated |
+| `deposit-attachments` | upload / signed URL | signed URL via AWS API; upload gated |
+| `loss-draft-documents` | upload / signed URL | signed URL via AWS API; upload/remove gated |
+| `company-branding` | upload / public URL | public URL via `/storage/public` only if authorized; upload gated |
+| `tenant-logos` | upload / public URL | `/storage/public` after `tenants_public` match; upload gated |
+| `endorsement-packets` | path via `.from` | signed URL via AWS API |
+| `homeowner-uploads` | path via `.from` | signed URL via AWS API |
 
 Do not copy production Storage in this phase. Browser never receives S3 credentials.
 

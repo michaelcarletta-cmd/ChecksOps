@@ -1,0 +1,150 @@
+{
+  "source": "pg_restore storage.objects from checksops_260901 dump",
+  "objectCount": 1334,
+  "byBucket": {
+    "claim-files": {
+      "count": 1184,
+      "bytes": 2455307970,
+      "sample": [
+        {
+          "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1777199954800_front_IMG_0368.jpeg",
+          "size": 2435765,
+          "mimetype": "image/jpeg"
+        },
+        {
+          "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1779911018979_front_image.jpg",
+          "size": 4523962,
+          "mimetype": "image/jpeg"
+        },
+        {
+          "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1777199954800_back_IMG_2417.jpeg",
+          "size": 6642349,
+          "mimetype": "image/jpeg"
+        }
+      ]
+    },
+    "email-assets": {
+      "count": 1,
+      "bytes": 1015445,
+      "sample": [
+        {
+          "name": "checksops-logo.png",
+          "size": 1015445,
+          "mimetype": "image/png"
+        }
+      ]
+    },
+    "tenant-logos": {
+      "count": 5,
+      "bytes": 2687016,
+      "sample": [
+        {
+          "name": "4f172140-f57a-4744-8050-95f4f07b13b4/1778078357240.png",
+          "size": 103746,
+          "mimetype": "image/png"
+        },
+        {
+          "name": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/logo-1779930456979.png",
+          "size": 858805,
+          "mimetype": "image/png"
+        },
+        {
+          "name": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/1779902892400.jpg",
+          "size": 60877,
+          "mimetype": "image/jpeg"
+        }
+      ]
+    },
+    "endorsement-packets": {
+      "count": 125,
+      "bytes": 9217337,
+      "sample": [
+        {
+          "name": "packets/ec2f4d26-341f-4c79-b24a-75539a19990a/endorsement-packet-1317914963-1780530827307.svg",
+          "size": 80907,
+          "mimetype": "image/svg+xml"
+        },
+        {
+          "name": "packets/a6024792-fa4e-432e-8794-6f86ddd7283f/endorsement-packet-1070681-1780530870526.svg",
+          "size": 121168,
+          "mimetype": "image/svg+xml"
+        },
+        {
+          "name": "packets/aad35598-d7b0-4ce5-84e0-a83ccb4e2146/endorsement-packet-2394-1783007070501.svg",
+          "size": 44458,
+          "mimetype": "image/svg+xml"
+        }
+      ]
+    },
+    "loss-draft-documents": {
+      "count": 2,
+      "bytes": 77234,
+      "sample": [
+        {
+          "name": "null/45d02099-b73a-400b-b480-a3f5986f71ea/f5e9f308-1144-4d4f-ae56-3919da33ba36/2026-06-08T20_24_58-FedEx-Shipping-Label.pdf",
+          "size": 38919,
+          "mimetype": "application/pdf"
+        },
+        {
+          "name": "440cb4ef-0652-4642-87f1-ed75ea06a0fd/7ea9dd4b-2566-449e-ac1f-aaf12d88eae2/c8d91cd5-0b17-452f-8248-1de32a9d79c9/1785512036222-ead48afe-e558-4098-b1f1-8b5f44aba07c.pdf",
+          "size": 38315,
+          "mimetype": "application/pdf"
+        }
+      ]
+    },
+    "document-templates": {
+      "count": 1,
+      "bytes": 3124,
+      "sample": [
+        {
+          "name": "mortgage-ops-invoices/MO-2026-AA3D85-1784459391849.html",
+          "size": 3124,
+          "mimetype": "text/html"
+        }
+      ]
+    },
+    "homeowner-uploads": {
+      "count": 8,
+      "bytes": 30364235,
+      "sample": [
+        {
+          "name": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/28f74b10-6716-4b50-a135-003167856ca3/1786214363303-front-image.jpg",
+          "size": 4455286,
+          "mimetype": "image/jpeg"
+        },
+        {
+          "name": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/28f74b10-6716-4b50-a135-003167856ca3/1786214363303-back-image.jpg",
+          "size": 3325348,
+          "mimetype": "image/jpeg"
+        },
+        {
+          "name": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/b8d6a160-8483-4343-b9c7-bfe01c6ea88e/1786215200301-front-image_cropped.jpg",
+          "size": 3327826,
+          "mimetype": "image/jpeg"
+        }
+      ]
+    },
+    "tenant-documents": {
+      "count": 8,
+      "bytes": 2800034,
+      "sample": [
+        {
+          "name": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/w9/1787239022497.pdf",
+          "size": 123434,
+          "mimetype": "application/pdf"
+        },
+        {
+          "name": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/verification/cdd5f165-85e7-4469-9662-6c48ed5b0633-FA_W9.pdf",
+          "size": 123434,
+          "mimetype": "application/pdf"
+        },
+        {
+          "name": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/verification/9c8a7d42-ba41-43a9-b1ef-1d7b8fc8da17-Carletta_License_Renewal_2028.pdf",
+          "size": 41698,
+          "mimetype": "application/pdf"
+        }
+      ]
+    }
+  },
+  "note": "Live anon list on 2026-09-02 confirmed tenant-logos=5 and email-assets=1. Private buckets are not listable without service role. database_export is absent from this extract and is not migrated."
+}

@@ -4,8 +4,19 @@ import { validateReadonlyCoreTables } from './db-readonly-validate.mjs';
 import { handleIdentityMe } from './identity.mjs';
 import { handleAuthorizationProbe, handleJwksCheck } from './authorization.mjs';
 import { AUTH_ROUTES } from './auth-cognito.mjs';
-import { handleDataQuery, handleDataRpc, handleWritesDisabled, handleStorageStub, handleFunctionsDisabled } from './data.mjs';
+import { handleDataQuery, handleDataRpc, handleWritesDisabled, handleFunctionsDisabled } from './data.mjs';
 import { handleTenantSecurityCompliance } from './tenant-security-compliance.mjs';
+import {
+  handleStorageSign,
+  handleStorageSignMany,
+  handleStorageList,
+  handleStorageDownload,
+  handleStoragePublic,
+  handleStorageWritesDisabled,
+  handlePublicSignatureDocument,
+  handlePublicEndorsement,
+  handlePublicWritesDisabled,
+} from './storage.mjs';
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -188,9 +199,110 @@ export const handler = async (event) => {
     });
   }
 
+  if (method === 'GET' && path === '/storage/public') {
+    const result = await handleStoragePublic(event);
+    if (result.redirect && result.location) {
+      return {
+        statusCode: 302,
+        headers: {
+          'content-type': 'application/json',
+          'cache-control': 'no-store',
+          location: result.location,
+          'access-control-allow-origin': '*',
+          'access-control-allow-headers': 'authorization,content-type,x-request-id,x-user-id,x-tenant-id,x-role,x-cognito-sub',
+          'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
+        },
+        body: JSON.stringify({
+          service: 'checksops-api',
+          environment: process.env.CHECKSOPS_ENV || 'unknown',
+          productionSupabaseChanged: false,
+          signedUrl: result.signedUrl,
+          bucket: result.bucket,
+          path: result.path,
+        }),
+      };
+    }
+    return json(result.statusCode || 403, {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/storage/sign') {
+    const result = await handleStorageSign(event);
+    return json(result.statusCode || (result.ok ? 200 : 401), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/storage/sign-many') {
+    const result = await handleStorageSignMany(event);
+    return json(result.statusCode || (result.ok ? 200 : 401), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/storage/list') {
+    const result = await handleStorageList(event);
+    return json(result.statusCode || (result.ok ? 200 : 401), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/storage/download') {
+    const result = await handleStorageDownload(event);
+    return json(result.statusCode || (result.ok ? 200 : 401), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
   if (path.startsWith('/storage')) {
-    const result = await handleStorageStub(event);
-    return json(501, {
+    const result = await handleStorageWritesDisabled(event);
+    return json(result.statusCode || 403, {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/public/signature-document') {
+    const result = await handlePublicSignatureDocument(event);
+    return json(result.statusCode || (result.ok ? 200 : 400), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/public/endorsement') {
+    const result = await handlePublicEndorsement(event);
+    return json(result.statusCode || (result.ok ? 200 : 400), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...result,
+    });
+  }
+
+  if (method === 'POST' && path === '/public/signature-submit') {
+    const result = await handlePublicWritesDisabled(event);
+    return json(403, {
       service: 'checksops-api',
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
