@@ -453,7 +453,7 @@ CREATE POLICY aws_select_loss_draft_documents ON public.loss_draft_documents
 DROP POLICY IF EXISTS aws_select_loss_draft_mortgage_intake ON public.loss_draft_mortgage_intake;
 CREATE POLICY aws_select_loss_draft_mortgage_intake ON public.loss_draft_mortgage_intake
   FOR SELECT TO authenticated
-  USING (public.aws_can_access_claim(claim_id));
+  USING (public.aws_can_access_loss_draft(loss_draft_id));
 
 DROP POLICY IF EXISTS aws_select_loss_draft_releases ON public.loss_draft_releases;
 CREATE POLICY aws_select_loss_draft_releases ON public.loss_draft_releases
@@ -688,7 +688,7 @@ CREATE POLICY aws_select_signature_field_templates ON public.signature_field_tem
 DROP POLICY IF EXISTS aws_select_signature_field_values ON public.signature_field_values;
 CREATE POLICY aws_select_signature_field_values ON public.signature_field_values
   FOR SELECT TO authenticated
-  USING (public.aws_can_access_signature_request(signature_request_id));
+  USING (EXISTS (SELECT 1 FROM public.signature_fields sf  WHERE sf.id = signature_field_values.field_id    AND public.aws_can_access_signature_request(sf.signature_request_id)));
 
 DROP POLICY IF EXISTS aws_select_signature_fields ON public.signature_fields;
 CREATE POLICY aws_select_signature_fields ON public.signature_fields

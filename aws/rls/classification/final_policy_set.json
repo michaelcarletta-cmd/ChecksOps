@@ -828,7 +828,7 @@
       "roles": "authenticated",
       "access_kind": "special",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_claim(claim_id)"
+      "using": "public.aws_can_access_loss_draft(loss_draft_id)"
     },
     {
       "table": "public.loss_draft_releases",
@@ -1251,7 +1251,7 @@
       "roles": "authenticated",
       "access_kind": "special",
       "remediated_global_admin_staff": false,
-      "using": "public.aws_can_access_signature_request(signature_request_id)"
+      "using": "EXISTS (SELECT 1 FROM public.signature_fields sf  WHERE sf.id = signature_field_values.field_id    AND public.aws_can_access_signature_request(sf.signature_request_id))"
     },
     {
       "table": "public.signature_fields",

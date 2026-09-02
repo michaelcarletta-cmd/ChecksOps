@@ -664,16 +664,34 @@ export const handler = async (event = {}) => {
     out.connectedAs = db.u;
 
     if (step === 'ddl' || step === 'all' || step === 'remediate') {
-      await client.query(readSql('01_role_shim.sql'));
-      await client.query(readSql('02_helpers.sql'));
-      await client.query(readSql('03_grants.sql'));
-      await client.query(readSql('10_owner_helpers_from_identity.sql'));
-      await client.query(readSql('11_access_helpers.sql'));
-      await client.query(readSql('15_access_grants.sql'));
+      const applySql = async (name) => {
+        try {
+          await client.query(readSql(name));
+        } catch (error) {
+          throw new Error(`${name}: ${error?.message || error}`);
+        }
+      };
+      await applySql('01_role_shim.sql');
+      await applySql('02_helpers.sql');
+      await applySql('03_grants.sql');
+      await applySql('10_owner_helpers_from_identity.sql');
+      await applySql('11_access_helpers.sql');
+      await applySql('15_access_grants.sql');
       out.helpersGranted = await grantHelperExecute(client);
-      await client.query(readSql('04_probe_table.sql'));
-      await client.query(readSql('16_probe_policy_remediate.sql'));
-      await client.query(readSql('12_final_select_policies.sql'));
+      await applySql('04_probe_table.sql');
+      await applySql('16_probe_policy_remediate.sql');
+      const policySql = readSql('12_final_select_policies.sql');
+      const dropAt = policySql.indexOf('DROP POLICY');
+      if (dropAt < 0) throw new Error('12_final_select_policies.sql: missing DROP POLICY');
+      await client.query(policySql.slice(0, dropAt));
+      const policyStmts = policySql.slice(dropAt).split(/;\n+/).map((s) => s.trim()).filter(Boolean);
+      for (const stmt of policyStmts) {
+        try {
+          await client.query(`${stmt};`);
+        } catch (error) {
+          throw new Error(`12_final_select_policies.sql near ${stmt.slice(0, 160)}: ${error?.message || error}`);
+        }
+      }
       out.dumpPoliciesBeforeDrop = Number((await client.query(
         `SELECT count(*)::int AS n FROM pg_policies
          WHERE schemaname = 'public' AND policyname NOT LIKE 'aws_%'`,

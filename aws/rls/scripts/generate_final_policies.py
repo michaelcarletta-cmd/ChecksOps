@@ -133,6 +133,8 @@ def using_clause(table: str, cols: list[str] | None) -> tuple[str, str]:
         return "public.aws_can_access_check(check_id)", "check_id"
     if "claim_id" in cols:
         return "public.aws_can_access_claim(claim_id)", "claim_id"
+    if "loss_draft_id" in cols:
+        return "public.aws_can_access_loss_draft(loss_draft_id)", "loss_draft_id"
     if "user_id" in cols:
         return "public.aws_can_access_same_tenant_user(user_id)", "user_id"
     if "batch_id" in cols and table.startswith("deposit_"):
@@ -225,6 +227,27 @@ def main():
     print("wrote", OUT_SQL, "count", len(policies))
     print("kinds", kinds)
     print("remediated tables", sum(1 for p in policies if p["remediated_global_admin_staff"]))
+    missing = []
+    for p in policies:
+        table = p["table"].split(".")[-1]
+        using = p["using"]
+        have = set(cols.get(table) or [])
+        for col in (
+            "tenant_id",
+            "org_id",
+            "claim_id",
+            "check_id",
+            "check_intake_item_id",
+            "user_id",
+            "loss_draft_id",
+            "deposit_item_id",
+        ):
+            if f"({col})" in using or f" {col}" in using:
+                qualified = f"{table}.{col}" in using
+                if col not in have and not qualified:
+                    missing.append((table, col, using))
+    if missing:
+        raise SystemExit(f"USING column missing from dump COPY: {missing}")
 
 
 if __name__ == "__main__":
