@@ -8,6 +8,9 @@ export const parseDatabaseSecretString = (raw) => {
   if (!parsed || typeof parsed !== 'object') {
     throw new Error('database secret JSON is invalid');
   }
+  if (/checksops_admin/i.test(parsed.username || '')) {
+    throw new Error('refusing to load checksops_admin secret');
+  }
   return {
     username: parsed.username,
     host: parsed.host,

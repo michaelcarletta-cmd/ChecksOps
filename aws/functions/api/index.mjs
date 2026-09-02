@@ -1,4 +1,5 @@
 import { databaseSecretConfigured } from './secrets.mjs';
+import { probeDatabase } from './db-health.mjs';
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -42,6 +43,20 @@ export const handler = async (event) => {
       database: 'not-connected',
       databaseSecretConfigured: databaseSecretConfigured(),
       productionSupabaseChanged: false,
+    });
+  }
+
+  if (method === 'GET' && path === '/db-health') {
+    const probe = await probeDatabase();
+    const ok = probe.secretsManager === 'ok'
+      && probe.networkTls === 'ok'
+      && probe.authentication === 'ok'
+      && probe.select1 === 'ok';
+    return json(ok ? 200 : 503, {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...probe,
     });
   }
 

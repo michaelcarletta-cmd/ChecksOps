@@ -60,7 +60,9 @@ After deployment, record the CloudFormation outputs (API URL, S3 bucket name, Co
 
 ## First verification
 
-Call the API `/health` endpoint. It should return JSON with `status: ok`, `database: not-connected`, and `databaseSecretConfigured: true`.
+Call the API `/health` endpoint. It should return JSON with `status: ok` and `databaseSecretConfigured: true`.
+
+Call `/db-health` for a read-only `SELECT 1` over TLS. It must not return passwords.
 
 Do not point the production frontend at this API yet.
 
