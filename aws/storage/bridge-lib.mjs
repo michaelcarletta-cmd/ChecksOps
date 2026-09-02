@@ -38,6 +38,35 @@ export const batchesOf = (items, size = MAX_SIGN_BATCH) => {
   return out;
 };
 
+export const groupByBucket = (objects) => {
+  const map = new Map();
+  for (const obj of objects || []) {
+    if (!map.has(obj.bucket)) map.set(obj.bucket, []);
+    map.get(obj.bucket).push(obj);
+  }
+  return map;
+};
+
+export const isBridgeHealthy = (statusCode, body) => (
+  Number(statusCode) === 200 && (body?.ok === true || body?.status === 'ok')
+);
+
+export const parseSignUrls = (body, bucket) => {
+  const rows = body?.urls || body?.signed || [];
+  const byName = new Map();
+  const failed = [];
+  for (const row of rows) {
+    const name = row.path || row.name;
+    const url = row.signed_url || row.signedUrl;
+    if (row.error || !url) {
+      failed.push({ bucket, name, reason: row.error || 'sign_failed' });
+      continue;
+    }
+    byName.set(`${bucket}/${name}`, url);
+  }
+  return { byName, failed };
+};
+
 export const destinationKey = (bucket, name) => s3KeyFor(bucket, name);
 
 export const classifyCopy = ({ exists, existingHash, sourceHash }) => {

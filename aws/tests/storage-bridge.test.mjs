@@ -8,7 +8,10 @@ import {
   batchesOf,
   classifyCopy,
   destinationKey,
+  groupByBucket,
   isApprovedMigrationObject,
+  isBridgeHealthy,
+  parseSignUrls,
   remainingPrivateObjects,
   sha256Hex,
   tokenMatches,
@@ -59,6 +62,27 @@ test('hash mismatch refuses silent overwrite', () => {
   });
   assert.equal(classifyCopy({ exists: true, existingHash: 'aaa', sourceHash: 'aaa' }).action, 'skip_existing');
   assert.equal(classifyCopy({ exists: false, existingHash: null, sourceHash: 'aaa' }).action, 'put');
+});
+
+test('live bridge health and per-bucket sign payloads are accepted', () => {
+  assert.equal(isBridgeHealthy(200, { status: 'ok', mode: 'migration-bridge' }), true);
+  assert.equal(isBridgeHealthy(200, { ok: true }), true);
+  assert.equal(isBridgeHealthy(401, { error: 'unauthorized' }), false);
+  const grouped = groupByBucket([
+    { bucket: 'claim-files', name: 'a.jpg' },
+    { bucket: 'endorsement-packets', name: 'b.svg' },
+    { bucket: 'claim-files', name: 'c.jpg' },
+  ]);
+  assert.equal(grouped.get('claim-files').length, 2);
+  const parsed = parseSignUrls({
+    status: 'ok',
+    urls: [
+      { path: 'a.jpg', signed_url: 'https://example/a', error: null },
+      { path: 'c.jpg', signed_url: null, error: 'not_found' },
+    ],
+  }, 'claim-files');
+  assert.equal(parsed.byName.get('claim-files/a.jpg'), 'https://example/a');
+  assert.equal(parsed.failed[0].reason, 'not_found');
 });
 
 test('bridge and worker source never request a service-role key from the operator', () => {

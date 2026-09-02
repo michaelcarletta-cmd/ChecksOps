@@ -14,6 +14,9 @@ import {
   batchesOf,
   classifyCopy,
   destinationKey,
+  groupByBucket,
+  isBridgeHealthy,
+  parseSignUrls,
   remainingPrivateObjects,
   sha256Buffer,
   tokenMatches,
@@ -112,6 +115,7 @@ const copyOne = async (obj, signedUrl, stats) => {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     got = await downloadSigned(signedUrl);
     if (got.ok) break;
+    if (stats && Number.isFinite(stats.downloadRetries)) stats.downloadRetries += 1;
     if (got.status && got.status < 500 && got.status !== 429) break;
     await sleep(Math.min(8000, 500 * 2 ** (attempt - 1)));
   }
@@ -172,7 +176,7 @@ const main = async () => {
     console.log(JSON.stringify(summary, null, 2));
     process.exit(2);
   }
-  if (health.status !== 200 || !health.json?.ok) {
+  if (health.status !== 200 || !isBridgeHealthy(health.status, health.json)) {
     const summary = {
       ok: false,
       blocked: 'bridge_health_failed',
@@ -189,43 +193,76 @@ const main = async () => {
     copied: [], failed: [], skipped: [], conflicts: [], bytes: 0,
     sourceCount: (inventory.objects || []).length,
     remainingPrivate: remaining.length,
+    signRetries: 0,
+    downloadRetries: 0,
   };
+  const grouped = groupByBucket(remaining);
+  let batchIndex = 0;
+  const totalBatches = [...grouped.values()].reduce((n, rows) => n + batchesOf(rows, MAX_SIGN_BATCH).length, 0);
 
-  for (const batch of batchesOf(remaining, MAX_SIGN_BATCH)) {
-    let signedResp = { status: 0, json: {} };
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-      signedResp = await bridgeFetch(token, {
-        action: 'sign',
-        items: batch.map((obj) => ({ bucket: obj.bucket, name: obj.name })),
-      });
-      if (signedResp.status === 200 && signedResp.json?.ok) break;
-      if (signedResp.status && signedResp.status < 500 && signedResp.status !== 429) break;
-      await sleep(Math.min(8000, 500 * 2 ** (attempt - 1)));
-    }
-    if (signedResp.status !== 200 || !signedResp.json?.ok) {
+  for (const [bucket, objects] of grouped) {
+    for (const batch of batchesOf(objects, MAX_SIGN_BATCH)) {
+      batchIndex += 1;
+      let signedResp = { status: 0, json: {} };
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+        signedResp = await bridgeFetch(token, {
+          action: 'sign',
+          bucket,
+          paths: batch.map((obj) => obj.name),
+        });
+        if (isBridgeHealthy(signedResp.status, signedResp.json)) break;
+        if (signedResp.status && signedResp.status < 500 && signedResp.status !== 429) break;
+        stats.signRetries += 1;
+        await sleep(Math.min(8000, 500 * 2 ** (attempt - 1)));
+      }
+      if (!isBridgeHealthy(signedResp.status, signedResp.json)) {
+        for (const obj of batch) {
+          stats.failed.push({
+            bucket: obj.bucket, name: obj.name, reason: 'sign_batch_failed', status: signedResp.status,
+            error: signedResp.json?.error || null,
+          });
+        }
+        continue;
+      }
+      const parsed = parseSignUrls(signedResp.json, bucket);
+      for (const row of parsed.failed) stats.failed.push(row);
+      const jobs = [];
       for (const obj of batch) {
-        stats.failed.push({
-          bucket: obj.bucket, name: obj.name, reason: 'sign_batch_failed', status: signedResp.status,
-        });
+        const signedUrl = parsed.byName.get(`${obj.bucket}/${obj.name}`);
+        if (!signedUrl) {
+          if (!stats.failed.some((row) => row.bucket === obj.bucket && row.name === obj.name)) {
+            stats.failed.push({ bucket: obj.bucket, name: obj.name, reason: 'missing_signed_url' });
+          }
+          continue;
+        }
+        jobs.push(obj);
+        obj._signedUrl = signedUrl;
       }
-      continue;
-    }
-    const byName = new Map(
-      (signedResp.json.signed || []).map((row) => [`${row.bucket}/${row.name}`, row.signedUrl]),
-    );
-    for (const row of signedResp.json.failed || []) {
-      stats.failed.push({ bucket: row.bucket, name: row.name, reason: row.reason || 'sign_failed' });
-    }
-    for (const obj of batch) {
-      const url = byName.get(`${obj.bucket}/${obj.name}`);
-      if (!url) continue;
-      try {
-        await copyOne(obj, url, stats);
-      } catch (error) {
-        stats.failed.push({
-          bucket: obj.bucket, name: obj.name, reason: 'copy_exception', message: String(error.message || error).slice(0, 180),
-        });
+      const concurrency = 5;
+      for (let i = 0; i < jobs.length; i += concurrency) {
+        const slice = jobs.slice(i, i + concurrency);
+        await Promise.all(slice.map(async (obj) => {
+          try {
+            await copyOne(obj, obj._signedUrl, stats);
+          } catch (error) {
+            stats.failed.push({
+              bucket: obj.bucket, name: obj.name, reason: 'copy_exception',
+              message: String(error.message || error).slice(0, 180),
+            });
+          } finally {
+            delete obj._signedUrl;
+          }
+        }));
       }
+      console.log(JSON.stringify({
+        progress: `${batchIndex}/${totalBatches}`,
+        bucket,
+        batchSize: batch.length,
+        copied: stats.copied.length,
+        failed: stats.failed.length,
+        conflicts: stats.conflicts.length,
+        bytes: stats.bytes,
+      }));
     }
   }
 
@@ -244,6 +281,7 @@ const main = async () => {
     skippedCount: stats.skipped.length,
     conflictCount: stats.conflicts.length,
     copiedBytes: stats.bytes,
+    signRetries: stats.signRetries,
     failedByReason,
     conflicts: stats.conflicts,
     failedSample: stats.failed.slice(0, 25),
@@ -263,6 +301,7 @@ const main = async () => {
     failed: summary.failedCount,
     conflicts: summary.conflictCount,
     bytes: summary.copiedBytes,
+    signRetries: summary.signRetries,
     failedByReason,
   }, null, 2));
   if (stats.failed.length || stats.conflicts.length) process.exit(3);
