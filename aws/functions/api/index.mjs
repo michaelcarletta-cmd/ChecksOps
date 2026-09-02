@@ -2,6 +2,7 @@ import { databaseSecretConfigured } from './secrets.mjs';
 import { probeDatabase, probeIsHealthy } from './db-health.mjs';
 import { validateReadonlyCoreTables } from './db-readonly-validate.mjs';
 import { handleIdentityMe } from './identity.mjs';
+import { handleAuthorizationProbe } from './authorization.mjs';
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -33,7 +34,12 @@ export const requestPath = (event) => {
   return path;
 };
 
-const READ_ONLY_PATHS = new Set(['/db-health', '/db-readonly-validate', '/identity/me', '/identity/session']);
+const READ_ONLY_PATHS = new Set([
+  '/db-health',
+  '/db-readonly-validate',
+  '/identity/me',
+  '/identity/session',
+]);
 
 export const handler = async (event) => {
   const method = (event?.requestContext?.http?.method || event?.httpMethod || 'GET').toUpperCase();
@@ -85,6 +91,16 @@ export const handler = async (event) => {
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
       ...identity,
+    });
+  }
+
+  if ((method === 'GET' || method === 'POST') && path === '/authorization/probe') {
+    const probe = await handleAuthorizationProbe(event);
+    return json(probe.statusCode || (probe.ok ? 200 : 401), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      ...probe,
     });
   }
 

@@ -1,0 +1,209 @@
+-- DO NOT RUN. Exact retarget of the 47 skipped public FKs that referenced auth.users(id).
+-- Referenced column is the preserved ChecksOps application UUID, never Cognito sub.
+-- Preferred parent: public.identity_accounts(application_user_id)
+--   covers all 9 restored users, including dd24eea5-5d12-47d1-999e-d5930c278b7d
+--   who has user_roles and no profiles row.
+-- Alternative later: public.profiles(id) only after that UUID has a profiles row
+--   with the SAME id. Do not mint a new UUID.
+-- Preserve dump ON DELETE / ON UPDATE. Do not rewrite existing UUID values.
+-- Blockers: invite/link Cognito for the 8 known emails; decide profiles row for
+-- the 9th UUID; do not attach FKs while RLS is off if a future DELETE of
+-- identity_accounts would CASCADE production-like membership rows.
+
+-- identity_primary_key (1)
+-- ALTER TABLE public.profiles
+--   ADD CONSTRAINT profiles_id_identity_fkey
+--   FOREIGN KEY (id) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE CASCADE ON UPDATE NO ACTION NOT VALID;
+
+-- identity_membership_or_profile (6)
+-- ALTER TABLE public.tenant_users
+--   ADD CONSTRAINT tenant_users_user_id_identity_fkey
+--   FOREIGN KEY (user_id) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE CASCADE ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.user_roles
+--   ADD CONSTRAINT user_roles_user_id_identity_fkey
+--   FOREIGN KEY (user_id) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE CASCADE ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.contractor_profiles
+--   ADD CONSTRAINT contractor_profiles_user_id_identity_fkey
+--   FOREIGN KEY (user_id) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE CASCADE ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.notification_preferences
+--   ADD CONSTRAINT notification_preferences_user_id_identity_fkey
+--   FOREIGN KEY (user_id) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE CASCADE ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.contractor_reviews
+--   ADD CONSTRAINT contractor_reviews_author_user_id_identity_fkey
+--   FOREIGN KEY (author_user_id) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE SET NULL ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.referral_events
+--   ADD CONSTRAINT referral_events_referred_user_id_identity_fkey
+--   FOREIGN KEY (referred_user_id) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+
+-- audit_actor_has_data (20)
+-- ALTER TABLE public.ach_authorizations
+--   ADD CONSTRAINT ach_authorizations_authorized_by_identity_fkey
+--   FOREIGN KEY (authorized_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.audit_logs
+--   ADD CONSTRAINT audit_logs_user_id_identity_fkey
+--   FOREIGN KEY (user_id) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE SET NULL ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.cash_jobs
+--   ADD CONSTRAINT cash_jobs_created_by_identity_fkey
+--   FOREIGN KEY (created_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.check_audit_log
+--   ADD CONSTRAINT check_audit_log_actor_id_identity_fkey
+--   FOREIGN KEY (actor_id) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE SET NULL ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.check_eligibility_results
+--   ADD CONSTRAINT check_eligibility_results_evaluated_by_identity_fkey
+--   FOREIGN KEY (evaluated_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE SET NULL ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.check_files
+--   ADD CONSTRAINT check_files_uploaded_by_identity_fkey
+--   FOREIGN KEY (uploaded_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE SET NULL ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.check_intake_items
+--   ADD CONSTRAINT check_intake_items_uploaded_by_identity_fkey
+--   FOREIGN KEY (uploaded_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE SET NULL ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.check_stakeholders
+--   ADD CONSTRAINT check_stakeholders_added_by_identity_fkey
+--   FOREIGN KEY (added_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.claim_checks
+--   ADD CONSTRAINT claim_checks_created_by_identity_fkey
+--   FOREIGN KEY (created_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.claim_settlements
+--   ADD CONSTRAINT claim_settlements_created_by_identity_fkey
+--   FOREIGN KEY (created_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.deposit_batches
+--   ADD CONSTRAINT deposit_batches_created_by_identity_fkey
+--   FOREIGN KEY (created_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.disbursement_batches
+--   ADD CONSTRAINT disbursement_batches_created_by_identity_fkey
+--   FOREIGN KEY (created_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.homeowner_bank_link_tokens
+--   ADD CONSTRAINT homeowner_bank_link_tokens_sent_by_user_id_identity_fkey
+--   FOREIGN KEY (sent_by_user_id) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.micro_deposit_verifications
+--   ADD CONSTRAINT micro_deposit_verifications_initiated_by_identity_fkey
+--   FOREIGN KEY (initiated_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.mortgage_handling_requests
+--   ADD CONSTRAINT mortgage_handling_requests_assigned_employee_id_identity_fkey
+--   FOREIGN KEY (assigned_employee_id) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE SET NULL ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.mortgage_handling_requests
+--   ADD CONSTRAINT mortgage_handling_requests_requested_by_identity_fkey
+--   FOREIGN KEY (requested_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE SET NULL ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.stakeholder_account_verification_log
+--   ADD CONSTRAINT stakeholder_account_verification_log_actor_user_id_identity_fkey
+--   FOREIGN KEY (actor_user_id) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.stakeholder_accounts
+--   ADD CONSTRAINT stakeholder_accounts_created_by_identity_fkey
+--   FOREIGN KEY (created_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.tenant_maintenance_payments
+--   ADD CONSTRAINT tenant_maintenance_payments_recorded_by_identity_fkey
+--   FOREIGN KEY (recorded_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.tenant_openai_credentials
+--   ADD CONSTRAINT tenant_openai_credentials_created_by_identity_fkey
+--   FOREIGN KEY (created_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE SET NULL ON UPDATE NO ACTION NOT VALID;
+
+-- audit_actor_currently_empty (20)
+-- ALTER TABLE public.ach_authorizations
+--   ADD CONSTRAINT ach_authorizations_revoked_by_identity_fkey
+--   FOREIGN KEY (revoked_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.cash_job_attachments
+--   ADD CONSTRAINT cash_job_attachments_uploaded_by_identity_fkey
+--   FOREIGN KEY (uploaded_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.cash_job_payments
+--   ADD CONSTRAINT cash_job_payments_created_by_identity_fkey
+--   FOREIGN KEY (created_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.check_endorsement_events
+--   ADD CONSTRAINT check_endorsement_events_actor_id_identity_fkey
+--   FOREIGN KEY (actor_id) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE SET NULL ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.claim_check_payments
+--   ADD CONSTRAINT claim_check_payments_sender_user_id_identity_fkey
+--   FOREIGN KEY (sender_user_id) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.claim_files
+--   ADD CONSTRAINT claim_files_uploaded_by_identity_fkey
+--   FOREIGN KEY (uploaded_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.claim_folders
+--   ADD CONSTRAINT claim_folders_created_by_identity_fkey
+--   FOREIGN KEY (created_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.claim_payments
+--   ADD CONSTRAINT claim_payments_created_by_identity_fkey
+--   FOREIGN KEY (created_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.document_templates
+--   ADD CONSTRAINT document_templates_created_by_identity_fkey
+--   FOREIGN KEY (created_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.email_templates
+--   ADD CONSTRAINT email_templates_created_by_identity_fkey
+--   FOREIGN KEY (created_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.emails
+--   ADD CONSTRAINT emails_sent_by_identity_fkey
+--   FOREIGN KEY (sent_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.payroll_runs
+--   ADD CONSTRAINT payroll_runs_initiated_by_identity_fkey
+--   FOREIGN KEY (initiated_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.pii_reveal_logs
+--   ADD CONSTRAINT pii_reveal_logs_user_id_identity_fkey
+--   FOREIGN KEY (user_id) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE SET NULL ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.platform_announcements
+--   ADD CONSTRAINT platform_announcements_created_by_identity_fkey
+--   FOREIGN KEY (created_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE SET NULL ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.signature_document_presets
+--   ADD CONSTRAINT signature_document_presets_created_by_identity_fkey
+--   FOREIGN KEY (created_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.signature_requests
+--   ADD CONSTRAINT signature_requests_created_by_identity_fkey
+--   FOREIGN KEY (created_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.sms_messages
+--   ADD CONSTRAINT sms_messages_user_id_identity_fkey
+--   FOREIGN KEY (user_id) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.stakeholder_limit_requests
+--   ADD CONSTRAINT stakeholder_limit_requests_requested_by_identity_fkey
+--   FOREIGN KEY (requested_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.stakeholder_limit_requests
+--   ADD CONSTRAINT stakeholder_limit_requests_reviewed_by_identity_fkey
+--   FOREIGN KEY (reviewed_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+-- ALTER TABLE public.tenant_billing_accounts
+--   ADD CONSTRAINT tenant_billing_accounts_ach_authorized_by_identity_fkey
+--   FOREIGN KEY (ach_authorized_by) REFERENCES public.identity_accounts(application_user_id)
+--   ON DELETE NO ACTION ON UPDATE NO ACTION NOT VALID;
+
+-- After ADD ... NOT VALID, VALIDATE CONSTRAINT in a later window. This file is not applied.

@@ -66,7 +66,8 @@ export const resolveIdentitySession = async ({
     refuseSubAsApplicationId(mapping.application_user_id, cognitoSub);
 
     await client.query('SELECT set_config($1, $2, true)', [APP_USER_ID_GUC, mapping.application_user_id]);
-    await client.query('SELECT set_config($1, $2, true)', [APP_USER_EMAIL_GUC, email || mapping.email || '']);
+    // Application email, not Cognito probe email, so JWT-email policies cannot be spoofed.
+    await client.query('SELECT set_config($1, $2, true)', [APP_USER_EMAIL_GUC, mapping.email || email || '']);
 
     const uid = (await client.query('SELECT auth.uid()::text AS auth_uid')).rows[0]?.auth_uid;
     if (uid !== mapping.application_user_id) {
