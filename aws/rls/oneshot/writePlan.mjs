@@ -207,6 +207,20 @@ export const inspectApplicationRole = async (client) => {
       has_table_privilege('checksops', 'public.check_intake_items', 'TRUNCATE') AS trunc,
       has_table_privilege('checksops', 'public.check_intake_items', 'REFERENCES') AS refs
   `)).rows[0];
+  const memberships = (await client.query(`
+    SELECT r.rolname AS member, g.rolname AS role
+    FROM pg_auth_members m
+    JOIN pg_roles r ON r.oid = m.member
+    JOIN pg_roles g ON g.oid = m.roleid
+    WHERE r.rolname IN ('checksops', 'checksops_admin', 'authenticated', 'anon')
+       OR g.rolname IN ('checksops', 'checksops_admin')
+    ORDER BY 1, 2
+  `)).rows;
+  const roleFlags = (await client.query(`
+    SELECT
+      pg_has_role('checksops', 'checksops_admin', 'MEMBER') AS checksops_member_of_admin,
+      pg_has_role('checksops', 'rds_superuser', 'MEMBER') AS checksops_member_of_rds_superuser
+  `)).rows[0];
   await client.query('BEGIN');
   const canAlter = await asRole(client, TESTER_ID, async () => {
     await client.query('ALTER TABLE public.check_intake_items DISABLE ROW LEVEL SECURITY');
@@ -216,22 +230,20 @@ export const inspectApplicationRole = async (client) => {
     await client.query(`CREATE POLICY aws_should_not_exist ON public.check_intake_items FOR SELECT USING (true)`);
     return { rowCount: 1 };
   });
-  const canBecomeAdmin = await asRole(client, TESTER_ID, async () => {
-    await client.query('SET LOCAL ROLE checksops_admin');
-    return { rowCount: 1 };
-  });
   await client.query('ROLLBACK');
   return {
     roles,
     checkIntakeOwner: grants?.tableowner || null,
     checksopsTablePrivileges: privileges,
     checksopsHasWritePrivilege: Boolean(privileges?.ins || privileges?.upd || privileges?.del),
+    memberships,
+    checksopsMemberOfAdmin: Boolean(roleFlags?.checksops_member_of_admin),
+    checksopsMemberOfRdsSuperuser: Boolean(roleFlags?.checksops_member_of_rds_superuser),
     checksopsCannotAlterRls: Boolean(canAlter.error),
     checksopsCannotCreatePolicy: Boolean(canCreatePolicy.error),
-    checksopsCannotBecomeAdmin: Boolean(canBecomeAdmin.error),
+    checksopsCannotBecomeAdmin: roleFlags?.checksops_member_of_admin === false,
     alterError: canAlter.error || null,
     createPolicyError: canCreatePolicy.error || null,
-    becomeAdminError: canBecomeAdmin.error || null,
   };
 };
 

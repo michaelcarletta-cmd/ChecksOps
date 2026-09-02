@@ -760,6 +760,7 @@ export const handler = async (event = {}) => {
         && out.applicationRoleInspection?.checksopsCannotAlterRls
         && out.applicationRoleInspection?.checksopsCannotCreatePolicy
         && out.applicationRoleInspection?.checksopsCannotBecomeAdmin
+        && out.applicationRoleInspection?.checksopsMemberOfAdmin === false
         && out.applicationRoleInspection?.checksopsHasWritePrivilege === false
         && out.applicationRoleInspection?.checkIntakeOwner !== 'checksops';
     }
