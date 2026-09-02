@@ -2,6 +2,12 @@
 
 Isolated ChecksOps frontend for AWS staging. Production Lovable/Supabase, production DNS, and `main` are not changed.
 
+Staging frontend (S3 website, no production DNS):
+
+http://checksops-staging-frontend-c48b.s3-website-us-east-1.amazonaws.com/
+
+Results: `aws/frontend/FRONTEND_STAGING_RESULTS.md`.
+
 ## Public configuration (browser-safe)
 
 Set in `.env.aws` (gitignored) or copy from `.env.aws.example`:
