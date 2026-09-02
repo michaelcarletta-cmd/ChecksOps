@@ -7,6 +7,7 @@ import { VitePWA } from "vite-plugin-pwa";
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
+  const awsMode = mode === "aws" || String(env.VITE_AUTH_PROVIDER || "").toLowerCase() === "cognito";
   const supabaseUrl = env.VITE_SUPABASE_URL || env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const supabasePublishableKey =
     env.VITE_SUPABASE_PUBLISHABLE_KEY ||
@@ -21,10 +22,14 @@ export default defineConfig(({ mode }) => {
     host: "::",
     port: 8080,
   },
+  preview: {
+    host: "0.0.0.0",
+    port: 4173,
+  },
   plugins: [
     react(),
-    mode === "development" && componentTagger(),
-    VitePWA({
+    !awsMode && mode === "development" && componentTagger(),
+    !awsMode && VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg"],
       workbox: {
@@ -83,9 +88,15 @@ export default defineConfig(({ mode }) => {
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  define: {
-    "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(supabaseUrl),
-    "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(supabasePublishableKey),
-  },
+  define: awsMode
+    ? {
+        // Never bake production Supabase URL/keys into the AWS staging bundle.
+        "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(""),
+        "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(""),
+      }
+    : {
+        "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(supabaseUrl),
+        "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(supabasePublishableKey),
+      },
   };
 });

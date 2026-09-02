@@ -12,6 +12,7 @@ import { Loader2, ArrowLeft, KeyRound, Mail, CheckCircle2 } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { isPlatformOwner } from "@/lib/masterMerchant";
+import { isAwsStaging } from "@/lib/awsStaging";
 import { passkeysSupported, sendMagicLink, signInWithPasskey } from "@/lib/passkeys";
 
 /**
@@ -147,6 +148,7 @@ export default function CheckOpsLogin() {
           <CardTitle className="text-xl md:text-2xl">Sign in to ChecksOps</CardTitle>
           <p className="text-xs text-muted-foreground">
             Access your organization's check workflows.
+            {isAwsStaging() ? " AWS staging." : ""}
           </p>
         </CardHeader>
         <CardContent className="pt-2 space-y-4">

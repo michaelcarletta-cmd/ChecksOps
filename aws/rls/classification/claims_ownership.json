@@ -1,0 +1,1693 @@
+{
+  "backfill_applied": true,
+  "source": "approved dump COPY data; live oneshot 2026-09-02 confirmed 83/0/97; Freedom org_id backfill applied for those 83 only",
+  "rules": {
+    "deterministic": "exactly one tenant_id from tenant-keyed child rows (intake.claim_id, intake.freedom_claim_id, exact claim_number match to detected/freedom_claim_number, ledger.claim_id, deposit_items via check tenant, claim_payments via check_intake_item_id)",
+    "not_used": [
+      "created_by / uploaded_by (admin/staff inference forbidden)",
+      "predefined claim_folders named 'Freedom Adjustment Documents' (product template on all 180 claims, created_by null)",
+      "claim_settlements.created_by master-owner row on one otherwise-unlinked claim",
+      "emails.claim_id (469 ids not in restored claims table)"
+    ]
+  },
+  "summary": {
+    "claims_total": 180,
+    "org_id_null": 180,
+    "assignable": 83,
+    "ambiguous": 0,
+    "none": 97,
+    "assignable_all_freedom": true,
+    "proposed_tenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+    "proposed_tenant_name": "Freedom Adjustment"
+  },
+  "assignable": [
+    {
+      "claim_id": "8ffa9472-0255-41de-8256-aae6e8ec0921",
+      "claim_number": "CLM-00066498",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.detected_claim_number": 2,
+        "check_intake_items.freedom_claim_number": 2,
+        "homeowner_ledger_events.claim_id": 11,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 2
+      },
+      "evidence_count": 19
+    },
+    {
+      "claim_id": "0e791f0e-3aa9-4a03-8603-7006e5e00677",
+      "claim_number": "3887J641V",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "homeowner_ledger_events.claim_id": 14,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 16
+    },
+    {
+      "claim_id": "790b649c-b96b-4422-a9e6-2d307699246c",
+      "claim_number": "730730-GQ",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.detected_claim_number": 2,
+        "homeowner_ledger_events.claim_id": 12,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1,
+        "claim_payments.check_intake_item_id": 1
+      },
+      "evidence_count": 18
+    },
+    {
+      "claim_id": "9da84cde-9941-4305-b7b8-4028dc86abd0",
+      "claim_number": "0268681851",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1
+      },
+      "evidence_count": 2
+    },
+    {
+      "claim_id": "c859c30e-a8d9-48ea-92f0-d3aea262a837",
+      "claim_number": "038953633",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.detected_claim_number": 2,
+        "homeowner_ledger_events.claim_id": 17,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 2
+      },
+      "evidence_count": 23
+    },
+    {
+      "claim_id": "3f50cb5a-4b6c-4d87-91d2-8c668a806de4",
+      "claim_number": "034882580",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 6,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 9
+    },
+    {
+      "claim_id": "347c76aa-bab4-4d07-8300-3854defb02f2",
+      "claim_number": "3099C039L",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 2,
+        "claim_payments.check_intake_item_id": 1
+      },
+      "evidence_count": 6
+    },
+    {
+      "claim_id": "5f82e26a-ae0b-49bb-9c0b-09c0adc0f701",
+      "claim_number": "3090K450S",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.freedom_claim_id": 1,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 8,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 12
+    },
+    {
+      "claim_id": "2a806462-3340-4a91-8587-47271803649d",
+      "claim_number": "G-PA-01-25-1235254",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 6,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 10
+    },
+    {
+      "claim_id": "c61e6e61-f0bc-418b-ad92-fba64e2f227c",
+      "claim_number": "38-0L3S-603",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 1
+      },
+      "evidence_count": 3
+    },
+    {
+      "claim_id": "167a03cb-18da-43ed-afe2-555aef820371",
+      "claim_number": "058302755583",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 3
+      },
+      "evidence_count": 5
+    },
+    {
+      "claim_id": "32687b6d-da93-49cd-9676-ed636c23fc2a",
+      "claim_number": "0755987328",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 1
+      },
+      "evidence_count": 3
+    },
+    {
+      "claim_id": "bc291a63-134c-42d1-904e-3a03f04d3ed9",
+      "claim_number": "JGL9802",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 6,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 10
+    },
+    {
+      "claim_id": "ea7d428b-1f8f-493c-9a10-fca3e75da40d",
+      "claim_number": "38-99V2-97X",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.detected_claim_number": 2,
+        "homeowner_ledger_events.claim_id": 4
+      },
+      "evidence_count": 8
+    },
+    {
+      "claim_id": "8dc533eb-bc27-497d-ba42-ec79585429d6",
+      "claim_number": "0829002096",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.detected_claim_number": 2,
+        "check_intake_items.freedom_claim_number": 2,
+        "homeowner_ledger_events.claim_id": 18,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 2
+      },
+      "evidence_count": 26
+    },
+    {
+      "claim_id": "1033f4ac-a947-42fe-a076-57976afe5222",
+      "claim_number": "0798676136",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.detected_claim_number": 2,
+        "check_intake_items.freedom_claim_number": 2
+      },
+      "evidence_count": 6
+    },
+    {
+      "claim_id": "87f1f085-9883-4421-93f5-65cab3198060",
+      "claim_number": "000759963",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 4,
+        "check_intake_items.detected_claim_number": 4,
+        "homeowner_ledger_events.claim_id": 2
+      },
+      "evidence_count": 10
+    },
+    {
+      "claim_id": "4dcce56f-6a0f-41e0-a6ca-84ec3f445a5e",
+      "claim_number": "38-68J2-92S",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 10,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1,
+        "claim_payments.check_intake_item_id": 1
+      },
+      "evidence_count": 14
+    },
+    {
+      "claim_id": "735f4859-d57e-4ddd-af53-279a68a91271",
+      "claim_number": "JEP8917",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.detected_claim_number": 2,
+        "homeowner_ledger_events.claim_id": 11,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 2
+      },
+      "evidence_count": 17
+    },
+    {
+      "claim_id": "8080bf9d-f5a9-4f33-8664-4cb69a947172",
+      "claim_number": "051802777018",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.detected_claim_number": 2,
+        "homeowner_ledger_events.claim_id": 10,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1,
+        "claim_payments.check_intake_item_id": 1
+      },
+      "evidence_count": 16
+    },
+    {
+      "claim_id": "8d7e212c-fbf6-4d28-90cf-669d7deff21e",
+      "claim_number": "30-68F3-12T",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.freedom_claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 8,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 13
+    },
+    {
+      "claim_id": "770ad77d-32e9-4dd6-917d-8be9440fbeff",
+      "claim_number": "0791729395",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1
+      },
+      "evidence_count": 2
+    },
+    {
+      "claim_id": "ce266fa9-b9fb-4167-aa59-afda3c5fa4cf",
+      "claim_number": "0828999754",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.detected_claim_number": 2,
+        "check_intake_items.freedom_claim_number": 2,
+        "homeowner_ledger_events.claim_id": 20,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 2
+      },
+      "evidence_count": 28
+    },
+    {
+      "claim_id": "888e4cd5-ccac-4141-be4c-643b3d16e7b1",
+      "claim_number": "0",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1
+      },
+      "evidence_count": 2
+    },
+    {
+      "claim_id": "8f2da619-e9a1-4789-a3bc-000010530bd7",
+      "claim_number": "7010285647-1",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 7,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 11
+    },
+    {
+      "claim_id": "dc443885-357f-4419-9b7e-f0e946a9cbbd",
+      "claim_number": "7H4202746842",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.detected_claim_number": 2,
+        "check_intake_items.freedom_claim_number": 2,
+        "homeowner_ledger_events.claim_id": 25,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 2
+      },
+      "evidence_count": 33
+    },
+    {
+      "claim_id": "370ee013-01b3-4597-90e6-4807c77712f8",
+      "claim_number": "JBN7162",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 6,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 9
+    },
+    {
+      "claim_id": "2d46a120-5c12-4d0b-910d-b95d17571244",
+      "claim_number": "0828824037",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 7,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 11
+    },
+    {
+      "claim_id": "2936d04c-e861-4b8f-ab57-4db459ace3f3",
+      "claim_number": "2026-192191",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 2,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 6
+    },
+    {
+      "claim_id": "af6b3678-cded-4ee2-a455-852e3f349b66",
+      "claim_number": "I7Z1644",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.freedom_claim_id": 1,
+        "check_intake_items.detected_claim_number": 2,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 9
+      },
+      "evidence_count": 15
+    },
+    {
+      "claim_id": "296f1fe9-935c-4c47-b7a1-826a4a3ce794",
+      "claim_number": "38-87M2-35L",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.freedom_claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 3,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 8
+    },
+    {
+      "claim_id": "84d1c796-13c7-4ebb-a715-4b70370bb680",
+      "claim_number": "0823146584",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 8,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 12
+    },
+    {
+      "claim_id": "aacdbe7d-c5e1-49c9-92e0-e0fe74ed4a56",
+      "claim_number": "P2674166",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1
+      },
+      "evidence_count": 2
+    },
+    {
+      "claim_id": "e48d8638-8c2f-478c-8717-f26a6d6e2fd4",
+      "claim_number": "38-0D3M-805",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 9,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 12
+    },
+    {
+      "claim_id": "51c44345-89d2-4221-97aa-a53a84e7e2fd",
+      "claim_number": "017306260",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.detected_claim_number": 2,
+        "homeowner_ledger_events.claim_id": 16,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 2
+      },
+      "evidence_count": 22
+    },
+    {
+      "claim_id": "77a702d6-b0f0-4d9b-8fb1-f0f5221e14b0",
+      "claim_number": "JIT0342",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 6,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 9
+    },
+    {
+      "claim_id": "d487cdf2-d2d8-4650-a796-4f2d45b120e7",
+      "claim_number": "30-92T419G",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1
+      },
+      "evidence_count": 1
+    },
+    {
+      "claim_id": "3812f035-43cb-49a5-9ee7-f9e6d1c0c0fb",
+      "claim_number": "009144352",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 4
+      },
+      "evidence_count": 6
+    },
+    {
+      "claim_id": "6833c87e-580f-443c-92ae-553100339b09",
+      "claim_number": "\\N",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.freedom_claim_id": 1
+      },
+      "evidence_count": 1
+    },
+    {
+      "claim_id": "2471a94c-4107-47fd-8107-f6567282baed",
+      "claim_number": "CHO-00190993",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.freedom_claim_id": 1
+      },
+      "evidence_count": 1
+    },
+    {
+      "claim_id": "914c5be1-8e6c-467c-ba45-81f2030d4ec6",
+      "claim_number": "0821940152",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.detected_claim_number": 2,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 5
+      },
+      "evidence_count": 10
+    },
+    {
+      "claim_id": "0b9d377c-7ae2-40dd-a5a7-ef428a528f91",
+      "claim_number": "0821047560",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.detected_claim_number": 2,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 16,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 2,
+        "claim_payments.check_intake_item_id": 1
+      },
+      "evidence_count": 24
+    },
+    {
+      "claim_id": "27331a75-22a8-4b53-b99d-3beb912adc13",
+      "claim_number": "0822229976",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 9,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 13
+    },
+    {
+      "claim_id": "7e0b02c1-d356-4704-abe8-832824a61bb9",
+      "claim_number": "CGB-2026-482",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 3,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 7
+    },
+    {
+      "claim_id": "19cdd7b2-2bb8-4065-bac8-042dc3d765c2",
+      "claim_number": "01009714448",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 2
+      },
+      "evidence_count": 4
+    },
+    {
+      "claim_id": "6134d6c9-996d-45a3-ba86-33a1497b4827",
+      "claim_number": "0006931",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 6,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 9
+    },
+    {
+      "claim_id": "8bbf5383-d439-42ca-85ef-9893806a1a15",
+      "claim_number": "38-0D5L-003",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 10,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 13
+    },
+    {
+      "claim_id": "7041ee80-9040-49bc-86a1-a79b47bc5460",
+      "claim_number": "38-97V0-33J",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 8,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 11
+    },
+    {
+      "claim_id": "d986d026-f047-481f-b9ce-1d716c9b6968",
+      "claim_number": "JIT0346",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 4,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 7
+    },
+    {
+      "claim_id": "82c088d3-b20a-47f1-864d-afe1bb1367aa",
+      "claim_number": "JJN1071",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 4,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 7
+    },
+    {
+      "claim_id": "5127d889-ff3e-4065-8412-299344e8a100",
+      "claim_number": "688974-GQ",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 5,
+        "claim_payments.check_intake_item_id": 1
+      },
+      "evidence_count": 8
+    },
+    {
+      "claim_id": "8e75b61d-68d6-484a-ba99-ab6c52b11b97",
+      "claim_number": "0821997854",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.detected_claim_number": 2,
+        "homeowner_ledger_events.claim_id": 7,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 2
+      },
+      "evidence_count": 13
+    },
+    {
+      "claim_id": "891508c8-35cc-45b1-bdfe-0cb82d7d80ff",
+      "claim_number": "A00007717706",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.detected_claim_number": 2,
+        "check_intake_items.freedom_claim_number": 2,
+        "homeowner_ledger_events.claim_id": 16,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 2
+      },
+      "evidence_count": 24
+    },
+    {
+      "claim_id": "a66179fa-ef24-438c-9887-2068f0477b88",
+      "claim_number": "250826411",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.detected_claim_number": 2,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 7,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 2
+      },
+      "evidence_count": 14
+    },
+    {
+      "claim_id": "2182c35c-4280-4784-bc3a-876fe3810b89",
+      "claim_number": "38-0G3W-498",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 8,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 11
+    },
+    {
+      "claim_id": "fce18334-9b41-454d-ad56-47b882b8ba1a",
+      "claim_number": "250460686",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 8,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 11
+    },
+    {
+      "claim_id": "ec69425f-87a6-4d90-a1bf-702d441f9a34",
+      "claim_number": "JIT1488",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 4,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 7
+    },
+    {
+      "claim_id": "81d8431b-ee12-4db2-80f6-8a9c8e664700",
+      "claim_number": "JBN6683",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 2,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 6
+    },
+    {
+      "claim_id": "fe5be52e-d46e-401d-ae4c-cde56f944dee",
+      "claim_number": "2026-188943",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 9,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 13
+    },
+    {
+      "claim_id": "e2b165a8-60e6-421b-a2b1-5c823a5c3db3",
+      "claim_number": "0821938206",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 3,
+        "check_intake_items.detected_claim_number": 3,
+        "homeowner_ledger_events.claim_id": 6,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 3,
+        "claim_payments.check_intake_item_id": 2
+      },
+      "evidence_count": 17
+    },
+    {
+      "claim_id": "36046e4d-0036-4e09-8050-dff032e71d74",
+      "claim_number": "0827379538",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 3,
+        "check_intake_items.detected_claim_number": 3,
+        "check_intake_items.freedom_claim_number": 3,
+        "homeowner_ledger_events.claim_id": 22,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 3
+      },
+      "evidence_count": 34
+    },
+    {
+      "claim_id": "2a4bd05c-e37f-43b2-b6a0-78f33a056274",
+      "claim_number": "017458559",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.freedom_claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 3,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 8
+    },
+    {
+      "claim_id": "070ef81d-fdd1-4f4b-b674-67783bf171b2",
+      "claim_number": "2026-189648",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 8,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 11
+    },
+    {
+      "claim_id": "e29c20d2-22d8-4740-a449-99bfbadd7afb",
+      "claim_number": "JBN6925",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.freedom_claim_number": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 9,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 13
+    },
+    {
+      "claim_id": "c62364e7-af76-44d0-9343-c2123b9551e9",
+      "claim_number": "0829003482",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.detected_claim_number": 2,
+        "check_intake_items.freedom_claim_number": 2,
+        "homeowner_ledger_events.claim_id": 18,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 2
+      },
+      "evidence_count": 26
+    },
+    {
+      "claim_id": "af80b305-dadf-430e-8ce1-c79886633454",
+      "claim_number": "2026-189658",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1
+      },
+      "evidence_count": 2
+    },
+    {
+      "claim_id": "b3be1c8a-d594-488d-a8c0-8ba3a492bfbb",
+      "claim_number": "01-009-559304",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.detected_claim_number": 2,
+        "homeowner_ledger_events.claim_id": 9,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 2
+      },
+      "evidence_count": 15
+    },
+    {
+      "claim_id": "65f387e4-82a7-4b1e-88e3-d89c2f8a3204",
+      "claim_number": "0791732100",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 5
+      },
+      "evidence_count": 7
+    },
+    {
+      "claim_id": "440cb4ef-0652-4642-87f1-ed75ea06a0fd",
+      "claim_number": "2026-160754",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 43,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 46
+    },
+    {
+      "claim_id": "9b35a776-1f85-4b4f-b753-1314ae106f6c",
+      "claim_number": "38-0H1J-937",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 1
+      },
+      "evidence_count": 3
+    },
+    {
+      "claim_id": "de607c44-9c74-4d87-a776-51cf5514f0d1",
+      "claim_number": "7010285548-1",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 6,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 10
+    },
+    {
+      "claim_id": "16d5bf3e-f54e-4bf0-a64b-6e5919885cc2",
+      "claim_number": "1006-62-2593",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1
+      },
+      "evidence_count": 2
+    },
+    {
+      "claim_id": "1109df1e-6a12-4e91-a740-598f0ab07348",
+      "claim_number": "HO-2026-643085970",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 2,
+        "check_intake_items.detected_claim_number": 2,
+        "check_intake_items.freedom_claim_number": 2,
+        "homeowner_ledger_events.claim_id": 20,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 2
+      },
+      "evidence_count": 28
+    },
+    {
+      "claim_id": "3b5f2097-a17d-4473-9b40-56c1ce292693",
+      "claim_number": "A00005994933",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 2,
+        "homeowner_ledger_events.claim_id": 1
+      },
+      "evidence_count": 4
+    },
+    {
+      "claim_id": "e7a807f0-8e49-475d-80f4-f314693b5a53",
+      "claim_number": "3891X242R",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "homeowner_ledger_events.claim_id": 9,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 11
+    },
+    {
+      "claim_id": "c981db8c-560e-4258-8856-3ca57182212c",
+      "claim_number": "1570399-253921",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 6,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 9
+    },
+    {
+      "claim_id": "8ff57eaf-f200-4466-a1cf-2debb56c88a8",
+      "claim_number": "JGL9295",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 8,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 11
+    },
+    {
+      "claim_id": "6671dfa4-324f-4e5a-8001-a2f1c0ec99d1",
+      "claim_number": "JIT1809",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 7,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 10
+    },
+    {
+      "claim_id": "8eed6817-54cb-4622-8eb1-65028f52ca56",
+      "claim_number": "0788433837",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 9,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 12
+    },
+    {
+      "claim_id": "a90471bc-cfb5-495c-96f4-e5461ccb3013",
+      "claim_number": "0821992724",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 5,
+        "check_intake_items.detected_claim_number": 5,
+        "check_intake_items.freedom_claim_number": 3,
+        "homeowner_ledger_events.claim_id": 42,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 5,
+        "claim_payments.check_intake_item_id": 1
+      },
+      "evidence_count": 61
+    },
+    {
+      "claim_id": "6f2591d4-e109-4882-a33e-0b90b09aa478",
+      "claim_number": "22882660",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.detected_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 6,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 9
+    },
+    {
+      "claim_id": "7e42f9ef-9326-41ad-8c11-f11f387710c3",
+      "claim_number": "3884J448N",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "homeowner_ledger_events.claim_id": 6,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1,
+        "claim_payments.check_intake_item_id": 1
+      },
+      "evidence_count": 9
+    },
+    {
+      "claim_id": "e366d737-c1b6-4164-a980-ffcd22e81b88",
+      "claim_number": "059984564",
+      "proposed_org_id": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "tenant_name": "Freedom Adjustment",
+      "evidence": {
+        "check_intake_items.claim_id": 1,
+        "check_intake_items.freedom_claim_id": 1,
+        "check_intake_items.freedom_claim_number": 1,
+        "homeowner_ledger_events.claim_id": 8,
+        "deposit_items.claim_id->check_intake_items.tenant_id": 1
+      },
+      "evidence_count": 12
+    }
+  ],
+  "ambiguous": [],
+  "none": [
+    {
+      "claim_id": "65087b72-d1f2-4b64-aae3-359be1e83493",
+      "claim_number": "022025000933",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:51:11.945473+00"
+    },
+    {
+      "claim_id": "b4108a9f-3783-4b58-9595-d03c96d47184",
+      "claim_number": "LM2025-10004186",
+      "status": "Job in Production",
+      "created_at": "2025-12-01 21:51:32.794005+00"
+    },
+    {
+      "claim_id": "8ee07a22-85f5-405d-a86e-91e606130d13",
+      "claim_number": "060081021",
+      "status": "Job Completed / Prepare Depreciation Package",
+      "created_at": "2025-12-01 21:51:27.699993+00"
+    },
+    {
+      "claim_id": "405d2292-0183-42c3-8210-26e6719abfc5",
+      "claim_number": "20-2025-65",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:06.938862+00"
+    },
+    {
+      "claim_id": "eedf60d7-7273-4141-9e33-1d8746f89fc3",
+      "claim_number": "30-86H020B",
+      "status": "Job in Production",
+      "created_at": "2025-12-01 21:51:16.740575+00"
+    },
+    {
+      "claim_id": "3caafb29-1452-4228-b3c3-bc74424b3803",
+      "claim_number": "0764758041",
+      "status": "Waiting on ACV Funds",
+      "created_at": "2025-12-01 21:50:59.568114+00"
+    },
+    {
+      "claim_id": "b02fb860-291a-4142-aa85-169d75642c0f",
+      "claim_number": "01-008-932613",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:15.600868+00"
+    },
+    {
+      "claim_id": "926b5cf3-4467-43d7-a1b3-d57c6e102491",
+      "claim_number": "NJHO-00004169",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:50:50.54195+00"
+    },
+    {
+      "claim_id": "4a10c608-51da-4245-9089-f364e0b4bb0f",
+      "claim_number": "20-2025-69",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:06.178758+00"
+    },
+    {
+      "claim_id": "9fe467a6-5cec-4cdf-8209-6f1bd395bdb9",
+      "claim_number": "3091L373Q",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:31.455498+00"
+    },
+    {
+      "claim_id": "0f36e41f-359f-4b0a-af4c-763eef43ab0c",
+      "claim_number": "2025-125575",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:51:33.895752+00"
+    },
+    {
+      "claim_id": "0392eb93-add8-4482-b0a4-cbfc07e3c455",
+      "claim_number": "1006-30-0964",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:18.427171+00"
+    },
+    {
+      "claim_id": "ebc9b2fd-526d-4819-853a-e1732ad1c937",
+      "claim_number": "3070D152J",
+      "status": "Check Received - Mortgage",
+      "created_at": "2025-12-01 21:50:51.873411+00"
+    },
+    {
+      "claim_id": "ba472055-a75a-4ad0-b558-986aec8c78ed",
+      "claim_number": "30-90C455P",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:51:27.285696+00"
+    },
+    {
+      "claim_id": "fb9e71dd-592a-4547-8a0c-c5946341276c",
+      "claim_number": "HONJ250045",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:50:58.823836+00"
+    },
+    {
+      "claim_id": "db000895-9157-4ac0-a23b-e85e749e94ed",
+      "claim_number": "3880L820T",
+      "status": "Check Received - Mortgage",
+      "created_at": "2025-12-01 21:51:00.734974+00"
+    },
+    {
+      "claim_id": "d7990918-901b-4a34-a347-d266a11d3a6e",
+      "claim_number": "60010472485",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:04.746272+00"
+    },
+    {
+      "claim_id": "6cde8572-5328-48d4-b2ef-baca41dd194b",
+      "claim_number": "ZBZ003796815",
+      "status": "DOBI Complaint Filed",
+      "created_at": "2025-12-01 21:51:09.21631+00"
+    },
+    {
+      "claim_id": "0593bba3-0185-4fd2-8301-c6820202c9de",
+      "claim_number": "025971995-800",
+      "status": "Job in Production",
+      "created_at": "2025-12-01 21:51:36.312443+00"
+    },
+    {
+      "claim_id": "71c46db6-56d7-43d2-8af3-587b7641247e",
+      "claim_number": "056583979",
+      "status": "Job in Production",
+      "created_at": "2025-12-01 21:50:47.189795+00"
+    },
+    {
+      "claim_id": "21a42e24-f3ef-4258-8325-3509696df76c",
+      "claim_number": "38-65F474M",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:50:47.016621+00"
+    },
+    {
+      "claim_id": "9549a9a6-d090-4a4e-9a8a-17c5903c8b53",
+      "claim_number": "133913AB-001",
+      "status": "Reissue of Check Requested",
+      "created_at": "2025-12-01 21:51:29.390388+00"
+    },
+    {
+      "claim_id": "40e0ed29-619c-48c1-8f62-4f12e409cf93",
+      "claim_number": "269202601692",
+      "status": "Job Completed / Prepare Depreciation Package",
+      "created_at": "2025-12-01 21:51:12.853103+00"
+    },
+    {
+      "claim_id": "81fd7f56-9529-45d6-b3b8-901a76054d3e",
+      "claim_number": "7009063768-1",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:51:15.76927+00"
+    },
+    {
+      "claim_id": "734fcb35-d3cc-4a84-b314-b51da3bfa7f7",
+      "claim_number": "526255",
+      "status": "Job in Production",
+      "created_at": "2025-12-01 21:51:17.30253+00"
+    },
+    {
+      "claim_id": "e42a77cd-5776-4cf9-99dc-881241b72e86",
+      "claim_number": "1005-87-6341",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:50:54.383096+00"
+    },
+    {
+      "claim_id": "dcb343e1-9aea-498c-a973-b2a2656028a6",
+      "claim_number": "1005-87-6352",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:50:54.635105+00"
+    },
+    {
+      "claim_id": "4b93b005-5afe-4cf3-99b7-a2ab6067f362",
+      "claim_number": "1005-87-6297",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:50:54.202873+00"
+    },
+    {
+      "claim_id": "94da4d71-3f9d-4910-95b6-e5e310005395",
+      "claim_number": "01008417959",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:50:58.655188+00"
+    },
+    {
+      "claim_id": "574f9412-5c7b-4b36-a97b-a8575afaad80",
+      "claim_number": "20-2025-10089",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:51:35.038656+00"
+    },
+    {
+      "claim_id": "0a6cca59-a6b4-4a08-b273-e2e6554efd73",
+      "claim_number": "3090K433L",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:30.333155+00"
+    },
+    {
+      "claim_id": "47a03e86-b132-4d0c-9601-f3ff5f17fe48",
+      "claim_number": "38-88S123C",
+      "status": "Job Completed / Prepare Depreciation Package",
+      "created_at": "2025-12-01 21:51:23.800781+00"
+    },
+    {
+      "claim_id": "0f46f97f-6fe1-4a8c-a7c3-59fde5859674",
+      "claim_number": "25108665",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:14.439259+00"
+    },
+    {
+      "claim_id": "056c6e87-fb2e-4e74-9433-7850c81b73e6",
+      "claim_number": "625969",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:51:25.280624+00"
+    },
+    {
+      "claim_id": "1b2d2bae-75da-4bce-8fb7-95fd1ea8addd",
+      "claim_number": "HOPA24901",
+      "status": "Check Received - No Mortgage",
+      "created_at": "2025-12-01 21:50:46.793362+00"
+    },
+    {
+      "claim_id": "8d3a8a84-b9cf-4f77-87c8-e8a698beca46",
+      "claim_number": "ZBZ003789972",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:51:07.520156+00"
+    },
+    {
+      "claim_id": "75b4840d-dc6e-49ca-ba46-93f299630e81",
+      "claim_number": "CLM46928",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:50:57.532166+00"
+    },
+    {
+      "claim_id": "a1e49900-080c-4f37-974c-9fc20a84c8ee",
+      "claim_number": "01-009-361488",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:51:34.06045+00"
+    },
+    {
+      "claim_id": "158e2fcb-c3a7-43cd-9f41-aa7804f6ad31",
+      "claim_number": "85-00834087",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:24.067512+00"
+    },
+    {
+      "claim_id": "38e24a71-9dea-4d5b-92d6-51576999b3ad",
+      "claim_number": "7006167370-1-1",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:50:42.950885+00"
+    },
+    {
+      "claim_id": "e02de72d-fc8d-4777-b07b-514361b3810e",
+      "claim_number": "2025-134518",
+      "status": "Waiting on Mortgage Check",
+      "created_at": "2025-12-01 21:51:36.856348+00"
+    },
+    {
+      "claim_id": "a5185f4c-95b1-4d7a-9fd4-eb38f35fcf4b",
+      "claim_number": "30-85X316V",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:16.01542+00"
+    },
+    {
+      "claim_id": "7fc8b494-f4f7-42ad-8f3e-66d1170f4a5b",
+      "claim_number": "034110785-3",
+      "status": "Recoverable Depreciation Requested",
+      "created_at": "2025-12-01 21:50:47.621352+00"
+    },
+    {
+      "claim_id": "40e4403f-0d7e-44e8-8644-0484de30d5b1",
+      "claim_number": "033913785-800",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:51:33.344635+00"
+    },
+    {
+      "claim_id": "bedfd0a3-ceb2-4bbb-a23a-0e1ed18f8f73",
+      "claim_number": "0796835239",
+      "status": "Check Received - Mortgage",
+      "created_at": "2025-12-01 21:51:31.229051+00"
+    },
+    {
+      "claim_id": "7ef205bb-39a7-45f0-8623-b1e890f1658c",
+      "claim_number": "506732GQ",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:51:12.506355+00"
+    },
+    {
+      "claim_id": "39806b9f-1342-452f-9509-732722b4bdeb",
+      "claim_number": "0804260180",
+      "status": "Check Received - No Mortgage",
+      "created_at": "2025-12-01 21:51:28.101108+00"
+    },
+    {
+      "claim_id": "3d420f51-5225-4973-82e4-06d71911770f",
+      "claim_number": "01-008-988219",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:51:17.129179+00"
+    },
+    {
+      "claim_id": "bd676c63-9377-4b9b-96af-9f7436dd0065",
+      "claim_number": "01009247477",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:28.440115+00"
+    },
+    {
+      "claim_id": "d118b51e-bba4-468a-88e4-361a98c0f3dc",
+      "claim_number": "30-88J9-16D",
+      "status": "Job Completed / Prepare Depreciation Package",
+      "created_at": "2025-12-01 21:51:28.997562+00"
+    },
+    {
+      "claim_id": "fccecba0-ad49-4092-8fef-328d84532ac5",
+      "claim_number": "01-008722397",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:51:08.078865+00"
+    },
+    {
+      "claim_id": "e1491e69-3d2f-4789-ad4b-34296b3b6244",
+      "claim_number": "PP0021297144",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:51:35.425052+00"
+    },
+    {
+      "claim_id": "656c6d19-c050-4c16-9455-de7f5d18807c",
+      "claim_number": "3086J798V",
+      "status": "Check Received - Mortgage",
+      "created_at": "2025-12-01 21:51:19.724132+00"
+    },
+    {
+      "claim_id": "1b757924-a662-433f-bbdb-f99b49e92e82",
+      "claim_number": "010724122-803",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:51:00.955416+00"
+    },
+    {
+      "claim_id": "565cb442-b67a-442e-8451-4b87f15cbdf6",
+      "claim_number": "563500-GQ",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:51:17.871021+00"
+    },
+    {
+      "claim_id": "2f2061ae-3a6a-4c54-8cad-0042d0824349",
+      "claim_number": "514890-GQ",
+      "status": "Check Received - No Mortgage",
+      "created_at": "2025-12-01 21:51:13.254679+00"
+    },
+    {
+      "claim_id": "93d702dc-3c2b-4497-861e-e448c846c39e",
+      "claim_number": "3883S161L",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:51:09.615594+00"
+    },
+    {
+      "claim_id": "b04cfda3-b73d-4974-aac9-5912c6c986fa",
+      "claim_number": "JEP3436",
+      "status": "Job in Production",
+      "created_at": "2025-12-01 21:51:31.058063+00"
+    },
+    {
+      "claim_id": "c76ba37f-cdd6-4edd-8eb4-b4cc1ea178b0",
+      "claim_number": "N010046509",
+      "status": "Proof of Loss",
+      "created_at": "2025-12-01 21:51:25.046826+00"
+    },
+    {
+      "claim_id": "931d9c1e-0fa1-46dc-9d7a-4627da1f9241",
+      "claim_number": "003779807",
+      "status": "tracking",
+      "created_at": "2026-06-24 19:33:53.071353+00"
+    },
+    {
+      "claim_id": "d859f4dc-7fc4-4fbe-82b8-ae5ad473b413",
+      "claim_number": "01008555530",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:50:59.971114+00"
+    },
+    {
+      "claim_id": "99ff91cf-f735-47d9-9a5e-70b976e7dd05",
+      "claim_number": "3885X352X",
+      "status": "Check Received - No Mortgage",
+      "created_at": "2025-12-01 21:51:15.189392+00"
+    },
+    {
+      "claim_id": "034ddb81-f94a-4c65-99ec-edce2e711094",
+      "claim_number": "JAHO591385-001-001-001",
+      "status": "Prepare Supplement",
+      "created_at": "2025-12-01 21:51:21.789627+00"
+    },
+    {
+      "claim_id": "41e47c44-e315-4d82-b5bd-efce6f3089d5",
+      "claim_number": "2025-125571",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:33.732004+00"
+    },
+    {
+      "claim_id": "9d673749-d913-4c85-88c0-362b4ad999de",
+      "claim_number": "38-71H5-25S",
+      "status": "Job in Production",
+      "created_at": "2025-12-01 21:51:02.490162+00"
+    },
+    {
+      "claim_id": "9cca340f-ca7c-4fe1-b4ca-3e05a3d91273",
+      "claim_number": "3889T180Z",
+      "status": "Waiting on Mortgage Check",
+      "created_at": "2025-12-01 21:51:28.270625+00"
+    },
+    {
+      "claim_id": "77a84acc-9eec-4517-88b2-73c80795fa2f",
+      "claim_number": "3883S174F",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:51:09.959296+00"
+    },
+    {
+      "claim_id": "a83b1e47-9f59-4e8b-b546-7be113140421",
+      "claim_number": "650422",
+      "status": "Waiting on Recoverable Depreciation Check",
+      "created_at": "2025-12-01 21:51:20.505052+00"
+    },
+    {
+      "claim_id": "be982285-aba0-43d7-aa13-ce880340fe77",
+      "claim_number": "38-88Q499F",
+      "status": "Job in Production",
+      "created_at": "2025-12-01 21:51:29.549941+00"
+    },
+    {
+      "claim_id": "2714846d-9c73-41b3-8fe9-f7f9b92b3b83",
+      "claim_number": "500-00-100106",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:06.522637+00"
+    },
+    {
+      "claim_id": "550cf476-47fb-4cf6-a4ae-1d1fcb9aee82",
+      "claim_number": "0220240001880",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:50:48.202052+00"
+    },
+    {
+      "claim_id": "77f0bea3-6b4d-47c9-8161-9c5176309df1",
+      "claim_number": "3089D087L",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:24.491151+00"
+    },
+    {
+      "claim_id": "7f4b5ae1-8c58-4d5b-9cab-91d029e63a5f",
+      "claim_number": "0799019435",
+      "status": "Repair Attempt / Sample Needed",
+      "created_at": "2025-12-01 21:51:26.161854+00"
+    },
+    {
+      "claim_id": "36366fde-cf3b-4d36-9188-6146d26e2cb2",
+      "claim_number": "3084M736P",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:07.35+00"
+    },
+    {
+      "claim_id": "7a5af944-97e9-4573-8d79-10706972ea4a",
+      "claim_number": "3063H236Z",
+      "status": "Job in Production",
+      "created_at": "2025-12-01 21:50:48.53771+00"
+    },
+    {
+      "claim_id": "c9f70972-1e98-48ce-a8b9-0974364c64dd",
+      "claim_number": "01-009-145012",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:21.624123+00"
+    },
+    {
+      "claim_id": "a870f894-ee4a-48d8-b79b-6c91b888d61e",
+      "claim_number": "3088C910L",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:20.843626+00"
+    },
+    {
+      "claim_id": "f85408ac-2c4e-4266-8bd0-e670ae1a8abc",
+      "claim_number": "38-91P319S",
+      "status": "Job in Production",
+      "created_at": "2025-12-01 21:51:32.379101+00"
+    },
+    {
+      "claim_id": "390fba33-57fe-4de7-af01-ccb187f83499",
+      "claim_number": "CHI25054480",
+      "status": "Job in Production",
+      "created_at": "2025-12-01 21:50:59.395971+00"
+    },
+    {
+      "claim_id": "573c67a6-26ad-4ea0-92b9-10a0996b268a",
+      "claim_number": "0805484359",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:29.947358+00"
+    },
+    {
+      "claim_id": "532abe7e-0f65-4436-af62-78af2df45be3",
+      "claim_number": "CLM50333",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:02.881152+00"
+    },
+    {
+      "claim_id": "3138ea1d-aee9-43d8-9d5f-2a5059a3e3f1",
+      "claim_number": "269802637898",
+      "status": "Waiting on Recoverable Depreciation Check",
+      "created_at": "2025-12-01 21:51:21.4019+00"
+    },
+    {
+      "claim_id": "664934b3-4302-4088-9d86-ab82c3b011f9",
+      "claim_number": "10006-16-6973",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:51:05.184003+00"
+    },
+    {
+      "claim_id": "6200a260-6b96-446b-914c-4b7e38bfc155",
+      "claim_number": "I4D2853",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:50:44.917675+00"
+    },
+    {
+      "claim_id": "6cf713b3-0bfe-4436-8dee-30f0d0172806",
+      "claim_number": "30-83F3-49J",
+      "status": "Waiting on ACV Funds",
+      "created_at": "2025-12-01 21:51:08.66032+00"
+    },
+    {
+      "claim_id": "8623b7fd-429f-43ad-b837-f148e60de741",
+      "claim_number": "2025-927221",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:01.219535+00"
+    },
+    {
+      "claim_id": "6ea73a36-ba30-4015-aa34-0b6b6e37fd9a",
+      "claim_number": "CGB-2025-549",
+      "status": "Recoverable Depreciation Requested",
+      "created_at": "2025-12-01 21:51:33.503857+00"
+    },
+    {
+      "claim_id": "6c2efd82-7101-4bdd-9532-f8f4fcd55609",
+      "claim_number": "1211319",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:01.934418+00"
+    },
+    {
+      "claim_id": "8e598a21-599a-4136-b531-c9405cc05a81",
+      "claim_number": "2025-145204",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:37.090315+00"
+    },
+    {
+      "claim_id": "3c6521c6-0ebb-43ba-be57-6e5cd160659a",
+      "claim_number": "CLTW24000412",
+      "status": "Job Completed / Prepare Depreciation Package",
+      "created_at": "2025-12-01 21:50:50.893556+00"
+    },
+    {
+      "claim_id": "279a4392-f897-4428-ad5a-7fac709524de",
+      "claim_number": "35661018-001",
+      "status": "Job in Production",
+      "created_at": "2025-12-01 21:50:52.052795+00"
+    },
+    {
+      "claim_id": "cecd1fba-44f9-4ee2-915d-9b7d3800fef3",
+      "claim_number": "A00006810617",
+      "status": "Job Completed / Prepare Depreciation Package",
+      "created_at": "2025-12-01 21:51:09.385244+00"
+    },
+    {
+      "claim_id": "9a67520d-01ec-4aea-9a11-c8bc51d5e61f",
+      "claim_number": "0808587430",
+      "status": "Job in Production",
+      "created_at": "2025-12-01 21:51:32.04945+00"
+    },
+    {
+      "claim_id": "984d5b1f-c211-4b6d-8940-bd90a7ce9416",
+      "claim_number": "1488871",
+      "status": "Claim Settled",
+      "created_at": "2025-12-01 21:51:05.354152+00"
+    },
+    {
+      "claim_id": "785f252b-bacd-4d3d-8c5d-614e2b301520",
+      "claim_number": "914548-GQ",
+      "status": "Check Received - No Mortgage",
+      "created_at": "2026-01-07 18:51:06.82702+00"
+    },
+    {
+      "claim_id": "95de09ea-b669-4573-9907-f86feef15172",
+      "claim_number": "3315538",
+      "status": "Check Processing on iink",
+      "created_at": "2025-12-01 21:51:24.72343+00"
+    },
+    {
+      "claim_id": "48d63358-14f9-4c17-8c28-fe156646c5db",
+      "claim_number": "263802582138",
+      "status": "Job Completed / Prepare Depreciation Package",
+      "created_at": "2025-12-01 21:51:04.383176+00"
+    }
+  ]
+}

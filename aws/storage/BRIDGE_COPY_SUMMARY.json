@@ -1,0 +1,131 @@
+{
+  "generatedAt": "2026-09-02T18:36:49.252Z",
+  "filesBucket": "checksops-staging-privatefilesbucket-erzqsolpucjp",
+  "copyMode": "bridge_signed_urls",
+  "sourceObjectCount": 1334,
+  "sourceBytes": 2501472395,
+  "publicAlreadyPresent": 6,
+  "publicAlreadyPresentBytes": 3702461,
+  "remainingPrivate": 1328,
+  "pass1": {
+    "copiedCount": 1312,
+    "failedCount": 16,
+    "conflictCount": 0,
+    "copiedBytes": 2472086050,
+    "signRetries": 0,
+    "failedByReason": {
+      "copy_exception": 16
+    }
+  },
+  "retry": {
+    "copiedCount": 16,
+    "failedCount": 0,
+    "conflictCount": 0,
+    "copiedBytes": 25683884,
+    "signRetries": 0,
+    "failedByReason": {},
+    "recoveredPass1Failures": 16
+  },
+  "copiedCount": 1328,
+  "failedCount": 0,
+  "skippedCount": 0,
+  "conflictCount": 0,
+  "copiedPrivateBytes": 2497769934,
+  "s3ObjectCount": 1334,
+  "s3Bytes": 2501472395,
+  "missingCount": 0,
+  "extraCount": 0,
+  "sizeMismatchCount": 0,
+  "unexplainedMissing": 0,
+  "unexplainedHashMismatches": 0,
+  "conflictingPaths": 0,
+  "zeroByteSourceObjects": [
+    "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1784235588930_front_80539082710__F7A28C61-DDC8-4A2F-AD84-D7771B818AF2_cropped.jpg",
+    "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1784235588930_back_80539084248__0D208796-3B0B-4983-B886-2694300E079F_cropped.jpg"
+  ],
+  "failedByReason": {},
+  "conflicts": [],
+  "failedSample": [],
+  "copiedSample": [
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1777199954800_front_IMG_0368.jpeg",
+      "key": "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1777199954800_front_IMG_0368.jpeg",
+      "sha256": "ac2dba5afc97c2eb2f5eb3e76b2f310f0f9fcc1c3ce054100f5705a3c32812dd",
+      "bytes": 2435765,
+      "skippedExisting": false
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1777199954800_back_IMG_2417.jpeg",
+      "key": "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1777199954800_back_IMG_2417.jpeg",
+      "sha256": "4ee3cfe93e059356cd3d52d0a80975af32bcbc6185e797dfaabb7e37d76cdb87",
+      "bytes": 6642349,
+      "skippedExisting": false
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1779911018979_front_image.jpg",
+      "key": "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1779911018979_front_image.jpg",
+      "sha256": "5e9990db92c4d1ef14e7ff28c6301574d6e720b36ba8fe89ed5e98dc421cc8d3",
+      "bytes": 4523962,
+      "skippedExisting": false
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1779980493435_front_image.jpg",
+      "key": "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1779980493435_front_image.jpg",
+      "sha256": "3a9999433558bed0d53f1acb9ea00fdc98b8d36518dedd0b6653e7a2a86a43bc",
+      "bytes": 5169874,
+      "skippedExisting": false
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1777200096927_front_IMG_0414.jpeg",
+      "key": "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1777200096927_front_IMG_0414.jpeg",
+      "sha256": "abef7240caa00c6a69a3699f6d9060ca2a624f6e943b089a3d7f07c310adf5cf",
+      "bytes": 2636634,
+      "skippedExisting": false
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/48a99d60-a8ed-4e0a-99ea-57d3aee792b7/front-legacy-1778090515776.jpeg",
+      "key": "files/claim-files/checks/48a99d60-a8ed-4e0a-99ea-57d3aee792b7/front-legacy-1778090515776.jpeg",
+      "sha256": "310486bbdaad85745547e0e86d79dc30f2be685d4122a1f3b5e9a56f2bad909f",
+      "bytes": 345733,
+      "skippedExisting": false
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1779932972946_front_IMG_0548.jpeg",
+      "key": "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1779932972946_front_IMG_0548.jpeg",
+      "sha256": "60f2f869673858b089751b834594e4527e02b7d3ef9c8642d01e712e42f4316f",
+      "bytes": 1828263,
+      "skippedExisting": false
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/shared/73239c54-07ee-4d56-9cfc-276e8c030ce6/front-1781277791269.jpg",
+      "key": "files/claim-files/checks/shared/73239c54-07ee-4d56-9cfc-276e8c030ce6/front-1781277791269.jpg",
+      "sha256": "1488c96a096e6efbc9f9f30d53e1e5b064b8b33a49d861a24dd3c2debf3f0a16",
+      "bytes": 4003726,
+      "skippedExisting": false
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1777200096927_back_IMG_2417.jpeg",
+      "key": "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1777200096927_back_IMG_2417.jpeg",
+      "sha256": "5bd706ea673d844cc17023bfa865e9abfb84a6b0f6c21c9ef113e162c831ae9c",
+      "bytes": 6642349,
+      "skippedExisting": false
+    },
+    {
+      "bucket": "claim-files",
+      "name": "checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1779911018979_back_image.jpg",
+      "key": "files/claim-files/checks/7dbb3009-f059-4767-b5dc-1c5c72379330/unclaimed/1779911018979_back_image.jpg",
+      "sha256": "201128f4ee7a60bc801a3e320445597eaea4ce49894dd0e0223644534ed148c5",
+      "bytes": 4447026,
+      "skippedExisting": false
+    }
+  ]
+}

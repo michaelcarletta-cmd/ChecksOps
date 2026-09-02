@@ -1,0 +1,161 @@
+{
+  "generatedAt": "2026-09-02T18:37:25.231Z",
+  "testerLoginOk": true,
+  "c1cLoginOk": true,
+  "testerAppUserIdFromImage": "abd3c2a0-6dc0-4680-92dd-a013e1141c91",
+  "c1cAppUserIdFromDeny": "fd857564-9534-4b0f-95ac-624ed1273725",
+  "testerImage": {
+    "signHttp": 200,
+    "error": null,
+    "getHttp": 200,
+    "getBytes": 284394,
+    "expectedBytes": 284394,
+    "bytesMatch": true,
+    "spoofIgnored": {
+      "ignored": true,
+      "queryUserId": null,
+      "queryTenantId": null,
+      "headerUserId": "00000000-0000-0000-0000-000000000099",
+      "headerTenantId": "4f172140-f57a-4744-8050-95f4f07b13b4",
+      "headerRole": null,
+      "bodyUserId": null,
+      "bodyTenantId": null,
+      "bodyRole": null
+    }
+  },
+  "testerPacket": {
+    "signHttp": 200,
+    "error": null,
+    "getHttp": 200,
+    "getBytes": 60283,
+    "expectedBytes": 60283,
+    "bytesMatch": true
+  },
+  "testerDownload": {
+    "signHttp": 200,
+    "getHttp": 200,
+    "getBytes": 284394,
+    "bytesMatch": true
+  },
+  "c1cImage": {
+    "http": 403,
+    "error": "storage_forbidden",
+    "message": "Not authorized for this object",
+    "ok": false,
+    "spoofFieldsIgnored": {
+      "ignored": true,
+      "queryUserId": null,
+      "queryTenantId": null,
+      "headerUserId": "abd3c2a0-6dc0-4680-92dd-a013e1141c91",
+      "headerTenantId": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "headerRole": "admin",
+      "bodyUserId": "abd3c2a0-6dc0-4680-92dd-a013e1141c91",
+      "bodyTenantId": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "bodyRole": null
+    },
+    "applicationUserId": "fd857564-9534-4b0f-95ac-624ed1273725",
+    "path": null,
+    "hasSignedUrl": false
+  },
+  "c1cPacket": {
+    "http": 403,
+    "error": "storage_forbidden",
+    "message": "Not authorized for this object",
+    "ok": false,
+    "spoofFieldsIgnored": {
+      "ignored": true,
+      "queryUserId": null,
+      "queryTenantId": null,
+      "headerUserId": "abd3c2a0-6dc0-4680-92dd-a013e1141c91",
+      "headerTenantId": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "headerRole": "admin",
+      "bodyUserId": "abd3c2a0-6dc0-4680-92dd-a013e1141c91",
+      "bodyTenantId": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "bodyRole": null
+    },
+    "applicationUserId": "fd857564-9534-4b0f-95ac-624ed1273725",
+    "path": null,
+    "hasSignedUrl": false
+  },
+  "unauthSign": {
+    "http": 401,
+    "error": "missing_cognito_token"
+  },
+  "unauthPublicClaim": {
+    "http": 403,
+    "error": "storage_forbidden"
+  },
+  "unauthPublicLogo": {
+    "http": 302,
+    "hasLocation": true
+  },
+  "uploadDisabled": {
+    "http": 403,
+    "error": "uploads_disabled",
+    "message": "Staging storage uploads, deletes, and moves are prepared but not enabled",
+    "ok": false,
+    "spoofFieldsIgnored": {
+      "ignored": true,
+      "queryUserId": null,
+      "queryTenantId": null,
+      "headerUserId": null,
+      "headerTenantId": null,
+      "headerRole": null,
+      "bodyUserId": null,
+      "bodyTenantId": null,
+      "bodyRole": null
+    },
+    "applicationUserId": null,
+    "path": null,
+    "hasSignedUrl": false
+  },
+  "deleteDisabled": {
+    "http": 403,
+    "error": "uploads_disabled",
+    "message": "Staging storage uploads, deletes, and moves are prepared but not enabled",
+    "ok": false,
+    "spoofFieldsIgnored": {
+      "ignored": true,
+      "queryUserId": null,
+      "queryTenantId": null,
+      "headerUserId": null,
+      "headerTenantId": null,
+      "headerRole": null,
+      "bodyUserId": null,
+      "bodyTenantId": null,
+      "bodyRole": null
+    },
+    "applicationUserId": null,
+    "path": null,
+    "hasSignedUrl": false
+  },
+  "writeDisabled": {
+    "http": 403,
+    "error": "writes_disabled"
+  },
+  "insertDisabled": {
+    "http": 403,
+    "error": "writes_disabled",
+    "message": "Staging application writes are disabled (default_transaction_read_only=on)",
+    "ok": false,
+    "spoofFieldsIgnored": {
+      "ignored": true,
+      "queryUserId": null,
+      "queryTenantId": null,
+      "headerUserId": null,
+      "headerTenantId": null,
+      "headerRole": null,
+      "bodyUserId": null,
+      "bodyTenantId": null,
+      "bodyRole": null
+    },
+    "applicationUserId": null,
+    "path": null,
+    "hasSignedUrl": false
+  },
+  "directS3": {
+    "http": 403,
+    "bytes": 0
+  },
+  "ok": true
+}

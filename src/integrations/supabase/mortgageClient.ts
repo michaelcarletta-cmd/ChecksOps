@@ -5,19 +5,23 @@
 // affecting the other.
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
+import { isAwsStaging } from "@/lib/awsStaging";
+import { createAwsStagingClient } from "@/integrations/aws/client";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-export const mortgageSupabase = createClient<Database>(
-  SUPABASE_URL,
-  SUPABASE_PUBLISHABLE_KEY,
-  {
-    auth: {
-      storage: localStorage,
-      storageKey: "sb-mortgage-ops-auth",
-      persistSession: true,
-      autoRefreshToken: true,
-    },
-  }
-);
+export const mortgageSupabase = isAwsStaging()
+  ? (createAwsStagingClient() as unknown as ReturnType<typeof createClient<Database>>)
+  : createClient<Database>(
+      SUPABASE_URL,
+      SUPABASE_PUBLISHABLE_KEY,
+      {
+        auth: {
+          storage: localStorage,
+          storageKey: "sb-mortgage-ops-auth",
+          persistSession: true,
+          autoRefreshToken: true,
+        },
+      }
+    );

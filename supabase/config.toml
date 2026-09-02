@@ -57,3 +57,6 @@ verify_jwt = false
 
 [functions.passkey-auth-verify]
 verify_jwt = false
+
+[functions.aws-staging-storage-bridge]
+verify_jwt = false

@@ -1,0 +1,26 @@
+{
+  "backfill_applied": true,
+  "tenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+  "tenant_name": "Freedom Adjustment",
+  "before": {
+    "claims": 180,
+    "org_id_null": 180,
+    "freedom": 0,
+    "other": 0
+  },
+  "after": {
+    "n": 180,
+    "org_null": 97,
+    "freedom": 83,
+    "other": 0
+  },
+  "rows_updated_first_apply": 83,
+  "unassigned_left_null": 97,
+  "ambiguous": 0,
+  "evidence_not_used": [
+    "created_by",
+    "uploaded_by",
+    "folder names",
+    "admin roles"
+  ]
+}

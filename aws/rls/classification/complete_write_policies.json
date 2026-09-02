@@ -1,0 +1,867 @@
+{
+  "remaining_tenant_scoped": 108,
+  "platform_owner_write_policies": 7,
+  "representative_already_prepared": [
+    "check_endorsements",
+    "check_intake_items",
+    "claim_files",
+    "claim_folders",
+    "claims",
+    "deposit_items",
+    "disbursement_batches",
+    "homeowner_ledger_events",
+    "payment_provider_accounts",
+    "tenant_email_settings",
+    "tenants",
+    "user_roles"
+  ],
+  "server_side_api_no_write_policy": [
+    "check_reconciliation_alerts",
+    "checkalt_config",
+    "checkalt_deposits",
+    "checkalt_webhook_events",
+    "deposit_provider_config",
+    "endorsement_automated_reminders",
+    "homeowner_directory_leads",
+    "homeowner_intro_requests",
+    "mortgage_releases",
+    "privacy_notice_acknowledgments",
+    "referral_alerts",
+    "signature_document_presets",
+    "signature_signers"
+  ],
+  "obsolete_no_write_policy": [
+    "signature_field_values",
+    "signature_fields"
+  ],
+  "expected_aws_write_total": 127,
+  "fk_retargets": 47,
+  "claims_backfill_ids": 83,
+  "access_kind_totals": {
+    "tenant_id": 49,
+    "audit_self_or_owner": 1,
+    "catalog_owner_only": 7,
+    "check_id": 12,
+    "check_intake_item_id": 5,
+    "claim_id": 6,
+    "user_id": 8,
+    "org_id": 1,
+    "deposit_item_id": 6,
+    "deposit_batch_join": 1,
+    "ops_owner_only": 4,
+    "homeowner_upload": 1,
+    "loss_draft_id": 3,
+    "profiles_self_or_same_tenant": 1,
+    "referral_tenants": 1,
+    "partnership_tenants": 1,
+    "tenant_users_admin": 1,
+    "platform_owner_only": 7
+  },
+  "policies": [
+    {
+      "table": "ach_authorizations",
+      "policy": "aws_write_ach_authorizations",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "actum_transactions",
+      "policy": "aws_write_actum_transactions",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "audit_logs",
+      "policy": "aws_write_audit_logs",
+      "kind": "audit_self_or_owner",
+      "class": "tenant_scoped",
+      "using": "public.aws_is_authenticated() AND ( user_id = auth.uid() OR public.aws_is_cross_tenant_reader())"
+    },
+    {
+      "table": "cash_job_attachments",
+      "policy": "aws_write_cash_job_attachments",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "cash_job_line_items",
+      "policy": "aws_write_cash_job_line_items",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "cash_job_payments",
+      "policy": "aws_write_cash_job_payments",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "cash_jobs",
+      "policy": "aws_write_cash_jobs",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "check_audit_log",
+      "policy": "aws_write_check_audit_log",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "check_billing_config",
+      "policy": "aws_write_check_billing_config",
+      "kind": "catalog_owner_only",
+      "class": "tenant_scoped",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "check_billing_events",
+      "policy": "aws_write_check_billing_events",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "check_cases",
+      "policy": "aws_write_check_cases",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "check_eligibility_results",
+      "policy": "aws_write_check_eligibility_results",
+      "kind": "check_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_check(check_id)"
+    },
+    {
+      "table": "check_endorsement_events",
+      "policy": "aws_write_check_endorsement_events",
+      "kind": "check_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_check(check_id)"
+    },
+    {
+      "table": "check_files",
+      "policy": "aws_write_check_files",
+      "kind": "check_intake_item_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_check(check_intake_item_id)"
+    },
+    {
+      "table": "check_intake_mortgage_draws",
+      "policy": "aws_write_check_intake_mortgage_draws",
+      "kind": "check_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_check(check_id)"
+    },
+    {
+      "table": "check_message_reads",
+      "policy": "aws_write_check_message_reads",
+      "kind": "check_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_check(check_id)"
+    },
+    {
+      "table": "check_messages",
+      "policy": "aws_write_check_messages",
+      "kind": "check_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_check(check_id)"
+    },
+    {
+      "table": "check_payees",
+      "policy": "aws_write_check_payees",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "check_payment_directions",
+      "policy": "aws_write_check_payment_directions",
+      "kind": "check_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_check(check_id)"
+    },
+    {
+      "table": "check_reissue_requests",
+      "policy": "aws_write_check_reissue_requests",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "check_review_decisions",
+      "policy": "aws_write_check_review_decisions",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "check_stakeholders",
+      "policy": "aws_write_check_stakeholders",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "checkalt_tenant_accounts",
+      "policy": "aws_write_checkalt_tenant_accounts",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "claim_check_mortgage_draws",
+      "policy": "aws_write_claim_check_mortgage_draws",
+      "kind": "check_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_check(check_id)"
+    },
+    {
+      "table": "claim_check_payments",
+      "policy": "aws_write_claim_check_payments",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "claim_checks",
+      "policy": "aws_write_claim_checks",
+      "kind": "check_intake_item_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_check(check_intake_item_id)"
+    },
+    {
+      "table": "claim_disbursements",
+      "policy": "aws_write_claim_disbursements",
+      "kind": "check_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_check(check_id)"
+    },
+    {
+      "table": "claim_operational_state",
+      "policy": "aws_write_claim_operational_state",
+      "kind": "claim_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_claim(claim_id)"
+    },
+    {
+      "table": "claim_payments",
+      "policy": "aws_write_claim_payments",
+      "kind": "check_intake_item_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_check(check_intake_item_id)"
+    },
+    {
+      "table": "claim_project_plans",
+      "policy": "aws_write_claim_project_plans",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "claim_settlements",
+      "policy": "aws_write_claim_settlements",
+      "kind": "claim_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_claim(claim_id)"
+    },
+    {
+      "table": "contractor_profiles",
+      "policy": "aws_write_contractor_profiles",
+      "kind": "user_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_same_tenant_user(user_id)"
+    },
+    {
+      "table": "contractor_reviews",
+      "policy": "aws_write_contractor_reviews",
+      "kind": "org_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(org_id)"
+    },
+    {
+      "table": "deposit_attachments",
+      "policy": "aws_write_deposit_attachments",
+      "kind": "deposit_item_id",
+      "class": "tenant_scoped",
+      "using": "EXISTS (SELECT 1 FROM public.deposit_items di WHERE di.id = deposit_item_id   AND public.aws_can_write_check(di.check_id))"
+    },
+    {
+      "table": "deposit_audit_log",
+      "policy": "aws_write_deposit_audit_log",
+      "kind": "deposit_item_id",
+      "class": "tenant_scoped",
+      "using": "EXISTS (SELECT 1 FROM public.deposit_items di WHERE di.id = deposit_item_id   AND public.aws_can_write_check(di.check_id))"
+    },
+    {
+      "table": "deposit_batches",
+      "policy": "aws_write_deposit_batches",
+      "kind": "deposit_batch_join",
+      "class": "tenant_scoped",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader() OR EXISTS ( SELECT 1 FROM public.deposit_items di JOIN public.check_intake_items ci ON ci.id = di.check_id WHERE di.batch_id = deposit_batches.id   AND public.aws_can_write_tenant(ci.tenant_id))"
+    },
+    {
+      "table": "deposit_daily_digest",
+      "policy": "aws_write_deposit_daily_digest",
+      "kind": "ops_owner_only",
+      "class": "tenant_scoped",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "deposit_digest_delivery_log",
+      "policy": "aws_write_deposit_digest_delivery_log",
+      "kind": "ops_owner_only",
+      "class": "tenant_scoped",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "deposit_escalation_events",
+      "policy": "aws_write_deposit_escalation_events",
+      "kind": "deposit_item_id",
+      "class": "tenant_scoped",
+      "using": "EXISTS (SELECT 1 FROM public.deposit_items di WHERE di.id = deposit_item_id   AND public.aws_can_write_check(di.check_id))"
+    },
+    {
+      "table": "deposit_exceptions",
+      "policy": "aws_write_deposit_exceptions",
+      "kind": "deposit_item_id",
+      "class": "tenant_scoped",
+      "using": "EXISTS (SELECT 1 FROM public.deposit_items di WHERE di.id = deposit_item_id   AND public.aws_can_write_check(di.check_id))"
+    },
+    {
+      "table": "deposit_manager_snapshots",
+      "policy": "aws_write_deposit_manager_snapshots",
+      "kind": "ops_owner_only",
+      "class": "tenant_scoped",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "deposit_notification_prefs",
+      "policy": "aws_write_deposit_notification_prefs",
+      "kind": "user_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_same_tenant_user(user_id)"
+    },
+    {
+      "table": "deposit_pending_approvals",
+      "policy": "aws_write_deposit_pending_approvals",
+      "kind": "ops_owner_only",
+      "class": "tenant_scoped",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "deposit_provider_attempts",
+      "policy": "aws_write_deposit_provider_attempts",
+      "kind": "deposit_item_id",
+      "class": "tenant_scoped",
+      "using": "EXISTS (SELECT 1 FROM public.deposit_items di WHERE di.id = deposit_item_id   AND public.aws_can_write_check(di.check_id))"
+    },
+    {
+      "table": "deposit_webhook_events",
+      "policy": "aws_write_deposit_webhook_events",
+      "kind": "deposit_item_id",
+      "class": "tenant_scoped",
+      "using": "EXISTS (SELECT 1 FROM public.deposit_items di WHERE di.id = deposit_item_id   AND public.aws_can_write_check(di.check_id))"
+    },
+    {
+      "table": "disbursement_splits",
+      "policy": "aws_write_disbursement_splits",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "document_templates",
+      "policy": "aws_write_document_templates",
+      "kind": "catalog_owner_only",
+      "class": "tenant_scoped",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "email_send_log",
+      "policy": "aws_write_email_send_log",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "email_templates",
+      "policy": "aws_write_email_templates",
+      "kind": "catalog_owner_only",
+      "class": "tenant_scoped",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "emails",
+      "policy": "aws_write_emails",
+      "kind": "claim_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_claim(claim_id)"
+    },
+    {
+      "table": "endorsement_audit_log",
+      "policy": "aws_write_endorsement_audit_log",
+      "kind": "check_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_check(check_id)"
+    },
+    {
+      "table": "endorsement_requests",
+      "policy": "aws_write_endorsement_requests",
+      "kind": "check_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_check(check_id)"
+    },
+    {
+      "table": "esign_event_logs",
+      "policy": "aws_write_esign_event_logs",
+      "kind": "claim_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_claim(claim_id)"
+    },
+    {
+      "table": "external_payment_recipients",
+      "policy": "aws_write_external_payment_recipients",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "homeowner_bank_link_tokens",
+      "policy": "aws_write_homeowner_bank_link_tokens",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "homeowner_check_uploads",
+      "policy": "aws_write_homeowner_check_uploads",
+      "kind": "homeowner_upload",
+      "class": "tenant_scoped",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader() OR contractor_user_id = auth.uid() OR public.aws_can_write_check(converted_check_id)"
+    },
+    {
+      "table": "homeowner_ledger_check_uploads",
+      "policy": "aws_write_homeowner_ledger_check_uploads",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "homeowner_ledger_tokens",
+      "policy": "aws_write_homeowner_ledger_tokens",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "loss_draft_audit_log",
+      "policy": "aws_write_loss_draft_audit_log",
+      "kind": "loss_draft_id",
+      "class": "tenant_scoped",
+      "using": "EXISTS (SELECT 1 FROM public.loss_draft_tracking ldt WHERE ldt.id = loss_draft_id   AND public.aws_can_write_claim(ldt.claim_id))"
+    },
+    {
+      "table": "loss_draft_documents",
+      "policy": "aws_write_loss_draft_documents",
+      "kind": "loss_draft_id",
+      "class": "tenant_scoped",
+      "using": "EXISTS (SELECT 1 FROM public.loss_draft_tracking ldt WHERE ldt.id = loss_draft_id   AND public.aws_can_write_claim(ldt.claim_id))"
+    },
+    {
+      "table": "loss_draft_releases",
+      "policy": "aws_write_loss_draft_releases",
+      "kind": "loss_draft_id",
+      "class": "tenant_scoped",
+      "using": "EXISTS (SELECT 1 FROM public.loss_draft_tracking ldt WHERE ldt.id = loss_draft_id   AND public.aws_can_write_claim(ldt.claim_id))"
+    },
+    {
+      "table": "loss_draft_tracking",
+      "policy": "aws_write_loss_draft_tracking",
+      "kind": "check_intake_item_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_check(check_intake_item_id)"
+    },
+    {
+      "table": "micro_deposit_verifications",
+      "policy": "aws_write_micro_deposit_verifications",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "moov_invoice_customers",
+      "policy": "aws_write_moov_invoice_customers",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "moov_invoices",
+      "policy": "aws_write_moov_invoices",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "mortgage_companies",
+      "policy": "aws_write_mortgage_companies",
+      "kind": "catalog_owner_only",
+      "class": "tenant_scoped",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "mortgage_desk_config",
+      "policy": "aws_write_mortgage_desk_config",
+      "kind": "catalog_owner_only",
+      "class": "tenant_scoped",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "mortgage_handling_requests",
+      "policy": "aws_write_mortgage_handling_requests",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "mortgage_request_library_documents",
+      "policy": "aws_write_mortgage_request_library_documents",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "notification_delivery_logs",
+      "policy": "aws_write_notification_delivery_logs",
+      "kind": "user_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_same_tenant_user(user_id)"
+    },
+    {
+      "table": "notification_preferences",
+      "policy": "aws_write_notification_preferences",
+      "kind": "user_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_same_tenant_user(user_id)"
+    },
+    {
+      "table": "notifications",
+      "policy": "aws_write_notifications",
+      "kind": "claim_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_claim(claim_id)"
+    },
+    {
+      "table": "payment_method_verifications",
+      "policy": "aws_write_payment_method_verifications",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "payment_provider_methods",
+      "policy": "aws_write_payment_provider_methods",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "payment_sweep_configs",
+      "policy": "aws_write_payment_sweep_configs",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "payment_transfer_groups",
+      "policy": "aws_write_payment_transfer_groups",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "payment_transfers",
+      "policy": "aws_write_payment_transfers",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "payment_wallet_sub_ledgers",
+      "policy": "aws_write_payment_wallet_sub_ledgers",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "payment_wallets",
+      "policy": "aws_write_payment_wallets",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "payroll_runs",
+      "policy": "aws_write_payroll_runs",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "pii_reveal_logs",
+      "policy": "aws_write_pii_reveal_logs",
+      "kind": "user_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_same_tenant_user(user_id)"
+    },
+    {
+      "table": "platform_announcements",
+      "policy": "aws_write_platform_announcements",
+      "kind": "catalog_owner_only",
+      "class": "tenant_scoped",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "platform_fee_schedules",
+      "policy": "aws_write_platform_fee_schedules",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "profiles",
+      "policy": "aws_write_profiles",
+      "kind": "profiles_self_or_same_tenant",
+      "class": "tenant_scoped",
+      "using": "public.aws_is_authenticated() AND ( id = auth.uid() OR public.aws_can_write_same_tenant_user(id))"
+    },
+    {
+      "table": "recipient_tax_profiles",
+      "policy": "aws_write_recipient_tax_profiles",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "referral_events",
+      "policy": "aws_write_referral_events",
+      "kind": "referral_tenants",
+      "class": "tenant_scoped",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader() OR public.aws_can_write_tenant(referrer_tenant_id) OR public.aws_can_write_tenant(referred_tenant_id)"
+    },
+    {
+      "table": "referrers",
+      "policy": "aws_write_referrers",
+      "kind": "user_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_same_tenant_user(user_id)"
+    },
+    {
+      "table": "role_version_tracker",
+      "policy": "aws_write_role_version_tracker",
+      "kind": "user_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_same_tenant_user(user_id)"
+    },
+    {
+      "table": "shared_check_messages",
+      "policy": "aws_write_shared_check_messages",
+      "kind": "check_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_check(check_id)"
+    },
+    {
+      "table": "shared_checks",
+      "policy": "aws_write_shared_checks",
+      "kind": "check_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_check(check_id)"
+    },
+    {
+      "table": "signature_field_templates",
+      "policy": "aws_write_signature_field_templates",
+      "kind": "catalog_owner_only",
+      "class": "tenant_scoped",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "signature_requests",
+      "policy": "aws_write_signature_requests",
+      "kind": "check_intake_item_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_check(check_intake_item_id)"
+    },
+    {
+      "table": "sms_messages",
+      "policy": "aws_write_sms_messages",
+      "kind": "claim_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_claim(claim_id)"
+    },
+    {
+      "table": "stakeholder_accounts",
+      "policy": "aws_write_stakeholder_accounts",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "stakeholder_limit_requests",
+      "policy": "aws_write_stakeholder_limit_requests",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "suppressed_emails",
+      "policy": "aws_write_suppressed_emails",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "tenant_bank_accounts",
+      "policy": "aws_write_tenant_bank_accounts",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "tenant_billing_accounts",
+      "policy": "aws_write_tenant_billing_accounts",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "tenant_credit_balances",
+      "policy": "aws_write_tenant_credit_balances",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "tenant_credit_transactions",
+      "policy": "aws_write_tenant_credit_transactions",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "tenant_documents",
+      "policy": "aws_write_tenant_documents",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "tenant_maintenance_payments",
+      "policy": "aws_write_tenant_maintenance_payments",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "tenant_partner_code_aliases",
+      "policy": "aws_write_tenant_partner_code_aliases",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "tenant_partnerships",
+      "policy": "aws_write_tenant_partnerships",
+      "kind": "partnership_tenants",
+      "class": "tenant_scoped",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader() OR public.aws_can_write_tenant(inviter_tenant_id) OR public.aws_can_write_tenant(invitee_tenant_id)"
+    },
+    {
+      "table": "tenant_users",
+      "policy": "aws_write_tenant_users",
+      "kind": "tenant_users_admin",
+      "class": "tenant_scoped",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader() OR ( public.aws_can_write_tenant(tenant_id) AND public.has_role(auth.uid(), 'admin'::public.app_role))"
+    },
+    {
+      "table": "tenant_vetting_documents",
+      "policy": "aws_write_tenant_vetting_documents",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "tenant_wallet_funding_settings",
+      "policy": "aws_write_tenant_wallet_funding_settings",
+      "kind": "tenant_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_tenant(tenant_id)"
+    },
+    {
+      "table": "user_sessions",
+      "policy": "aws_write_user_sessions",
+      "kind": "user_id",
+      "class": "tenant_scoped",
+      "using": "public.aws_can_write_same_tenant_user(user_id)"
+    },
+    {
+      "table": "ai_response_cache",
+      "policy": "aws_write_ai_response_cache",
+      "kind": "platform_owner_only",
+      "class": "platform_owner_or_api",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "company_branding",
+      "policy": "aws_write_company_branding",
+      "kind": "platform_owner_only",
+      "class": "platform_owner_or_api",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "deposit_automation_settings",
+      "policy": "aws_write_deposit_automation_settings",
+      "kind": "platform_owner_only",
+      "class": "platform_owner_or_api",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "deposit_escalation_rules",
+      "policy": "aws_write_deposit_escalation_rules",
+      "kind": "platform_owner_only",
+      "class": "platform_owner_or_api",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "email_send_state",
+      "policy": "aws_write_email_send_state",
+      "kind": "platform_owner_only",
+      "class": "platform_owner_or_api",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "email_unsubscribe_tokens",
+      "policy": "aws_write_email_unsubscribe_tokens",
+      "kind": "platform_owner_only",
+      "class": "platform_owner_or_api",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader()"
+    },
+    {
+      "table": "payment_methods",
+      "policy": "aws_write_payment_methods",
+      "kind": "platform_owner_only",
+      "class": "platform_owner_or_api",
+      "using": "public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader()"
+    }
+  ]
+}

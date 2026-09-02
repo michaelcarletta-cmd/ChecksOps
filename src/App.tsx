@@ -12,6 +12,7 @@ import { CustomDomainWhiteLabelApp } from "./components/white-label/CustomDomain
 import { AuthProvider } from "./hooks/useAuth";
 import { StepUpProvider } from "./hooks/useStepUp";
 import { ThemeProvider, ThemeScope } from "./hooks/useTheme";
+import { AwsStagingBanner } from "./components/AwsStagingBanner";
 
 
 import { bootstrapEmbedContext } from "./lib/embedContext";
@@ -212,6 +213,7 @@ const App = () => (
           <AuthProvider>
             <StepUpProvider>
               <ThemeScope>
+                <AwsStagingBanner />
                 <RecoveryHashRedirect />
                 <PlatformAnnouncementBanner />
                 <AppRoutes />

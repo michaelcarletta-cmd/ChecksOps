@@ -10,6 +10,8 @@
  * must never treat those paths as tenant slugs.
  */
 
+import { isAwsStaging } from "./awsStaging";
+
 const CHECKOPS_HOSTS = [
   "checkops.com",
   "www.checkops.com",
@@ -25,6 +27,8 @@ const CHECKOPS_HOSTS = [
 ];
 
 export function isCheckOpsHost(hostname: string = typeof window !== "undefined" ? window.location.hostname : ""): boolean {
+  // Isolated AWS staging frontend uses the same /{slug} ChecksOps routing as production.
+  if (isAwsStaging()) return true;
   if (!hostname) return false;
   if (CHECKOPS_HOSTS.includes(hostname)) return true;
   // Any subdomain of checkops.com / checksops.com / checkops.app / checksops.app

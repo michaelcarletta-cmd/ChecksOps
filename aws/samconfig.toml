@@ -1,5 +1,8 @@
 version = 0.1
 
+[staging.global.parameters]
+region = "us-east-1"
+
 [staging.deploy.parameters]
 stack_name = "checksops-staging"
 resolve_s3 = true
@@ -7,5 +10,5 @@ s3_prefix = "checksops-staging"
 region = "us-east-1"
 confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
-parameter_overrides = "Environment=staging"
+parameter_overrides = "Environment=staging VpcId=vpc-09f2268778966ce97 SubnetIds=subnet-092e4e41821fba6c4,subnet-0df2518070c5b9ff0 ExistingRdsSecurityGroupId=sg-0e9332faa87c1d059 DatabaseSecretArn=arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops/1788286468693-b4U0Rn S3RouteTableId=rtb-0b92eeeb4ce2759c8 S3ManagedPrefixListId=pl-63a5400a"
 disable_rollback = false
