@@ -99,7 +99,7 @@ Freedom CRUD + readback; C1C ↛ Freedom; Freedom ↛ C1C; NULL-org deny; unauth
 
 Staging restore still has Freedom checks and **0 C1C intake rows** — C1C isolation is “cannot write Freedom check_id”.
 
-## Out of scope / Tranche 3 candidates
+Payee INSERT still runs `tg_mirror_payee_to_endorsement`, which creates a pending endorsement. Live staging required `GRANT INSERT` on `check_endorsements` for that trigger (`permission denied for table check_endorsements` without it). The HTTP allowlist still has no endorsement insert op and still denies `status`.
 
 - `check_messages` INSERT (needs a ledger-safe product decision)
 - endorsement `status` without partner HTTP / stage side effects

@@ -35,13 +35,19 @@ GRANT UPDATE (
 ) ON TABLE public.check_payees TO checksops, authenticated;
 
 GRANT SELECT ON TABLE public.check_endorsements TO checksops, authenticated;
-GRANT DELETE ON TABLE public.check_endorsements TO checksops, authenticated;
+GRANT INSERT, DELETE ON TABLE public.check_endorsements TO checksops, authenticated;
+-- Extra UPDATE columns are required for tg_mirror_payee_to_endorsement.
+-- HTTP allowlist still denies client status/signed_at mutations.
 GRANT UPDATE (
+  payee_id,
+  tenant_id,
   payee_name,
   payee_type,
   contact_email,
   contact_phone,
   notes,
+  status,
+  signed_at,
   updated_at
 ) ON TABLE public.check_endorsements TO checksops, authenticated;
 
