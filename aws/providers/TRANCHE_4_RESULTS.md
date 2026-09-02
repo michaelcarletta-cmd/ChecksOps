@@ -1,6 +1,17 @@
 # Tranche 4 results
 
-Branch `cursor/aws-provider-tranche-4-c48b`. **PR #97** targets `main`. Do not merge until a human reviews.
+Branch `cursor/aws-provider-tranche-4-c48b`. **PR #97** targets `main`.
+
+## Unified with Tranche 3 (PR #96)
+
+PR #96 merged to `main` as `f19a07b5`. PR #97 then merged as `2f69698d` (parents: `#96` + T4 `c604b414`). The T4 branch was fast-forwarded to that unified `main` tip.
+
+The repository now contains complete T1 + T2 + T3 + T4. Staging Lambda `checksops-staging-api` was rebuilt from `aws/functions/api` on `2f69698d` (zip SHA256 `RB2IoXULw1RpjsWi776fc7ifU1Vgb6W3i7MtdoY8BHg=` matches Lambda `CodeSha256`). Not an overlay.
+
+Post-unify unit tests: **70/70 PASS** (providers + write T1–T3 + storage + auth/health/identity).  
+Live T3 `scripts/aws-write-tranche3-validate.mjs`: **27/27 PASS**.  
+Live T4 `scripts/aws-provider-tranche4-validate.mjs`: **20/20 PASS**.  
+Financial aggregates unchanged vs T2 baseline. Production not touched.
 
 Production ChecksOps, production DNS, production frontend, production Supabase provider functions, and production Moov/CheckAlt/Plaid webhook URLs were **not** touched.
 
