@@ -14,6 +14,7 @@ import {
   probeDatabase,
   probeIsHealthy,
   buildClientConfig,
+  buildWriteClientConfig,
 } from '../functions/api/db-health.mjs';
 import {
   CORE_TABLES,
@@ -225,6 +226,14 @@ test('TLS client config verifies certificates and stays read-only', async () => 
   assert.equal(config.user, 'checksops');
   assert.equal(config.database, 'checksops');
   assert.match(config.options, /default_transaction_read_only=on/);
+  const writeConfig = buildWriteClientConfig({
+    username: 'checksops',
+    password: 'unit-test-only-not-a-real-secret',
+    host: 'db.example.internal',
+    database: 'checksops',
+  });
+  assert.equal(writeConfig.options, undefined);
+  assert.equal(writeConfig.user, 'checksops');
   assert.throws(
     () => buildClientConfig({
       username: 'checksops_admin',

@@ -40,6 +40,7 @@ import { Search as SearchIcon } from "lucide-react";
 
 import { PasskeyManagerCard } from "@/components/auth/PasskeyManagerCard";
 import { TotpManagerCard } from "@/components/auth/TotpManagerCard";
+import NotificationPreferencesSettings from "@/components/settings/NotificationPreferencesSettings";
 import { CheckUsageCard } from "@/components/billing/CheckUsageCard";
 import { TenantUsageTracker } from "@/components/billing/TenantUsageTracker";
 import { BillingConfigPanel } from "@/components/billing/BillingConfigPanel";
@@ -183,6 +184,7 @@ export function WhiteLabelSettings() {
 
           <TabsContent value="profile" className="space-y-6">
             {tenant && <ProfileSettings tenant={tenant} />}
+            <NotificationPreferencesSettings />
             <PasskeyManagerCard />
             <TotpManagerCard />
           </TabsContent>

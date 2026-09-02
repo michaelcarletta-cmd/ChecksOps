@@ -1,0 +1,7 @@
+{
+  "name": "checksops-staging-tranche1-grants",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "index.mjs"
+}

@@ -20,7 +20,10 @@ type QueryState = {
   single: boolean;
   maybeSingle: boolean;
   payload: unknown;
+  onConflict: string | null;
 };
+
+const AWS_WRITE_TABLES = new Set(["check_message_reads", "notification_preferences"]);
 
 const listeners = new Set<AuthListener>();
 
@@ -192,19 +195,70 @@ function createBuilder(table: string) {
     single: false,
     maybeSingle: false,
     payload: null,
+    onConflict: null,
+  };
+
+  const executeWrite = async (token: string) => {
+    const { response, body } = await apiFetch("/data/write", {
+      method: "POST",
+      body: JSON.stringify({
+        table: state.table,
+        op: state.op,
+        values: state.payload,
+        filters: state.filters,
+        onConflict: state.onConflict,
+        single: state.single,
+        maybeSingle: state.maybeSingle,
+        select: state.select,
+      }),
+    }, token);
+    if (response.status === 401) {
+      writeStored(null);
+      emit("SIGNED_OUT", null);
+    }
+    if (!response.ok) {
+      return {
+        data: body.data ?? null,
+        error: postgrestError(String(body.message || body.error || "write_failed"), String(body.error || "42501")),
+        count: body.count ?? null,
+        status: response.status,
+        statusText: response.statusText,
+      };
+    }
+    return {
+      data: body.data ?? null,
+      error: null,
+      count: body.count ?? null,
+      status: 200,
+      statusText: "OK",
+    };
   };
 
   const execute = async () => {
     if (state.op !== "select") {
-      return {
-        data: null,
-        error: postgrestError("writes_disabled", "42501", {
-          hint: "Staging application writes are disabled (default_transaction_read_only=on)",
-        }),
-        count: null,
-        status: 403,
-        statusText: "Forbidden",
-      };
+      if (!AWS_WRITE_TABLES.has(state.table)) {
+        return {
+          data: null,
+          error: postgrestError("writes_disabled", "42501", {
+            hint: "This table is not in the AWS Tranche 1 write allowlist",
+          }),
+          count: null,
+          status: 403,
+          statusText: "Forbidden",
+        };
+      }
+      const restoredWrite = await restoreSession();
+      const writeToken = restoredWrite.session?.access_token;
+      if (!writeToken) {
+        return {
+          data: null,
+          error: postgrestError("JWT expired", "PGRST301"),
+          count: null,
+          status: 401,
+          statusText: "Unauthorized",
+        };
+      }
+      return executeWrite(writeToken);
     }
     const restored = await restoreSession();
     const token = restored.session?.access_token;
@@ -273,9 +327,10 @@ function createBuilder(table: string) {
       state.payload = payload;
       return builder;
     },
-    upsert(payload: unknown) {
+    upsert(payload: unknown, options?: { onConflict?: string }) {
       state.op = "upsert";
       state.payload = payload;
+      state.onConflict = options?.onConflict || null;
       return builder;
     },
     delete() {
@@ -559,6 +614,26 @@ export function createAwsStagingClient() {
       const token = restored.session?.access_token;
       if (!token) {
         return { data: null, error: postgrestError("JWT expired", "PGRST301") };
+      }
+      if (name === "get_or_create_notification_preferences") {
+        const { response, body } = await apiFetch("/data/write", {
+          method: "POST",
+          body: JSON.stringify({
+            table: "notification_preferences",
+            op: "get_or_create",
+            values: {},
+            args,
+            maybeSingle: true,
+          }),
+        }, token);
+        if (response.status === 401) {
+          writeStored(null);
+          emit("SIGNED_OUT", null);
+        }
+        if (!response.ok) {
+          return { data: null, error: postgrestError(String(body.message || body.error || "rpc_failed"), String(body.error || "42501")) };
+        }
+        return { data: body.data ?? null, error: null };
       }
       const { response, body } = await apiFetch("/data/rpc", {
         method: "POST",
