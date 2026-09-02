@@ -1,0 +1,53 @@
+# AWS staging frontend (Cognito + staging API)
+
+Isolated ChecksOps frontend for AWS staging. Production Lovable/Supabase, production DNS, and `main` are not changed.
+
+## Public configuration (browser-safe)
+
+Set in `.env.aws` (gitignored) or copy from `.env.aws.example`:
+
+- `VITE_AUTH_PROVIDER=cognito`
+- `VITE_CHECKSOPS_API_URL=https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging`
+- `VITE_COGNITO_USER_POOL_ID=us-east-1_vPmQ7cL1F`
+- `VITE_COGNITO_USER_POOL_CLIENT_ID=71bb7a192cbl6o6s8m259tl589`
+
+RDS passwords, AWS keys, Moov/CheckAlt/Plaid/Resend secrets must never be `VITE_*` values. The browser never connects to RDS.
+
+## Commands
+
+```bash
+cp .env.aws.example .env.aws
+npm run dev:aws
+npm run build:aws
+npm run preview:aws
+node --test aws/tests/api-auth-data.test.mjs
+```
+
+`vite build` / production mode still uses `.env.production` and the Supabase client.
+
+## Auth adapter
+
+`src/integrations/aws/client.ts` replaces the generated Supabase browser client when `isAwsStaging()` is true.
+
+1. Email/password → `POST /auth/login` (Cognito `USER_PASSWORD_AUTH` via Lambda, not from the browser).
+2. `NEW_PASSWORD_REQUIRED` → login UI collects a permanent password → `POST /auth/challenge`.
+3. Forgot password → `POST /auth/forgot` (Tester mailbox only).
+4. Confirmation code → `POST /auth/confirm-forgot` (Tester only).
+5. Session restore / refresh / logout as listed in the inventory.
+6. `/identity/me` maps Cognito `sub` to the existing ChecksOps UUID. `user.id` in the UI is that UUID.
+
+## Data
+
+Authenticated reads use `POST /data/query` and `POST /data/rpc`. Lambda sets `request.app_user_id` from `identity_accounts` and RLS is the database authorization boundary.
+
+Writes return `writes_disabled`. Provider functions return `provider_disabled`. Storage returns `s3_migration_required`.
+
+## Do not
+
+- Change production frontend, DNS, or Lovable/Supabase
+- Merge AWS cutover into `main`
+- Migrate production Storage
+- Enable production writes / `default_transaction_read_only=off`
+- Call Moov, CheckAlt, or Plaid
+- Modify the unresolved ninth UUID
+- Activate the disabled probe

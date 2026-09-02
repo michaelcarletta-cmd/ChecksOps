@@ -11,6 +11,7 @@ import { useCustomDomainTenant } from "./hooks/useCustomDomainTenant";
 import { CustomDomainWhiteLabelApp } from "./components/white-label/CustomDomainWhiteLabelApp";
 import { AuthProvider } from "./hooks/useAuth";
 import { ThemeProvider, ThemeScope } from "./hooks/useTheme";
+import { AwsStagingBanner } from "./components/AwsStagingBanner";
 
 
 import { bootstrapEmbedContext } from "./lib/embedContext";
@@ -207,6 +208,7 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <ThemeScope>
+              <AwsStagingBanner />
               <RecoveryHashRedirect />
               <PlatformAnnouncementBanner />
               <AppRoutes />
