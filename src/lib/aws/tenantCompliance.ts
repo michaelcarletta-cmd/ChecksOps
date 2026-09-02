@@ -3,7 +3,7 @@ import type {
   TenantComplianceOverview,
   TenantFinancialPermissions,
   TenantSecurityReadiness,
-} from "@/components/settings/TenantSecurityCompliance";
+} from "@/components/settings/TenantSecurityComplianceView";
 import type { TenantAgreementAcceptance } from "@/components/settings/TenantAgreementsAcceptances";
 import type { TenantAuditEvent } from "@/components/settings/TenantAuditActivity";
 import type { TenantComplianceReview } from "@/components/settings/TenantComplianceReviews";
