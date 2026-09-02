@@ -164,6 +164,11 @@ export const parseSelect = (select) => {
   return { columns, embeds };
 };
 
+export const embedColumnSql = (columns) => {
+  if (!columns?.length || columns.includes('*')) return '*';
+  return columns.map((c) => ident(c, 'column')).join(', ');
+};
+
 export const relatedFk = (table, embedTable) => {
   if (embedTable === 'tenants' || embedTable === 'tenants_public') {
     if (table === 'claims') return 'org_id';
@@ -386,7 +391,7 @@ const runSelect = async (client, body) => {
     if (!ALLOWED.has(relTable) && relTable !== 'tenants') continue;
     const fk = relatedFk(table, relTable);
     const parentHasFk = rows.some((row) => Object.prototype.hasOwnProperty.call(row, fk));
-    const embedCols = embed.columns.length ? embed.columns.map((c) => ident(c, 'column')).join(', ') : '*';
+    const embedCols = embedColumnSql(embed.columns);
     if (parentHasFk) {
       const ids = [...new Set(rows.map((row) => row[fk]).filter(Boolean))];
       if (!ids.length) {

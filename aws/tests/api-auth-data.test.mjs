@@ -9,6 +9,7 @@ import {
   handleDataRpc,
   parseOrExpr,
   parseSelect,
+  embedColumnSql,
   relatedFk,
 } from '../functions/api/data.mjs';
 import { LOOKUP_MAPPING_SQL } from '../functions/api/identity.mjs';
@@ -78,6 +79,15 @@ test('parseSelect extracts inner tenant embeds used by login redirect', () => {
   assert.deepEqual(parsed.columns, ['tenant_id']);
   assert.equal(parsed.embeds[0].table, 'tenants');
   assert.equal(parsed.embeds[0].inner, true);
+});
+
+test('has-many star embeds do not pass * through ident', () => {
+  const parsed = parseSelect('*, check_payees(*), checkalt_deposits(id, status, last_status_payload)');
+  assert.equal(parsed.columns[0], '*');
+  assert.equal(parsed.embeds[0].table, 'check_payees');
+  assert.deepEqual(parsed.embeds[0].columns, ['*']);
+  assert.equal(embedColumnSql(parsed.embeds[0].columns), '*');
+  assert.equal(embedColumnSql(parsed.embeds[1].columns), 'id, status, last_status_payload');
 });
 
 test('or parser supports PostgREST login/search expressions', () => {
