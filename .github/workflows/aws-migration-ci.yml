@@ -74,8 +74,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if grep -R --line-number --exclude='PRODUCTION_CUTOVER_CHECKLIST.md' --exclude='64_financial_activation_grants.sql' \
-            -E '(psql|execute|apply|run).*64_financial_activation_grants\.sql' .github aws scripts 2>/dev/null; then
-            echo 'Found an automated path that may apply 64_financial_activation_grants.sql'
+          matches="$(grep -R --line-number \
+            --include='*.sh' --include='*.bash' --include='*.mjs' --include='*.js' --include='*.ts' --include='*.tsx' --include='*.yml' --include='*.yaml' \
+            --exclude='aws-migration-ci.yml' \
+            -E '(psql|execute|apply|run)[^[:cntrl:]]*64_financial_activation_grants\.sql' \
+            .github aws scripts 2>/dev/null || true)"
+          if [ -n "$matches" ]; then
+            printf '%s\n' "$matches"
+            echo 'Found executable automation that may apply 64_financial_activation_grants.sql'
             exit 1
           fi
