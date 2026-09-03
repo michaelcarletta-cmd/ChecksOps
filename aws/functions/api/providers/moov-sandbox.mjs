@@ -120,6 +120,8 @@ export const moovSandboxToken = async ({ credentials, scopes = ['/accounts.read'
       accessTokenPresent: Boolean(parsed.json?.access_token),
       expiresIn: Number(parsed.json?.expires_in || 0) || null,
       token: parsed.json?.access_token || null,
+      tokenType: parsed.json?.token_type || null,
+      grantedScope: parsed.json?.scope || null,
     };
   } catch (error) {
     if (isProviderNetworkError(error)) return providerEgressFailure('moov');

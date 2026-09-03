@@ -1150,7 +1150,7 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
     fetchImpl: deps.fetchImpl || fetch,
   });
   const extracted = extractCheckAltSsoAndAccount(user.data, depositAccount.data);
-  if (!extracted.hasDepositAccount) {
+  if (!extracted.hasDepositAccount || !extracted.hasSsoKey) {
     const failed = await updateSandboxOperation(client, {
       id: pending.id,
       status: 'failed',
@@ -1188,7 +1188,7 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
       applicationUserId: mapping.application_user_id,
       spoofFieldsIgnored: spoof,
       amount: { ...deposit, cents: amount.cents },
-      uatAccount: { hasSsoKey: extracted.hasSsoKey, hasDepositAccount: false, accountCount: extracted.accountCount },
+      uatAccount: { hasSsoKey: extracted.hasSsoKey, hasDepositAccount: extracted.hasDepositAccount, accountCount: extracted.accountCount },
       operation: publicOperation(failed),
       message: 'CheckAlt UAT user has no deposit account. A TEST account was not registered because that requires bank numbers. No negotiable check was submitted.',
     };

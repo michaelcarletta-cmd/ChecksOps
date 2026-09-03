@@ -47,8 +47,7 @@ const dropSensitive = (value, depth = 0) => {
   if (typeof value !== 'object') return value;
   const out = {};
   for (const [key, item] of Object.entries(value)) {
-    if (/password|secret|token|authorization|accountnumber|routing|ssn|image|frontimage|rearimage|rawreference|^key$/i.test(key)
-      && !/fiKey|userAmount|idempotency/i.test(key)) {
+    if (/^(password|secret|token|authorization|accountnumber|routingnumber|ssn|frontimage|rearimage|rawtoken|rawreference|secretstring|access_token)$/i.test(key)) {
       out[key] = item == null ? null : '[redacted]';
       continue;
     }
@@ -144,6 +143,8 @@ const validateMoov = async (loaded, productionAccountIds, productionWalletIds) =
   report.authentication = {
     ok: auth.ok === true,
     tokenPresent: Boolean(auth.accessTokenPresent || auth.token),
+    tokenType: auth.tokenType || null,
+    grantedScope: auth.grantedScope || null,
     error: auth.ok ? null : auth.error,
     httpStatus: auth.httpStatus || auth.statusCode || null,
   };
@@ -151,31 +152,66 @@ const validateMoov = async (loaded, productionAccountIds, productionWalletIds) =
     report.stopped = true;
     return report;
   }
-  const listed = await moovSandboxFetch({
+  let listed = await moovSandboxFetch({
     credentials: loaded.moov,
-    path: '/accounts',
+    path: '/accounts?count=50',
     scopes: moovSandboxScopes.accountsRead(),
     token: auth.token,
   });
+  if (!listed.ok) {
+    listed = await moovSandboxFetch({
+      credentials: loaded.moov,
+      path: '/accounts',
+      scopes: moovSandboxScopes.accountsRead(),
+      token: auth.token,
+    });
+  }
+  const listedDataKeys = listed.data && typeof listed.data === 'object' && !Array.isArray(listed.data)
+    ? Object.keys(listed.data).sort()
+    : (Array.isArray(listed.data) ? ['<array>'] : []);
   const listedIds = collectMoovAccountIds(listed.data);
   const overlapping = listedIds.filter((id) => productionAccountIds.includes(id));
   const isolatedIds = listedIds.filter((id) => !productionAccountIds.includes(id));
   if (loaded.moov.platformAccountId && productionAccountIds.includes(loaded.moov.platformAccountId)) {
     overlapping.push(loaded.moov.platformAccountId);
   }
+  let productionVisibleToSandbox = 0;
+  const productionProbes = [];
+  for (const prodId of productionAccountIds.slice(0, 8)) {
+    const probe = await moovSandboxFetch({
+      credentials: loaded.moov,
+      path: `/accounts/${prodId}`,
+      scopes: moovSandboxScopes.accountRead(prodId),
+    });
+    const visible = probe.ok === true;
+    if (visible) productionVisibleToSandbox += 1;
+    productionProbes.push({
+      httpStatus: probe.statusCode || probe.httpStatus || null,
+      visible,
+    });
+  }
   report.isolation = {
     listedAccountCount: listedIds.length,
     isolatedAccountCount: isolatedIds.length,
     overlappingAccountCount: overlapping.length,
-    productionOverlap: overlapping.length > 0,
-    sandboxIdentityProven: listed.ok === true && overlapping.length === 0 && isolatedIds.length > 0,
+    productionOverlap: overlapping.length > 0 || productionVisibleToSandbox > 0,
+    sandboxIdentityProven: listed.ok === true && overlapping.length === 0 && isolatedIds.length > 0 && productionVisibleToSandbox === 0,
     listedOk: listed.ok === true,
+    listedHttpStatus: listed.statusCode || listed.httpStatus || null,
+    listedError: listed.ok ? null : listed.error,
+    listedMessage: listed.ok ? null : listed.message,
+    listedDataKeys,
+    productionAccountsVisibleToSandbox: productionVisibleToSandbox,
+    productionAccountProbes: productionProbes,
   };
-  if (!listed.ok || overlapping.length > 0 || isolatedIds.length === 0) {
+  if (productionVisibleToSandbox > 0 || overlapping.length > 0) {
     report.stopped = true;
-    report.isolation.stopReason = overlapping.length > 0
-      ? 'production_provider_id_refused'
-      : (listed.ok ? 'no_isolated_sandbox_account' : (listed.error || 'moov_list_failed'));
+    report.isolation.stopReason = 'production_provider_id_refused';
+    return report;
+  }
+  if (!listed.ok || isolatedIds.length === 0) {
+    report.stopped = true;
+    report.isolation.stopReason = listed.ok ? 'no_isolated_sandbox_account' : (listed.error || 'moov_list_failed');
     return report;
   }
   const accountId = isolatedIds[0];
@@ -427,10 +463,15 @@ const validateCheckAlt = async (loaded) => {
     body: { fiKey: loaded.checkalt.fiKey, userId: loaded.checkalt.userId },
     token: auth.rawToken,
   });
+  const extractedFromUser = extractCheckAltSsoAndAccount(user.data, {});
   const depositAccount = await checkAltSandboxFetch({
     credentials: loaded.checkalt,
     path: '/fincapture/useraccount/getDepositAccountInformation',
-    body: { fiKey: loaded.checkalt.fiKey, userId: loaded.checkalt.userId },
+    body: {
+      fiKey: loaded.checkalt.fiKey,
+      userId: loaded.checkalt.userId,
+      ...(extractedFromUser.depositAccountNumber ? { accountNumber: extractedFromUser.depositAccountNumber } : {}),
+    },
     token: auth.rawToken,
   });
   const extracted = extractCheckAltSsoAndAccount(user.data, depositAccount.data);
@@ -439,6 +480,9 @@ const validateCheckAlt = async (loaded) => {
     httpStatus: user.statusCode || user.httpStatus || null,
     hasSsoKey: extracted.hasSsoKey,
     accountCount: extracted.accountCount,
+    userObjectKeys: extracted.userObjectKeys,
+    accountObjectKeys: extracted.accountObjectKeys,
+    isValidUser: user.data?.isValidUser ?? null,
     error: user.ok ? null : user.error,
   };
   report.depositAccount = {
@@ -446,13 +490,14 @@ const validateCheckAlt = async (loaded) => {
     httpStatus: depositAccount.statusCode || depositAccount.httpStatus || null,
     hasDepositAccount: extracted.hasDepositAccount,
     error: depositAccount.ok ? null : depositAccount.error,
+    message: depositAccount.message || null,
   };
-  if (!extracted.hasDepositAccount) {
+  if (!extracted.hasDepositAccount || !extracted.hasSsoKey) {
     report.stopped = true;
     report.failure = {
       error: 'account_unregistered',
       registeredTestAccount: false,
-      reason: 'UAT user has no deposit account. Registration skipped; inventing bank numbers is refused.',
+      reason: 'UAT user has no ssoKey/deposit account for FinCapture capture. Registration skipped; inventing bank numbers is refused.',
     };
     return report;
   }
@@ -629,7 +674,7 @@ export const handler = async (event = {}) => {
     productionWebhooksRedirected: false,
     dnsChanged: false,
     frontendDeployed: false,
-    secret: {
+    secretPresence: {
       keyNames,
       requiredPresent: [
         'MOOV_SANDBOX_PUBLIC_KEY',

@@ -44,10 +44,17 @@ export const CHECKALT_UAT_AUTH_PATH_FALLBACK = '/public/fincapture/authenticate'
 export const CHECKALT_UAT_AUTH_PATHS = [CHECKALT_UAT_AUTH_PATH, CHECKALT_UAT_AUTH_PATH_FALLBACK];
 
 export const extractCheckAltSsoAndAccount = (userData = {}, depositData = {}) => {
-  const list = Array.isArray(userData?.accountDataList) ? userData.accountDataList : [];
+  const list = Array.isArray(userData?.accountDataList)
+    ? userData.accountDataList
+    : (Array.isArray(depositData?.accountDataList) ? depositData.accountDataList : []);
+  const pickSso = (row = {}) => (
+    row.ssoKey || row.SSOKey || row.SsoKey || row.sso_key || row.userSsoKey || row.ssoUserId || null
+  );
   const first = list[0] || {};
-  const ssoKey = first.ssoKey || userData?.ssoKey || userData?.sso_key || null;
+  const ssoKey = pickSso(first) || pickSso(userData) || pickSso(depositData) || list.map(pickSso).find(Boolean) || null;
   const depositAccountNumber = first.accountNumber
+    || first.AccountNumber
+    || first.depositAccountNumber
     || depositData?.accountNumber
     || depositData?.depositAccountNumber
     || depositData?.accountDataList?.[0]?.accountNumber
@@ -58,6 +65,8 @@ export const extractCheckAltSsoAndAccount = (userData = {}, depositData = {}) =>
     accountCount: list.length,
     hasSsoKey: Boolean(ssoKey),
     hasDepositAccount: Boolean(depositAccountNumber),
+    accountObjectKeys: first && typeof first === 'object' ? Object.keys(first).sort() : [],
+    userObjectKeys: userData && typeof userData === 'object' ? Object.keys(userData).sort() : [],
   };
 };
 

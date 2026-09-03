@@ -904,3 +904,48 @@ test('CheckAlt deposit without a UAT account does not process and does not regis
     assert.equal(registers, 0);
   });
 });
+
+test('CheckAlt deposit without a UAT ssoKey does not process', async () => {
+  await withEnv({
+    AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true',
+    AWS_FINANCIAL_PERMISSIONS_ACTIVATED: 'false',
+  }, async () => {
+    const client = mockClient();
+    let processes = 0;
+    const result = await handleSandboxRequest(
+      jwtEvent('/sandbox/checkalt/deposit', 'POST', { fixture: 'min' }),
+      '/sandbox/checkalt/deposit',
+      'POST',
+      depsFor(client, {
+        loadSandboxCredentials: async () => ({
+          checkalt: {
+            environment: 'uat',
+            baseUrl: CHECKALT_UAT_HOST,
+            userId: 'uat-user',
+            username: 'uat-user',
+            password: 'uat-pass',
+            fiKey: 'fi',
+            merchant: 'lockbox5',
+          },
+          snapshot: { checkalt: { available: true } },
+        }),
+        fetchImpl: async (url) => {
+          if (String(url).includes('/authenticate')) {
+            return { ok: true, status: 200, text: async () => JSON.stringify({ token: 'a.b.c' }) };
+          }
+          if (String(url).includes('getUserAccountInformation')) {
+            return { ok: true, status: 200, text: async () => JSON.stringify({ accountDataList: [{ accountNumber: 'TEST-UAT-ONLY' }] }) };
+          }
+          if (String(url).includes('/deposit/process')) {
+            processes += 1;
+            return { ok: true, status: 200, text: async () => JSON.stringify({ referenceNumber: 'should-not' }) };
+          }
+          return { ok: true, status: 200, text: async () => '{}' };
+        },
+      }),
+    );
+    assert.equal(result.error, 'account_unregistered');
+    assert.equal(processes, 0);
+  });
+});

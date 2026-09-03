@@ -4,22 +4,22 @@
 
 It is a precise go/no-go sequence for a later, separately approved cutover. Provider sandbox validation (this PR) does not enable production providers, redirect production webhooks, change production DNS, deploy production frontend, or move money.
 
-## Current go / no-go (after real-provider UAT validation)
+## Current go / no-go (after real-provider UAT HTTP)
 
-**Re-evaluated after PR #100 merge (`1b7559de`) plus this UAT phase. Do not execute this runbook.**
+**Re-evaluated after PR #101 merge (`06f1307f`) plus sidecar HTTP. Do not execute this runbook.**
 
 A provider can remain **NO-GO** independently without weakening another provider.
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Moov | **NO-GO** | Staging secret has no `MOOV_SANDBOX_*` values. Isolation stopped HTTP (`sandbox_keys_missing`). API version stays `v2024.01.00`. See `UAT_RESULTS.md`. |
-| CheckAlt | **NO-GO** | Staging secret has no `CHECKALT_UAT_*` values. Isolation stopped HTTP (`uat_keys_missing`). Host allowlist is `https://uatapi.checkalt.com`. No negotiable check. |
-| ChecksOps AWS overall | **NO-GO** | T1–T6 + PR #100 + this fail-closed UAT suite are green. Real provider ledgers are not proven. Production flags remain false. |
+| Moov | **NO-GO** | `MOOV_SANDBOX_*` OAuth succeeds (`/accounts.read`). `GET /accounts` is 401. No sandbox transfer. Pin stays `v2024.01.00`. See `UAT_RESULTS.md`. |
+| CheckAlt | **NO-GO** | UAT host/merchant approved. `/public/fincapture/authenticate` succeeds. User is valid but has no `ssoKey`. TEST register skipped (would invent bank numbers). Zero UAT deposits. |
+| ChecksOps AWS overall | **NO-GO** | T1–T6 green. Staging API has no NAT (`provider_egress_failed`). Real provider ledgers are not proven. Production flags remain false. |
 | Plaid sandbox on money path | **N/A / NO-GO for money** | Plaid Link is not the deposit→disburse path. |
-| One ChecksOps op = one provider transaction (live HTTP) | **NO-GO** | Live provider object count is zero. Unit tests prove persist-before-HTTP recovery does not resubmit CheckAlt; Moov retries use the same `X-Idempotency-Key`. |
-| Sandbox webhooks vs production records | **Partial** | Staging `/sandbox/webhooks/*` never mutate production ledgers. Production webhook URLs remain on Supabase. |
+| One ChecksOps op = one provider transaction (live HTTP) | **NO-GO** | Provider-side object count is zero. |
+| Sandbox webhooks vs production records | **Partial** | Staging `/sandbox/webhooks/*` never mutate production ledgers. Webhook secrets missing. Production webhook URLs remain on Supabase. |
 | Production flags | **HOLD** | `AWS_PROVIDER_EXECUTION_ENABLED=false`, `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=false`, all production `AWS_*_ENABLED` provider flags false. Only `AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED` may be true. |
-| Production Moov/CheckAlt IDs in RDS | **HOLD** | Must not be overwritten. Isolation route refuses HTTP on ID overlap. |
+| Production Moov/CheckAlt IDs in RDS | **HOLD** | Not overwritten. Sandbox keys cannot GET production Moov account IDs (401). |
 
 Do not start the sequence below until every item in the **exact checklist** is GO.
 
