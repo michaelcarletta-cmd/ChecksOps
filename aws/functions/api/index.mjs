@@ -26,6 +26,7 @@ import {
 } from './storage-write.mjs';
 import { handleWorkflowRequest } from './workflow.mjs';
 import { handleFinancialRequest } from './financial.mjs';
+import { handleSandboxRequest } from './sandbox.mjs';
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -356,6 +357,19 @@ export const handler = async (event) => {
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
       ...result,
+    });
+  }
+
+  const sandbox = await handleSandboxRequest(event, path, method);
+  if (sandbox) {
+    return json(sandbox.statusCode || (sandbox.ok ? 200 : 403), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      productionWebhooksRedirected: false,
+      productionDnsChanged: false,
+      liveProviderTransactions: false,
+      ...sandbox,
     });
   }
 

@@ -73,3 +73,15 @@ A valid tenant user must never automatically receive these.
 - [ ] Sandbox-only Moov/CheckAlt/Plaid first
 - [ ] Production webhook URLs unchanged until dual-run sign-off
 - [ ] Rollback: set `AWS_PROVIDER_EXECUTION_ENABLED=false` and keep Supabase functions serving production
+
+## Sandbox validation (current — NO-GO)
+
+See `aws/financial/PROVIDER_SANDBOX_VALIDATION.md` and `aws/financial/PRODUCTION_ACTIVATION_RUNBOOK.md`.
+
+- [ ] Moov `MOOV_SANDBOX_*` loaded on staging (not done)
+- [ ] Real Moov sandbox HTTP: auth, 1-cent transfer, retrieve, idempotent retry (not done)
+- [ ] CheckAlt dedicated FinCapture UAT (none available — production CheckAlt stays disabled)
+- [ ] Plaid sandbox only if Link is in scope (not required for money movement; keys missing)
+- [ ] Sandbox IDs isolated from production `payment_provider_accounts`
+- [ ] Exact go/no-go checklist in the production runbook is all GO before cutover
+

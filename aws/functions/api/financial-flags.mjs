@@ -1,5 +1,7 @@
 /** Financial pre-activation flags. Only the string `true` enables a flag. */
 
+import { providerSandboxExecutionEnabled } from './sandbox-flags.mjs';
+
 const isTrue = (value) => String(value || '') === 'true';
 
 /**
@@ -19,4 +21,5 @@ export const financialPermissionsActivated = () =>
 export const financialFlagSnapshot = () => ({
   AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED: financialSandboxSimulationEnabled(),
   AWS_FINANCIAL_PERMISSIONS_ACTIVATED: financialPermissionsActivated(),
+  AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: providerSandboxExecutionEnabled(),
 });
