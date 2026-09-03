@@ -3,6 +3,8 @@ import { configuredFlags, loadProviderSecrets } from './provider-secrets.mjs';
 export const MOOV_SANDBOX_HOST = 'https://api.moov.io';
 export const PLAID_SANDBOX_HOST = 'https://sandbox.plaid.com';
 export const PLAID_PRODUCTION_HOST = 'https://production.plaid.com';
+export const CHECKALT_UAT_HOST = 'https://uatapi.checkalt.com';
+export const CHECKALT_UAT_MERCHANT_EXPECTED = 'lockbox5';
 
 export const SANDBOX_SECRET_KEYS = [
   'MOOV_SANDBOX_PUBLIC_KEY',
@@ -11,6 +13,11 @@ export const SANDBOX_SECRET_KEYS = [
   'MOOV_SANDBOX_ALLOWED_ORIGIN',
   'MOOV_SANDBOX_WEBHOOK_SECRET',
   'MOOV_SANDBOX_API_VERSION',
+  'CHECKALT_UAT_BASE_URL',
+  'CHECKALT_UAT_USER_ID',
+  'CHECKALT_UAT_PASSWORD',
+  'CHECKALT_UAT_FI_KEY',
+  'CHECKALT_UAT_MERCHANT',
   'CHECKALT_SANDBOX_USERNAME',
   'CHECKALT_SANDBOX_PASSWORD',
   'CHECKALT_SANDBOX_FI_KEY',
@@ -49,6 +56,29 @@ export const looksLikeSandboxHost = (value) => {
   }
 };
 
+/** Approved CheckAlt FinCapture UAT only. Scheme, host, and empty path must match exactly. */
+export const isApprovedCheckAltUatUrl = (value) => {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    const pathOk = url.pathname === '/' || url.pathname === '';
+    return url.protocol === 'https:'
+      && url.hostname.toLowerCase() === 'uatapi.checkalt.com'
+      && pathOk
+      && !url.username
+      && !url.password
+      && !url.search
+      && !url.hash;
+  } catch {
+    return false;
+  }
+};
+
+export const normalizeCheckAltUatUrl = (value) => {
+  if (!isApprovedCheckAltUatUrl(value)) return null;
+  return CHECKALT_UAT_HOST;
+};
+
 const present = (secrets, key) => Boolean(secrets?.[key]);
 
 export const classifyMoovSandbox = (secrets = {}) => {
@@ -84,27 +114,39 @@ export const classifyMoovSandbox = (secrets = {}) => {
 };
 
 export const classifyCheckAltSandbox = (secrets = {}) => {
-  const url = secrets.CHECKALT_SANDBOX_BASE_URL || null;
-  const sandboxCreds = present(secrets, 'CHECKALT_SANDBOX_USERNAME')
-    && present(secrets, 'CHECKALT_SANDBOX_PASSWORD');
-  const urlOk = looksLikeSandboxHost(url);
+  const uatUrl = secrets.CHECKALT_UAT_BASE_URL || null;
+  const uatCreds = present(secrets, 'CHECKALT_UAT_USER_ID') && present(secrets, 'CHECKALT_UAT_PASSWORD');
+  const uatUrlOk = isApprovedCheckAltUatUrl(uatUrl);
+  const merchant = secrets.CHECKALT_UAT_MERCHANT || null;
+  const merchantOk = !merchant || String(merchant).toLowerCase() === CHECKALT_UAT_MERCHANT_EXPECTED;
   const productionCreds = present(secrets, 'CHECKALT_USERNAME') || present(secrets, 'CHECKALT_PASSWORD');
-  const available = Boolean(sandboxCreds && urlOk);
-  let reason = 'no_sandbox_fincapture_environment';
-  if (sandboxCreds && !url) reason = 'sandbox_base_url_missing';
-  else if (sandboxCreds && url && !urlOk) reason = 'sandbox_base_url_not_test_host';
-  else if (available) reason = 'sandbox_keys_configured';
+  const legacyUrl = secrets.CHECKALT_SANDBOX_BASE_URL || null;
+  const legacyCreds = present(secrets, 'CHECKALT_SANDBOX_USERNAME') && present(secrets, 'CHECKALT_SANDBOX_PASSWORD');
+  const available = Boolean(uatCreds && uatUrlOk && merchantOk);
+  let reason = 'uat_keys_missing';
+  if (uatCreds && !uatUrl) reason = 'uat_base_url_missing';
+  else if (uatCreds && uatUrl && !uatUrlOk) reason = 'uat_host_refused';
+  else if (uatCreds && uatUrlOk && !merchantOk) reason = 'uat_merchant_refused';
+  else if (available) reason = 'uat_keys_configured';
+  else if (legacyCreds && looksLikeSandboxHost(legacyUrl) && !uatCreds) reason = 'legacy_sandbox_keys_present_uat_required';
+  else if (productionCreds && !uatCreds) reason = 'no_sandbox_fincapture_environment';
   return {
     provider: 'checkalt',
     available,
     reason,
-    dedicatedSandboxUrlConfigured: Boolean(url),
-    dedicatedSandboxUrlLooksLikeTest: urlOk,
+    approvedHost: CHECKALT_UAT_HOST,
+    approvedMerchant: CHECKALT_UAT_MERCHANT_EXPECTED,
+    authPath: '/public/jwtauth/authenticate',
+    dedicatedUatUrlConfigured: Boolean(uatUrl),
+    dedicatedUatUrlApproved: uatUrlOk,
+    merchantConfigured: Boolean(merchant),
+    merchantApproved: merchantOk,
     productionKeysPresent: productionCreds,
     webhookSecretConfigured: present(secrets, 'CHECKALT_SANDBOX_WEBHOOK_SECRET'),
     refuseProductionKeys: true,
+    refuseUnapprovedHost: true,
     refuseNegotiableCheck: true,
-    note: 'CheckAlt/FinCapture has no first-class sandbox key names in production code. A dedicated CHECKALT_SANDBOX_BASE_URL on a test/UAT host is required. Production FinCapture credentials must not be used. Do not submit a negotiable check.',
+    note: 'Only CHECKALT_UAT_* against https://uatapi.checkalt.com (merchant lockbox5) is allowed. Production CHECKALT_* and any other host are refused. Do not submit a negotiable check.',
   };
 };
 
@@ -164,13 +206,15 @@ export const loadSandboxCredentials = async (getSecrets = loadProviderSecrets) =
       : null,
     checkalt: snapshot.checkalt.available
       ? {
-        environment: 'sandbox',
-        baseUrl: String(secrets.CHECKALT_SANDBOX_BASE_URL).replace(/\/$/, ''),
-        username: secrets.CHECKALT_SANDBOX_USERNAME,
-        password: secrets.CHECKALT_SANDBOX_PASSWORD,
-        fiKey: secrets.CHECKALT_SANDBOX_FI_KEY || null,
-        merchant: secrets.CHECKALT_SANDBOX_MERCHANT || null,
+        environment: 'uat',
+        baseUrl: CHECKALT_UAT_HOST,
+        username: secrets.CHECKALT_UAT_USER_ID,
+        userId: secrets.CHECKALT_UAT_USER_ID,
+        password: secrets.CHECKALT_UAT_PASSWORD,
+        fiKey: secrets.CHECKALT_UAT_FI_KEY || null,
+        merchant: secrets.CHECKALT_UAT_MERCHANT || CHECKALT_UAT_MERCHANT_EXPECTED,
         webhookSecret: secrets.CHECKALT_SANDBOX_WEBHOOK_SECRET || null,
+        authPath: '/public/jwtauth/authenticate',
       }
       : null,
     plaid: snapshot.plaid.available

@@ -1,6 +1,67 @@
 import { formatCheckAltUserAmount, dollarsToIntegerCents, validateProviderCents } from './amounts.mjs';
-import { looksLikeSandboxHost } from '../sandbox-credentials.mjs';
+import {
+  CHECKALT_UAT_HOST,
+  CHECKALT_UAT_MERCHANT_EXPECTED,
+  isApprovedCheckAltUatUrl,
+} from '../sandbox-credentials.mjs';
 import { SANDBOX_MIN_CENTS } from './moov-sandbox.mjs';
+
+/**
+ * CheckAlt FinCapture `userAmount` is integer cents with no decimal point.
+ *
+ * Authoritative evidence (do not treat as dollars):
+ * 1. Production `checkalt-submit-deposit` records CheckAlt support guidance:
+ *    send integer cents (`$123.45 → 12345`). A dollar pass-through caused
+ *    "RDC Amount Mismatch" against OCR cents on the image.
+ * 2. ChecksOps `providers/amounts.mjs` and T6 certification use the same map.
+ *
+ * Adapter conversion is 1:1: ChecksOps integer cents === CheckAlt `userAmount`.
+ */
+export const CHECKALT_USER_AMOUNT = {
+  provider: 'checkalt',
+  environment: 'uat',
+  field: 'userAmount',
+  scale: 'integer_cents',
+  evidence: [
+    'checkalt-submit-deposit CheckAlt support: integer cents, no decimal point',
+    'RDC Amount Mismatch when dollars were sent',
+    'T6 certification 123.45 → 12345',
+  ],
+  examples: [
+    { dollars: 0.01, checksOpsCents: 1, userAmount: 1 },
+    { dollars: 1.0, checksOpsCents: 100, userAmount: 100 },
+    { dollars: 123.45, checksOpsCents: 12345, userAmount: 12345 },
+  ],
+};
+
+/** UAT auth path specified for this phase. Production uses /public/fincapture/authenticate. */
+export const CHECKALT_UAT_AUTH_PATH = '/public/jwtauth/authenticate';
+export const CHECKALT_UAT_AUTH_PATH_FALLBACK = '/public/fincapture/authenticate';
+export const CHECKALT_UAT_AUTH_PATHS = [CHECKALT_UAT_AUTH_PATH, CHECKALT_UAT_AUTH_PATH_FALLBACK];
+
+export const extractCheckAltReference = (data = {}) => {
+  const raw = data?.referenceNumber ?? data?.checkalt_reference ?? data?.reference ?? null;
+  return raw == null ? null : String(raw);
+};
+
+export const extractCheckAltStatus = (data = {}) => (
+  data?.statusDescription || data?.status || data?.statusCode || data?.itemStatus || null
+);
+
+/** Minimal valid PNG. Not a check image. Labeled non-negotiable test fixture. */
+export const SYNTHETIC_VOID_PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+export const convertChecksOpsCentsToCheckAltUserAmount = (cents) => {
+  const validated = validateProviderCents(cents);
+  if (validated.error) return validated;
+  const formatted = formatCheckAltUserAmount(validated.cents / 100);
+  return {
+    userAmount: formatted.userAmount,
+    scale: CHECKALT_USER_AMOUNT.scale,
+    checksOpsCents: validated.cents,
+    sourceDollars: validated.cents / 100,
+  };
+};
 
 export const assertCheckAltSandboxCredentials = (credentials) => {
   if (!credentials) {
@@ -9,61 +70,121 @@ export const assertCheckAltSandboxCredentials = (credentials) => {
       statusCode: 409,
       error: 'sandbox_credentials_unavailable',
       provider: 'checkalt',
-      message: 'No dedicated CheckAlt/FinCapture sandbox URL and credentials are configured. Production CHECKALT_* keys will not be substituted. CheckAlt production execution stays disabled.',
-      limitation: 'no_sandbox_fincapture_environment',
+      message: 'CHECKALT_UAT_* credentials are not configured. Production CHECKALT_* keys will not be substituted. CheckAlt production execution stays disabled.',
+      limitation: 'uat_keys_missing',
     };
   }
-  if (credentials.environment !== 'sandbox' || !looksLikeSandboxHost(credentials.baseUrl)) {
+  if (credentials.environment !== 'uat' && credentials.environment !== 'sandbox') {
     return {
       ok: false,
       statusCode: 403,
       error: 'production_credentials_refused',
       provider: 'checkalt',
-      message: 'CheckAlt sandbox adapter refuses production FinCapture hosts and credentials.',
+      message: 'CheckAlt adapter refuses non-UAT credentials.',
+    };
+  }
+  if (!isApprovedCheckAltUatUrl(credentials.baseUrl) || credentials.baseUrl !== CHECKALT_UAT_HOST) {
+    return {
+      ok: false,
+      statusCode: 403,
+      error: 'uat_host_refused',
+      provider: 'checkalt',
+      approvedHost: CHECKALT_UAT_HOST,
+      message: 'CheckAlt HTTP is allowed only to https://uatapi.checkalt.com.',
+    };
+  }
+  const merchant = String(credentials.merchant || '').toLowerCase();
+  if (merchant && merchant !== CHECKALT_UAT_MERCHANT_EXPECTED) {
+    return {
+      ok: false,
+      statusCode: 403,
+      error: 'uat_merchant_refused',
+      provider: 'checkalt',
+      message: 'CheckAlt UAT merchant must be the approved test merchant.',
     };
   }
   return { ok: true };
 };
 
 export const buildCheckAltSandboxDeposit = ({ amountCents = SANDBOX_MIN_CENTS, reference } = {}) => {
-  const validated = validateProviderCents(amountCents);
-  if (validated.error) return validated;
-  const dollars = validated.cents / 100;
-  const formatted = formatCheckAltUserAmount(dollars);
+  const converted = convertChecksOpsCentsToCheckAltUserAmount(amountCents);
+  if (converted.error) return converted;
   return {
-    userAmount: formatted.userAmount,
-    scale: 'integer_cents',
-    sourceDollars: dollars,
+    ...converted,
     reference: reference || null,
     negotiableCheck: false,
-    imageIncluded: false,
+    imageIncluded: true,
+    imageKind: 'synthetic_void_png',
+    unit: CHECKALT_USER_AMOUNT,
   };
+};
+
+const parseAuthToken = (text) => {
+  const raw = String(text || '').trim().replace(/^"|"$/g, '');
+  if (raw.startsWith('{')) {
+    try {
+      const data = JSON.parse(raw);
+      const token = data?.token || data?.jwt || data?.accessToken || data?.access_token;
+      return { token: token || null, json: data };
+    } catch {
+      return { token: null, json: null };
+    }
+  }
+  return { token: raw.includes('.') ? raw : null, json: null };
 };
 
 export const checkAltSandboxAuthenticate = async ({ credentials, fetchImpl = fetch } = {}) => {
   const gate = assertCheckAltSandboxCredentials(credentials);
   if (!gate.ok) return gate;
-  const response = await fetchImpl(`${credentials.baseUrl}/public/fincapture/authenticate`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(credentials.merchant ? { merchant: credentials.merchant } : {}),
-    },
-    body: JSON.stringify({ userName: credentials.username, password: credentials.password }),
+  const headers = {
+    'Content-Type': 'application/json',
+    merchant: credentials.merchant || CHECKALT_UAT_MERCHANT_EXPECTED,
+  };
+  const body = JSON.stringify({
+    userName: credentials.userId || credentials.username,
+    userId: credentials.userId || credentials.username,
+    password: credentials.password,
   });
-  const text = await response.text();
-  if (!response.ok) {
-    return {
-      ok: false,
-      statusCode: response.status,
-      error: 'checkalt_sandbox_auth_failed',
-      provider: 'checkalt',
-      httpStatus: response.status,
-    };
+  let last = null;
+  for (const authPath of CHECKALT_UAT_AUTH_PATHS) {
+    const response = await fetchImpl(`${CHECKALT_UAT_HOST}${authPath}`, {
+      method: 'POST',
+      headers,
+      body,
+    });
+    const text = await response.text();
+    last = { response, text, authPath };
+    if (response.ok) {
+      const parsed = parseAuthToken(text);
+      if (parsed.token) {
+        return {
+          ok: true,
+          tokenPresent: true,
+          httpStatus: response.status,
+          rawToken: parsed.token,
+          authPath,
+        };
+      }
+    }
+    if (response.status !== 404) {
+      return {
+        ok: false,
+        statusCode: response.status,
+        error: 'checkalt_uat_auth_failed',
+        provider: 'checkalt',
+        httpStatus: response.status,
+        authPath,
+      };
+    }
   }
-  let tokenPresent = false;
-  if (text.includes('.')) tokenPresent = true;
-  return { ok: true, tokenPresent, httpStatus: response.status, rawToken: text };
+  return {
+    ok: false,
+    statusCode: last?.response?.status || 502,
+    error: 'checkalt_uat_auth_failed',
+    provider: 'checkalt',
+    httpStatus: last?.response?.status || 502,
+    authPath: last?.authPath || CHECKALT_UAT_AUTH_PATH,
+  };
 };
 
 export const checkAltSandboxFetch = async ({
@@ -81,11 +202,12 @@ export const checkAltSandboxFetch = async ({
     if (!authed.ok) return authed;
     jwt = authed.rawToken;
   }
-  const response = await fetchImpl(`${credentials.baseUrl}${path}`, {
+  const response = await fetchImpl(`${CHECKALT_UAT_HOST}${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${String(jwt).replace(/^"|"$/g, '')}`,
+      merchant: credentials.merchant || CHECKALT_UAT_MERCHANT_EXPECTED,
       ...(credentials.fiKey ? { fi_key: credentials.fiKey } : {}),
     },
     body: JSON.stringify(body || {}),
@@ -97,13 +219,38 @@ export const checkAltSandboxFetch = async ({
     return {
       ok: false,
       statusCode: response.status,
-      error: 'checkalt_sandbox_http_failed',
+      error: 'checkalt_uat_http_failed',
       provider: 'checkalt',
       httpStatus: response.status,
       path,
     };
   }
   return { ok: true, statusCode: response.status, data: json };
+};
+
+export const buildCheckAltUatDepositBody = ({
+  credentials,
+  amountCents = SANDBOX_MIN_CENTS,
+  reference,
+  ssoKey,
+  depositAccountNumber,
+} = {}) => {
+  const deposit = buildCheckAltSandboxDeposit({ amountCents, reference });
+  if (deposit.error) return deposit;
+  return {
+    request: {
+      fiKey: credentials?.fiKey || null,
+      ssoKey: ssoKey || credentials?.userId || null,
+      depositAccountNumber: depositAccountNumber || null,
+      captureDateTime: new Date().toISOString(),
+      userAmount: deposit.userAmount,
+      frontImage: SYNTHETIC_VOID_PNG_B64,
+      rearImage: SYNTHETIC_VOID_PNG_B64,
+      performRiskAssessment: true,
+      testDeposit: true,
+    },
+    meta: deposit,
+  };
 };
 
 export { dollarsToIntegerCents };

@@ -4,22 +4,22 @@
 
 It is a precise go/no-go sequence for a later, separately approved cutover. Provider sandbox validation (this PR) does not enable production providers, redirect production webhooks, change production DNS, deploy production frontend, or move money.
 
-## Current go / no-go (after sandbox inspection)
+## Current go / no-go (after real-provider UAT validation)
 
-**NO-GO for controlled production cutover.**
+**Re-evaluated after PR #100 merge (`1b7559de`) plus this UAT phase. Do not execute this runbook.**
 
-Reasons discovered on current `main` (PR #99 merge) plus this phase:
+A provider can remain **NO-GO** independently without weakening another provider.
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Moov sandbox credentials on AWS staging | **NO-GO** | Secret `checksops/staging/providers` has no `MOOV_SANDBOX_*` values. Production keys must not be substituted. Moov sandbox shares `https://api.moov.io`; keys select the ledger. |
-| Real Moov HTTP (auth → $0.01 transfer → retrieve → idempotent retry) | **NO-GO** | Not executed. Fail-closed probes only. |
-| CheckAlt FinCapture sandbox | **NO-GO** | No dedicated test host/credentials. Staging `checkalt_config.base_url` is null. Do not submit a negotiable check. |
-| Plaid sandbox on money path | **N/A / NO-GO for money** | Plaid Link is not the deposit→disburse path. No AWS sandbox keys. |
-| One ChecksOps op = one provider transaction (live HTTP) | **NO-GO** | Proven in unit tests with mocked HTTP and fail-closed live probes. Not proven against a real provider sandbox. |
-| Sandbox webhooks vs production records | **Partial** | Staging `/sandbox/webhooks/*` never mutate production ledgers. Production webhook URLs remain on Supabase. Signature/idempotency proven in unit tests; live unsigned webhook rejected. |
-| Production flags | **HOLD** | `AWS_PROVIDER_EXECUTION_ENABLED=false`, `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=false`, all `AWS_*_ENABLED` provider flags false. |
-| Production Moov IDs in RDS | **HOLD** | Freedom/C1C `payment_provider_accounts` are `environment=production`. Must not be overwritten with sandbox IDs. |
+| Moov | **NO-GO** until live sandbox HTTP + provider-side idempotency are proven with `MOOV_SANDBOX_*` only. Isolation, fail-closed, and mocked HTTP are in place. API version stays `v2024.01.00`. | See `UAT_RESULTS.md`. |
+| CheckAlt | **NO-GO** until live UAT HTTP against `https://uatapi.checkalt.com` / merchant `lockbox5` is proven. Host/merchant allowlist and integer-cents `userAmount` adapter are in place. No negotiable check. | See `UAT_RESULTS.md`. |
+| ChecksOps AWS overall | **NO-GO** | Production flags remain false. T1–T6 + PR #100 remain the certified baseline. Real provider ledgers are not yet proven on AWS. |
+| Plaid sandbox on money path | **N/A / NO-GO for money** | Plaid Link is not the deposit→disburse path. |
+| One ChecksOps op = one provider transaction (live HTTP) | **NO-GO** until live provider object counts are recorded. Unit tests prove persist-before-HTTP recovery does not resubmit CheckAlt; Moov retries use the same `X-Idempotency-Key`. |
+| Sandbox webhooks vs production records | **Partial** | Staging `/sandbox/webhooks/*` never mutate production ledgers. Production webhook URLs remain on Supabase. |
+| Production flags | **HOLD** | `AWS_PROVIDER_EXECUTION_ENABLED=false`, `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=false`, all production `AWS_*_ENABLED` provider flags false. Only `AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED` may be true. |
+| Production Moov/CheckAlt IDs in RDS | **HOLD** | Must not be overwritten. Isolation route refuses HTTP on ID overlap. |
 
 Do not start the sequence below until every item in the **exact checklist** is GO.
 

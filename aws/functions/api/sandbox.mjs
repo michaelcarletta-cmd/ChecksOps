@@ -6,8 +6,13 @@ import { TENANT_MEMBERSHIP_SQL } from './identity.mjs';
 import { denyProviderExecution, flagSnapshot, providerExecutionEnabled } from './provider-flags.mjs';
 import { financialFlagSnapshot, financialPermissionsActivated } from './financial-flags.mjs';
 import { providerSandboxExecutionEnabled, sandboxFlagSnapshot } from './sandbox-flags.mjs';
-import { loadSandboxCredentials, publicSandboxCapability } from './sandbox-credentials.mjs';
-import { rejectUntrustedAmountFields } from './providers/amounts.mjs';
+import {
+  CHECKALT_UAT_HOST,
+  CHECKALT_UAT_MERCHANT_EXPECTED,
+  loadSandboxCredentials,
+  publicSandboxCapability,
+} from './sandbox-credentials.mjs';
+import { mapCheckAltStatus, rejectUntrustedAmountFields } from './providers/amounts.mjs';
 import {
   SANDBOX_MIN_CENTS,
   MOOV_SANDBOX_AMOUNT_API,
@@ -19,10 +24,15 @@ import {
   redactProviderId,
 } from './providers/moov-sandbox.mjs';
 import {
+  CHECKALT_USER_AMOUNT,
+  CHECKALT_UAT_AUTH_PATH,
   assertCheckAltSandboxCredentials,
   buildCheckAltSandboxDeposit,
+  buildCheckAltUatDepositBody,
   checkAltSandboxAuthenticate,
   checkAltSandboxFetch,
+  extractCheckAltReference,
+  extractCheckAltStatus,
 } from './providers/checkalt-sandbox.mjs';
 import {
   assertPlaidSandboxCredentials,
@@ -161,6 +171,50 @@ const lookupSandboxOperation = async (client, { operationId, idempotencyKey, ten
   return null;
 };
 
+const insertPendingOperation = async (client, {
+  tenantId,
+  applicationUserId,
+  operationType,
+  provider,
+  amountCents,
+  idempotencyKey,
+  metadata,
+}) => {
+  const allowedTypes = { moov_sandbox_transfer: 'moov', checkalt_sandbox_deposit: 'checkalt' };
+  if (allowedTypes[operationType] !== provider) {
+    throw new Error('unsupported_sandbox_operation');
+  }
+  return (await client.query(
+    `INSERT INTO public.aws_provider_sandbox_operations
+      (tenant_id, application_user_id, operation_type, provider, amount_cents, currency,
+       idempotency_key, status, sandbox_http_called, production_execution, metadata)
+     VALUES ($1::uuid, $2::uuid, '${operationType}', '${provider}', $3, 'USD', $4, 'submitting', false, false, $5::jsonb)
+     RETURNING *`,
+    [tenantId, applicationUserId, amountCents, idempotencyKey, JSON.stringify(metadata || {})],
+  )).rows[0];
+};
+
+const updateSandboxOperation = async (client, {
+  id,
+  status,
+  providerReference = null,
+  sandboxHttpCalled = true,
+  failureClass = null,
+  metadataPatch = {},
+}) => (await client.query(
+  `UPDATE public.aws_provider_sandbox_operations
+   SET status = $2,
+       provider_reference = COALESCE($3, provider_reference),
+       sandbox_http_called = $4,
+       production_execution = false,
+       failure_class = $5,
+       metadata = COALESCE(metadata, '{}'::jsonb) || $6::jsonb,
+       updated_at = now()
+   WHERE id = $1::uuid
+   RETURNING *`,
+  [id, status, providerReference, sandboxHttpCalled, failureClass, JSON.stringify(metadataPatch)],
+)).rows[0];
+
 const insertSandboxObject = async (client, { tenantId, provider, objectType, sandboxProviderId, metadata }) => {
   if (!sandboxProviderId) return null;
   const existing = (await client.query(
@@ -200,10 +254,12 @@ export const handleSandboxStatus = async (deps = {}) => {
     capability: publicSandboxCapability(loaded),
     amountUnits: {
       moov: MOOV_SANDBOX_AMOUNT_API,
-      checkalt: { scale: 'integer_cents', example: { dollars: 0.01, userAmount: 1 } },
+      checkalt: CHECKALT_USER_AMOUNT,
       sandboxMinCents: SANDBOX_MIN_CENTS,
     },
     isolation: {
+      approvedCheckAltHost: CHECKALT_UAT_HOST,
+      approvedCheckAltMerchant: CHECKALT_UAT_MERCHANT_EXPECTED,
       sandboxTables: [
         'aws_provider_sandbox_objects',
         'aws_provider_sandbox_operations',
@@ -219,6 +275,11 @@ export const handleSandboxStatus = async (deps = {}) => {
         'homeowner_ledger_events',
       ],
       productionMoovIdsMustNotBeOverwritten: true,
+      httpAllowed: {
+        moov: Boolean(loaded.snapshot.moov.available) && !providerExecutionEnabled(),
+        checkalt: Boolean(loaded.snapshot.checkalt.available) && loaded.snapshot.checkalt.dedicatedUatUrlApproved,
+        plaid: false,
+      },
     },
     cutover: {
       authorized: false,
@@ -227,9 +288,86 @@ export const handleSandboxStatus = async (deps = {}) => {
   };
 };
 
+const AMOUNT_FIXTURES = { min: 1, dollar: 100, cert: 12345 };
+
+const serverAmountCents = (body) => {
+  const fixture = String(body?.fixture || 'min');
+  if (!Object.prototype.hasOwnProperty.call(AMOUNT_FIXTURES, fixture)) {
+    return { error: 'unknown_amount_fixture', message: 'Use fixture min|dollar|cert. Browser amounts are rejected.' };
+  }
+  return { cents: AMOUNT_FIXTURES[fixture], fixture };
+};
+
+const productionProviderIds = async (client, tenantId) => {
+  const accounts = (await client.query(
+    `SELECT provider, provider_account_id, environment
+     FROM public.payment_provider_accounts
+     WHERE tenant_id = $1::uuid`,
+    [tenantId],
+  )).rows;
+  const wallets = (await client.query(
+    `SELECT provider_wallet_id, provider_account_id, environment
+     FROM public.payment_wallets
+     WHERE tenant_id = $1::uuid`,
+    [tenantId],
+  )).rows;
+  return {
+    productionAccountIds: accounts.filter((row) => row.environment === 'production').map((row) => row.provider_account_id),
+    productionWalletIds: wallets.filter((row) => row.environment === 'production').map((row) => row.provider_wallet_id),
+    environments: [...new Set(accounts.map((row) => row.environment))],
+  };
+};
+
 const handleAuthenticated = (event, fn, deps) => withIdentityWrite(event, async (ctx) => {
   await setSandboxGuc(ctx.client);
   return fn(ctx);
+}, deps);
+
+const handleIsolation = async (event, deps) => handleAuthenticated(event, async ({ client, mapping, claims, spoof }) => {
+  const gate = requireSandboxGate({ spoof });
+  if (gate.ok !== true) return gate;
+  const memberships = await membershipsOf(client, mapping.application_user_id);
+  const tenantId = memberships[0]?.tenant_id;
+  if (!tenantId) return denied(spoof, { error: 'no_tenant_membership' });
+  const loaded = await (deps.loadSandboxCredentials || loadSandboxCredentials)();
+  const production = await productionProviderIds(client, tenantId);
+  const sandboxObjects = (await client.query(
+    `SELECT provider, object_type, sandbox_provider_id
+     FROM public.aws_provider_sandbox_objects
+     WHERE tenant_id = $1::uuid`,
+    [tenantId],
+  )).rows;
+  const overlap = sandboxObjects.filter((row) => (
+    production.productionAccountIds.includes(row.sandbox_provider_id)
+    || production.productionWalletIds.includes(row.sandbox_provider_id)
+  ));
+  const moovHttpAllowed = Boolean(loaded.snapshot.moov.available) && overlap.length === 0 && !providerExecutionEnabled();
+  const checkaltHttpAllowed = Boolean(loaded.snapshot.checkalt.available)
+    && loaded.snapshot.checkalt.dedicatedUatUrlApproved
+    && loaded.snapshot.checkalt.merchantApproved;
+  return {
+    ok: true,
+    statusCode: 200,
+    productionExecution: false,
+    productionRecordsMutated: false,
+    applicationUserId: mapping.application_user_id,
+    cognitoSub: claims.sub,
+    spoofFieldsIgnored: spoof,
+    capability: publicSandboxCapability(loaded),
+    productionProviderEnvironments: production.environments,
+    productionAccountCount: production.productionAccountIds.length,
+    sandboxObjectCount: sandboxObjects.length,
+    productionIdOverlap: overlap.length > 0,
+    httpAllowed: {
+      moov: moovHttpAllowed,
+      checkalt: checkaltHttpAllowed,
+      reason: {
+        moov: moovHttpAllowed ? 'sandbox_keys_isolated' : (loaded.snapshot.moov.available ? 'environment_not_proven' : loaded.snapshot.moov.reason),
+        checkalt: checkaltHttpAllowed ? 'uat_host_approved' : loaded.snapshot.checkalt.reason,
+      },
+    },
+    stopHttpUnlessProven: true,
+  };
 }, deps);
 
 const handleMoovProbe = async (event, deps) => handleAuthenticated(event, async ({ client, mapping, claims, body, spoof }) => {
@@ -274,7 +412,23 @@ const handleMoovProbe = async (event, deps) => handleAuthenticated(event, async 
     });
     return denied(spoof, { ...auth, sandboxHttpCalled: true });
   }
+  const production = await productionProviderIds(client, tenantId);
   const accountId = loaded.moov.platformAccountId;
+  if (accountId && production.productionAccountIds.includes(accountId)) {
+    await insertAudit(client, {
+      applicationUserId: mapping.application_user_id,
+      tenantId,
+      operationType: 'moov_probe',
+      provider: 'moov',
+      outcome: 'production_provider_id_refused',
+    });
+    return denied(spoof, {
+      statusCode: 403,
+      error: 'production_provider_id_refused',
+      sandboxHttpCalled: true,
+      message: 'Moov sandbox platform account matches a production RDS provider_account_id. HTTP stopped after auth classification.',
+    });
+  }
   const reads = {
     authentication: { ok: true, tokenPresent: auth.accessTokenPresent },
     account: null,
@@ -366,6 +520,8 @@ const handleMoovProbe = async (event, deps) => handleAuthenticated(event, async 
     ok: true,
     statusCode: 200,
     provider: 'moov',
+    environment: 'sandbox',
+    apiVersion: loaded.moov.apiVersion || 'v2024.01.00',
     sandboxHttpCalled: true,
     productionExecution: false,
     productionRecordsMutated: false,
@@ -398,7 +554,7 @@ const handleMoovTransfer = async (event, deps) => handleAuthenticated(event, asy
     amountCents: SANDBOX_MIN_CENTS,
   });
   const existing = await lookupSandboxOperation(client, { idempotencyKey: key, tenantId });
-  if (existing) {
+  if (existing?.provider_reference) {
     await insertAudit(client, {
       applicationUserId: mapping.application_user_id,
       tenantId,
@@ -418,11 +574,29 @@ const handleMoovTransfer = async (event, deps) => handleAuthenticated(event, asy
       productionExecution: false,
       applicationUserId: mapping.application_user_id,
       spoofFieldsIgnored: spoof,
+      amount: { currency: 'USD', value: Number(existing.amount_cents), cents: Number(existing.amount_cents) },
+      providerReference: redactProviderId(existing.provider_reference),
       operation: publicOperation(existing),
       message: 'Same ChecksOps operation replayed. No second provider call.',
     };
   }
   if (!loaded.moov) {
+    if (existing) {
+      return {
+        ok: true,
+        statusCode: 200,
+        duplicate: true,
+        replayed: true,
+        failClosed: true,
+        error: existing.failure_class || 'sandbox_credentials_unavailable',
+        sandboxHttpCalled: false,
+        productionExecution: false,
+        applicationUserId: mapping.application_user_id,
+        spoofFieldsIgnored: spoof,
+        operation: publicOperation(existing),
+        message: 'Same ChecksOps operation replayed. No second provider call.',
+      };
+    }
     const inserted = (await client.query(
       `INSERT INTO public.aws_provider_sandbox_operations
         (tenant_id, application_user_id, operation_type, provider, amount_cents, currency,
@@ -456,11 +630,42 @@ const handleMoovTransfer = async (event, deps) => handleAuthenticated(event, asy
       message: 'Moov sandbox keys are not present. No provider HTTP was sent. Production keys were not used.',
     };
   }
+  const production = await productionProviderIds(client, tenantId);
+  if (loaded.moov.platformAccountId && production.productionAccountIds.includes(loaded.moov.platformAccountId)) {
+    return denied(spoof, {
+      statusCode: 403,
+      error: 'production_provider_id_refused',
+      message: 'Moov sandbox platform account matches a production RDS provider_account_id. HTTP stopped.',
+    });
+  }
   const source = await lookupSandboxObject(client, { tenantId, provider: 'moov', objectType: 'source_payment_method' })
     || await lookupSandboxObject(client, { tenantId, provider: 'moov', objectType: 'payment_method' });
   const destination = await lookupSandboxObject(client, { tenantId, provider: 'moov', objectType: 'destination_payment_method' })
     || await lookupSandboxObject(client, { tenantId, provider: 'moov', objectType: 'wallet' });
+  if (source && (production.productionAccountIds.includes(source.sandbox_provider_id) || production.productionWalletIds.includes(source.sandbox_provider_id))) {
+    return denied(spoof, {
+      statusCode: 403,
+      error: 'production_provider_id_refused',
+      message: 'Sandbox source payment method matches a production provider ID. HTTP stopped.',
+    });
+  }
   if (!source?.sandbox_provider_id || !destination?.sandbox_provider_id) {
+    if (existing) {
+      return {
+        ok: true,
+        statusCode: 200,
+        duplicate: true,
+        replayed: true,
+        failClosed: true,
+        error: existing.failure_class || 'sandbox_account_unmapped',
+        sandboxHttpCalled: false,
+        productionExecution: false,
+        applicationUserId: mapping.application_user_id,
+        spoofFieldsIgnored: spoof,
+        operation: publicOperation(existing),
+        message: 'Same ChecksOps operation replayed. Production Moov account IDs were not used.',
+      };
+    }
     const inserted = (await client.query(
       `INSERT INTO public.aws_provider_sandbox_operations
         (tenant_id, application_user_id, operation_type, provider, amount_cents, currency,
@@ -502,6 +707,15 @@ const handleMoovTransfer = async (event, deps) => handleAuthenticated(event, asy
     destinationPaymentMethodId: destination.sandbox_provider_id,
     amountCents: SANDBOX_MIN_CENTS,
   });
+  const pending = existing || await insertPendingOperation(client, {
+    tenantId,
+    applicationUserId: mapping.application_user_id,
+    operationType: 'moov_sandbox_transfer',
+    provider: 'moov',
+    amountCents: SANDBOX_MIN_CENTS,
+    idempotencyKey: key,
+    metadata: { marker: body?.marker || SANDBOX_MARKER },
+  });
   const created = await moovSandboxFetch({
     credentials: loaded.moov,
     path: `/accounts/${facilitator}/transfers`,
@@ -512,26 +726,18 @@ const handleMoovTransfer = async (event, deps) => handleAuthenticated(event, asy
     fetchImpl,
   });
   if (!created.ok) {
-    const inserted = (await client.query(
-      `INSERT INTO public.aws_provider_sandbox_operations
-        (tenant_id, application_user_id, operation_type, provider, amount_cents, currency,
-         idempotency_key, status, sandbox_http_called, production_execution, failure_class, metadata)
-       VALUES ($1::uuid, $2::uuid, 'moov_sandbox_transfer', 'moov', $3, 'USD', $4, 'failed', true, false, $5, $6::jsonb)
-       RETURNING *`,
-      [
-        tenantId,
-        mapping.application_user_id,
-        SANDBOX_MIN_CENTS,
-        key,
-        `provider_${created.httpStatus || 500}`,
-        JSON.stringify({ marker: body?.marker || SANDBOX_MARKER, httpStatus: created.httpStatus || null }),
-      ],
-    )).rows[0];
+    const failed = await updateSandboxOperation(client, {
+      id: pending.id,
+      status: 'failed',
+      sandboxHttpCalled: true,
+      failureClass: `provider_${created.httpStatus || 500}`,
+      metadataPatch: { httpStatus: created.httpStatus || null, recovery: Boolean(existing) },
+    });
     await insertAudit(client, {
       applicationUserId: mapping.application_user_id,
       tenantId,
       operationType: 'moov_sandbox_transfer',
-      operationId: inserted.id,
+      operationId: failed.id,
       provider: 'moov',
       outcome: 'provider_failure',
       idempotencyKey: key,
@@ -540,33 +746,26 @@ const handleMoovTransfer = async (event, deps) => handleAuthenticated(event, asy
     return denied(spoof, {
       ...created,
       sandboxHttpCalled: true,
-      operation: publicOperation(inserted),
+      operation: publicOperation(failed),
     });
   }
   const normalized = normalizeMoovSandboxTransfer(created.data || {});
-  const inserted = (await client.query(
-    `INSERT INTO public.aws_provider_sandbox_operations
-      (tenant_id, application_user_id, operation_type, provider, amount_cents, currency,
-       idempotency_key, status, provider_reference, sandbox_http_called, production_execution, metadata)
-     VALUES ($1::uuid, $2::uuid, 'moov_sandbox_transfer', 'moov', $3, 'USD', $4, 'provider_pending', $5, true, false, $6::jsonb)
-     RETURNING *`,
-    [
-      tenantId,
-      mapping.application_user_id,
-      SANDBOX_MIN_CENTS,
-      key,
-      normalized.provider_transfer_id,
-      JSON.stringify({
-        marker: body?.marker || SANDBOX_MARKER,
-        moov_idempotency_uuid: created.idempotencyKey,
-        simulated_provider: {
-          provider_reference: normalized.provider_transfer_id,
-          status: normalized.status || 'pending',
-          amount_cents: SANDBOX_MIN_CENTS,
-        },
-      }),
-    ],
-  )).rows[0];
+  const inserted = await updateSandboxOperation(client, {
+    id: pending.id,
+    status: 'provider_pending',
+    providerReference: normalized.provider_transfer_id,
+    sandboxHttpCalled: true,
+    metadataPatch: {
+      marker: body?.marker || SANDBOX_MARKER,
+      moov_idempotency_uuid: created.idempotencyKey,
+      recovery: Boolean(existing),
+      simulated_provider: {
+        provider_reference: normalized.provider_transfer_id,
+        status: normalized.status || 'pending',
+        amount_cents: SANDBOX_MIN_CENTS,
+      },
+    },
+  });
   await insertSandboxObject(client, {
     tenantId,
     provider: 'moov',
@@ -581,20 +780,24 @@ const handleMoovTransfer = async (event, deps) => handleAuthenticated(event, asy
     operationId: inserted.id,
     provider: 'moov',
     providerReference: normalized.provider_transfer_id,
-    outcome: 'sandbox_transfer_created',
+    outcome: existing ? 'sandbox_transfer_recovered' : 'sandbox_transfer_created',
     idempotencyKey: key,
   });
   return {
     ok: true,
     statusCode: 200,
-    duplicate: false,
+    duplicate: Boolean(existing),
+    recovered: Boolean(existing),
     sandboxHttpCalled: true,
     productionExecution: false,
     productionRecordsMutated: false,
     applicationUserId: mapping.application_user_id,
     cognitoSub: claims.sub,
     spoofFieldsIgnored: spoof,
-    amount: transferBody.amount,
+    amount: { ...transferBody.amount, cents: SANDBOX_MIN_CENTS },
+    providerReference: redactProviderId(normalized.provider_transfer_id),
+    environment: 'sandbox',
+    apiVersion: loaded.moov.apiVersion || 'v2024.01.00',
     operation: publicOperation(inserted),
     provider: normalizeMoovSandboxTransfer(created.data || {}),
   };
@@ -644,6 +847,8 @@ const handleMoovRetrieve = async (event, deps) => handleAuthenticated(event, asy
     spoofFieldsIgnored: spoof,
     operation: publicOperation(operation),
     provider: fetched.ok ? normalizeMoovSandboxTransfer(fetched.data || {}) : null,
+    providerStatus: fetched.ok ? (fetched.data?.status || null) : null,
+    providerReference: redactProviderId(operation.provider_reference),
     error: fetched.ok ? undefined : fetched.error,
   };
 }, deps);
@@ -683,6 +888,10 @@ const handleCheckAltProbe = async (event, deps) => handleAuthenticated(event, as
     ok: auth.ok,
     statusCode: auth.ok ? 200 : auth.statusCode || 502,
     provider: 'checkalt',
+    environment: 'uat',
+    host: CHECKALT_UAT_HOST,
+    merchant: CHECKALT_UAT_MERCHANT_EXPECTED,
+    authPath: auth.authPath || CHECKALT_UAT_AUTH_PATH,
     sandboxHttpCalled: true,
     productionExecution: false,
     productionRecordsMutated: false,
@@ -703,14 +912,16 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
   const memberships = await membershipsOf(client, mapping.application_user_id);
   const tenantId = memberships[0]?.tenant_id;
   if (!tenantId) return denied(spoof, { error: 'no_tenant_membership' });
+  const amount = serverAmountCents(body);
+  if (amount.error) return denied(spoof, { statusCode: 400, ...amount });
   const key = stableIdempotencyKey({
     tenantId,
     operationType: 'checkalt_sandbox_deposit',
     resourceId: body?.resource_id || tenantId,
-    amountCents: SANDBOX_MIN_CENTS,
+    amountCents: amount.cents,
   });
   const existing = await lookupSandboxOperation(client, { idempotencyKey: key, tenantId });
-  if (existing) {
+  if (existing?.provider_reference) {
     return {
       ok: true,
       statusCode: 200,
@@ -719,20 +930,38 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
       sandboxHttpCalled: false,
       productionExecution: false,
       negotiableCheckSubmitted: false,
+      amount: { ...buildCheckAltSandboxDeposit({ amountCents: Number(existing.amount_cents), reference: key }), cents: Number(existing.amount_cents) },
+      providerReference: redactProviderId(existing.provider_reference),
       operation: publicOperation(existing),
       spoofFieldsIgnored: spoof,
     };
   }
   const loaded = await (deps.loadSandboxCredentials || loadSandboxCredentials)();
-  const deposit = buildCheckAltSandboxDeposit({ amountCents: SANDBOX_MIN_CENTS, reference: key });
+  const deposit = buildCheckAltSandboxDeposit({ amountCents: amount.cents, reference: key });
   if (!loaded.checkalt) {
+    if (existing) {
+      return {
+        ok: true,
+        statusCode: 200,
+        duplicate: true,
+        replayed: true,
+        failClosed: true,
+        error: existing.failure_class || 'sandbox_credentials_unavailable',
+        sandboxHttpCalled: false,
+        productionExecution: false,
+        negotiableCheckSubmitted: false,
+        operation: publicOperation(existing),
+        amount: { ...deposit, cents: amount.cents },
+        spoofFieldsIgnored: spoof,
+      };
+    }
     const inserted = (await client.query(
       `INSERT INTO public.aws_provider_sandbox_operations
         (tenant_id, application_user_id, operation_type, provider, amount_cents, currency,
          idempotency_key, status, sandbox_http_called, production_execution, failure_class, metadata)
        VALUES ($1::uuid, $2::uuid, 'checkalt_sandbox_deposit', 'checkalt', $3, 'USD', $4, 'failed', false, false, 'sandbox_credentials_unavailable', $5::jsonb)
        RETURNING *`,
-      [tenantId, mapping.application_user_id, SANDBOX_MIN_CENTS, key, JSON.stringify({ marker: body?.marker || SANDBOX_MARKER })],
+      [tenantId, mapping.application_user_id, amount.cents, key, JSON.stringify({ marker: body?.marker || SANDBOX_MARKER, fixture: amount.fixture })],
     )).rows[0];
     return {
       ok: true,
@@ -748,38 +977,101 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
       spoofFieldsIgnored: spoof,
       capability: loaded.snapshot.checkalt,
       operation: publicOperation(inserted),
-      amount: deposit,
-      message: 'No CheckAlt sandbox is configured. No negotiable check was submitted.',
+      amount: { ...deposit, cents: amount.cents },
+      message: 'No CheckAlt UAT is configured. No negotiable check was submitted.',
     };
   }
+  if (existing && !existing.provider_reference) {
+    const history = await checkAltSandboxFetch({
+      credentials: loaded.checkalt,
+      path: '/fincapture/deposit/history',
+      body: { fiKey: loaded.checkalt.fiKey, ssoKey: loaded.checkalt.userId },
+      fetchImpl: deps.fetchImpl || fetch,
+    });
+    const discovered = extractCheckAltReference(history.data)
+      || extractCheckAltReference((history.data?.depositHistoryList || history.data?.depositList || [])[0] || {});
+    if (discovered) {
+      const recovered = await updateSandboxOperation(client, {
+        id: existing.id,
+        status: 'provider_pending',
+        providerReference: discovered,
+        sandboxHttpCalled: true,
+        metadataPatch: { recovered: true, discovery: 'history' },
+      });
+      return {
+        ok: true,
+        statusCode: 200,
+        duplicate: true,
+        recovered: true,
+        sandboxHttpCalled: true,
+        productionExecution: false,
+        negotiableCheckSubmitted: false,
+        amount: { ...deposit, cents: amount.cents },
+        providerReference: redactProviderId(discovered),
+        operation: publicOperation(recovered),
+        spoofFieldsIgnored: spoof,
+        message: 'Recovered existing UAT deposit. No second process call.',
+      };
+    }
+    await insertAudit(client, {
+      applicationUserId: mapping.application_user_id,
+      tenantId,
+      operationType: 'checkalt_sandbox_deposit',
+      operationId: existing.id,
+      provider: 'checkalt',
+      outcome: 'recovery_required',
+      idempotencyKey: key,
+    });
+    return {
+      ok: true,
+      statusCode: 200,
+      duplicate: true,
+      recovered: false,
+      recoveryRequired: true,
+      sandboxHttpCalled: history.ok === true,
+      productionExecution: false,
+      negotiableCheckSubmitted: false,
+      amount: { ...deposit, cents: amount.cents },
+      operation: publicOperation(existing),
+      spoofFieldsIgnored: spoof,
+      message: 'Existing ChecksOps deposit has no provider reference. History did not discover one. No second UAT deposit submitted.',
+    };
+  }
+  const pending = await insertPendingOperation(client, {
+    tenantId,
+    applicationUserId: mapping.application_user_id,
+    operationType: 'checkalt_sandbox_deposit',
+    provider: 'checkalt',
+    amountCents: amount.cents,
+    idempotencyKey: key,
+    metadata: { marker: body?.marker || SANDBOX_MARKER, fixture: amount.fixture, syntheticImages: true, negotiableCheck: false },
+  });
+  const packed = buildCheckAltUatDepositBody({
+    credentials: loaded.checkalt,
+    amountCents: amount.cents,
+    reference: key,
+  });
   const submitted = await checkAltSandboxFetch({
     credentials: loaded.checkalt,
     path: '/fincapture/deposit/process',
-    body: {
-      userAmount: deposit.userAmount,
-      referenceNumber: key,
-      testDeposit: true,
-      includeImages: false,
-    },
+    body: packed.request,
     fetchImpl: deps.fetchImpl || fetch,
   });
-  const inserted = (await client.query(
-    `INSERT INTO public.aws_provider_sandbox_operations
-      (tenant_id, application_user_id, operation_type, provider, amount_cents, currency,
-       idempotency_key, status, provider_reference, sandbox_http_called, production_execution, failure_class, metadata)
-     VALUES ($1::uuid, $2::uuid, 'checkalt_sandbox_deposit', 'checkalt', $3, 'USD', $4, $5, $6, true, false, $7, $8::jsonb)
-     RETURNING *`,
-    [
-      tenantId,
-      mapping.application_user_id,
-      SANDBOX_MIN_CENTS,
-      key,
-      submitted.ok ? 'provider_pending' : 'failed',
-      submitted.data?.referenceNumber || submitted.data?.checkalt_reference || null,
-      submitted.ok ? null : `provider_${submitted.httpStatus || 500}`,
-      JSON.stringify({ marker: body?.marker || SANDBOX_MARKER, userAmount: deposit.userAmount }),
-    ],
-  )).rows[0];
+  const reference = extractCheckAltReference(submitted.data);
+  const inserted = await updateSandboxOperation(client, {
+    id: pending.id,
+    status: submitted.ok ? 'provider_pending' : 'failed',
+    providerReference: reference,
+    sandboxHttpCalled: true,
+    failureClass: submitted.ok ? null : `provider_${submitted.httpStatus || 500}`,
+    metadataPatch: {
+      marker: body?.marker || SANDBOX_MARKER,
+      userAmount: deposit.userAmount,
+      fixture: amount.fixture,
+      syntheticImages: true,
+      negotiableCheck: false,
+    },
+  });
   return {
     ok: submitted.ok,
     statusCode: submitted.ok ? 200 : submitted.statusCode || 502,
@@ -788,8 +1080,158 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
     negotiableCheckSubmitted: false,
     applicationUserId: mapping.application_user_id,
     spoofFieldsIgnored: spoof,
-    amount: deposit,
+    amount: { ...deposit, cents: amount.cents },
+    providerReference: redactProviderId(reference),
     operation: publicOperation(inserted),
+  };
+}, deps);
+
+const handleCheckAltAccount = async (event, deps) => handleAuthenticated(event, async ({ client, mapping, claims, spoof }) => {
+  const gate = requireSandboxGate({ spoof });
+  if (gate.ok !== true) return gate;
+  const memberships = await membershipsOf(client, mapping.application_user_id);
+  const tenantId = memberships[0]?.tenant_id;
+  if (!tenantId) return denied(spoof, { error: 'no_tenant_membership' });
+  const loaded = await (deps.loadSandboxCredentials || loadSandboxCredentials)();
+  const gateCreds = assertCheckAltSandboxCredentials(loaded.checkalt);
+  if (!gateCreds.ok) return denied(spoof, { ...gateCreds, capability: loaded.snapshot.checkalt });
+  const user = await checkAltSandboxFetch({
+    credentials: loaded.checkalt,
+    path: '/fincapture/useraccount/getUserAccountInformation',
+    body: { fiKey: loaded.checkalt.fiKey, userId: loaded.checkalt.userId },
+    fetchImpl: deps.fetchImpl || fetch,
+  });
+  const deposit = await checkAltSandboxFetch({
+    credentials: loaded.checkalt,
+    path: '/fincapture/useraccount/getDepositAccountInformation',
+    body: { fiKey: loaded.checkalt.fiKey, userId: loaded.checkalt.userId },
+    fetchImpl: deps.fetchImpl || fetch,
+  });
+  return {
+    ok: user.ok,
+    statusCode: user.ok ? 200 : user.statusCode || 502,
+    sandboxHttpCalled: true,
+    productionExecution: false,
+    productionRecordsMutated: false,
+    negotiableCheckSubmitted: false,
+    applicationUserId: mapping.application_user_id,
+    spoofFieldsIgnored: spoof,
+    userAccount: { ok: user.ok, httpStatus: user.statusCode || user.httpStatus || null },
+    depositAccount: { ok: deposit.ok, httpStatus: deposit.statusCode || deposit.httpStatus || null },
+  };
+}, deps);
+
+const handleCheckAltStatus = async (event, deps) => handleAuthenticated(event, async ({ client, mapping, claims, body, spoof }) => {
+  const gate = requireSandboxGate({ spoof });
+  if (gate.ok !== true) return gate;
+  const memberships = await membershipsOf(client, mapping.application_user_id);
+  const tenantId = memberships[0]?.tenant_id;
+  const operation = await lookupSandboxOperation(client, {
+    operationId: body?.operation_id,
+    idempotencyKey: body?.idempotency_key,
+    tenantId,
+  });
+  if (!operation) return denied(spoof, { statusCode: 404, error: 'operation_not_found' });
+  if (!memberships.some((row) => row.tenant_id === operation.tenant_id)) {
+    return denied(spoof, { error: 'cross_tenant_denied' });
+  }
+  const loaded = await (deps.loadSandboxCredentials || loadSandboxCredentials)();
+  const gateCreds = assertCheckAltSandboxCredentials(loaded.checkalt);
+  if (!gateCreds.ok || !operation.provider_reference) {
+    return {
+      ok: true,
+      statusCode: 200,
+      retrieved: false,
+      sandboxHttpCalled: false,
+      productionExecution: false,
+      operation: publicOperation(operation),
+      reason: gateCreds.ok ? 'missing_provider_reference' : gateCreds.error,
+    };
+  }
+  const item = await checkAltSandboxFetch({
+    credentials: loaded.checkalt,
+    path: '/fincapture/deposit/item',
+    body: { fiKey: loaded.checkalt.fiKey, ssoKey: loaded.checkalt.userId, referenceNumber: operation.provider_reference },
+    fetchImpl: deps.fetchImpl || fetch,
+  });
+  let history = null;
+  let providerStatus = mapCheckAltStatus(item.data || {}) || extractCheckAltStatus(item.data);
+  if (!providerStatus) {
+    history = await checkAltSandboxFetch({
+      credentials: loaded.checkalt,
+      path: '/fincapture/deposit/history',
+      body: { fiKey: loaded.checkalt.fiKey, ssoKey: loaded.checkalt.userId },
+      fetchImpl: deps.fetchImpl || fetch,
+    });
+    providerStatus = mapCheckAltStatus(history.data || {}) || extractCheckAltStatus(history.data);
+  }
+  return {
+    ok: item.ok || history?.ok === true,
+    statusCode: (item.ok || history?.ok) ? 200 : item.statusCode || 502,
+    sandboxHttpCalled: true,
+    productionExecution: false,
+    operation: publicOperation(operation),
+    providerStatus: providerStatus || null,
+    providerReference: redactProviderId(operation.provider_reference),
+    history: { ok: item.ok, httpStatus: item.statusCode || item.httpStatus || null, fallback: Boolean(history) },
+  };
+}, deps);
+
+const handleCheckAltApprove = async (event, deps) => handleAuthenticated(event, async ({ client, mapping, claims, body, spoof }) => {
+  const gate = requireSandboxGate({ spoof });
+  if (gate.ok !== true) return gate;
+  const memberships = await membershipsOf(client, mapping.application_user_id);
+  const tenantId = memberships[0]?.tenant_id;
+  const operation = await lookupSandboxOperation(client, {
+    operationId: body?.operation_id,
+    idempotencyKey: body?.idempotency_key,
+    tenantId,
+  });
+  if (!operation) return denied(spoof, { statusCode: 404, error: 'operation_not_found' });
+  if (!memberships.some((row) => row.tenant_id === operation.tenant_id)) {
+    return denied(spoof, { error: 'cross_tenant_denied' });
+  }
+  if (operation.metadata?.negotiableCheck === true) {
+    return denied(spoof, { statusCode: 403, error: 'negotiable_check_refused' });
+  }
+  const loaded = await (deps.loadSandboxCredentials || loadSandboxCredentials)();
+  const gateCreds = assertCheckAltSandboxCredentials(loaded.checkalt);
+  if (!gateCreds.ok || !operation.provider_reference) {
+    return denied(spoof, {
+      statusCode: 409,
+      error: gateCreds.ok ? 'missing_provider_reference' : gateCreds.error,
+      capability: loaded.snapshot.checkalt,
+    });
+  }
+  const approved = await checkAltSandboxFetch({
+    credentials: loaded.checkalt,
+    path: '/fincapture/deposit/approve',
+    body: {
+      fiKey: loaded.checkalt.fiKey,
+      referenceNumber: Number(operation.provider_reference) || operation.provider_reference,
+      action: 1,
+    },
+    fetchImpl: deps.fetchImpl || fetch,
+  });
+  await insertAudit(client, {
+    applicationUserId: mapping.application_user_id,
+    tenantId: operation.tenant_id,
+    operationType: 'checkalt_sandbox_approve',
+    operationId: operation.id,
+    provider: 'checkalt',
+    providerReference: operation.provider_reference,
+    outcome: approved.ok ? 'uat_approve' : 'uat_approve_failed',
+  });
+  return {
+    ok: approved.ok,
+    statusCode: approved.ok ? 200 : approved.statusCode || 502,
+    sandboxHttpCalled: true,
+    productionExecution: false,
+    negotiableCheckSubmitted: false,
+    applicationUserId: mapping.application_user_id,
+    spoofFieldsIgnored: spoof,
+    operation: publicOperation(operation),
+    providerStatus: extractCheckAltStatus(approved.data),
   };
 }, deps);
 
@@ -1067,11 +1509,15 @@ const persistSandboxWebhook = async ({ client, provider, payload, externalEventI
 
 export const sandboxRoute = (path, method) => {
   if (method === 'GET' && path === '/sandbox/status') return { kind: 'status' };
+  if (method === 'POST' && path === '/sandbox/isolation') return { kind: 'isolation' };
   if (method === 'POST' && path === '/sandbox/moov/probe') return { kind: 'moov-probe' };
   if (method === 'POST' && path === '/sandbox/moov/transfer') return { kind: 'moov-transfer' };
   if (method === 'POST' && path === '/sandbox/moov/retrieve') return { kind: 'moov-retrieve' };
   if (method === 'POST' && path === '/sandbox/checkalt/probe') return { kind: 'checkalt-probe' };
+  if (method === 'POST' && path === '/sandbox/checkalt/account') return { kind: 'checkalt-account' };
   if (method === 'POST' && path === '/sandbox/checkalt/deposit') return { kind: 'checkalt-deposit' };
+  if (method === 'POST' && path === '/sandbox/checkalt/status') return { kind: 'checkalt-status' };
+  if (method === 'POST' && path === '/sandbox/checkalt/approve') return { kind: 'checkalt-approve' };
   if (method === 'POST' && path === '/sandbox/plaid/probe') return { kind: 'plaid-probe' };
   if (method === 'POST' && path === '/sandbox/reconcile') return { kind: 'reconcile' };
   if (method === 'POST' && path === '/sandbox/cleanup') return { kind: 'cleanup' };
@@ -1085,11 +1531,15 @@ export const handleSandboxRequest = async (event, path, method, deps = {}) => {
   const route = sandboxRoute(path, method);
   if (!route) return null;
   if (route.kind === 'status') return handleSandboxStatus(deps);
+  if (route.kind === 'isolation') return handleIsolation(event, deps);
   if (route.kind === 'moov-probe') return handleMoovProbe(event, deps);
   if (route.kind === 'moov-transfer') return handleMoovTransfer(event, deps);
   if (route.kind === 'moov-retrieve') return handleMoovRetrieve(event, deps);
   if (route.kind === 'checkalt-probe') return handleCheckAltProbe(event, deps);
+  if (route.kind === 'checkalt-account') return handleCheckAltAccount(event, deps);
   if (route.kind === 'checkalt-deposit') return handleCheckAltDeposit(event, deps);
+  if (route.kind === 'checkalt-status') return handleCheckAltStatus(event, deps);
+  if (route.kind === 'checkalt-approve') return handleCheckAltApprove(event, deps);
   if (route.kind === 'plaid-probe') return handlePlaidProbe(event, deps);
   if (route.kind === 'reconcile') return handleReconcile(event, deps);
   if (route.kind === 'cleanup') return handleCleanup(event, deps);

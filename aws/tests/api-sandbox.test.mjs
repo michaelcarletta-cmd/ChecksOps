@@ -4,12 +4,19 @@ import { handler } from '../functions/api/index.mjs';
 import { LOOKUP_MAPPING_SQL, TENANT_MEMBERSHIP_SQL } from '../functions/api/identity.mjs';
 import { handleSandboxRequest } from '../functions/api/sandbox.mjs';
 import {
+  CHECKALT_UAT_HOST,
   classifyCheckAltSandbox,
   classifyMoovSandbox,
   classifyPlaidSandbox,
+  isApprovedCheckAltUatUrl,
   looksLikeSandboxHost,
   sandboxCredentialSnapshot,
 } from '../functions/api/sandbox-credentials.mjs';
+import {
+  CHECKALT_UAT_AUTH_PATH,
+  CHECKALT_USER_AMOUNT,
+  convertChecksOpsCentsToCheckAltUserAmount,
+} from '../functions/api/providers/checkalt-sandbox.mjs';
 import {
   buildMoovSandboxTransferBody,
   idempotencyUuid,
@@ -18,6 +25,7 @@ import {
 import { buildCheckAltSandboxDeposit } from '../functions/api/providers/checkalt-sandbox.mjs';
 import { hmacBase64 } from '../functions/api/providers/hmac.mjs';
 import { providerSandboxExecutionEnabled } from '../functions/api/sandbox-flags.mjs';
+import { stableIdempotencyKey } from '../functions/api/financial-idempotency.mjs';
 
 const FREEDOM_APP = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
 const FREEDOM_TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
@@ -111,6 +119,22 @@ const mockClient = ({
             return row.tenant_id === params[0];
           }),
         };
+      }
+      if (sql.includes('UPDATE public.aws_provider_sandbox_operations')) {
+        const row = ops.find((item) => item.id === params[0]) || ops[ops.length - 1];
+        if (row) {
+          row.status = params[1];
+          if (params[2]) row.provider_reference = params[2];
+          row.sandbox_http_called = params[3];
+          row.failure_class = params[4];
+        }
+        return { rows: row ? [row] : [] };
+      }
+      if (sql.includes('FROM public.payment_provider_accounts')) {
+        return { rows: [] };
+      }
+      if (sql.includes('FROM public.payment_wallets')) {
+        return { rows: [] };
       }
       if (sql.includes('INSERT INTO public.aws_provider_sandbox_operations')) {
         const existing = ops.find((row) => row.tenant_id === params[0] && row.idempotency_key === params[3]);
@@ -224,9 +248,13 @@ test('Moov sandbox classification refuses production keys', () => {
   assert.equal(present.host, 'https://api.moov.io');
 });
 
-test('CheckAlt has no implicit sandbox and rejects production hosts', () => {
+test('CheckAlt UAT requires the exact approved host and refuses production', () => {
   assert.equal(looksLikeSandboxHost('https://api.clearingworks.com'), false);
-  assert.equal(looksLikeSandboxHost('https://uat.clearingworks.com'), true);
+  assert.equal(isApprovedCheckAltUatUrl('https://uatapi.checkalt.com'), true);
+  assert.equal(isApprovedCheckAltUatUrl('https://uatapi.checkalt.com/'), true);
+  assert.equal(isApprovedCheckAltUatUrl('http://uatapi.checkalt.com'), false);
+  assert.equal(isApprovedCheckAltUatUrl('https://api.checkalt.com'), false);
+  assert.equal(isApprovedCheckAltUatUrl('https://uatapi.checkalt.com/fincapture'), false);
   const none = classifyCheckAltSandbox({
     CHECKALT_USERNAME: 'prod-user',
     CHECKALT_PASSWORD: 'prod-pass',
@@ -235,13 +263,37 @@ test('CheckAlt has no implicit sandbox and rejects production hosts', () => {
   assert.equal(none.available, false);
   assert.equal(none.reason, 'no_sandbox_fincapture_environment');
   assert.equal(none.refuseNegotiableCheck, true);
-  const badUrl = classifyCheckAltSandbox({
-    CHECKALT_SANDBOX_USERNAME: 'u',
-    CHECKALT_SANDBOX_PASSWORD: 'p',
-    CHECKALT_SANDBOX_BASE_URL: 'https://api.clearingworks.com',
+  const badHost = classifyCheckAltSandbox({
+    CHECKALT_UAT_USER_ID: 'u',
+    CHECKALT_UAT_PASSWORD: 'p',
+    CHECKALT_UAT_BASE_URL: 'https://api.checkalt.com',
+    CHECKALT_UAT_MERCHANT: 'lockbox5',
   });
-  assert.equal(badUrl.available, false);
-  assert.equal(badUrl.reason, 'sandbox_base_url_not_test_host');
+  assert.equal(badHost.available, false);
+  assert.equal(badHost.reason, 'uat_host_refused');
+  const badMerchant = classifyCheckAltSandbox({
+    CHECKALT_UAT_USER_ID: 'u',
+    CHECKALT_UAT_PASSWORD: 'p',
+    CHECKALT_UAT_BASE_URL: CHECKALT_UAT_HOST,
+    CHECKALT_UAT_MERCHANT: 'production-lockbox',
+  });
+  assert.equal(badMerchant.available, false);
+  assert.equal(badMerchant.reason, 'uat_merchant_refused');
+  const ok = classifyCheckAltSandbox({
+    CHECKALT_UAT_USER_ID: 'u',
+    CHECKALT_UAT_PASSWORD: 'p',
+    CHECKALT_UAT_BASE_URL: CHECKALT_UAT_HOST,
+    CHECKALT_UAT_MERCHANT: 'lockbox5',
+  });
+  assert.equal(ok.available, true);
+  assert.equal(ok.authPath, CHECKALT_UAT_AUTH_PATH);
+});
+
+test('CheckAlt userAmount is integer cents for 0.01, 1.00, and 123.45', () => {
+  assert.equal(convertChecksOpsCentsToCheckAltUserAmount(1).userAmount, 1);
+  assert.equal(convertChecksOpsCentsToCheckAltUserAmount(100).userAmount, 100);
+  assert.equal(convertChecksOpsCentsToCheckAltUserAmount(12345).userAmount, 12345);
+  assert.equal(CHECKALT_USER_AMOUNT.scale, 'integer_cents');
 });
 
 test('Plaid sandbox is not the money path', () => {
@@ -280,11 +332,19 @@ test('Moov sandbox transfer body uses 1 cent and a stable UUID key', () => {
   assert.match(first, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
 });
 
-test('CheckAlt sandbox deposit converts cents without a check image', () => {
+test('CheckAlt sandbox deposit converts cents with a synthetic non-negotiable image', () => {
   const deposit = buildCheckAltSandboxDeposit({ amountCents: 1, reference: 'ref' });
   assert.equal(deposit.userAmount, 1);
   assert.equal(deposit.negotiableCheck, false);
-  assert.equal(deposit.imageIncluded, false);
+  assert.equal(deposit.imageIncluded, true);
+  assert.equal(deposit.imageKind, 'synthetic_void_png');
+});
+
+test('CheckAlt and Moov reject zero, negative, over-max, and extra precision', () => {
+  assert.equal(convertChecksOpsCentsToCheckAltUserAmount(0).error, 'invalid_amount');
+  assert.equal(convertChecksOpsCentsToCheckAltUserAmount(-1).error, 'invalid_amount');
+  assert.equal(convertChecksOpsCentsToCheckAltUserAmount(100_000_001).error, 'invalid_amount');
+  assert.equal(convertChecksOpsCentsToCheckAltUserAmount(1.234)?.error, 'invalid_amount');
 });
 
 test('GET /sandbox/status reports capability and production guards', async () => {
@@ -305,6 +365,8 @@ test('GET /sandbox/status reports capability and production guards', async () =>
     assert.equal(body.capability.moov.available, false);
     assert.equal(body.capability.checkalt.available, false);
     assert.equal(body.amountUnits.sandboxMinCents, 1);
+    assert.equal(body.isolation.approvedCheckAltHost, CHECKALT_UAT_HOST);
+    assert.equal(body.amountUnits.checkalt.examples[2].userAmount, 12345);
   });
 });
 
@@ -521,5 +583,195 @@ test('sandbox webhook verifies signature, ignores payload tenant, and is idempot
     assert.equal(second.duplicate, true);
     assert.equal(second.applied, false);
     assert.equal(client.hooks.length, 1);
+  });
+});
+
+test('isolation gate reports HTTP stopped when UAT/sandbox keys are missing', async () => {
+  await withEnv({
+    AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true',
+    AWS_FINANCIAL_PERMISSIONS_ACTIVATED: 'false',
+  }, async () => {
+    const client = mockClient();
+    const result = await handleSandboxRequest(
+      jwtEvent('/sandbox/isolation', 'POST', {}),
+      '/sandbox/isolation',
+      'POST',
+      depsFor(client, {
+        loadSandboxCredentials: async () => ({
+          moov: null,
+          checkalt: null,
+          snapshot: {
+            moov: classifyMoovSandbox({}),
+            checkalt: classifyCheckAltSandbox({}),
+          },
+        }),
+      }),
+    );
+    assert.equal(result.ok, true);
+    assert.equal(result.httpAllowed.moov, false);
+    assert.equal(result.httpAllowed.checkalt, false);
+    assert.equal(result.stopHttpUnlessProven, true);
+    assert.equal(result.productionIdOverlap, false);
+  });
+});
+
+test('mocked CheckAlt UAT HTTP creates one deposit and refuses a second process', async () => {
+  await withEnv({
+    AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true',
+    AWS_FINANCIAL_PERMISSIONS_ACTIVATED: 'false',
+  }, async () => {
+    const client = mockClient();
+    let processes = 0;
+    const fetchImpl = async (url) => {
+      if (String(url).includes('/public/jwtauth/authenticate')) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ token: 'a.b.c' }) };
+      }
+      if (String(url).includes('/fincapture/deposit/process')) {
+        processes += 1;
+        return { ok: true, status: 200, text: async () => JSON.stringify({ referenceNumber: 'uat-ref-1', status: 127 }) };
+      }
+      return { ok: false, status: 404, text: async () => '{}' };
+    };
+    const creds = async () => ({
+      checkalt: {
+        environment: 'uat',
+        baseUrl: CHECKALT_UAT_HOST,
+        userId: 'uat-user',
+        username: 'uat-user',
+        password: 'uat-pass',
+        fiKey: 'fi',
+        merchant: 'lockbox5',
+        authPath: '/public/jwtauth/authenticate',
+      },
+      snapshot: { checkalt: { available: true } },
+    });
+    const first = await handleSandboxRequest(
+      jwtEvent('/sandbox/checkalt/deposit', 'POST', { fixture: 'min' }),
+      '/sandbox/checkalt/deposit',
+      'POST',
+      depsFor(client, { loadSandboxCredentials: creds, fetchImpl }),
+    );
+    assert.equal(first.ok, true);
+    assert.equal(first.amount.cents, 1);
+    assert.equal(first.amount.userAmount, 1);
+    assert.equal(first.negotiableCheckSubmitted, false);
+    const second = await handleSandboxRequest(
+      jwtEvent('/sandbox/checkalt/deposit', 'POST', { fixture: 'min' }),
+      '/sandbox/checkalt/deposit',
+      'POST',
+      depsFor(client, { loadSandboxCredentials: creds, fetchImpl }),
+    );
+    assert.equal(second.duplicate, true);
+    assert.equal(processes, 1);
+  });
+});
+
+test('Moov transfer refuses a platform account that matches production RDS IDs', async () => {
+  await withEnv({
+    AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true',
+    AWS_FINANCIAL_PERMISSIONS_ACTIVATED: 'false',
+  }, async () => {
+    const client = mockClient();
+    const originalQuery = client.query.bind(client);
+    client.query = async (sql, params = []) => {
+      if (sql.includes('FROM public.payment_provider_accounts')) {
+        return { rows: [{ provider: 'moov', provider_account_id: 'acct_prod', environment: 'production' }] };
+      }
+      return originalQuery(sql, params);
+    };
+    let posts = 0;
+    const result = await handleSandboxRequest(
+      jwtEvent('/sandbox/moov/transfer', 'POST', {}),
+      '/sandbox/moov/transfer',
+      'POST',
+      depsFor(client, {
+        loadSandboxCredentials: async () => ({
+          moov: {
+            environment: 'sandbox',
+            host: 'https://api.moov.io',
+            publicKey: 'pk_sbox',
+            secretKey: 'sk_sbox',
+            platformAccountId: 'acct_prod',
+            origin: 'https://checksops.com',
+            apiVersion: 'v2024.01.00',
+          },
+          snapshot: { moov: { available: true } },
+        }),
+        fetchImpl: async () => {
+          posts += 1;
+          return { ok: true, status: 200, text: async () => '{}' };
+        },
+      }),
+    );
+    assert.equal(result.error, 'production_provider_id_refused');
+    assert.equal(posts, 0);
+  });
+});
+
+test('CheckAlt recovery does not submit a second UAT deposit', async () => {
+  await withEnv({
+    AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true',
+    AWS_FINANCIAL_PERMISSIONS_ACTIVATED: 'false',
+  }, async () => {
+    const key = stableIdempotencyKey({
+      tenantId: FREEDOM_TENANT,
+      operationType: 'checkalt_sandbox_deposit',
+      resourceId: FREEDOM_TENANT,
+      amountCents: 1,
+    });
+    const client = mockClient({
+      operations: [{
+        id: OP_ID,
+        tenant_id: FREEDOM_TENANT,
+        application_user_id: FREEDOM_APP,
+        operation_type: 'checkalt_sandbox_deposit',
+        provider: 'checkalt',
+        amount_cents: 1,
+        idempotency_key: key,
+        status: 'submitting',
+        provider_reference: null,
+        sandbox_http_called: true,
+        production_execution: false,
+      }],
+    });
+    let processes = 0;
+    const fetchImpl = async (url) => {
+      if (String(url).includes('/authenticate')) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ token: 'a.b.c' }) };
+      }
+      if (String(url).includes('/deposit/process')) {
+        processes += 1;
+        return { ok: true, status: 200, text: async () => JSON.stringify({ referenceNumber: 'should-not' }) };
+      }
+      if (String(url).includes('/deposit/history')) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ depositHistoryList: [] }) };
+      }
+      return { ok: false, status: 404, text: async () => '{}' };
+    };
+    const creds = async () => ({
+      checkalt: {
+        environment: 'uat',
+        baseUrl: CHECKALT_UAT_HOST,
+        userId: 'uat-user',
+        username: 'uat-user',
+        password: 'uat-pass',
+        fiKey: 'fi',
+        merchant: 'lockbox5',
+      },
+      snapshot: { checkalt: { available: true } },
+    });
+    const retry = await handleSandboxRequest(
+      jwtEvent('/sandbox/checkalt/deposit', 'POST', { fixture: 'min' }),
+      '/sandbox/checkalt/deposit',
+      'POST',
+      depsFor(client, { loadSandboxCredentials: creds, fetchImpl }),
+    );
+    assert.equal(retry.duplicate, true);
+    assert.equal(retry.recoveryRequired, true);
+    assert.equal(processes, 0);
   });
 });
