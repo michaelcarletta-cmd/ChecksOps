@@ -33,7 +33,7 @@ That flag must never be reused as the production master execution switch.
 | Provider | Sandbox available on AWS staging? | Safe operations without production accounts |
 | --- | --- | --- |
 | Moov | **No.** `checksops/staging/providers` has no `MOOV_SANDBOX_*` keys. Production Edge Functions use separate sandbox keys, but those values were not copied to AWS and must not be extracted from production. Moov sandbox and production share `https://api.moov.io`; the **keys** select the ledger. | OAuth, account/wallet/method/capability reads, $0.01 sandbox transfer, retrieve, idempotent retry, sandbox webhook — only after dedicated sandbox keys and sandbox object mappings exist. |
-| CheckAlt | **No.** There is no first-class FinCapture sandbox in ChecksOps. Staging `checkalt_config.base_url` is null. Production `CHECKALT_*` credentials must not be used. | None. Do not submit a negotiable check. Production CheckAlt stays disabled. |
+| CheckAlt | **UAT only.** Require `CHECKALT_UAT_*` against `https://uatapi.checkalt.com` (merchant `lockbox5`). Production `CHECKALT_*` and any other host are refused. | Auth, user/deposit account reads, synthetic-image test deposit, history/status, approve only if UAT requires it. Do not submit a negotiable check. |
 | Plaid | **No dedicated sandbox keys on AWS.** Plaid has `https://sandbox.plaid.com`, but Link is account-connection, not the deposit→disburse money path. | Link token, public-token exchange, webhook verification only. No transfers. |
 
 RDS Freedom/C1C `payment_provider_accounts` / wallets are labeled **`production`**. Those IDs must not be overwritten with sandbox IDs and must not be used to place a “sandbox” transfer.
@@ -72,11 +72,15 @@ Browser-supplied amounts are rejected. Server derives tenant, application user, 
 ## Routes
 
 - `GET /sandbox/status`
+- `POST /sandbox/isolation` (must pass before provider HTTP)
 - `POST /sandbox/moov/probe`
 - `POST /sandbox/moov/transfer`
 - `POST /sandbox/moov/retrieve`
 - `POST /sandbox/checkalt/probe`
+- `POST /sandbox/checkalt/account`
 - `POST /sandbox/checkalt/deposit`
+- `POST /sandbox/checkalt/status`
+- `POST /sandbox/checkalt/approve`
 - `POST /sandbox/plaid/probe`
 - `POST /sandbox/reconcile`
 - `POST /sandbox/cleanup`
@@ -91,7 +95,7 @@ Populate Secrets Manager `checksops/staging/providers` with **sandbox-only** key
 - `MOOV_SANDBOX_PLATFORM_ACCOUNT_ID`
 - `MOOV_SANDBOX_ALLOWED_ORIGIN`
 - `MOOV_SANDBOX_WEBHOOK_SECRET`
-- Optional CheckAlt: `CHECKALT_SANDBOX_*` plus a test/UAT `CHECKALT_SANDBOX_BASE_URL`
+- CheckAlt UAT: `CHECKALT_UAT_BASE_URL` (exactly `https://uatapi.checkalt.com`), `CHECKALT_UAT_USER_ID`, `CHECKALT_UAT_PASSWORD`, `CHECKALT_UAT_FI_KEY`, `CHECKALT_UAT_MERCHANT` (`lockbox5`)
 - Optional Plaid: `PLAID_SANDBOX_CLIENT_ID` / `PLAID_SANDBOX_SECRET`
 
 Then map sandbox payment methods into `aws_provider_sandbox_objects` for the staging tester tenant. Do not copy production Moov account IDs into that table.
