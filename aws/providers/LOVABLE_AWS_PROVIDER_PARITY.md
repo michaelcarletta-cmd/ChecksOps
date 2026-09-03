@@ -14,7 +14,7 @@ Prior live sidecar evidence (auth-only, no money movement): `aws/financial/UAT_R
 
 Provider **function names are no longer missing**. Every production Moov/CheckAlt Edge Function the frontend (or webhook/cron) calls has an AWS `/functions/v1/<name>` handler. Shared client semantics (pinned Moov version, facilitator POST, integer-cents CheckAlt `userAmount`, FinCapture auth path/body) are ported.
 
-Production cutover is still **NO-GO**. Remaining gates are configuration, networking, isolated-table policy, ImageScript oversized-image re-encode, webhook apply, and financial GRANTs — not unexplained missing function names.
+Production cutover is still **NO-GO**. Remaining gates are live staging NAT/egress proof from the API Lambda, Moov sandbox platform/connected-account IDs, and a CheckAlt-approved UAT deposit account number. Function bodies, image re-encode, sandbox webhook apply, and grant architecture are in place. Production flags stay false.
 
 | Gate | Status |
 | --- | --- |
@@ -35,7 +35,7 @@ A single sandbox transfer or a single UAT deposit would still not be enough for 
 | `INTENTIONAL AWS IMPROVEMENT` | AWS is stricter or safer on purpose. Do not revert to match Lovable weaknesses. Must not change the legitimate provider result. |
 | `NOT REQUIRED FOR CURRENT FLOW` | Exists in production; not on the deposit → disburse money path. Still inventoried and ported unless noted. |
 | `MISSING` | Production function has no AWS body that performs the same provider HTTP. Fail-closed `403` is not an equivalent. **None remain for Moov/CheckAlt function names.** |
-| `BEHAVIORAL DIFFERENCE` | AWS has a handler, but a documented semantic difference remains (isolation table, ImageScript, public-token auth). |
+| `BEHAVIORAL DIFFERENCE` | AWS has a handler, but a documented semantic difference remains. Remaining ones are explained (`moov-account-file-view` URL vs path; `moov-account-discover` aliased to selftest / not on the money path). |
 | `BLOCKED BY PROVIDER TEST ENVIRONMENT` | Handler exists; live HTTP cannot complete without non-production test IDs and/or NAT. Not a license to change working production semantics. |
 
 Each production function gets **one** primary status. Isolation and security deltas are also listed under helpers.
@@ -65,18 +65,18 @@ Dispatch (`handleFunctionInvoke`):
 | Helper | Production | AWS | Status |
 | --- | --- | --- | --- |
 | Moov OAuth client-credentials + `Origin` + `x-moov-version` | `_shared/moovClient.ts` `moovToken` / `moovFetch`. GET still sends `Content-Type: application/json`. Default Origin `https://checksops.com`. Pin `v2024.01.00`. | `parity/moov-client.mjs`. Same headers including GET `Content-Type`. ALS-bound sandbox keys. | `PARITY VERIFIED` (unit test: OAuth Origin + transfer `x-moov-version` + GET Content-Type). Sidecar OAuth previously succeeded. |
-| Moov facilitator resolution | `MOOV_SANDBOX_PLATFORM_ACCOUNT_ID` / `MOOV_PLATFORM_ACCOUNT_ID` then wallet `partnerAccountID` | Same algorithm in `facilitatorAccountId`. Staging binds sandbox platform id only. | Code `PARITY VERIFIED`. Live facilitator `BLOCKED BY PROVIDER TEST ENVIRONMENT` (`MOOV_SANDBOX_PLATFORM_ACCOUNT_ID` absent). |
+| Moov facilitator resolution | `MOOV_SANDBOX_PLATFORM_ACCOUNT_ID` / `MOOV_PLATFORM_ACCOUNT_ID` then wallet `partnerAccountID` | Same algorithm in `facilitatorAccountId`. Staging binds sandbox platform id only. Bootstrap oneshot creates a sandbox connected account and reads `wallet.partnerAccountID` — never copies production. | Code `PARITY VERIFIED`. Live facilitator `BLOCKED BY PROVIDER TEST CONFIGURATION` until sandbox platform id is written to Secrets Manager. |
 | Moov idempotency UUID | SHA-256 seed → v4-shaped `X-Idempotency-Key` | Same in `idempotencyUuid` | `PARITY VERIFIED` |
 | Moov transfer amount | integer cents `{ currency: "USD", value }` | `POST .../transfers` body `amount.value` integer | `PARITY VERIFIED` |
 | Moov readiness math | `_shared/moovReadiness.ts` | `providers/readiness.mjs` + live GETs in `moov-readiness` | Formula `PARITY VERIFIED`. Function now live (was local snapshot). |
 | CheckAlt auth | `POST /public/fincapture/authenticate` `{ userName, password }` + `merchant` header. JWT cached on `checkalt_config` in production. | Same path and body keys. UAT host overlay. JWT **not** written to production `checkalt_config`. | Path/body `PARITY VERIFIED`. JWT cache isolation is `INTENTIONAL AWS IMPROVEMENT`. |
 | CheckAlt `userAmount` | `Math.round(Number(check.amount) * 100)` from `check_intake_items.amount` (dollars → integer cents). Frontend never sends amount. | `formatCheckAltUserAmount(check.amount)` | `PARITY VERIFIED` |
-| CheckAlt depositor identity | `checkalt_tenant_accounts.sso_user_id` + `deposit_account_number`; `ssoKey` from register payload / `getUserAccountInformation`. Never the FI API login. | Isolated `aws_provider_sandbox_objects` row. Register rejects `sso_user_id === API login`. | Identity rule `PARITY VERIFIED`. Storage table is `INTENTIONAL AWS IMPROVEMENT` (no environment column on production CheckAlt tables). |
+| CheckAlt depositor identity | `checkalt_tenant_accounts.sso_user_id` + `deposit_account_number`; `ssoKey` from register payload / `getUserAccountInformation`. Never the FI API login. | Isolated `aws_provider_sandbox_objects` row. Register rejects `sso_user_id === API login`. Missing CheckAlt-approved UAT deposit account number returns `blocked_by_checkalt_test_configuration` and does not invent a number. | Identity rule `PARITY VERIFIED`. Storage table is `INTENTIONAL AWS IMPROVEMENT`. Live register `BLOCKED BY CHECKALT TEST CONFIGURATION`. |
 | CheckAlt fail-closed if unregistered | `loadTenantAccount` throws | `account_unregistered` 409 | `PARITY VERIFIED` / `INTENTIONAL AWS IMPROVEMENT` |
 | Persist-before-HTTP | `payment_idempotency_keys` / `payment_transfers` / `checkalt_deposits` insert before provider POST | Moov: `payment_transfers` with `environment='sandbox'` before HTTP. CheckAlt: `aws_provider_sandbox_operations` before HTTP. | Moov table `PARITY VERIFIED` (sandbox env). CheckAlt table isolation `INTENTIONAL AWS IMPROVEMENT`. |
 | Untrusted browser amounts | Production functions take `amount_cents` after auth (server still uses DB for CheckAlt). | Sandbox harness still rejects body `amount` / `userAmount`. CheckAlt submit reads `check_intake_items.amount` only. | `INTENTIONAL AWS IMPROVEMENT` |
 | Header spoof ignore | Edge Functions use JWT `auth.uid()` | Cognito mapping; `x-user-id` / `x-tenant-id` ignored | `INTENTIONAL AWS IMPROVEMENT` |
-| Webhook HMAC | `moov-webhook` verify + apply | `POST /webhooks/moov` verify, sanitize, `applied: false` | Verify `PARITY VERIFIED`. Apply dry-run `INTENTIONAL AWS IMPROVEMENT`. |
+| Webhook HMAC | `moov-webhook` verify + apply | `POST /webhooks/moov` verify, sanitize, sandbox apply when `AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED=true`. Production-environment rows are never updated. Duplicate receipts do not re-apply. | Verify `PARITY VERIFIED`. Sandbox apply `PARITY VERIFIED`. Production-env skip `INTENTIONAL AWS IMPROVEMENT`. Live apply `BLOCKED BY PROVIDER TEST ENVIRONMENT` until Lambda egress + sandbox IDs exist. |
 | `provider_egress_failed` | N/A (Supabase egress works) | Maps Node `fetch failed` to 503 | `INTENTIONAL AWS IMPROVEMENT` |
 | Frontend invoke envelope | supabase-js: HTTP 2xx → `{ data, error: null }`. Callers check `data.error` / `data.success`. | `src/integrations/aws/client.ts` now matches: HTTP 2xx → `{ data: body, error: null }`. No longer requires `body.ok`. | `PARITY VERIFIED` (was a behavioral difference). |
 
@@ -185,21 +185,21 @@ Staging overlay: host `https://uatapi.checkalt.com`, merchant header `lockbox5`,
 | `checkalt-register-account` | `POST /fincapture/useraccount/register` then `getUserAccountInformation` for `ssoKey` | `checkalt_tenant_accounts` | `CheckAltSettings` | Same HTTP. Writes `aws_provider_sandbox_objects`. Rejects API login as `sso_user_id`. | HTTP `PARITY VERIFIED`. Table isolation `INTENTIONAL AWS IMPROVEMENT`. Live register `BLOCKED BY PROVIDER TEST ENVIRONMENT` (needs UAT deposit account number issued by CheckAlt) |
 | `checkalt-verify-account` | `getUserAccountInformation` / `getDepositAccountInformation` with `userId: acct.sso_user_id` | none (read) | `CheckAltSettings` (`action: "user"`) | Same; UAT depositor row | `PARITY VERIFIED` |
 | `checkalt-test-connection` | Auth only; `{ success, message, token_preview }` | may refresh cached JWT on `checkalt_config` | `CheckAltSettings` | Auth only; no production config JWT write | `PARITY VERIFIED` + JWT isolation `INTENTIONAL AWS IMPROVEMENT` |
-| `checkalt-prepare-image` | ImageScript normalize one side; upload deposit-ready JPEG; return `prepared_path`; landscape / Mitek IQA | storage `claim-files` | `prepareCheckAltDeposit.ts` (browser prep is primary; edge is fallback) | Fast-path: if source already ≤ 450KB, return `prepared_path`. Oversized → 413 (no ImageScript) | `BEHAVIORAL DIFFERENCE` for oversized re-encode. Fast-path matches production skip-re-encode. Browser compression remains the current-flow primary path. |
-| `checkalt-submit-deposit` | Download front/back from storage, compress, `POST /fincapture/deposit/process` with `ssoKey` + integer-cents `userAmount`. No `testDeposit`. Status 40/120/127 mapping. Writes `checkalt_deposits` + intake/claim_checks | `checkalt_deposits`, `check_intake_items`, `claim_checks`, `deposit_items` | `CheckCommandCenter`, `DepositOperationsConsole` (`check_intake_item_id`, optional prepared paths) | Same process path, auth, integer cents, persist-before-HTTP, SVG-back rejection, combined b64 budget. Loads images from staging S3 when under budget. Isolated operations table; **does not** mutate production `checkalt_deposits` / intake status | HTTP + amount `PARITY VERIFIED`. Production-table writes `INTENTIONAL AWS IMPROVEMENT` (isolation). Oversized ImageScript `BEHAVIORAL DIFFERENCE`. Live process `BLOCKED BY PROVIDER TEST ENVIRONMENT` |
+| `checkalt-prepare-image` | ImageScript normalize one side; upload deposit-ready JPEG; return `prepared_path`; landscape / Mitek IQA 1680; JPEG 78→35; longest 1600 then ×0.8 to MIN_DIM 1300; 450KB budget | storage `claim-files` | `prepareCheckAltDeposit.ts` (browser prep is primary; edge is fallback) | Same constants and loop in `checkalt-image.mjs` (jpeg-js/pngjs). Uploads `{source}.deposit2.jpg`. Synthetic oversized/front/rear/under-limit tests. Not a 1×1 fixture. | Code `PARITY VERIFIED`. Live CheckAlt accept `BLOCKED BY CHECKALT TEST CONFIGURATION`. |
+| `checkalt-submit-deposit` | Download front/back from storage, compress, `POST /fincapture/deposit/process` with `ssoKey` + integer-cents `userAmount`. No `testDeposit`. Status 40/120/127 mapping. Writes `checkalt_deposits` + intake/claim_checks | `checkalt_deposits`, `check_intake_items`, `claim_checks`, `deposit_items` | `CheckCommandCenter`, `DepositOperationsConsole` (`check_intake_item_id`, optional prepared paths) | Same process path, auth, integer cents, persist-before-HTTP, SVG-back rejection, combined b64 budget. Re-encodes oversized images with the same budget pipeline. Isolated operations table; **does not** mutate production `checkalt_deposits` / intake status | HTTP + amount + image budget `PARITY VERIFIED`. Production-table writes `INTENTIONAL AWS IMPROVEMENT` (isolation). Live process `BLOCKED BY CHECKALT TEST CONFIGURATION`. |
 | `checkalt-approve-deposit` | Body `{ deposit_id, action }`. Lookup `checkalt_deposits.checkalt_reference`. `action` 1 approve / 2 reject. `ssoKey` **not** in schema. HTTP 200 is not enough; require `success === true`. Updates deposits + intake + claim_checks | `checkalt_deposits`, intake, `claim_checks` | `PendingApprovalDeposits`, command centers | Accepts production `deposit_id` against isolated operation id; same payload shape; checks `success === true`; default rejectCode 1721 | HTTP/contract `PARITY VERIFIED`. Production-table writes isolated `INTENTIONAL AWS IMPROVEMENT` |
 | `checkalt-poll-status` | `POST /fincapture/deposit/item` then fallback `/deposit/history`; updates stale `checkalt_deposits`; 60-day return window. Response `{ polled, updated, errors }` | `checkalt_deposits` | `CheckAltSettings` poll | Same item + history fallback against isolated operations. `{ polled, updated, errors, success }` | HTTP `PARITY VERIFIED`. Table isolation `INTENTIONAL AWS IMPROVEMENT` |
 | `checkalt-deposit-history` | Live `POST /fincapture/deposit/history` with tenant `ssoKey` | none (read) | `CheckAltDepositHistory` (`items`, `count`) | Live history with UAT `ssoKey` | `PARITY VERIFIED` when a UAT depositor exists; else fail-closed |
 | `checkalt-account-status` | Live user/deposit-account lookups | none (read) | No frontend caller (settings read `checkalt_tenant_accounts` directly) | Live `getUserAccountInformation` for isolated UAT row | `PARITY VERIFIED` |
 
-There is **no** production `checkalt-webhook` Edge Function. AWS `POST /webhooks/checkalt` is dry-run receipts (`INTENTIONAL AWS IMPROVEMENT`). Production CheckAlt status is poll + history.
+There is **no** production `checkalt-webhook` Edge Function. AWS `POST /webhooks/checkalt` verifies HMAC and applies isolated `aws_provider_sandbox_operations` when sandbox execution is on (`PARITY VERIFIED` for that isolation). Production CheckAlt status remains poll + history + approve.
 
 ### CheckAlt Edge Function totals
 
 | Status | Count |
 | --- | --- |
-| `PARITY VERIFIED` (HTTP/contract) | 8 (register/submit/poll/approve isolated-table caveat) |
-| `BEHAVIORAL DIFFERENCE` (primary) | 1 (`checkalt-prepare-image` ImageScript) |
+| `PARITY VERIFIED` (HTTP/contract) | 9 |
+| Unexplained `BEHAVIORAL DIFFERENCE` | **0** |
 | `MISSING` | **0** |
 | **Total** | **9** |
 
@@ -251,8 +251,9 @@ These routes remain a separate staging harness. Frontend production screens do *
 | `payment_provider_accounts` | create/onboard/sync/TOS | Yes, `environment='sandbox'` only |
 | `payment_provider_methods` | bank add, micro-deposits, sync | Yes, sandbox env |
 | `payment_provider_files` | file list/upload | Yes, sandbox env |
-| `payment_wallets` / `payment_wallet_ledger` | wallet-sync, transfer-status, webhooks | wallet-sync/fund write sandbox env. Webhook apply off |
-| `payment_transfers` | transfer-create, disburse, funding, fees | Yes, sandbox env. Staging Lambda may lack GRANT until financial IAM is activated (`AWS_FINANCIAL_PERMISSIONS_ACTIVATED` stays false) |
+| `payment_wallets` / `payment_wallet_ledger` | wallet-sync, transfer-status, webhooks | wallet-sync/fund write sandbox env. Sandbox webhook apply posts ledger for sandbox transfers only |
+| `payment_transfers` | transfer-create, disburse, funding, fees | Yes, sandbox env. Webhook apply updates `environment='sandbox'` only. `AWS_FINANCIAL_PERMISSIONS_ACTIVATED` stays false. |
+| `payment_webhook_events` | moov-webhook apply | Receipts table plus sandbox apply functions (`62_sandbox_financial_apply_grants.sql`). Production rows skipped. |
 | `payment_idempotency_keys` | account-create, transfers | Yes |
 | `payment_sweep_configs` | sweep-config | Yes |
 | `moov_invoices` / `moov_invoice_customers` | moov-invoice | Yes (sandbox) |
@@ -261,8 +262,7 @@ These routes remain a separate staging harness. Frontend production screens do *
 | `checkalt_deposits` | submit, approve, poll | **Not written** on staging |
 | `check_intake_items` status | submit/approve | **Not written** on staging for CheckAlt UAT |
 | `aws_provider_sandbox_objects` | n/a | CheckAlt UAT depositor |
-| `aws_provider_sandbox_operations` | n/a | CheckAlt submit/poll/approve |
-| `payment_webhook_events` | moov-webhook apply | No (receipts table instead) |
+| `aws_provider_sandbox_operations` | n/a | CheckAlt submit/poll/approve / webhook apply |
 
 CheckAlt isolation is required because those production tables have no environment column. Moov already keys rows by `environment`.
 
@@ -302,13 +302,14 @@ Staging already has UAT API login + `https://uatapi.checkalt.com` + merchant `lo
 
 | Item | Current |
 | --- | --- |
-| Lambda | `checksops-staging-api` |
+| Lambda | `checksops-staging-api` (private VPC, no public inbound beyond API Gateway) |
 | VPC | `vpc-09f2268778966ce97` |
-| NAT gateway | **none** |
-| Observed from Lambda | `503 provider_egress_failed` |
-| This Cloud Agent VM | HTTPS to `api.moov.io` and `uatapi.checkalt.com` succeeds (host reachable). Secrets Manager token on this turn was **expired**, so live OAuth/auth was not re-run here. Prior no-VPC sidecar: Moov OAuth succeeded (`tokenType=Bearer`); CheckAlt `/public/fincapture/authenticate` succeeded. |
+| NAT gateway | **none live.** Template can create one when `PublicSubnetId` + `PrivateRouteTableId` are set. Oneshot: `aws/providers/oneshot/ensure-staging-nat.mjs`. |
+| Lambda SG HTTPS 443 | Template now includes `0.0.0.0/0` tcp/443 **egress only**. RDS SG is unchanged. |
+| Proof endpoint | `GET /providers/egress` — must be invoked **on the Lambda**. |
+| This Cloud Agent VM | HTTPS to `api.moov.io` and `uatapi.checkalt.com` succeeds. **Not Lambda proof.** STS was expired this turn, so NAT create + Lambda invoke did not run. |
 
-Required before the **API** can call providers: NAT (or equivalent HTTPS egress), **or** a dedicated no-VPC invoker. Cursor staging role cannot create NAT. Independent of provider-code parity.
+RDS is not made public. Lambda does not get a public inbound endpoint beyond existing API Gateway.
 
 ---
 
@@ -323,7 +324,9 @@ Credentials are never printed. Key **names** only.
 | Moov `GET /accounts` | Not required for transfers | Sidecar 401 | Do not change Origin/version to chase 401 |
 | CheckAlt `POST /public/fincapture/authenticate` `{ userName, password }` + merchant | JWT | Sidecar **succeeded**. Unit test asserts path, body keys, merchant `lockbox5` | `PARITY VERIFIED` |
 | CheckAlt `userAmount` | dollars × 100 integer | Unit test: check `123.45` → `12345`. No `testDeposit` | `PARITY VERIFIED` |
-| CheckAlt process/approve/history | Requires registered depositor `ssoKey` | Not executed (no UAT depositor). Fail-closed `account_unregistered` | `BLOCKED BY PROVIDER TEST ENVIRONMENT` |
+| CheckAlt process/approve/history | Requires registered depositor `ssoKey` | Not executed. Register without CheckAlt-approved UAT account number returns `blocked_by_checkalt_test_configuration` and does not call FinCapture. | `BLOCKED BY CHECKALT TEST CONFIGURATION` |
+| CheckAlt image prepare | Landscape, 450KB, `.deposit2.jpg`, front/rear | Unit tests with synthetic oversized + under-limit + portrait rasters. Not a 1×1 fixture. | Code `PARITY VERIFIED` |
+| Webhook apply | Production `moov-webhook` state updates | Sandbox rows applied; production-environment rows skipped; duplicates not re-applied | Code `PARITY VERIFIED`. Live `BLOCKED BY PROVIDER TEST ENVIRONMENT` |
 
 ---
 
@@ -338,26 +341,28 @@ Do not revert these to “match Lovable.”
 5. CheckAlt UAT rows isolated from production CheckAlt tables.
 6. Depositor must not equal FI API login.
 7. Persist-before-HTTP; reject untrusted browser amount fields on the sandbox harness.
-8. Webhook dry-run (`applied: false`); payload sanitization.
+8. Webhook signature verification + sanitization + server-derived tenant. Sandbox apply is opt-in via `AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED`. Production-environment financial rows are never updated.
 9. No public Moov key returned to the browser for TOS/bank-link tokens.
 10. Public recipient/invoice/deductible token routes still require Cognito mapping on AWS staging.
 11. Map VPC `fetch failed` to `provider_egress_failed`.
 12. Secrets Manager for provider credentials.
+13. Financial apply GRANT architecture is EXECUTE-on-function only (`62_sandbox_financial_apply_grants.sql`). `64_financial_activation_grants.sql` is **not applied**. `AWS_FINANCIAL_PERMISSIONS_ACTIVATED` stays false.
 
 ---
 
 ## Remaining production-required gaps (not missing function names)
 
-These keep cutover at **NO-GO**. They are explained.
+These keep cutover at **NO-GO**. They are explained. None are unexplained `MISSING` or unexplained `BEHAVIORAL DIFFERENCE`.
 
-1. **NAT / Lambda egress** — API cannot complete live provider HTTP.
-2. **`MOOV_SANDBOX_PLATFORM_ACCOUNT_ID` + sandbox connected accounts/payment methods** — cannot execute a real sandbox transfer.
-3. **CheckAlt UAT depositor + `ssoKey` + deposit account** — cannot execute a real UAT deposit. Do not invent bank numbers.
-4. **ImageScript oversized re-encode** — AWS fast-path only when bytes already ≤ 450KB (same as production skip). Oversized images 413 until ImageScript/sharp is ported or the browser prep path succeeds.
-5. **Webhook apply** — receipts only; production ledger/method/stakeholder updates still dry-run.
-6. **Financial GRANTs** — `AWS_FINANCIAL_PERMISSIONS_ACTIVATED` stays false; live `payment_transfers` DML from Lambda may be denied until activation.
-7. **`moov-account-file-view` signed URL** — path vs URL for the UI viewer.
-8. **`moov-account-discover` full adopt loop** — not on the money path; currently aliased to selftest.
+1. **NAT / Lambda egress (live proof)** — IaC + `GET /providers/egress` are implemented. Creating NAT and proving reachability **from `checksops-staging-api`** is `BLOCKED BY AWS CREDENTIALS / IAM` on this agent (expired STS). Do not treat this VM as Lambda proof.
+2. **`MOOV_SANDBOX_PLATFORM_ACCOUNT_ID` + sandbox connected accounts/payment methods** — bootstrap oneshot exists (`wallet.partnerAccountID`). Must not copy production. `BLOCKED BY PROVIDER TEST CONFIGURATION` until the oneshot can run.
+3. **CheckAlt UAT depositor + `ssoKey` + approved test deposit account** — `BLOCKED BY CHECKALT TEST CONFIGURATION`. Do not invent bank numbers.
+4. **Live $0.01 Moov sandbox transfer + provider-side idempotency** — blocked on (1)+(2).
+5. **Live CheckAlt UAT deposit (1 / 100 / 12345 cents)** — blocked on (1)+(3). Image re-encode is code `PARITY VERIFIED`.
+6. **Live webhook apply against sandbox records** — code `PARITY VERIFIED`; live blocked on (1)+(2).
+7. **Apply `62_sandbox_financial_apply_grants.sql` on staging RDS** — architecture is in repo; live apply blocked on AWS credentials. Activation file `64` stays unapplied.
+8. **`moov-account-file-view` signed URL** — explained `BEHAVIORAL DIFFERENCE` (path vs URL); not on the money path.
+9. **`moov-account-discover` full adopt loop** — explained `BEHAVIORAL DIFFERENCE` / `NOT REQUIRED FOR CURRENT FLOW`.
 
 No unexplained missing production-required **function** remains.
 
@@ -368,20 +373,20 @@ No unexplained missing production-required **function** remains.
 | Requirement | Result |
 | --- | --- |
 | 1. Known-working Lovable/Supabase provider behavior fully inventoried | **Yes** (48 Moov-class + 9 CheckAlt) |
-| 2. AWS equivalent identified for every production-required function | **Yes** (`/functions/v1/*` ports). Webhook apply intentionally dry-run. |
-| 3. Request/response semantics preserved | **Yes** for money-path HTTP (facilitator POST, integer cents, FinCapture auth/process/approve/item). Documented diffs: ImageScript, public-token Cognito, file-view URL, CheckAlt table isolation. |
-| 4. Database side effects preserved | **Moov sandbox env rows: yes.** **CheckAlt production tables: intentionally not written on staging.** |
+| 2. AWS equivalent identified for every production-required function | **Yes** (`/functions/v1/*` ports). Sandbox webhook apply implemented. |
+| 3. Request/response semantics preserved | **Yes** for money-path HTTP (facilitator POST, integer cents, FinCapture auth/process/approve/item, ImageScript-equivalent re-encode). Explained diffs: public-token Cognito, file-view URL, CheckAlt table isolation, discover alias. |
+| 4. Database side effects preserved | **Moov sandbox env rows: yes.** **CheckAlt production tables: intentionally not written on staging.** Sandbox webhook apply updates sandbox rows only. |
 | 5. Frontend contract preserved | **Yes** (HTTP 2xx envelope; same invoke names/bodies). UAT deposits will not appear in production `checkalt_deposits` queries. |
 | 6. Intentional differences documented | **Yes** |
-| 7. Real provider test passes where test environment permits | **Auth-only previously proven (sidecar).** Transfer/deposit not permitted by missing IDs + Lambda NAT. This VM Secrets Manager token expired this turn; hosts are reachable. |
-| 8. No unexplained production-required functionality missing | **Yes — none unexplained.** Remaining items are named gates 1–8 above. |
+| 7. Real provider test passes where test environment permits | **Auth-only previously proven (sidecar).** Transfer/deposit/Lambda egress not permitted this turn (expired STS + missing sandbox/UAT IDs). |
+| 8. No unexplained production-required functionality missing | **Yes — none unexplained.** Remaining items are named gates 1–9 above. |
 
 | Question | Answer |
 | --- | --- |
-| **Moov GO?** | **NO-GO** (code ports exist; live sandbox transfer + NAT + platform id + webhook apply not satisfied) |
-| **CheckAlt GO?** | **NO-GO** (code ports exist; live UAT deposit + depositor + ImageScript + NAT not satisfied) |
+| **Moov GO?** | **NO-GO** (code + sandbox apply + grants done; live NAT proof, platform id, $0.01 transfer not satisfied) |
+| **CheckAlt GO?** | **NO-GO** (image re-encode `PARITY VERIFIED`; live UAT depositor still `BLOCKED BY CHECKALT TEST CONFIGURATION`) |
 | **Overall AWS GO?** | **NO-GO** |
 | Production flags | Remain **false** |
 | Merge / DNS / production webhooks | **Do not** |
 
-Unit evidence: `/exec-daemon/node --test aws/tests/*.test.mjs` → **164/164 pass**, including facilitator POST, integer cents, persist-before-HTTP, pinned `v2024.01.00`, CheckAlt auth path/body, depositor ≠ API login, approve `deposit_id` + action 1.
+Unit evidence: `node --test aws/tests/*.test.mjs` → **172/172 pass**, including facilitator POST, integer cents, persist-before-HTTP, pinned `v2024.01.00`, CheckAlt auth path/body, depositor ≠ API login, approve `deposit_id` + action 1, oversized/front/rear image re-encode, sandbox webhook apply vs production-row skip, register blocked without CheckAlt test account number, financial fail-closed while activation flag is false.
