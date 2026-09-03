@@ -18,6 +18,7 @@ export const SANDBOX_SECRET_KEYS = [
   'CHECKALT_UAT_PASSWORD',
   'CHECKALT_UAT_FI_KEY',
   'CHECKALT_UAT_MERCHANT',
+  'CHECKALT_UAT_DEPOSIT_ACCOUNT_NUMBER',
   'CHECKALT_SANDBOX_USERNAME',
   'CHECKALT_SANDBOX_PASSWORD',
   'CHECKALT_SANDBOX_FI_KEY',
@@ -186,6 +187,7 @@ export const classifyCheckAltSandbox = (secrets = {}) => {
     dedicatedUatUrlApproved: uatUrlOk,
     merchantConfigured: Boolean(merchant),
     merchantApproved: merchantOk,
+    approvedDepositAccountConfigured: present(secrets, 'CHECKALT_UAT_DEPOSIT_ACCOUNT_NUMBER'),
     productionKeysPresent: productionCreds,
     webhookSecretConfigured: present(secrets, 'CHECKALT_SANDBOX_WEBHOOK_SECRET'),
     refuseProductionKeys: true,
@@ -258,6 +260,7 @@ export const loadSandboxCredentials = async (getSecrets = loadProviderSecrets) =
         password: secrets.CHECKALT_UAT_PASSWORD,
         fiKey: secrets.CHECKALT_UAT_FI_KEY || null,
         merchant: merchantHeaderForCheckAltUat(secrets.CHECKALT_UAT_MERCHANT),
+        depositAccountNumber: secrets.CHECKALT_UAT_DEPOSIT_ACCOUNT_NUMBER || null,
         webhookSecret: secrets.CHECKALT_SANDBOX_WEBHOOK_SECRET || null,
         authPath: '/public/jwtauth/authenticate',
       }

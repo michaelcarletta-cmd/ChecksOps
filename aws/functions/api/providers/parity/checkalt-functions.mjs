@@ -19,9 +19,10 @@ import {
   getUserAccountInfo,
   uatConfigOverlay,
 } from './checkalt-client.mjs';
+import { normalizeToBudget, PER_IMAGE_BYTES_BUDGET as IMAGE_BUDGET, toDepositPath } from './checkalt-image.mjs';
 
 const jwtCache = { token: null, expiresAt: null };
-const PER_IMAGE_BYTES_BUDGET = 450_000;
+const PER_IMAGE_BYTES_BUDGET = IMAGE_BUDGET;
 const MAX_TOTAL_B64_CHARS = 1_600_000;
 
 const bytesToBase64 = (bytes) => Buffer.from(bytes).toString('base64');
@@ -44,13 +45,52 @@ async function downloadClaimFileBytes(path, deps = {}) {
   return Buffer.concat(chunks);
 }
 
+async function headClaimFileBytes(path, deps = {}) {
+  if (!path) return null;
+  if (typeof deps.headClaimFile === 'function') return deps.headClaimFile(path);
+  const { HeadObjectCommand, GetObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
+  const { s3KeyFor } = await import('../../storage-paths.mjs');
+  const bucket = process.env.FILES_BUCKET;
+  if (!bucket) return null;
+  const key = s3KeyFor('claim-files', path);
+  if (!key) return null;
+  const s3 = deps.s3 || new S3Client({ region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1' });
+  try {
+    const head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    const size = Number(head.ContentLength || 0);
+    if (size <= 0 || size > PER_IMAGE_BYTES_BUDGET) return null;
+    const out = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const chunks = [];
+    for await (const chunk of out.Body) chunks.push(chunk);
+    return Buffer.concat(chunks);
+  } catch {
+    return null;
+  }
+}
+
+async function uploadClaimFileBytes(path, bytes, deps = {}) {
+  if (typeof deps.uploadClaimFile === 'function') return deps.uploadClaimFile(path, bytes);
+  const { PutObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
+  const { s3KeyFor } = await import('../../storage-paths.mjs');
+  const bucket = process.env.FILES_BUCKET;
+  if (!bucket) throw new Error('FILES_BUCKET is not configured');
+  const key = s3KeyFor('claim-files', path);
+  if (!key) throw new Error(`invalid claim-files path: ${path}`);
+  const s3 = deps.s3 || new S3Client({ region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1' });
+  await s3.send(new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    Body: bytes,
+    ContentType: 'image/jpeg',
+  }));
+  return path;
+}
+
 async function imageToBudgetB64(bytes, label, { prepared = false } = {}) {
   if (!bytes) return null;
-  if (prepared || bytes.length <= PER_IMAGE_BYTES_BUDGET) return bytesToBase64(bytes);
-  throw new Error(
-    `${label} image exceeds CheckAlt's ${Math.round(PER_IMAGE_BYTES_BUDGET / 1024)}KB budget (${Math.round(bytes.length / 1024)}KB). ` +
-    'Production re-encodes oversized images with ImageScript. AWS uses the same fast-path when bytes are already under budget; reupload a compressed JPEG/PNG or run browser prepareCheckAltDeposit first.',
-  );
+  if (prepared && bytes.length <= PER_IMAGE_BYTES_BUDGET) return bytesToBase64(bytes);
+  const normalized = normalizeToBudget(bytes, label);
+  return bytesToBase64(normalized);
 }
 
 const uatCfg = (uat) => uatConfigOverlay({
@@ -159,10 +199,19 @@ const registerAccount = {
   run: async ({ client, mapping, body, ctx, fetchImpl }) => {
     const tenantId = body.tenant_id || ctx.tenantId;
     if (!tenantId) return fail('tenant_id is required', 400);
-    const ssoUserId = String(body.sso_user_id || '').trim();
-    const depositAccountNumber = String(body.deposit_account_number || '').trim();
-    if (!ssoUserId || !depositAccountNumber) {
-      return fail('sso_user_id and deposit_account_number are required', 400);
+    const ssoUserId = String(body.sso_user_id || body.ssoUserId || '').trim()
+      || `aws-uat-test-${crypto.randomUUID()}`;
+    const fromSecret = String(ctx.uat.depositAccountNumber || '').trim();
+    const depositAccountNumber = String(body.deposit_account_number || fromSecret || '').trim();
+    if (!depositAccountNumber) {
+      return fail('blocked_by_checkalt_test_configuration', 409, {
+        classification: 'BLOCKED BY CHECKALT TEST CONFIGURATION',
+        message: 'CheckAlt has not provided an approved UAT test deposit account number. Do not invent one. Do not copy production checkalt_tenant_accounts or reuse a production sso_user_id.',
+        liveProviderCalled: false,
+      });
+    }
+    if (!ssoUserId) {
+      return fail('sso_user_id is required', 400);
     }
     if (ssoUserId === (ctx.uat.username || ctx.uat.userId)) {
       return fail('uat_depositor_must_not_be_api_login', 400, {
@@ -603,20 +652,33 @@ const prepareImage = {
     if (isSvgPath(sourcePath) && side === 'back') {
       return fail('Back image needs an approved deposit JPEG before submission. Generate and approve the deposit image before depositing.', 400);
     }
+    const preparedPath = toDepositPath(sourcePath);
+    const cached = await headClaimFileBytes(preparedPath, deps);
+    if (cached && cached.length > 0 && cached.length <= PER_IMAGE_BYTES_BUDGET) {
+      return jsonResult({
+        success: true,
+        prepared_path: preparedPath,
+        cached: true,
+        liveProviderCalled: false,
+        bytes: cached.length,
+      });
+    }
     const bytes = await downloadClaimFileBytes(sourcePath, deps);
     if (!bytes) return fail(`${side} image download failed`, 404);
-    if (bytes.length > PER_IMAGE_BYTES_BUDGET) {
-      return fail(
-        `${side} image exceeds CheckAlt's ${Math.round(PER_IMAGE_BYTES_BUDGET / 1024)}KB budget. Production checkalt-prepare-image re-encodes with ImageScript. AWS fast-path returns prepared_path only when the source is already under budget.`,
-        413,
-      );
+    let normalized;
+    try {
+      normalized = normalizeToBudget(bytes, side);
+    } catch (error) {
+      return fail(error.message, 413);
     }
+    await uploadClaimFileBytes(preparedPath, normalized, deps);
     return jsonResult({
       success: true,
-      prepared_path: sourcePath,
+      prepared_path: preparedPath,
+      cached: false,
       liveProviderCalled: false,
-      skipped_reencode: true,
-      bytes: bytes.length,
+      bytes: normalized.length,
+      source_bytes: bytes.length,
     });
   },
 };

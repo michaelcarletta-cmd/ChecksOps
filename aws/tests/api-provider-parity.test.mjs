@@ -358,7 +358,10 @@ test('checkalt-submit-deposit uses production auth path, integer cents from chec
         createClient: () => client,
         loadSandboxCredentials: async () => sandboxCreds(),
         fetchImpl,
-        downloadClaimFile: async () => Buffer.from('fake-jpeg-under-budget'),
+        downloadClaimFile: async () => {
+          const { syntheticCheckRaster } = await import('../functions/api/providers/parity/checkalt-image.mjs');
+          return syntheticCheckRaster({ width: 200, height: 160, flat: true });
+        },
       },
     );
     assert.equal(result.success, true);

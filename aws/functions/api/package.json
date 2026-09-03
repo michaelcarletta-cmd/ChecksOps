@@ -10,6 +10,8 @@
     "@aws-sdk/client-secrets-manager": "3.1124.0",
     "@aws-sdk/s3-request-presigner": "3.1124.0",
     "aws-jwt-verify": "^5.2.1",
-    "pg": "8.23.0"
+    "jpeg-js": "^0.4.4",
+    "pg": "8.23.0",
+    "pngjs": "^7.0.0"
   }
 }
