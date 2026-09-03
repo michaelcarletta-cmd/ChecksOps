@@ -1,3 +1,5 @@
+import { WEBAUTHN_AUTH_ROUTES, WEBAUTHN_STAGING } from './auth-webauthn.mjs';
+
 const POOL_ID = () => process.env.COGNITO_USER_POOL_ID;
 const CLIENT_ID = () => process.env.COGNITO_CLIENT_ID;
 const TESTER_EMAIL = 'checksops-tester@freedomadj.com';
@@ -345,6 +347,7 @@ export const AUTH_ROUTES = {
   '/auth/forgot': handleAuthForgot,
   '/auth/confirm-forgot': handleAuthConfirmForgot,
   '/auth/logout': handleAuthLogout,
+  ...WEBAUTHN_AUTH_ROUTES,
 };
 
 export const PASSWORDLESS_AUTH = {
@@ -353,4 +356,5 @@ export const PASSWORDLESS_AUTH = {
   authFlow: 'USER_AUTH',
   preferredChallenge: 'EMAIL_OTP',
   passwordAcceptedByPasswordlessRoutes: false,
+  webAuthn: WEBAUTHN_STAGING,
 };
