@@ -5,6 +5,7 @@ export const PLAID_SANDBOX_HOST = 'https://sandbox.plaid.com';
 export const PLAID_PRODUCTION_HOST = 'https://production.plaid.com';
 export const CHECKALT_UAT_HOST = 'https://uatapi.checkalt.com';
 export const CHECKALT_UAT_MERCHANT_EXPECTED = 'lockbox5';
+export const CHECKALT_UAT_AUTH_PATH = '/public/fincapture/authenticate';
 
 export const SANDBOX_SECRET_KEYS = [
   'MOOV_SANDBOX_PUBLIC_KEY',
@@ -182,7 +183,7 @@ export const classifyCheckAltSandbox = (secrets = {}) => {
     reason,
     approvedHost: CHECKALT_UAT_HOST,
     approvedMerchant: CHECKALT_UAT_MERCHANT_EXPECTED,
-    authPath: '/public/jwtauth/authenticate',
+    authPath: CHECKALT_UAT_AUTH_PATH,
     dedicatedUatUrlConfigured: Boolean(uatUrl),
     dedicatedUatUrlApproved: uatUrlOk,
     merchantConfigured: Boolean(merchant),
@@ -262,7 +263,7 @@ export const loadSandboxCredentials = async (getSecrets = loadProviderSecrets) =
         merchant: merchantHeaderForCheckAltUat(secrets.CHECKALT_UAT_MERCHANT),
         depositAccountNumber: secrets.CHECKALT_UAT_DEPOSIT_ACCOUNT_NUMBER || null,
         webhookSecret: secrets.CHECKALT_SANDBOX_WEBHOOK_SECRET || null,
-        authPath: '/public/jwtauth/authenticate',
+        authPath: CHECKALT_UAT_AUTH_PATH,
       }
       : null,
     plaid: snapshot.plaid.available
