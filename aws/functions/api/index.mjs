@@ -25,6 +25,7 @@ import {
   handleStorageMove,
 } from './storage-write.mjs';
 import { handleWorkflowRequest } from './workflow.mjs';
+import { handleFinancialRequest } from './financial.mjs';
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -355,6 +356,19 @@ export const handler = async (event) => {
       environment: process.env.CHECKSOPS_ENV || 'unknown',
       productionSupabaseChanged: false,
       ...result,
+    });
+  }
+
+  const financial = await handleFinancialRequest(event, path, method);
+  if (financial) {
+    return json(financial.statusCode || (financial.ok ? 200 : 403), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      productionWebhooksRedirected: false,
+      productionDnsChanged: false,
+      liveProviderTransactions: false,
+      ...financial,
     });
   }
 
