@@ -267,11 +267,20 @@ const main = async () => {
   const msgIns = await write(freedomToken, {
     table: 'check_messages',
     op: 'insert',
-    values: { check_id: freedomCheck.id, body: 'should not write ledger' },
+    values: { check_id: freedomCheck.id, body: `AWS T2 REGRESSION ${Date.now()}` },
   });
-  record('check_messages INSERT denied (ledger trigger)', msgIns.status === 403, {
-    detail: `error=${msgIns.json.error}`,
+  const msgRow = rowOf(msgIns.json.data);
+  record('check_messages INSERT allowed (T3 approved zero-amount ops_note)', msgIns.status === 200 && Boolean(msgRow?.id), {
+    detail: `status=${msgIns.status} id=${msgRow?.id} error=${msgIns.json.error || ''}`,
   });
+  if (msgRow?.id) {
+    await write(freedomToken, {
+      table: 'check_messages',
+      op: 'update',
+      values: { is_deleted: true },
+      filters: [{ column: 'id', op: 'eq', value: msgRow.id }],
+    });
+  }
 
   const unauth = await write(null, {
     table: 'check_intake_items',
