@@ -33,6 +33,7 @@ import {
 import { plaidExecutionStub, publicPlaidStatus } from './providers/plaid.mjs';
 import { quickbooksExecutionStub, quickbooksInterface } from './providers/quickbooks.mjs';
 import { handleProviderWebhook } from './providers/webhooks.mjs';
+import { handleProviderEgress } from './providers/egress.mjs';
 import { providerSandboxExecutionEnabled } from './sandbox-flags.mjs';
 import { hasParityHandler, runParityHandler } from './providers/parity/dispatch.mjs';
 
@@ -384,6 +385,7 @@ export const providerRoute = (path, method) => {
   if (method === 'GET' && (path === '/providers/status' || path === '/providers/health')) {
     return { kind: 'flags' };
   }
+  if (method === 'GET' && path === '/providers/egress') return { kind: 'egress' };
   if (method === 'POST' && path === '/providers/moov/status') return { kind: 'moov' };
   if (method === 'POST' && path === '/providers/checkalt/status') return { kind: 'checkalt' };
   if (method === 'POST' && path === '/providers/plaid/status') return { kind: 'plaid' };
@@ -401,6 +403,7 @@ export const handleProviderRequest = async (event, path, method, deps = {}) => {
   const route = providerRoute(path, method);
   if (!route) return null;
   if (route.kind === 'flags') return handleProviderFlags();
+  if (route.kind === 'egress') return handleProviderEgress(event, deps);
   if (route.kind === 'moov') return handleMoovStatus(event, deps);
   if (route.kind === 'checkalt') return handleCheckAltStatus(event, deps);
   if (route.kind === 'plaid') return handlePlaidStatus(event, deps);
