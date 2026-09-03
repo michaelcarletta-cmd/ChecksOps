@@ -2,8 +2,11 @@
 /**
  * Obtain MOOV_SANDBOX_PLATFORM_ACCOUNT_ID from Moov sandbox account context.
  *
- * Safe path: OAuth with sandbox keys → create a dedicated sandbox connected
- * account → GET payment-methods → wallet.partnerAccountID (facilitator).
+ * Safe paths:
+ *   1. use an operator-provided sandbox connected account id, or
+ *   2. create a dedicated sandbox connected account when /accounts.write is granted.
+ * Then mint the account-specific payment-method scope and resolve
+ * wallet.partnerAccountID (the facilitator), matching the production client.
  *
  * Never copies MOOV_PLATFORM_ACCOUNT_ID / production RDS provider IDs.
  * Never prints secret values.
@@ -16,7 +19,7 @@ const REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-e
 const SECRET_ID = process.env.PROVIDER_SECRETS_ARN || 'checksops/staging/providers';
 const MOOV_HOST = 'https://api.moov.io';
 const PINNED = 'v2024.01.00';
-const ORIGIN = 'https://checksops.com';
+const DEFAULT_ORIGIN = 'https://checksops.com';
 
 const awsJson = (args) => JSON.parse(execFileSync('aws', ['--region', REGION, '--output', 'json', ...args], {
   encoding: 'utf8',
@@ -28,6 +31,15 @@ const redact = (value) => {
   const s = String(value);
   if (s.length <= 8) return '[redacted]';
   return `${s.slice(0, 4)}…${s.slice(-4)}`;
+};
+
+const normalizeOrigin = (value) => {
+  try {
+    const url = new URL(value || DEFAULT_ORIGIN);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return DEFAULT_ORIGIN;
+  }
 };
 
 const loadSecretObject = () => {
@@ -42,7 +54,7 @@ const putSecretObject = (parsed) => {
   });
 };
 
-const moovToken = async (publicKey, secretKey, scopes, fetchImpl) => {
+const moovToken = async (publicKey, secretKey, scopes, origin, fetchImpl) => {
   const body = new URLSearchParams({
     grant_type: 'client_credentials',
     scope: scopes.join(' '),
@@ -52,8 +64,7 @@ const moovToken = async (publicKey, secretKey, scopes, fetchImpl) => {
     headers: {
       Authorization: `Basic ${Buffer.from(`${publicKey}:${secretKey}`).toString('base64')}`,
       'Content-Type': 'application/x-www-form-urlencoded',
-      Origin: ORIGIN,
-      'x-moov-version': PINNED,
+      Origin: origin,
     },
     body,
   });
@@ -67,17 +78,17 @@ const moovToken = async (publicKey, secretKey, scopes, fetchImpl) => {
   return json.access_token;
 };
 
-const moovJson = async (token, path, { method = 'GET', body, fetchImpl }) => {
+const moovJson = async (token, path, { method = 'GET', body, origin, fetchImpl }) => {
   const resp = await fetchImpl(`${MOOV_HOST}${path}`, {
     method,
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
       Accept: 'application/json',
-      Origin: ORIGIN,
+      Origin: origin,
       'x-moov-version': PINNED,
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await resp.text();
   let json = null;
@@ -97,18 +108,35 @@ export async function bootstrapMoovSandbox({ fetchImpl = fetch, writeSecret = tr
       usedProductionPlatformId: false,
     };
   }
+
   const parsed = secrets.parsed || {};
+  const origin = normalizeOrigin(parsed.MOOV_SANDBOX_ALLOWED_ORIGIN || DEFAULT_ORIGIN);
+
   if (parsed.MOOV_SANDBOX_PLATFORM_ACCOUNT_ID) {
+    if (parsed.MOOV_PLATFORM_ACCOUNT_ID
+      && parsed.MOOV_SANDBOX_PLATFORM_ACCOUNT_ID === parsed.MOOV_PLATFORM_ACCOUNT_ID) {
+      return {
+        ok: false,
+        classification: 'BLOCKED BY PROVIDER TEST CONFIGURATION',
+        error: 'refused_production_platform_account_id',
+        usedProductionPlatformId: true,
+        copiedFromProduction: false,
+      };
+    }
     return {
       ok: true,
       alreadyConfigured: true,
       platformAccountId: parsed.MOOV_SANDBOX_PLATFORM_ACCOUNT_ID,
       platformAccountIdRedacted: redact(parsed.MOOV_SANDBOX_PLATFORM_ACCOUNT_ID),
+      connectedAccountId: parsed.MOOV_SANDBOX_CONNECTED_ACCOUNT_ID || null,
+      connectedAccountIdRedacted: redact(parsed.MOOV_SANDBOX_CONNECTED_ACCOUNT_ID),
       usedProductionPlatformId: false,
       copiedFromProduction: false,
       source: 'secrets_manager',
+      originConfigured: Boolean(parsed.MOOV_SANDBOX_ALLOWED_ORIGIN),
     };
   }
+
   if (!parsed.MOOV_SANDBOX_PUBLIC_KEY || !parsed.MOOV_SANDBOX_SECRET_KEY) {
     return {
       ok: false,
@@ -117,63 +145,118 @@ export async function bootstrapMoovSandbox({ fetchImpl = fetch, writeSecret = tr
       usedProductionPlatformId: false,
     };
   }
-  if (parsed.MOOV_PLATFORM_ACCOUNT_ID && !parsed.MOOV_SANDBOX_PLATFORM_ACCOUNT_ID) {
-    // Presence of production id is noted only so we never copy it.
+
+  let connectedAccountId = parsed.MOOV_SANDBOX_CONNECTED_ACCOUNT_ID || null;
+  let createdConnectedAccount = false;
+
+  if (!connectedAccountId) {
+    let createToken;
+    try {
+      createToken = await moovToken(
+        parsed.MOOV_SANDBOX_PUBLIC_KEY,
+        parsed.MOOV_SANDBOX_SECRET_KEY,
+        ['/accounts.write'],
+        origin,
+        fetchImpl,
+      );
+    } catch (error) {
+      return {
+        ok: false,
+        classification: error.status === 401 ? 'BLOCKED BY PROVIDER TEST CONFIGURATION' : 'BLOCKED BY PROVIDER TEST ENVIRONMENT',
+        error: String(error.message || error).slice(0, 120),
+        oauth: false,
+        usedProductionPlatformId: false,
+        required: 'Moov sandbox /accounts.write OR MOOV_SANDBOX_CONNECTED_ACCOUNT_ID',
+      };
+    }
+
+    const displayName = `ChecksOps AWS sandbox ${new Date().toISOString().slice(0, 10)}`;
+    const created = await moovJson(createToken, '/accounts', {
+      method: 'POST',
+      origin,
+      fetchImpl,
+      body: {
+        accountType: 'business',
+        displayName,
+        profile: {
+          business: {
+            legalBusinessName: displayName,
+            businessType: 'llc',
+          },
+        },
+      },
+    });
+    if (!created.ok) {
+      return {
+        ok: false,
+        classification: 'BLOCKED BY PROVIDER TEST CONFIGURATION',
+        error: `moov_account_create_${created.status}`,
+        oauth: true,
+        usedProductionPlatformId: false,
+        required: 'Moov sandbox /accounts.write OR MOOV_SANDBOX_CONNECTED_ACCOUNT_ID',
+        note: 'Do not guess a sandbox account id and do not copy production.',
+      };
+    }
+    connectedAccountId = created.json?.accountID || created.json?.accountId || created.json?.account?.accountID;
+    createdConnectedAccount = true;
   }
 
-  let token;
+  if (!connectedAccountId) {
+    return {
+      ok: false,
+      classification: 'BLOCKED BY PROVIDER TEST CONFIGURATION',
+      error: 'moov_sandbox_connected_account_missing',
+      usedProductionPlatformId: false,
+    };
+  }
+
+  if (parsed.MOOV_ACCOUNT_ID && connectedAccountId === parsed.MOOV_ACCOUNT_ID) {
+    return {
+      ok: false,
+      classification: 'BLOCKED BY PROVIDER TEST CONFIGURATION',
+      error: 'refused_production_connected_account_id',
+      usedProductionPlatformId: false,
+      copiedFromProduction: false,
+    };
+  }
+
+  let methodsToken;
   try {
-    token = await moovToken(parsed.MOOV_SANDBOX_PUBLIC_KEY, parsed.MOOV_SANDBOX_SECRET_KEY, [
-      '/accounts.write',
-      '/accounts.read',
-      '/payment-methods.read',
-    ], fetchImpl);
+    methodsToken = await moovToken(
+      parsed.MOOV_SANDBOX_PUBLIC_KEY,
+      parsed.MOOV_SANDBOX_SECRET_KEY,
+      [`/accounts/${connectedAccountId}/payment-methods.read`],
+      origin,
+      fetchImpl,
+    );
   } catch (error) {
     return {
       ok: false,
       classification: error.status === 401 ? 'BLOCKED BY PROVIDER TEST CONFIGURATION' : 'BLOCKED BY PROVIDER TEST ENVIRONMENT',
       error: String(error.message || error).slice(0, 120),
       oauth: false,
+      connectedAccountId,
+      connectedAccountIdRedacted: redact(connectedAccountId),
       usedProductionPlatformId: false,
+      required: `/accounts/${redact(connectedAccountId)}/payment-methods.read`,
     };
   }
 
-  const displayName = `ChecksOps AWS sandbox ${new Date().toISOString().slice(0, 10)}`;
-  const created = await moovJson(token, '/accounts', {
-    method: 'POST',
+  const methods = await moovJson(methodsToken, `/accounts/${connectedAccountId}/payment-methods`, {
+    origin,
     fetchImpl,
-    body: {
-      accountType: 'business',
-      displayName,
-      profile: {
-        business: {
-          legalBusinessName: displayName,
-          businessType: 'llc',
-        },
-      },
-    },
   });
-  if (!created.ok) {
+  if (!methods.ok) {
     return {
       ok: false,
       classification: 'BLOCKED BY PROVIDER TEST CONFIGURATION',
-      error: `moov_account_create_${created.status}`,
-      oauth: true,
-      usedProductionPlatformId: false,
-      note: 'Sandbox application may lack /accounts.write. Do not guess a platform account id and do not copy production.',
-    };
-  }
-  const connectedAccountId = created.json?.accountID || created.json?.accountId || created.json?.account?.accountID;
-  if (!connectedAccountId) {
-    return {
-      ok: false,
-      classification: 'BLOCKED BY PROVIDER TEST CONFIGURATION',
-      error: 'moov_account_create_missing_id',
+      error: `moov_payment_methods_${methods.status}`,
+      connectedAccountId,
+      connectedAccountIdRedacted: redact(connectedAccountId),
       usedProductionPlatformId: false,
     };
   }
 
-  const methods = await moovJson(token, `/accounts/${connectedAccountId}/payment-methods`, { fetchImpl });
   const partner = (methods.json || [])
     .map((m) => m?.wallet?.partnerAccountID || m?.wallet?.partnerAccountId)
     .find(Boolean);
@@ -184,10 +267,12 @@ export async function bootstrapMoovSandbox({ fetchImpl = fetch, writeSecret = tr
       classification: 'BLOCKED BY PROVIDER TEST CONFIGURATION',
       error: 'wallet_partner_account_id_unavailable',
       connectedAccountId,
+      connectedAccountIdRedacted: redact(connectedAccountId),
       usedProductionPlatformId: false,
-      note: 'Created a sandbox connected account but payment-methods did not expose partnerAccountID. Do not guess the facilitator id.',
+      note: 'Sandbox connected account payment-methods did not expose wallet.partnerAccountID. Do not guess the facilitator id.',
     };
   }
+
   if (parsed.MOOV_PLATFORM_ACCOUNT_ID && platformAccountId === parsed.MOOV_PLATFORM_ACCOUNT_ID) {
     return {
       ok: false,
@@ -201,6 +286,7 @@ export async function bootstrapMoovSandbox({ fetchImpl = fetch, writeSecret = tr
   if (writeSecret) {
     putSecretObject({
       ...parsed,
+      MOOV_SANDBOX_CONNECTED_ACCOUNT_ID: connectedAccountId,
       MOOV_SANDBOX_PLATFORM_ACCOUNT_ID: platformAccountId,
     });
   }
@@ -210,6 +296,8 @@ export async function bootstrapMoovSandbox({ fetchImpl = fetch, writeSecret = tr
     alreadyConfigured: false,
     oauth: true,
     connectedAccountId,
+    connectedAccountIdRedacted: redact(connectedAccountId),
+    connectedAccountSource: createdConnectedAccount ? 'created_sandbox_account' : 'secrets_manager',
     platformAccountId,
     platformAccountIdRedacted: redact(platformAccountId),
     source: 'wallet.partnerAccountID',
@@ -217,6 +305,7 @@ export async function bootstrapMoovSandbox({ fetchImpl = fetch, writeSecret = tr
     copiedFromProduction: false,
     environment: 'sandbox',
     apiVersion: PINNED,
+    originConfigured: Boolean(parsed.MOOV_SANDBOX_ALLOWED_ORIGIN),
     secretWritten: Boolean(writeSecret),
   };
 }
