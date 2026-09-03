@@ -47,7 +47,7 @@ Results:
 | Flag | Meaning |
 | --- | --- |
 | `canExecuteProduction` | always `false` in this phase |
-| `canSimulate` | true only when sandbox simulation is on and steps 1–3 pass |
+| `canSimulate` | true when sandbox simulation is on and the caller is an authenticated member of the **resource** tenant. A financial role is recorded (`roleOk`) but is not required for simulation, because simulation is not money movement. Staging testers are `staff` / tenant members, not automatically `owner`/`admin`/`manager`. |
 | `activated` | always `false` |
 
 ## Who can do what (when later activated — not now)

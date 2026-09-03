@@ -247,6 +247,17 @@ test('admin/staff login is not production money-movement authority', () => {
   });
   assert.equal(gate.canExecuteProduction, false);
   assert.equal(gate.canSimulate, false);
+  const sim = evaluateFinancialAuthorization({
+    operation: 'checkalt_deposit',
+    identityOk: true,
+    membershipOk: true,
+    roles: ['staff'],
+    simulationEnabled: true,
+    permissionsActivated: false,
+  });
+  assert.equal(sim.canExecuteProduction, false);
+  assert.equal(sim.canSimulate, true);
+  assert.equal(sim.roleOk, false);
   assert.equal(FINANCIAL_OPERATIONS.checkalt_deposit.activated, false);
 });
 

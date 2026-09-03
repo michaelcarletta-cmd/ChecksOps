@@ -149,40 +149,50 @@ const lookupCheck = async (client, checkId) => {
   return { check: rows[0] };
 };
 
+const optionalLookup = async (client, sql, params) => {
+  await client.query('SAVEPOINT financial_lookup');
+  try {
+    const rows = (await client.query(sql, params)).rows;
+    await client.query('RELEASE SAVEPOINT financial_lookup');
+    return rows[0] || null;
+  } catch {
+    try { await client.query('ROLLBACK TO SAVEPOINT financial_lookup'); } catch { /* ignore */ }
+    return null;
+  }
+};
+
 const lookupProviderAccount = async (client, tenantId, provider) => {
   if (provider === 'checkalt') {
-    const rows = (await client.query(
+    return optionalLookup(
+      client,
       `SELECT id, tenant_id, 'checkalt' AS provider, sso_user_id AS provider_account_id, enabled
        FROM public.checkalt_tenant_accounts
        WHERE tenant_id = $1::uuid
        ORDER BY updated_at DESC NULLS LAST
        LIMIT 1`,
       [tenantId],
-    )).rows;
-    return rows[0] || null;
+    );
   }
-  const rows = (await client.query(
+  return optionalLookup(
+    client,
     `SELECT id, tenant_id, provider, provider_account_id, environment, disabled
      FROM public.payment_provider_accounts
      WHERE tenant_id = $1::uuid AND provider = $2
      ORDER BY updated_at DESC NULLS LAST
      LIMIT 1`,
     [tenantId, provider],
-  )).rows;
-  return rows[0] || null;
+  );
 };
 
-const lookupWallet = async (client, tenantId) => {
-  const rows = (await client.query(
-    `SELECT id, tenant_id, provider, provider_wallet_id, provider_account_id, status
-     FROM public.payment_wallets
-     WHERE tenant_id = $1::uuid
-     ORDER BY updated_at DESC NULLS LAST
-     LIMIT 1`,
-    [tenantId],
-  )).rows;
-  return rows[0] || null;
-};
+const lookupWallet = async (client, tenantId) => optionalLookup(
+  client,
+  `SELECT id, tenant_id, provider, provider_wallet_id, provider_account_id, status
+   FROM public.payment_wallets
+   WHERE tenant_id = $1::uuid
+   ORDER BY updated_at DESC NULLS LAST
+   LIMIT 1`,
+  [tenantId],
+);
 
 const lookupOperation = async (client, { operationId, idempotencyKey, tenantId }) => {
   if (operationId && isUuid(operationId)) {

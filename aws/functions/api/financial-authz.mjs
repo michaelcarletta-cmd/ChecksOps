@@ -159,8 +159,11 @@ export const evaluateFinancialAuthorization = ({
   const canExecuteProduction = Boolean(
     identityOk && membershipOk && roleOk && permissionsActivated && spec,
   );
+  // Simulation certifies the architecture. It is not money movement.
+  // Authenticated tenant membership of the resource is required; a financial
+  // role is recorded but not required, and never grants production execution.
   const canSimulate = Boolean(
-    identityOk && membershipOk && roleOk && simulationEnabled && spec,
+    identityOk && membershipOk && simulationEnabled && spec,
   );
   return {
     operation: operation || null,
