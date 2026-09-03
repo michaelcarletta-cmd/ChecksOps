@@ -17,6 +17,9 @@ import {
   SANDBOX_MIN_CENTS,
   MOOV_SANDBOX_AMOUNT_API,
   buildMoovSandboxTransferBody,
+  collectMoovAccountIds,
+  collectMoovPaymentMethods,
+  collectMoovTransferIds,
   moovSandboxFetch,
   moovSandboxScopes,
   moovSandboxToken,
@@ -31,7 +34,9 @@ import {
   buildCheckAltUatDepositBody,
   checkAltSandboxAuthenticate,
   checkAltSandboxFetch,
+  extractCheckAltAmountEcho,
   extractCheckAltReference,
+  extractCheckAltSsoAndAccount,
   extractCheckAltStatus,
 } from './providers/checkalt-sandbox.mjs';
 import {
@@ -413,8 +418,16 @@ const handleMoovProbe = async (event, deps) => handleAuthenticated(event, async 
     return denied(spoof, { ...auth, sandboxHttpCalled: true });
   }
   const production = await productionProviderIds(client, tenantId);
-  const accountId = loaded.moov.platformAccountId;
-  if (accountId && production.productionAccountIds.includes(accountId)) {
+  const listed = await moovSandboxFetch({
+    credentials: loaded.moov,
+    path: '/accounts',
+    scopes: moovSandboxScopes.accountsRead(),
+    fetchImpl,
+    token: auth.token,
+  });
+  const listedIds = collectMoovAccountIds(listed.data);
+  const overlappingIds = listedIds.filter((id) => production.productionAccountIds.includes(id));
+  if (overlappingIds.length || (loaded.moov.platformAccountId && production.productionAccountIds.includes(loaded.moov.platformAccountId))) {
     await insertAudit(client, {
       applicationUserId: mapping.application_user_id,
       tenantId,
@@ -426,11 +439,18 @@ const handleMoovProbe = async (event, deps) => handleAuthenticated(event, async 
       statusCode: 403,
       error: 'production_provider_id_refused',
       sandboxHttpCalled: true,
-      message: 'Moov sandbox platform account matches a production RDS provider_account_id. HTTP stopped after auth classification.',
+      listedAccountCount: listedIds.length,
+      overlappingAccountCount: overlappingIds.length,
+      message: 'Moov sandbox credentials resolved to an account ID stored as production in RDS. HTTP stopped.',
     });
   }
+  const isolatedIds = listedIds.filter((id) => !production.productionAccountIds.includes(id));
+  const accountId = (loaded.moov.platformAccountId && isolatedIds.includes(loaded.moov.platformAccountId))
+    ? loaded.moov.platformAccountId
+    : (isolatedIds[0] || null);
   const reads = {
     authentication: { ok: true, tokenPresent: auth.accessTokenPresent },
+    listedAccounts: { ok: listed.ok, count: listedIds.length, isolatedCount: isolatedIds.length, overlapCount: 0 },
     account: null,
     wallets: null,
     paymentMethods: null,
@@ -500,12 +520,54 @@ const handleMoovProbe = async (event, deps) => handleAuthenticated(event, async 
         });
       }
     }
+    const isolatedMethods = collectMoovPaymentMethods(methods.data);
+    for (const extraId of isolatedIds.slice(1, 3)) {
+      const extraMethods = await moovSandboxFetch({
+        credentials: loaded.moov,
+        path: `/accounts/${extraId}/payment-methods`,
+        scopes: moovSandboxScopes.paymentMethodsRead(extraId),
+        fetchImpl,
+        token: auth.token,
+      });
+      isolatedMethods.push(...collectMoovPaymentMethods(extraMethods.data).map((row) => ({ ...row, fromAccount: extraId })));
+      if (extraMethods.ok && Array.isArray(extraMethods.data)) {
+        reads.paymentMethods = {
+          ok: true,
+          count: (reads.paymentMethods?.count || 0) + extraMethods.data.length,
+        };
+      }
+    }
+    if (isolatedMethods[0]?.id) {
+      await insertSandboxObject(client, {
+        tenantId,
+        provider: 'moov',
+        objectType: 'source_payment_method',
+        sandboxProviderId: isolatedMethods[0].id,
+        metadata: { source: 'sandbox_probe' },
+      });
+    }
+    if (isolatedMethods[1]?.id && isolatedMethods[1].id !== isolatedMethods[0]?.id) {
+      await insertSandboxObject(client, {
+        tenantId,
+        provider: 'moov',
+        objectType: 'destination_payment_method',
+        sandboxProviderId: isolatedMethods[1].id,
+        metadata: { source: 'sandbox_probe' },
+      });
+    }
     await insertSandboxObject(client, {
       tenantId,
       provider: 'moov',
       objectType: 'account',
       sandboxProviderId: accountId,
       metadata: { source: 'sandbox_platform_account' },
+    });
+    await insertSandboxObject(client, {
+      tenantId,
+      provider: 'moov',
+      objectType: 'facilitator',
+      sandboxProviderId: accountId,
+      metadata: { source: 'sandbox_probe' },
     });
   }
   await insertAudit(client, {
@@ -631,7 +693,10 @@ const handleMoovTransfer = async (event, deps) => handleAuthenticated(event, asy
     };
   }
   const production = await productionProviderIds(client, tenantId);
-  if (loaded.moov.platformAccountId && production.productionAccountIds.includes(loaded.moov.platformAccountId)) {
+  const facilitatorRow = await lookupSandboxObject(client, { tenantId, provider: 'moov', objectType: 'facilitator' })
+    || await lookupSandboxObject(client, { tenantId, provider: 'moov', objectType: 'account' });
+  const facilitator = loaded.moov.platformAccountId || facilitatorRow?.sandbox_provider_id;
+  if (facilitator && production.productionAccountIds.includes(facilitator)) {
     return denied(spoof, {
       statusCode: 403,
       error: 'production_provider_id_refused',
@@ -640,8 +705,7 @@ const handleMoovTransfer = async (event, deps) => handleAuthenticated(event, asy
   }
   const source = await lookupSandboxObject(client, { tenantId, provider: 'moov', objectType: 'source_payment_method' })
     || await lookupSandboxObject(client, { tenantId, provider: 'moov', objectType: 'payment_method' });
-  const destination = await lookupSandboxObject(client, { tenantId, provider: 'moov', objectType: 'destination_payment_method' })
-    || await lookupSandboxObject(client, { tenantId, provider: 'moov', objectType: 'wallet' });
+  const destination = await lookupSandboxObject(client, { tenantId, provider: 'moov', objectType: 'destination_payment_method' });
   if (source && (production.productionAccountIds.includes(source.sandbox_provider_id) || production.productionWalletIds.includes(source.sandbox_provider_id))) {
     return denied(spoof, {
       statusCode: 403,
@@ -701,7 +765,6 @@ const handleMoovTransfer = async (event, deps) => handleAuthenticated(event, asy
       message: 'No sandbox payment methods are mapped for this tenant. Production Moov account IDs were not used.',
     };
   }
-  const facilitator = loaded.moov.platformAccountId;
   const transferBody = buildMoovSandboxTransferBody({
     sourcePaymentMethodId: source.sandbox_provider_id,
     destinationPaymentMethodId: destination.sandbox_provider_id,
@@ -831,13 +894,23 @@ const handleMoovRetrieve = async (event, deps) => handleAuthenticated(event, asy
       reason: loaded.moov ? 'missing_provider_reference' : 'sandbox_credentials_unavailable',
     };
   }
-  const facilitator = loaded.moov.platformAccountId;
+  const facilitatorRow = await lookupSandboxObject(client, { tenantId: operation.tenant_id, provider: 'moov', objectType: 'facilitator' })
+    || await lookupSandboxObject(client, { tenantId: operation.tenant_id, provider: 'moov', objectType: 'account' });
+  const facilitator = loaded.moov.platformAccountId || facilitatorRow?.sandbox_provider_id;
   const fetched = await moovSandboxFetch({
     credentials: loaded.moov,
     path: `/accounts/${facilitator}/transfers/${operation.provider_reference}`,
     scopes: moovSandboxScopes.transfersRead(facilitator),
     fetchImpl: deps.fetchImpl || fetch,
   });
+  const listed = await moovSandboxFetch({
+    credentials: loaded.moov,
+    path: `/accounts/${facilitator}/transfers`,
+    scopes: moovSandboxScopes.transfersRead(facilitator),
+    fetchImpl: deps.fetchImpl || fetch,
+  });
+  const listedIds = collectMoovTransferIds(listed.data);
+  const matching = listedIds.filter((id) => id === operation.provider_reference);
   return {
     ok: fetched.ok,
     statusCode: fetched.ok ? 200 : fetched.statusCode || 502,
@@ -849,6 +922,8 @@ const handleMoovRetrieve = async (event, deps) => handleAuthenticated(event, asy
     provider: fetched.ok ? normalizeMoovSandboxTransfer(fetched.data || {}) : null,
     providerStatus: fetched.ok ? (fetched.data?.status || null) : null,
     providerReference: redactProviderId(operation.provider_reference),
+    providerObjectCount: matching.length,
+    listedTransferCount: listedIds.length,
     error: fetched.ok ? undefined : fetched.error,
   };
 }, deps);
@@ -1046,10 +1121,25 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
     idempotencyKey: key,
     metadata: { marker: body?.marker || SANDBOX_MARKER, fixture: amount.fixture, syntheticImages: true, negotiableCheck: false },
   });
+  const user = await checkAltSandboxFetch({
+    credentials: loaded.checkalt,
+    path: '/fincapture/useraccount/getUserAccountInformation',
+    body: { fiKey: loaded.checkalt.fiKey, userId: loaded.checkalt.userId },
+    fetchImpl: deps.fetchImpl || fetch,
+  });
+  const depositAccount = await checkAltSandboxFetch({
+    credentials: loaded.checkalt,
+    path: '/fincapture/useraccount/getDepositAccountInformation',
+    body: { fiKey: loaded.checkalt.fiKey, userId: loaded.checkalt.userId },
+    fetchImpl: deps.fetchImpl || fetch,
+  });
+  const extracted = extractCheckAltSsoAndAccount(user.data, depositAccount.data);
   const packed = buildCheckAltUatDepositBody({
     credentials: loaded.checkalt,
     amountCents: amount.cents,
     reference: key,
+    ssoKey: extracted.ssoKey,
+    depositAccountNumber: extracted.depositAccountNumber,
   });
   const submitted = await checkAltSandboxFetch({
     credentials: loaded.checkalt,
@@ -1058,6 +1148,7 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
     fetchImpl: deps.fetchImpl || fetch,
   });
   const reference = extractCheckAltReference(submitted.data);
+  const amountEcho = extractCheckAltAmountEcho(submitted.data);
   const inserted = await updateSandboxOperation(client, {
     id: pending.id,
     status: submitted.ok ? 'provider_pending' : 'failed',
@@ -1070,6 +1161,8 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
       fixture: amount.fixture,
       syntheticImages: true,
       negotiableCheck: false,
+      amountEcho,
+      hasUatAccount: extracted.hasDepositAccount,
     },
   });
   return {
@@ -1081,6 +1174,15 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
     applicationUserId: mapping.application_user_id,
     spoofFieldsIgnored: spoof,
     amount: { ...deposit, cents: amount.cents },
+    amountUnitEvidence: {
+      sentUserAmount: deposit.userAmount,
+      sentChecksOpsCents: amount.cents,
+      ...amountEcho,
+      inferredScale: amountEcho.echoedUserAmount == null
+        ? 'not_echoed'
+        : (Number(amountEcho.echoedUserAmount) === amount.cents ? 'integer_cents' : 'unconfirmed'),
+    },
+    uatAccount: { hasSsoKey: extracted.hasSsoKey, hasDepositAccount: extracted.hasDepositAccount, accountCount: extracted.accountCount },
     providerReference: redactProviderId(reference),
     operation: publicOperation(inserted),
   };
@@ -1116,8 +1218,8 @@ const handleCheckAltAccount = async (event, deps) => handleAuthenticated(event, 
     negotiableCheckSubmitted: false,
     applicationUserId: mapping.application_user_id,
     spoofFieldsIgnored: spoof,
-    userAccount: { ok: user.ok, httpStatus: user.statusCode || user.httpStatus || null },
-    depositAccount: { ok: deposit.ok, httpStatus: deposit.statusCode || deposit.httpStatus || null },
+    userAccount: { ok: user.ok, httpStatus: user.statusCode || user.httpStatus || null, hasSsoKey: extractCheckAltSsoAndAccount(user.data, {}).hasSsoKey, accountCount: extractCheckAltSsoAndAccount(user.data, {}).accountCount },
+    depositAccount: { ok: deposit.ok, httpStatus: deposit.statusCode || deposit.httpStatus || null, hasDepositAccount: extractCheckAltSsoAndAccount(user.data, deposit.data).hasDepositAccount },
   };
 }, deps);
 

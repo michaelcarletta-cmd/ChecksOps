@@ -2,7 +2,9 @@ import { formatCheckAltUserAmount, dollarsToIntegerCents, validateProviderCents 
 import {
   CHECKALT_UAT_HOST,
   CHECKALT_UAT_MERCHANT_EXPECTED,
+  isApprovedCheckAltMerchant,
   isApprovedCheckAltUatUrl,
+  merchantHeaderForCheckAltUat,
 } from '../sandbox-credentials.mjs';
 import { SANDBOX_MIN_CENTS } from './moov-sandbox.mjs';
 
@@ -38,6 +40,32 @@ export const CHECKALT_USER_AMOUNT = {
 export const CHECKALT_UAT_AUTH_PATH = '/public/jwtauth/authenticate';
 export const CHECKALT_UAT_AUTH_PATH_FALLBACK = '/public/fincapture/authenticate';
 export const CHECKALT_UAT_AUTH_PATHS = [CHECKALT_UAT_AUTH_PATH, CHECKALT_UAT_AUTH_PATH_FALLBACK];
+
+export const extractCheckAltSsoAndAccount = (userData = {}, depositData = {}) => {
+  const list = Array.isArray(userData?.accountDataList) ? userData.accountDataList : [];
+  const first = list[0] || {};
+  const ssoKey = first.ssoKey || userData?.ssoKey || userData?.sso_key || null;
+  const depositAccountNumber = first.accountNumber
+    || depositData?.accountNumber
+    || depositData?.depositAccountNumber
+    || depositData?.accountDataList?.[0]?.accountNumber
+    || null;
+  return {
+    ssoKey,
+    depositAccountNumber,
+    accountCount: list.length,
+    hasSsoKey: Boolean(ssoKey),
+    hasDepositAccount: Boolean(depositAccountNumber),
+  };
+};
+
+export const extractCheckAltAmountEcho = (data = {}) => ({
+  echoedUserAmount: data?.userAmount ?? data?.UserAmount ?? null,
+  echoedAmount: data?.amount ?? null,
+  echoedAmountCents: data?.amountCents ?? data?.amount_cents ?? null,
+  status: data?.status ?? data?.statusCode ?? null,
+  statusDescription: data?.statusDescription || data?.message || null,
+});
 
 export const extractCheckAltReference = (data = {}) => {
   const raw = data?.referenceNumber ?? data?.checkalt_reference ?? data?.reference ?? null;
@@ -94,7 +122,7 @@ export const assertCheckAltSandboxCredentials = (credentials) => {
     };
   }
   const merchant = String(credentials.merchant || '').toLowerCase();
-  if (merchant && merchant !== CHECKALT_UAT_MERCHANT_EXPECTED) {
+  if (merchant && !isApprovedCheckAltMerchant(credentials.merchant)) {
     return {
       ok: false,
       statusCode: 403,
@@ -136,9 +164,10 @@ const parseAuthToken = (text) => {
 export const checkAltSandboxAuthenticate = async ({ credentials, fetchImpl = fetch } = {}) => {
   const gate = assertCheckAltSandboxCredentials(credentials);
   if (!gate.ok) return gate;
+  const merchant = merchantHeaderForCheckAltUat(credentials.merchant);
   const headers = {
     'Content-Type': 'application/json',
-    merchant: credentials.merchant || CHECKALT_UAT_MERCHANT_EXPECTED,
+    merchant,
   };
   const body = JSON.stringify({
     userName: credentials.userId || credentials.username,
@@ -207,7 +236,7 @@ export const checkAltSandboxFetch = async ({
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${String(jwt).replace(/^"|"$/g, '')}`,
-      merchant: credentials.merchant || CHECKALT_UAT_MERCHANT_EXPECTED,
+      merchant: merchantHeaderForCheckAltUat(credentials.merchant),
       ...(credentials.fiKey ? { fi_key: credentials.fiKey } : {}),
     },
     body: JSON.stringify(body || {}),

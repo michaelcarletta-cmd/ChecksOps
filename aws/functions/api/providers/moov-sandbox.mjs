@@ -168,6 +168,40 @@ export const moovSandboxFetch = async ({
   return { ok: true, statusCode: response.status, data: parsed.json, idempotencyKey: headers['X-Idempotency-Key'] || null };
 };
 
+export const collectMoovAccountIds = (payload) => {
+  const rows = Array.isArray(payload)
+    ? payload
+    : (payload?.accounts || payload?.items || payload?.data || []);
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((row) => row?.accountID || row?.accountId || row?.account_id || row?.id)
+    .filter(Boolean)
+    .map((id) => String(id));
+};
+
+export const collectMoovPaymentMethods = (payload) => {
+  const rows = Array.isArray(payload)
+    ? payload
+    : (payload?.paymentMethods || payload?.items || payload?.data || []);
+  if (!Array.isArray(rows)) return [];
+  return rows.map((row) => ({
+    id: row?.paymentMethodID || row?.paymentMethodId || row?.id || null,
+    type: row?.paymentMethodType || row?.type || null,
+    walletId: row?.wallet?.walletID || row?.walletID || row?.walletId || null,
+  })).filter((row) => row.id);
+};
+
+export const collectMoovTransferIds = (payload) => {
+  const rows = Array.isArray(payload)
+    ? payload
+    : (payload?.transfers || payload?.items || payload?.data || []);
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((row) => row?.transferID || row?.transferId || row?.id)
+    .filter(Boolean)
+    .map((id) => String(id));
+};
+
 export const buildMoovSandboxTransferBody = ({
   sourcePaymentMethodId,
   destinationPaymentMethodId,

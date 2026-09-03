@@ -56,6 +56,31 @@ export const looksLikeSandboxHost = (value) => {
   }
 };
 
+/**
+ * Approved CheckAlt UAT merchant is lockbox5.
+ * A labeled secret value is accepted only if it contains lockbox5 and does not look like production.
+ */
+export const isApprovedCheckAltMerchant = (value) => {
+  if (!value) return true;
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return true;
+  if (raw === CHECKALT_UAT_MERCHANT_EXPECTED) return true;
+  if (raw.includes('prod')) return false;
+  const segments = raw.split(/[:|/,-]+/).map((part) => part.trim()).filter(Boolean);
+  if (segments.includes(CHECKALT_UAT_MERCHANT_EXPECTED)) return true;
+  return raw.includes(CHECKALT_UAT_MERCHANT_EXPECTED);
+};
+
+export const merchantHeaderForCheckAltUat = (value) => {
+  if (isApprovedCheckAltMerchant(value) && String(value || '').trim()) {
+    const raw = String(value).trim();
+    if (raw.toLowerCase() === CHECKALT_UAT_MERCHANT_EXPECTED) return CHECKALT_UAT_MERCHANT_EXPECTED;
+    const match = raw.split(/[:|/,-]+/).map((part) => part.trim()).find((part) => part.toLowerCase() === CHECKALT_UAT_MERCHANT_EXPECTED);
+    return match || CHECKALT_UAT_MERCHANT_EXPECTED;
+  }
+  return CHECKALT_UAT_MERCHANT_EXPECTED;
+};
+
 /** Approved CheckAlt FinCapture UAT only. Scheme, host, and empty path must match exactly. */
 export const isApprovedCheckAltUatUrl = (value) => {
   if (!value) return false;
@@ -118,7 +143,7 @@ export const classifyCheckAltSandbox = (secrets = {}) => {
   const uatCreds = present(secrets, 'CHECKALT_UAT_USER_ID') && present(secrets, 'CHECKALT_UAT_PASSWORD');
   const uatUrlOk = isApprovedCheckAltUatUrl(uatUrl);
   const merchant = secrets.CHECKALT_UAT_MERCHANT || null;
-  const merchantOk = !merchant || String(merchant).toLowerCase() === CHECKALT_UAT_MERCHANT_EXPECTED;
+  const merchantOk = isApprovedCheckAltMerchant(merchant);
   const productionCreds = present(secrets, 'CHECKALT_USERNAME') || present(secrets, 'CHECKALT_PASSWORD');
   const legacyUrl = secrets.CHECKALT_SANDBOX_BASE_URL || null;
   const legacyCreds = present(secrets, 'CHECKALT_SANDBOX_USERNAME') && present(secrets, 'CHECKALT_SANDBOX_PASSWORD');
@@ -212,7 +237,7 @@ export const loadSandboxCredentials = async (getSecrets = loadProviderSecrets) =
         userId: secrets.CHECKALT_UAT_USER_ID,
         password: secrets.CHECKALT_UAT_PASSWORD,
         fiKey: secrets.CHECKALT_UAT_FI_KEY || null,
-        merchant: secrets.CHECKALT_UAT_MERCHANT || CHECKALT_UAT_MERCHANT_EXPECTED,
+        merchant: merchantHeaderForCheckAltUat(secrets.CHECKALT_UAT_MERCHANT),
         webhookSecret: secrets.CHECKALT_SANDBOX_WEBHOOK_SECRET || null,
         authPath: '/public/jwtauth/authenticate',
       }

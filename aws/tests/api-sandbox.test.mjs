@@ -8,6 +8,7 @@ import {
   classifyCheckAltSandbox,
   classifyMoovSandbox,
   classifyPlaidSandbox,
+  isApprovedCheckAltMerchant,
   isApprovedCheckAltUatUrl,
   looksLikeSandboxHost,
   sandboxCredentialSnapshot,
@@ -255,6 +256,12 @@ test('CheckAlt UAT requires the exact approved host and refuses production', () 
   assert.equal(isApprovedCheckAltUatUrl('http://uatapi.checkalt.com'), false);
   assert.equal(isApprovedCheckAltUatUrl('https://api.checkalt.com'), false);
   assert.equal(isApprovedCheckAltUatUrl('https://uatapi.checkalt.com/fincapture'), false);
+  assert.equal(looksLikeSandboxHost('https://api.clearingworks.com'), false);
+  assert.equal(isApprovedCheckAltUatUrl('https://uatapi.checkalt.com'), true);
+  assert.equal(isApprovedCheckAltUatUrl('https://uatapi.checkalt.com/'), true);
+  assert.equal(isApprovedCheckAltUatUrl('http://uatapi.checkalt.com'), false);
+  assert.equal(isApprovedCheckAltUatUrl('https://api.checkalt.com'), false);
+  assert.equal(isApprovedCheckAltUatUrl('https://uatapi.checkalt.com/fincapture'), false);
   const none = classifyCheckAltSandbox({
     CHECKALT_USERNAME: 'prod-user',
     CHECKALT_PASSWORD: 'prod-pass',
@@ -287,6 +294,9 @@ test('CheckAlt UAT requires the exact approved host and refuses production', () 
   });
   assert.equal(ok.available, true);
   assert.equal(ok.authPath, CHECKALT_UAT_AUTH_PATH);
+  assert.equal(isApprovedCheckAltMerchant('lockbox5'), true);
+  assert.equal(isApprovedCheckAltMerchant('UAT Label: lockbox5'), true);
+  assert.equal(isApprovedCheckAltMerchant('production-lockbox'), false);
 });
 
 test('CheckAlt userAmount is integer cents for 0.01, 1.00, and 123.45', () => {
