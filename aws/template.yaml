@@ -41,6 +41,28 @@ Parameters:
     Type: String
     Default: ''
     Description: Optional private route table for Lambda subnets. Used only when PublicSubnetId is set. Must not be a route table that already has 0.0.0.0/0 → igw.
+  # Live Lambda overlay env values that must survive SAM updates. Pass at deploy time;
+  # NoEcho keeps secret material out of CloudFormation console display and out of git.
+  MoovWebhookSecret:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Staging AWS_MOOV_WEBHOOK_SECRET. Provide from live Lambda env at deploy; do not commit the value.
+  CheckAltWebhookSecret:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Staging AWS_CHECKALT_WEBHOOK_SECRET. Provide from live Lambda env at deploy; do not commit the value.
+  PlaidWebhookSecret:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Staging AWS_PLAID_WEBHOOK_SECRET. Provide from live Lambda env at deploy; do not commit the value.
+  SandboxSecretEpoch:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Staging CHECKSOPS_SANDBOX_SECRET_EPOCH. Provide from live Lambda env at deploy; do not commit the value.
 
 Conditions:
   CreateStagingNat: !And
@@ -65,6 +87,13 @@ Globals:
         DATABASE_NAME: checksops
         COGNITO_USER_POOL_ID: !Ref ChecksOpsUserPool
         COGNITO_CLIENT_ID: !Ref ChecksOpsUserPoolClient
+        # Preserve live staging write/workflow overlay behavior.
+        AWS_WRITES_ENABLED: "true"
+        AWS_CHECK_WORKFLOW_WRITES_ENABLED: "true"
+        AWS_STORAGE_WRITES_ENABLED: "true"
+        AWS_APPLICATION_WORKFLOW_WRITES_ENABLED: "true"
+        AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED: "true"
+        # Safety / production-execution flags stay disabled.
         AWS_PROVIDER_EXECUTION_ENABLED: "false"
         AWS_MOOV_ENABLED: "false"
         AWS_CHECKALT_ENABLED: "false"
@@ -75,6 +104,11 @@ Globals:
         AWS_PROVIDER_WEBHOOK_DRY_RUN: "true"
         AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: "true"
         AWS_FINANCIAL_PERMISSIONS_ACTIVATED: "false"
+        # Webhook HMAC / sandbox epoch preserved via NoEcho parameters (not stored in git).
+        AWS_MOOV_WEBHOOK_SECRET: !Ref MoovWebhookSecret
+        AWS_CHECKALT_WEBHOOK_SECRET: !Ref CheckAltWebhookSecret
+        AWS_PLAID_WEBHOOK_SECRET: !Ref PlaidWebhookSecret
+        CHECKSOPS_SANDBOX_SECRET_EPOCH: !Ref SandboxSecretEpoch
 
 Resources:
   ChecksOpsApi:
@@ -99,7 +133,8 @@ Resources:
   ApiLambdaSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Dedicated checksops-staging-api Lambda SG. No inbound. Egress to RDS 5432, Secrets Manager, S3 prefix list, and HTTPS 443 via staging NAT.
+      # Exact live CloudFormation GroupDescription. Changing this string replaces the SG.
+      GroupDescription: Dedicated checksops-staging-api Lambda SG. No inbound. Egress only to RDS 5432, Secrets Manager endpoint, and S3 prefix list.
       VpcId: !Ref VpcId
       SecurityGroupEgress:
         - IpProtocol: tcp
@@ -303,10 +338,6 @@ Resources:
         - email
       AutoVerifiedAttributes:
         - email
-      SignInPolicy:
-        AllowedFirstAuthFactors:
-          - EMAIL_OTP
-          - PASSWORD
       AccountRecoverySetting:
         RecoveryMechanisms:
           - Name: verified_email
@@ -319,6 +350,10 @@ Resources:
           RequireNumbers: true
           RequireSymbols: true
           TemporaryPasswordValidityDays: 7
+        SignInPolicy:
+          AllowedFirstAuthFactors:
+            - EMAIL_OTP
+            - PASSWORD
 
   ChecksOpsUserPoolClient:
     Type: AWS::Cognito::UserPoolClient
