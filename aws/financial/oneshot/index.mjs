@@ -87,6 +87,38 @@ export const handler = async (event) => {
     if (step === 'financial') {
       return { ok: true, financial: await financialAggregates(client) };
     }
+    if (step === 'provider_ids') {
+      const accounts = (await client.query(`
+        SELECT provider, provider_account_id, environment
+        FROM public.payment_provider_accounts
+        WHERE environment = 'production'
+        ORDER BY provider, provider_account_id
+      `)).rows;
+      const wallets = (await client.query(`
+        SELECT provider, provider_wallet_id, provider_account_id, environment
+        FROM public.payment_wallets
+        WHERE environment = 'production'
+        ORDER BY provider, provider_wallet_id
+      `)).rows;
+      return {
+        ok: true,
+        productionExecution: false,
+        productionRecordsMutated: false,
+        environments: [...new Set(accounts.map((row) => row.environment))],
+        productionAccountCount: accounts.length,
+        productionWalletCount: wallets.length,
+        moovAccountCount: accounts.filter((row) => row.provider === 'moov').length,
+        moovWalletCount: wallets.filter((row) => /moov/i.test(row.provider || '')).length,
+        productionAccountIds: accounts.map((row) => ({
+          provider: row.provider,
+          provider_account_id: row.provider_account_id,
+        })),
+        productionWalletIds: wallets.map((row) => ({
+          provider: row.provider,
+          provider_wallet_id: row.provider_wallet_id,
+        })),
+      };
+    }
     if (step === 'sandbox') {
       const before = await financialAggregates(client);
       await client.query(readSql(SQL_DIR, '70_provider_sandbox.sql'));

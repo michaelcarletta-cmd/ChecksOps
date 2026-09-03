@@ -106,6 +106,26 @@ export const normalizeCheckAltUatUrl = (value) => {
 
 const present = (secrets, key) => Boolean(secrets?.[key]);
 
+/** Node undici / VPC-egress failures. Not a database error. */
+export const isProviderNetworkError = (error) => {
+  if (!error) return false;
+  if (error.code === 'PROVIDER_EGRESS_FAILED') return true;
+  const msg = String(error.message || '');
+  const causeMsg = String(error.cause?.message || '');
+  const causeCode = String(error.cause?.code || error.code || '');
+  if (msg === 'fetch failed' || causeMsg === 'fetch failed') return true;
+  return /^(ECONNREFUSED|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|UND_ERR_CONNECT_TIMEOUT)$/i.test(causeCode);
+};
+
+export const providerEgressFailure = (provider, extra = {}) => ({
+  ok: false,
+  statusCode: 503,
+  error: 'provider_egress_failed',
+  provider,
+  message: 'Staging cannot reach the provider HTTPS endpoint. No production keys were used.',
+  ...extra,
+});
+
 export const classifyMoovSandbox = (secrets = {}) => {
   const sandboxKeys = present(secrets, 'MOOV_SANDBOX_PUBLIC_KEY') && present(secrets, 'MOOV_SANDBOX_SECRET_KEY');
   const productionKeys = present(secrets, 'MOOV_PUBLIC_KEY') && present(secrets, 'MOOV_SECRET_KEY');

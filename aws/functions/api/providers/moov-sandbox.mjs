@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { formatMoovTransferAmount, MOOV_AMOUNT_API, MIN_PROVIDER_AMOUNT_CENTS } from './amounts.mjs';
-import { MOOV_SANDBOX_HOST } from '../sandbox-credentials.mjs';
+import { isProviderNetworkError, MOOV_SANDBOX_HOST, providerEgressFailure } from '../sandbox-credentials.mjs';
 
 export const SANDBOX_MIN_CENTS = MIN_PROVIDER_AMOUNT_CENTS;
 export const MOOV_SANDBOX_API_VERSION_DEFAULT = 'v2024.01.00';
@@ -91,35 +91,40 @@ export const moovSandboxToken = async ({ credentials, scopes = ['/accounts.read'
   const gate = assertMoovSandboxCredentials(credentials);
   if (!gate.ok) return gate;
   const basic = Buffer.from(`${credentials.publicKey}:${credentials.secretKey}`).toString('base64');
-  const response = await fetchImpl(`${MOOV_SANDBOX_HOST}/oauth2/token`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${basic}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Origin: originOf(credentials),
-    },
-    body: new URLSearchParams({
-      grant_type: 'client_credentials',
-      scope: scopes.join(' '),
-    }).toString(),
-  });
-  const parsed = await parseBody(response);
-  if (!response.ok) {
+  try {
+    const response = await fetchImpl(`${MOOV_SANDBOX_HOST}/oauth2/token`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${basic}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Origin: originOf(credentials),
+      },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        scope: scopes.join(' '),
+      }).toString(),
+    });
+    const parsed = await parseBody(response);
+    if (!response.ok) {
+      return {
+        ok: false,
+        statusCode: response.status,
+        error: 'moov_sandbox_auth_failed',
+        provider: 'moov',
+        httpStatus: response.status,
+        message: 'Moov sandbox OAuth failed. No production keys were used.',
+      };
+    }
     return {
-      ok: false,
-      statusCode: response.status,
-      error: 'moov_sandbox_auth_failed',
-      provider: 'moov',
-      httpStatus: response.status,
-      message: 'Moov sandbox OAuth failed. No production keys were used.',
+      ok: true,
+      accessTokenPresent: Boolean(parsed.json?.access_token),
+      expiresIn: Number(parsed.json?.expires_in || 0) || null,
+      token: parsed.json?.access_token || null,
     };
+  } catch (error) {
+    if (isProviderNetworkError(error)) return providerEgressFailure('moov');
+    throw error;
   }
-  return {
-    ok: true,
-    accessTokenPresent: Boolean(parsed.json?.access_token),
-    expiresIn: Number(parsed.json?.expires_in || 0) || null,
-    token: parsed.json?.access_token || null,
-  };
 };
 
 export const moovSandboxFetch = async ({
@@ -148,24 +153,29 @@ export const moovSandboxFetch = async ({
   };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (idempotencyKey) headers['X-Idempotency-Key'] = idempotencyUuid(idempotencyKey);
-  const response = await fetchImpl(`${MOOV_SANDBOX_HOST}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const parsed = await parseBody(response);
-  if (!response.ok) {
-    return {
-      ok: false,
-      statusCode: response.status,
-      error: 'moov_sandbox_http_failed',
-      provider: 'moov',
-      httpStatus: response.status,
-      path,
-      message: parsed.json?.error || parsed.json?.message || 'Moov sandbox request failed',
-    };
+  try {
+    const response = await fetchImpl(`${MOOV_SANDBOX_HOST}${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const parsed = await parseBody(response);
+    if (!response.ok) {
+      return {
+        ok: false,
+        statusCode: response.status,
+        error: 'moov_sandbox_http_failed',
+        provider: 'moov',
+        httpStatus: response.status,
+        path,
+        message: parsed.json?.error || parsed.json?.message || 'Moov sandbox request failed',
+      };
+    }
+    return { ok: true, statusCode: response.status, data: parsed.json, idempotencyKey: headers['X-Idempotency-Key'] || null };
+  } catch (error) {
+    if (isProviderNetworkError(error)) return providerEgressFailure('moov', { path });
+    throw error;
   }
-  return { ok: true, statusCode: response.status, data: parsed.json, idempotencyKey: headers['X-Idempotency-Key'] || null };
 };
 
 export const collectMoovAccountIds = (payload) => {

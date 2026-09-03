@@ -9,6 +9,7 @@ import { providerSandboxExecutionEnabled, sandboxFlagSnapshot } from './sandbox-
 import {
   CHECKALT_UAT_HOST,
   CHECKALT_UAT_MERCHANT_EXPECTED,
+  isProviderNetworkError,
   loadSandboxCredentials,
   publicSandboxCapability,
 } from './sandbox-credentials.mjs';
@@ -325,7 +326,22 @@ const productionProviderIds = async (client, tenantId) => {
 
 const handleAuthenticated = (event, fn, deps) => withIdentityWrite(event, async (ctx) => {
   await setSandboxGuc(ctx.client);
-  return fn(ctx);
+  try {
+    return await fn(ctx);
+  } catch (error) {
+    if (isProviderNetworkError(error)) {
+      return {
+        ok: false,
+        statusCode: 503,
+        error: 'provider_egress_failed',
+        message: 'Staging Lambda cannot reach the provider HTTPS endpoint from the VPC. No production keys were used.',
+        sandboxHttpCalled: true,
+        productionExecution: false,
+        productionRecordsMutated: false,
+      };
+    }
+    throw error;
+  }
 }, deps);
 
 const handleIsolation = async (event, deps) => handleAuthenticated(event, async ({ client, mapping, claims, spoof }) => {
@@ -1134,6 +1150,49 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
     fetchImpl: deps.fetchImpl || fetch,
   });
   const extracted = extractCheckAltSsoAndAccount(user.data, depositAccount.data);
+  if (!extracted.hasDepositAccount) {
+    const failed = await updateSandboxOperation(client, {
+      id: pending.id,
+      status: 'failed',
+      sandboxHttpCalled: true,
+      failureClass: 'account_unregistered',
+      metadataPatch: {
+        marker: body?.marker || SANDBOX_MARKER,
+        fixture: amount.fixture,
+        syntheticImages: true,
+        negotiableCheck: false,
+        hasUatAccount: false,
+        registeredTestAccount: false,
+        reason: 'UAT user has no deposit account. Test account registration was skipped because it would require inventing bank numbers.',
+      },
+    });
+    await insertAudit(client, {
+      applicationUserId: mapping.application_user_id,
+      tenantId,
+      operationType: 'checkalt_sandbox_deposit',
+      operationId: failed.id,
+      provider: 'checkalt',
+      outcome: 'account_unregistered',
+      idempotencyKey: key,
+    });
+    return {
+      ok: false,
+      statusCode: 409,
+      error: 'account_unregistered',
+      provider: 'checkalt',
+      sandboxHttpCalled: true,
+      productionExecution: false,
+      productionRecordsMutated: false,
+      negotiableCheckSubmitted: false,
+      registeredTestAccount: false,
+      applicationUserId: mapping.application_user_id,
+      spoofFieldsIgnored: spoof,
+      amount: { ...deposit, cents: amount.cents },
+      uatAccount: { hasSsoKey: extracted.hasSsoKey, hasDepositAccount: false, accountCount: extracted.accountCount },
+      operation: publicOperation(failed),
+      message: 'CheckAlt UAT user has no deposit account. A TEST account was not registered because that requires bank numbers. No negotiable check was submitted.',
+    };
+  }
   const packed = buildCheckAltUatDepositBody({
     credentials: loaded.checkalt,
     amountCents: amount.cents,

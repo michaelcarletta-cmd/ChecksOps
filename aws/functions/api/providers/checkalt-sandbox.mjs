@@ -4,7 +4,9 @@ import {
   CHECKALT_UAT_MERCHANT_EXPECTED,
   isApprovedCheckAltMerchant,
   isApprovedCheckAltUatUrl,
+  isProviderNetworkError,
   merchantHeaderForCheckAltUat,
+  providerEgressFailure,
 } from '../sandbox-credentials.mjs';
 import { SANDBOX_MIN_CENTS } from './moov-sandbox.mjs';
 
@@ -175,36 +177,41 @@ export const checkAltSandboxAuthenticate = async ({ credentials, fetchImpl = fet
     password: credentials.password,
   });
   let last = null;
-  for (const authPath of CHECKALT_UAT_AUTH_PATHS) {
-    const response = await fetchImpl(`${CHECKALT_UAT_HOST}${authPath}`, {
-      method: 'POST',
-      headers,
-      body,
-    });
-    const text = await response.text();
-    last = { response, text, authPath };
-    if (response.ok) {
-      const parsed = parseAuthToken(text);
-      if (parsed.token) {
+  try {
+    for (const authPath of CHECKALT_UAT_AUTH_PATHS) {
+      const response = await fetchImpl(`${CHECKALT_UAT_HOST}${authPath}`, {
+        method: 'POST',
+        headers,
+        body,
+      });
+      const text = await response.text();
+      last = { response, text, authPath };
+      if (response.ok) {
+        const parsed = parseAuthToken(text);
+        if (parsed.token) {
+          return {
+            ok: true,
+            tokenPresent: true,
+            httpStatus: response.status,
+            rawToken: parsed.token,
+            authPath,
+          };
+        }
+      }
+      if (response.status !== 404) {
         return {
-          ok: true,
-          tokenPresent: true,
+          ok: false,
+          statusCode: response.status,
+          error: 'checkalt_uat_auth_failed',
+          provider: 'checkalt',
           httpStatus: response.status,
-          rawToken: parsed.token,
           authPath,
         };
       }
     }
-    if (response.status !== 404) {
-      return {
-        ok: false,
-        statusCode: response.status,
-        error: 'checkalt_uat_auth_failed',
-        provider: 'checkalt',
-        httpStatus: response.status,
-        authPath,
-      };
-    }
+  } catch (error) {
+    if (isProviderNetworkError(error)) return providerEgressFailure('checkalt');
+    throw error;
   }
   return {
     ok: false,
@@ -231,30 +238,36 @@ export const checkAltSandboxFetch = async ({
     if (!authed.ok) return authed;
     jwt = authed.rawToken;
   }
-  const response = await fetchImpl(`${CHECKALT_UAT_HOST}${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${String(jwt).replace(/^"|"$/g, '')}`,
-      merchant: merchantHeaderForCheckAltUat(credentials.merchant),
-      ...(credentials.fiKey ? { fi_key: credentials.fiKey } : {}),
-    },
-    body: JSON.stringify(body || {}),
-  });
-  let json = null;
-  const text = await response.text();
-  try { json = text ? JSON.parse(text) : null; } catch { json = null; }
-  if (!response.ok) {
-    return {
-      ok: false,
-      statusCode: response.status,
-      error: 'checkalt_uat_http_failed',
-      provider: 'checkalt',
-      httpStatus: response.status,
-      path,
-    };
+  try {
+    const response = await fetchImpl(`${CHECKALT_UAT_HOST}${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${String(jwt).replace(/^"|"$/g, '')}`,
+        merchant: merchantHeaderForCheckAltUat(credentials.merchant),
+        ...(credentials.fiKey ? { fi_key: credentials.fiKey } : {}),
+      },
+      body: JSON.stringify(body || {}),
+    });
+    let json = null;
+    const text = await response.text();
+    try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+    if (!response.ok) {
+      return {
+        ok: false,
+        statusCode: response.status,
+        error: 'checkalt_uat_http_failed',
+        provider: 'checkalt',
+        httpStatus: response.status,
+        path,
+        message: json?.message || json?.statusDescription || json?.error || null,
+      };
+    }
+    return { ok: true, statusCode: response.status, data: json };
+  } catch (error) {
+    if (isProviderNetworkError(error)) return providerEgressFailure('checkalt', { path });
+    throw error;
   }
-  return { ok: true, statusCode: response.status, data: json };
 };
 
 export const buildCheckAltUatDepositBody = ({
