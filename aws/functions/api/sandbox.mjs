@@ -440,13 +440,21 @@ const handleMoovTransfer = async (event, deps) => handleAuthenticated(event, asy
       outcome: 'sandbox_credentials_unavailable',
       idempotencyKey: key,
     });
-    return denied(spoof, {
-      statusCode: 409,
+    return {
+      ok: true,
+      statusCode: 200,
+      failClosed: true,
       error: 'sandbox_credentials_unavailable',
       provider: 'moov',
+      sandboxHttpCalled: false,
+      productionExecution: false,
+      productionRecordsMutated: false,
+      applicationUserId: mapping.application_user_id,
+      spoofFieldsIgnored: spoof,
       operation: publicOperation(inserted),
       capability: loaded.snapshot.moov,
-    });
+      message: 'Moov sandbox keys are not present. No provider HTTP was sent. Production keys were not used.',
+    };
   }
   const source = await lookupSandboxObject(client, { tenantId, provider: 'moov', objectType: 'source_payment_method' })
     || await lookupSandboxObject(client, { tenantId, provider: 'moov', objectType: 'payment_method' });
@@ -473,13 +481,20 @@ const handleMoovTransfer = async (event, deps) => handleAuthenticated(event, asy
       outcome: 'sandbox_account_unmapped',
       idempotencyKey: key,
     });
-    return denied(spoof, {
-      statusCode: 409,
+    return {
+      ok: true,
+      statusCode: 200,
+      failClosed: true,
       error: 'sandbox_account_unmapped',
       provider: 'moov',
+      sandboxHttpCalled: false,
+      productionExecution: false,
+      productionRecordsMutated: false,
+      applicationUserId: mapping.application_user_id,
+      spoofFieldsIgnored: spoof,
       operation: publicOperation(inserted),
       message: 'No sandbox payment methods are mapped for this tenant. Production Moov account IDs were not used.',
-    });
+    };
   }
   const facilitator = loaded.moov.platformAccountId;
   const transferBody = buildMoovSandboxTransferBody({
@@ -719,15 +734,23 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
        RETURNING *`,
       [tenantId, mapping.application_user_id, SANDBOX_MIN_CENTS, key, JSON.stringify({ marker: body?.marker || SANDBOX_MARKER })],
     )).rows[0];
-    return denied(spoof, {
-      statusCode: 409,
+    return {
+      ok: true,
+      statusCode: 200,
+      failClosed: true,
       error: 'sandbox_credentials_unavailable',
       provider: 'checkalt',
+      sandboxHttpCalled: false,
+      productionExecution: false,
+      productionRecordsMutated: false,
+      negotiableCheckSubmitted: false,
+      applicationUserId: mapping.application_user_id,
+      spoofFieldsIgnored: spoof,
       capability: loaded.snapshot.checkalt,
       operation: publicOperation(inserted),
       amount: deposit,
-      negotiableCheckSubmitted: false,
-    });
+      message: 'No CheckAlt sandbox is configured. No negotiable check was submitted.',
+    };
   }
   const submitted = await checkAltSandboxFetch({
     credentials: loaded.checkalt,

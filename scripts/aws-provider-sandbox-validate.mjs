@@ -95,14 +95,17 @@ const main = async () => {
 
   const transfer1 = await api('/sandbox/moov/transfer', { token: freedom, body: { marker: MARKER } });
   const transfer2 = await api('/sandbox/moov/transfer', { token: freedom, body: { marker: MARKER } });
-  record('Moov transfer fail-closed', [403, 409].includes(transfer1.status)
+  record('Moov transfer fail-closed', transfer1.status === 200
+    && transfer1.json.failClosed === true
+    && transfer1.json.error === 'sandbox_credentials_unavailable'
     && transfer1.json.productionExecution === false
-    && transfer1.json.liveProductionProviderTransactions !== true, {
-    detail: `status=${transfer1.status} error=${transfer1.json.error}`,
+    && transfer1.json.sandboxHttpCalled === false, {
+    detail: `status=${transfer1.status} error=${transfer1.json.error} id=${transfer1.json.operation?.id}`,
   });
-  record('repeat transfer is idempotent (one ChecksOps op)', transfer2.json.duplicate === true
-    || transfer2.json.operation?.id === transfer1.json.operation?.id
-    || (transfer2.status === transfer1.status && transfer2.json.error === transfer1.json.error), {
+  record('repeat transfer is idempotent (one ChecksOps op)', transfer2.status === 200
+    && transfer2.json.duplicate === true
+    && transfer2.json.operation?.id === transfer1.json.operation?.id
+    && transfer2.json.sandboxHttpCalled === false, {
     detail: `dup=${transfer2.json.duplicate} id1=${transfer1.json.operation?.id} id2=${transfer2.json.operation?.id}`,
   });
 
@@ -115,14 +118,16 @@ const main = async () => {
 
   const deposit1 = await api('/sandbox/checkalt/deposit', { token: freedom, body: { marker: MARKER } });
   const deposit2 = await api('/sandbox/checkalt/deposit', { token: freedom, body: { marker: MARKER } });
-  record('CheckAlt deposit not submitted (no sandbox)', [403, 409].includes(deposit1.status)
-    && deposit1.json.negotiableCheckSubmitted === false, {
+  record('CheckAlt deposit not submitted (no sandbox)', deposit1.status === 200
+    && deposit1.json.failClosed === true
+    && deposit1.json.negotiableCheckSubmitted === false
+    && deposit1.json.error === 'sandbox_credentials_unavailable', {
     detail: `status=${deposit1.status} error=${deposit1.json.error}`,
   });
-  record('CheckAlt deposit idempotent fail-closed', deposit2.json.duplicate === true
-    || deposit2.json.operation?.id === deposit1.json.operation?.id
-    || deposit2.json.error === deposit1.json.error, {
-    detail: `dup=${deposit2.json.duplicate}`,
+  record('CheckAlt deposit idempotent fail-closed', deposit2.status === 200
+    && deposit2.json.duplicate === true
+    && deposit2.json.operation?.id === deposit1.json.operation?.id, {
+    detail: `dup=${deposit2.json.duplicate} id=${deposit2.json.operation?.id}`,
   });
 
   const plaid = await api('/sandbox/plaid/probe', { token: freedom, body: {} });

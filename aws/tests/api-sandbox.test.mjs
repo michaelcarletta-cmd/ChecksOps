@@ -363,7 +363,9 @@ test('missing sandbox credentials fail closed and stay idempotent', async () => 
       'POST',
       depsFor(client, { loadSandboxCredentials: creds }),
     );
+    assert.equal(first.failClosed, true);
     assert.equal(first.error, 'sandbox_credentials_unavailable');
+    assert.equal(first.ok, true);
     assert.equal(first.productionExecution, false);
     const second = await handleSandboxRequest(
       jwtEvent('/sandbox/moov/transfer', 'POST', {}),
