@@ -609,14 +609,14 @@ export function createAwsStagingClient() {
         method: "POST",
         body: JSON.stringify(options.body || {}),
       }, token);
-      if (response.status === 200 && body?.ok) {
+      if (response.ok) {
         return { data: body, error: null };
       }
       return {
-        data: null,
+        data: body && typeof body === "object" ? body : null,
         error: {
-          message: String(body?.error || `provider_disabled:${name}`),
-          name: "FunctionsError",
+          message: String(body?.error || body?.message || `FunctionsHttpError:${name}`),
+          name: "FunctionsHttpError",
           context: { status: response.status || 403, body },
         },
       };
