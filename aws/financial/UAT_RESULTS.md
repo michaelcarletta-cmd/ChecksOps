@@ -178,6 +178,76 @@ Unchanged vs PR #100 / T6 baseline. Sandbox/UAT testing did not alter production
 
 No security regression. Production provider execution remains disabled (`provider_disabled` / production flags false).
 
+## Comparison to working Lovable/Supabase production (not a fix)
+
+This section classifies the Moov `GET /accounts` 401 and CheckAlt `ssoKey` / `account_unregistered` blockers. **No code or provider configuration was changed to “solve” them.**
+
+### Moov — how production actually talks to `/accounts`
+
+Production never starts a transfer by listing accounts and picking an isolated ID.
+
+| Production step | Where | What it uses |
+| --- | --- | --- |
+| Credentials | `MOOV_PUBLIC_KEY` / `MOOV_SECRET_KEY` (or `MOOV_SANDBOX_*` when `MOOV_ENVIRONMENT=sandbox`) | Same host `https://api.moov.io`; environment is the key pair |
+| Origin | `moovOrigin()` | `MOOV_SANDBOX_ALLOWED_ORIGIN` or `MOOV_ALLOWED_ORIGIN` or `CHECKSOPS_APP_URL` or `https://checksops.com`. Comment: missing/wrong Origin → **401** |
+| Token | `moovToken(scopes)` per request | Client credentials; scopes are **per account** for reads/transfers |
+| Tenant account | `payment_provider_accounts.provider_account_id` | Already stored. `GET /accounts/{id}` with `/accounts/{id}/profile.read` |
+| Facilitator | `MOOV_PLATFORM_ACCOUNT_ID` then wallet `partnerAccountID` | `POST /accounts/{facilitatorId}/transfers` |
+| List accounts | `moov-selftest` / `moov-account-discover` only | `GET /accounts` or `GET /accounts?count=200` with `/accounts.read`. Selftest comment: listing **needs `/accounts.write` on the key** (application permission, not the OAuth scope string) |
+
+Money movement (`moov-transfer-create`, `moov-disburse`, wallet funding) **does not call `GET /accounts`**.
+
+### Moov — AWS sidecar vs that path
+
+| Item | Production | AWS sidecar | Classification |
+| --- | --- | --- | --- |
+| OAuth client credentials + Origin + `x-moov-version: v2024.01.00` | yes | yes; OAuth **succeeded**, granted `/accounts.read` | Implementation **matches**. Not the blocker. |
+| Platform account id | required (`MOOV_PLATFORM_ACCOUNT_ID`) | `MOOV_SANDBOX_PLATFORM_ACCOUNT_ID` **absent** | **Missing sandbox config** (same role as production platform id) |
+| Allowed origin secret | `MOOV_SANDBOX_ALLOWED_ORIGIN` if sandbox keys are allowlisted to a non-default host | absent; defaulted to `https://checksops.com` | Possible **missing config**. Token succeeded with that Origin, so it is not proven as the 401 cause. |
+| How an account id is chosen | RDS mapping + platform id | **List `/accounts` then probe production IDs** | **AWS diagnostic deviation.** Production money path does not do this. |
+| `GET /accounts` | diagnostic only; may fail if the key cannot list | treated as the isolation gate; **401** | Same call production selftest uses. 401 is consistent with a sandbox **application that cannot list**, or with Origin/permissions. |
+| `GET /accounts/{productionId}` with sandbox keys | would use sandbox keys only against sandbox IDs | 401, not visible | **Expected isolation**, not a bug. Production would not read production IDs with sandbox keys. |
+| `GET /accounts/{platformId}` with `/accounts/{id}/profile.read` | selftest `platform_account_read` | **never attempted** (no platform id) | **Missing config** prevented the production-shaped read. |
+| `Content-Type: application/json` on GET | always set | omitted unless there is a body | Small **AWS header deviation**. Not proven as the 401 cause; not changed here. |
+| Fresh token per request | `moovFetch` always remints | list reused the `/accounts.read` token | Small **AWS deviation**. Same scope as production list. |
+
+**Verdict (Moov 401):** not an AWS OAuth rewrite failure. The sidecar authenticated the same way production does. It then used a **list-all-accounts** probe that production payments do not use, without the **platform account id** production requires. The 401 is therefore **missing sandbox platform/list configuration**, possibly compounded by treating a diagnostic list as a hard gate — **not** evidence that AWS cannot perform the production `GET /accounts/{knownId}` call once that id exists on the sandbox key.
+
+### CheckAlt — how production actually gets `ssoKey`
+
+Production does **not** treat `CHECKALT_USERNAME` as a FinCapture depositor.
+
+| Production step | Where | What it uses |
+| --- | --- | --- |
+| API login | `CHECKALT_USERNAME` / `CHECKALT_PASSWORD` | **Only** `POST {base_url}/public/fincapture/authenticate` with `{ userName, password }` and `merchant` header. `fi_key` is **not** a header. |
+| Deployment config | `checkalt_config` singleton | `base_url`, `merchant`, `fi_key`, `depositor_account_id` |
+| Tenant depositor | `checkalt_tenant_accounts` | `sso_user_id` + `deposit_account_number`, created by Integration Settings → `checkalt-register-account` |
+| User/account lookup | `checkalt-verify-account` | `{ fiKey, userId: acct.sso_user_id }` and for account also `accountNumber: acct.deposit_account_number` |
+| Deposit `ssoKey` | `checkalt-submit-deposit` | 1) cached `last_register_payload.sso_key` 2) `extractSsoKey(getUserAccountInformation)` 3) fallback `sso_user_id`. UI copy: the registered **User ID becomes the ssoKey**. |
+| If unregistered | `loadTenantAccount` | Throws: *Register in Integration Settings first.* Does **not** invent bank numbers. |
+
+`getUserAccountInformation` with a registered depositor is expected to return `accountDataList[].ssoKey`. The FI login returning accounts with only `accountNumber` / deposit limits and **no** `ssoKey` is the operator/FI view, not a tenant depositor.
+
+### CheckAlt — AWS sidecar vs that path
+
+| Item | Production | AWS sidecar | Classification |
+| --- | --- | --- | --- |
+| Auth path | `/public/fincapture/authenticate` only | tries `/public/jwtauth/authenticate` first, then production path | Harmless extra try. **Auth succeeded on the production path.** |
+| Auth body | `{ userName, password }` | also sends `userId` | Small **AWS deviation**. Auth still worked. |
+| `merchant` header | from `checkalt_config` | `lockbox5` from UAT secret | Environment-correct for UAT; not a deviation from the header mechanism. |
+| `fi_key` header on later calls | not sent | sent when `fiKey` present | **AWS deviation.** Production puts `fiKey` in the JSON body only. |
+| Who is `userId` on account lookup | `checkalt_tenant_accounts.sso_user_id` | **`CHECKALT_UAT_USER_ID` (API login)** | **AWS deviation.** Production never does this. |
+| Registered UAT depositor | required on **that** FinCapture host | none; restored RDS rows are production registrations | **Missing UAT config.** Must not reuse production `sso_user_id` / bank numbers against UAT. |
+| `account_unregistered` | production equivalent: “Register in Integration Settings first” | sidecar refused process without `ssoKey` | **Same product rule.** The 400 “Complete the Register event” from the first process attempt is CheckAlt agreeing. |
+
+**Verdict (CheckAlt ssoKey):** not an AWS authentication rewrite failure. UAT login matches production and works. The blocker is **missing a depositor registered on UAT** plus AWS looking up the **API user** instead of a tenant `sso_user_id`. Production would fail the same way if those two mistakes were made against live FinCapture.
+
+### What this does *not* mean
+
+- Do not copy production Moov account IDs or CheckAlt tenant registrations onto UAT/sandbox.
+- Do not treat these findings as permission to enable production flags.
+- Do not “fix” Origin, list permissions, or UAT register in this run; that is a later, explicit step.
+
 ## Cutover
 
 | Provider | Status |
