@@ -303,6 +303,10 @@ Resources:
         - email
       AutoVerifiedAttributes:
         - email
+      SignInPolicy:
+        AllowedFirstAuthFactors:
+          - EMAIL_OTP
+          - PASSWORD
       AccountRecoverySetting:
         RecoveryMechanisms:
           - Name: verified_email
@@ -332,6 +336,7 @@ Resources:
         IdToken: minutes
         RefreshToken: days
       ExplicitAuthFlows:
+        - ALLOW_USER_AUTH
         - ALLOW_USER_SRP_AUTH
         - ALLOW_USER_PASSWORD_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
