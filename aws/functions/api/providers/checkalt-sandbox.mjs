@@ -38,9 +38,13 @@ export const CHECKALT_USER_AMOUNT = {
   ],
 };
 
-/** UAT auth path specified for this phase. Production uses /public/fincapture/authenticate. */
-export const CHECKALT_UAT_AUTH_PATH = '/public/jwtauth/authenticate';
-export const CHECKALT_UAT_AUTH_PATH_FALLBACK = '/public/fincapture/authenticate';
+/**
+ * Production CheckAlt authenticates at /public/fincapture/authenticate with
+ * exactly { userName, password }. UAT validation uses that same contract first.
+ * The vendor-provided jwtauth endpoint remains a UAT-only fallback on 404.
+ */
+export const CHECKALT_UAT_AUTH_PATH = '/public/fincapture/authenticate';
+export const CHECKALT_UAT_AUTH_PATH_FALLBACK = '/public/jwtauth/authenticate';
 export const CHECKALT_UAT_AUTH_PATHS = [CHECKALT_UAT_AUTH_PATH, CHECKALT_UAT_AUTH_PATH_FALLBACK];
 
 export const extractCheckAltSsoAndAccount = (userData = {}, depositData = {}) => {
@@ -181,8 +185,7 @@ export const checkAltSandboxAuthenticate = async ({ credentials, fetchImpl = fet
     merchant,
   };
   const body = JSON.stringify({
-    userName: credentials.userId || credentials.username,
-    userId: credentials.userId || credentials.username,
+    userName: credentials.username || credentials.userId,
     password: credentials.password,
   });
   let last = null;
@@ -254,7 +257,6 @@ export const checkAltSandboxFetch = async ({
         'Content-Type': 'application/json',
         Authorization: `Bearer ${String(jwt).replace(/^"|"$/g, '')}`,
         merchant: merchantHeaderForCheckAltUat(credentials.merchant),
-        ...(credentials.fiKey ? { fi_key: credentials.fiKey } : {}),
       },
       body: JSON.stringify(body || {}),
     });
@@ -288,11 +290,20 @@ export const buildCheckAltUatDepositBody = ({
 } = {}) => {
   const deposit = buildCheckAltSandboxDeposit({ amountCents, reference });
   if (deposit.error) return deposit;
+  if (!ssoKey || !depositAccountNumber) {
+    return {
+      error: 'account_unregistered',
+      statusCode: 409,
+      provider: 'checkalt',
+      message: 'CheckAlt UAT deposit requires a registered FinCapture depositor ssoKey and approved UAT deposit account. The API login is never substituted as the depositor.',
+      negotiableCheck: false,
+    };
+  }
   return {
     request: {
       fiKey: credentials?.fiKey || null,
-      ssoKey: ssoKey || credentials?.userId || null,
-      depositAccountNumber: depositAccountNumber || null,
+      ssoKey,
+      depositAccountNumber,
       captureDateTime: new Date().toISOString(),
       userAmount: deposit.userAmount,
       frontImage: SYNTHETIC_VOID_PNG_B64,
