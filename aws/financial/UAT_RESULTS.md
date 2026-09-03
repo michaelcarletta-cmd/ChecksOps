@@ -178,6 +178,8 @@ Unchanged vs PR #100 / T6 baseline. Sandbox/UAT testing did not alter production
 
 No security regression. Production provider execution remains disabled (`provider_disabled` / production flags false).
 
+Function-by-function matrix (all 39 Moov Edge Functions, 9 related Moov workflows, 9 CheckAlt functions, frontend/idempotency/DB/NAT): `aws/providers/LOVABLE_AWS_PROVIDER_PARITY.md`. That audit does not change provider implementations.
+
 ## Comparison to working Lovable/Supabase production (not a fix)
 
 This section classifies the Moov `GET /accounts` 401 and CheckAlt `ssoKey` / `account_unregistered` blockers. **No code or provider configuration was changed to “solve” them.**

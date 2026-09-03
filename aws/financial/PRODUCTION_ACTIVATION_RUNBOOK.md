@@ -14,7 +14,7 @@ A provider can remain **NO-GO** independently without weakening another provider
 | --- | --- | --- |
 | Moov | **NO-GO** | OAuth matches production and succeeds. `GET /accounts` 401 is a list/platform-id gap, not how production transfers work. See `UAT_RESULTS.md` comparison. Pin stays `v2024.01.00`. |
 | CheckAlt | **NO-GO** | UAT auth matches production (`/public/fincapture/authenticate`). `ssoKey` missing because AWS used the API login as `userId` and no UAT depositor is registered. Production requires `checkalt_tenant_accounts`. |
-| ChecksOps AWS overall | **NO-GO** | T1–T6 green. Staging API has no NAT (`provider_egress_failed`). Real provider ledgers are not proven. Production flags remain false. |
+| ChecksOps AWS overall | **NO-GO** | T1–T6 green. Staging API has no NAT (`provider_egress_failed`). Real provider ledgers are not proven. Production Edge Function bodies are not ported (see `aws/providers/LOVABLE_AWS_PROVIDER_PARITY.md`). Production flags remain false. |
 | Plaid sandbox on money path | **N/A / NO-GO for money** | Plaid Link is not the deposit→disburse path. |
 | One ChecksOps op = one provider transaction (live HTTP) | **NO-GO** | Provider-side object count is zero. |
 | Sandbox webhooks vs production records | **Partial** | Staging `/sandbox/webhooks/*` never mutate production ledgers. Webhook secrets missing. Production webhook URLs remain on Supabase. |
