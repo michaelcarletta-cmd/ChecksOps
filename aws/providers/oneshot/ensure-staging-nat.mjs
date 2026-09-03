@@ -163,9 +163,114 @@ const main = () => {
     actions.push({ createNatGateway: 'already_present', natId });
   }
 
-  const privateRts = [...new Set(privateSubnetIds.map((id) => rtForSubnet(id)?.RouteTableId).filter(Boolean))];
+  const refreshRouteTables = () => (
+    awsJson(['ec2', 'describe-route-tables', '--filters', `Name=vpc-id,Values=${VPC_ID}`]).RouteTables || []
+  );
+
+  // Default VPC: Lambda subnets share the main table (0.0.0.0/0 → igw).
+  // Lambda ENIs have no public IPs, so that IGW route cannot provide egress.
+  // Create/reuse a dedicated private RT and associate only Lambda subnets.
+  // Never replace the main/public IGW default route. Never make RDS public.
+  let workingTables = routeTables;
+  const taggedPrivate = workingTables.find((rt) => (
+    (rt.Tags || []).some((t) => t.Key === 'Name' && t.Value === 'checksops-staging-lambda-private')
+  ));
+  let dedicatedPrivateRt = taggedPrivate?.RouteTableId || null;
+  const lambdaRtsNeedIsolation = privateSubnetIds.some((subnetId) => hasIgwRoute(rtForSubnet(subnetId)));
+  if (lambdaRtsNeedIsolation) {
+    if (!dedicatedPrivateRt) {
+      const createdRt = awsOk([
+        'ec2', 'create-route-table',
+        '--vpc-id', VPC_ID,
+        '--tag-specifications',
+        `ResourceType=route-table,Tags=[{Key=Name,Value=checksops-staging-lambda-private},{Key=Environment,Value=staging}]`,
+      ]);
+      if (!createdRt.ok) {
+        return {
+          ok: false,
+          classification: 'BLOCKED BY AWS CREDENTIALS / IAM',
+          error: createdRt.error,
+          createdNat: Boolean(natId),
+          natGatewayId: natId,
+          rdsMadePublic: false,
+          hint: 'Need ec2:CreateRouteTable so Lambda subnets can leave the main IGW table without changing public routes.',
+        };
+      }
+      dedicatedPrivateRt = createdRt.data.RouteTable?.RouteTableId || createdRt.data.RouteTableId;
+      actions.push({ createPrivateRouteTable: true, rtId: dedicatedPrivateRt });
+    } else {
+      actions.push({ createPrivateRouteTable: 'already_present', rtId: dedicatedPrivateRt });
+    }
+    for (const subnetId of privateSubnetIds) {
+      const current = rtForSubnet(subnetId);
+      if (current?.RouteTableId === dedicatedPrivateRt) {
+        actions.push({ associatePrivateRt: 'already_present', subnetId, rtId: dedicatedPrivateRt });
+        continue;
+      }
+      if (hasIgwRoute(current) && current?.Associations?.some((a) => a.Main && !a.SubnetId)) {
+        const associated = awsOk([
+          'ec2', 'associate-route-table',
+          '--route-table-id', dedicatedPrivateRt,
+          '--subnet-id', subnetId,
+        ]);
+        actions.push({
+          associatePrivateRt: associated.ok,
+          subnetId,
+          rtId: dedicatedPrivateRt,
+          previousRtId: current?.RouteTableId || null,
+          error: associated.error || null,
+        });
+        if (!associated.ok) {
+          return {
+            ok: false,
+            classification: 'BLOCKED BY AWS CREDENTIALS / IAM',
+            error: associated.error,
+            createdNat: Boolean(natId),
+            natGatewayId: natId,
+            rdsMadePublic: false,
+            hint: 'Need ec2:AssociateRouteTable on Lambda subnets only. Main IGW table was not modified.',
+          };
+        }
+      } else if (hasIgwRoute(current)) {
+        actions.push({ associatePrivateRt: 'skipped_explicit_public_association', subnetId, rtId: current.RouteTableId });
+      }
+    }
+    workingTables = refreshRouteTables();
+  }
+
+  const rtForSubnetNow = (subnetId) => {
+    const explicit = workingTables.find((rt) => (rt.Associations || []).some((a) => a.SubnetId === subnetId));
+    if (explicit) return explicit;
+    return workingTables.find((rt) => (rt.Associations || []).some((a) => a.Main)) || null;
+  };
+
+  const waitNatAvailable = () => {
+    if (!natId) return { ok: false, error: 'nat_id_missing' };
+    for (let i = 0; i < 30; i += 1) {
+      const latest = awsOk(['ec2', 'describe-nat-gateways', '--nat-gateway-ids', natId]);
+      const state = latest.data?.NatGateways?.[0]?.State || latest.error;
+      if (state === 'available') return { ok: true, state };
+      if (state === 'failed' || state === 'deleted') return { ok: false, state };
+      execFileSync('sleep', ['10']);
+    }
+    return { ok: false, error: 'nat_not_available_timeout' };
+  };
+  const natReady = waitNatAvailable();
+  actions.push({ waitNatAvailable: natReady.ok, natId, error: natReady.error || natReady.state || null });
+  if (!natReady.ok) {
+    return {
+      ok: false,
+      classification: 'BLOCKED BY AWS NETWORK ARCHITECTURE',
+      error: natReady.error || natReady.state,
+      createdNat: Boolean(natId),
+      natGatewayId: natId,
+      rdsMadePublic: false,
+    };
+  }
+
+  const privateRts = [...new Set(privateSubnetIds.map((id) => rtForSubnetNow(id)?.RouteTableId).filter(Boolean))];
   for (const rtId of privateRts) {
-    const rt = routeTables.find((row) => row.RouteTableId === rtId);
+    const rt = workingTables.find((row) => row.RouteTableId === rtId);
     if (hasIgwRoute(rt)) {
       actions.push({ route: 'skipped_public_rt', rtId, reason: 'has_igw_default_route' });
       continue;
@@ -183,16 +288,36 @@ const main = () => {
     actions.push({ createPrivateNatRoute: created.ok, rtId, natId, error: created.error || null });
   }
 
+  const s3Endpoint = (awsJson(['ec2', 'describe-vpc-endpoints', '--filters', `Name=vpc-id,Values=${VPC_ID}`, 'Name=service-name,Values=com.amazonaws.us-east-1.s3']).VpcEndpoints || [])[0];
+  if (s3Endpoint?.VpcEndpointId && dedicatedPrivateRt && !(s3Endpoint.RouteTableIds || []).includes(dedicatedPrivateRt)) {
+    const attached = awsOk([
+      'ec2', 'modify-vpc-endpoint',
+      '--vpc-endpoint-id', s3Endpoint.VpcEndpointId,
+      '--add-route-table-ids', dedicatedPrivateRt,
+    ]);
+    actions.push({ attachS3GatewayToPrivateRt: attached.ok, rtId: dedicatedPrivateRt, error: attached.error || null });
+  }
+
+  const lambdaHasNatRoute = privateRts.every((rtId) => {
+    const rt = workingTables.find((row) => row.RouteTableId === rtId) || rtForSubnetNow(privateSubnetIds[0]);
+    const refreshed = (refreshRouteTables().find((row) => row.RouteTableId === rtId)) || rt;
+    return Boolean(natRoute(refreshed)?.NatGatewayId) && !hasIgwRoute(refreshed);
+  });
+
   return {
-    ok: Boolean(natId),
-    classification: natId ? 'NAT_CONFIGURED_OR_PRESENT' : 'BLOCKED BY AWS NETWORK ARCHITECTURE',
+    ok: Boolean(natId) && lambdaHasNatRoute,
+    classification: (natId && lambdaHasNatRoute)
+      ? 'NAT_CONFIGURED_OR_PRESENT'
+      : 'BLOCKED BY AWS NETWORK ARCHITECTURE',
     vpcId: VPC_ID,
     natGatewayId: natId,
     eipAllocationId: eipAlloc,
     publicSubnetId: requestedPublic,
+    dedicatedPrivateRouteTableId: dedicatedPrivateRt,
     privateSubnetIds,
     privateRouteTableIds: privateRts,
     lambdaSecurityGroups: lambdaSgs,
+    lambdaHasNatRoute,
     rdsMadePublic: false,
     rdsOpenToWorld: Boolean(rdsOpen),
     lambdaPublicInbound: false,
