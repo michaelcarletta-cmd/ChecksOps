@@ -4,6 +4,8 @@ Authoritative tip when this inventory was written: merge of PR #95 (Tranche 2). 
 
 Production ChecksOps remains on Lovable/Supabase. This document does not redirect webhooks or enable money movement.
 
+Full Lovable → AWS function-by-function parity (GO/NO-GO, missing equivalents, sandbox/UAT config, NAT): `aws/providers/LOVABLE_AWS_PROVIDER_PARITY.md`.
+
 ## Classification
 
 | # | Class |

@@ -5,6 +5,7 @@ import { buildWriteClientConfig } from '../db-health.mjs';
 import { loadProviderSecrets, webhookSecret } from '../provider-secrets.mjs';
 import { providerWebhookDryRun } from '../provider-flags.mjs';
 import { rawEventBody, verifyHmacBodySignature, verifyMoovSignature } from './hmac.mjs';
+import { applyCheckAltWebhook, applyMoovWebhook, sandboxWebhookApplyEnabled } from './webhook-apply.mjs';
 
 const { Client } = pg;
 
@@ -188,6 +189,23 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
       dry_run: dryRun,
     });
 
+    let applyResult = {
+      applied: false,
+      financialTablesMutated: false,
+      skipped: 'sandbox_apply_disabled',
+    };
+    if (!stored.duplicate && sandboxWebhookApplyEnabled()) {
+      if (provider === 'moov') {
+        applyResult = await applyMoovWebhook(client, parsed.payload, {
+          mappedTenantId: mapped.mapped_tenant_id,
+        });
+      } else if (provider === 'checkalt') {
+        applyResult = await applyCheckAltWebhook(client, parsed.payload);
+      }
+    } else if (stored.duplicate) {
+      applyResult = { applied: false, skipped: 'duplicate', financialTablesMutated: false };
+    }
+
     await client.query('COMMIT');
     didCommit = true;
 
@@ -197,14 +215,18 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
       accepted: true,
       duplicate: stored.duplicate,
       dry_run: dryRun,
-      applied: false,
+      applied: Boolean(applyResult.applied),
+      apply_skipped: applyResult.skipped || null,
+      apply_mutations: applyResult.mutations || [],
+      apply_environment: applyResult.environment || null,
       provider,
       event_type: eventTypeOf(parsed.payload),
       receipt_id: stored.receipt?.id || null,
       mapped_tenant_id: mapped.mapped_tenant_id,
       lookup: mapped.lookup,
       payload: sanitized,
-      financialTablesMutated: false,
+      financialTablesMutated: Boolean(applyResult.financialTablesMutated),
+      productionRecordsMutated: false,
       liveProviderCalled: false,
     };
   } catch (error) {

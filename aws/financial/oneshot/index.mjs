@@ -87,6 +87,76 @@ export const handler = async (event) => {
     if (step === 'financial') {
       return { ok: true, financial: await financialAggregates(client) };
     }
+    if (step === 'provider_ids') {
+      const accounts = (await client.query(`
+        SELECT provider, provider_account_id, environment
+        FROM public.payment_provider_accounts
+        WHERE environment = 'production'
+        ORDER BY provider, provider_account_id
+      `)).rows;
+      const wallets = (await client.query(`
+        SELECT provider, provider_wallet_id, provider_account_id, environment
+        FROM public.payment_wallets
+        WHERE environment = 'production'
+        ORDER BY provider, provider_wallet_id
+      `)).rows;
+      return {
+        ok: true,
+        productionExecution: false,
+        productionRecordsMutated: false,
+        environments: [...new Set(accounts.map((row) => row.environment))],
+        productionAccountCount: accounts.length,
+        productionWalletCount: wallets.length,
+        moovAccountCount: accounts.filter((row) => row.provider === 'moov').length,
+        moovWalletCount: wallets.filter((row) => /moov/i.test(row.provider || '')).length,
+        productionAccountIds: accounts.map((row) => ({
+          provider: row.provider,
+          provider_account_id: row.provider_account_id,
+        })),
+        productionWalletIds: wallets.map((row) => ({
+          provider: row.provider,
+          provider_wallet_id: row.provider_wallet_id,
+        })),
+      };
+    }
+    if (step === 'sandbox_apply_grants') {
+      const before = await financialAggregates(client);
+      await client.query(readSql(SQL_DIR, '62_sandbox_financial_apply_grants.sql'));
+      const after = await financialAggregates(client);
+      const fns = (await client.query(`
+        SELECT p.proname
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public'
+          AND p.proname LIKE 'aws_sandbox_apply%'
+        ORDER BY p.proname
+      `)).rows.map((row) => row.proname);
+      let deniedWithoutGuc = false;
+      try {
+        await client.query('SET ROLE checksops');
+        await client.query("SELECT set_config('request.provider_webhook_apply', '', true)");
+        await client.query("SELECT * FROM public.aws_sandbox_apply_moov_transfer_status('no-such', 'completed', 'completed', NULL)");
+      } catch (error) {
+        deniedWithoutGuc = /sandbox_financial_apply_denied|42501/.test(String(error.message || error));
+      } finally {
+        try { await client.query('RESET ROLE'); } catch { /* ignore */ }
+      }
+      const moneyLedgersWritable = (await tablePrivileges(client)).some((row) => (
+        ['claim_payments', 'homeowner_ledger_events', 'checkalt_deposits', 'payment_transfers',
+          'disbursement_splits', 'disbursement_batches'].includes(row.table_name)
+        && row.grantee === 'PUBLIC'
+        && ['INSERT', 'UPDATE', 'DELETE'].includes(row.privilege_type)
+      ));
+      return {
+        ok: JSON.stringify(before) === JSON.stringify(after) && deniedWithoutGuc && fns.length >= 3 && !moneyLedgersWritable,
+        financialUnchanged: JSON.stringify(before) === JSON.stringify(after),
+        deniedWithoutGuc,
+        functions: fns,
+        moneyLedgersWritableToPublic: moneyLedgersWritable,
+        activationSqlApplied: false,
+        AWS_FINANCIAL_PERMISSIONS_ACTIVATED: false,
+      };
+    }
     if (step === 'sandbox') {
       const before = await financialAggregates(client);
       await client.query(readSql(SQL_DIR, '70_provider_sandbox.sql'));

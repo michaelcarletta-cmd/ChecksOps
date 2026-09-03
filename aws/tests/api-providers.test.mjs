@@ -231,8 +231,8 @@ test('provider flags default false and fail closed', () => {
 
 test('inventory classifies every provider function', () => {
   assert.ok(PROVIDER_FUNCTIONS.length >= 60);
-  assert.equal(classifyFunction('moov-readiness').aws, 'db_status');
-  assert.equal(classifyFunction('moov-transfer-create').aws, 'disabled');
+  assert.equal(classifyFunction('moov-readiness').aws, 'sandbox_parity');
+  assert.equal(classifyFunction('moov-transfer-create').aws, 'sandbox_parity');
   assert.equal(classifyFunction('checkalt-submit-deposit').class, 5);
   assert.equal(classifyFunction('plaid-disburse').class, 7);
   assert.equal(FUNCTION_BY_NAME['moov-webhook'].aws, 'webhook');
@@ -405,21 +405,22 @@ test('spoofed Moov account and wallet ids are denied', async () => {
   assert.equal(spoofWallet.error, 'spoofed_provider_id');
 });
 
-test('money-moving function invokes stay provider_disabled even if flags are true', async () => {
+test('money-moving production flags stay blocked; sandbox flag is required for ports', async () => {
   await withEnv({
     AWS_PROVIDER_EXECUTION_ENABLED: 'true',
     AWS_MOOV_ENABLED: 'true',
     AWS_CHECKALT_ENABLED: 'true',
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: undefined,
   }, async () => {
     const transfer = await handler(jwtEvent('/functions/v1/moov-transfer-create', 'POST', { amount: 10 }));
     const transferBody = JSON.parse(transfer.body);
     assert.equal(transfer.statusCode, 403);
-    assert.equal(transferBody.error, 'provider_disabled');
+    assert.equal(transferBody.error, 'production_execution_blocked');
     assert.equal(transferBody.tranche4HardBlock, true);
 
     const deposit = await handler(jwtEvent('/functions/v1/checkalt-submit-deposit', 'POST', { check_id: WALLET_ID }));
     assert.equal(deposit.statusCode, 403);
-    assert.equal(JSON.parse(deposit.body).error, 'provider_disabled');
+    assert.equal(JSON.parse(deposit.body).error, 'production_execution_blocked');
   });
 });
 

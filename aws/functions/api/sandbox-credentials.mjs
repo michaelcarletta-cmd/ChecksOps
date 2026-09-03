@@ -18,6 +18,7 @@ export const SANDBOX_SECRET_KEYS = [
   'CHECKALT_UAT_PASSWORD',
   'CHECKALT_UAT_FI_KEY',
   'CHECKALT_UAT_MERCHANT',
+  'CHECKALT_UAT_DEPOSIT_ACCOUNT_NUMBER',
   'CHECKALT_SANDBOX_USERNAME',
   'CHECKALT_SANDBOX_PASSWORD',
   'CHECKALT_SANDBOX_FI_KEY',
@@ -56,6 +57,31 @@ export const looksLikeSandboxHost = (value) => {
   }
 };
 
+/**
+ * Approved CheckAlt UAT merchant is lockbox5.
+ * A labeled secret value is accepted only if it contains lockbox5 and does not look like production.
+ */
+export const isApprovedCheckAltMerchant = (value) => {
+  if (!value) return true;
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return true;
+  if (raw === CHECKALT_UAT_MERCHANT_EXPECTED) return true;
+  if (raw.includes('prod')) return false;
+  const segments = raw.split(/[:|/,-]+/).map((part) => part.trim()).filter(Boolean);
+  if (segments.includes(CHECKALT_UAT_MERCHANT_EXPECTED)) return true;
+  return raw.includes(CHECKALT_UAT_MERCHANT_EXPECTED);
+};
+
+export const merchantHeaderForCheckAltUat = (value) => {
+  if (isApprovedCheckAltMerchant(value) && String(value || '').trim()) {
+    const raw = String(value).trim();
+    if (raw.toLowerCase() === CHECKALT_UAT_MERCHANT_EXPECTED) return CHECKALT_UAT_MERCHANT_EXPECTED;
+    const match = raw.split(/[:|/,-]+/).map((part) => part.trim()).find((part) => part.toLowerCase() === CHECKALT_UAT_MERCHANT_EXPECTED);
+    return match || CHECKALT_UAT_MERCHANT_EXPECTED;
+  }
+  return CHECKALT_UAT_MERCHANT_EXPECTED;
+};
+
 /** Approved CheckAlt FinCapture UAT only. Scheme, host, and empty path must match exactly. */
 export const isApprovedCheckAltUatUrl = (value) => {
   if (!value) return false;
@@ -80,6 +106,26 @@ export const normalizeCheckAltUatUrl = (value) => {
 };
 
 const present = (secrets, key) => Boolean(secrets?.[key]);
+
+/** Node undici / VPC-egress failures. Not a database error. */
+export const isProviderNetworkError = (error) => {
+  if (!error) return false;
+  if (error.code === 'PROVIDER_EGRESS_FAILED') return true;
+  const msg = String(error.message || '');
+  const causeMsg = String(error.cause?.message || '');
+  const causeCode = String(error.cause?.code || error.code || '');
+  if (msg === 'fetch failed' || causeMsg === 'fetch failed') return true;
+  return /^(ECONNREFUSED|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|UND_ERR_CONNECT_TIMEOUT)$/i.test(causeCode);
+};
+
+export const providerEgressFailure = (provider, extra = {}) => ({
+  ok: false,
+  statusCode: 503,
+  error: 'provider_egress_failed',
+  provider,
+  message: 'Staging cannot reach the provider HTTPS endpoint. No production keys were used.',
+  ...extra,
+});
 
 export const classifyMoovSandbox = (secrets = {}) => {
   const sandboxKeys = present(secrets, 'MOOV_SANDBOX_PUBLIC_KEY') && present(secrets, 'MOOV_SANDBOX_SECRET_KEY');
@@ -118,7 +164,7 @@ export const classifyCheckAltSandbox = (secrets = {}) => {
   const uatCreds = present(secrets, 'CHECKALT_UAT_USER_ID') && present(secrets, 'CHECKALT_UAT_PASSWORD');
   const uatUrlOk = isApprovedCheckAltUatUrl(uatUrl);
   const merchant = secrets.CHECKALT_UAT_MERCHANT || null;
-  const merchantOk = !merchant || String(merchant).toLowerCase() === CHECKALT_UAT_MERCHANT_EXPECTED;
+  const merchantOk = isApprovedCheckAltMerchant(merchant);
   const productionCreds = present(secrets, 'CHECKALT_USERNAME') || present(secrets, 'CHECKALT_PASSWORD');
   const legacyUrl = secrets.CHECKALT_SANDBOX_BASE_URL || null;
   const legacyCreds = present(secrets, 'CHECKALT_SANDBOX_USERNAME') && present(secrets, 'CHECKALT_SANDBOX_PASSWORD');
@@ -141,6 +187,7 @@ export const classifyCheckAltSandbox = (secrets = {}) => {
     dedicatedUatUrlApproved: uatUrlOk,
     merchantConfigured: Boolean(merchant),
     merchantApproved: merchantOk,
+    approvedDepositAccountConfigured: present(secrets, 'CHECKALT_UAT_DEPOSIT_ACCOUNT_NUMBER'),
     productionKeysPresent: productionCreds,
     webhookSecretConfigured: present(secrets, 'CHECKALT_SANDBOX_WEBHOOK_SECRET'),
     refuseProductionKeys: true,
@@ -212,7 +259,8 @@ export const loadSandboxCredentials = async (getSecrets = loadProviderSecrets) =
         userId: secrets.CHECKALT_UAT_USER_ID,
         password: secrets.CHECKALT_UAT_PASSWORD,
         fiKey: secrets.CHECKALT_UAT_FI_KEY || null,
-        merchant: secrets.CHECKALT_UAT_MERCHANT || CHECKALT_UAT_MERCHANT_EXPECTED,
+        merchant: merchantHeaderForCheckAltUat(secrets.CHECKALT_UAT_MERCHANT),
+        depositAccountNumber: secrets.CHECKALT_UAT_DEPOSIT_ACCOUNT_NUMBER || null,
         webhookSecret: secrets.CHECKALT_SANDBOX_WEBHOOK_SECRET || null,
         authPath: '/public/jwtauth/authenticate',
       }

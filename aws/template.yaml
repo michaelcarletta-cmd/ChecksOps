@@ -33,14 +33,27 @@ Parameters:
     Type: String
     Default: pl-63a5400a
     Description: AWS-managed prefix list for com.amazonaws.us-east-1.s3. Used for Lambda HTTPS egress to S3 via the gateway endpoint.
+  PublicSubnetId:
+    Type: String
+    Default: ''
+    Description: Optional public subnet (IGW route) for a staging NAT Gateway. Empty skips NAT creation so a SAM update cannot attach 0.0.0.0/0 to a public route table by accident.
+  PrivateRouteTableId:
+    Type: String
+    Default: ''
+    Description: Optional private route table for Lambda subnets. Used only when PublicSubnetId is set. Must not be a route table that already has 0.0.0.0/0 → igw.
+
+Conditions:
+  CreateStagingNat: !And
+    - !Not [!Equals [!Ref PublicSubnetId, '']]
+    - !Not [!Equals [!Ref PrivateRouteTableId, '']]
 
 Globals:
   Function:
     Runtime: nodejs22.x
     Architectures:
       - arm64
-    Timeout: 15
-    MemorySize: 512
+    Timeout: 29
+    MemorySize: 1024
     Tracing: Active
     Environment:
       Variables:
@@ -60,6 +73,8 @@ Globals:
         AWS_QUICKBOOKS_ENABLED: "false"
         AWS_PROVIDER_LIVE_READS_ENABLED: "false"
         AWS_PROVIDER_WEBHOOK_DRY_RUN: "true"
+        AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: "true"
+        AWS_FINANCIAL_PERMISSIONS_ACTIVATED: "false"
 
 Resources:
   ChecksOpsApi:
@@ -84,7 +99,7 @@ Resources:
   ApiLambdaSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Dedicated checksops-staging-api Lambda SG. No inbound. Egress only to RDS 5432, Secrets Manager endpoint, and S3 prefix list.
+      GroupDescription: Dedicated checksops-staging-api Lambda SG. No inbound. Egress to RDS 5432, Secrets Manager, S3 prefix list, and HTTPS 443 via staging NAT.
       VpcId: !Ref VpcId
       SecurityGroupEgress:
         - IpProtocol: tcp
@@ -97,6 +112,11 @@ Resources:
           ToPort: 443
           DestinationPrefixListId: !Ref S3ManagedPrefixListId
           Description: HTTPS to S3 via gateway endpoint prefix list
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS to Moov and CheckAlt UAT via staging NAT. No inbound. Does not change the RDS security group.
       Tags:
         - Key: Name
           Value: !Sub checksops-${Environment}-api-lambda
@@ -143,6 +163,37 @@ Resources:
       ToPort: 5432
       SourceSecurityGroupId: !Ref ApiLambdaSecurityGroup
       Description: PostgreSQL from checksops-staging-api Lambda only
+
+  StagingNatEip:
+    Type: AWS::EC2::EIP
+    Condition: CreateStagingNat
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub checksops-${Environment}-nat
+        - Key: Environment
+          Value: !Ref Environment
+
+  StagingNatGateway:
+    Type: AWS::EC2::NatGateway
+    Condition: CreateStagingNat
+    Properties:
+      AllocationId: !GetAtt StagingNatEip.AllocationId
+      SubnetId: !Ref PublicSubnetId
+      Tags:
+        - Key: Name
+          Value: !Sub checksops-${Environment}-nat
+        - Key: Environment
+          Value: !Ref Environment
+
+  StagingPrivateInternetRoute:
+    Type: AWS::EC2::Route
+    Condition: CreateStagingNat
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableId
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref StagingNatGateway
 
   SecretsManagerVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint

@@ -2,7 +2,11 @@ import { formatCheckAltUserAmount, dollarsToIntegerCents, validateProviderCents 
 import {
   CHECKALT_UAT_HOST,
   CHECKALT_UAT_MERCHANT_EXPECTED,
+  isApprovedCheckAltMerchant,
   isApprovedCheckAltUatUrl,
+  isProviderNetworkError,
+  merchantHeaderForCheckAltUat,
+  providerEgressFailure,
 } from '../sandbox-credentials.mjs';
 import { SANDBOX_MIN_CENTS } from './moov-sandbox.mjs';
 
@@ -38,6 +42,41 @@ export const CHECKALT_USER_AMOUNT = {
 export const CHECKALT_UAT_AUTH_PATH = '/public/jwtauth/authenticate';
 export const CHECKALT_UAT_AUTH_PATH_FALLBACK = '/public/fincapture/authenticate';
 export const CHECKALT_UAT_AUTH_PATHS = [CHECKALT_UAT_AUTH_PATH, CHECKALT_UAT_AUTH_PATH_FALLBACK];
+
+export const extractCheckAltSsoAndAccount = (userData = {}, depositData = {}) => {
+  const list = Array.isArray(userData?.accountDataList)
+    ? userData.accountDataList
+    : (Array.isArray(depositData?.accountDataList) ? depositData.accountDataList : []);
+  const pickSso = (row = {}) => (
+    row.ssoKey || row.SSOKey || row.SsoKey || row.sso_key || row.userSsoKey || row.ssoUserId || null
+  );
+  const first = list[0] || {};
+  const ssoKey = pickSso(first) || pickSso(userData) || pickSso(depositData) || list.map(pickSso).find(Boolean) || null;
+  const depositAccountNumber = first.accountNumber
+    || first.AccountNumber
+    || first.depositAccountNumber
+    || depositData?.accountNumber
+    || depositData?.depositAccountNumber
+    || depositData?.accountDataList?.[0]?.accountNumber
+    || null;
+  return {
+    ssoKey,
+    depositAccountNumber,
+    accountCount: list.length,
+    hasSsoKey: Boolean(ssoKey),
+    hasDepositAccount: Boolean(depositAccountNumber),
+    accountObjectKeys: first && typeof first === 'object' ? Object.keys(first).sort() : [],
+    userObjectKeys: userData && typeof userData === 'object' ? Object.keys(userData).sort() : [],
+  };
+};
+
+export const extractCheckAltAmountEcho = (data = {}) => ({
+  echoedUserAmount: data?.userAmount ?? data?.UserAmount ?? null,
+  echoedAmount: data?.amount ?? null,
+  echoedAmountCents: data?.amountCents ?? data?.amount_cents ?? null,
+  status: data?.status ?? data?.statusCode ?? null,
+  statusDescription: data?.statusDescription || data?.message || null,
+});
 
 export const extractCheckAltReference = (data = {}) => {
   const raw = data?.referenceNumber ?? data?.checkalt_reference ?? data?.reference ?? null;
@@ -94,7 +133,7 @@ export const assertCheckAltSandboxCredentials = (credentials) => {
     };
   }
   const merchant = String(credentials.merchant || '').toLowerCase();
-  if (merchant && merchant !== CHECKALT_UAT_MERCHANT_EXPECTED) {
+  if (merchant && !isApprovedCheckAltMerchant(credentials.merchant)) {
     return {
       ok: false,
       statusCode: 403,
@@ -136,9 +175,10 @@ const parseAuthToken = (text) => {
 export const checkAltSandboxAuthenticate = async ({ credentials, fetchImpl = fetch } = {}) => {
   const gate = assertCheckAltSandboxCredentials(credentials);
   if (!gate.ok) return gate;
+  const merchant = merchantHeaderForCheckAltUat(credentials.merchant);
   const headers = {
     'Content-Type': 'application/json',
-    merchant: credentials.merchant || CHECKALT_UAT_MERCHANT_EXPECTED,
+    merchant,
   };
   const body = JSON.stringify({
     userName: credentials.userId || credentials.username,
@@ -146,36 +186,41 @@ export const checkAltSandboxAuthenticate = async ({ credentials, fetchImpl = fet
     password: credentials.password,
   });
   let last = null;
-  for (const authPath of CHECKALT_UAT_AUTH_PATHS) {
-    const response = await fetchImpl(`${CHECKALT_UAT_HOST}${authPath}`, {
-      method: 'POST',
-      headers,
-      body,
-    });
-    const text = await response.text();
-    last = { response, text, authPath };
-    if (response.ok) {
-      const parsed = parseAuthToken(text);
-      if (parsed.token) {
+  try {
+    for (const authPath of CHECKALT_UAT_AUTH_PATHS) {
+      const response = await fetchImpl(`${CHECKALT_UAT_HOST}${authPath}`, {
+        method: 'POST',
+        headers,
+        body,
+      });
+      const text = await response.text();
+      last = { response, text, authPath };
+      if (response.ok) {
+        const parsed = parseAuthToken(text);
+        if (parsed.token) {
+          return {
+            ok: true,
+            tokenPresent: true,
+            httpStatus: response.status,
+            rawToken: parsed.token,
+            authPath,
+          };
+        }
+      }
+      if (response.status !== 404) {
         return {
-          ok: true,
-          tokenPresent: true,
+          ok: false,
+          statusCode: response.status,
+          error: 'checkalt_uat_auth_failed',
+          provider: 'checkalt',
           httpStatus: response.status,
-          rawToken: parsed.token,
           authPath,
         };
       }
     }
-    if (response.status !== 404) {
-      return {
-        ok: false,
-        statusCode: response.status,
-        error: 'checkalt_uat_auth_failed',
-        provider: 'checkalt',
-        httpStatus: response.status,
-        authPath,
-      };
-    }
+  } catch (error) {
+    if (isProviderNetworkError(error)) return providerEgressFailure('checkalt');
+    throw error;
   }
   return {
     ok: false,
@@ -202,30 +247,36 @@ export const checkAltSandboxFetch = async ({
     if (!authed.ok) return authed;
     jwt = authed.rawToken;
   }
-  const response = await fetchImpl(`${CHECKALT_UAT_HOST}${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${String(jwt).replace(/^"|"$/g, '')}`,
-      merchant: credentials.merchant || CHECKALT_UAT_MERCHANT_EXPECTED,
-      ...(credentials.fiKey ? { fi_key: credentials.fiKey } : {}),
-    },
-    body: JSON.stringify(body || {}),
-  });
-  let json = null;
-  const text = await response.text();
-  try { json = text ? JSON.parse(text) : null; } catch { json = null; }
-  if (!response.ok) {
-    return {
-      ok: false,
-      statusCode: response.status,
-      error: 'checkalt_uat_http_failed',
-      provider: 'checkalt',
-      httpStatus: response.status,
-      path,
-    };
+  try {
+    const response = await fetchImpl(`${CHECKALT_UAT_HOST}${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${String(jwt).replace(/^"|"$/g, '')}`,
+        merchant: merchantHeaderForCheckAltUat(credentials.merchant),
+        ...(credentials.fiKey ? { fi_key: credentials.fiKey } : {}),
+      },
+      body: JSON.stringify(body || {}),
+    });
+    let json = null;
+    const text = await response.text();
+    try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+    if (!response.ok) {
+      return {
+        ok: false,
+        statusCode: response.status,
+        error: 'checkalt_uat_http_failed',
+        provider: 'checkalt',
+        httpStatus: response.status,
+        path,
+        message: json?.message || json?.statusDescription || json?.error || null,
+      };
+    }
+    return { ok: true, statusCode: response.status, data: json };
+  } catch (error) {
+    if (isProviderNetworkError(error)) return providerEgressFailure('checkalt', { path });
+    throw error;
   }
-  return { ok: true, statusCode: response.status, data: json };
 };
 
 export const buildCheckAltUatDepositBody = ({

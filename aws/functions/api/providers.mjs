@@ -33,6 +33,9 @@ import {
 import { plaidExecutionStub, publicPlaidStatus } from './providers/plaid.mjs';
 import { quickbooksExecutionStub, quickbooksInterface } from './providers/quickbooks.mjs';
 import { handleProviderWebhook } from './providers/webhooks.mjs';
+import { handleProviderEgress } from './providers/egress.mjs';
+import { providerSandboxExecutionEnabled } from './sandbox-flags.mjs';
+import { hasParityHandler, runParityHandler } from './providers/parity/dispatch.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -344,10 +347,14 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
 
   if (executionAllowed(spec.provider) && spec.aws !== 'db_status' && spec.aws !== 'webhook') {
     return denyProviderExecution(spec.provider, spec.name, {
-      error: 'provider_disabled',
-      message: 'Tranche 4 keeps execution fail-closed even if a flag is flipped. Money movement is not implemented on AWS.',
+      error: 'production_execution_blocked',
+      message: 'Production provider flags stay false. Staging never uses production Moov/CheckAlt keys. Enable AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED for sandbox/UAT ports only.',
       tranche4HardBlock: true,
     });
+  }
+
+  if (providerSandboxExecutionEnabled() && hasParityHandler(name)) {
+    return runParityHandler(name, event, deps);
   }
 
   if (spec.aws === 'db_status') {
@@ -378,6 +385,7 @@ export const providerRoute = (path, method) => {
   if (method === 'GET' && (path === '/providers/status' || path === '/providers/health')) {
     return { kind: 'flags' };
   }
+  if (method === 'GET' && path === '/providers/egress') return { kind: 'egress' };
   if (method === 'POST' && path === '/providers/moov/status') return { kind: 'moov' };
   if (method === 'POST' && path === '/providers/checkalt/status') return { kind: 'checkalt' };
   if (method === 'POST' && path === '/providers/plaid/status') return { kind: 'plaid' };
@@ -395,6 +403,7 @@ export const handleProviderRequest = async (event, path, method, deps = {}) => {
   const route = providerRoute(path, method);
   if (!route) return null;
   if (route.kind === 'flags') return handleProviderFlags();
+  if (route.kind === 'egress') return handleProviderEgress(event, deps);
   if (route.kind === 'moov') return handleMoovStatus(event, deps);
   if (route.kind === 'checkalt') return handleCheckAltStatus(event, deps);
   if (route.kind === 'plaid') return handlePlaidStatus(event, deps);

@@ -8,7 +8,9 @@ import {
   classifyCheckAltSandbox,
   classifyMoovSandbox,
   classifyPlaidSandbox,
+  isApprovedCheckAltMerchant,
   isApprovedCheckAltUatUrl,
+  isProviderNetworkError,
   looksLikeSandboxHost,
   sandboxCredentialSnapshot,
 } from '../functions/api/sandbox-credentials.mjs';
@@ -20,6 +22,7 @@ import {
 import {
   buildMoovSandboxTransferBody,
   idempotencyUuid,
+  moovSandboxToken,
   SANDBOX_MIN_CENTS,
 } from '../functions/api/providers/moov-sandbox.mjs';
 import { buildCheckAltSandboxDeposit } from '../functions/api/providers/checkalt-sandbox.mjs';
@@ -255,6 +258,12 @@ test('CheckAlt UAT requires the exact approved host and refuses production', () 
   assert.equal(isApprovedCheckAltUatUrl('http://uatapi.checkalt.com'), false);
   assert.equal(isApprovedCheckAltUatUrl('https://api.checkalt.com'), false);
   assert.equal(isApprovedCheckAltUatUrl('https://uatapi.checkalt.com/fincapture'), false);
+  assert.equal(looksLikeSandboxHost('https://api.clearingworks.com'), false);
+  assert.equal(isApprovedCheckAltUatUrl('https://uatapi.checkalt.com'), true);
+  assert.equal(isApprovedCheckAltUatUrl('https://uatapi.checkalt.com/'), true);
+  assert.equal(isApprovedCheckAltUatUrl('http://uatapi.checkalt.com'), false);
+  assert.equal(isApprovedCheckAltUatUrl('https://api.checkalt.com'), false);
+  assert.equal(isApprovedCheckAltUatUrl('https://uatapi.checkalt.com/fincapture'), false);
   const none = classifyCheckAltSandbox({
     CHECKALT_USERNAME: 'prod-user',
     CHECKALT_PASSWORD: 'prod-pass',
@@ -287,6 +296,9 @@ test('CheckAlt UAT requires the exact approved host and refuses production', () 
   });
   assert.equal(ok.available, true);
   assert.equal(ok.authPath, CHECKALT_UAT_AUTH_PATH);
+  assert.equal(isApprovedCheckAltMerchant('lockbox5'), true);
+  assert.equal(isApprovedCheckAltMerchant('UAT Label: lockbox5'), true);
+  assert.equal(isApprovedCheckAltMerchant('production-lockbox'), false);
 });
 
 test('CheckAlt userAmount is integer cents for 0.01, 1.00, and 123.45', () => {
@@ -628,9 +640,15 @@ test('mocked CheckAlt UAT HTTP creates one deposit and refuses a second process'
       if (String(url).includes('/public/jwtauth/authenticate')) {
         return { ok: true, status: 200, text: async () => JSON.stringify({ token: 'a.b.c' }) };
       }
+      if (String(url).includes('getUserAccountInformation')) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ accountDataList: [{ ssoKey: 'sso-uat', accountNumber: 'TEST-UAT-ONLY' }] }) };
+      }
+      if (String(url).includes('getDepositAccountInformation')) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ accountNumber: 'TEST-UAT-ONLY' }) };
+      }
       if (String(url).includes('/fincapture/deposit/process')) {
         processes += 1;
-        return { ok: true, status: 200, text: async () => JSON.stringify({ referenceNumber: 'uat-ref-1', status: 127 }) };
+        return { ok: true, status: 200, text: async () => JSON.stringify({ referenceNumber: 'uat-ref-1', status: 127, userAmount: 1 }) };
       }
       return { ok: false, status: 404, text: async () => '{}' };
     };
@@ -772,6 +790,162 @@ test('CheckAlt recovery does not submit a second UAT deposit', async () => {
     );
     assert.equal(retry.duplicate, true);
     assert.equal(retry.recoveryRequired, true);
+    assert.equal(processes, 0);
+  });
+});
+
+test('provider network errors are classified as egress failures, not DB errors', () => {
+  assert.equal(isProviderNetworkError(new TypeError('fetch failed')), true);
+  assert.equal(isProviderNetworkError({ message: 'password authentication failed', code: '28P01' }), false);
+});
+
+test('Moov sandbox token maps fetch failures to provider_egress_failed', async () => {
+  const result = await moovSandboxToken({
+    credentials: {
+      environment: 'sandbox',
+      host: 'https://api.moov.io',
+      publicKey: 'pk_sbox',
+      secretKey: 'sk_sbox',
+      origin: 'https://checksops.com',
+    },
+    fetchImpl: async () => {
+      throw new TypeError('fetch failed');
+    },
+  });
+  assert.equal(result.error, 'provider_egress_failed');
+  assert.equal(result.statusCode, 503);
+  assert.equal(result.provider, 'moov');
+});
+
+test('sandbox probe surfaces provider_egress_failed when Moov HTTPS cannot leave the VPC', async () => {
+  await withEnv({
+    AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true',
+    AWS_FINANCIAL_PERMISSIONS_ACTIVATED: 'false',
+  }, async () => {
+    const client = mockClient();
+    const result = await handleSandboxRequest(
+      jwtEvent('/sandbox/moov/probe', 'POST', {}),
+      '/sandbox/moov/probe',
+      'POST',
+      depsFor(client, {
+        loadSandboxCredentials: async () => ({
+          moov: {
+            environment: 'sandbox',
+            host: 'https://api.moov.io',
+            publicKey: 'pk_sbox',
+            secretKey: 'sk_sbox',
+            origin: 'https://checksops.com',
+            apiVersion: 'v2024.01.00',
+          },
+          snapshot: { moov: { available: true, reason: 'sandbox_keys_configured' } },
+        }),
+        fetchImpl: async () => {
+          throw new TypeError('fetch failed');
+        },
+      }),
+    );
+    assert.equal(result.error, 'provider_egress_failed');
+    assert.equal(result.statusCode, 503);
+    assert.notEqual(result.error, 'data_query_failed');
+  });
+});
+
+test('CheckAlt deposit without a UAT account does not process and does not register bank numbers', async () => {
+  await withEnv({
+    AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true',
+    AWS_FINANCIAL_PERMISSIONS_ACTIVATED: 'false',
+  }, async () => {
+    const client = mockClient();
+    let processes = 0;
+    let registers = 0;
+    const fetchImpl = async (url) => {
+      if (String(url).includes('/authenticate')) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ token: 'a.b.c' }) };
+      }
+      if (String(url).includes('/useraccount/register')) {
+        registers += 1;
+        return { ok: true, status: 200, text: async () => '{}' };
+      }
+      if (String(url).includes('getUserAccountInformation') || String(url).includes('getDepositAccountInformation')) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ accountDataList: [] }) };
+      }
+      if (String(url).includes('/deposit/process')) {
+        processes += 1;
+        return { ok: true, status: 200, text: async () => JSON.stringify({ referenceNumber: 'should-not' }) };
+      }
+      return { ok: false, status: 404, text: async () => '{}' };
+    };
+    const result = await handleSandboxRequest(
+      jwtEvent('/sandbox/checkalt/deposit', 'POST', { fixture: 'min' }),
+      '/sandbox/checkalt/deposit',
+      'POST',
+      depsFor(client, {
+        loadSandboxCredentials: async () => ({
+          checkalt: {
+            environment: 'uat',
+            baseUrl: CHECKALT_UAT_HOST,
+            userId: 'uat-user',
+            username: 'uat-user',
+            password: 'uat-pass',
+            fiKey: 'fi',
+            merchant: 'lockbox5',
+          },
+          snapshot: { checkalt: { available: true } },
+        }),
+        fetchImpl,
+      }),
+    );
+    assert.equal(result.error, 'account_unregistered');
+    assert.equal(result.registeredTestAccount, false);
+    assert.equal(result.negotiableCheckSubmitted, false);
+    assert.equal(processes, 0);
+    assert.equal(registers, 0);
+  });
+});
+
+test('CheckAlt deposit without a UAT ssoKey does not process', async () => {
+  await withEnv({
+    AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true',
+    AWS_FINANCIAL_PERMISSIONS_ACTIVATED: 'false',
+  }, async () => {
+    const client = mockClient();
+    let processes = 0;
+    const result = await handleSandboxRequest(
+      jwtEvent('/sandbox/checkalt/deposit', 'POST', { fixture: 'min' }),
+      '/sandbox/checkalt/deposit',
+      'POST',
+      depsFor(client, {
+        loadSandboxCredentials: async () => ({
+          checkalt: {
+            environment: 'uat',
+            baseUrl: CHECKALT_UAT_HOST,
+            userId: 'uat-user',
+            username: 'uat-user',
+            password: 'uat-pass',
+            fiKey: 'fi',
+            merchant: 'lockbox5',
+          },
+          snapshot: { checkalt: { available: true } },
+        }),
+        fetchImpl: async (url) => {
+          if (String(url).includes('/authenticate')) {
+            return { ok: true, status: 200, text: async () => JSON.stringify({ token: 'a.b.c' }) };
+          }
+          if (String(url).includes('getUserAccountInformation')) {
+            return { ok: true, status: 200, text: async () => JSON.stringify({ accountDataList: [{ accountNumber: 'TEST-UAT-ONLY' }] }) };
+          }
+          if (String(url).includes('/deposit/process')) {
+            processes += 1;
+            return { ok: true, status: 200, text: async () => JSON.stringify({ referenceNumber: 'should-not' }) };
+          }
+          return { ok: true, status: 200, text: async () => '{}' };
+        },
+      }),
+    );
+    assert.equal(result.error, 'account_unregistered');
     assert.equal(processes, 0);
   });
 });
