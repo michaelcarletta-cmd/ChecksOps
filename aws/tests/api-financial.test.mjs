@@ -540,6 +540,6 @@ test('production execution stays blocked even if the master flag is flipped', as
     assert.equal(result.error, 'production_execution_blocked');
     const liveFn = await handler(jwtEvent('/functions/v1/moov-transfer-create', 'POST', { amount_cents: 100 }));
     assert.equal(liveFn.statusCode, 403);
-    assert.equal(JSON.parse(liveFn.body).error, 'provider_disabled');
+    assert.equal(JSON.parse(liveFn.body).error, 'production_execution_blocked');
   });
 });
