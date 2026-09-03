@@ -33,7 +33,134 @@ const parseBody = (event) => {
 };
 
 const emailOf = (value) => String(value || '').trim().toLowerCase();
+const codeOf = (value) => String(value || '').trim().replace(/\s+/g, '');
 
+const authenticationOf = (result, refreshTokenFallback = null) => {
+  const auth = result?.AuthenticationResult || {};
+  if (!auth.IdToken || !auth.AccessToken) return null;
+  return {
+    idToken: auth.IdToken,
+    accessToken: auth.AccessToken,
+    refreshToken: auth.RefreshToken || refreshTokenFallback || null,
+    expiresIn: auth.ExpiresIn,
+    tokenType: auth.TokenType || 'Bearer',
+  };
+};
+
+/**
+ * Native Cognito passwordless start.
+ *
+ * Uses choice-based USER_AUTH with EMAIL_OTP. This route intentionally does
+ * not accept a password. PreventUserExistenceErrors on the app client remains
+ * the enumeration boundary; callers get a generic failure if the account is
+ * not eligible for EMAIL_OTP.
+ *
+ * Production ChecksOps remains unchanged. This is staging Cognito only.
+ */
+export const handleAuthPasswordlessStart = async (event) => {
+  const body = parseBody(event);
+  const email = emailOf(body.email || body.username);
+  if (!email) return { ok: false, statusCode: 400, error: 'missing_email' };
+  try {
+    const result = await cognitoJson('InitiateAuth', {
+      AuthFlow: 'USER_AUTH',
+      ClientId: CLIENT_ID(),
+      AuthParameters: {
+        USERNAME: email,
+        PREFERRED_CHALLENGE: 'EMAIL_OTP',
+      },
+    });
+
+    if (result.AuthenticationResult) {
+      return {
+        ok: true,
+        statusCode: 200,
+        completed: true,
+        authentication: authenticationOf(result),
+      };
+    }
+
+    const challenge = result.ChallengeName || null;
+    if (challenge !== 'EMAIL_OTP') {
+      return {
+        ok: false,
+        statusCode: 409,
+        error: 'email_otp_unavailable',
+        challenge,
+        availableChallenges: Array.isArray(result.AvailableChallenges) ? result.AvailableChallenges : [],
+        message: 'This staging Cognito account is not currently eligible for passwordless email OTP.',
+      };
+    }
+
+    return {
+      ok: true,
+      statusCode: 200,
+      completed: false,
+      challenge: 'EMAIL_OTP',
+      session: result.Session,
+      email,
+      delivery: {
+        destination: result.ChallengeParameters?.CODE_DELIVERY_DESTINATION || null,
+        deliveryMedium: 'EMAIL',
+      },
+      passwordUsed: false,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      statusCode: error.statusCode || 400,
+      error: 'passwordless_start_failed',
+      message: String(error.message || error).slice(0, 200),
+    };
+  }
+};
+
+/** Completes native Cognito EMAIL_OTP and returns normal Cognito JWTs. */
+export const handleAuthPasswordlessVerify = async (event) => {
+  const body = parseBody(event);
+  const email = emailOf(body.email || body.username);
+  const session = String(body.session || '').trim();
+  const code = codeOf(body.code || body.otp || body.emailOtp || body.answer);
+  if (!email || !session || !code) {
+    return { ok: false, statusCode: 400, error: 'missing_passwordless_fields' };
+  }
+  try {
+    const result = await cognitoJson('RespondToAuthChallenge', {
+      ClientId: CLIENT_ID(),
+      ChallengeName: 'EMAIL_OTP',
+      Session: session,
+      ChallengeResponses: {
+        USERNAME: email,
+        EMAIL_OTP_CODE: code,
+      },
+    });
+    const authentication = authenticationOf(result);
+    if (!authentication) {
+      return {
+        ok: false,
+        statusCode: 409,
+        error: 'passwordless_challenge_incomplete',
+        challenge: result.ChallengeName || null,
+      };
+    }
+    return {
+      ok: true,
+      statusCode: 200,
+      completed: true,
+      authentication,
+      passwordUsed: false,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      statusCode: error.statusCode || 400,
+      error: 'passwordless_verify_failed',
+      message: String(error.message || error).slice(0, 200),
+    };
+  }
+};
+
+/** Legacy staging password flow retained only until passwordless rollout is proven. */
 export const handleAuthLogin = async (event) => {
   const body = parseBody(event);
   const email = emailOf(body.email || body.username);
@@ -56,18 +183,11 @@ export const handleAuthLogin = async (event) => {
         email,
       };
     }
-    const auth = result.AuthenticationResult || {};
     return {
       ok: true,
       statusCode: 200,
       challenge: null,
-      authentication: {
-        idToken: auth.IdToken,
-        accessToken: auth.AccessToken,
-        refreshToken: auth.RefreshToken,
-        expiresIn: auth.ExpiresIn,
-        tokenType: auth.TokenType || 'Bearer',
-      },
+      authentication: authenticationOf(result),
     };
   } catch (error) {
     return {
@@ -94,17 +214,10 @@ export const handleAuthChallenge = async (event) => {
       Session: session,
       ChallengeResponses: { USERNAME: email, NEW_PASSWORD: newPassword },
     });
-    const auth = result.AuthenticationResult || {};
     return {
       ok: true,
       statusCode: 200,
-      authentication: {
-        idToken: auth.IdToken,
-        accessToken: auth.AccessToken,
-        refreshToken: auth.RefreshToken,
-        expiresIn: auth.ExpiresIn,
-        tokenType: auth.TokenType || 'Bearer',
-      },
+      authentication: authenticationOf(result),
     };
   } catch (error) {
     return {
@@ -126,17 +239,10 @@ export const handleAuthRefresh = async (event) => {
       ClientId: CLIENT_ID(),
       AuthParameters: { REFRESH_TOKEN: refreshToken },
     });
-    const auth = result.AuthenticationResult || {};
     return {
       ok: true,
       statusCode: 200,
-      authentication: {
-        idToken: auth.IdToken,
-        accessToken: auth.AccessToken,
-        refreshToken: auth.RefreshToken || refreshToken,
-        expiresIn: auth.ExpiresIn,
-        tokenType: auth.TokenType || 'Bearer',
-      },
+      authentication: authenticationOf(result, refreshToken),
     };
   } catch (error) {
     return {
@@ -229,10 +335,22 @@ export const handleAuthLogout = async (event) => {
 };
 
 export const AUTH_ROUTES = {
+  '/auth/passwordless/start': handleAuthPasswordlessStart,
+  '/auth/passwordless/verify': handleAuthPasswordlessVerify,
+  '/auth/email/start': handleAuthPasswordlessStart,
+  '/auth/email/verify': handleAuthPasswordlessVerify,
   '/auth/login': handleAuthLogin,
   '/auth/challenge': handleAuthChallenge,
   '/auth/refresh': handleAuthRefresh,
   '/auth/forgot': handleAuthForgot,
   '/auth/confirm-forgot': handleAuthConfirmForgot,
   '/auth/logout': handleAuthLogout,
+};
+
+export const PASSWORDLESS_AUTH = {
+  userPoolIdConfigured: Boolean(POOL_ID()),
+  clientIdConfigured: Boolean(CLIENT_ID()),
+  authFlow: 'USER_AUTH',
+  preferredChallenge: 'EMAIL_OTP',
+  passwordAcceptedByPasswordlessRoutes: false,
 };
