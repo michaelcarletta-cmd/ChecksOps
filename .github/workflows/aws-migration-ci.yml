@@ -1,0 +1,78 @@
+name: AWS Migration CI
+
+on:
+  pull_request:
+    paths:
+      - 'aws/**'
+      - 'src/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'bun.lock'
+      - '.env.aws.example'
+      - '.github/workflows/aws-migration-ci.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'aws/**'
+      - 'src/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'bun.lock'
+      - '.env.aws.example'
+      - '.github/workflows/aws-migration-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aws-migration-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  aws-migration-guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify publishable-key boundary
+        run: bun run check:publish-keys
+
+      - name: Run AWS API/provider regression suite
+        run: bun run test:aws-api
+
+      - name: Prepare staging-only AWS frontend environment
+        run: cp .env.aws.example .env.aws
+
+      - name: Build AWS staging frontend
+        run: bun run build:aws
+
+      - name: Assert production activation remains disabled in template
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Eq 'AWS_PROVIDER_EXECUTION_ENABLED[^\n]*false|AWS_PROVIDER_EXECUTION_ENABLED[[:space:]]*:[[:space:]]*"?false"?' aws/template.yaml
+          grep -Eq 'AWS_FINANCIAL_PERMISSIONS_ACTIVATED[^\n]*false|AWS_FINANCIAL_PERMISSIONS_ACTIVATED[[:space:]]*:[[:space:]]*"?false"?' aws/template.yaml
+          grep -Eq 'AWS_MOOV_ENABLED[^\n]*false|AWS_MOOV_ENABLED[[:space:]]*:[[:space:]]*"?false"?' aws/template.yaml
+          grep -Eq 'AWS_CHECKALT_ENABLED[^\n]*false|AWS_CHECKALT_ENABLED[[:space:]]*:[[:space:]]*"?false"?' aws/template.yaml
+
+      - name: Assert production financial activation SQL is never auto-applied
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -R --line-number --exclude='PRODUCTION_CUTOVER_CHECKLIST.md' --exclude='64_financial_activation_grants.sql' \
+            -E '(psql|execute|apply|run).*64_financial_activation_grants\.sql' .github aws scripts 2>/dev/null; then
+            echo 'Found an automated path that may apply 64_financial_activation_grants.sql'
+            exit 1
+          fi
