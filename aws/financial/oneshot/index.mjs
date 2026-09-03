@@ -87,6 +87,31 @@ export const handler = async (event) => {
     if (step === 'financial') {
       return { ok: true, financial: await financialAggregates(client) };
     }
+    if (step === 'sandbox') {
+      const before = await financialAggregates(client);
+      await client.query(readSql(SQL_DIR, '70_provider_sandbox.sql'));
+      const after = await financialAggregates(client);
+      const tables = (await client.query(`
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name LIKE 'aws_provider_sandbox_%'
+        ORDER BY table_name
+      `)).rows.map((row) => row.table_name);
+      const moneyLedgersWritable = (await tablePrivileges(client)).some((row) => (
+        ['claim_payments', 'homeowner_ledger_events', 'checkalt_deposits', 'payment_transfers',
+          'disbursement_splits', 'disbursement_batches'].includes(row.table_name)
+        && row.grantee === 'checksops'
+        && ['INSERT', 'UPDATE', 'DELETE'].includes(row.privilege_type)
+      ));
+      return {
+        ok: JSON.stringify(before) === JSON.stringify(after) && !moneyLedgersWritable && tables.length === 4,
+        financialUnchanged: JSON.stringify(before) === JSON.stringify(after),
+        moneyLedgersWritable,
+        sandboxTables: tables,
+        financial: after,
+      };
+    }
     if (step === 'revoke') {
       await client.query(readSql(SQL_DIR, '61_financial_preactivation_revoke.sql'));
       return { ok: true, revoked: true, privileges: await tablePrivileges(client) };

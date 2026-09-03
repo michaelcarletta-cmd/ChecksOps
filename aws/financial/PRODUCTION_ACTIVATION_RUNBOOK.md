@@ -2,17 +2,168 @@
 
 **DO NOT EXECUTE this runbook in this phase.**
 
-It is a precise sequence for a later, separately approved cutover. This PR does not enable production providers, redirect production webhooks, change production DNS, or move money.
+It is a precise go/no-go sequence for a later, separately approved cutover. Provider sandbox validation (this PR) does not enable production providers, redirect production webhooks, change production DNS, deploy production frontend, or move money.
 
-## Preconditions (must all be true before anyone starts)
+## Current go / no-go (after sandbox inspection)
+
+**NO-GO for controlled production cutover.**
+
+Reasons discovered on current `main` (PR #99 merge) plus this phase:
+
+| Gate | Status | Evidence |
+| --- | --- | --- |
+| Moov sandbox credentials on AWS staging | **NO-GO** | Secret `checksops/staging/providers` has no `MOOV_SANDBOX_*` values. Production keys must not be substituted. Moov sandbox shares `https://api.moov.io`; keys select the ledger. |
+| Real Moov HTTP (auth → $0.01 transfer → retrieve → idempotent retry) | **NO-GO** | Not executed. Fail-closed probes only. |
+| CheckAlt FinCapture sandbox | **NO-GO** | No dedicated test host/credentials. Staging `checkalt_config.base_url` is null. Do not submit a negotiable check. |
+| Plaid sandbox on money path | **N/A / NO-GO for money** | Plaid Link is not the deposit→disburse path. No AWS sandbox keys. |
+| One ChecksOps op = one provider transaction (live HTTP) | **NO-GO** | Proven in unit tests with mocked HTTP and fail-closed live probes. Not proven against a real provider sandbox. |
+| Sandbox webhooks vs production records | **Partial** | Staging `/sandbox/webhooks/*` never mutate production ledgers. Production webhook URLs remain on Supabase. Signature/idempotency proven in unit tests; live unsigned webhook rejected. |
+| Production flags | **HOLD** | `AWS_PROVIDER_EXECUTION_ENABLED=false`, `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=false`, all `AWS_*_ENABLED` provider flags false. |
+| Production Moov IDs in RDS | **HOLD** | Freedom/C1C `payment_provider_accounts` are `environment=production`. Must not be overwritten with sandbox IDs. |
+
+Do not start the sequence below until every item in the **exact checklist** is GO.
+
+## Exact go/no-go checklist (must all be GO)
+
+Record the value at cutover time. Leave unchecked until a human fills it.
+
+### Identity of the production AWS package
+
+- [ ] Production AWS Lambda package SHA (`CodeSha256`) recorded: `________________`
+- [ ] Staging certified SHA that was promoted: `________________`
+- [ ] Git commit on `main` recorded: `________________`
+
+### RDS reconciliation
+
+- [ ] `aws/rls/sql/28_financial_aggregates.sql` AWS vs Supabase: zero unexplained drift
+- [ ] `homeowner_ledger_amount` =
+- [ ] `check_intake_amount` =
+- [ ] `checkalt_deposits_amount` =
+- [ ] `payment_transfers_amount_cents` =
+- [ ] No unresolved `aws_financial_reconciliation_findings` that imply a duplicate provider object
+- [ ] Production Moov/CheckAlt account IDs were **not** overwritten by sandbox IDs
+
+### S3 reconciliation
+
+- [ ] Staging vs production check-image inventory compared
+- [ ] No unsigned/public production objects introduced by AWS
+
+### Cognito identity reconciliation
+
+- [ ] Every production user who must transact has `identity_accounts.application_user_id` mapped
+- [ ] Cognito `sub` is never used as `auth.uid()` / application UUID
+- [ ] Ninth-UUID / unmapped identity remains fail-closed
+
+### Provider secret readiness
+
+- [ ] Staging secret contains **only** `*_SANDBOX_*` keys (or is unused)
+- [ ] Production secret contains **only** production keys on the production Lambda
+- [ ] Moov sandbox HTTP was proven with sandbox keys before any production key is loaded on AWS
+- [ ] CheckAlt: either a documented FinCapture UAT exists **or** CheckAlt stays disabled and cutover excludes deposits
+- [ ] Webhook signing secrets are distinct per environment
+- [ ] No secret values appear in logs, GitHub, or docs
+
+### Moov account mappings
+
+- [ ] Each production tenant `payment_provider_accounts.environment=production` mapping reviewed
+- [ ] Sandbox object table is empty or clearly isolated (`aws_provider_sandbox_objects`)
+- [ ] Facilitator / platform account ID for production is known and is not a sandbox ID
+- [ ] Wallet and payment-method IDs match Moov production dashboard
+- [ ] Real sandbox transfer (1 cent) was created, retrieved, replayed, and not duplicated
+
+### CheckAlt configuration
+
+- [ ] Production FinCapture `base_url` / merchant / FI key confirmed
+- [ ] Integer-cents `userAmount` conversion certified (`123.45 → 12345`)
+- [ ] If no sandbox: written exception that first production deposit is dual-controlled and abortable
+- [ ] CheckAlt production flag stays false until that exception is signed
+
+### Webhook activation order
+
+1. [ ] Production webhooks still point at current Supabase URLs
+2. [ ] AWS `/webhooks/{moov,checkalt,plaid}` deployed and signature-verified in dry-run
+3. [ ] Tenant mapping from **provider account id**, payload `tenant_id` ignored
+4. [ ] Duplicate event id does not mutate a second time
+5. [ ] Dual-delivery (additional AWS subscriber) clean for a defined window
+6. [ ] Only then remove Supabase URLs
+7. [ ] Never flip DNS and webhooks in the same step
+
+### Financial permission activation order
+
+1. [ ] `AWS_FINANCIAL_PERMISSIONS_ACTIVATED` still `false`
+2. [ ] Named review of `deposit.submit`, `deposit.approve`, `disbursement.send`, `wallet.fund`, stakeholder pay
+3. [ ] Confirm `has_permission()` CRUD is not treated as money authority
+4. [ ] Set `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=true` only on production, after webhook dry-run
+
+### Provider flag activation order
+
+1. [ ] `AWS_PROVIDER_WEBHOOK_DRY_RUN=true` until dual-run is clean
+2. [ ] `AWS_PROVIDER_LIVE_READS_ENABLED=true` (read-only)
+3. [ ] `AWS_CHECKALT_ENABLED=true` only if CheckAlt exception is signed
+4. [ ] `AWS_MOOV_ENABLED=true`
+5. [ ] `AWS_PLAID_ENABLED` only if Link cutover is in scope (usually later)
+6. [ ] `AWS_PROVIDER_EXECUTION_ENABLED=true` **last**, production only
+7. [ ] Never set the production master flag to enable sandbox tests (`AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED` is staging-only)
+
+### Frontend deployment order
+
+1. [ ] AWS-backed frontend deployed to a non-production host
+2. [ ] Browser cannot honor posted amounts / tenant IDs / user IDs
+3. [ ] Auth is Cognito; `auth.uid()` is the application UUID
+4. [ ] Production frontend still on Lovable/Supabase until DNS step
+
+### DNS order
+
+1. [ ] Frontend + API + webhooks independently healthy
+2. [ ] Previous origin retained for rollback
+3. [ ] DNS changed only after the above
+4. [ ] **Not in this phase**
+
+### Smoke transaction (production — later only)
+
+- [ ] Not run in this phase
+- [ ] First CheckAlt: sandbox/UAT or abort if none exists
+- [ ] First Moov: already proven in sandbox; then one lowest-risk production ACH with dual control
+- [ ] Watch idempotency key and webhook before a second transaction
+
+### Monitoring
+
+- [ ] CloudWatch Lambda errors / timeouts
+- [ ] `aws_financial_audit` / `aws_provider_sandbox_audit` outcomes
+- [ ] Reconciliation findings count
+- [ ] Provider dashboard vs internal pending
+- [ ] Financial aggregate drift
+
+### Rollback thresholds (any one trips rollback)
+
+- Unexpected production provider transaction
+- Amount mismatch
+- Duplicate provider transaction
+- Webhook signature failures
+- Identity mapping failures
+- Financial aggregate drift
+- Sandbox IDs written into production provider tables
+
+### Rollback procedure
+
+1. Set `AWS_PROVIDER_EXECUTION_ENABLED=false` immediately (no code deploy required).
+2. Set all `AWS_*_ENABLED` provider flags `false`.
+3. Set `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=false`.
+4. Restore webhook URLs to the last known-good Supabase endpoints if they were changed.
+5. Restore DNS to the last known-good frontend.
+6. Leave ledgers intact; do not delete provider objects.
+7. Reconcile and report; do not auto-correct.
+
+## Preconditions (must all be true before anyone starts the sequence)
 
 - Final human approval for money movement
-- `AWS_PROVIDER_EXECUTION_ENABLED` still `false` until step 5
-- Financial permissions still deactivated until tested in production-like sandbox
-- Staging certification green, including T1–T5 regression
+- `AWS_PROVIDER_EXECUTION_ENABLED` still `false` until the last flag step
+- Financial permissions still deactivated until the permission step
+- Staging T1–T6 + sandbox fail-closed (or real sandbox HTTP) green
+- Real Moov sandbox HTTP proven **or** an explicit signed waiver (not recommended)
 - No unresolved reconciliation findings that imply duplicate provider risk
 
-## Sequence
+## Sequence (do not start while the checklist is NO-GO)
 
 ### 1. Final database backup
 
@@ -31,68 +182,6 @@ It is a precise sequence for a later, separately approved cutover. This PR does 
 - Rotate any secret that was ever used for a test in the wrong environment.
 - Verify webhook secrets are distinct.
 
-### 4. Webhook endpoint activation order
+### 4–12
 
-1. Keep production webhooks on current Supabase URLs.
-2. Deploy AWS webhook routes and prove signature + idempotency in dry-run.
-3. Add AWS URLs as **additional** subscribers if the provider allows dual delivery.
-4. Only then remove Supabase URLs.
-5. Never flip DNS and webhooks in the same step.
-
-### 5. Provider execution flag order
-
-1. `AWS_PROVIDER_WEBHOOK_DRY_RUN=true` remains until webhook dual-run is clean.
-2. `AWS_PROVIDER_LIVE_READS_ENABLED=true` (read-only GETs) for readiness.
-3. `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=true` only after a named permission review.
-4. Per-provider flags one at a time: CheckAlt, then Moov, then Plaid. Actum/QuickBooks last if ever.
-5. `AWS_PROVIDER_EXECUTION_ENABLED=true` last, on production only, with a change window.
-
-### 6. Frontend deployment
-
-- Deploy the AWS-backed frontend that calls the certified routes.
-- Confirm it cannot post amounts/tenant IDs that the server will honor.
-
-### 7. DNS change
-
-- After frontend + API + webhooks are healthy.
-- Keep the previous origin ready for rollback.
-- Do not change DNS in this phase.
-
-### 8. Smoke transaction strategy
-
-- First CheckAlt deposit: **sandbox or a $0.01–controlled test instrument if the provider documents it as non-production**. If no safe instrument exists, stop.
-- First Moov transfer: sandbox only, then a single lowest-risk production ACH with dual-control.
-- Watch idempotency keys and webhook confirmations before a second transaction.
-
-### 9. Monitoring
-
-- CloudWatch Lambda errors / timeouts
-- `aws_financial_audit` outcomes
-- Reconciliation findings count
-- Provider dashboard vs internal pending
-- Financial aggregates drift
-
-### 10. Rollback triggers
-
-- Any unexpected production provider transaction
-- Amount mismatch
-- Duplicate provider transaction
-- Webhook signature failures
-- Identity mapping failures
-- Financial aggregate drift
-
-### 11. Rollback procedure
-
-1. Set `AWS_PROVIDER_EXECUTION_ENABLED=false` immediately (no code deploy required).
-2. Set all `AWS_*_ENABLED` provider flags `false`.
-3. Set `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=false`.
-4. Restore webhook URLs to the last known-good Supabase endpoints if they were changed.
-5. Restore DNS to the last known-good frontend.
-6. Leave ledgers intact; do not delete provider objects.
-7. Reconcile and report; do not auto-correct.
-
-### 12. Post-cutover reconciliation
-
-- Run internal vs provider comparison for every transaction since cutover.
-- Confirm no unknown provider transactions.
-- Confirm no internal-succeeded / provider-missing rows without a documented reason.
+Follow the ordered checklist above (webhooks → permissions → provider flags → frontend → DNS → smoke → monitor → rollback).
