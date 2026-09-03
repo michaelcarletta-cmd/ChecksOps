@@ -43,8 +43,11 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install dependencies
+      - name: Install frontend dependencies
         run: bun install --frozen-lockfile
+
+      - name: Install AWS API runtime dependencies
+        run: npm ci --prefix aws/functions/api
 
       - name: Verify publishable-key boundary
         run: bun run check:publish-keys
