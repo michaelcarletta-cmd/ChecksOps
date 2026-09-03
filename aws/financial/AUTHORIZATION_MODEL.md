@@ -1,0 +1,81 @@
+# Financial authorization model
+
+Application authentication is not financial execution authority.
+
+Being all of the following is **not** enough to move money:
+
+- authenticated Cognito user
+- mapped ChecksOps UUID
+- tenant member
+- `user_roles.admin` or `staff`
+- tenant `owner` / `admin` / `manager`
+
+## What exists today in ChecksOps
+
+`has_permission(_user_id, _permission)` is CRUD only:
+
+`read`, `create`, `update`, `delete`, `export`, `reveal_pii`, `manage_users`, `view_audit_logs`.
+
+It does **not** include deposit, disbursement, ACH, RTP, or wallet permissions.
+
+Frontend money actions use `useFinancialGuard` → step-up 2FA:
+
+| Action key | UI |
+| --- | --- |
+| `deposit.submit` | Check command center, deposit ops console |
+| `deposit.approve` | CheckAlt settings |
+| `disbursement.send` | Disbursement console |
+| `payroll.run` | Payroll dialog |
+
+Production Moov `moov-transfer-create` additionally requires platform admin **or** tenant role in `{owner, admin, manager}`.
+
+## AWS financial gate
+
+Implemented in `aws/functions/api/financial-authz.mjs`.
+
+Evaluates, in order:
+
+1. Cognito → `identity_accounts.application_user_id` (never Cognito `sub`)
+2. Tenant membership for the **resource** tenant (from the check/payment row)
+3. Documented financial role (`owner` / `admin` / `manager`)
+4. Explicit financial permission key
+5. `AWS_FINANCIAL_PERMISSIONS_ACTIVATED` — **must stay false**
+6. `AWS_PROVIDER_EXECUTION_ENABLED` — **must stay false**
+
+Results:
+
+| Flag | Meaning |
+| --- | --- |
+| `canExecuteProduction` | always `false` in this phase |
+| `canSimulate` | true only when sandbox simulation is on and steps 1–3 pass |
+| `activated` | always `false` |
+
+## Who can do what (when later activated — not now)
+
+| Operation | Permission | Who | Activated |
+| --- | --- | --- | --- |
+| Submit CheckAlt deposit | `deposit.submit` | tenant owner/admin/manager + step-up | no |
+| Approve CheckAlt deposit | `deposit.approve` | same + step-up | no |
+| Fund wallet | `wallet.fund` | tenant owner/admin/manager | no |
+| Initiate disbursement | `disbursement.send` | same + step-up | no |
+| Initiate ACH | `payments.ach` | disbursement + `send-funds.ach` | no |
+| Initiate RTP | `payments.rtp` | ACH + RTP capability + explicit instant | no |
+| Initiate wire | `payments.wire` | documented; not a current primary rail | no |
+| Pay homeowner | `stakeholder.pay` | tenant owner/admin/manager | no |
+| Pay contractor/vendor | `contractor.pay` | tenant owner/admin/manager | no |
+| Retry failed transaction | same as original | same as original | no |
+| Cancel (where supported) | same as original | wallet funding cancel only in production | no |
+
+Permissions are **not activated**. Simulation testers exercise the gate without granting production money movement.
+
+## Resource ownership
+
+Before any simulated or future live call, the server verifies:
+
+`user → application UUID → tenant membership → financial role → check → deposit/payment → payee → provider account → wallet/bank`
+
+Browser-supplied values are ignored or rejected:
+
+`tenant_id`, `user_id`, `amount`, `provider_account_id`, `wallet_id`, `bank_account_id`, `transfer_id`, payee ownership.
+
+Cross-tenant IDs return `403`.
