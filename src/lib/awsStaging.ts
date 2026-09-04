@@ -7,6 +7,11 @@
 export const AWS_STAGING_HTTPS_ORIGIN = "https://staging.checksops.com";
 export const AWS_STAGING_RP_ID = "staging.checksops.com";
 
+/** Default CheckOps / WhiteLabel Cognito session localStorage key. */
+export const AWS_STAGING_AUTH_SESSION_KEY = "checksops.aws.staging.auth";
+/** Mortgage Desk Cognito session — isolated from CheckOps (parity with sb-mortgage-ops-auth). */
+export const AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY = "checksops.aws.staging.auth.mortgage-ops";
+
 export function isAwsStaging(): boolean {
   return String(import.meta.env.VITE_AUTH_PROVIDER || "").toLowerCase() === "cognito";
 }

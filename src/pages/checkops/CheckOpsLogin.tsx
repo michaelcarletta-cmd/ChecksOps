@@ -119,7 +119,9 @@ export default function CheckOpsLogin() {
     e.preventDefault();
     setLoading(true);
     try {
-      await verifyAwsEmailOtp(email, awsSession, code);
+      await verifyAwsEmailOtp(email, awsSession, code, {
+        authClient: supabase as any,
+      });
       window.location.assign("/login");
     } catch (err: any) {
       toast({ title: "Verification failed", description: err.message || "Request a new code and try again.", variant: "destructive" });

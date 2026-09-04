@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { toast } from "sonner";
 import { ArrowLeft, Loader2, Plus, RefreshCw, Trash2, Briefcase, ShieldAlert, KeyRound, Home } from "lucide-react";
 import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
+import { isAwsStaging } from "@/lib/awsStaging";
 
 
 const ALLOWED_EMAIL = PLATFORM_OWNER_EMAIL;
@@ -146,6 +147,14 @@ export default function AdminMortgageOps() {
 
   const sendPasswordReset = async (agent: AgentRow) => {
     if (!agent.email) return toast.error("No email on file for this agent");
+    if (isAwsStaging()) {
+      const { error } = await supabase.auth.resetPasswordForEmail(agent.email);
+      if (error) return toast.error(error.message);
+      toast.success(
+        `AWS staging: Cognito reset requested for ${agent.email} (Tester mailbox delivery rules apply).`,
+      );
+      return;
+    }
     const { error } = await supabase.auth.resetPasswordForEmail(agent.email, {
       redirectTo: `${window.location.origin}/mortgage-ops/login`,
     });

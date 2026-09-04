@@ -132,7 +132,9 @@ export function WhiteLabelLogin() {
     e.preventDefault();
     setLoading(true);
     try {
-      await verifyAwsEmailOtp(email, awsSession, code);
+      await verifyAwsEmailOtp(email, awsSession, code, {
+        authClient: supabase as any,
+      });
       window.location.assign(loginReturnPath());
     } catch (err: any) {
       toast({

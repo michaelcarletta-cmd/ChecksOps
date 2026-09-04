@@ -63,6 +63,7 @@ import {
   handleTenantSetOpenaiKey,
   handleTenantValidateOpenaiKey,
   handleTenantRemoveOpenaiKey,
+  handleHireMortgageAgent,
 } from './tenant-admin.mjs';
 
 export const CLASS_A_FUNCTIONS = new Set([
@@ -116,6 +117,8 @@ export const CLASS_A_FUNCTIONS = new Set([
   'tenant-set-openai-key',
   'tenant-validate-openai-key',
   'tenant-remove-openai-key',
+  // Mortgage desk hire (Cognito + identity_accounts)
+  'hire-mortgage-agent',
   // Public directory
   'public-contractor-directory',
   'lookup-partner-code-public',
@@ -238,6 +241,8 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleTenantValidateOpenaiKey(event);
     case 'tenant-remove-openai-key':
       return handleTenantRemoveOpenaiKey(event);
+    case 'hire-mortgage-agent':
+      return handleHireMortgageAgent(event);
     case 'public-contractor-directory':
     case 'contractor-directory-search':
       return handlePublicContractorDirectory(event);

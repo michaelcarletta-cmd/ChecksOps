@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { KeyRound, Loader2, Eye, EyeOff } from "lucide-react";
 import { SectionCard } from "./SectionCard";
+import { isAwsStaging } from "@/lib/awsStaging";
 
 export function ChangePasswordCard() {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -14,6 +15,22 @@ export function ChangePasswordCard() {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [saving, setSaving] = useState(false);
+  const awsStaging = isAwsStaging();
+
+  if (awsStaging) {
+    return (
+      <SectionCard
+        title="Change Password"
+        icon={<KeyRound className="h-4 w-4 text-emerald-500" />}
+        accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
+        description="AWS staging password changes use Cognito confirmation codes via Forgot password — not an in-session password update."
+      >
+        <p className="text-sm text-muted-foreground pt-2">
+          Use <a className="underline" href="/forgot-password">Forgot password</a> (Tester mailbox) or EMAIL_OTP / passkey sign-in on staging.
+        </p>
+      </SectionCard>
+    );
+  }
 
   const handleChangePassword = async () => {
     if (!newPassword || newPassword.length < 8) {

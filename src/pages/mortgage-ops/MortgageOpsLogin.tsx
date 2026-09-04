@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Fingerprint, Mail, CheckCircle2, Loader2 } from "lucide-react";
 import mortgageOpsLogo from "@/assets/mortgage-ops-logo.png";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled, AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY } from "@/lib/awsStaging";
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { signInWithPasskey, sendMagicLink, passkeysSupported } from "@/lib/passkeys";
 import { startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
@@ -62,8 +62,11 @@ export default function MortgageOpsLogin() {
         if (!awsHttpsPasskeys) {
           throw new Error("Passkeys require https://staging.checksops.com. Use email verification on this origin.");
         }
-        // Same Cognito handoff as CheckOpsLogin; useMortgageAuth hydrates after reload.
-        await signInWithAwsPasskey(email);
+        // Persist into Mortgage Desk session key + emit SIGNED_IN on mortgage client.
+        await signInWithAwsPasskey(email, {
+          sessionKey: AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY,
+          authClient: supabase as any,
+        });
         window.location.assign("/mortgage-ops/login");
         return;
       }
@@ -88,7 +91,7 @@ export default function MortgageOpsLogin() {
     setLoading(true);
     try {
       if (awsStaging) {
-        const pending = await startAwsEmailOtp(email);
+        const pending = await startAwsEmailOtp(email, { portal: "mortgage-ops" });
         setEmail(pending.email);
         setAwsSession(pending.session);
         setLinkSent(true);
@@ -107,7 +110,11 @@ export default function MortgageOpsLogin() {
     e.preventDefault();
     setLoading(true);
     try {
-      await verifyAwsEmailOtp(email, awsSession, code);
+      await verifyAwsEmailOtp(email, awsSession, code, {
+        portal: "mortgage-ops",
+        sessionKey: AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY,
+        authClient: supabase as any,
+      });
       window.location.assign("/mortgage-ops/login");
     } catch (err: any) {
       toast.error(err.message || "Verification failed");

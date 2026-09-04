@@ -9,6 +9,13 @@ import {
   DeleteSecretCommand,
   GetSecretValueCommand,
 } from '@aws-sdk/client-secrets-manager';
+import {
+  CognitoIdentityProviderClient,
+  AdminCreateUserCommand,
+  AdminGetUserCommand,
+  AdminDisableUserCommand,
+  AdminSetUserPasswordCommand,
+} from '@aws-sdk/client-cognito-identity-provider';
 import { withIdentity, parseBody, ignoredSpoof } from './data.mjs';
 import { normalizeEmail } from './email-policy.mjs';
 import { sendViaSesOrSink } from './email.mjs';
@@ -16,27 +23,31 @@ import { sendViaSesOrSink } from './email.mjs';
 const POOL_ID = () => process.env.COGNITO_USER_POOL_ID;
 const CLIENT_ID = () => process.env.COGNITO_CLIENT_ID;
 const sm = () => new SecretsManagerClient({ region: process.env.AWS_REGION || 'us-east-1' });
+const cognito = () => new CognitoIdentityProviderClient({ region: process.env.AWS_REGION || 'us-east-1' });
 
+/** Admin Cognito APIs require SigV4 (Lambda execution role). Unsigned fetch returns Missing Authentication Token. */
 const cognitoJson = async (target, payload) => {
-  const response = await fetch('https://cognito-idp.us-east-1.amazonaws.com/', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/x-amz-json-1.1',
-      'x-amz-target': `AWSCognitoIdentityProviderService.${target}`,
-    },
-    body: JSON.stringify(payload),
-  });
-  const text = await response.text();
-  let body = {};
-  try { body = text ? JSON.parse(text) : {}; } catch { body = { message: text.slice(0, 200) }; }
-  if (!response.ok) {
-    const error = new Error(body.message || body.Message || body.__type || 'CognitoError');
-    error.name = String(body.__type || 'CognitoError').split('#').pop();
-    error.statusCode = response.status;
-    error.body = body;
+  const commands = {
+    AdminCreateUser: AdminCreateUserCommand,
+    AdminGetUser: AdminGetUserCommand,
+    AdminDisableUser: AdminDisableUserCommand,
+    AdminSetUserPassword: AdminSetUserPasswordCommand,
+  };
+  const Command = commands[target];
+  if (!Command) {
+    const error = new Error(`unsupported_cognito_admin_target:${target}`);
+    error.name = 'UnsupportedCognitoAdminTarget';
     throw error;
   }
-  return body;
+  try {
+    return await cognito().send(new Command(payload));
+  } catch (err) {
+    const error = new Error(err?.message || err?.name || 'CognitoError');
+    error.name = String(err?.name || 'CognitoError').split('#').pop();
+    error.statusCode = err?.$metadata?.httpStatusCode || 502;
+    error.body = { message: err?.message, __type: err?.name };
+    throw error;
+  }
 };
 
 const assertTenantAdmin = async (client, mapping, tenantId) => {
@@ -143,12 +154,13 @@ export const handleTenantInviteUser = async (event) => withIdentity(event, async
 
   if (cognitoSub && appUserId && String(cognitoSub) !== String(appUserId)) {
     await client.query(
-      `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, created_at, updated_at)
-       VALUES ($1, $2::uuid, $3, now(), now())
+      `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, status, linked_at, created_at)
+       VALUES ($1, $2::uuid, $3, 'active', now(), now())
        ON CONFLICT (cognito_sub) DO UPDATE
          SET application_user_id = EXCLUDED.application_user_id,
              email = EXCLUDED.email,
-             updated_at = now()`,
+             status = 'active',
+             linked_at = COALESCE(public.identity_accounts.linked_at, now())`,
       [cognitoSub, appUserId, email],
     ).catch(() => {});
   }
@@ -387,3 +399,209 @@ export const handleTenantRemoveOpenaiKey = async (event) => withIdentity(event, 
   }
   return { ok: true, statusCode: 200, removed: true, spoofFieldsIgnored: spoof };
 }, { write: true, commit: true });
+
+/**
+ * Hire mortgage desk agent (Class A Cognito bridge for hire-mortgage-agent).
+ * Preserves production semantics: mortgage_agent-only accounts, identity mapping
+ * Cognito sub → application UUID (never equal), optional temp password for new users.
+ */
+export const handleHireMortgageAgent = async (event) => withIdentity(event, async ({
+  client, mapping, body, spoof,
+}) => {
+  const system = (await client.query(
+    `SELECT role FROM public.user_roles WHERE user_id = $1::uuid AND role = 'admin' LIMIT 1`,
+    [mapping.application_user_id],
+  )).rows[0];
+  const master = (await client.query(`SELECT public.is_master_owner() AS is_master`)).rows[0];
+  if (!master?.is_master && !system) {
+    return { ok: false, statusCode: 403, error: 'Admin access required', spoofFieldsIgnored: spoof };
+  }
+
+  const email = normalizeEmail(body.email);
+  const fullName = String(body.full_name || body.fullName || '').trim();
+  if (!email || !fullName) {
+    return { ok: false, statusCode: 400, error: 'Name and email are required', spoofFieldsIgnored: spoof };
+  }
+
+  const providedPassword = body.password && String(body.password).length >= 8
+    ? String(body.password)
+    : null;
+  const tempPassword = providedPassword
+    || `MortgageOps!${randomBytes(6).toString('base64url')}9a`;
+
+  // Existing profile by email → reuse ChecksOps application UUID
+  let appUserId = (await client.query(
+    `SELECT id::text AS id FROM public.profiles WHERE lower(email) = $1 LIMIT 1`,
+    [email],
+  )).rows[0]?.id || null;
+  let created = false;
+  let cognitoSub = null;
+
+  if (appUserId) {
+    const roles = (await client.query(
+      `SELECT role FROM public.user_roles WHERE user_id = $1::uuid`,
+      [appUserId],
+    )).rows.map((r) => r.role);
+    if (roles.includes('staff') || roles.includes('admin')) {
+      return {
+        ok: false,
+        statusCode: 400,
+        error: 'This account already has staff/admin access. Mortgage ops access must be scoped-only — remove those roles first.',
+        spoofFieldsIgnored: spoof,
+      };
+    }
+    if (roles.includes('mortgage_agent')) {
+      return {
+        ok: false,
+        statusCode: 409,
+        error: 'User already has mortgage ops access.',
+        spoofFieldsIgnored: spoof,
+      };
+    }
+  }
+
+  try {
+    const createdUser = await cognitoJson('AdminCreateUser', {
+      UserPoolId: POOL_ID(),
+      Username: email,
+      TemporaryPassword: tempPassword,
+      MessageAction: 'SUPPRESS',
+      UserAttributes: [
+        { Name: 'email', Value: email },
+        { Name: 'email_verified', Value: 'true' },
+        { Name: 'name', Value: fullName },
+      ],
+    });
+    const attrs = createdUser.User?.Attributes || [];
+    cognitoSub = attrs.find((a) => a.Name === 'sub')?.Value
+      || createdUser.User?.Username
+      || null;
+    created = true;
+    if (providedPassword) {
+      try {
+        await cognitoJson('AdminSetUserPassword', {
+          UserPoolId: POOL_ID(),
+          Username: email,
+          Password: providedPassword,
+          Permanent: true,
+        });
+      } catch {
+        /* temp password remains usable via NEW_PASSWORD_REQUIRED / forgot */
+      }
+    }
+  } catch (error) {
+    if (String(error.name).includes('UsernameExistsException')) {
+      const listed = await cognitoJson('AdminGetUser', {
+        UserPoolId: POOL_ID(),
+        Username: email,
+      });
+      const attrs = listed.UserAttributes || [];
+      cognitoSub = attrs.find((a) => a.Name === 'sub')?.Value || listed.Username;
+    } else {
+      return {
+        ok: false,
+        statusCode: 502,
+        error: 'cognito_hire_failed',
+        message: String(error.message || error).slice(0, 240),
+        spoofFieldsIgnored: spoof,
+      };
+    }
+  }
+
+  if (!cognitoSub || (appUserId && String(cognitoSub) === String(appUserId))) {
+    return {
+      ok: false,
+      statusCode: 500,
+      error: 'unsafe_or_missing_cognito_sub',
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
+  if (!appUserId) {
+    appUserId = randomUUID();
+    created = true;
+  }
+  if (String(cognitoSub) === String(appUserId)) {
+    return {
+      ok: false,
+      statusCode: 500,
+      error: 'unsafe_or_missing_cognito_sub',
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
+  // identity_accounts must exist before profiles (FK profiles_id_identity_fkey).
+  // Schema has created_at/linked_at/status — no updated_at column.
+  await client.query(
+    `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, status, linked_at, created_at)
+     VALUES ($1, $2::uuid, $3, 'active', now(), now())
+     ON CONFLICT (cognito_sub) DO UPDATE
+       SET application_user_id = EXCLUDED.application_user_id,
+           email = EXCLUDED.email,
+           status = 'active',
+           linked_at = COALESCE(public.identity_accounts.linked_at, now())`,
+    [cognitoSub, appUserId, email],
+  );
+
+  await client.query(
+    `INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
+     VALUES ($1::uuid, $2, $3, now(), now())
+     ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, full_name = EXCLUDED.full_name, updated_at = now()`,
+    [appUserId, email, fullName],
+  );
+
+  let roleOk = false;
+  try {
+    const roleInsert = await client.query(
+      `INSERT INTO public.user_roles (user_id, role)
+       VALUES ($1::uuid, 'mortgage_agent')
+       ON CONFLICT DO NOTHING
+       RETURNING id`,
+      [appUserId],
+    );
+    roleOk = Boolean(roleInsert?.rows?.length);
+  } catch {
+    try {
+      const roleInsert = await client.query(
+        `INSERT INTO public.user_roles (id, user_id, role)
+         VALUES ($1::uuid, $2::uuid, 'mortgage_agent')
+         ON CONFLICT DO NOTHING
+         RETURNING id`,
+        [randomUUID(), appUserId],
+      );
+      roleOk = Boolean(roleInsert?.rows?.length);
+    } catch {
+      roleOk = false;
+    }
+  }
+
+  if (!roleOk) {
+    const has = (await client.query(
+      `SELECT 1 FROM public.user_roles WHERE user_id = $1::uuid AND role = 'mortgage_agent' LIMIT 1`,
+      [appUserId],
+    )).rows[0];
+    if (!has) {
+      return {
+        ok: false,
+        statusCode: 400,
+        error: 'Failed to grant mortgage_agent role',
+        spoofFieldsIgnored: spoof,
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    statusCode: 200,
+    success: true,
+    user_id: appUserId,
+    email,
+    full_name: fullName,
+    created,
+    temp_password: created ? tempPassword : null,
+    cognitoSub,
+    applicationUserId: appUserId,
+    spoofFieldsIgnored: spoof,
+  };
+}, { write: true, commit: true });
+
