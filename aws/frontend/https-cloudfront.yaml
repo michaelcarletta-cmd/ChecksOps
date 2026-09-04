@@ -1,0 +1,108 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  ChecksOps AWS staging HTTPS frontend (CloudFront + existing ACM + S3 OAC).
+  Staging-only. Does not modify production DNS, Lovable, or Supabase.
+  Bucket policy is applied out-of-band via PutBucketPolicy because the staging
+  frontend bucket already has a policy (CFN AWS::S3::BucketPolicy cannot create
+  over an existing policy). Do not edit apex/www.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: staging
+    AllowedValues: [staging]
+  FrontendBucketName:
+    Type: String
+    Default: checksops-staging-frontend-c48b
+    Description: Existing staging SPA bucket (vite aws build). CloudFront OAC reads via CLI bucket policy.
+  StagingHostname:
+    Type: String
+    Default: staging.checksops.com
+    Description: Dedicated staging hostname. Must not be checksops.com or www.checksops.com.
+  PriceClass:
+    Type: String
+    Default: PriceClass_100
+    AllowedValues: [PriceClass_100, PriceClass_200, PriceClass_All]
+  # Keep using the already-ISSUED cert; do not request a second certificate.
+  ExistingCertificateArn:
+    Type: String
+    Default: arn:aws:acm:us-east-1:806168576068:certificate/cfcfe403-a34a-4272-96c6-e5e266b0b315
+    Description: ACM certificate ARN already issued for staging.checksops.com
+
+Resources:
+  StagingFrontendOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub checksops-${Environment}-frontend-oac
+        Description: OAC for staging SPA bucket (no public website required)
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  StagingFrontendDistribution:
+    Type: AWS::CloudFront::Distribution
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      DistributionConfig:
+        Comment: !Sub checksops-${Environment} SPA for ${StagingHostname}
+        Enabled: true
+        HttpVersion: http2
+        IPV6Enabled: true
+        PriceClass: !Ref PriceClass
+        Aliases:
+          - !Ref StagingHostname
+        ViewerCertificate:
+          AcmCertificateArn: !Ref ExistingCertificateArn
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        DefaultRootObject: index.html
+        Origins:
+          - Id: StagingSpaS3
+            DomainName: !Sub ${FrontendBucketName}.s3.us-east-1.amazonaws.com
+            OriginAccessControlId: !GetAtt StagingFrontendOAC.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: StagingSpaS3
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # CachingOptimized
+          OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf # CORS-S3Origin
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Name
+          Value: !Sub checksops-${Environment}-frontend
+
+Outputs:
+  StagingHostname:
+    Value: !Ref StagingHostname
+  CertificateArn:
+    Value: !Ref ExistingCertificateArn
+  CloudFrontDistributionId:
+    Value: !Ref StagingFrontendDistribution
+  CloudFrontDomainName:
+    Value: !GetAtt StagingFrontendDistribution.DomainName
+  OriginAccessControlId:
+    Value: !GetAtt StagingFrontendOAC.Id
+  DnsCheckpoint:
+    Description: Stop here — create staging CNAME in Cloudflare (DNS-only) to CloudFront domain; never apex/www.
+    Value: !Sub |
+      1) Cloudflare CNAME staging -> ${StagingFrontendDistribution.DomainName} (DNS-only).
+      2) Do not modify checksops.com or www.checksops.com.
+      3) Apply S3 OAC bucket policy via aws s3api put-bucket-policy (not CFN).

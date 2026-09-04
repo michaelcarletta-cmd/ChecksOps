@@ -12,23 +12,28 @@ import { Loader2, ArrowLeft, KeyRound, Mail, CheckCircle2 } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { isPlatformOwner } from "@/lib/masterMerchant";
-import { isAwsStaging } from "@/lib/awsStaging";
+import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { passkeysSupported, sendMagicLink, signInWithPasskey } from "@/lib/passkeys";
 import { readPendingAwsEmailOtp, startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
 
-/** Passwordless ChecksOps sign-in. AWS staging uses Cognito EMAIL_OTP until WebAuthn is ported. */
+/** Passwordless ChecksOps sign-in. AWS staging HTTPS enables Cognito WebAuthn; EMAIL_OTP remains fallback. */
 export default function CheckOpsLogin() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, loading: authLoading } = useAuth();
   const awsStaging = isAwsStaging();
+  const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
   const pendingAws = awsStaging ? readPendingAwsEmailOtp() : null;
   const [email, setEmail] = useState(pendingAws?.email || "");
   const [loading, setLoading] = useState(false);
   const [linkSent, setLinkSent] = useState(Boolean(pendingAws));
   const [awsSession, setAwsSession] = useState(pendingAws?.session || "");
   const [code, setCode] = useState("");
-  const supportsPasskeys = !awsStaging && passkeysSupported();
+  // Production: Supabase SimpleWebAuthn. AWS staging: Cognito WebAuthn only on https://staging.checksops.com.
+  const supportsPasskeys = awsStaging
+    ? awsHttpsPasskeys && passkeysSupported()
+    : passkeysSupported();
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -67,6 +72,14 @@ export default function CheckOpsLogin() {
   const handlePasskey = async () => {
     setLoading(true);
     try {
+      if (awsStaging) {
+        if (!awsHttpsPasskeys) {
+          throw new Error("Passkeys require https://staging.checksops.com. Use email verification on this origin.");
+        }
+        const result = await signInWithAwsPasskey(email);
+        await resolveAndRedirect(result.id, result.email || email);
+        return;
+      }
       const result = await signInWithPasskey(email || undefined);
       const authedId = result.user?.id;
       if (!authedId) throw new Error("Unable to start your session");
@@ -140,7 +153,11 @@ export default function CheckOpsLogin() {
               {supportsPasskeys && <div className="space-y-1.5"><Button type="button" className="w-full" disabled={loading} onClick={() => void handlePasskey()}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <KeyRound className="mr-2 h-4 w-4" />}Sign in with a passkey<Badge variant="secondary" className="ml-2">Recommended</Badge></Button><p className="text-center text-[11px] text-muted-foreground">Fastest and most secure — Face ID, Touch ID or Windows Hello.</p></div>}
               {supportsPasskeys && <div className="relative py-1"><div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border/60" /></div><div className="relative flex justify-center"><span className="bg-card px-2 text-[11px] uppercase tracking-wide text-muted-foreground">or</span></div></div>}
               <Button type="submit" variant="outline" className="w-full" disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}{awsStaging ? "Email me a verification code" : "Email me a sign-in link"}</Button>
-              <p className="text-center text-[11px] text-muted-foreground">{awsStaging ? "AWS staging uses email verification while passkey support is being ported." : "Two-factor verification is still required before any money moves."}</p>
+              <p className="text-center text-[11px] text-muted-foreground">{awsStaging
+                ? (awsHttpsPasskeys
+                  ? "AWS staging: passkeys use Cognito WebAuthn; email verification remains available."
+                  : "AWS staging passkeys require https://staging.checksops.com. Use email verification on this origin.")
+                : "Two-factor verification is still required before any money moves."}</p>
             </form>
           )}
           <div className="mt-6 pt-4 border-t border-border/40 flex flex-col items-center gap-1"><Button variant="ghost" size="sm" asChild className="text-xs text-muted-foreground"><Link to="/signup">Need an account? Create one</Link></Button><Button variant="ghost" size="sm" asChild className="text-xs text-muted-foreground"><Link to="/"><ArrowLeft className="h-3 w-3 mr-1" /> Back to checksops.com</Link></Button></div>

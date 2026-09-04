@@ -354,6 +354,7 @@ Resources:
           AllowedFirstAuthFactors:
             - EMAIL_OTP
             - PASSWORD
+            - WEB_AUTHN
 
   ChecksOpsUserPoolClient:
     Type: AWS::Cognito::UserPoolClient

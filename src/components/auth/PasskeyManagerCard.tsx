@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { deleteAwsPasskey, listAwsPasskeys, registerAwsPasskey } from "@/lib/awsPasskeys";
+import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
 import { passkeysSupported, registerPasskey } from "@/lib/passkeys";
 
 interface PasskeyRow {
@@ -21,17 +23,43 @@ export function PasskeyManagerCard({ onChanged }: { onChanged?: () => void }) {
   const [rows, setRows] = useState<PasskeyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
+  const awsStaging = isAwsStaging();
+  const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
   const supported = passkeysSupported();
+  // AWS staging: Cognito WebAuthn only on the HTTPS staging origin. Production: Supabase table.
+  const cognitoMode = awsStaging && awsHttpsPasskeys;
+  const blockedOnAwsHttp = awsStaging && !awsHttpsPasskeys;
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("user_passkeys")
-      .select("id, device_name, created_at, last_used_at")
-      .order("created_at", { ascending: false });
-    if (!error) setRows((data ?? []) as PasskeyRow[]);
-    setLoading(false);
-  }, []);
+    try {
+      if (blockedOnAwsHttp) {
+        setRows([]);
+        return;
+      }
+      if (cognitoMode) {
+        const credentials = await listAwsPasskeys();
+        setRows(
+          credentials.map((row) => ({
+            id: row.credentialId,
+            device_name: row.friendlyName || row.authenticatorAttachment || "Passkey",
+            created_at: row.createdAt || new Date().toISOString(),
+            last_used_at: null,
+          })),
+        );
+        return;
+      }
+      const { data, error } = await supabase
+        .from("user_passkeys")
+        .select("id, device_name, created_at, last_used_at")
+        .order("created_at", { ascending: false });
+      if (!error) setRows((data ?? []) as PasskeyRow[]);
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [blockedOnAwsHttp, cognitoMode]);
 
   useEffect(() => {
     void load();
@@ -40,7 +68,11 @@ export function PasskeyManagerCard({ onChanged }: { onChanged?: () => void }) {
   const add = async () => {
     setAdding(true);
     try {
-      await registerPasskey();
+      if (cognitoMode) {
+        await registerAwsPasskey();
+      } else {
+        await registerPasskey();
+      }
       toast({ title: "Passkey added", description: "You can now sign in without an email link." });
       await load();
       onChanged?.();
@@ -52,6 +84,18 @@ export function PasskeyManagerCard({ onChanged }: { onChanged?: () => void }) {
   };
 
   const remove = async (id: string) => {
+    if (cognitoMode) {
+      try {
+        await deleteAwsPasskey(id);
+      } catch (err: any) {
+        toast({ title: "Could not remove passkey", description: err.message, variant: "destructive" });
+        return;
+      }
+      toast({ title: "Passkey removed" });
+      await load();
+      onChanged?.();
+      return;
+    }
     const { error } = await supabase.from("user_passkeys").delete().eq("id", id);
     if (error) {
       toast({ title: "Could not remove passkey", description: error.message, variant: "destructive" });
@@ -73,10 +117,20 @@ export function PasskeyManagerCard({ onChanged }: { onChanged?: () => void }) {
         <CardDescription>
           Sign in with Face ID, Touch ID, Windows Hello or a security key — the fastest and most
           secure option. Nothing to remember and nothing to phish.
+          {cognitoMode ? " AWS staging stores passkeys in Cognito (staging RP only)." : ""}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {!supported && (
+        {blockedOnAwsHttp && (
+          <Alert>
+            <AlertDescription className="text-xs">
+              Passkey management is available only at https://staging.checksops.com. This origin
+              fails closed — production Supabase passkeys are not used or modified here.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {!supported && !blockedOnAwsHttp && (
           <Alert>
             <AlertDescription className="text-xs">
               This browser doesn't support passkeys. You can still sign in with an email link.
@@ -88,7 +142,7 @@ export function PasskeyManagerCard({ onChanged }: { onChanged?: () => void }) {
           <div className="flex justify-center py-6">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
-        ) : rows.length === 0 ? (
+        ) : blockedOnAwsHttp ? null : rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">No passkeys registered yet.</p>
         ) : (
           <ul className="divide-y divide-border rounded-md border border-border">
@@ -111,7 +165,11 @@ export function PasskeyManagerCard({ onChanged }: { onChanged?: () => void }) {
           </ul>
         )}
 
-        <Button onClick={() => void add()} disabled={!supported || adding} className="w-full sm:w-auto">
+        <Button
+          onClick={() => void add()}
+          disabled={!supported || adding || blockedOnAwsHttp}
+          className="w-full sm:w-auto"
+        >
           {adding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
           Add a passkey
         </Button>
