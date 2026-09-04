@@ -87,6 +87,63 @@ const requireStagingOrigin = (event) => {
   return null;
 };
 
+/**
+ * Cognito ListWebAuthnCredentials returns CreatedAt as UNIX epoch seconds
+ * (often fractional). Never pass raw seconds through to Date() consumers —
+ * JS Date(number) treats values as milliseconds and renders ~Jan 1970.
+ * Cognito does not expose last-used on this API.
+ */
+export const normalizeWebAuthnCreatedAt = (value) => {
+  if (value == null || value === '') return null;
+  let date = null;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const ms = value > 1e12 ? value : value * 1000;
+    date = new Date(ms);
+  } else if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (/^\d+(\.\d+)?$/.test(trimmed)) {
+      const numeric = Number(trimmed);
+      if (!Number.isFinite(numeric)) return null;
+      const ms = numeric > 1e12 ? numeric : numeric * 1000;
+      date = new Date(ms);
+    } else {
+      date = new Date(trimmed);
+    }
+  } else {
+    return null;
+  }
+  if (!date || Number.isNaN(date.getTime())) return null;
+  // Guard against epoch / nonsense (seconds misread as ms).
+  if (date.getUTCFullYear() < 2000) return null;
+  return date.toISOString();
+};
+
+/** Map one Cognito WebAuthnCredentialDescription to a safe API credential. */
+export const mapWebAuthnCredential = (row = {}) => {
+  const friendlyName = String(
+    row.FriendlyCredentialName
+      || row.friendlyCredentialName
+      || row.FriendlyName
+      || row.friendlyName
+      || '',
+  ).trim() || null;
+  const attachment = String(
+    row.AuthenticatorAttachment || row.authenticatorAttachment || '',
+  ).trim() || null;
+  const transports = row.AuthenticatorTransports || row.authenticatorTransports;
+  return {
+    credentialId: row.CredentialId || row.credentialId || null,
+    friendlyName,
+    relyingPartyId: row.RelyingPartyId || row.relyingPartyId || STAGING_RP_ID,
+    createdAt: normalizeWebAuthnCreatedAt(row.CreatedAt ?? row.createdAt),
+    authenticatorAttachment: attachment,
+    authenticatorTransports: Array.isArray(transports) ? transports : [],
+    // Cognito ListWebAuthnCredentials does not return last-used metadata.
+    lastUsedAt: null,
+  };
+};
+
 /** Start Cognito WebAuthn registration for an already-authenticated user. */
 export const handleAuthPasskeyRegisterOptions = async (event) => {
   const blocked = requireStagingOrigin(event);
@@ -155,13 +212,7 @@ export const handleAuthPasskeyList = async (event) => {
     return {
       ok: true,
       statusCode: 200,
-      credentials: credentials.map((row) => ({
-        credentialId: row.CredentialId || row.credentialId || null,
-        friendlyName: row.FriendlyName || row.friendlyName || null,
-        relyingPartyId: row.RelyingPartyId || row.relyingPartyId || STAGING_RP_ID,
-        createdAt: row.CreatedAt || row.createdAt || null,
-        authenticatorAttachment: row.AuthenticatorAttachment || row.authenticatorAttachment || null,
-      })),
+      credentials: credentials.map((row) => mapWebAuthnCredential(row)),
       rpId: STAGING_RP_ID,
     };
   } catch (error) {

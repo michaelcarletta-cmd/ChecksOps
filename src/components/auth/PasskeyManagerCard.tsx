@@ -8,12 +8,17 @@ import { KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { deleteAwsPasskey, listAwsPasskeys, registerAwsPasskey } from "@/lib/awsPasskeys";
 import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import {
+  formatPasskeyMetaLine,
+  passkeyCreatedAtIso,
+  passkeyDisplayName,
+} from "@/lib/passkeyDisplay";
 import { passkeysSupported, registerPasskey } from "@/lib/passkeys";
 
 interface PasskeyRow {
   id: string;
   device_name: string;
-  created_at: string;
+  created_at: string | null;
   last_used_at: string | null;
 }
 
@@ -42,9 +47,11 @@ export function PasskeyManagerCard({ onChanged }: { onChanged?: () => void }) {
         setRows(
           credentials.map((row) => ({
             id: row.credentialId,
-            device_name: row.friendlyName || row.authenticatorAttachment || "Passkey",
-            created_at: row.createdAt || new Date().toISOString(),
-            last_used_at: null,
+            device_name: passkeyDisplayName(row),
+            // null when Cognito/API omits or sends invalid timestamps — never invent "now" or epoch.
+            created_at: passkeyCreatedAtIso(row.createdAt),
+            // Cognito does not expose last-used; omit the field when absent.
+            last_used_at: passkeyCreatedAtIso(row.lastUsedAt ?? null),
           })),
         );
         return;
@@ -53,7 +60,16 @@ export function PasskeyManagerCard({ onChanged }: { onChanged?: () => void }) {
         .from("user_passkeys")
         .select("id, device_name, created_at, last_used_at")
         .order("created_at", { ascending: false });
-      if (!error) setRows((data ?? []) as PasskeyRow[]);
+      if (!error) {
+        setRows(
+          ((data ?? []) as PasskeyRow[]).map((row) => ({
+            id: row.id,
+            device_name: passkeyDisplayName(row),
+            created_at: passkeyCreatedAtIso(row.created_at),
+            last_used_at: passkeyCreatedAtIso(row.last_used_at),
+          })),
+        );
+      }
     } catch {
       setRows([]);
     } finally {
@@ -146,22 +162,22 @@ export function PasskeyManagerCard({ onChanged }: { onChanged?: () => void }) {
           <p className="text-sm text-muted-foreground">No passkeys registered yet.</p>
         ) : (
           <ul className="divide-y divide-border rounded-md border border-border">
-            {rows.map((row) => (
-              <li key={row.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{row.device_name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Added {new Date(row.created_at).toLocaleDateString()}
-                    {row.last_used_at
-                      ? ` · Last used ${new Date(row.last_used_at).toLocaleDateString()}`
-                      : " · Never used"}
-                  </p>
-                </div>
-                <Button variant="ghost" size="icon" onClick={() => void remove(row.id)}>
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
-              </li>
-            ))}
+            {rows.map((row) => {
+              const meta = formatPasskeyMetaLine(row);
+              return (
+                <li key={row.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{row.device_name}</p>
+                    {meta ? (
+                      <p className="text-xs text-muted-foreground">{meta}</p>
+                    ) : null}
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => void remove(row.id)}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </li>
+              );
+            })}
           </ul>
         )}
 
