@@ -577,12 +577,12 @@ export const WRITE_ALLOWLIST = {
   profiles: {
     tranche: 6,
     ops: new Set(['update']),
-    columns: new Set(['full_name', 'preferred_auth_method', 'phone']),
+    columns: new Set(['full_name', 'phone']),
     identityColumn: null,
     requiredForWrite: { update: [] },
     filterColumns: new Set(['id']),
-    clientIgnored: new Set(['id', 'email', 'approval_status', 'created_at']),
-    frontend: { file: 'AccountSecurity', op: 'update', reason: 'Self profile preferences only.' },
+    clientIgnored: new Set(['id', 'email', 'approval_status', 'created_at', 'preferred_auth_method']),
+    frontend: { file: 'AccountSecurity', op: 'update', reason: 'Self profile name/phone only (staging schema).' },
   },
   company_branding: {
     tranche: 6,
@@ -616,10 +616,7 @@ export const WRITE_ALLOWLIST = {
     identityColumn: null,
     requiredForWrite: { update: [] },
     filterColumns: new Set(['id']),
-    clientIgnored: new Set([
-      'id', 'slug', 'moov_allowlisted', 'subscription_status', 'created_at',
-      'checkalt_enabled', 'billing_status',
-    ]),
+    clientIgnored: new Set(['id', 'slug', 'created_at']),
     frontend: { file: 'TenantManagement / CompanyBranding', op: 'update', reason: 'Branding/name only; billing/provider flags denied.' },
   },
   privacy_notice_acknowledgments: {

@@ -31,10 +31,7 @@ const buildSet = (values, casts = {}) => {
 
 const memberOfTenant = async (client, userId, tenantId) => {
   const rows = (await client.query(
-    `SELECT 1 FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid
-     UNION ALL
-     SELECT 1 FROM public.user_roles WHERE user_id = $1::uuid AND role IN ('admin', 'staff')
-     LIMIT 1`,
+    `SELECT 1 FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid LIMIT 1`,
     [userId, tenantId],
   )).rows;
   return rows.length > 0;
@@ -397,14 +394,6 @@ export const executeProfiles = async ({ client, mapping, values, filters }) => {
     const text = clip(values.full_name, 200);
     if (text?.error) return text;
     out.full_name = text;
-  }
-  if ('preferred_auth_method' in values) {
-    const text = clip(values.preferred_auth_method, 40);
-    if (text?.error) return text;
-    if (text && !['password', 'passkey', 'otp', 'magic_link'].includes(String(text).toLowerCase())) {
-      return { error: 'invalid_field', field: 'preferred_auth_method' };
-    }
-    out.preferred_auth_method = text;
   }
   if ('phone' in values) {
     const text = clip(values.phone, 40);

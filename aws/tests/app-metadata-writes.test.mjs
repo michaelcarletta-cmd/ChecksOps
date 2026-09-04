@@ -82,7 +82,10 @@ test('notifications mark-all-read updates only own rows', async () => {
 test('tenant_users role updates require admin membership and valid enum', async () => {
   const client = {
     query: async (sql, params) => {
-      if (/UNION ALL/.test(sql) && /tenant_users/.test(sql)) {
+      if (/FROM public.tenant_users WHERE user_id = \$1::uuid AND tenant_id = \$2::uuid LIMIT 1/.test(sql)) {
+        return { rows: [{ '?column?': 1 }] };
+      }
+      if (/role = 'admin'/.test(sql)) {
         return { rows: [{ role: 'admin' }] };
       }
       if (/UPDATE public.tenant_users SET role/.test(sql)) {

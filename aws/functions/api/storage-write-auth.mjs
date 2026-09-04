@@ -41,10 +41,7 @@ const lookupWritableCheck = async (client, checkId) => {
 const hasTenantMembership = async (client, userId, tenantId) => {
   if (!UUID_RE.test(String(tenantId || ''))) return false;
   const rows = (await client.query(
-    `SELECT 1 FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid
-     UNION ALL
-     SELECT 1 FROM public.user_roles WHERE user_id = $1::uuid AND role IN ('admin', 'staff')
-     LIMIT 1`,
+    `SELECT 1 FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid LIMIT 1`,
     [userId, tenantId],
   )).rows;
   return rows.length > 0;
@@ -52,10 +49,7 @@ const hasTenantMembership = async (client, userId, tenantId) => {
 
 const hasAnyTenantMembership = async (client, userId) => {
   const rows = (await client.query(
-    `SELECT 1 FROM public.tenant_users WHERE user_id = $1::uuid
-     UNION ALL
-     SELECT 1 FROM public.user_roles WHERE user_id = $1::uuid AND role IN ('admin', 'staff', 'mortgage_agent')
-     LIMIT 1`,
+    `SELECT 1 FROM public.tenant_users WHERE user_id = $1::uuid LIMIT 1`,
     [userId],
   )).rows;
   return rows.length > 0;
