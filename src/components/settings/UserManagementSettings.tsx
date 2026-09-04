@@ -4,7 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UserPlus, Trash2, Shield, UserX, CheckCircle, XCircle, Clock, KeyRound, Loader2, Users } from "lucide-react";
+import { UserPlus, Trash2, Shield, UserX, CheckCircle, XCircle, Clock, RotateCcw, Loader2, Users } from "lucide-react";
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
 
@@ -267,18 +267,22 @@ export function UserManagementSettings() {
     }
   };
 
-  const sendPasswordResetEmail = async (userId: string, userEmail: string, userName: string) => {
-    if (!confirm(`Send password reset email to ${userName}?`)) return;
+  const resetTwoFactor = async (userId: string, userEmail: string, userName: string) => {
+    if (!confirm(`Reset two-factor authentication for ${userName}? They will be signed out and must set up a new authenticator.`)) return;
 
     try {
       setResettingUserId(userId);
-      const { error } = await supabase.auth.resetPasswordForEmail(userEmail, {
-        redirectTo: `${window.location.origin}/auth?reset=1`,
+      const { data, error } = await supabase.functions.invoke("admin-reset-totp", {
+        body: { user_id: userId },
       });
       if (error) throw error;
-      toast({ title: "Reset email sent", description: `Link sent to ${userEmail}` });
+      if (!data?.success) throw new Error(data?.error || "Two-factor reset failed");
+      toast({
+        title: "Two-factor reset",
+        description: `${userEmail} can now sign in by magic link and set up a new authenticator.`,
+      });
     } catch (error: any) {
-      toast({ title: "Error", description: error?.message, variant: "destructive" });
+      toast({ title: "Could not reset two-factor", description: error?.message, variant: "destructive" });
     } finally {
       setResettingUserId(null);
     }
@@ -312,9 +316,9 @@ export function UserManagementSettings() {
                     <p className="text-sm text-muted-foreground">{user.email}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={() => sendPasswordResetEmail(user.id, user.email, user.full_name || user.email)} disabled={resettingUserId === user.id}>
-                      {resettingUserId === user.id ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <KeyRound className="h-4 w-4 mr-1" />}
-                      Reset Password
+                    <Button variant="outline" size="sm" onClick={() => resetTwoFactor(user.id, user.email, user.full_name || user.email)} disabled={resettingUserId === user.id}>
+                      {resettingUserId === user.id ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-1" />}
+                      Reset two-factor
                     </Button>
                     <Button variant="default" size="sm" onClick={() => approveUser(user.id, user.full_name || user.email)} className="bg-success text-success-foreground hover:bg-success/90">
                       <CheckCircle className="h-4 w-4 mr-1" /> Approve
@@ -362,8 +366,8 @@ export function UserManagementSettings() {
                 </div>
 
                 <div className="ml-4 flex items-center gap-2">
-                  <Button variant="outline" size="icon" onClick={() => sendPasswordResetEmail(user.id, user.email, user.full_name || user.email)} disabled={resettingUserId === user.id} title="Reset password">
-                    {resettingUserId === user.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                  <Button variant="outline" size="icon" onClick={() => resetTwoFactor(user.id, user.email, user.full_name || user.email)} disabled={resettingUserId === user.id} title="Reset two-factor authentication">
+                    {resettingUserId === user.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
                   </Button>
                   <Select onValueChange={(role) => addRole(user.id, role)}>
                     <SelectTrigger className="w-[180px]">
