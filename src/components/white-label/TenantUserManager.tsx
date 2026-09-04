@@ -7,9 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Send, Trash2, UserPlus, Users, Shield } from "lucide-react";
+import { Loader2, RotateCcw, Send, Trash2, UserPlus, Users, Shield } from "lucide-react";
 import { SettingsHero } from "@/components/settings/SettingsHero";
 import { SectionCard } from "@/components/settings/SectionCard";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface Props {
   tenantId: string;
@@ -17,6 +18,7 @@ interface Props {
 
 export function TenantUserManager({ tenantId }: Props) {
   const { toast } = useToast();
+  const { isAdmin } = usePermissions();
   const qc = useQueryClient();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<string>("operator");
@@ -96,6 +98,31 @@ export function TenantUserManager({ tenantId }: Props) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
     },
   });
+
+  const resetTwoFactorMutation = useMutation({
+    mutationFn: async ({ userId }: { userId: string; email: string }) => {
+      const { data, error } = await supabase.functions.invoke("admin-reset-totp", {
+        body: { user_id: userId },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Two-factor reset failed");
+      return data;
+    },
+    onSuccess: (_data, variables) => {
+      toast({
+        title: "Two-factor reset",
+        description: `${variables.email} can now sign in by magic link and set up a new authenticator.`,
+      });
+    },
+    onError: (e: any) => {
+      toast({ title: "Could not reset two-factor", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const confirmTwoFactorReset = (userId: string, email: string) => {
+    if (!confirm(`Reset two-factor authentication for ${email}? They will be signed out and must set up a new authenticator.`)) return;
+    resetTwoFactorMutation.mutate({ userId, email });
+  };
 
 
   const roleColor = (r: string) => {
@@ -186,6 +213,23 @@ export function TenantUserManager({ tenantId }: Props) {
                     <Badge className={`shrink-0 text-[10px] ${roleColor(u.role)}`}>{u.role}</Badge>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
+                    {isAdmin && u.email && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        disabled={resetTwoFactorMutation.isPending && resetTwoFactorMutation.variables?.userId === u.user_id}
+                        onClick={() => confirmTwoFactorReset(u.user_id, u.email ?? "this user")}
+                        title="Reset two-factor authentication"
+                        aria-label={`Reset two-factor authentication for ${u.email}`}
+                      >
+                        {resetTwoFactorMutation.isPending && resetTwoFactorMutation.variables?.userId === u.user_id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
