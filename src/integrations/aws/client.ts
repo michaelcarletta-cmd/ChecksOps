@@ -37,6 +37,11 @@ const AWS_WRITE_TABLES = new Set([
   "loss_draft_tracking",
   "mortgage_handling_requests",
   "loss_draft_audit_log",
+  "audit_logs",
+  "user_sessions",
+  "homeowner_intro_requests",
+  "check_cases",
+  "contractor_profiles",
 ]);
 
 const REVIEW_DECISION_RPCS = new Set([

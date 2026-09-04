@@ -42,6 +42,8 @@ const READ_RPCS = new Set([
   'get_stuck_checks',
   'get_check_claim_settlement',
   'lookup_tenant_by_partner_code',
+  'get_tenant_users_with_profiles',
+  'is_approval_required',
 ]);
 
 const RPC_UNWRAP_SINGLE_COLUMN = new Set([
@@ -593,7 +595,21 @@ export const handleDataQuery = async (event, deps) => {
 }, deps);
 };
 
-export const handleDataRpc = async (event, deps) => withIdentity(event, async ({ client, mapping, claims, body, spoof }) => {
+export const handleDataRpc = async (event, deps) => {
+  const earlyBody = parseBody(event);
+  let earlyName = '';
+  try {
+    earlyName = ident(earlyBody.name || earlyBody.rpc, 'rpc');
+  } catch {
+    earlyName = '';
+  }
+  if (earlyName) {
+    const { SAFE_WRITE_RPCS, handleSafeWriteRpc } = await import('./workflow-rpc.mjs');
+    if (SAFE_WRITE_RPCS.has(earlyName)) {
+      return handleSafeWriteRpc(event, deps);
+    }
+  }
+  return withIdentity(event, async ({ client, mapping, claims, body, spoof }) => {
   const name = ident(body.name || body.rpc, 'rpc');
   if (!READ_RPCS.has(name)) {
     return {
@@ -603,6 +619,7 @@ export const handleDataRpc = async (event, deps) => withIdentity(event, async ({
       message: 'This RPC is not enabled for AWS staging reads, or it is a write/provider operation',
       name,
       spoofFieldsIgnored: spoof,
+      classification: 'disabled',
     };
   }
   const args = body.args && typeof body.args === 'object' ? body.args : {};
@@ -626,6 +643,7 @@ export const handleDataRpc = async (event, deps) => withIdentity(event, async ({
     spoofFieldsIgnored: spoof,
   };
 }, deps);
+};
 
 export const handleWritesDisabled = async (event) => {
   const body = parseBody(event);

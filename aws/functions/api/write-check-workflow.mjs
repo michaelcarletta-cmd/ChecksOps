@@ -734,7 +734,7 @@ const LOSS_DRAFT_ESCROW = new Set([
   'follow_up',
 ]);
 
-const MORTGAGE_REQUEST_STATUS = new Set(['requested', 'in_progress', 'cancelled']);
+const MORTGAGE_REQUEST_STATUS = new Set(['requested', 'in_progress', 'cancelled', 'completed']);
 
 const lookupLossDraft = async (client, id) => {
   const invalid = requireUuid('id', id);
@@ -957,6 +957,364 @@ const executeLossDraftAudit = async ({ client, mapping, values }) => {
   return { rows };
 };
 
+const INTRO_STATUSES = new Set(['new', 'contacted', 'accepted', 'declined', 'closed', 'spam']);
+
+const executeHomeownerIntro = async ({ client, mapping, op, values, filters }) => {
+  if (op === 'insert') {
+    const profileId = values.contractor_profile_id;
+    const invalid = requireUuid('contractor_profile_id', profileId);
+    if (invalid) return invalid;
+    const contractor = (await client.query(
+      `SELECT id, user_id FROM public.contractor_profiles
+       WHERE id = $1::uuid AND is_directory_listed = true AND directory_opt_in = true`,
+      [profileId],
+    )).rows[0];
+    if (!contractor?.user_id) {
+      return { error: 'contractor_not_accepting_leads', message: 'contractor not accepting leads' };
+    }
+    const name = asText(values.homeowner_name, 120);
+    if (name.error || !name.value) return name.error || { error: 'missing_required_field', field: 'homeowner_name' };
+    const email = asText(values.homeowner_email, 255);
+    if (email.error || !email.value) return email.error || { error: 'missing_required_field', field: 'homeowner_email' };
+    const phone = asText(values.homeowner_phone, 30);
+    if (phone.error) return phone;
+    const zip = asText(values.property_zip, 10);
+    if (zip.error) return zip;
+    const lossType = asText(values.loss_type, 80);
+    if (lossType.error) return lossType;
+    const message = asText(values.message, 1000);
+    if (message.error) return message;
+    const rows = (await client.query(
+      `INSERT INTO public.homeowner_intro_requests (
+         contractor_profile_id, contractor_user_id,
+         homeowner_name, homeowner_email, homeowner_phone,
+         property_zip, loss_type, message
+       ) VALUES (
+         $1::uuid, $2::uuid, $3::text, $4::text, $5::text, $6::text, $7::text, $8::text
+       ) RETURNING *`,
+      [
+        profileId,
+        contractor.user_id,
+        name.value,
+        email.value.toLowerCase(),
+        phone.value,
+        zip.value,
+        lossType.value,
+        message.value,
+      ],
+    )).rows;
+    return { rows };
+  }
+
+  const id = eqFilter(filters, 'id');
+  const invalid = requireUuid('id', id);
+  if (invalid) return invalid;
+  const existing = (await client.query(
+    `SELECT id, contractor_user_id FROM public.homeowner_intro_requests WHERE id = $1::uuid`,
+    [id],
+  )).rows[0];
+  if (!existing) return { error: 'rls_denied', message: 'intro request not found' };
+  if (existing.contractor_user_id !== mapping.application_user_id) {
+    const roles = (await client.query(
+      `SELECT role FROM public.user_roles WHERE user_id = $1::uuid`,
+      [mapping.application_user_id],
+    )).rows.map((row) => String(row.role || '').toLowerCase());
+    if (!roles.includes('admin') && !roles.includes('staff')) {
+      return { error: 'not_authorized', message: 'Only the assigned contractor can update this lead' };
+    }
+  }
+  const out = {};
+  if ('status' in values) {
+    const text = asText(values.status, 40);
+    if (text.error) return text;
+    const status = (text.value || '').toLowerCase();
+    if (!INTRO_STATUSES.has(status)) return { error: 'column_not_allowlisted', columns: ['status'] };
+    out.status = status;
+  }
+  for (const column of ['contacted_at', 'accepted_at', 'updated_at']) {
+    if (column in values) {
+      if (values[column] === null || values[column] === '') out[column] = null;
+      else {
+        const ts = Date.parse(String(values[column]));
+        if (Number.isNaN(ts)) return { error: 'invalid_field', field: column };
+        out[column] = new Date(ts).toISOString();
+      }
+    }
+  }
+  if (!Object.keys(out).length) {
+    return { error: 'missing_required_field', field: 'values', table: 'homeowner_intro_requests', op: 'update' };
+  }
+  const built = buildSet(out, {});
+  built.params.push(id);
+  const rows = (await client.query(
+    `UPDATE public.homeowner_intro_requests
+     SET ${built.sets.join(', ')}
+     WHERE id = $${built.next}::uuid
+     RETURNING *`,
+    built.params,
+  )).rows;
+  if (!rows.length) return { error: 'rls_denied', message: 'intro request not writable' };
+  return { rows };
+};
+
+const executeCheckCases = async ({ client, mapping, op, values, filters }) => {
+  if (op === 'insert') {
+    const tenantId = values.tenant_id;
+    const invalid = requireUuid('tenant_id', tenantId);
+    if (invalid) return invalid;
+    const member = (await client.query(
+      `SELECT 1 FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid
+       UNION ALL
+       SELECT 1 FROM public.user_roles WHERE user_id = $1::uuid AND role IN ('admin', 'staff')`,
+      [mapping.application_user_id, tenantId],
+    )).rows[0];
+    if (!member) return { error: 'not_authorized', message: 'Not a member of tenant' };
+    const out = { tenant_id: tenantId };
+    for (const [column, max] of [
+      ['external_system', 80],
+      ['external_reference', 120],
+      ['claim_number', 120],
+      ['insured_name', 200],
+      ['insured_email', 200],
+      ['insured_phone', 40],
+      ['property_address', 2000],
+      ['carrier_name', 200],
+      ['policy_number', 120],
+      ['loan_number', 80],
+      ['status', 40],
+    ]) {
+      if (column in values) {
+        const text = asText(values[column], max);
+        if (text.error) return text;
+        out[column] = text.value;
+      }
+    }
+    if ('external_claim_id' in values) {
+      if (values.external_claim_id === null || values.external_claim_id === '') out.external_claim_id = null;
+      else {
+        const bad = requireUuid('external_claim_id', values.external_claim_id);
+        if (bad) return bad;
+        out.external_claim_id = values.external_claim_id;
+      }
+    }
+    if ('mortgage_company_id' in values) {
+      if (values.mortgage_company_id === null || values.mortgage_company_id === '') out.mortgage_company_id = null;
+      else {
+        const bad = requireUuid('mortgage_company_id', values.mortgage_company_id);
+        if (bad) return bad;
+        out.mortgage_company_id = values.mortgage_company_id;
+      }
+    }
+    if ('loss_date' in values) {
+      if (values.loss_date === null || values.loss_date === '') out.loss_date = null;
+      else if (!DATE_RE.test(String(values.loss_date))) return { error: 'invalid_field', field: 'loss_date' };
+      else out.loss_date = String(values.loss_date);
+    }
+    if (!out.external_system) out.external_system = out.external_claim_id ? 'freedom_crm' : 'checksops';
+    const cols = Object.keys(out);
+    const params = cols.map((column) => out[column]);
+    const rows = (await client.query(
+      `INSERT INTO public.check_cases (${cols.join(', ')})
+       VALUES (${cols.map((_, i) => `$${i + 1}`).join(', ')})
+       RETURNING *`,
+      params,
+    )).rows;
+    return { rows };
+  }
+
+  const id = eqFilter(filters, 'id');
+  const invalid = requireUuid('id', id);
+  if (invalid) return invalid;
+  const existing = (await client.query(
+    'SELECT id, tenant_id FROM public.check_cases WHERE id = $1::uuid',
+    [id],
+  )).rows[0];
+  if (!existing) return { error: 'rls_denied', message: 'check case not found' };
+  const out = {};
+  for (const [column, max] of [
+    ['external_reference', 120],
+    ['claim_number', 120],
+    ['insured_name', 200],
+    ['insured_email', 200],
+    ['insured_phone', 40],
+    ['property_address', 2000],
+    ['carrier_name', 200],
+    ['policy_number', 120],
+    ['loan_number', 80],
+    ['status', 40],
+  ]) {
+    if (column in values) {
+      const text = asText(values[column], max);
+      if (text.error) return text;
+      out[column] = text.value;
+    }
+  }
+  if ('updated_at' in values) out.updated_at = new Date().toISOString();
+  if (!Object.keys(out).length) {
+    return { error: 'missing_required_field', field: 'values', table: 'check_cases', op: 'update' };
+  }
+  const built = buildSet(out, {});
+  built.params.push(id);
+  const rows = (await client.query(
+    `UPDATE public.check_cases SET ${built.sets.join(', ')} WHERE id = $${built.next}::uuid RETURNING *`,
+    built.params,
+  )).rows;
+  if (!rows.length) return { error: 'rls_denied', message: 'check case not writable' };
+  return { rows };
+};
+
+const executeContractorProfiles = async ({ client, mapping, values, filters }) => {
+  const id = eqFilter(filters, 'id') || eqFilter(filters, 'user_id');
+  const column = eqFilter(filters, 'id') ? 'id' : 'user_id';
+  const invalid = requireUuid(column, id);
+  if (invalid) return invalid;
+  const existing = (await client.query(
+    `SELECT id, user_id FROM public.contractor_profiles WHERE ${column} = $1::uuid`,
+    [id],
+  )).rows[0];
+  if (!existing) return { error: 'rls_denied', message: 'contractor profile not found' };
+  if (existing.user_id !== mapping.application_user_id) {
+    const roles = (await client.query(
+      `SELECT role FROM public.user_roles WHERE user_id = $1::uuid`,
+      [mapping.application_user_id],
+    )).rows.map((row) => String(row.role || '').toLowerCase());
+    if (!roles.includes('admin')) {
+      return { error: 'not_authorized', message: 'Only the profile owner or admin can update' };
+    }
+  }
+  const out = {};
+  for (const [col, max] of [
+    ['display_name', 200],
+    ['bio', 4000],
+    ['phone', 40],
+    ['website', 300],
+  ]) {
+    if (col in values) {
+      const text = asText(values[col], max);
+      if (text.error) return text;
+      out[col] = text.value;
+    }
+  }
+  if ('service_areas' in values) out.service_areas = values.service_areas;
+  for (const col of ['directory_opt_in', 'is_directory_listed']) {
+    if (col in values) {
+      const flag = asBool(values[col]);
+      if (flag && flag.error) return flag;
+      out[col] = flag;
+    }
+  }
+  if ('updated_at' in values) out.updated_at = new Date().toISOString();
+  if (!Object.keys(out).length) {
+    return { error: 'missing_required_field', field: 'values', table: 'contractor_profiles', op: 'update' };
+  }
+  const built = buildSet(out, {});
+  built.params.push(existing.id);
+  const rows = (await client.query(
+    `UPDATE public.contractor_profiles SET ${built.sets.join(', ')} WHERE id = $${built.next}::uuid RETURNING *`,
+    built.params,
+  )).rows;
+  if (!rows.length) return { error: 'rls_denied', message: 'contractor profile not writable' };
+  return { rows };
+};
+
+const executeAuditLogsTable = async ({ client, mapping, values }) => {
+  const action = asText(values.action, 120);
+  if (action.error || !action.value) return action.error || { error: 'missing_required_field', field: 'action' };
+  const recordType = asText(values.record_type, 120);
+  if (recordType.error || !recordType.value) {
+    return recordType.error || { error: 'missing_required_field', field: 'record_type' };
+  }
+  const recordId = asText(values.record_id, 200);
+  if (recordId.error) return recordId;
+  const rows = (await client.query(
+    `INSERT INTO public.audit_logs (
+       user_id, action, record_type, record_id, old_values, new_values, metadata
+     ) VALUES (
+       $1::uuid, $2::text, $3::text, $4::text, $5::jsonb, $6::jsonb, $7::jsonb
+     ) RETURNING *`,
+    [
+      mapping.application_user_id,
+      action.value,
+      recordType.value,
+      recordId.value,
+      values.old_values ?? null,
+      values.new_values ?? null,
+      values.metadata ?? null,
+    ],
+  )).rows;
+  return { rows };
+};
+
+const executeUserSessionsTable = async ({ client, mapping, op, values, filters }) => {
+  if (op === 'insert') {
+    const token = asText(values.session_token, 200);
+    if (token.error || !token.value) {
+      return token.error || { error: 'missing_required_field', field: 'session_token' };
+    }
+    const device = asText(values.device_info, 500);
+    if (device.error) return device;
+    const ip = asText(values.ip_address, 80);
+    if (ip.error) return ip;
+    const rows = (await client.query(
+      `INSERT INTO public.user_sessions (
+         user_id, session_token, device_info, ip_address, role_version
+       ) VALUES ($1::uuid, $2::text, $3::text, $4::text, COALESCE($5::int, 1))
+       RETURNING *`,
+      [
+        mapping.application_user_id,
+        token.value,
+        device.value,
+        ip.value,
+        values.role_version ?? 1,
+      ],
+    )).rows;
+    return { rows };
+  }
+  const id = eqFilter(filters, 'id');
+  const token = eqFilter(filters, 'session_token');
+  const out = {};
+  for (const col of ['is_active', 'last_activity_at', 'expires_at', 'device_info', 'ip_address']) {
+    if (col in values) out[col] = values[col];
+  }
+  if (!Object.keys(out).length) {
+    return { error: 'missing_required_field', field: 'values', table: 'user_sessions', op: 'update' };
+  }
+  const sets = [];
+  const params = [];
+  let i = 1;
+  for (const [column, value] of Object.entries(out)) {
+    const cast = column === 'is_active' ? 'boolean'
+      : (column === 'last_activity_at' || column === 'expires_at') ? 'timestamptz'
+        : 'text';
+    sets.push(`${ident(column, 'column')} = $${i}::${cast}`);
+    params.push(value);
+    i += 1;
+  }
+  if (id) {
+    const invalid = requireUuid('id', id);
+    if (invalid) return invalid;
+    params.push(id, mapping.application_user_id);
+    const rows = (await client.query(
+      `UPDATE public.user_sessions SET ${sets.join(', ')}
+       WHERE id = $${i}::uuid AND user_id = $${i + 1}::uuid
+       RETURNING *`,
+      params,
+    )).rows;
+    return { rows };
+  }
+  if (token) {
+    params.push(String(token), mapping.application_user_id);
+    const rows = (await client.query(
+      `UPDATE public.user_sessions SET ${sets.join(', ')}
+       WHERE session_token = $${i}::text AND user_id = $${i + 1}::uuid
+       RETURNING *`,
+      params,
+    )).rows;
+    return { rows };
+  }
+  return { error: 'missing_required_field', field: 'id' };
+};
+
 export const executeCheckWorkflowWrite = async ({ client, mapping, table, op, values, filters }) => {
   const spec = WRITE_ALLOWLIST[table];
   const badFilters = rejectNonEqFilters(filters, spec);
@@ -973,5 +1331,10 @@ export const executeCheckWorkflowWrite = async ({ client, mapping, table, op, va
   if (table === 'loss_draft_tracking') return executeLossDraft({ client, mapping, op, values, filters });
   if (table === 'mortgage_handling_requests') return executeMortgageRequests({ client, mapping, op, values, filters });
   if (table === 'loss_draft_audit_log') return executeLossDraftAudit({ client, mapping, values });
+  if (table === 'homeowner_intro_requests') return executeHomeownerIntro({ client, mapping, op, values, filters });
+  if (table === 'check_cases') return executeCheckCases({ client, mapping, op, values, filters });
+  if (table === 'contractor_profiles') return executeContractorProfiles({ client, mapping, values, filters });
+  if (table === 'audit_logs') return executeAuditLogsTable({ client, mapping, values });
+  if (table === 'user_sessions') return executeUserSessionsTable({ client, mapping, op, values, filters });
   return { error: 'table_not_allowlisted', table };
 };
