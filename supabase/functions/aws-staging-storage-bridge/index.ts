@@ -12,8 +12,6 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
-const PINNED_TOKEN_SHA256 = "e5549ea0d88afb24b3b0d7d99db10d6f72a88fa3a724cb8e07d468b11c0625d9";
-
 const APP_BUCKETS = new Set([
   "claim-files",
   "claim-files-backup",
@@ -36,9 +34,9 @@ const SKIP_BUCKETS = new Set([
   "database_export",
 ]);
 
-const MAX_SIGN = 20;
-const SIGN_TTL_SECONDS = 120;
-const MAX_INVENTORY = 200;
+const MAX_SIGN = 50;
+const SIGN_TTL_SECONDS = 300;
+const MAX_INVENTORY = 500;
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 const json = (body: unknown, status = 200) =>
@@ -59,13 +57,23 @@ const timingSafeEqualHex = (left: string, right: string) => {
 };
 
 const expectedTokenSha256 = () =>
-  String(Deno.env.get("CHECKSOPS_STORAGE_MIGRATION_TOKEN_SHA256") || PINNED_TOKEN_SHA256).toLowerCase();
+  String(
+    Deno.env.get("AWS_MIGRATION_TOKEN_SHA256") ||
+      Deno.env.get("CHECKSOPS_STORAGE_MIGRATION_TOKEN_SHA256") ||
+      "",
+  ).trim().toLowerCase();
 
-const authorize = async (req: Request) => {
-  const token = req.headers.get("x-checksops-migration-token") || "";
-  if (!token) return false;
+/** Returns "unconfigured" when no token hash secret is present (fail closed). */
+const authorize = async (req: Request): Promise<"ok" | "denied" | "unconfigured"> => {
+  const expected = expectedTokenSha256();
+  if (!expected) return "unconfigured";
+  const token =
+    req.headers.get("x-checksops-migration-token") ||
+    req.headers.get("x-migration-token") ||
+    "";
+  if (!token) return "denied";
   const digest = await sha256Hex(token);
-  return timingSafeEqualHex(digest, expectedTokenSha256());
+  return timingSafeEqualHex(digest, expected) ? "ok" : "denied";
 };
 
 const allowedBucket = (bucket: string) => APP_BUCKETS.has(bucket) && !SKIP_BUCKETS.has(bucket);
@@ -86,8 +94,12 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return json({ error: "method_not_allowed" }, 405);
   }
-  if (!(await authorize(req))) {
-    return json({ error: "migration_unauthorized" }, 401);
+  const auth = await authorize(req);
+  if (auth === "unconfigured") {
+    return json({ error: "bridge_not_configured" }, 503);
+  }
+  if (auth !== "ok") {
+    return json({ error: "unauthorized" }, 401);
   }
 
   let body: Record<string, unknown> = {};
@@ -135,6 +147,9 @@ Deno.serve(async (req) => {
           size: Number(metadata.size || metadata.contentLength || 0) || null,
           mimetype: metadata.mimetype || metadata.contentType || null,
           createdAt: row.created_at || null,
+          etag: (metadata.eTag ?? metadata.etag ?? null) as string | null,
+          cacheControl: (metadata.cacheControl ?? null) as string | null,
+          lastModified: (metadata.lastModified ?? null) as string | null,
         };
       });
       return json({
