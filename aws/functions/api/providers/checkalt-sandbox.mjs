@@ -315,6 +315,7 @@ export const checkAltSandboxFetch = async ({
     const text = await response.text();
     try { json = text ? JSON.parse(text) : null; } catch { json = null; }
     if (!response.ok) {
+      const textSnippet = String(text || '').replace(/\s+/g, ' ').slice(0, 240);
       return {
         ok: false,
         statusCode: response.status,
@@ -322,7 +323,8 @@ export const checkAltSandboxFetch = async ({
         provider: 'checkalt',
         httpStatus: response.status,
         path,
-        message: json?.message || json?.statusDescription || json?.error || null,
+        message: json?.message || json?.statusDescription || json?.error || json?.title || textSnippet || null,
+        providerResponseKeys: json && typeof json === 'object' ? Object.keys(json).sort() : [],
       };
     }
     return { ok: true, statusCode: response.status, data: json };
