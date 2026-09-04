@@ -5,15 +5,8 @@
 
 ## Moov sandbox
 
-| Item | Status |
-|---|---|
-| Secrets present | `MOOV_SANDBOX_PUBLIC_KEY`, `MOOV_SANDBOX_SECRET_KEY`, `MOOV_SANDBOX_PLATFORM_ACCOUNT_ID`, `MOOV_SANDBOX_WEBHOOK_SECRET`, `MOOV_SANDBOX_ALLOWED_ORIGIN` (`https://staging.checksops.com`) |
-| Missing / failing | `MOOV_SANDBOX_CONNECTED_ACCOUNT_ID` (optional). **Account resource authorization:** OAuth PASS but `GET /accounts/{platform}` returns **401** after correcting platform ID (redacted `eb75…613b`). Moov app/key still cannot read that account. |
-| Discovery / cert (2026-09-04 resume) | OAuth **PASS**; webhook signature + idempotency **PASS**; capabilities/wallet/methods/transfer **blocked** by account 401. See `MOOV_SANDBOX_CERTIFICATION.md`. |
-| Network/egress | **Reachable** (`moovReachable: true`) |
-| Webhooks | Staging `/sandbox/webhooks/moov` signature + replay **PASS**; production webhooks not redirected |
-| Certification | **BLOCKED** (corrected platform ID still GET 401) |
-| Why execution disabled | `AWS_PROVIDER_EXECUTION_ENABLED=false`, `AWS_MOOV_ENABLED=false`; Class C money movement intentionally off |
+**Status (2026-09-04):** **PASS** on AWS staging (PR #124).  
+Platform account `36b7…47bb` authorized with Origin `https://staging.checksops.com`. Probe → $0.01 transfer → webhook signature/idempotency → reconcile → C1C cross-tenant denial all green. Production Moov/CheckAlt/financial execution flags remain **false**.
 
 ## CheckAlt UAT
 
@@ -38,16 +31,15 @@
 
 ## Genuine production-cutover blockers (current)
 
-1. Moov: sandbox account resource authorization (GET `/accounts/{platform}` must return 200 with staging sandbox keys) before any Moov money path
-2. Moov: production activation intentionally held (`AWS_MOOV_ENABLED` / master execution flags)
-3. CheckAlt: UAT deposit account binding + production activation held
-4. Production DNS / webhooks / auth / data cutover not performed (intentional)
-5. Financial activation grants / Deposit Ops money RPCs intentionally disabled
+1. Moov: production activation intentionally held (`AWS_MOOV_ENABLED` / master execution flags) — sandbox cert is **PASS**
+2. CheckAlt: UAT deposit account binding + production activation held
+3. Production DNS / webhooks / auth / data cutover not performed (intentional)
+4. Financial activation grants / Deposit Ops money RPCs intentionally disabled
 
-Removed from blocker list: **Plaid** (not required).
+Removed from blocker list: **Plaid** (not required); **Moov sandbox account authorization** (resolved 2026-09-04).
 
 ## Next certification phase prerequisites (external)
 
-1. Moov: fix sandbox platform account ↔ API key authorization (see `MOOV_SANDBOX_CERTIFICATION.md`), then resume capabilities/wallet/transfer cert  
-2. CheckAlt: UAT deposit account number approved for lockbox5 merchant  
-3. Keep NAT/egress healthy (currently OK)
+1. CheckAlt: UAT deposit account number approved for lockbox5 merchant  
+2. Keep NAT/egress healthy (currently OK)
+3. Moov production activation remains a deliberate, separate gate — do not flip production flags from this sandbox PASS

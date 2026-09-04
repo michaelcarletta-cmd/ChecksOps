@@ -1,0 +1,307 @@
+{
+  "verdict": "PASS",
+  "date": "2026-09-04",
+  "scope": "Moov sandbox certification only \u2014 production providers OFF",
+  "platformAccount": {
+    "redacted": "36b7\u202647bb",
+    "matchesConfirmed36B79_47BB": true,
+    "secretVersionId": "a3c01fa4-f200-4073-aa41-8a3c8d8b4106",
+    "origin": "https://staging.checksops.com"
+  },
+  "authorization_gate": {
+    "oauth": "PASS",
+    "get_platform_account": "PASS_200",
+    "directAgentVmNote": "Later agent-VM calls to api.moov.io returned Cloudflare 1010; Lambda egress remained the live proof path.",
+    "gateEvidence": {
+      "gate": "ACCOUNT_AUTHORIZED_200",
+      "oauth": {
+        "status": 200,
+        "ok": true,
+        "hasToken": true,
+        "scopeGranted": "/accounts.read /accounts/[account]/profile.read /accounts/[account]/wallets.read /accounts/[account]/payment-methods.read /accounts/[account]/capabilities.read /accounts/[account]/transfers.read /accounts/[account]/transfers.write",
+        "error": null
+      },
+      "get_platform_account": {
+        "status": 200,
+        "ok": true,
+        "bodyLen": 2288,
+        "accountType": "business",
+        "displayName": "ChecksOps",
+        "legalBusinessName": "ChecksOps ",
+        "looksLikeChecksOps": true,
+        "verificationStatus": "verified",
+        "errorCode": null
+      },
+      "wallets": {
+        "status": 200,
+        "ok": true,
+        "count": 1,
+        "sample": [
+          {
+            "walletID": "9e06\u2026920d",
+            "currency": null,
+            "status": "active"
+          }
+        ]
+      },
+      "paymentMethods": {
+        "status": 200,
+        "ok": true,
+        "count": 6,
+        "types": [
+          "moov-wallet",
+          "ach-debit-fund",
+          "ach-debit-collect",
+          "ach-credit-standard",
+          "ach-credit-same-day",
+          "rtp-credit"
+        ],
+        "walletCount": 1,
+        "bankCount": 4
+      },
+      "capabilities": {
+        "status": 200,
+        "ok": true,
+        "count": 2,
+        "names": [
+          "production-app:enabled",
+          "transfers:enabled"
+        ]
+      },
+      "stop": false
+    }
+  },
+  "probe": {
+    "http": "200",
+    "ok": true,
+    "sandboxHttpCalled": true,
+    "productionExecution": false,
+    "reads": {
+      "authentication": {
+        "ok": true,
+        "tokenPresent": true
+      },
+      "listedAccounts": {
+        "ok": true,
+        "count": 5,
+        "isolatedCount": 5,
+        "overlapCount": 0
+      },
+      "account": {
+        "ok": true,
+        "redactedId": "36b7\u202647bb",
+        "httpStatus": 200
+      },
+      "wallets": {
+        "ok": true,
+        "count": 1,
+        "httpStatus": 200
+      },
+      "paymentMethods": {
+        "ok": true,
+        "count": 12,
+        "httpStatus": 200
+      },
+      "capabilities": {
+        "ok": true,
+        "count": 2,
+        "httpStatus": 200
+      },
+      "transferPairing": "ach_debit_to_wallet"
+    },
+    "error": null
+  },
+  "transfer": {
+    "create": {
+      "ok": true,
+      "error": null,
+      "sandboxHttpCalled": true,
+      "productionExecution": false,
+      "productionRecordsMutated": false,
+      "providerReference": "b18e\u20261c01",
+      "amount": {
+        "currency": "USD",
+        "value": 1,
+        "cents": 1
+      },
+      "operation": {
+        "id": "4340\u2026fded",
+        "tenant_id": "2eff\u2026f42a",
+        "operation_type": "moov_sandbox_transfer",
+        "provider": "moov",
+        "amount_cents": 1,
+        "currency": "USD",
+        "idempotency_key": "[REDACTED]",
+        "status": "provider_pending",
+        "provider_reference": "b18e\u20261c01",
+        "provider_reference_full_stored": true,
+        "sandbox_http_called": true,
+        "production_execution": false,
+        "failure_class": null,
+        "created_at": "2026-09-04T17:38:17.057Z",
+        "updated_at": "2026-09-04T17:38:17.057Z"
+      },
+      "duplicate": false
+    },
+    "retrieve": {
+      "ok": true,
+      "error": null,
+      "sandboxHttpCalled": true,
+      "productionExecution": false,
+      "providerStatus": "pending",
+      "providerReference": "b18e\u20261c01",
+      "providerObjectCount": 1,
+      "listedTransferCount": 9,
+      "provider": {
+        "provider": "moov",
+        "environment": "sandbox",
+        "provider_transfer_id": "b18e\u20261c01",
+        "status": "pending",
+        "amount_cents": 1,
+        "currency": "USD",
+        "redacted_id": "b18e\u20261c01"
+      }
+    },
+    "idempotent_replay": {
+      "ok": true,
+      "duplicate": true,
+      "replayed": true,
+      "sandboxHttpCalled": false,
+      "error": null,
+      "providerReference": "b18e\u20261c01"
+    }
+  },
+  "webhooks": {
+    "valid": {
+      "label": "valid",
+      "http": 200,
+      "ok": true,
+      "duplicate": false,
+      "applied": false,
+      "error": null,
+      "productionRecordsMutated": false,
+      "tenantFromPayloadIgnored": true
+    },
+    "replay": {
+      "label": "replay",
+      "http": 200,
+      "ok": true,
+      "duplicate": true,
+      "applied": false,
+      "error": null,
+      "productionRecordsMutated": false,
+      "tenantFromPayloadIgnored": true
+    },
+    "bad_sig": {
+      "label": "bad_sig",
+      "http": 401,
+      "ok": false,
+      "duplicate": null,
+      "applied": false,
+      "error": "invalid_signature",
+      "productionRecordsMutated": false,
+      "tenantFromPayloadIgnored": null
+    },
+    "expired": {
+      "label": "expired",
+      "http": 401,
+      "ok": false,
+      "duplicate": null,
+      "applied": false,
+      "error": "timestamp_outside_window",
+      "productionRecordsMutated": false,
+      "tenantFromPayloadIgnored": null
+    }
+  },
+  "reconcile": {
+    "ok": true,
+    "compared": 1,
+    "findings": [],
+    "autoCorrected": false,
+    "sandboxHttpCalled": false,
+    "productionExecution": false
+  },
+  "cross_tenant": {
+    "c1c_retrieve_freedom_op": {
+      "ok": false,
+      "error": "cross_tenant_denied",
+      "statusCode": 403
+    },
+    "c1c_probe": {
+      "ok": true,
+      "error": null,
+      "reads": {
+        "authentication": {
+          "ok": true,
+          "tokenPresent": true
+        },
+        "listedAccounts": {
+          "ok": true,
+          "count": 5,
+          "isolatedCount": 5,
+          "overlapCount": 0
+        },
+        "account": {
+          "ok": true,
+          "redactedId": "36b7\u202647bb",
+          "httpStatus": 200
+        },
+        "wallets": {
+          "ok": true,
+          "count": 1,
+          "httpStatus": 200
+        },
+        "paymentMethods": {
+          "ok": true,
+          "count": 12,
+          "httpStatus": 200
+        },
+        "capabilities": {
+          "ok": true,
+          "count": 2,
+          "httpStatus": 200
+        },
+        "transferPairing": "ach_debit_to_wallet"
+      },
+      "applicationUserId": "fd85\u20263725"
+    }
+  },
+  "isolation": {
+    "ok": true,
+    "productionExecution": false,
+    "productionIdOverlap": false,
+    "sandboxObjectCount": 14,
+    "httpAllowed": {
+      "moov": true,
+      "checkalt": true,
+      "reason": {
+        "moov": "sandbox_keys_isolated",
+        "checkalt": "uat_host_approved"
+      }
+    },
+    "productionAccountCount": 1,
+    "stopHttpUnlessProven": true
+  },
+  "production_remain_off": {
+    "flags": {
+      "AWS_PROVIDER_EXECUTION_ENABLED": false,
+      "AWS_MOOV_ENABLED": false,
+      "AWS_CHECKALT_ENABLED": false,
+      "AWS_PLAID_ENABLED": false,
+      "AWS_ACTUM_ENABLED": false,
+      "AWS_QUICKBOOKS_ENABLED": false,
+      "AWS_PROVIDER_LIVE_READS_ENABLED": false,
+      "AWS_PROVIDER_WEBHOOK_DRY_RUN": true,
+      "AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED": true,
+      "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
+      "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": true
+    },
+    "cutover": {
+      "authorized": false,
+      "executed": false
+    },
+    "productionExecution": false,
+    "providers_moov_status_liveProviderCalled": false
+  },
+  "harness_fix": "Probe now mints account-scoped OAuth tokens (does not reuse /accounts.read bearer) and pairs ACH-debit\u2192wallet for sandbox transfer mapping."
+}
