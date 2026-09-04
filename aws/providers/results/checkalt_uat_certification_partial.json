@@ -3,41 +3,22 @@
   "date": "2026-09-04",
   "scope": "CheckAlt UAT certification only — production CheckAlt/financial execution OFF",
   "moovSandbox": "PASS (unchanged; not modified in this PR)",
+  "lovableReference": [
+    "supabase/functions/checkalt-prepare-image/index.ts",
+    "supabase/functions/checkalt-submit-deposit/index.ts",
+    "src/lib/prepareCheckAltDeposit.ts",
+    "aws/functions/api/providers/parity/checkalt-image.mjs"
+  ],
   "authoritativeAssumptions": {
     "webhooksRequired": false,
-    "CHECKALT_SANDBOX_WEBHOOK_SECRET_required": false,
-    "statusVia": "FinCapture workflow/status/history API endpoints",
-    "workflow": [
-      "authenticate",
-      "register user/depositor",
-      "getUserAccountInformation",
-      "getDepositAccountInformation",
-      "deposit item/process",
-      "deposit history/status"
-    ],
-    "merchantBusUnit": "either busUnitId or busUnitName; Freedom Adjustment provisioned on UAT",
-    "sampleDepositAccount123456789": "do not use unless UAT API returns it as authorized"
-  },
-  "secret": {
-    "id": "checksops/staging/providers",
-    "stage": "AWSCURRENT",
-    "CHECKALT_UAT_BASE_URL": "https://uatapi.checkalt.com",
-    "baseHostApproved": true,
-    "CHECKALT_UAT_USER_ID_present": true,
-    "CHECKALT_UAT_PASSWORD_present": true,
-    "CHECKALT_UAT_FI_KEY_present": true,
-    "CHECKALT_UAT_MERCHANT": "lockbox5",
-    "merchantApprovedLockbox5": true,
-    "CHECKALT_UAT_DEPOSIT_ACCOUNT_NUMBER_present": false,
-    "CHECKALT_SANDBOX_WEBHOOK_SECRET_present": false,
-    "note": "Deposit account discovered via UAT API; secret key not required once API returns authorized account",
-    "production_CHECKALT_keys_present": false
+    "imageStrategy": "reuse Lovable prepare+submit pipeline; do not invent a new CheckAlt image approach"
   },
   "scorecard": {
     "authentication": "PASS",
     "merchant_fi_context": "PASS",
     "deposit_account_binding": "PASS",
     "depositor_ssoKey": "PASS",
+    "image_pipeline_parity": "PASS",
     "uat_submission": "PARTIAL",
     "status_retrieval": "BLOCKED",
     "callback_webhook": "N/A",
@@ -45,82 +26,55 @@
     "reconciliation": "PASS",
     "tenant_isolation": "PASS"
   },
-  "details": {
-    "authentication": {
-      "probe": "PASS",
-      "host": "https://uatapi.checkalt.com",
-      "authPath": "/public/fincapture/authenticate",
-      "merchantHeader": "lockbox5",
-      "tokenPresent": true,
-      "sandboxHttpCalled": true,
-      "productionExecution": false
+  "parityMatrix": {
+    "landscapeOrientation": "PASS",
+    "jpegEncoding": "PASS",
+    "targetMaxDim1600": "PASS",
+    "minDim1300": "PASS",
+    "jpegQuality78to35": "PASS",
+    "perImageBudget450KB": "PASS",
+    "combinedB64Limit1600000": "PASS",
+    "rawBase64NoDataUri": "PASS",
+    "svgBackRejection": "PASS (parity path unchanged)",
+    "fiKey": "PASS",
+    "ssoKey": "PASS",
+    "depositAccountNumber": "PASS",
+    "captureDateTime": "PASS",
+    "performRiskAssessment": "PASS (true; matched production)",
+    "testDeposit": "PASS (absent; matched production)",
+    "userAmountIntegerCents": "PASS"
+  },
+  "uatSubmission": {
+    "processPath": "/fincapture/deposit/process",
+    "imageKind": "synthetic_uat_via_prepare_pipeline",
+    "preparedFront": { "width": 1600, "height": 733, "preparedBytes": 112407, "landscape": true },
+    "preparedRear": { "width": 1600, "height": 733, "preparedBytes": 98423, "landscape": true },
+    "checkAltHttp": 500,
+    "checkAltMessage": "Check deposit processing failed. Please retake the check images and resubmit.",
+    "providerReferenceIssued": false,
+    "negotiableCheckSubmitted": false
+  },
+  "remainingDifferenceVsLovable": {
+    "pipelineConstants": "aligned",
+    "pixelContent": "Lovable submits photographic camera checks + endorsed deposit backs; AWS UAT fixture is procedural VOID geometry/bitmap text",
+    "inspectedLovableDepositedExample": {
+      "note": "status=deposited restored Freedom check; inspected only; NOT submitted to UAT",
+      "rawFront": { "width": 4265, "height": 2052, "bytes": 2341143 },
+      "preparedFront": { "width": 1600, "height": 770, "bytes": 293230 },
+      "rawBackEndorsedDeposit": { "width": 1200, "height": 576, "bytes": 207060 }
     },
-    "account_binding": {
-      "getUserAccountInformation": "200",
-      "accountCount": 2,
-      "accountObjectKeys": [
-        "accountNumber",
-        "availableDepositLimit",
-        "dailyDepositLimit"
-      ],
-      "fiLoginHasSsoKey": false,
-      "getDepositAccountInformation": "200 on authorized account",
-      "authorizedAccountRedacted": "31…73",
-      "authorizedAccountFingerprint": "46bed6e573bb",
-      "sample123456789Used": false,
-      "sample123456789ReturnedByApi": false,
-      "freedomAdjustmentUatBusinessUnitPresent": true
-    },
-    "register": {
-      "path": "/fincapture/useraccount/register",
-      "syntheticUatDepositorCreated": true,
-      "storedIn": "aws_provider_sandbox_objects (object_type=uat_tenant_account)",
-      "productionCheckaltTenantAccountsWritten": false,
-      "ssoKeyPresent": true,
-      "ssoKeyFromAccountInfo": false,
-      "ssoKeySource": "register response / sso_user_id fallback (never FI API login)"
-    },
-    "uat_submission": {
-      "processPath": "/fincapture/deposit/process",
-      "testDeposit": true,
-      "depositorSource": "uat_isolated_row",
-      "imageFixturesTried": [
-        "1x1 PNG",
-        "check-sized PNG VOID",
-        "check-sized JPEG VOID (synthetic_void_check_jpeg)"
-      ],
-      "checkAltHttp": 500,
-      "checkAltMessage": "Check deposit processing failed. Please retake the check images and resubmit.",
-      "providerReferenceIssued": false,
-      "negotiableCheckSubmitted": false
-    },
-    "webhook": {
-      "requiredByCheckAlt": false,
-      "certificationBlocker": false,
-      "note": "ChecksOps obtains deposit/status via API workflow/status/history endpoints"
-    },
-    "reconcile": {
-      "ok": true,
-      "autoCorrected": false,
-      "productionExecution": false
-    },
-    "tenant_isolation": {
-      "c1c_status_of_freedom_idempotency_key": "404 operation_not_found",
-      "note": "C1C cannot read Freedom sandbox CheckAlt operations"
-    },
-    "production_remain_off": {
-      "AWS_PROVIDER_EXECUTION_ENABLED": false,
-      "AWS_CHECKALT_ENABLED": false,
-      "AWS_MOOV_ENABLED": false,
-      "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
-      "AWS_PLAID_ENABLED": false,
-      "providers_checkalt_status_liveProviderCalled": false
-    }
+    "environment": "Lovable success is on production CheckAlt; this cert targets uatapi.checkalt.com"
   },
   "exact_remaining_vendor_action": [
-    "Provide CheckAlt-acceptable UAT check image fixtures (or image-QA guidance / bypass for testDeposit) so /fincapture/deposit/process accepts synthetic VOID images.",
-    "After an accepted UAT deposit: verify status/history, idempotency, and reconciliation against the provider reference.",
-    "Do not invent deposit account numbers. Deposit account binding is already PASS via UAT API discovery (fingerprint 46bed6e573bb).",
-    "Webhooks remain optional / not required."
-  ]
+    "Provide CheckAlt-acceptable UAT photographic/endorsed fixtures or UAT IQA guidance — without submitting restored production negotiable checks.",
+    "Then verify process → provider reference → status/history → idempotency → reconcile.",
+    "Webhooks remain not required."
+  ],
+  "production_remain_off": {
+    "AWS_PROVIDER_EXECUTION_ENABLED": false,
+    "AWS_CHECKALT_ENABLED": false,
+    "AWS_MOOV_ENABLED": false,
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
+    "AWS_PLAID_ENABLED": false
+  }
 }

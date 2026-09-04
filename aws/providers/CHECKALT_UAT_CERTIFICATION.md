@@ -7,56 +7,71 @@
 **Moov:** Sandbox certification remains **PASS** (PR #124). Moov implementation was **not** modified.  
 **Verdict:** **PARTIAL** — STOP for review
 
-## Authoritative CheckAlt assumptions (updated)
+## Authoritative assumptions
 
-1. **Webhooks are not required** for CheckAlt certification or production cutover. `CHECKALT_SANDBOX_WEBHOOK_SECRET` is **not** a blocker. Deposit/status information is obtained through FinCapture workflow/status/history endpoints.
-2. Documented FinCapture workflow: authenticate → register user/depositor → `getUserAccountInformation` → `getDepositAccountInformation` → deposit process → deposit history/status.
-3. Per merchant, either `busUnitId` or `busUnitName` may be used. Freedom Adjustment is provisioned as a UAT business unit — use CheckAlt-provided values from configuration/API only; do not invent or substitute production values.
-4. Do **not** use sample deposit account `123456789` unless the UAT API independently returns it as authorized for our business unit.
+1. Webhooks are **not** required (`CHECKALT_SANDBOX_WEBHOOK_SECRET` is not a blocker).
+2. FinCapture workflow: authenticate → register → `getUserAccountInformation` → `getDepositAccountInformation` → deposit process → history/status.
+3. Freedom Adjustment is a provisioned UAT business unit; use API/config values only.
+4. Do not use sample `123456789` unless UAT API returns it.
+5. Image/submission behavior must match the working Lovable/Supabase path — do not invent a new CheckAlt image strategy.
+
+## Parity vs Lovable/Supabase (verified)
+
+| Concern | Lovable reference | AWS UAT after this PR |
+|---|---|---|
+| Landscape / orientation | `ensureLandscape` + prepare `rotate(90)` | `browserCapToDepositTarget` + `normalizeToBudget` |
+| Target max dim | 1600 (`prepareCheckAltDeposit` / prepare-image) | 1600 |
+| Min acceptable dim | 1300 (browser cache gate) | 1300 (prepare constants) |
+| JPEG quality ladder | prepare-image 78→35 | same |
+| Per-image budget | 450KB | 450KB |
+| Combined base64 limit | 1_600_000 | 1_600_000 |
+| Raw base64 (no data-URI) | yes | yes |
+| SVG back rejection | yes | unchanged in parity submit path |
+| `fiKey` / `ssoKey` / `depositAccountNumber` / `captureDateTime` | yes | yes |
+| `performRiskAssessment` | `true` | `true` (was incorrectly `false`) |
+| `testDeposit` | absent | absent (removed) |
+| `userAmount` | `Math.round(dollars * 100)` integer cents | same integer-cents adapter |
+
+UAT sandbox deposits now build a synthetic VOID raster and run **`browserCapToDepositTarget` → `normalizeToBudget`** — the same constants as `checkalt-prepare-image` / `prepareCheckAltDeposit`.
 
 ## Scorecard
 
 | Area | Result |
 |---|---|
-| Authentication | **PASS** — `POST /public/fincapture/authenticate` → JWT on `https://uatapi.checkalt.com` |
-| Merchant / FI context | **PASS** — merchant `lockbox5`; `CHECKALT_UAT_FI_KEY` present; Freedom Adjustment UAT business unit present in staging `checkalt_config` |
-| Deposit-account binding | **PASS** — `getUserAccountInformation` returned 2 accounts; `getDepositAccountInformation` authorized account redacted `31…73` (fingerprint `46bed6e573bb`). Sample `123456789` **not** used / **not** returned |
-| Depositor / ssoKey | **PASS** — synthetic UAT depositor registered via `/fincapture/useraccount/register`; `ssoKey` discoverable (stored as UAT-isolated sandbox object; production `checkalt_tenant_accounts` not written). FI API login is **not** used as `ssoKey` |
-| UAT submission | **PARTIAL** — process reached CheckAlt `POST /fincapture/deposit/process` with `testDeposit: true` and registered depositor; CheckAlt returned **HTTP 500** image QA: *"Check deposit processing failed. Please retake the check images and resubmit."* No provider reference issued; `negotiableCheckSubmitted=false` |
-| Status / history | **BLOCKED** — no successful deposit reference to poll |
-| Callback / webhook | **N/A** — CheckAlt confirmed webhooks are not required |
-| Idempotency | **BLOCKED** — success-path idempotency not exercised (no accepted deposit) |
-| Reconciliation | **PASS** — `POST /sandbox/reconcile` report-only; `autoCorrected=false` |
-| Tenant isolation | **PASS** — C1C lookup of Freedom CheckAlt sandbox op → `404 operation_not_found` |
+| Authentication | **PASS** |
+| Merchant / FI context | **PASS** |
+| Deposit-account binding | **PASS** (API `31…73` / fp `46bed6e573bb`) |
+| Depositor / ssoKey | **PASS** (UAT register; FI login not used as ssoKey) |
+| Image pipeline parity | **PASS** (1600×733 landscape JPEG via prepare pipeline; ≤450KB; raw base64; riskAssessment true; no testDeposit) |
+| UAT submission | **PARTIAL** — CheckAlt HTTP 500 IQA: *"Please retake the check images and resubmit."* No provider reference; negotiableCheckSubmitted=false |
+| Status / history | **BLOCKED** (no accepted deposit reference) |
+| Callback / webhook | **N/A** |
+| Idempotency | **BLOCKED** (success path not reached) |
+| Reconciliation | **PASS** (report-only) |
+| Tenant isolation | **PASS** (C1C → `404 operation_not_found`) |
 
-## FinCapture workflow executed
+## Why IQA still fails (precise remaining difference)
 
-1. Authenticate (PASS)
-2. Register synthetic UAT-only depositor (PASS)
-3. `getUserAccountInformation` (PASS — 2 accounts; FI view has no `ssoKey`, as expected)
-4. `getDepositAccountInformation` (PASS — one authorized UAT deposit account)
-5. Deposit process with synthetic VOID JPEG / check-sized fixtures + `testDeposit: true` (FAIL — CheckAlt image QA HTTP 500)
-6. Deposit history/status (not reached)
+Encoding/dimension/budget/field parity is aligned. CheckAlt still rejects because the **pixel content** is not a photographic check.
 
-## What was verified (safe)
+Compared a restored Freedom check already `status=deposited` (inspected only — **not** submitted to UAT):
 
-1. Fresh Secrets Manager read of `checksops/staging/providers` (`AWSCURRENT`) — credential values never printed.
-2. Staging Lambda sandbox harness against UAT only (`AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED=true`).
-3. Adapter amount unit preview remains integer cents (`userAmount=1` for $0.01).
-4. Production flags remain false; production CheckAlt keys absent from staging secret.
-5. Deposit account discovered via UAT API (not invented; not sample `123456789`).
-6. Synthetic depositor isolated in `aws_provider_sandbox_objects` (`object_type=uat_tenant_account`).
+| | Lovable deposited example | AWS UAT synthetic fixture |
+|---|---|---|
+| Content | Camera JPEG of a real check + endorsed deposit back | Procedural geometric VOID + bitmap-font labels |
+| Raw front | 4265×2052 (~2.3MB) | Drawn 1920×880 then capped |
+| Prepared front | 1600×770 JPEG (~286KB) | 1600×733 JPEG (~110KB) |
+| Back | Approved endorsed-deposit JPEG (1200×576) | Synthetic drawn rear (1600×733) |
+| Host that accepted it | Production CheckAlt (Lovable) | UAT `uatapi.checkalt.com` (rejected) |
 
-## Exact remaining action (STOP)
+Shared after prepare: landscape, JPEG, raw base64, ≤450KB/side, `performRiskAssessment: true`, integer-cent `userAmount`, no data-URI, no `testDeposit`.
 
-**Deposit account number is no longer the primary blocker** — UAT API identified an authorized account.
+**Remaining gap is not pipeline constants — it is photographic / endorsed check imagery (or a CheckAlt-provided UAT image kit).** Using restored production check images for UAT would submit negotiable instruments; that is refused by this certification.
 
-**Only remaining CheckAlt / operator gap for a full PASS:**
+## Exact remaining action
 
-1. CheckAlt-acceptable **UAT check image fixture** (or vendor guidance / image-QA bypass for `testDeposit` on UAT) so synthetic VOID images are accepted by `/fincapture/deposit/process`.
-2. After an accepted deposit: verify status/history retrieval, idempotency, and reconciliation against that provider reference.
-
-Do **not** invent bank numbers. Do **not** enable production CheckAlt. Do **not** modify Moov.
+1. Obtain CheckAlt-acceptable **UAT** check image fixtures (vendor UAT kit), **or** a documented UAT IQA bypass — without copying production negotiable checks into UAT submit.
+2. Then: process → provider reference → status/history → idempotency → reconcile.
 
 ## Production remains OFF
 
@@ -68,9 +83,10 @@ AWS_FINANCIAL_PERMISSIONS_ACTIVATED=false
 AWS_PLAID_ENABLED=false
 ```
 
-No production webhook/DNS/auth/data changes. `64_financial_activation_grants.sql` not applied. Production Supabase/Lovable CheckAlt integration untouched. Certified Moov integration untouched.
+Moov untouched. Production Supabase CheckAlt untouched. No financial activation grants.
 
 ## Evidence
 
-- `/opt/cursor/artifacts/checkalt_uat_certification_partial.json`
 - `aws/providers/results/checkalt_uat_certification_partial.json`
+- `/opt/cursor/artifacts/checkalt_uat_prepare_pipeline_deposit.json`
+- `/opt/cursor/artifacts/checkalt_image_parity_diff.json`
