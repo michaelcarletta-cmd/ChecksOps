@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { isAwsStaging, awsApiBaseUrl } from "@/lib/awsStaging";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,17 +46,44 @@ type Upload = {
   created_at: string;
 };
 
+type UploadSession = {
+  user: { email: string };
+  uploadToken?: string;
+};
+
 const MAX_MB = 15;
+const AWS_UPLOAD_SESSION_KEY = "checksops.aws.homeowner.upload.session";
+
+const awsInvoke = async (name: string, body: Record<string, unknown>, uploadToken?: string) => {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (uploadToken) {
+    headers.authorization = `Bearer ${uploadToken}`;
+    headers["x-homeowner-upload-token"] = uploadToken;
+  }
+  const response = await fetch(`${awsApiBaseUrl()}/functions/v1/${encodeURIComponent(name)}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.error) {
+    throw new Error(String(data?.message || data?.error || `request_failed_${response.status}`));
+  }
+  return data;
+};
 
 export default function HomeownerCheckUpload() {
   const [params] = useSearchParams();
   const leadId = params.get("lead");
   const contractorParam = params.get("contractor");
+  const aws = isAwsStaging();
 
-  const [session, setSession] = useState<any>(null);
+  const [session, setSession] = useState<UploadSession | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [emailInput, setEmailInput] = useState("");
+  const [otpInput, setOtpInput] = useState("");
   const [sendingLink, setSendingLink] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [linkSent, setLinkSent] = useState(false);
 
   const [lead, setLead] = useState<Lead | null>(null);
@@ -70,26 +98,44 @@ export default function HomeownerCheckUpload() {
   const [uploads, setUploads] = useState<Upload[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  // SEO
   useEffect(() => {
     document.title = "Send your insurance check securely | ChecksOps";
   }, []);
 
-  // Session
+  // Session bootstrap
   useEffect(() => {
     let mounted = true;
+    if (aws) {
+      try {
+        const raw = sessionStorage.getItem(AWS_UPLOAD_SESSION_KEY);
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (mounted) {
+          setSession(parsed?.uploadToken && parsed?.user?.email ? parsed : null);
+          setCheckingSession(false);
+        }
+      } catch {
+        if (mounted) {
+          setSession(null);
+          setCheckingSession(false);
+        }
+      }
+      return () => {
+        mounted = false;
+      };
+    }
+
     supabase.auth.getSession().then(({ data }) => {
       if (mounted) {
-        setSession(data.session);
+        setSession(data.session as any);
         setCheckingSession(false);
       }
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s as any));
     return () => {
       mounted = false;
       sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [aws]);
 
   // Load lead + contractor once signed in
   useEffect(() => {
@@ -98,6 +144,29 @@ export default function HomeownerCheckUpload() {
     (async () => {
       setLoading(true);
       try {
+        if (aws) {
+          const data = await awsInvoke(
+            "homeowner-upload-session",
+            { action: "get" },
+            (session as UploadSession).uploadToken,
+          );
+          if (cancelled) return;
+          setLead((data.lead as Lead) || null);
+          setContractor((data.contractor as Contractor) || null);
+          setUploads((data.uploads as Upload[]) || []);
+          // If session lacks contractor but URL has one, fetch directory detail publicly
+          if (!data.contractor && (contractorParam || data.contractorProfileId)) {
+            const detail = await awsInvoke("public-contractor-directory", {
+              action: "detail",
+              contractorId: contractorParam || data.contractorProfileId,
+              email: session.user.email,
+              zip: data.lead?.property_zip ?? "00000",
+            });
+            if (!cancelled) setContractor(((detail as any)?.profile ?? null) as Contractor | null);
+          }
+          return;
+        }
+
         let l: Lead | null = null;
         if (leadId) {
           const { data } = await supabase
@@ -122,7 +191,6 @@ export default function HomeownerCheckUpload() {
           if (!cancelled) setContractor(((c as any)?.profile ?? null) as Contractor | null);
         }
 
-        // Load previous uploads for this session
         const { data: prev } = await supabase
           .from("homeowner_check_uploads")
           .select("id, file_path, status, note, created_at")
@@ -135,7 +203,7 @@ export default function HomeownerCheckUpload() {
     return () => {
       cancelled = true;
     };
-  }, [session, leadId, contractorParam]);
+  }, [session, leadId, contractorParam, aws]);
 
   const sendMagicLink = async () => {
     const em = emailInput.trim().toLowerCase();
@@ -145,6 +213,16 @@ export default function HomeownerCheckUpload() {
     }
     setSendingLink(true);
     try {
+      if (aws) {
+        await awsInvoke("homeowner-upload-otp-start", {
+          email: em,
+          lead_id: leadId,
+          contractor_profile_id: contractorParam,
+        });
+        setLinkSent(true);
+        toast.success("Upload code sent");
+        return;
+      }
       const redirect = `${window.location.origin}/h/upload${window.location.search}`;
       const { error } = await supabase.auth.signInWithOtp({
         email: em,
@@ -159,6 +237,37 @@ export default function HomeownerCheckUpload() {
     }
   };
 
+  const verifyAwsOtp = async () => {
+    const em = emailInput.trim().toLowerCase();
+    const code = otpInput.trim();
+    if (!/^\d{6}$/.test(code)) {
+      toast.error("Enter the 6-digit code");
+      return;
+    }
+    setVerifyingOtp(true);
+    try {
+      const data = await awsInvoke("homeowner-upload-otp-verify", {
+        email: em,
+        code,
+        lead_id: leadId,
+      });
+      const next: UploadSession = {
+        user: { email: data.email || em },
+        uploadToken: data.uploadToken,
+      };
+      sessionStorage.setItem(AWS_UPLOAD_SESSION_KEY, JSON.stringify(next));
+      setSession(next);
+      setLead((data.lead as Lead) || null);
+      setContractor((data.contractor as Contractor) || null);
+      setUploads((data.uploads as Upload[]) || []);
+      toast.success("Signed in for upload");
+    } catch (e: any) {
+      toast.error(e.message ?? "Invalid or expired code");
+    } finally {
+      setVerifyingOtp(false);
+    }
+  };
+
   const pickFile = (f: File | null) => {
     if (!f) {
       setFile(null);
@@ -169,7 +278,6 @@ export default function HomeownerCheckUpload() {
       toast.error(`File too large (${MAX_MB} MB max)`);
       return;
     }
-    // Route images through the cropper first; PDFs skip it.
     if (f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name)) {
       setPendingCrop(f);
       return;
@@ -183,7 +291,6 @@ export default function HomeownerCheckUpload() {
     }
   };
 
-  // Called after the user confirms a crop from the CheckImageCropper dialog
   const applyCroppedFile = (cropped: File) => {
     setFile(cropped);
     const url = URL.createObjectURL(cropped);
@@ -195,29 +302,51 @@ export default function HomeownerCheckUpload() {
     setUploading(true);
     try {
       const b64 = await fileToBase64(file);
-      const { data, error } = await supabase.functions.invoke("homeowner-upload-check", {
-        body: {
-          lead_id: lead?.id ?? null,
-          contractor_profile_id: contractor.id,
-          file_base64: b64,
-          file_mime: file.type || "application/octet-stream",
-          filename: file.name,
-          note: note.trim() || undefined,
-        },
-      });
-      if (error) throw new Error(error.message);
-      if ((data as any)?.error) throw new Error((data as any).error);
+      if (aws) {
+        const data = await awsInvoke(
+          "homeowner-upload-check",
+          {
+            lead_id: lead?.id ?? null,
+            contractor_profile_id: contractor.id,
+            file_base64: b64,
+            file_mime: file.type || "application/octet-stream",
+            filename: file.name,
+            note: note.trim() || undefined,
+          },
+          (session as UploadSession)?.uploadToken,
+        );
+        if ((data as any)?.error) throw new Error((data as any).error);
+        const refreshed = await awsInvoke(
+          "homeowner-upload-session",
+          { action: "get" },
+          (session as UploadSession)?.uploadToken,
+        );
+        setUploads((refreshed.uploads as Upload[]) || []);
+      } else {
+        const { data, error } = await supabase.functions.invoke("homeowner-upload-check", {
+          body: {
+            lead_id: lead?.id ?? null,
+            contractor_profile_id: contractor.id,
+            file_base64: b64,
+            file_mime: file.type || "application/octet-stream",
+            filename: file.name,
+            note: note.trim() || undefined,
+          },
+        });
+        if (error) throw new Error(error.message);
+        if ((data as any)?.error) throw new Error((data as any).error);
+        const { data: refreshed } = await supabase
+          .from("homeowner_check_uploads")
+          .select("id, file_path, status, note, created_at")
+          .order("created_at", { ascending: false });
+        setUploads((refreshed ?? []) as Upload[]);
+      }
 
       toast.success("Check sent securely");
       setFile(null);
       setPreview(null);
       setNote("");
       if (fileInput.current) fileInput.current.value = "";
-      const { data: refreshed } = await supabase
-        .from("homeowner_check_uploads")
-        .select("id, file_path, status, note, created_at")
-        .order("created_at", { ascending: false });
-      setUploads((refreshed ?? []) as Upload[]);
     } catch (e: any) {
       toast.error(e.message ?? "Upload failed");
     } finally {
@@ -226,11 +355,26 @@ export default function HomeownerCheckUpload() {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    if (aws) {
+      try {
+        await awsInvoke(
+          "homeowner-upload-session",
+          { action: "revoke" },
+          (session as UploadSession)?.uploadToken,
+        );
+      } catch {
+        /* best-effort */
+      }
+      sessionStorage.removeItem(AWS_UPLOAD_SESSION_KEY);
+    } else {
+      await supabase.auth.signOut();
+    }
     setSession(null);
     setUploads([]);
     setLead(null);
     setContractor(null);
+    setLinkSent(false);
+    setOtpInput("");
   };
 
   // ----- Views -----
@@ -255,18 +399,46 @@ export default function HomeownerCheckUpload() {
               Secure homeowner sign-in
             </CardTitle>
             <CardDescription>
-              We'll email you a one-time link. No password needed. Only you can open your uploads.
+              {aws
+                ? "We'll email you a one-time 6-digit code. No ChecksOps account needed — this only unlocks your upload."
+                : "We'll email you a one-time link. No password needed. Only you can open your uploads."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {linkSent ? (
               <div className="text-center py-4 space-y-3">
                 <Mail className="h-10 w-10 text-primary mx-auto" />
-                <div className="font-semibold">Check your inbox</div>
+                <div className="font-semibold">{aws ? "Enter your code" : "Check your inbox"}</div>
                 <p className="text-sm text-muted-foreground">
-                  We sent a sign-in link to <strong>{emailInput}</strong>. Open it on this device to continue.
+                  {aws ? (
+                    <>
+                      We sent a 6-digit upload code to <strong>{emailInput}</strong>. It expires in 15 minutes.
+                    </>
+                  ) : (
+                    <>
+                      We sent a sign-in link to <strong>{emailInput}</strong>. Open it on this device to continue.
+                    </>
+                  )}
                 </p>
-                <Button variant="outline" onClick={() => setLinkSent(false)}>
+                {aws && (
+                  <div className="space-y-2 text-left">
+                    <Label htmlFor="ho-otp">Upload code</Label>
+                    <Input
+                      id="ho-otp"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      value={otpInput}
+                      onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="123456"
+                    />
+                    <Button className="w-full" onClick={verifyAwsOtp} disabled={verifyingOtp || otpInput.length !== 6}>
+                      {verifyingOtp && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                      Verify and continue
+                    </Button>
+                  </div>
+                )}
+                <Button variant="outline" onClick={() => { setLinkSent(false); setOtpInput(""); }}>
                   Use a different email
                 </Button>
               </div>
@@ -288,7 +460,7 @@ export default function HomeownerCheckUpload() {
                 </div>
                 <Button className="w-full" onClick={sendMagicLink} disabled={sendingLink}>
                   {sendingLink && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                  Send me a secure link
+                  {aws ? "Send me a secure code" : "Send me a secure link"}
                 </Button>
                 <div className="text-center">
                   <Link to="/find-a-pro" className="text-xs text-muted-foreground underline">

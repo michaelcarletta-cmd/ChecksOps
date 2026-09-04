@@ -1,0 +1,116 @@
+{
+  "sms": {
+    "service": "checksops-api",
+    "environment": "staging",
+    "productionSupabaseChanged": false,
+    "productionWebhooksRedirected": false,
+    "ok": true,
+    "statusCode": 200,
+    "success": true,
+    "messageId": "sms-sink-2fa67684-b4a8-4907-9a9c-509802aec95f",
+    "stagingMode": "sink",
+    "delivery": "sink",
+    "to": "+15551234567",
+    "sunk": true,
+    "spoofFieldsIgnored": {
+      "ignored": true,
+      "queryUserId": null,
+      "queryTenantId": null,
+      "headerUserId": null,
+      "headerTenantId": null,
+      "headerRole": null,
+      "bodyUserId": null,
+      "bodyTenantId": null,
+      "bodyRole": null
+    }
+  },
+  "pdf": {
+    "service": "checksops-api",
+    "environment": "staging",
+    "productionSupabaseChanged": false,
+    "productionWebhooksRedirected": false,
+    "ok": true,
+    "statusCode": 200,
+    "path": "docs/7dbb3009-f059-4767-b5dc-1c5c72379330/65087b72-d1f2-4b64-aae3-359be1e83493/tpa-1788538312526.pdf",
+    "signedUrl": "https://checksops-staging-privatefilesbucket-erzqsolpucjp.s3.us-east-1.amazonaws.com/files/claim-files/docs/7dbb3009-f059-4767-b5dc-1c5c72379330/65087b72-d1f2-4b64-aae3-359be1e83493/tpa-1788538312526.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=ASIA3XM3EIBCPEQJ7HQO%2F20260904%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260904T161152Z&X-Amz-Expires=900&X-Amz-Security-Token=IQoJb3JpZ2luX2VjEDEaCXVzLWVhc3QtMSJHMEUCIQCgWcL16AzVFvH1UjLX0mxQA6xZCNjiuIyNeBYNBTYi3AIgeTdxpV3RcWV%2B9LkVLoohK3mJ%2BHGIahZGpqBPGBlXwZUqgQQI%2Bf%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARAAGgw4MDYxNjg1NzYwNjgiDNmyNFM9zRiUYgZLTSrVA7XAUl9iE%2B3g8opoXpVK6PpkFet0BgGI0kAWLaKLw1%2FNWbLwC4bBaUlg63gH27hfXKDZyAfIwrCmzS1Sb%2FGoSVEdHrAI5cKytJr19%2FWJgdEVJZG7m7jGAmg2qUkjr33QuqpRDO%2FE69YTIYjbz2I%2B%2BHPXrAiUF00YzY4ErqkWLu%2Fj56aQcF8wfRgvyNp0TdRRouMeuz5BLN%2BfvghF4o%2B0GYMmaOF6UEK%2FgFMhq4B%2F70C1MztMXVvt4h%2B6PmP7KHAv9qb7fPvAPuKUEj%2B3FSgbyl5tdapVQWOKjf%2BoR6B4sC95Kue7ieTmeec%2FgcRg6XVqHFQbSTA7NJt%2F8tSchx2P8q1Lt%2BUdj%2FbqkHQUezlNKdwFHrrUnQfKmrLWVnP5q%2B8g8DZSCrI6u11zPFjVBmZ9k4aOanW2GXdn9MVysKFWyMEO7s2Jyy9mNVIyPieHI3j6pGkcl8SAfipcJQfu4TA3CSbyEiJS9B9rL0RZkybZoTPOE7lteZU8wa9qNOYdTniJ1QVJ2877DVLlDeezKY2dF3sUjIcMoDkd4%2BIAIEXUqt7kuefIpm0w1gCSayXeTH297TnrMDqA4KhluyAkwv9E3pAcimAtquYZmlbvSDPNb6U743E2vTcwxtvr1AY6oQH%2BaIw9PGVtsFBG2ZQGcC9%2BEF0yUvsnoSCeMOrb26PSzoIrNboxx3PpVDmJS%2BthH7o6u55YUymLFpAYCNzJgR1U3I13PeH4bCT9Rgj93sTLvFUuPS2CDjaTTiOg6CbOjRytr1mpTQm4xHF2GY%2BlSoSWU0eR3p%2FbhRZMC7oZfCRH8I1Ylc%2Fv00KpKVrdvUms8qzzHyDLJCPTWYwjl1M%2BFJzDoA%3D%3D&X-Amz-Signature=8360a9d386f41e599b001b354e2f2fd53242e009d1e48e507b8fce3944b34c48&X-Amz-SignedHeaders=host&x-amz-checksum-mode=ENABLED&x-id=GetObject",
+    "template": "tpa",
+    "engine": "aws_pdf_lib",
+    "spoofFieldsIgnored": {
+      "ignored": true,
+      "queryUserId": null,
+      "queryTenantId": null,
+      "headerUserId": null,
+      "headerTenantId": null,
+      "headerRole": null,
+      "bodyUserId": null,
+      "bodyTenantId": null,
+      "bodyRole": null
+    }
+  },
+  "domain": {
+    "service": "checksops-api",
+    "environment": "staging",
+    "productionSupabaseChanged": false,
+    "productionWebhooksRedirected": false,
+    "ok": true,
+    "statusCode": 200,
+    "domain": "notify.freedomadj.com",
+    "status": "verified",
+    "verified": true,
+    "verifiedAt": "2026-07-23T03:15:04.853Z",
+    "stagingNote": "AWS staging reads tenant_email_settings; ACM/Route53 attach remains ops-owned",
+    "spoofFieldsIgnored": {
+      "ignored": true,
+      "queryUserId": null,
+      "queryTenantId": null,
+      "headerUserId": null,
+      "headerTenantId": null,
+      "headerRole": null,
+      "bodyUserId": null,
+      "bodyTenantId": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a",
+      "bodyRole": null
+    }
+  },
+  "otp_wrong": {
+    "service": "checksops-api",
+    "environment": "staging",
+    "productionSupabaseChanged": false,
+    "productionWebhooksRedirected": false,
+    "ok": false,
+    "statusCode": 403,
+    "error": "email_mismatch",
+    "spoofFieldsIgnored": {
+      "ignored": true,
+      "queryUserId": null,
+      "queryTenantId": null,
+      "headerUserId": null,
+      "headerTenantId": null,
+      "headerRole": null,
+      "bodyUserId": null,
+      "bodyTenantId": null,
+      "bodyRole": null
+    }
+  },
+  "packet": {
+    "service": "checksops-api",
+    "environment": "staging",
+    "productionSupabaseChanged": false,
+    "productionWebhooksRedirected": false,
+    "ok": true,
+    "statusCode": 200,
+    "path": "endorsement-packets/2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/dc647a1f-9c0a-4893-a09a-f8159c6a9151-1788538313211.pdf",
+    "signedUrl": "https://checksops-staging-privatefilesbucket-erzqsolpucjp.s3.us-east-1.amazonaws.com/files/claim-files/endorsement-packets/2eff5f1a-929d-4ce3-9a8b-cd96b98df42a/dc647a1f-9c0a-4893-a09a-f8159c6a9151-1788538313211.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=ASIA3XM3EIBCPEQJ7HQO%2F20260904%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260904T161153Z&X-Amz-Expires=900&X-Amz-Security-Token=IQoJb3JpZ2luX2VjEDEaCXVzLWVhc3QtMSJHMEUCIQCgWcL16AzVFvH1UjLX0mxQA6xZCNjiuIyNeBYNBTYi3AIgeTdxpV3RcWV%2B9LkVLoohK3mJ%2BHGIahZGpqBPGBlXwZUqgQQI%2Bf%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARAAGgw4MDYxNjg1NzYwNjgiDNmyNFM9zRiUYgZLTSrVA7XAUl9iE%2B3g8opoXpVK6PpkFet0BgGI0kAWLaKLw1%2FNWbLwC4bBaUlg63gH27hfXKDZyAfIwrCmzS1Sb%2FGoSVEdHrAI5cKytJr19%2FWJgdEVJZG7m7jGAmg2qUkjr33QuqpRDO%2FE69YTIYjbz2I%2B%2BHPXrAiUF00YzY4ErqkWLu%2Fj56aQcF8wfRgvyNp0TdRRouMeuz5BLN%2BfvghF4o%2B0GYMmaOF6UEK%2FgFMhq4B%2F70C1MztMXVvt4h%2B6PmP7KHAv9qb7fPvAPuKUEj%2B3FSgbyl5tdapVQWOKjf%2BoR6B4sC95Kue7ieTmeec%2FgcRg6XVqHFQbSTA7NJt%2F8tSchx2P8q1Lt%2BUdj%2FbqkHQUezlNKdwFHrrUnQfKmrLWVnP5q%2B8g8DZSCrI6u11zPFjVBmZ9k4aOanW2GXdn9MVysKFWyMEO7s2Jyy9mNVIyPieHI3j6pGkcl8SAfipcJQfu4TA3CSbyEiJS9B9rL0RZkybZoTPOE7lteZU8wa9qNOYdTniJ1QVJ2877DVLlDeezKY2dF3sUjIcMoDkd4%2BIAIEXUqt7kuefIpm0w1gCSayXeTH297TnrMDqA4KhluyAkwv9E3pAcimAtquYZmlbvSDPNb6U743E2vTcwxtvr1AY6oQH%2BaIw9PGVtsFBG2ZQGcC9%2BEF0yUvsnoSCeMOrb26PSzoIrNboxx3PpVDmJS%2BthH7o6u55YUymLFpAYCNzJgR1U3I13PeH4bCT9Rgj93sTLvFUuPS2CDjaTTiOg6CbOjRytr1mpTQm4xHF2GY%2BlSoSWU0eR3p%2FbhRZMC7oZfCRH8I1Ylc%2Fv00KpKVrdvUms8qzzHyDLJCPTWYwjl1M%2BFJzDoA%3D%3D&X-Amz-Signature=a12e5989d466f3f3c796f585b9e107491f6aecc22c9862ea10e9c0205a58b55f&X-Amz-SignedHeaders=host&x-amz-checksum-mode=ENABLED&x-id=GetObject",
+    "engine": "aws_pdf_lib",
+    "spoofFieldsIgnored": {
+      "ignored": true,
+      "queryUserId": null,
+      "queryTenantId": null,
+      "headerUserId": null,
+      "headerTenantId": null,
+      "headerRole": null,
+      "bodyUserId": null,
+      "bodyTenantId": null,
+      "bodyRole": null
+    }
+  }
+}

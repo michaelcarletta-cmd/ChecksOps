@@ -397,6 +397,21 @@ export const handler = async (event) => {
     });
   }
 
+  // Non-financial Class A scheduled jobs (EventBridge → shared secret).
+  if (path.startsWith('/scheduled')) {
+    const { handleScheduledRequest } = await import('./scheduled.mjs');
+    const scheduled = await handleScheduledRequest(event, path);
+    if (scheduled) {
+      return json(scheduled.statusCode || (scheduled.ok ? 200 : 403), {
+        service: 'checksops-api',
+        environment: process.env.CHECKSOPS_ENV || 'unknown',
+        productionSupabaseChanged: false,
+        productionWebhooksRedirected: false,
+        ...scheduled,
+      });
+    }
+  }
+
   // Class A ordinary application services (email / OCR / HomeownerOps / public directory).
   // MUST run before handleProviderRequest — providers.mjs matches every
   // /functions/v1/* path and returns provider_disabled for unknown names,

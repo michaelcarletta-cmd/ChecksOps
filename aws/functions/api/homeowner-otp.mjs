@@ -1,0 +1,257 @@
+/**
+ * Homeowner /h/upload purpose-scoped OTP sessions (AWS staging).
+ * Replaces Supabase Auth magic-link for document upload only.
+ * Does NOT create a permanent ChecksOps Cognito user.
+ */
+import { createHash, randomBytes, randomInt, randomUUID } from 'node:crypto';
+import pg from 'pg';
+import { parseBody, ignoredSpoof } from './data.mjs';
+import { loadDatabaseCredentials } from './secrets.mjs';
+import { buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
+import { normalizeEmail } from './email-policy.mjs';
+import { sendViaSesOrSink } from './email.mjs';
+import { emailMode } from './email-policy.mjs';
+
+const { Client } = pg;
+
+const publicDb = async () => {
+  const credentials = await loadDatabaseCredentials();
+  const client = new Client(buildWriteClientConfig(credentials, { queryTimeoutMillis: 12000 }));
+  await client.connect();
+  return client;
+};
+
+const hashToken = (value) => createHash('sha256').update(String(value)).digest('hex');
+
+const mintCode = () => String(randomInt(100000, 999999));
+
+export const handleHomeownerUploadOtpStart = async (event) => {
+  const body = parseBody(event);
+  const spoof = ignoredSpoof(event, body);
+  const email = normalizeEmail(body.email);
+  const leadId = body.lead_id || body.leadId || null;
+  const contractorProfileId = body.contractor_profile_id || body.contractorId || null;
+  if (!email || !email.includes('@')) {
+    return { ok: false, statusCode: 400, error: 'invalid_email', spoofFieldsIgnored: spoof };
+  }
+
+  let client;
+  try {
+    client = await publicDb();
+    await client.query('BEGIN');
+    await client.query('SET TRANSACTION READ WRITE');
+
+    // Bind to lead when provided
+    if (leadId) {
+      const lead = (await client.query(
+        `SELECT id, homeowner_email, contractor_profile_id
+         FROM public.homeowner_intro_requests WHERE id = $1::uuid LIMIT 1`,
+        [leadId],
+      )).rows[0];
+      // Use SECURITY DEFINER when RLS blocks
+      const leadDoc = lead || (await client.query(
+        `SELECT id, homeowner_email, contractor_profile_id
+         FROM public.homeowner_intro_requests WHERE id = $1::uuid LIMIT 1`,
+        [leadId],
+      )).rows[0];
+      void leadDoc;
+    }
+
+    const code = mintCode();
+    const codeHash = hashToken(code);
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const id = randomUUID();
+
+    const inserted = (await client.query(
+      `SELECT public.aws_public_homeowner_upload_otp_insert(
+         $1::uuid, $2, $3, $4::uuid, $5::uuid, $6::timestamptz
+       ) AS doc`,
+      [id, email, codeHash, leadId, contractorProfileId, expiresAt],
+    )).rows[0]?.doc;
+
+    if (!inserted?.ok) {
+      await client.query('ROLLBACK');
+      const err = inserted?.error || 'otp_create_failed';
+      const status = err === 'email_mismatch' || err === 'lead_not_found' ? 403 : 503;
+      return {
+        ok: false,
+        statusCode: status,
+        error: err,
+        spoofFieldsIgnored: spoof,
+      };
+    }
+
+    await sendViaSesOrSink({
+      to: email,
+      subject: 'Your ChecksOps upload code',
+      html: `<p>Your one-time upload code is <strong>${code}</strong>.</p><p>It expires in 15 minutes. This code only authorizes a document upload.</p>`,
+      text: `Your ChecksOps upload code is ${code}. Expires in 15 minutes.`,
+    });
+
+    await client.query('COMMIT');
+    return {
+      ok: true,
+      statusCode: 200,
+      sent: true,
+      expiresAt,
+      // Staging sink only: expose code for automated UAT (never in production mode)
+      stagingDebugCode: emailMode() === 'sink' ? code : undefined,
+      spoofFieldsIgnored: spoof,
+    };
+  } catch (error) {
+    if (client) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    return {
+      ok: false,
+      statusCode: 503,
+      error: 'otp_start_failed',
+      message: sanitizePublicError(error),
+      spoofFieldsIgnored: spoof,
+    };
+  } finally {
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+};
+
+export const handleHomeownerUploadOtpVerify = async (event) => {
+  const body = parseBody(event);
+  const spoof = ignoredSpoof(event, body);
+  const email = normalizeEmail(body.email);
+  const code = String(body.code || '').trim().replace(/\s+/g, '');
+  if (!email || !/^\d{6}$/.test(code)) {
+    return { ok: false, statusCode: 400, error: 'invalid_code', spoofFieldsIgnored: spoof };
+  }
+
+  let client;
+  try {
+    client = await publicDb();
+    await client.query('BEGIN');
+    await client.query('SET TRANSACTION READ WRITE');
+
+    const sessionToken = randomBytes(32).toString('hex');
+    const sessionHash = hashToken(sessionToken);
+    const doc = (await client.query(
+      `SELECT public.aws_public_homeowner_upload_otp_verify(
+         $1, $2, $3, $4::timestamptz
+       ) AS doc`,
+      [email, hashToken(code), sessionHash, new Date(Date.now() + 60 * 60 * 1000).toISOString()],
+    )).rows[0]?.doc;
+
+    if (!doc?.ok) {
+      await client.query('ROLLBACK');
+      const err = doc?.error || 'invalid_code';
+      const status = err === 'expired' ? 410 : err === 'used' ? 409 : 401;
+      return { ok: false, statusCode: status, error: err, spoofFieldsIgnored: spoof };
+    }
+
+    await client.query('COMMIT');
+    return {
+      ok: true,
+      statusCode: 200,
+      uploadToken: sessionToken,
+      expiresAt: doc.expires_at,
+      email: doc.email,
+      leadId: doc.lead_id || null,
+      contractorProfileId: doc.contractor_profile_id || null,
+      lead: doc.lead || null,
+      contractor: doc.contractor || null,
+      uploads: doc.uploads || [],
+      spoofFieldsIgnored: spoof,
+    };
+  } catch (error) {
+    if (client) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    return {
+      ok: false,
+      statusCode: 503,
+      error: 'otp_verify_failed',
+      message: sanitizePublicError(error),
+      spoofFieldsIgnored: spoof,
+    };
+  } finally {
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+};
+
+export const handleHomeownerUploadSession = async (event) => {
+  const body = parseBody(event);
+  const spoof = ignoredSpoof(event, body);
+  const token = String(
+    body.upload_token
+    || body.uploadToken
+    || event.headers?.['x-homeowner-upload-token']
+    || event.headers?.['X-Homeowner-Upload-Token']
+    || '',
+  ).trim();
+  const action = body.action || 'get';
+  if (!token || token.length < 32) {
+    return { ok: false, statusCode: 401, error: 'missing_upload_token', spoofFieldsIgnored: spoof };
+  }
+
+  let client;
+  try {
+    client = await publicDb();
+    if (action === 'sign_out' || action === 'revoke') {
+      await client.query('BEGIN');
+      await client.query('SET TRANSACTION READ WRITE');
+      await client.query(
+        `SELECT public.aws_public_homeowner_upload_session_revoke($1)`,
+        [hashToken(token)],
+      );
+      await client.query('COMMIT');
+      return { ok: true, statusCode: 200, revoked: true, spoofFieldsIgnored: spoof };
+    }
+
+    const doc = (await client.query(
+      `SELECT public.aws_public_homeowner_upload_session_get($1) AS doc`,
+      [hashToken(token)],
+    )).rows[0]?.doc;
+    if (!doc?.ok) {
+      const err = doc?.error || 'invalid_token';
+      const status = err === 'expired' || err === 'revoked' ? 410 : 401;
+      return { ok: false, statusCode: status, error: err, spoofFieldsIgnored: spoof };
+    }
+    return {
+      ok: true,
+      statusCode: 200,
+      email: doc.email,
+      leadId: doc.lead_id,
+      contractorProfileId: doc.contractor_profile_id,
+      lead: doc.lead,
+      contractor: doc.contractor,
+      uploads: doc.uploads || [],
+      spoofFieldsIgnored: spoof,
+    };
+  } catch (error) {
+    if (client) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    return {
+      ok: false,
+      statusCode: 503,
+      error: 'session_failed',
+      message: sanitizePublicError(error),
+      spoofFieldsIgnored: spoof,
+    };
+  } finally {
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+};
+
+export const resolveHomeownerUploadToken = async (client, rawToken) => {
+  if (!rawToken || String(rawToken).length < 32) return null;
+  const doc = (await client.query(
+    `SELECT public.aws_public_homeowner_upload_session_get($1) AS doc`,
+    [hashToken(rawToken)],
+  )).rows[0]?.doc;
+  if (!doc?.ok) return null;
+  return doc;
+};

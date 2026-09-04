@@ -14,6 +14,11 @@ import {
   handleNotifyHomeownerLeadAccepted,
 } from './email.mjs';
 import {
+  handleProcessEmailQueue,
+  handleEmailSuppression,
+  handleResendWebhook,
+} from './email-queue.mjs';
+import {
   handleCheckOcrIntake,
   handleDetectEndorsementZone,
   handleCheckOcrBacklog,
@@ -31,6 +36,34 @@ import {
   handleLookupPartnerCodePublic,
   handleHomeownerUploadCheck,
 } from './homeowner.mjs';
+import {
+  handleHomeownerUploadOtpStart,
+  handleHomeownerUploadOtpVerify,
+  handleHomeownerUploadSession,
+} from './homeowner-otp.mjs';
+import { handleSendSms, handleTelnyxSmsStatus } from './sms.mjs';
+import {
+  handleGenerateChecksopsDoc,
+  handleGenerateDocument,
+  handleGeneratePolDocx,
+  handleContractsPdf,
+  handleRetryPdfGeneration,
+  handleGenerateInvoice,
+  handleGenerateEndorsementPacket,
+  handleCompositeEndorsementSignatures,
+} from './documents.mjs';
+import {
+  handleTenantInviteUser,
+  handleCreateTenantUser,
+  handleDeleteUser,
+  handleGetInstanceUsers,
+  handleTenantDomainVerify,
+  handleTenantDomainCheck,
+  handleTenantDomainRecheckCron,
+  handleTenantSetOpenaiKey,
+  handleTenantValidateOpenaiKey,
+  handleTenantRemoveOpenaiKey,
+} from './tenant-admin.mjs';
 
 export const CLASS_A_FUNCTIONS = new Set([
   // Email
@@ -38,16 +71,30 @@ export const CLASS_A_FUNCTIONS = new Set([
   'send-transactional-email',
   'preview-transactional-email',
   'handle-email-unsubscribe',
+  'handle-email-suppression',
+  'process-email-queue',
+  'resend-webhook',
   'notify-mortgage-handling-request',
   'notify-homeowner-lead',
   'notify-homeowner-lead-accepted',
   'send-portal-invite',
   'send-file-to-homeowner',
+  // SMS
+  'send-sms',
+  'telnyx-sms-status',
   // OCR / docs
   'check-ocr-intake',
   'check-ocr-backlog',
   'detect-endorsement-zone',
   'get-check-image-urls',
+  'generate-document',
+  'generate-checksops-doc',
+  'generate-pol-docx',
+  'contracts-pdf',
+  'retry-pdf-generation',
+  'generate-invoice',
+  'generate-endorsement-packet',
+  'composite-endorsement-signatures',
   // HomeownerOps (non-financial)
   'homeowner-ledger-view',
   'homeowner-claim-portal',
@@ -55,6 +102,20 @@ export const CLASS_A_FUNCTIONS = new Set([
   'homeowner-ledger-sign-link',
   'homeowner-ledger-send',
   'homeowner-upload-check',
+  'homeowner-upload-otp-start',
+  'homeowner-upload-otp-verify',
+  'homeowner-upload-session',
+  // Tenant admin / domain / BYOK
+  'tenant-invite-user',
+  'create-tenant-user',
+  'delete-user',
+  'get-instance-users',
+  'tenant-domain-verify',
+  'tenant-domain-check',
+  'tenant-domain-recheck-cron',
+  'tenant-set-openai-key',
+  'tenant-validate-openai-key',
+  'tenant-remove-openai-key',
   // Public directory
   'public-contractor-directory',
   'lookup-partner-code-public',
@@ -84,7 +145,6 @@ export const handleAppServiceRequest = async (event, path, method) => {
     return { ok: true, statusCode: 200, cors: true };
   }
 
-  // GET unsubscribe validation
   if (name === 'handle-email-unsubscribe' && (upper === 'GET' || upper === 'POST')) {
     return handleEmailUnsubscribe(event);
   }
@@ -96,6 +156,12 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleSendEmail(event);
     case 'preview-transactional-email':
       return handlePreviewTransactionalEmail(event);
+    case 'handle-email-suppression':
+      return handleEmailSuppression(event);
+    case 'process-email-queue':
+      return handleProcessEmailQueue(event);
+    case 'resend-webhook':
+      return handleResendWebhook(event);
     case 'notify-mortgage-handling-request':
       return handleNotifyMortgageHandlingRequest(event);
     case 'notify-homeowner-lead':
@@ -106,6 +172,10 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleSendPortalInvite(event);
     case 'send-file-to-homeowner':
       return handleSendFileToHomeowner(event);
+    case 'send-sms':
+      return handleSendSms(event);
+    case 'telnyx-sms-status':
+      return handleTelnyxSmsStatus(event);
     case 'check-ocr-intake':
       return handleCheckOcrIntake(event);
     case 'check-ocr-backlog':
@@ -114,6 +184,22 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleDetectEndorsementZone(event);
     case 'get-check-image-urls':
       return handleGetCheckImageUrls(event);
+    case 'generate-document':
+      return handleGenerateDocument(event);
+    case 'generate-checksops-doc':
+      return handleGenerateChecksopsDoc(event);
+    case 'generate-pol-docx':
+      return handleGeneratePolDocx(event);
+    case 'contracts-pdf':
+      return handleContractsPdf(event);
+    case 'retry-pdf-generation':
+      return handleRetryPdfGeneration(event);
+    case 'generate-invoice':
+      return handleGenerateInvoice(event);
+    case 'generate-endorsement-packet':
+      return handleGenerateEndorsementPacket(event);
+    case 'composite-endorsement-signatures':
+      return handleCompositeEndorsementSignatures(event);
     case 'homeowner-ledger-view':
       return handleHomeownerLedgerView(event);
     case 'homeowner-claim-portal':
@@ -126,6 +212,32 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleHomeownerLedgerSend(event);
     case 'homeowner-upload-check':
       return handleHomeownerUploadCheck(event);
+    case 'homeowner-upload-otp-start':
+      return handleHomeownerUploadOtpStart(event);
+    case 'homeowner-upload-otp-verify':
+      return handleHomeownerUploadOtpVerify(event);
+    case 'homeowner-upload-session':
+      return handleHomeownerUploadSession(event);
+    case 'tenant-invite-user':
+      return handleTenantInviteUser(event);
+    case 'create-tenant-user':
+      return handleCreateTenantUser(event);
+    case 'delete-user':
+      return handleDeleteUser(event);
+    case 'get-instance-users':
+      return handleGetInstanceUsers(event);
+    case 'tenant-domain-verify':
+      return handleTenantDomainVerify(event);
+    case 'tenant-domain-check':
+      return handleTenantDomainCheck(event);
+    case 'tenant-domain-recheck-cron':
+      return handleTenantDomainRecheckCron(event);
+    case 'tenant-set-openai-key':
+      return handleTenantSetOpenaiKey(event);
+    case 'tenant-validate-openai-key':
+      return handleTenantValidateOpenaiKey(event);
+    case 'tenant-remove-openai-key':
+      return handleTenantRemoveOpenaiKey(event);
     case 'public-contractor-directory':
     case 'contractor-directory-search':
       return handlePublicContractorDirectory(event);

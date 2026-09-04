@@ -111,3 +111,10 @@ email send/transactional/unsubscribe/notifies, OCR intake/backlog/zone, Homeowne
 Still `provider_disabled` / deferred: Class B/C providers, document PDF generators, domain cron, tenant invite Cognito admin, SMS, SES bounce webhooks, `homeowner-deductible-pay`.
 
 Routing: Class A dispatch runs **before** `handleProviderRequest` so unknown-provider stubs cannot shadow these routes.
+
+## Staging posture after Class A final cleanup
+
+See `aws/providers/CLASS_A_SERVICES.md`, `SCHEDULED_JOBS.md`, `TEXTRACT_PREREQUISITE.md`, `PROVIDER_CERTIFICATION_READINESS.md`.
+
+Launch-relevant Class A ports complete for PDF, SMS sink, email queue, Cognito invite, domain check, `/h/upload` AWS OTP, and safe scheduled endpoint.
+Financial/provider execution remains disabled. Textract requires account subscription enablement.
