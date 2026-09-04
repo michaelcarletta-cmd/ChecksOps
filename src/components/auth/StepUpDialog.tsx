@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, ShieldCheck, Copy } from "lucide-react";
+import { Loader2, ShieldCheck, Copy, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { StepUpRequest } from "@/hooks/useStepUp";
 
@@ -21,7 +21,7 @@ interface Props {
   onFactorsChanged: () => Promise<void> | void;
 }
 
-type Mode = "loading" | "verify" | "enroll";
+type Mode = "loading" | "verify" | "enroll" | "setup-error";
 
 /**
  * Blocking two-factor challenge shown before any money-movement action.
@@ -39,6 +39,7 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [setupAttempt, setSetupAttempt] = useState(0);
 
   useEffect(() => {
     if (!open) {
@@ -48,6 +49,7 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
       setQr(null);
       setSecret(null);
       setFactorId(null);
+      setSetupAttempt(0);
       return;
     }
 
@@ -57,8 +59,8 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
       const { data, error: listError } = await supabase.auth.mfa.listFactors();
       if (cancelled) return;
       if (listError) {
-        setError(listError.message);
-        setMode("verify");
+        setError(`Could not check your two-factor setup: ${listError.message}`);
+        setMode("setup-error");
         return;
       }
 
@@ -71,7 +73,12 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
 
       // Clean up any half-finished enrollment so we can start fresh.
       for (const stale of (data?.totp ?? []).filter((f) => f.status !== "verified")) {
-        await supabase.auth.mfa.unenroll({ factorId: stale.id });
+        const { error: cleanupError } = await supabase.auth.mfa.unenroll({ factorId: stale.id });
+        if (cleanupError) {
+          setError("We couldn't restart the unfinished setup. Select Restart setup to try again.");
+          setMode("setup-error");
+          return;
+        }
       }
 
       const { data: enrolled, error: enrollError } = await supabase.auth.mfa.enroll({
@@ -81,7 +88,7 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
       if (cancelled) return;
       if (enrollError || !enrolled) {
         setError(enrollError?.message ?? "Could not start two-factor setup.");
-        setMode("verify");
+        setMode("setup-error");
         return;
       }
       setFactorId(enrolled.id);
@@ -93,7 +100,7 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, setupAttempt]);
 
   const submit = async () => {
     if (!factorId) {
@@ -216,7 +223,28 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
           </div>
         )}
 
-        {mode !== "loading" && (
+        {mode === "setup-error" && (
+          <Alert variant="destructive">
+            <AlertDescription className="space-y-3 text-xs">
+              <p>{error ?? "Two-factor setup could not be started."}</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setError(null);
+                  setMode("loading");
+                  setSetupAttempt((attempt) => attempt + 1);
+                }}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Restart setup
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {(mode === "verify" || mode === "enroll") && (
           <div className="space-y-2">
             <Label htmlFor="stepup-code">Authentication code</Label>
             <Input
@@ -233,11 +261,18 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
               }}
             />
             {mode === "verify" && (
-              <p className="text-xs text-muted-foreground">
-                Open your authenticator app (Google Authenticator, Microsoft Authenticator, Authy,
-                1Password or iPhone Passwords) and enter the current 6-digit number listed for
-                ChecksOps.
-              </p>
+              <div className="space-y-2 text-xs text-muted-foreground">
+                <p>
+                  This account already has an authenticator linked. Open Google Authenticator,
+                  Microsoft Authenticator, Authy, 1Password, or iPhone Passwords and enter the
+                  current 6-digit number listed for ChecksOps.
+                </p>
+                <p>
+                  Installing a new app will not recreate an existing code. If you no longer have
+                  access to the linked app, an administrator must reset two-factor authentication
+                  before you can set it up again.
+                </p>
+              </div>
             )}
             {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
@@ -248,7 +283,10 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
           <Button variant="ghost" disabled={busy} onClick={() => onResolved(false)}>
             Cancel
           </Button>
-          <Button disabled={busy || mode === "loading"} onClick={() => void submit()}>
+          <Button
+            disabled={busy || mode === "loading" || mode === "setup-error" || !factorId}
+            onClick={() => void submit()}
+          >
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Verify
           </Button>
