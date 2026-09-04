@@ -1,0 +1,9 @@
+{
+  "ok": false,
+  "classification": "BLOCKED BY PROVIDER TEST CONFIGURATION",
+  "error": "moov_account_create_401",
+  "oauth": true,
+  "usedProductionPlatformId": false,
+  "required": "Moov sandbox /accounts.write OR MOOV_SANDBOX_CONNECTED_ACCOUNT_ID",
+  "note": "Do not guess a sandbox account id and do not copy production."
+}

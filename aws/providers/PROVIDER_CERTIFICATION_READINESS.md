@@ -8,9 +8,11 @@
 | Item | Status |
 |---|---|
 | Secrets present | `MOOV_SANDBOX_PUBLIC_KEY`, `MOOV_SANDBOX_SECRET_KEY` in `checksops/staging/providers` |
-| Missing | `MOOV_SANDBOX_PLATFORM_ACCOUNT_ID` (and optional webhook secret / allowed origin) |
-| Network/egress | **Reachable** from `checksops-staging-api` (`GET /providers/egress` → `moovReachable: true`, HTTP 403 at edge without credentials — expected) |
-| Webhooks | Dry-run path present; production webhooks not redirected |
+| Missing | `MOOV_SANDBOX_PLATFORM_ACCOUNT_ID`, `MOOV_SANDBOX_CONNECTED_ACCOUNT_ID`, `MOOV_SANDBOX_WEBHOOK_SECRET`, `MOOV_SANDBOX_ALLOWED_ORIGIN` |
+| Discovery attempt (2026-09-04) | OAuth **PASS**; `GET/POST /accounts` **401**; bootstrap cannot resolve `wallet.partnerAccountID` without a connected account. **Do not guess.** See `MOOV_SANDBOX_CERTIFICATION.md`. |
+| Network/egress | **Reachable** (`moovReachable: true`) |
+| Webhooks | Path ready; signature cert **blocked** until `MOOV_SANDBOX_WEBHOOK_SECRET`; production webhooks not redirected |
+| Certification | **BLOCKED** on platform account ID (manual Moov dashboard) |
 | Why execution disabled | `AWS_PROVIDER_EXECUTION_ENABLED=false`, `AWS_MOOV_ENABLED=false`; Class C money movement intentionally off |
 
 ## CheckAlt UAT
