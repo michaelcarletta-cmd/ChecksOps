@@ -633,6 +633,7 @@ export const WRITE_ALLOWLIST = {
     tranche: 6,
     ops: new Set(['insert', 'update', 'delete']),
     columns: new Set([
+      'tenant_id',
       'job_name', 'work_type', 'customer_name', 'customer_phone', 'customer_email',
       'property_address', 'property_city', 'property_state', 'property_zip',
       'contract_amount', 'estimate_date', 'start_date', 'completion_date',
@@ -744,7 +745,14 @@ export const pickAllowlistedValues = (table, values = {}) => {
   const denied = [];
   const ignored = [];
   for (const [key, value] of Object.entries(values || {})) {
-    if (IGNORED.has(key) || key === spec.identityColumn || extraIgnored.has(key)) {
+    // Always ignore server-owned identity column (e.g. created_by / uploaded_by).
+    if (key === spec.identityColumn || extraIgnored.has(key)) {
+      ignored.push(key);
+      continue;
+    }
+    // Global identity keys are ignored unless this table explicitly allowlists them
+    // (e.g. tenant_id on membership-scoped inserts — executor still verifies membership).
+    if (IGNORED.has(key) && !spec.columns.has(key)) {
       ignored.push(key);
       continue;
     }

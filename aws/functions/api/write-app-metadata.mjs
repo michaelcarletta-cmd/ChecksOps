@@ -521,14 +521,28 @@ export const executePrivacyAck = async ({ client, mapping, values }) => {
 };
 
 const SAFE_LEDGER_EVENT_TYPES = new Set([
-  'tenant_update',
+  'ops_note',
   'mortgage_update',
   'mortgage_followup',
-  'ops_note',
   'document_uploaded',
-  'endorsement_requested',
-  'status_update',
+  'document_sent',
+  'document_shared',
+  'document_delivered',
+  'document_viewed',
+  'signature_reminder',
+  'mortgage_check_sent',
+  'mortgage_check_returned',
+  'contractor_upload',
+  'homeowner_check_upload',
+  'homeowner_upload_attached',
+  'production_doc_uploaded',
 ]);
+
+/** UI aliases that are not in the DB check constraint — coerce to ops_note. */
+const LEDGER_EVENT_ALIASES = {
+  tenant_update: 'ops_note',
+  status_update: 'ops_note',
+};
 
 export const executeHomeownerLedgerEvents = async ({ client, mapping, values }) => {
   if (values.amount !== undefined && values.amount !== null) {
@@ -541,9 +555,12 @@ export const executeHomeownerLedgerEvents = async ({ client, mapping, values }) 
   if (!(await memberOfTenant(client, mapping.application_user_id, tenantId))) {
     return { error: 'not_authorized', message: 'Not a member of tenant' };
   }
-  const eventType = clip(values.event_type, 80);
+  let eventType = clip(values.event_type, 80);
   if (eventType?.error || !eventType) {
     return eventType?.error || { error: 'missing_required_field', field: 'event_type' };
+  }
+  if (LEDGER_EVENT_ALIASES[eventType]) {
+    eventType = LEDGER_EVENT_ALIASES[eventType];
   }
   if (!SAFE_LEDGER_EVENT_TYPES.has(eventType)) {
     return { error: 'event_type_not_allowlisted', event_type: eventType };
