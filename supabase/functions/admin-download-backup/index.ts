@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -28,10 +28,9 @@ Deno.serve(async (req) => {
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
     // Identify the caller from their JWT
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: userData, error: userError } = await userClient.auth.getUser();
+    const token = authHeader.slice("Bearer ".length);
+    const userClient = createClient(supabaseUrl, anonKey);
+    const { data: userData, error: userError } = await userClient.auth.getUser(token);
     if (userError || !userData?.user) {
       return new Response(JSON.stringify({ error: "unauthorized" }), {
         status: 401,
