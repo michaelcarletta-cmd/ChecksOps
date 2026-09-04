@@ -45,13 +45,17 @@ Production passkeys (Supabase SimpleWebAuthn) are **not** migrated. AWS staging 
 | Signup | CheckOps signup | **PASS** (disabled) | `signUp` returns disabled on AWS staging (intentional) |
 | Production Supabase Auth at runtime | any | **PASS** (absent) | When `VITE_AUTH_PROVIDER=cognito`, SPA uses AWS client — no live Supabase Auth calls for login/OTP/session |
 
-### Overall: **PARTIAL**
+### Overall: **PARTIAL** (live UAT blocked)
 
 Primary remaining blockers for a full PASS scorecard:
 
-1. **Refresh AWS STS credentials** and redeploy API Lambda so `hire-mortgage-agent` is live.
-2. **Live UAT** on `https://staging.checksops.com`: CheckOps / WhiteLabel / MortgageOps login, OTP, logout, cross-portal isolation, role denial, passkey register/sign-in (HTTPS only).
-3. Cognito MFA / financial step-up remains deferred (acceptable while `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=false`).
+1. **BLOCKER (2026-09-04):** Cloud Agent has temporary `ASIA…` `AWS_ACCESS_KEY_ID` + secret but **`AWS_SESSION_TOKEN` is MISSING** → `sts:GetCallerIdentity` returns `InvalidClientTokenId`. Cannot `UpdateFunctionCode`, S3 sync, CloudFront invalidate, or read master UAT secret.
+2. Live `POST /functions/v1/hire-mortgage-agent` still returns `provider_disabled` (Lambda not redeployed with this PR’s Class A bridge).
+3. Live `https://staging.checksops.com` SPA still lacks `checksops.aws.staging.auth.mortgage-ops` (frontend not redeployed; local `npm run build:aws` already includes it in `index-CgG5WshV.js`).
+4. After STS is fixed: redeploy API (`/tmp/checksops-staging-api-pr126.zip` ready) + frontend `dist/`, then live UAT on HTTPS staging.
+5. Cognito MFA / financial step-up remains deferred (acceptable while `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=false`).
+
+Artifact: `pr126_uat_blocker_missing_session_token.md`
 
 ## Evidence (automated)
 
