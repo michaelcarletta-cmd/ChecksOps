@@ -10,13 +10,8 @@ Platform account `36b7…47bb` authorized with Origin `https://staging.checksops
 
 ## CheckAlt UAT
 
-| Item | Status |
-|---|---|
-| Secrets present | `CHECKALT_UAT_USER_ID`, `CHECKALT_UAT_PASSWORD`, `CHECKALT_UAT_FI_KEY`, `CHECKALT_UAT_MERCHANT`, `CHECKALT_UAT_BASE_URL` |
-| Missing | Approved UAT deposit account number / register-account binding confirmation |
-| Network/egress | **Reachable** (`checkaltUatReachable: true`) |
-| Webhooks | Staging dry-run; production not redirected |
-| Why execution disabled | Deposit submit/approve remain Class C; flags keep execution off |
+**Status (2026-09-04):** **BLOCKED** on depositor `ssoKey` + approved UAT deposit account (PR for CheckAlt UAT cert).  
+Auth + merchant/`lockbox5` + FI context **PASS**. `getUserAccountInformation` returns accounts without `ssoKey`. `CHECKALT_UAT_DEPOSIT_ACCOUNT_NUMBER` and `CHECKALT_SANDBOX_WEBHOOK_SECRET` absent. No negotiable check submitted. Production CheckAlt remains **OFF**. See `CHECKALT_UAT_CERTIFICATION.md`.
 
 ## Plaid
 
@@ -40,6 +35,8 @@ Removed from blocker list: **Plaid** (not required); **Moov sandbox account auth
 
 ## Next certification phase prerequisites (external)
 
-1. CheckAlt: UAT deposit account number approved for lockbox5 merchant  
-2. Keep NAT/egress healthy (currently OK)
-3. Moov production activation remains a deliberate, separate gate — do not flip production flags from this sandbox PASS
+1. CheckAlt: issue approved UAT deposit account number for lockbox5 + register UAT FinCapture depositor (`ssoKey`)
+2. Optionally set `CHECKALT_SANDBOX_WEBHOOK_SECRET` for UAT callbacks
+3. Keep NAT/egress healthy (currently OK)
+4. Moov production activation remains a deliberate, separate gate — sandbox PASS does not authorize production flags
+

@@ -1163,6 +1163,9 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
   });
   const extracted = extractCheckAltSsoAndAccount(user.data, depositAccount.data);
   if (!extracted.hasDepositAccount || !extracted.hasSsoKey) {
+    const failureReason = !extracted.hasSsoKey
+      ? 'missing_depositor_sso_key'
+      : 'missing_deposit_account';
     const failed = await updateSandboxOperation(client, {
       id: pending.id,
       status: 'failed',
@@ -1173,9 +1176,11 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
         fixture: amount.fixture,
         syntheticImages: true,
         negotiableCheck: false,
-        hasUatAccount: false,
+        hasUatAccount: extracted.hasDepositAccount,
+        hasSsoKey: extracted.hasSsoKey,
         registeredTestAccount: false,
-        reason: 'UAT user has no deposit account. Test account registration was skipped because it would require inventing bank numbers.',
+        reason: failureReason,
+        accountObjectKeys: extracted.accountObjectKeys,
       },
     });
     await insertAudit(client, {
@@ -1200,9 +1205,17 @@ const handleCheckAltDeposit = async (event, deps) => handleAuthenticated(event, 
       applicationUserId: mapping.application_user_id,
       spoofFieldsIgnored: spoof,
       amount: { ...deposit, cents: amount.cents },
-      uatAccount: { hasSsoKey: extracted.hasSsoKey, hasDepositAccount: extracted.hasDepositAccount, accountCount: extracted.accountCount },
+      uatAccount: {
+        hasSsoKey: extracted.hasSsoKey,
+        hasDepositAccount: extracted.hasDepositAccount,
+        accountCount: extracted.accountCount,
+        accountObjectKeys: extracted.accountObjectKeys,
+        failureReason,
+      },
       operation: publicOperation(failed),
-      message: 'CheckAlt UAT user has no deposit account. A TEST account was not registered because that requires bank numbers. No negotiable check was submitted.',
+      message: !extracted.hasSsoKey
+        ? 'CheckAlt UAT depositor ssoKey is missing. A FinCapture depositor must be registered on UAT (API login is never used as ssoKey). Deposit account registration was not invented. No negotiable check was submitted.'
+        : 'CheckAlt UAT user has no deposit account. A TEST account was not registered because that requires bank numbers. No negotiable check was submitted.',
     };
   }
   const packed = buildCheckAltUatDepositBody({
@@ -1289,8 +1302,28 @@ const handleCheckAltAccount = async (event, deps) => handleAuthenticated(event, 
     negotiableCheckSubmitted: false,
     applicationUserId: mapping.application_user_id,
     spoofFieldsIgnored: spoof,
-    userAccount: { ok: user.ok, httpStatus: user.statusCode || user.httpStatus || null, hasSsoKey: extractCheckAltSsoAndAccount(user.data, {}).hasSsoKey, accountCount: extractCheckAltSsoAndAccount(user.data, {}).accountCount },
-    depositAccount: { ok: deposit.ok, httpStatus: deposit.statusCode || deposit.httpStatus || null, hasDepositAccount: extractCheckAltSsoAndAccount(user.data, deposit.data).hasDepositAccount },
+    userAccount: {
+      ok: user.ok,
+      httpStatus: user.statusCode || user.httpStatus || null,
+      hasSsoKey: extractCheckAltSsoAndAccount(user.data, {}).hasSsoKey,
+      accountCount: extractCheckAltSsoAndAccount(user.data, {}).accountCount,
+      accountObjectKeys: extractCheckAltSsoAndAccount(user.data, {}).accountObjectKeys,
+    },
+    depositAccount: {
+      ok: deposit.ok,
+      httpStatus: deposit.statusCode || deposit.httpStatus || null,
+      hasDepositAccount: extractCheckAltSsoAndAccount(user.data, deposit.data).hasDepositAccount,
+      message: deposit.message || null,
+    },
+    binding: {
+      apiLoginNeverUsedAsSsoKey: true,
+      approvedDepositAccountSecretConfigured: Boolean(loaded.checkalt?.depositAccountNumber),
+      requiredFromVendor: [
+        'UAT FinCapture depositor User ID (becomes ssoKey after register)',
+        'CheckAlt-approved UAT deposit account number for merchant lockbox5',
+        'Optional CHECKALT_SANDBOX_WEBHOOK_SECRET if UAT callbacks are in scope',
+      ],
+    },
   };
 }, deps);
 
