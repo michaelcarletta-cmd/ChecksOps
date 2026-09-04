@@ -1,0 +1,39 @@
+{
+  "bucket": "checksops-staging-privatefilesbucket-erzqsolpucjp",
+  "total_objects": 1355,
+  "total_bytes": 2501606326,
+  "by_supabase_bucket": {
+    "claim-files": {
+      "objects": 1201,
+      "bytes": 2455438378
+    },
+    "document-templates": {
+      "objects": 1,
+      "bytes": 3124
+    },
+    "email-assets": {
+      "objects": 1,
+      "bytes": 1015445
+    },
+    "endorsement-packets": {
+      "objects": 125,
+      "bytes": 9217337
+    },
+    "homeowner-uploads": {
+      "objects": 12,
+      "bytes": 30367758
+    },
+    "loss-draft-documents": {
+      "objects": 2,
+      "bytes": 77234
+    },
+    "tenant-documents": {
+      "objects": 8,
+      "bytes": 2800034
+    },
+    "tenant-logos": {
+      "objects": 5,
+      "bytes": 2687016
+    }
+  }
+}
