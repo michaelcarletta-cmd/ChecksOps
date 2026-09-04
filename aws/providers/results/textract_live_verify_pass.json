@@ -1,0 +1,57 @@
+{
+  "http_status": 200,
+  "engine": "aws_textract_analyze",
+  "ocr_success": true,
+  "textract_error": null,
+  "rpc_success": true,
+  "rpc_error": "fallback_descriptive_only",
+  "subscription_required": false,
+  "parsed": {
+    "carrier_name": "Synthetic Staging Mutual Insurance Company",
+    "check_number": "778899",
+    "amount": "1234.56",
+    "claim_number": "CLM-STAGING-7788",
+    "payee_line": "Staging Uat Homeowner And Freedom Adjustment LLC",
+    "payees": [
+      {
+        "name": "Staging Uat Homeowner",
+        "type": "unknown"
+      },
+      {
+        "name": "Freedom Adjustment LLC",
+        "type": "unknown"
+      }
+    ]
+  },
+  "db_after": {
+    "carrier_name": "Synthetic Staging Mutual Insurance Company",
+    "check_number": "778899",
+    "payee_line": "Staging Uat Homeowner And Freedom Adjustment LLC",
+    "front_image_path": "checks/dc647a1f-9c0a-4893-a09a-f8159c6a9151/synthetic-textract-live-verify-20260904.png",
+    "amount": 6119.46,
+    "id": "dc647a1f-9c0a-4893-a09a-f8159c6a9151"
+  },
+  "cross_tenant_ocr": {
+    "status": 404,
+    "error": "check_not_found"
+  },
+  "cross_tenant_visible": 0,
+  "moov": "provider_disabled",
+  "financial_job": "financial_job_disabled",
+  "flags": {
+    "AWS_PROVIDER_EXECUTION_ENABLED": "false",
+    "AWS_MOOV_ENABLED": "false",
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "false",
+    "AWS_PLAID_ENABLED": "false",
+    "AWS_CHECKALT_ENABLED": "false"
+  },
+  "verdict": {
+    "textract_pass": true,
+    "parser_pass": true,
+    "db_descriptive_commit": true,
+    "cross_tenant_denied": true,
+    "financial_still_disabled": true,
+    "synthetic_only": true,
+    "amount_unchanged_no_ledger": true
+  }
+}

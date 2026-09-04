@@ -15,7 +15,7 @@ API: https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging
 
 | Priority | Themes |
 |----------|--------|
-| P0 | Live Textract subscription (manual); Moov platform account ID for certification; CheckAlt UAT deposit account; financial activation intentionally held |
+| P0 | Moov platform account ID for certification; CheckAlt UAT deposit account; financial activation intentionally held |
 | P1 | Plaid sandbox keys absent; WhiteLabel/MortgageOps Cognito; EventBridge Scheduler IAM for ops |
 | P2 | Email/SMS provider identity (sinks OK); OCR live vs stored; invite email delivery polish |
 | P3 | Production DNS/webhooks/data cutover (out of scope) |
@@ -30,13 +30,12 @@ API: https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging
 | PDF generation | **PASS** — `generate-tpa-authorization`, `generate-endorsement-packet` return S3 signed URLs. |
 | Email/SMS | **PASS (sink)** — SMS `AWS_SMS_MODE=sink`; email staging sink/allowlist unchanged. |
 | Scheduled jobs | **PASS (endpoint)** — `/scheduled/class-a` OK; financial jobs `financial_job_disabled`. EventBridge CreateConnection denied for agent — manual ops. |
-| Textract | **BLOCKED** — `SubscriptionRequiredException`. IAM+code ready. Manual console enable required. |
+| Textract | **PASS** — live `aws_textract_analyze` on synthetic image; `SubscriptionRequiredException` gone. |
 | Moov/CheckAlt/Plaid | Readiness documented — no money movement. |
 | RLS/cross-tenant | Prior PASS retained; OTP sessions claim-bound. |
 
 ## Items preventing production cutover
 
-1. Textract not subscribed in account 806168576068
 2. Moov sandbox platform account ID missing
 3. CheckAlt UAT deposit account ID unset
 4. Plaid sandbox credentials absent
@@ -44,3 +43,7 @@ API: https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging
 6. Production DNS / webhooks / data cutover not performed (intentional)
 7. Financial activation grants / Deposit Ops money RPCs intentionally disabled
 8. EventBridge Scheduler connection IAM for automated cron (optional ops)
+
+## Textract live verify (2026-09-04)
+
+PASS — see `TEXTRACT_PREREQUISITE.md` and `textract_live_verify_pass.json`.

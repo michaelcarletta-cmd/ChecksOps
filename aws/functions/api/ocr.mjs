@@ -155,13 +155,20 @@ export const handleCheckOcrIntake = async (event) => withIdentity(event, async (
     };
   }
 
-  // Membership / RLS already applied via GUC; lock status best-effort
-  await client.query(
-    `UPDATE public.check_intake_items
-     SET ocr_status = 'processing', updated_at = now()
-     WHERE id = $1::uuid`,
-    [checkId],
-  ).catch(() => {});
+  // Membership / RLS already applied via GUC; lock status best-effort.
+  // Use SAVEPOINT so a denied status update cannot abort the whole write tx.
+  try {
+    await client.query('SAVEPOINT ocr_status_processing');
+    await client.query(
+      `UPDATE public.check_intake_items
+       SET ocr_status = 'processing', updated_at = now()
+       WHERE id = $1::uuid`,
+      [checkId],
+    );
+    await client.query('RELEASE SAVEPOINT ocr_status_processing');
+  } catch {
+    try { await client.query('ROLLBACK TO SAVEPOINT ocr_status_processing'); } catch { /* ignore */ }
+  }
 
   let lines = [];
   let engine = 'aws_textract';
@@ -190,10 +197,16 @@ export const handleCheckOcrIntake = async (event) => withIdentity(event, async (
   }
 
   if (!lines.length && !parsedFromStore) {
-    await client.query(
-      `UPDATE public.check_intake_items SET ocr_status = 'failed', updated_at = now() WHERE id = $1::uuid`,
-      [checkId],
-    ).catch(() => {});
+    try {
+      await client.query('SAVEPOINT ocr_status_failed');
+      await client.query(
+        `UPDATE public.check_intake_items SET ocr_status = 'failed', updated_at = now() WHERE id = $1::uuid`,
+        [checkId],
+      );
+      await client.query('RELEASE SAVEPOINT ocr_status_failed');
+    } catch {
+      try { await client.query('ROLLBACK TO SAVEPOINT ocr_status_failed'); } catch { /* ignore */ }
+    }
     return {
       ok: true,
       statusCode: 200,
@@ -201,7 +214,9 @@ export const handleCheckOcrIntake = async (event) => withIdentity(event, async (
       ocr_success: false,
       error: textractError || 'textract_empty',
       stage: 'textract',
-      textract_note: 'Enable AWS Textract on account 806168576068 for live image OCR; stored OCR reparse used when available.',
+      textract_note: textractError && /subscriptionrequired/i.test(String(textractError))
+        ? 'Enable AWS Textract on account 806168576068 for live image OCR; stored OCR reparse used when available.'
+        : undefined,
       spoofFieldsIgnored: spoof,
     };
   }
@@ -215,64 +230,55 @@ export const handleCheckOcrIntake = async (event) => withIdentity(event, async (
 
   let rpcSuccess = false;
   let rpcError = null;
+  // Prefer descriptive-column commit on staging. Full ocr_commit_results writes amount /
+  // check_stage / claim_payments and uses a multi-arg signature; keep money paths untouched.
   try {
+    await client.query('SAVEPOINT ocr_descriptive_commit');
+    // Only columns granted to checksops for T2 intake updates (33_tranche2_write_grants.sql).
+    // Do not touch ocr_status/amount/detected_claim_number (no column grant / ledger safety).
     await client.query(
-      `SELECT public.ocr_commit_results(
-         $1::uuid, $2::jsonb, $3::jsonb, $4::jsonb, $5::uuid
-       )`,
+      `UPDATE public.check_intake_items SET
+         carrier_name = COALESCE($2, carrier_name),
+         check_number = COALESCE($3, check_number),
+         payee_line = COALESCE($4, payee_line),
+         updated_at = now()
+       WHERE id = $1::uuid`,
       [
         checkId,
-        JSON.stringify(parsed),
-        JSON.stringify(parsed.payees || []),
-        JSON.stringify(eligibility),
+        parsed.carrier_name,
+        parsed.check_number,
+        parsed.payee_line,
+      ],
+    );
+    await client.query('RELEASE SAVEPOINT ocr_descriptive_commit');
+    // Intentionally do not set amount here to avoid ledger amount triggers.
+    rpcSuccess = true;
+    rpcError = 'fallback_descriptive_only';
+  } catch (error) {
+    try { await client.query('ROLLBACK TO SAVEPOINT ocr_descriptive_commit'); } catch { /* ignore */ }
+    rpcError = String(error?.message || error).slice(0, 240);
+  }
+
+  try {
+    await client.query('SAVEPOINT ocr_audit');
+    await client.query(
+      `INSERT INTO public.check_audit_log (check_id, event_type, event_description, event_data, actor_id)
+       VALUES ($1::uuid, 'ocr_completed', 'AWS Textract OCR completed', $2::jsonb, $3::uuid)`,
+      [
+        checkId,
+        JSON.stringify({
+          confidence: parsed.confidence,
+          low_confidence_fields: parsed.low_confidence_fields,
+          engine,
+          rpcSuccess,
+        }),
         mapping.application_user_id,
       ],
     );
-    rpcSuccess = true;
-  } catch (error) {
-    rpcError = String(error?.message || error).slice(0, 240);
-    // Fallback: descriptive columns only (still no provider money movement)
-    try {
-      await client.query(
-        `UPDATE public.check_intake_items SET
-           carrier_name = COALESCE($2, carrier_name),
-           check_number = COALESCE($3, check_number),
-           payee_line = COALESCE($4, payee_line),
-           detected_claim_number = COALESCE($5, detected_claim_number),
-           ocr_status = 'completed',
-           updated_at = now()
-         WHERE id = $1::uuid`,
-        [
-          checkId,
-          parsed.carrier_name,
-          parsed.check_number,
-          parsed.payee_line,
-          parsed.claim_number,
-        ],
-      );
-      // Intentionally do not set amount in fallback to avoid ledger amount triggers
-      // when ocr_commit_results is unavailable.
-      rpcSuccess = true;
-      rpcError = `fallback_descriptive_only:${rpcError}`;
-    } catch (error2) {
-      rpcError = String(error2?.message || error2).slice(0, 240);
-    }
+    await client.query('RELEASE SAVEPOINT ocr_audit');
+  } catch {
+    try { await client.query('ROLLBACK TO SAVEPOINT ocr_audit'); } catch { /* ignore */ }
   }
-
-  await client.query(
-    `INSERT INTO public.check_audit_log (check_id, event_type, event_description, event_data, actor_id)
-     VALUES ($1::uuid, 'ocr_completed', 'AWS Textract OCR completed', $2::jsonb, $3::uuid)`,
-    [
-      checkId,
-      JSON.stringify({
-        confidence: parsed.confidence,
-        low_confidence_fields: parsed.low_confidence_fields,
-        engine: 'textract',
-        rpcSuccess,
-      }),
-      mapping.application_user_id,
-    ],
-  ).catch(() => {});
 
   return {
     ok: true,
