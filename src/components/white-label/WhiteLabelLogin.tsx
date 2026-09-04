@@ -12,21 +12,36 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, KeyRound, Mail, CheckCircle2 } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { isPlatformOwner } from "@/lib/masterMerchant";
+import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { passkeysSupported, sendMagicLink, signInWithPasskey } from "@/lib/passkeys";
+import { startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
 
 /**
  * Tenant-branded sign-in. Passwords are retired platform-wide: users sign in
- * with a passkey (recommended) or a one-time email link.
+ * with a passkey (recommended) or a one-time email link / Cognito EMAIL_OTP.
  */
 export function WhiteLabelLogin() {
   const { tenant } = useTenant();
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
+  const awsStaging = isAwsStaging();
+  const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [linkSent, setLinkSent] = useState(false);
-  const supportsPasskeys = passkeysSupported();
+  const [awsSession, setAwsSession] = useState("");
+  const [code, setCode] = useState("");
+  const supportsPasskeys = awsStaging
+    ? awsHttpsPasskeys && passkeysSupported()
+    : passkeysSupported();
+
+  const loginReturnPath = () => {
+    if (isCheckOpsHost() && tenant?.slug) return `/${tenant.slug}/login`;
+    if (location.pathname.startsWith(`/wl/${tenant?.slug}`)) return `/wl/${tenant.slug}/login`;
+    return location.pathname || "/login";
+  };
 
   const resolveAndRedirect = async (userId: string, emailHint?: string | null) => {
     const emailLc = (emailHint ?? "").trim().toLowerCase();
@@ -62,6 +77,14 @@ export function WhiteLabelLogin() {
   const handlePasskey = async () => {
     setLoading(true);
     try {
+      if (awsStaging) {
+        if (!awsHttpsPasskeys) {
+          throw new Error("Passkeys require https://staging.checksops.com. Use email verification on this origin.");
+        }
+        await signInWithAwsPasskey(email);
+        window.location.assign(loginReturnPath());
+        return;
+      }
       const result = await signInWithPasskey(email || undefined);
       const authedId = result.user?.id;
       if (!authedId) throw new Error("Unable to start your session");
@@ -85,12 +108,36 @@ export function WhiteLabelLogin() {
     }
     setLoading(true);
     try {
-      await sendMagicLink(email, `${window.location.origin}${location.pathname}`);
-      setLinkSent(true);
+      if (awsStaging) {
+        const pending = await startAwsEmailOtp(email);
+        setEmail(pending.email);
+        setAwsSession(pending.session);
+        setLinkSent(true);
+      } else {
+        await sendMagicLink(email, `${window.location.origin}${location.pathname}`);
+        setLinkSent(true);
+      }
     } catch (err: any) {
       toast({
-        title: "Could not send sign-in link",
+        title: awsStaging ? "Could not send verification code" : "Could not send sign-in link",
         description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAwsVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await verifyAwsEmailOtp(email, awsSession, code);
+      window.location.assign(loginReturnPath());
+    } catch (err: any) {
+      toast({
+        title: "Verification failed",
+        description: err.message || "Request a new code and try again.",
         variant: "destructive",
       });
     } finally {
@@ -113,18 +160,55 @@ export function WhiteLabelLogin() {
           )}
           <div>
             <CardTitle className="text-xl md:text-2xl">{tenant.name}</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">ChecksOps</p>
+            <p className="text-xs text-muted-foreground mt-1">ChecksOps{awsStaging ? " · AWS staging" : ""}</p>
           </div>
         </CardHeader>
         <CardContent className="pt-2 space-y-4">
           {linkSent ? (
-            <Alert>
-              <CheckCircle2 className="h-4 w-4" />
-              <AlertDescription className="text-sm">
-                Check <span className="font-medium">{email}</span> for your one-time sign-in link.
-                It expires shortly — request a new one if it lapses.
-              </AlertDescription>
-            </Alert>
+            <>
+              <Alert>
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertDescription className="text-sm">
+                  {awsStaging ? (
+                    <>Check <span className="font-medium">{email}</span> for your one-time verification code.</>
+                  ) : (
+                    <>
+                      Check <span className="font-medium">{email}</span> for your one-time sign-in link.
+                      It expires shortly — request a new one if it lapses.
+                    </>
+                  )}
+                </AlertDescription>
+              </Alert>
+              {awsStaging && (
+                <form onSubmit={handleAwsVerify} className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="wl-email-code">Email verification code</Label>
+                    <Input
+                      id="wl-email-code"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                      required
+                      autoFocus
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading || !code.trim()}>
+                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Verify and sign in
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full"
+                    disabled={loading}
+                    onClick={() => { setLinkSent(false); setAwsSession(""); setCode(""); }}
+                  >
+                    Request a new code
+                  </Button>
+                </form>
+              )}
+            </>
           ) : (
             <>
               <form onSubmit={handleMagicLink} className="space-y-4">
@@ -174,13 +258,17 @@ export function WhiteLabelLogin() {
                 </div>
 
                 <Button type="submit" variant="outline" className="w-full" disabled={loading}>
-                  <Mail className="mr-2 h-4 w-4" />
-                  Email me a sign-in link
+                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+                  {awsStaging ? "Email me a verification code" : "Email me a sign-in link"}
                 </Button>
               </form>
 
               <p className="text-center text-[11px] text-muted-foreground">
-                Two-factor verification is still required before any money moves.
+                {awsStaging
+                  ? (awsHttpsPasskeys
+                    ? "AWS staging: Cognito passkeys and email verification."
+                    : "AWS staging passkeys require https://staging.checksops.com.")
+                  : "Two-factor verification is still required before any money moves."}
               </p>
             </>
           )}
