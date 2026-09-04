@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { formatCheckAltUserAmount, dollarsToIntegerCents, validateProviderCents } from './amounts.mjs';
 import {
   CHECKALT_UAT_HOST,
@@ -73,6 +74,56 @@ export const extractCheckAltSsoAndAccount = (userData = {}, depositData = {}) =>
     userObjectKeys: userData && typeof userData === 'object' ? Object.keys(userData).sort() : [],
   };
 };
+
+/** Redact deposit/account numbers for API responses (never log full values). */
+export const redactAccountNumber = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (raw.length <= 4) return '[redacted]';
+  return `${raw.slice(0, 2)}…${raw.slice(-2)}`;
+};
+
+export const fingerprintAccountNumber = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  return createHash('sha256').update(raw).digest('hex').slice(0, 12);
+};
+
+export const collectCheckAltAccountNumbers = (userData = {}) => {
+  const list = Array.isArray(userData?.accountDataList) ? userData.accountDataList : [];
+  return list
+    .map((row) => row?.accountNumber || row?.AccountNumber || row?.depositAccountNumber || null)
+    .filter(Boolean)
+    .map((value) => String(value));
+};
+
+export const extractCheckAltBusUnit = (payload = {}) => {
+  const row = payload?.accountDataList?.[0] || payload || {};
+  return {
+    busUnitId: row.busUnitId || row.BusUnitId || row.businessUnitId || row.business_unit_id
+      || payload.busUnitId || payload.businessUnitId || payload.business_unit || null,
+    busUnitName: row.busUnitName || row.BusUnitName || row.businessUnitName || row.business_unit_name
+      || payload.busUnitName || payload.businessUnitName || payload.businessUnit || null,
+  };
+};
+
+/**
+ * Documented FinCapture discovery: getUserAccountInformation account numbers are
+ * fed into getDepositAccountInformation. Never invent numbers; never use sample 123456789
+ * unless that exact value appears in the UAT API response.
+ */
+export const summarizeDiscoveredDepositAccounts = (discoveries = []) => discoveries.map((row) => ({
+  accountNumberRedacted: redactAccountNumber(row.accountNumber),
+  accountFingerprint: fingerprintAccountNumber(row.accountNumber),
+  isSample123456789: String(row.accountNumber || '') === '123456789',
+  depositLookupOk: row.ok === true,
+  depositHttpStatus: row.httpStatus || null,
+  depositMessage: row.message || null,
+  hasSsoKey: Boolean(row.ssoKey),
+  busUnitId: row.busUnitId || null,
+  busUnitName: row.busUnitName || null,
+  objectKeys: row.objectKeys || [],
+}));
 
 export const extractCheckAltAmountEcho = (data = {}) => ({
   echoedUserAmount: data?.userAmount ?? data?.UserAmount ?? null,
