@@ -214,7 +214,7 @@ export const buildCheckAltSandboxDeposit = ({ amountCents = SANDBOX_MIN_CENTS, r
     reference: reference || null,
     negotiableCheck: false,
     imageIncluded: true,
-    imageKind: 'synthetic_void_check_png',
+    imageKind: 'synthetic_void_check_jpeg',
     unit: CHECKALT_USER_AMOUNT,
   };
 };
@@ -367,7 +367,7 @@ export const buildCheckAltUatDepositBody = ({
       userAmount: deposit.userAmount,
       frontImage: SYNTHETIC_UAT_CHECK_FRONT_B64,
       rearImage: SYNTHETIC_UAT_CHECK_REAR_B64,
-      performRiskAssessment: true,
+      performRiskAssessment: false,
       testDeposit: true,
     },
     meta: deposit,
