@@ -5,6 +5,23 @@ import pg from 'pg';
 import { loadDatabaseCredentials } from './secrets.mjs';
 
 const { Client } = pg;
+
+/**
+ * node-pg returns PostgreSQL `numeric` as JS strings. Frontend totals that use
+ * `+= amount` then concatenate ("3802.10" + "17357.80" → "3802.1017357.80").
+ * Coerce numeric (OID 1700) to Number for JSON API responses. Money magnitudes
+ * in ChecksOps are well within Number precision; do not coerce int8/OID 20
+ * (can be large identifiers).
+ */
+export const installPgJsonTypeParsers = () => {
+  pg.types.setTypeParser(1700, (value) => {
+    if (value == null || value === '') return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : value;
+  });
+};
+installPgJsonTypeParsers();
+
 export const READ_ONLY_PROBE = 'SELECT 1 AS ok';
 export const VERSION_PROBE = 'SHOW server_version';
 export const IDENTITY_PROBE = "SELECT current_database() AS current_database, current_user AS current_user, current_setting('transaction_read_only') AS transaction_read_only, current_setting('default_transaction_read_only') AS default_transaction_read_only";
