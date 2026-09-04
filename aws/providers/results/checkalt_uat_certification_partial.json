@@ -1,0 +1,126 @@
+{
+  "verdict": "PARTIAL",
+  "date": "2026-09-04",
+  "scope": "CheckAlt UAT certification only — production CheckAlt/financial execution OFF",
+  "moovSandbox": "PASS (unchanged; not modified in this PR)",
+  "authoritativeAssumptions": {
+    "webhooksRequired": false,
+    "CHECKALT_SANDBOX_WEBHOOK_SECRET_required": false,
+    "statusVia": "FinCapture workflow/status/history API endpoints",
+    "workflow": [
+      "authenticate",
+      "register user/depositor",
+      "getUserAccountInformation",
+      "getDepositAccountInformation",
+      "deposit item/process",
+      "deposit history/status"
+    ],
+    "merchantBusUnit": "either busUnitId or busUnitName; Freedom Adjustment provisioned on UAT",
+    "sampleDepositAccount123456789": "do not use unless UAT API returns it as authorized"
+  },
+  "secret": {
+    "id": "checksops/staging/providers",
+    "stage": "AWSCURRENT",
+    "CHECKALT_UAT_BASE_URL": "https://uatapi.checkalt.com",
+    "baseHostApproved": true,
+    "CHECKALT_UAT_USER_ID_present": true,
+    "CHECKALT_UAT_PASSWORD_present": true,
+    "CHECKALT_UAT_FI_KEY_present": true,
+    "CHECKALT_UAT_MERCHANT": "lockbox5",
+    "merchantApprovedLockbox5": true,
+    "CHECKALT_UAT_DEPOSIT_ACCOUNT_NUMBER_present": false,
+    "CHECKALT_SANDBOX_WEBHOOK_SECRET_present": false,
+    "note": "Deposit account discovered via UAT API; secret key not required once API returns authorized account",
+    "production_CHECKALT_keys_present": false
+  },
+  "scorecard": {
+    "authentication": "PASS",
+    "merchant_fi_context": "PASS",
+    "deposit_account_binding": "PASS",
+    "depositor_ssoKey": "PASS",
+    "uat_submission": "PARTIAL",
+    "status_retrieval": "BLOCKED",
+    "callback_webhook": "N/A",
+    "idempotency": "BLOCKED",
+    "reconciliation": "PASS",
+    "tenant_isolation": "PASS"
+  },
+  "details": {
+    "authentication": {
+      "probe": "PASS",
+      "host": "https://uatapi.checkalt.com",
+      "authPath": "/public/fincapture/authenticate",
+      "merchantHeader": "lockbox5",
+      "tokenPresent": true,
+      "sandboxHttpCalled": true,
+      "productionExecution": false
+    },
+    "account_binding": {
+      "getUserAccountInformation": "200",
+      "accountCount": 2,
+      "accountObjectKeys": [
+        "accountNumber",
+        "availableDepositLimit",
+        "dailyDepositLimit"
+      ],
+      "fiLoginHasSsoKey": false,
+      "getDepositAccountInformation": "200 on authorized account",
+      "authorizedAccountRedacted": "31…73",
+      "authorizedAccountFingerprint": "46bed6e573bb",
+      "sample123456789Used": false,
+      "sample123456789ReturnedByApi": false,
+      "freedomAdjustmentUatBusinessUnitPresent": true
+    },
+    "register": {
+      "path": "/fincapture/useraccount/register",
+      "syntheticUatDepositorCreated": true,
+      "storedIn": "aws_provider_sandbox_objects (object_type=uat_tenant_account)",
+      "productionCheckaltTenantAccountsWritten": false,
+      "ssoKeyPresent": true,
+      "ssoKeyFromAccountInfo": false,
+      "ssoKeySource": "register response / sso_user_id fallback (never FI API login)"
+    },
+    "uat_submission": {
+      "processPath": "/fincapture/deposit/process",
+      "testDeposit": true,
+      "depositorSource": "uat_isolated_row",
+      "imageFixturesTried": [
+        "1x1 PNG",
+        "check-sized PNG VOID",
+        "check-sized JPEG VOID (synthetic_void_check_jpeg)"
+      ],
+      "checkAltHttp": 500,
+      "checkAltMessage": "Check deposit processing failed. Please retake the check images and resubmit.",
+      "providerReferenceIssued": false,
+      "negotiableCheckSubmitted": false
+    },
+    "webhook": {
+      "requiredByCheckAlt": false,
+      "certificationBlocker": false,
+      "note": "ChecksOps obtains deposit/status via API workflow/status/history endpoints"
+    },
+    "reconcile": {
+      "ok": true,
+      "autoCorrected": false,
+      "productionExecution": false
+    },
+    "tenant_isolation": {
+      "c1c_status_of_freedom_idempotency_key": "404 operation_not_found",
+      "note": "C1C cannot read Freedom sandbox CheckAlt operations"
+    },
+    "production_remain_off": {
+      "AWS_PROVIDER_EXECUTION_ENABLED": false,
+      "AWS_CHECKALT_ENABLED": false,
+      "AWS_MOOV_ENABLED": false,
+      "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
+      "AWS_PLAID_ENABLED": false,
+      "providers_checkalt_status_liveProviderCalled": false
+    }
+  },
+  "exact_remaining_vendor_action": [
+    "Provide CheckAlt-acceptable UAT check image fixtures (or image-QA guidance / bypass for testDeposit) so /fincapture/deposit/process accepts synthetic VOID images.",
+    "After an accepted UAT deposit: verify status/history, idempotency, and reconciliation against the provider reference.",
+    "Do not invent deposit account numbers. Deposit account binding is already PASS via UAT API discovery (fingerprint 46bed6e573bb).",
+    "Webhooks remain optional / not required."
+  ]
+}
