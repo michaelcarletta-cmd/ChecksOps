@@ -244,7 +244,8 @@ export const executeAllowlistedWrite = async ({
       table,
     };
   }
-  if (spec.tranche === 2 || spec.tranche === 3 || spec.tranche === 5) {
+  if (spec.tranche === 2 || spec.tranche === 3 || spec.tranche === 5
+    || table === 'audit_logs' || table === 'user_sessions') {
     return executeCheckWorkflowWrite({
       client,
       mapping,
