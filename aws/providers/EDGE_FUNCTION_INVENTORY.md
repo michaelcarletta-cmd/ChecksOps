@@ -106,6 +106,8 @@ Ordinary services such as **email** and **OCR** must **not** remain disabled mer
 See `aws/providers/CLASS_A_SERVICES.md`.
 
 Migrated to AWS handlers (invoke no longer `provider_disabled`):
-email send/transactional/unsubscribe/notifies, OCR intake/backlog/zone, HomeownerOps ledger/claim/upload/sign-link/send, get-check-image-urls, public contractor directory, partner code lookup.
+email send/transactional/unsubscribe/notifies, OCR intake/backlog/zone, HomeownerOps ledger/claim/upload/sign-link/send/`homeowner-upload-check`, get-check-image-urls, public contractor directory, partner code lookup.
 
 Still `provider_disabled` / deferred: Class B/C providers, document PDF generators, domain cron, tenant invite Cognito admin, SMS, SES bounce webhooks, `homeowner-deductible-pay`.
+
+Routing: Class A dispatch runs **before** `handleProviderRequest` so unknown-provider stubs cannot shadow these routes.

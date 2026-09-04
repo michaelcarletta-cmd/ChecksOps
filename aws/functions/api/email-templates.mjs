@@ -9,6 +9,11 @@ export const TEMPLATE_NAMES = new Set([
   'homeowner-ledger-invite',
   'homeowner-upload-alert',
   'homeowner-document-shared',
+  // Aliases / generic internal notifications used by staff workflows
+  'generic_notification',
+  'generic-notification',
+  'internal-notification',
+  'mortgage-handling-request',
 ]);
 
 const esc = (value) => String(value ?? '')
@@ -74,6 +79,20 @@ export const renderTransactionalTemplate = (name, data = {}) => {
         subject: 'A document was shared with you',
         html: shell('Document shared', `<p>${esc(data.note || 'A document is ready for you.')}</p><p><a href="${esc(data.url)}">Open document</a></p>`),
         text: `Document: ${data.url}`,
+      };
+    case 'generic_notification':
+    case 'generic-notification':
+    case 'internal-notification':
+      return {
+        subject: data.subject || 'ChecksOps notification',
+        html: shell(data.subject || 'Notification', `<p>${esc(data.message || data.body || '')}</p>`),
+        text: String(data.message || data.body || data.subject || 'Notification'),
+      };
+    case 'mortgage-handling-request':
+      return {
+        subject: 'Mortgage handling request',
+        html: shell('Mortgage handling', `<p>Company: ${esc(data.mortgageCompany || data.mortgage_company)}</p><p>Status: ${esc(data.status)}</p><p>Request: ${esc(data.requestId || data.request_id)}</p>`),
+        text: `Mortgage request ${data.requestId || data.request_id}`,
       };
     default:
       return {

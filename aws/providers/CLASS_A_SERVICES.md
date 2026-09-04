@@ -22,9 +22,11 @@ Functions: `send-email`, `send-transactional-email`, `preview-transactional-emai
 | Item | Behavior |
 | --- | --- |
 | Engine | AWS Textract (`AnalyzeDocument`/`DetectDocumentText`) + heuristic field parse |
+| Staging fallback | If Textract is not subscribed on the account, reparse restored `raw_ocr_front` JSON/text (`aws_stored_ocr_reparse`) |
 | Functions | `check-ocr-intake`, `check-ocr-backlog`, `detect-endorsement-zone` |
 | Commit | Prefers `ocr_commit_results`; falls back to descriptive intake columns (no amount) |
 | Isolation | Image loaded from tenant-scoped S3 key after RLS check on `check_intake_items` |
+| Ops note | Account `806168576068` currently returns Textract “subscription for the service” — enable Textract for live image OCR |
 
 ## HomeownerOps (non-financial)
 
@@ -33,6 +35,7 @@ Functions: `send-email`, `send-transactional-email`, `preview-transactional-emai
 | `homeowner-ledger-view` | SECURITY DEFINER token lookup; money CTAs forced off |
 | `homeowner-claim-portal` | get / upload_check / sign_dtp |
 | `homeowner-ledger-upload` | Public upload → `homeowner-uploads` |
+| `homeowner-upload-check` | Cognito session **or** lead `access_token` + email match; SECURITY DEFINER insert |
 | `homeowner-ledger-sign-link` | Mints SHA-256 signer token for existing `/sign` flow |
 | `homeowner-ledger-send` | Staff + staging-safe email |
 | Deductible pay / bank link | **Still Class C / disabled** |
@@ -43,7 +46,7 @@ Functions: `send-email`, `send-transactional-email`, `preview-transactional-emai
 
 ## Still outstanding (Class A not fully ported)
 
-Document generation PDF pack (`generate-*`), domain verify cron, tenant Cognito invite/delete, OpenAI key vault, geocode, JobNimbus, endorsement packet render, SMS, Resend/SES bounce webhooks, `homeowner-upload-check` authenticated path, `process-email-queue` worker.
+Document generation PDF pack (`generate-*`), domain verify cron, tenant Cognito invite/delete, OpenAI key vault, geocode, JobNimbus, endorsement packet render, SMS, Resend/SES bounce webhooks, `process-email-queue` worker.
 
 ## Deploy notes
 

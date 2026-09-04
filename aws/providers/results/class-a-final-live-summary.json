@@ -1,0 +1,49 @@
+{
+  "summary": {
+    "email_stagingMode": "sink",
+    "email_messageId_prefix": "sink-",
+    "ledger_ok": true,
+    "ledger_money_cta": false,
+    "ocr_engine": "aws_stored_ocr_reparse",
+    "ocr_success": true,
+    "directory_ok": true,
+    "moov_error": "Disbursement batch not found.",
+    "upload_deny": "lead does not match this session"
+  },
+  "raw": {
+    "email_sink": {
+      "ok": true,
+      "statusCode": 200,
+      "success": true,
+      "messageId": "sink-c394e1d5-5452-4379-b7bd-2fd7f4b61cc7",
+      "stagingMode": "sink"
+    },
+    "ledger": {
+      "ok": true,
+      "statusCode": 200,
+      "allow_deductible_payment": false
+    },
+    "ocr": {
+      "ok": true,
+      "statusCode": 200,
+      "success": true,
+      "ocr_success": true,
+      "engine": "aws_stored_ocr_reparse"
+    },
+    "directory": {
+      "ok": true,
+      "statusCode": 200
+    },
+    "moov": {
+      "ok": false,
+      "statusCode": 404,
+      "success": false,
+      "error": "Disbursement batch not found."
+    },
+    "upload_wrong_email": {
+      "ok": false,
+      "statusCode": 403,
+      "error": "lead does not match this session"
+    }
+  }
+}

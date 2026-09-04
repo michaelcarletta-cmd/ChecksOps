@@ -32,7 +32,9 @@ const extractLines = (blocks = []) => (blocks || [])
 
 const loadCheckImageBytes = async (client, checkId) => {
   const row = (await client.query(
-    `SELECT id, tenant_id, front_image_path, back_image_path, ocr_status
+    `SELECT id, tenant_id, front_image_path, back_image_path, ocr_status,
+            raw_ocr_front, raw_ocr_back, carrier_name, check_number, payee_line,
+            detected_claim_number, amount
      FROM public.check_intake_items WHERE id = $1::uuid LIMIT 1`,
     [checkId],
   )).rows[0];
@@ -43,9 +45,67 @@ const loadCheckImageBytes = async (client, checkId) => {
   const key = s3KeyFor('claim-files', rel);
   if (!key || !filesBucket()) return { error: 's3_not_configured', row };
 
-  const obj = await s3().send(new GetObjectCommand({ Bucket: filesBucket(), Key: key }));
-  const bytes = await streamToBuffer(obj.Body);
-  return { row, bytes, key };
+  try {
+    const obj = await s3().send(new GetObjectCommand({ Bucket: filesBucket(), Key: key }));
+    const bytes = await streamToBuffer(obj.Body);
+    return { row, bytes, key };
+  } catch (error) {
+    return {
+      row,
+      bytes: null,
+      key,
+      imageError: String(error?.message || error).slice(0, 240),
+    };
+  }
+};
+
+const linesFromStoredOcr = (row) => {
+  const chunks = [];
+  for (const value of [row?.raw_ocr_front, row?.raw_ocr_back]) {
+    if (!value) continue;
+    if (typeof value === 'string') {
+      chunks.push(value);
+      continue;
+    }
+    if (typeof value === 'object') {
+      // Restored dumps often store structured OCR JSON rather than LINE text.
+      const parts = [
+        value.payee_line,
+        value.carrier_name,
+        value.check_number && `Check ${value.check_number}`,
+        value.amount && `$${value.amount}`,
+        value.claim_number || value.detected_claim_number,
+        value.issue_date,
+        ...(Array.isArray(value.payees) ? value.payees.map((p) => p?.name).filter(Boolean) : []),
+        value.text,
+        value.raw_text,
+      ].filter(Boolean);
+      if (parts.length) chunks.push(parts.join('\n'));
+      else chunks.push(JSON.stringify(value));
+    }
+  }
+  const text = chunks.join('\n');
+  if (!text.trim()) return [];
+  return text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+};
+
+/** If stored OCR is already structured fields, prefer that over heuristic reparse. */
+const parsedFromStoredOcr = (row) => {
+  const value = row?.raw_ocr_front;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  if (!value.payee_line && !value.amount && !value.check_number && !value.payees) return null;
+  return {
+    amount: value.amount != null ? Number(value.amount) : null,
+    payee_line: value.payee_line || null,
+    payees: Array.isArray(value.payees) ? value.payees : [],
+    check_number: value.check_number || null,
+    carrier_name: value.carrier_name || null,
+    claim_number: value.claim_number || value.detected_claim_number || null,
+    issue_date: value.issue_date || null,
+    confidence: value.confidence || 50,
+    low_confidence_fields: value.low_confidence_fields || [],
+    needs_manual_review: Boolean(value.needs_manual_review),
+  };
 };
 
 const runTextract = async (bytes) => {
@@ -54,12 +114,17 @@ const runTextract = async (bytes) => {
       Document: { Bytes: bytes },
       FeatureTypes: ['FORMS'],
     }));
-    return extractLines(analyzed.Blocks || []);
-  } catch {
-    const detected = await textract().send(new DetectDocumentTextCommand({
-      Document: { Bytes: bytes },
-    }));
-    return extractLines(detected.Blocks || []);
+    return { lines: extractLines(analyzed.Blocks || []), engine: 'aws_textract_analyze' };
+  } catch (analyzeError) {
+    try {
+      const detected = await textract().send(new DetectDocumentTextCommand({
+        Document: { Bytes: bytes },
+      }));
+      return { lines: extractLines(detected.Blocks || []), engine: 'aws_textract_detect' };
+    } catch (detectError) {
+      const message = String(detectError?.message || analyzeError?.message || detectError).slice(0, 240);
+      return { lines: [], engine: 'aws_textract', error: message };
+    }
   }
 };
 
@@ -79,7 +144,7 @@ export const handleCheckOcrIntake = async (event) => withIdentity(event, async (
       ok: false, statusCode: 404, success: false, error: 'check_not_found', spoofFieldsIgnored: spoof,
     };
   }
-  if (loaded.error) {
+  if (loaded.error === 'missing_front_image' || loaded.error === 's3_not_configured') {
     return {
       ok: true,
       statusCode: 200,
@@ -99,14 +164,32 @@ export const handleCheckOcrIntake = async (event) => withIdentity(event, async (
   ).catch(() => {});
 
   let lines = [];
+  let engine = 'aws_textract';
   let textractError = null;
-  try {
-    lines = await runTextract(loaded.bytes);
-  } catch (error) {
-    textractError = String(error?.message || error).slice(0, 240);
+  if (loaded.bytes && loaded.bytes.length) {
+    const tex = await runTextract(loaded.bytes);
+    lines = tex.lines || [];
+    engine = tex.engine || engine;
+    textractError = tex.error || null;
+  } else {
+    textractError = loaded.imageError || 'image_unavailable';
   }
 
+  // Staging fallback when Textract is not subscribed / unavailable:
+  // re-parse restored raw OCR text/JSON so intake UAT still works without money movement.
+  let parsedFromStore = null;
   if (!lines.length) {
+    parsedFromStore = parsedFromStoredOcr(loaded.row);
+    const stored = linesFromStoredOcr(loaded.row);
+    if (stored.length) {
+      lines = stored;
+      engine = 'aws_stored_ocr_reparse';
+    } else if (parsedFromStore) {
+      engine = 'aws_stored_ocr_json';
+    }
+  }
+
+  if (!lines.length && !parsedFromStore) {
     await client.query(
       `UPDATE public.check_intake_items SET ocr_status = 'failed', updated_at = now() WHERE id = $1::uuid`,
       [checkId],
@@ -118,15 +201,16 @@ export const handleCheckOcrIntake = async (event) => withIdentity(event, async (
       ocr_success: false,
       error: textractError || 'textract_empty',
       stage: 'textract',
+      textract_note: 'Enable AWS Textract on account 806168576068 for live image OCR; stored OCR reparse used when available.',
       spoofFieldsIgnored: spoof,
     };
   }
 
-  const parsed = parseCheckFields(lines);
+  const parsed = parsedFromStore || parseCheckFields(lines);
   const eligibility = {
     recommendation: parsed.needs_manual_review ? 'manual_review' : 'proceed',
-    reasons: parsed.low_confidence_fields.map((f) => `low_confidence:${f}`),
-    rules: { engine: 'aws_textract_heuristics', version: 1 },
+    reasons: (parsed.low_confidence_fields || []).map((f) => `low_confidence:${f}`),
+    rules: { engine: engine === 'aws_textract_analyze' || engine === 'aws_textract_detect' ? 'aws_textract_heuristics' : engine, version: 1 },
   };
 
   let rpcSuccess = false;
@@ -202,7 +286,8 @@ export const handleCheckOcrIntake = async (event) => withIdentity(event, async (
     eligibility,
     payees_preserved: false,
     transaction: {},
-    engine: 'aws_textract',
+    engine,
+    textract_error: textractError,
     spoofFieldsIgnored: spoof,
   };
 }, { write: true, commit: true });

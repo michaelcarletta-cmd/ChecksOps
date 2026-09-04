@@ -230,8 +230,11 @@ export const handleSendEmail = async (event) => withIdentity(event, async ({
   if (Array.isArray(body.recipients)) {
     for (const r of body.recipients) recipients.push(r.email || r);
   }
-  if (body.to) recipients.push(body.to);
-  if (!recipients.length || !body.subject || !body.body) {
+  if (body.to) recipients.push(...(Array.isArray(body.to) ? body.to : [body.to]));
+  if (body.email) recipients.push(body.email);
+  const htmlBody = body.body || body.html || body.htmlBody || body.message || '';
+  const textBody = body.text || String(htmlBody).replace(/<[^>]+>/g, ' ');
+  if (!recipients.length || !body.subject || !htmlBody) {
     return {
       ok: false,
       statusCode: 400,
@@ -244,9 +247,9 @@ export const handleSendEmail = async (event) => withIdentity(event, async ({
   const send = await sendViaSesOrSink({
     to: recipients,
     subject: String(body.subject),
-    html: String(body.body),
-    text: String(body.body).replace(/<[^>]+>/g, ' '),
-    replyTo: body.claimEmailCc || null,
+    html: String(htmlBody),
+    text: String(textBody),
+    replyTo: body.claimEmailCc || body.replyTo || null,
     headers: body.headers || {},
   });
 

@@ -536,6 +536,184 @@ export const handleSendPortalInvite = async (event) => withIdentity(event, async
   return { ok: true, statusCode: 200, success: true, stagingMode: send.mode, spoofFieldsIgnored: spoof };
 }, { write: true, commit: true });
 
+export const handleHomeownerUploadCheck = async (event) => {
+  const body = parseBody(event);
+  const spoof = ignoredSpoof(event, body);
+  const contractorProfileId = body.contractor_profile_id;
+  const fileB64 = String(body.file_base64 || '');
+  if (!contractorProfileId || fileB64.length < 100) {
+    return { ok: false, statusCode: 400, error: 'invalid body', spoofFieldsIgnored: spoof };
+  }
+  const mime = String(body.file_mime || 'image/jpeg').slice(0, 60);
+  const allowed = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf']);
+  if (!allowed.has(mime)) {
+    return { ok: false, statusCode: 400, error: 'unsupported file type', spoofFieldsIgnored: spoof };
+  }
+
+  // Prefer Cognito-mapped identity email when present; otherwise require lead access token + email.
+  let homeownerEmail = normalizeEmail(body.homeowner_email || body.email);
+  let homeownerUserId = null;
+  const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
+  const hasBearer = /^Bearer\s+\S+/i.test(authHeader);
+
+  let client;
+  try {
+    if (hasBearer) {
+      return withIdentity(event, async ({ client: c, mapping, body: b, spoof: s }) => {
+        homeownerEmail = normalizeEmail(mapping.email || b.homeowner_email || b.email);
+        homeownerUserId = mapping.application_user_id;
+        if (!homeownerEmail) {
+          return { ok: false, statusCode: 401, error: 'invalid session', spoofFieldsIgnored: s };
+        }
+        return insertHomeownerCheckUpload(c, {
+          body: b,
+          homeownerEmail,
+          homeownerUserId,
+          spoof: s,
+        });
+      }, { write: true, commit: true });
+    }
+
+    // Public staging path: lead access_token proves ownership of the lead email.
+    const leadToken = String(body.access_token || body.lead_access_token || '').trim();
+    if (!leadToken || !homeownerEmail) {
+      return {
+        ok: false,
+        statusCode: 401,
+        error: 'unauthenticated',
+        message: 'Cognito session or lead access_token + homeowner_email required on AWS staging',
+        spoofFieldsIgnored: spoof,
+      };
+    }
+
+    client = await publicDb(true);
+    await client.query('BEGIN');
+    await client.query('SET TRANSACTION READ WRITE');
+    const leadDoc = (await client.query(
+      'SELECT public.aws_public_homeowner_claim_by_token($1) AS doc',
+      [leadToken],
+    )).rows[0]?.doc;
+    if (!leadDoc?.ok || !leadDoc.lead) {
+      await client.query('ROLLBACK');
+      return { ok: false, statusCode: 404, error: 'lead not found', spoofFieldsIgnored: spoof };
+    }
+    const leadEmail = normalizeEmail(leadDoc.lead.homeowner_email);
+    if (leadEmail !== homeownerEmail) {
+      await client.query('ROLLBACK');
+      return { ok: false, statusCode: 403, error: 'lead does not match this session', spoofFieldsIgnored: spoof };
+    }
+    if (body.lead_id && String(body.lead_id) !== String(leadDoc.lead.id)) {
+      await client.query('ROLLBACK');
+      return { ok: false, statusCode: 403, error: 'lead does not match this session', spoofFieldsIgnored: spoof };
+    }
+    const result = await insertHomeownerCheckUpload(client, {
+      body: { ...body, lead_id: body.lead_id || leadDoc.lead.id },
+      homeownerEmail,
+      homeownerUserId: null,
+      spoof,
+      verifiedLead: {
+        id: leadDoc.lead.id,
+        homeowner_email: leadDoc.lead.homeowner_email,
+        contractor_profile_id: leadDoc.lead.contractor_profile_id || body.contractor_profile_id,
+      },
+    });
+    if (result.ok) await client.query('COMMIT');
+    else await client.query('ROLLBACK');
+    return result;
+  } catch (error) {
+    if (client) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    return {
+      ok: false,
+      statusCode: 503,
+      error: 'upload failed',
+      message: sanitizePublicError(error),
+      spoofFieldsIgnored: spoof,
+    };
+  } finally {
+    if (client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+};
+
+const insertHomeownerCheckUpload = async (client, {
+  body, homeownerEmail, homeownerUserId, spoof, verifiedLead = null,
+}) => {
+  const profile = (await client.query(
+    `SELECT id, user_id, is_directory_listed, directory_opt_in, display_name
+     FROM public.contractor_profiles WHERE id = $1::uuid LIMIT 1`,
+    [body.contractor_profile_id],
+  )).rows[0];
+  if (!profile || !profile.is_directory_listed || !profile.directory_opt_in) {
+    return { ok: false, statusCode: 403, error: 'contractor not accepting uploads', spoofFieldsIgnored: spoof };
+  }
+
+  if (body.lead_id) {
+    const lead = verifiedLead || (await client.query(
+      `SELECT id, homeowner_email, contractor_profile_id
+       FROM public.homeowner_intro_requests WHERE id = $1::uuid LIMIT 1`,
+      [body.lead_id],
+    )).rows[0];
+    if (
+      !lead
+      || String(lead.contractor_profile_id) !== String(profile.id)
+      || normalizeEmail(lead.homeowner_email) !== homeownerEmail
+    ) {
+      return { ok: false, statusCode: 403, error: 'lead does not match this session', spoofFieldsIgnored: spoof };
+    }
+  }
+
+  const clean = String(body.file_base64).includes(',')
+    ? String(body.file_base64).split(',').pop()
+    : String(body.file_base64);
+  const bytes = Buffer.from(clean, 'base64');
+  if (bytes.length > 15 * 1024 * 1024) {
+    return { ok: false, statusCode: 400, error: 'file too large (15 MB max)', spoofFieldsIgnored: spoof };
+  }
+  const mime = String(body.file_mime || 'image/jpeg').slice(0, 60);
+  const ext = String(body.filename || 'upload.jpg').split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
+  const rel = `homeowner-uploads/${profile.user_id}/${body.lead_id || 'nolead'}/${randomUUID()}.${ext}`;
+  const key = s3KeyFor('homeowner-uploads', rel);
+  if (!filesBucket() || !key) {
+    return { ok: false, statusCode: 503, error: 's3_not_configured', spoofFieldsIgnored: spoof };
+  }
+  await s3().send(new PutObjectCommand({
+    Bucket: filesBucket(),
+    Key: key,
+    Body: bytes,
+    ContentType: mime,
+  }));
+
+  const row = (await client.query(
+    `SELECT public.aws_public_homeowner_check_upload_insert(
+       $1::uuid, $2::uuid, $3::uuid, $4, $5::uuid, $6, $7, $8
+     ) AS doc`,
+    [
+      body.lead_id || null,
+      profile.id,
+      profile.user_id,
+      homeownerEmail,
+      homeownerUserId,
+      rel,
+      mime,
+      body.note || null,
+    ],
+  )).rows[0]?.doc;
+  if (!row?.ok || !row.id) {
+    return {
+      ok: false,
+      statusCode: 500,
+      error: 'db insert failed',
+      detail: row?.error || null,
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
+  return { ok: true, statusCode: 200, id: row.id, spoofFieldsIgnored: spoof };
+};
+
 export const handleGetCheckImageUrls = async (event) => withIdentity(event, async ({
   client, body, spoof,
 }) => {

@@ -159,3 +159,52 @@ $$;
 
 REVOKE ALL ON FUNCTION public.aws_public_homeowner_claim_by_token(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.aws_public_homeowner_claim_by_token(text) TO checksops;
+
+-- ---------------------------------------------------------------------------
+-- Public homeowner check upload insert (token already validated in API).
+-- Writes metadata only — no payment execution.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.aws_public_homeowner_check_upload_insert(
+  p_lead_id uuid,
+  p_contractor_profile_id uuid,
+  p_contractor_user_id uuid,
+  p_homeowner_email text,
+  p_homeowner_user_id uuid,
+  p_file_path text,
+  p_file_mime text,
+  p_note text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  new_id uuid;
+BEGIN
+  IF p_contractor_profile_id IS NULL OR p_file_path IS NULL OR length(trim(p_file_path)) < 3 THEN
+    RETURN jsonb_build_object('error', 'invalid_args');
+  END IF;
+  IF p_homeowner_email IS NULL OR position('@' in p_homeowner_email) = 0 THEN
+    RETURN jsonb_build_object('error', 'invalid_email');
+  END IF;
+
+  INSERT INTO public.homeowner_check_uploads (
+    lead_id, contractor_profile_id, contractor_user_id, homeowner_email, homeowner_user_id,
+    file_path, file_mime, note, status, created_at
+  ) VALUES (
+    p_lead_id, p_contractor_profile_id, p_contractor_user_id, lower(trim(p_homeowner_email)),
+    p_homeowner_user_id, p_file_path, p_file_mime, p_note, 'uploaded', now()
+  )
+  RETURNING id INTO new_id;
+
+  RETURN jsonb_build_object('ok', true, 'id', new_id);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.aws_public_homeowner_check_upload_insert(
+  uuid, uuid, uuid, text, uuid, text, text, text
+) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.aws_public_homeowner_check_upload_insert(
+  uuid, uuid, uuid, text, uuid, text, text, text
+) TO checksops;

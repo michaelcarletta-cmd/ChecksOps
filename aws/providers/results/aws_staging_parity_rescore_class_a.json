@@ -1,0 +1,145 @@
+{
+  "title": "AWS Staging Parity Rescore — Class A services",
+  "pr": 121,
+  "before": {
+    "features_audited": 58,
+    "PASS": 30,
+    "PARTIAL": 22,
+    "FAIL": 6,
+    "P0": 0,
+    "P1": 16,
+    "P2": 12,
+    "P3": 0,
+    "source": "PR #120 master UAT rescore"
+  },
+  "after": {
+    "features_audited": 58,
+    "PASS": 34,
+    "PARTIAL": 24,
+    "FAIL": 0,
+    "P0": 0,
+    "P1": 12,
+    "P2": 10,
+    "P3": 0
+  },
+  "features_improved": [
+    {
+      "feature": "OCR intake invoke",
+      "before": "FAIL",
+      "after": "PARTIAL",
+      "priority": "P1",
+      "note": "Class A route; Textract subscription missing; stored OCR reparse works"
+    },
+    {
+      "feature": "HomeownerClaimPortal",
+      "before": "FAIL",
+      "after": "PASS",
+      "priority": "P1",
+      "note": "Token portal live; money CTAs off"
+    },
+    {
+      "feature": "HomeownerLedger token pages",
+      "before": "FAIL",
+      "after": "PASS",
+      "priority": "P1",
+      "note": "ledger-view live; deductible pay still Class C"
+    },
+    {
+      "feature": "Homeowner check upload /h/upload",
+      "before": "FAIL",
+      "after": "PASS",
+      "priority": "P1",
+      "note": "homeowner-upload-check + S3; magic-link OTP still Supabase residual"
+    },
+    {
+      "feature": "QuickBooks / email sender / Zapier",
+      "before": "FAIL",
+      "after": "PARTIAL",
+      "priority": "P2",
+      "note": "Email Class A sink; QB/Zapier still disabled"
+    },
+    {
+      "feature": "Public directory",
+      "before": "FAIL",
+      "after": "PASS",
+      "priority": "P2",
+      "note": "public-contractor-directory live"
+    }
+  ],
+  "class_a_migrated": [
+    "send-email",
+    "send-transactional-email",
+    "preview-transactional-email",
+    "handle-email-unsubscribe",
+    "notify-mortgage-handling-request",
+    "notify-homeowner-lead",
+    "notify-homeowner-lead-accepted",
+    "send-portal-invite",
+    "send-file-to-homeowner",
+    "check-ocr-intake",
+    "check-ocr-backlog",
+    "detect-endorsement-zone",
+    "homeowner-ledger-view",
+    "homeowner-claim-portal",
+    "homeowner-ledger-upload",
+    "homeowner-ledger-sign-link",
+    "homeowner-ledger-send",
+    "homeowner-upload-check",
+    "get-check-image-urls",
+    "public-contractor-directory",
+    "contractor-directory-search",
+    "lookup-partner-code-public"
+  ],
+  "class_a_outstanding": [
+    "generate-document / generate-checksops-doc / generate-pol-docx / contracts-pdf / retry-pdf-generation / generate-invoice",
+    "generate-endorsement-packet / composite-endorsement-signatures",
+    "tenant-domain-check / verify / recheck-cron",
+    "tenant-invite-user / create-tenant-user / delete-user / get-instance-users",
+    "tenant-set/validate/remove-openai-key",
+    "geocode-claim / fetch-aerial-image",
+    "jobnimbus-search-match / push-status-to-freedom",
+    "send-sms / telnyx-sms-status",
+    "process-email-queue / handle-email-suppression / resend-webhook",
+    "ingest-shared-check / partner-shared-checks (partial)"
+  ],
+  "remaining_provider_disabled": [
+    "moov-* execution",
+    "checkalt-submit/approve-deposit",
+    "plaid-disburse / transfer paths",
+    "homeowner-deductible-pay",
+    "tenant-checkout / stripe billing charges",
+    "quickbooks-payment",
+    "bill-mortgage-handling"
+  ],
+  "email_staging_safety": {
+    "mode": "sink",
+    "sink_address": "staging-sink@checksops.invalid",
+    "verified_gmail_rewritten": true,
+    "verified_yahoo_sunk": true,
+    "production_resend_untouched": true
+  },
+  "ocr_textract": {
+    "iam_policy": "ApiFunctionRolePolicyClassA",
+    "live_textract": "subscription_required",
+    "fallback": "aws_stored_ocr_reparse",
+    "verified_check_id": "f618a3ea-e995-449f-b53f-329c81a6dcbc",
+    "parsed_amount": 9952.47
+  },
+  "homeownerops": {
+    "ledger_view": "PASS",
+    "claim_portal": "PASS",
+    "upload_check": "PASS",
+    "upload_id": "bb54eb3a-293d-4d7e-879a-28f2506690fb",
+    "wrong_email_denied": true,
+    "allow_deductible_payment": false
+  },
+  "security": {
+    "spoof_headers_ignored": true,
+    "ocr_unauth_401": true,
+    "email_unauth_401": true,
+    "ocr_unknown_check_404": true,
+    "upload_email_mismatch_403": true,
+    "moov_no_money_movement": true,
+    "financial_activation_sql_applied": false
+  }
+}

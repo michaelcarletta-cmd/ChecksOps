@@ -29,6 +29,7 @@ import {
   handleGetCheckImageUrls,
   handlePublicContractorDirectory,
   handleLookupPartnerCodePublic,
+  handleHomeownerUploadCheck,
 } from './homeowner.mjs';
 
 export const CLASS_A_FUNCTIONS = new Set([
@@ -53,6 +54,7 @@ export const CLASS_A_FUNCTIONS = new Set([
   'homeowner-ledger-upload',
   'homeowner-ledger-sign-link',
   'homeowner-ledger-send',
+  'homeowner-upload-check',
   // Public directory
   'public-contractor-directory',
   'lookup-partner-code-public',
@@ -122,6 +124,8 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleHomeownerLedgerSignLink(event);
     case 'homeowner-ledger-send':
       return handleHomeownerLedgerSend(event);
+    case 'homeowner-upload-check':
+      return handleHomeownerUploadCheck(event);
     case 'public-contractor-directory':
     case 'contractor-directory-search':
       return handlePublicContractorDirectory(event);
