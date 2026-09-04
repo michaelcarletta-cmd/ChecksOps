@@ -11,7 +11,7 @@ Platform account `36b7…47bb` authorized with Origin `https://staging.checksops
 ## CheckAlt UAT
 
 **Status (2026-09-04):** **PARTIAL** (PR #125) — STOP for review.  
-FinCapture sequence/fields match working Lovable (`/deposit/process` is the submit endpoint; approve/item/history are post-process; IRD / high-res retrieve are **not** submission). Image-pipeline parity **PASS**. UAT `deposit/process` still returns CheckAlt HTTP 500 IQA (*retake the check images*) on the synthetic non-negotiable payload — classified as UAT IQA/acceptance behavior, **not** a missing documented workflow step. Vendor Postman/`ClearingworksAPI.yaml` file was **not** present in the agent workspace (upload requested). Production CheckAlt remains **OFF**. See `CHECKALT_UAT_CERTIFICATION.md`.
+Authoritative Postman extract (`CheckAlt_PR125_Minimal_API.json`) confirms **`POST /fincapture/deposit/process` = Submit deposit transaction**. Approve/item/history are post-process. **High-res retrieve** and **IRD generate** are post-transaction only (not submit). AWS matches Lovable core process fields + image-pipeline parity. Remaining UAT HTTP 500 (*retake the check images*) is CheckAlt IQA/acceptance behavior — not a missing documented workflow step. Production CheckAlt remains **OFF**. See `CHECKALT_UAT_CERTIFICATION.md`.
 
 ## Plaid
 
@@ -35,10 +35,10 @@ Removed from blocker list: **Plaid**; **Moov sandbox account authorization**; **
 
 ## Next certification phase prerequisites (external)
 
-1. Attach CheckAlt FinCapture Postman / `ClearingworksAPI.yaml` (not found in agent workspace) for final IRD/high-res path confirmation
-2. CheckAlt: UAT synthetic-image policy or official UAT image kit / IQA guidance (do not submit restored production negotiable checks)
-3. After accepted deposit: status/history + idempotency + reconcile evidence
-4. Keep NAT/egress healthy (currently OK)
-5. Moov production activation remains a deliberate, separate gate — sandbox PASS does not authorize production flags
-6. CheckAlt webhooks remain optional / not required
+1. CheckAlt: UAT synthetic-image acceptance policy or official UAT image kit / IQA guidance (do not submit restored production negotiable checks)
+2. After accepted deposit: status/history + idempotency + reconcile evidence
+3. Keep NAT/egress healthy (currently OK)
+4. Moov production activation remains a deliberate, separate gate — sandbox PASS does not authorize production flags
+5. CheckAlt webhooks remain optional / not required
+6. Postman authority for FinCapture submit vs IRD/high-res is now on-branch (`aws/providers/results/CheckAlt_PR125_Minimal_API.json`)
 
