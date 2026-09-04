@@ -66,7 +66,7 @@ Ordinary EMAIL_OTP and HTTPS Cognito passkeys remain available on the same login
 
 - [x] Master password login → `7dbb3009-…`
 - [x] Master `/data/query` tenants → 6 tenants (RLS master visibility)
-- [x] Tester EMAIL_OTP mapping still `abd3c2a0-…` (unchanged Cognito email)
-- [ ] UI: AdminTenants / Manage tabs / Manager hub visible as master
-- [ ] Tester still cannot open master-only surfaces
-- [ ] Moov / CheckAlt / Plaid still `provider_disabled`
+- [x] Tester EMAIL_OTP mapping still `abd3c2a0-…` (unchanged Cognito email `mcarletta@freedomadj.com`)
+- [x] UI: AdminTenants / Manage tabs / Platform Finance / Financial Model visible as master
+- [x] Tester `is_master_owner()` false; master true (SQL helper unchanged)
+- [x] Moov / CheckAlt / Plaid still `provider_disabled` / not executed
