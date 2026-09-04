@@ -1,17 +1,51 @@
 {
   "verdict": "PARTIAL",
   "date": "2026-09-04",
-  "scope": "CheckAlt UAT certification only — production CheckAlt/financial execution OFF",
-  "moovSandbox": "PASS (unchanged; not modified in this PR)",
-  "lovableReference": [
-    "supabase/functions/checkalt-prepare-image/index.ts",
-    "supabase/functions/checkalt-submit-deposit/index.ts",
-    "src/lib/prepareCheckAltDeposit.ts",
-    "aws/functions/api/providers/parity/checkalt-image.mjs"
-  ],
-  "authoritativeAssumptions": {
-    "webhooksRequired": false,
-    "imageStrategy": "reuse Lovable prepare+submit pipeline; do not invent a new CheckAlt image approach"
+  "scope": "CheckAlt UAT certification — documentation-backed FinCapture sequence review",
+  "moovSandbox": "PASS (unchanged)",
+  "documentationAuthority": {
+    "vendorPostmanOrClearingworksYamlInWorkspace": false,
+    "lovableOpenApiCitation": "supabase/functions/_shared/checkalt.ts → ClearingworksAPI.yaml (OpenAPI 3.1)",
+    "userConfirmedWorkflow": [
+      "authenticate",
+      "register",
+      "getUserAccountInformation",
+      "getDepositAccountInformation",
+      "deposit item/process",
+      "deposit history/status"
+    ],
+    "developerPortal": "https://developer.checkalt.com/ (OpenAPI assets 403 without login)"
+  },
+  "operationClassification": {
+    "authenticate": "required pre-step",
+    "register": "required depositor provisioning",
+    "getUserAccountInformation": "required account/ssoKey discovery",
+    "getDepositAccountInformation": "required deposit-account authorization",
+    "deposit/process": "direct submission endpoint (authoritative)",
+    "deposit/approve": "post-process only (status 40)",
+    "deposit/item": "post-process status retrieval",
+    "deposit/history": "post-process history/status fallback",
+    "Retrieve Transaction with High-Resolution Images": "post-transaction retrieval only — not submission",
+    "Generate Image Replacement Document (IRD)": "post-transaction/output only — not submission"
+  },
+  "missingDocumentedSubmitStepOnAws": false,
+  "depositProcessRequiredFieldsParity": {
+    "fiKey": true,
+    "ssoKey": true,
+    "depositAccountNumber": true,
+    "captureDateTime": true,
+    "userAmountIntegerCents": true,
+    "frontImageRearImageRawBase64": true,
+    "performRiskAssessmentTrue": true,
+    "testDepositAbsent": true,
+    "lovablePreparePipeline": true
+  },
+  "http500Classification": {
+    "missingWorkflowStep": false,
+    "missingRequiredRequestFieldVsLovable": false,
+    "checkAltIqaOrUatImageAcceptance": true,
+    "apiMessage": "Check deposit processing failed. Please retake the check images and resubmit.",
+    "photographicFixtureRequiredByDocs": "not established — vendor Postman/OpenAPI file not available in this run; do not assume"
   },
   "scorecard": {
     "authentication": "PASS",
@@ -19,6 +53,7 @@
     "deposit_account_binding": "PASS",
     "depositor_ssoKey": "PASS",
     "image_pipeline_parity": "PASS",
+    "fincapture_sequence_and_fields": "PASS",
     "uat_submission": "PARTIAL",
     "status_retrieval": "BLOCKED",
     "callback_webhook": "N/A",
@@ -26,55 +61,11 @@
     "reconciliation": "PASS",
     "tenant_isolation": "PASS"
   },
-  "parityMatrix": {
-    "landscapeOrientation": "PASS",
-    "jpegEncoding": "PASS",
-    "targetMaxDim1600": "PASS",
-    "minDim1300": "PASS",
-    "jpegQuality78to35": "PASS",
-    "perImageBudget450KB": "PASS",
-    "combinedB64Limit1600000": "PASS",
-    "rawBase64NoDataUri": "PASS",
-    "svgBackRejection": "PASS (parity path unchanged)",
-    "fiKey": "PASS",
-    "ssoKey": "PASS",
-    "depositAccountNumber": "PASS",
-    "captureDateTime": "PASS",
-    "performRiskAssessment": "PASS (true; matched production)",
-    "testDeposit": "PASS (absent; matched production)",
-    "userAmountIntegerCents": "PASS"
-  },
-  "uatSubmission": {
-    "processPath": "/fincapture/deposit/process",
-    "imageKind": "synthetic_uat_via_prepare_pipeline",
-    "preparedFront": { "width": 1600, "height": 733, "preparedBytes": 112407, "landscape": true },
-    "preparedRear": { "width": 1600, "height": 733, "preparedBytes": 98423, "landscape": true },
-    "checkAltHttp": 500,
-    "checkAltMessage": "Check deposit processing failed. Please retake the check images and resubmit.",
-    "providerReferenceIssued": false,
-    "negotiableCheckSubmitted": false
-  },
-  "remainingDifferenceVsLovable": {
-    "pipelineConstants": "aligned",
-    "pixelContent": "Lovable submits photographic camera checks + endorsed deposit backs; AWS UAT fixture is procedural VOID geometry/bitmap text",
-    "inspectedLovableDepositedExample": {
-      "note": "status=deposited restored Freedom check; inspected only; NOT submitted to UAT",
-      "rawFront": { "width": 4265, "height": 2052, "bytes": 2341143 },
-      "preparedFront": { "width": 1600, "height": 770, "bytes": 293230 },
-      "rawBackEndorsedDeposit": { "width": 1200, "height": 576, "bytes": 207060 }
-    },
-    "environment": "Lovable success is on production CheckAlt; this cert targets uatapi.checkalt.com"
-  },
-  "exact_remaining_vendor_action": [
-    "Provide CheckAlt-acceptable UAT photographic/endorsed fixtures or UAT IQA guidance — without submitting restored production negotiable checks.",
-    "Then verify process → provider reference → status/history → idempotency → reconcile.",
-    "Webhooks remain not required."
+  "exact_remaining_action": [
+    "Upload CheckAlt FinCapture Postman / ClearingworksAPI.yaml to the agent run for final IRD/high-res path confirmation.",
+    "Ask CheckAlt for UAT synthetic-image acceptance policy or an official UAT image kit / IQA guidance.",
+    "Do not submit restored production negotiable checks to UAT.",
+    "After accepted deposit: status/history → idempotency → reconcile."
   ],
-  "production_remain_off": {
-    "AWS_PROVIDER_EXECUTION_ENABLED": false,
-    "AWS_CHECKALT_ENABLED": false,
-    "AWS_MOOV_ENABLED": false,
-    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": false,
-    "AWS_PLAID_ENABLED": false
-  }
+  "production_remain_off": true
 }

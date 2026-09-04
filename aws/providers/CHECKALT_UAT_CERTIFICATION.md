@@ -7,32 +7,55 @@
 **Moov:** Sandbox certification remains **PASS** (PR #124). Moov implementation was **not** modified.  
 **Verdict:** **PARTIAL** — STOP for review
 
-## Authoritative assumptions
+## Documentation authority (this pass)
 
-1. Webhooks are **not** required (`CHECKALT_SANDBOX_WEBHOOK_SECRET` is not a blocker).
-2. FinCapture workflow: authenticate → register → `getUserAccountInformation` → `getDepositAccountInformation` → deposit process → history/status.
-3. Freedom Adjustment is a provisioned UAT business unit; use API/config values only.
-4. Do not use sample `123456789` unless UAT API returns it.
-5. Image/submission behavior must match the working Lovable/Supabase path — do not invent a new CheckAlt image strategy.
+| Source | Status |
+|---|---|
+| CheckAlt-supplied FinCapture Postman / `ClearingworksAPI.yaml` file | **Not present** in this Cloud Agent workspace, PR tree, or message attachments. Upload requested. |
+| In-repo Lovable reference citing the OpenAPI | Present — `supabase/functions/_shared/checkalt.ts` states: *API reference: Clearingworks IR OpenAPI 3.1 spec (`ClearingworksAPI.yaml`)* and maps Auth / Deposit / Status / Approve / History |
+| Prior user-confirmed FinCapture workflow | Authenticate → register → getUserAccountInformation → getDepositAccountInformation → deposit item/process → history/status |
+| Live UAT API responses from earlier #125 runs | Auth/register/account discovery PASS; `POST /fincapture/deposit/process` reached; HTTP 500 body: *"Check deposit processing failed. Please retake the check images and resubmit."* |
+| CheckAlt public developer portal | `developer.checkalt.com` requires authenticated access (JS/OpenAPI assets 403 without login) |
 
-## Parity vs Lovable/Supabase (verified)
+This pass does **not** invent a “photographic UAT fixture” requirement. No available CheckAlt document states that. Classification of the 500 is from the **API response text** + confirmation that the documented submission sequence/fields are already satisfied.
 
-| Concern | Lovable reference | AWS UAT after this PR |
+## Documented FinCapture sequence vs implementations
+
+| Step / operation | Documented role (Lovable + user workflow + OpenAPI citations) | Lovable/Supabase (production working path) | AWS #125 UAT |
+|---|---|---|---|
+| `POST /public/fincapture/authenticate` | Auth → JWT | Used | Used (UAT host) |
+| `POST /fincapture/useraccount/register` | Create depositor; then discover `ssoKey` | Used | Used (sandbox-isolated) |
+| `POST …/getUserAccountInformation` | Account list / `ssoKey` | Used | Used |
+| `POST …/getDepositAccountInformation` | Authorize deposit account | Used | Used |
+| **`POST /fincapture/deposit/process`** | **Direct deposit submission** (front/rear images + amount) | **Only submit path** | **Only submit path** |
+| `POST /fincapture/deposit/approve` | **Post-process** approval when status 40 | After successful process | Parity route exists; not a pre-process gate |
+| `POST /fincapture/deposit/item` | Status of an existing reference | Poll after process | Parity / sandbox status after process |
+| `POST /fincapture/deposit/history` | History / status fallback | Poll fallback | Available |
+| Retrieve Transaction with High-Resolution Images | **Post-transaction retrieval** of images for an existing transaction | **Not** used in submit | **Not** used (must not be used as a substitute for submit) |
+| Generate Image Replacement Document (IRD) | **Post-transaction / output** (substitute-check / IRD generation for an existing item) | **Not** used in submit | **Not** used |
+
+### IRD / High-Resolution classification
+
+- **Not part of deposit submission.** Working Lovable never calls them before or instead of `/deposit/process`.
+- Names and banking practice: high-resolution retrieve and IRD generation operate on an **existing** transaction/reference; they are retrieval/output, not capture.
+- **Do not call them** merely because they mention images. Pending vendor Postman file for path/field confirmation only.
+
+### Required `/deposit/process` fields (parity preserved)
+
+| Field | Lovable | AWS #125 UAT |
 |---|---|---|
-| Landscape / orientation | `ensureLandscape` + prepare `rotate(90)` | `browserCapToDepositTarget` + `normalizeToBudget` |
-| Target max dim | 1600 (`prepareCheckAltDeposit` / prepare-image) | 1600 |
-| Min acceptable dim | 1300 (browser cache gate) | 1300 (prepare constants) |
-| JPEG quality ladder | prepare-image 78→35 | same |
-| Per-image budget | 450KB | 450KB |
-| Combined base64 limit | 1_600_000 | 1_600_000 |
-| Raw base64 (no data-URI) | yes | yes |
-| SVG back rejection | yes | unchanged in parity submit path |
-| `fiKey` / `ssoKey` / `depositAccountNumber` / `captureDateTime` | yes | yes |
-| `performRiskAssessment` | `true` | `true` (was incorrectly `false`) |
-| `testDeposit` | absent | absent (removed) |
-| `userAmount` | `Math.round(dollars * 100)` integer cents | same integer-cents adapter |
+| `fiKey` | yes | yes |
+| `ssoKey` | yes (never API login) | yes |
+| `depositAccountNumber` | yes | yes (API-discovered) |
+| `captureDateTime` | ISO | ISO |
+| `userAmount` | integer cents | integer cents (`1` for $0.01) |
+| `frontImage` / `rearImage` | raw base64, prepare pipeline | raw base64 via same prepare pipeline |
+| `performRiskAssessment` | `true` | `true` |
+| `testDeposit` | absent | absent |
 
-UAT sandbox deposits now build a synthetic VOID raster and run **`browserCapToDepositTarget` → `normalizeToBudget`** — the same constants as `checkalt-prepare-image` / `prepareCheckAltDeposit`.
+No documented pre-process “transaction create”, separate image-upload, or deposit-item step is missing from AWS relative to Lovable.
+
+**Finding:** `/fincapture/deposit/process` is the correct direct submission endpoint. Documented request requirements exercised by Lovable are present on AWS UAT.
 
 ## Scorecard
 
@@ -40,38 +63,30 @@ UAT sandbox deposits now build a synthetic VOID raster and run **`browserCapToDe
 |---|---|
 | Authentication | **PASS** |
 | Merchant / FI context | **PASS** |
-| Deposit-account binding | **PASS** (API `31…73` / fp `46bed6e573bb`) |
-| Depositor / ssoKey | **PASS** (UAT register; FI login not used as ssoKey) |
-| Image pipeline parity | **PASS** (1600×733 landscape JPEG via prepare pipeline; ≤450KB; raw base64; riskAssessment true; no testDeposit) |
-| UAT submission | **PARTIAL** — CheckAlt HTTP 500 IQA: *"Please retake the check images and resubmit."* No provider reference; negotiableCheckSubmitted=false |
-| Status / history | **BLOCKED** (no accepted deposit reference) |
+| Deposit-account binding | **PASS** |
+| Depositor / ssoKey | **PASS** |
+| Image pipeline parity (Lovable) | **PASS** |
+| FinCapture sequence / required fields | **PASS** (matches Lovable + documented workflow; no missing submit step found) |
+| UAT submission | **PARTIAL** — process reached; CheckAlt HTTP 500 IQA message; no provider reference |
+| Status / history | **BLOCKED** (no accepted reference) |
 | Callback / webhook | **N/A** |
-| Idempotency | **BLOCKED** (success path not reached) |
+| Idempotency | **BLOCKED** |
 | Reconciliation | **PASS** (report-only) |
-| Tenant isolation | **PASS** (C1C → `404 operation_not_found`) |
+| Tenant isolation | **PASS** |
 
-## Why IQA still fails (precise remaining difference)
+## Remaining 500 classification
 
-Encoding/dimension/budget/field parity is aligned. CheckAlt still rejects because the **pixel content** is not a photographic check.
+Because the documented submission endpoint and required fields are satisfied, the remaining failure is classified as **CheckAlt UAT IQA / image-acceptance behavior** on the synthetic non-negotiable payload — evidenced by CheckAlt’s own response:
 
-Compared a restored Freedom check already `status=deposited` (inspected only — **not** submitted to UAT):
+> Check deposit processing failed. Please retake the check images and resubmit.
 
-| | Lovable deposited example | AWS UAT synthetic fixture |
-|---|---|---|
-| Content | Camera JPEG of a real check + endorsed deposit back | Procedural geometric VOID + bitmap-font labels |
-| Raw front | 4265×2052 (~2.3MB) | Drawn 1920×880 then capped |
-| Prepared front | 1600×770 JPEG (~286KB) | 1600×733 JPEG (~110KB) |
-| Back | Approved endorsed-deposit JPEG (1200×576) | Synthetic drawn rear (1600×733) |
-| Host that accepted it | Production CheckAlt (Lovable) | UAT `uatapi.checkalt.com` (rejected) |
+That message does **not**, by itself, establish a requirement for a special photographic UAT fixture in vendor documentation (Postman/OpenAPI file still not available to this agent). It does establish that CheckAlt rejected the submitted images after accepting the request shape enough to run image processing.
 
-Shared after prepare: landscape, JPEG, raw base64, ≤450KB/side, `performRiskAssessment: true`, integer-cent `userAmount`, no data-URI, no `testDeposit`.
+Safe next steps (do **not** submit restored production negotiable checks):
 
-**Remaining gap is not pipeline constants — it is photographic / endorsed check imagery (or a CheckAlt-provided UAT image kit).** Using restored production check images for UAT would submit negotiable instruments; that is refused by this certification.
-
-## Exact remaining action
-
-1. Obtain CheckAlt-acceptable **UAT** check image fixtures (vendor UAT kit), **or** a documented UAT IQA bypass — without copying production negotiable checks into UAT submit.
-2. Then: process → provider reference → status/history → idempotency → reconcile.
+1. Attach the CheckAlt FinCapture Postman / `ClearingworksAPI.yaml` to this run for final IRD/high-res path confirmation.
+2. Ask CheckAlt whether UAT accepts synthetic/non-negotiable images, or provide an official UAT image kit / IQA guidance.
+3. After an accepted deposit: status/history → idempotency → reconcile.
 
 ## Production remains OFF
 
@@ -83,10 +98,11 @@ AWS_FINANCIAL_PERMISSIONS_ACTIVATED=false
 AWS_PLAID_ENABLED=false
 ```
 
-Moov untouched. Production Supabase CheckAlt untouched. No financial activation grants.
+Moov untouched. Production Supabase/Lovable CheckAlt untouched. No DNS / production webhook / financial-activation changes.
 
 ## Evidence
 
 - `aws/providers/results/checkalt_uat_certification_partial.json`
 - `/opt/cursor/artifacts/checkalt_uat_prepare_pipeline_deposit.json`
 - `/opt/cursor/artifacts/checkalt_image_parity_diff.json`
+- `/opt/cursor/artifacts/checkalt_fincapture_doc_findings.json`
