@@ -8,11 +8,11 @@
 | Item | Status |
 |---|---|
 | Secrets present | `MOOV_SANDBOX_PUBLIC_KEY`, `MOOV_SANDBOX_SECRET_KEY`, `MOOV_SANDBOX_PLATFORM_ACCOUNT_ID`, `MOOV_SANDBOX_WEBHOOK_SECRET`, `MOOV_SANDBOX_ALLOWED_ORIGIN` (`https://staging.checksops.com`) |
-| Missing / failing | `MOOV_SANDBOX_CONNECTED_ACCOUNT_ID` (optional). **Account resource authorization:** OAuth PASS but `GET /accounts/{platform}` returns **401** — Moov app/key cannot read the configured account. |
+| Missing / failing | `MOOV_SANDBOX_CONNECTED_ACCOUNT_ID` (optional). **Account resource authorization:** OAuth PASS but `GET /accounts/{platform}` returns **401** after correcting platform ID (redacted `eb75…613b`). Moov app/key still cannot read that account. |
 | Discovery / cert (2026-09-04 resume) | OAuth **PASS**; webhook signature + idempotency **PASS**; capabilities/wallet/methods/transfer **blocked** by account 401. See `MOOV_SANDBOX_CERTIFICATION.md`. |
 | Network/egress | **Reachable** (`moovReachable: true`) |
 | Webhooks | Staging `/sandbox/webhooks/moov` signature + replay **PASS**; production webhooks not redirected |
-| Certification | **PARTIAL** |
+| Certification | **BLOCKED** (corrected platform ID still GET 401) |
 | Why execution disabled | `AWS_PROVIDER_EXECUTION_ENABLED=false`, `AWS_MOOV_ENABLED=false`; Class C money movement intentionally off |
 
 ## CheckAlt UAT
