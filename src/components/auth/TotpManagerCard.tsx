@@ -51,6 +51,13 @@ export function TotpManagerCard() {
     const { data } = await supabase.auth.mfa.listFactors();
     const factor = (data?.totp ?? []).find((f) => f.status === "verified");
     if (!factor) return;
+    // Removing a verified factor requires a fresh code first (AAL2).
+    const ok = await requireStepUp({
+      actionKey: "totp.unenroll",
+      title: "Confirm before removing",
+      description: "Enter a current code from your authenticator app to remove it.",
+    });
+    if (!ok) return;
     const { error } = await supabase.auth.mfa.unenroll({ factorId: factor.id });
     if (error) {
       toast({ title: "Could not remove", description: error.message, variant: "destructive" });
@@ -63,6 +70,7 @@ export function TotpManagerCard() {
     await refreshFactors();
     await load();
   };
+
 
   return (
     <Card>
@@ -91,6 +99,22 @@ export function TotpManagerCard() {
             </AlertDescription>
           </Alert>
         )}
+        <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+          <p className="font-medium text-foreground">Which app do I need?</p>
+          <p>
+            Any free authenticator app works:{" "}
+            <a href="https://apps.apple.com/app/google-authenticator/id388497605" target="_blank" rel="noreferrer" className="underline">Google Authenticator (iPhone)</a>,{" "}
+            <a href="https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2" target="_blank" rel="noreferrer" className="underline">Google Authenticator (Android)</a>,{" "}
+            <a href="https://apps.apple.com/app/microsoft-authenticator/id983156458" target="_blank" rel="noreferrer" className="underline">Microsoft Authenticator</a>, Authy, or 1Password.
+            iPhone users can also use the built-in Passwords app.
+          </p>
+          <p>
+            Install it, tap “+” → Scan a QR code, scan the square we show you, then type the 6-digit
+            number the app displays. That number is your authentication code, and it changes every
+            30 seconds.
+          </p>
+        </div>
+
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => void start()} disabled={busy}>
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

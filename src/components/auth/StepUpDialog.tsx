@@ -174,11 +174,22 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
         {mode === "enroll" && (
           <div className="space-y-3">
             <Alert>
-              <AlertDescription className="text-xs">
-                Two-factor isn't set up on this account yet. Scan this code with Google
-                Authenticator, 1Password, Authy or similar, then enter the 6-digit code.
+              <AlertDescription className="text-xs space-y-2">
+                <p className="font-medium">Set this up once — it takes about a minute.</p>
+                <ol className="list-decimal pl-4 space-y-1">
+                  <li>
+                    Install a free authenticator app on your phone:{" "}
+                    <a href="https://apps.apple.com/app/google-authenticator/id388497605" target="_blank" rel="noreferrer" className="underline">Google Authenticator (iPhone)</a>,{" "}
+                    <a href="https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2" target="_blank" rel="noreferrer" className="underline">Google Authenticator (Android)</a>,{" "}
+                    <a href="https://apps.apple.com/app/microsoft-authenticator/id983156458" target="_blank" rel="noreferrer" className="underline">Microsoft Authenticator</a>, Authy, or 1Password.
+                    On iPhone you can also use the built-in Passwords app.
+                  </li>
+                  <li>In the app, tap the “+” and choose Scan a QR code, then scan the square below. Can't scan? Choose “Enter a setup key” and paste the key underneath.</li>
+                  <li>The app shows a 6-digit number that changes every 30 seconds. Type the current one below and press Verify.</li>
+                </ol>
               </AlertDescription>
             </Alert>
+
             {qr && (
               <div className="flex justify-center rounded-md bg-background p-3 border border-border">
                 <img src={qr} alt="Two-factor setup QR code" className="h-44 w-44" />
@@ -221,9 +232,17 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
                 if (e.key === "Enter") void submit();
               }}
             />
+            {mode === "verify" && (
+              <p className="text-xs text-muted-foreground">
+                Open your authenticator app (Google Authenticator, Microsoft Authenticator, Authy,
+                1Password or iPhone Passwords) and enter the current 6-digit number listed for
+                ChecksOps.
+              </p>
+            )}
             {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
         )}
+
 
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" disabled={busy} onClick={() => onResolved(false)}>
