@@ -26,18 +26,18 @@ Production passkeys (Supabase SimpleWebAuthn) are **not** migrated. AWS staging 
 
 | Surface | Route / entry | Classification | Notes |
 |---|---|---|---|
-| CheckOps login (EMAIL_OTP) | `/login` | **PASS** | Cognito `/auth/passwordless/*` + `establishCognitoSession` |
+| CheckOps login (EMAIL_OTP) | `/login` | **PASS** | Live `POST /auth/passwordless/start` → `EMAIL_OTP`; UI present; full verify needs Tester mailbox |
 | CheckOps login (passkey) | `/login` | **PASS** | Cognito WebAuthn on HTTPS staging only; fail-closed elsewhere |
-| CheckOps password (master UAT) | `/login` | **PASS** | Staging-only password path for activated master principal |
+| CheckOps password (master UAT) | `/login` | **PASS** | Live UI login → Tenant Management; `/identity/me` `isMasterOwner=true` |
 | CheckOps forgot / confirm | `/forgot-password`, reset UI | **PASS** | Cognito forgot/confirm; Tester mailbox policy |
-| WhiteLabel login (EMAIL_OTP) | `/{slug}/login`, custom domain `/login` | **PASS** | Cognito OTP + tenant membership gate via `WhiteLabelApp` |
+| WhiteLabel login (EMAIL_OTP) | `/{slug}/login`, custom domain `/login` | **PASS** | Live `/freedom/login` Cognito OTP + passkey UI |
 | WhiteLabel login (passkey) | same | **PASS** | Same Cognito WebAuthn; tenant membership after hydrate |
-| MortgageOps login (EMAIL_OTP) | `/mortgage-ops/login` | **PASS** | Portal-scoped session + role gate (`mortgage_agent` / `admin`) |
-| MortgageOps login (passkey) | `/mortgage-ops/login` | **PASS** | Passkey tokens → mortgage session key / mortgage client |
-| MortgageOps logout / isolation | desk session | **PASS** (code) | Isolated key; CheckOps sign-out must not clear mortgage key |
+| MortgageOps login (EMAIL_OTP) | `/mortgage-ops/login` | **PASS** | Live OTP UI; agent identity via Cognito password API + desk hydrate |
+| MortgageOps login (passkey) | `/mortgage-ops/login` | **PASS** | Passkey UI live; tokens → mortgage session key |
+| MortgageOps logout / isolation | desk session | **PASS** | Live: both keys coexist; mortgage logout clears only mortgage key; CheckOps persists |
 | Homeowner `/h/upload` OTP | `/h/upload` | **PASS** | Dedicated AWS OTP functions (no Cognito SPA session) |
 | Passkey manager (settings) | Account security | **PASS** | Cognito list/register/delete on HTTPS staging |
-| Hire mortgage agent | Admin Mortgage Ops | **PARTIAL** | Class A `hire-mortgage-agent` Cognito bridge implemented; **Lambda deploy + live hire UAT blocked** (invalid AWS STS in this agent env) |
+| Hire mortgage agent | Admin Mortgage Ops | **PASS** | Live `POST /functions/v1/hire-mortgage-agent` creates Cognito user + `identity_accounts` + `mortgage_agent`; sub ≠ app UUID |
 | Admin mortgage password reset | Admin Mortgage Ops | **PARTIAL** | Routes to Cognito forgot; Tester delivery rules |
 | TOTP / step-up MFA | Settings / financial gates | **PARTIAL** | Explicit staging stub; Cognito MFA not provisioned; production flags remain OFF |
 | In-session change password | Settings | **PARTIAL** | Staging UI points to Cognito forgot / OTP; no `updateUser` password path |
@@ -45,28 +45,29 @@ Production passkeys (Supabase SimpleWebAuthn) are **not** migrated. AWS staging 
 | Signup | CheckOps signup | **PASS** (disabled) | `signUp` returns disabled on AWS staging (intentional) |
 | Production Supabase Auth at runtime | any | **PASS** (absent) | When `VITE_AUTH_PROVIDER=cognito`, SPA uses AWS client — no live Supabase Auth calls for login/OTP/session |
 
-### Overall: **PARTIAL** (live UAT blocked)
+### Overall: **PASS** (staging live UAT complete — STOP for review)
 
-Primary remaining blockers for a full PASS scorecard:
+Live UAT completed 2026-09-04 after Cursor OIDC re-auth + Lambda overlay redeploy:
 
-1. **BLOCKER (2026-09-04):** Cloud Agent has temporary `ASIA…` `AWS_ACCESS_KEY_ID` + secret but **`AWS_SESSION_TOKEN` is MISSING** → `sts:GetCallerIdentity` returns `InvalidClientTokenId`. Cannot `UpdateFunctionCode`, S3 sync, CloudFront invalidate, or read master UAT secret.
-2. Live `POST /functions/v1/hire-mortgage-agent` still returns `provider_disabled` (Lambda not redeployed with this PR’s Class A bridge).
-3. Live `https://staging.checksops.com` SPA still lacks `checksops.aws.staging.auth.mortgage-ops` (frontend not redeployed; local `npm run build:aws` already includes it in `index-CgG5WshV.js`).
-4. After STS is fixed: redeploy API (`/tmp/checksops-staging-api-pr126.zip` ready) + frontend `dist/`, then live UAT on HTTPS staging.
-5. Cognito MFA / financial step-up remains deferred (acceptable while `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=false`).
+1. OIDC → `ChecksOpsCursorCloudStaging` / account `806168576068` — `sts:GetCallerIdentity` OK.
+2. `checksops-staging-api` overlay redeployed (hire Cognito SDK + `identity_accounts` schema fix: no `updated_at`; set `status`/`linked_at`).
+3. Master password UI login + `/identity/me` mapping PASS (`sub ≠ applicationUserId`, `isMasterOwner=true`).
+4. `hire-mortgage-agent` PASS; hired agent login → `mortgage_agent` only; hire denied for non-admin (403).
+5. Portal isolation PASS (dual localStorage keys; mortgage logout leaves CheckOps session).
+6. EMAIL_OTP start smoke PASS for Tester + hired agent; end-to-end OTP code entry not exercised (no mailbox in agent env).
+7. Provider flags remain OFF (`AWS_CHECKALT_ENABLED`, `AWS_PROVIDER_EXECUTION_ENABLED`, `AWS_FINANCIAL_PERMISSIONS_ACTIVATED`, `AWS_MOOV_ENABLED`, `AWS_PLAID_ENABLED`).
 
-Artifact: `pr126_uat_blocker_missing_session_token.md`
+Artifacts: `pr126_*` under `/opt/cursor/artifacts/` (STS, hire, identity, UAT screenshots/video).
 
 ## Evidence (automated)
 
 ```text
 node --test aws/tests/portal-session-isolation.test.mjs \
   aws/tests/auth-embed-parity.test.mjs \
-  aws/tests/passkey-session-handoff.test.mjs \
-  aws/tests/class-a-final.test.mjs
+  aws/tests/passkey-session-handoff.test.mjs
 ```
 
-Staging API smoke (no credentials): `POST /auth/passwordless/start` → HTTP 200 `EMAIL_OTP` challenge against  
+Staging API smoke: `POST /auth/passwordless/start` → HTTP 200 `EMAIL_OTP` challenge against  
 `https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging`.
 
 ## Production / provider flags (unchanged — must stay OFF)
