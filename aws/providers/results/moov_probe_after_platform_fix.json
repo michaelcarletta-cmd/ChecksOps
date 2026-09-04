@@ -1,0 +1,32 @@
+{
+  "ok": true,
+  "reads": {
+    "authentication": {
+      "ok": true,
+      "tokenPresent": true
+    },
+    "listedAccounts": {
+      "ok": false,
+      "count": 0,
+      "isolatedCount": 0,
+      "overlapCount": 0
+    },
+    "account": {
+      "ok": false,
+      "redactedId": "36b7\u202647bb",
+      "httpStatus": 401
+    },
+    "wallets": {
+      "ok": false,
+      "count": null
+    },
+    "paymentMethods": {
+      "ok": false,
+      "count": null
+    },
+    "capabilities": {
+      "ok": false,
+      "count": null
+    }
+  }
+}

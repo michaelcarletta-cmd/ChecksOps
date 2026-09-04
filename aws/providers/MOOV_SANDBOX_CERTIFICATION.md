@@ -1,63 +1,70 @@
 # Moov sandbox certification (AWS staging)
 
-**Date:** 2026-09-04  
+**Date:** 2026-09-04 (resumed after manual secret configuration)  
 **Scope:** Moov sandbox certification only — not production activation.  
-**Verdict:** **BLOCKED**
+**Verdict:** **PARTIAL**
 
 ## Scorecard
 
 | Item | Result |
 |---|---|
-| Moov sandbox certification | **BLOCKED** |
-| Sandbox platform account ID | **not configured** |
-| Auth (OAuth client_credentials with `MOOV_SANDBOX_*`) | **PASS** |
-| Capabilities lookup | **BLOCKED** (no platform/connected account to read) |
-| Wallet lookup | **BLOCKED** (no account context) |
-| Payment-method / bank lookup | **BLOCKED** (no account context) |
-| Provider egress | **PASS** (`moovReachable: true`) |
-| Sandbox transfer | **not attempted** — fail-closed `sandbox_account_unmapped` (no HTTP to Moov) |
-| Webhook signature / idempotency | **BLOCKED** — `MOOV_SANDBOX_WEBHOOK_SECRET` absent (`sandbox_webhook_secret_unavailable`) |
-| Tenant isolation / kill switches | **PASS** (production Moov `provider_disabled`; financial flags false; transfer refuses production IDs) |
-| Cognito → app UUID mapping | **PASS** (master `7dbb3009-…`) |
+| Moov sandbox certification | **PARTIAL** |
+| Sandbox platform account ID | **configured** (redacted in artifacts) |
+| Connected sandbox account ID | **not configured** |
+| OAuth / auth (`MOOV_SANDBOX_*`) | **PASS** |
+| Allowed origin | **PASS** (`https://staging.checksops.com`) |
+| Platform account mapping (secret present, ≠ RDS production IDs) | **PASS** |
+| `/accounts` list authorization | **FAIL** HTTP **401** |
+| `GET /accounts/{platform}` | **FAIL** HTTP **401** (empty body) |
+| Capabilities | **BLOCKED** by account 401 |
+| Wallet | **BLOCKED** by account 401 |
+| Payment methods / bank | **BLOCKED** by account 401 |
+| Provider egress | **PASS** |
+| AWS staging webhook signature validation | **PASS** |
+| Webhook idempotency / replay | **PASS** (`duplicate: true` on replay; bad sig / skew → 401) |
+| Cognito → application UUID → tenant | **PASS** |
+| Cross-tenant provider isolation | **PASS** (payload `tenant_id` ignored; transfer fail-closed `sandbox_account_unmapped`; production Moov path `provider_disabled`) |
+| Simulated sandbox transfer | **not performed** — account reads unauthorized + no sandbox payment-method mapping |
 
-## Why blocked (no guessing)
+## What progressed since the prior BLOCKED attempt
 
-Existing bootstrap (`aws/providers/oneshot/bootstrap-moov-sandbox.mjs`) and live probes prove:
+Configured in `checksops/staging/providers` (values not logged):
 
-1. `MOOV_SANDBOX_PUBLIC_KEY` / `MOOV_SANDBOX_SECRET_KEY` are present in `checksops/staging/providers`.
-2. OAuth token mint succeeds for `/accounts.read` and `/accounts.write` scopes.
-3. `GET /accounts` → **401**; `POST /accounts` → **401**.
-4. No `MOOV_SANDBOX_CONNECTED_ACCOUNT_ID` exists to resolve `wallet.partnerAccountID`.
-5. Therefore `MOOV_SANDBOX_PLATFORM_ACCOUNT_ID` **cannot** be discovered programmatically from these keys.
+- `MOOV_SANDBOX_PLATFORM_ACCOUNT_ID`
+- `MOOV_SANDBOX_WEBHOOK_SECRET`
+- `MOOV_SANDBOX_ALLOWED_ORIGIN` = `https://staging.checksops.com`
+- Rotated `MOOV_SANDBOX_PUBLIC_KEY` / `MOOV_SANDBOX_SECRET_KEY`
+- CheckAlt UAT credentials rotated (not exercised in this Moov-only cert)
 
-Do **not** copy production RDS `provider_account_id` values or invent an ID.
+Webhook path certified against staging endpoint:
 
-## Exact manual action required
+`POST /staging/sandbox/webhooks/moov`
 
-Perform these steps in the **Moov Dashboard for the sandbox application that owns the AWS staging API keys** (the key pair already stored as `MOOV_SANDBOX_*` — not production keys):
+## Exact remaining Moov requirement (STOP — do not bypass)
 
-1. Sign in to [Moov Dashboard](https://dashboard.moov.io) for that **sandbox** app.
-2. Open the platform / business account that owns the API keys.
-3. Copy the **platform (facilitator) account ID**.
-4. Optionally create or select a **sandbox connected business account** and copy its account ID (needed if payment-method / wallet probes should run against a connected account).
-5. Confirm the API key can read that platform account (and, if you want bootstrap to create test accounts later, grant `/accounts.write` that actually authorizes `POST /accounts` — token mint alone is not enough; today create returns 401).
-6. In AWS account **806168576068**, Secrets Manager secret `checksops/staging/providers`, add:
+OAuth token mint succeeds **including account-scoped scopes** for the configured platform UUID, but every resource call returns **401**:
 
-| Key | Value |
-|---|---|
-| `MOOV_SANDBOX_PLATFORM_ACCOUNT_ID` | platform/facilitator account ID from step 3 |
-| `MOOV_SANDBOX_CONNECTED_ACCOUNT_ID` | (optional) sandbox connected account from step 4 |
-| `MOOV_SANDBOX_ALLOWED_ORIGIN` | Origin allowlisted on the Moov app (recommend `https://staging.checksops.com` or the origin already allowlisted; default code fallback is `https://checksops.com`) |
-| `MOOV_SANDBOX_WEBHOOK_SECRET` | (optional but required for webhook cert) signing secret for staging webhooks |
+- `GET /accounts`
+- `GET /accounts/{platformAccountId}`
+- wallets / payment-methods / capabilities under that account
 
-7. Do **not** set production `MOOV_PLATFORM_ACCOUNT_ID` / production account IDs into these sandbox fields.
-8. Tell the agent to resume Moov sandbox certification after the secret is updated (no production activation).
+This is **not** an AWS IAM/Lambda issue. The sandbox API key cannot authorize that account ID.
 
-Optional Moov dashboard webhook wiring (after secret exists):
+### Manual Moov dashboard / API-key action
 
-- Endpoint: `https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging/sandbox/webhooks/moov`
-- Use the same signing secret as `MOOV_SANDBOX_WEBHOOK_SECRET`
-- Do **not** redirect production Moov webhooks
+1. Open the Moov Dashboard for the **same sandbox application** that owns the rotated staging `MOOV_SANDBOX_*` keys.
+2. Confirm the platform/facilitator **Account ID** shown for that application matches the value stored as `MOOV_SANDBOX_PLATFORM_ACCOUNT_ID`.
+3. If it does not match, replace the secret with the Account ID from that app (do not paste production account IDs from ChecksOps RDS).
+4. In API key / application permissions, ensure the key can **read** that account (profile, wallets, payment-methods, capabilities). Token mint alone is insufficient — resource GETs must return 200.
+5. Optional: create a sandbox **connected** business account with a wallet payment method; set `MOOV_SANDBOX_CONNECTED_ACCOUNT_ID`.
+6. Prove with Moov API explorer or curl that `GET /accounts/{id}` returns **200** using the staging sandbox keys + `Origin: https://staging.checksops.com`.
+7. Resume certification for capabilities/wallet/methods and a minimal simulated transfer.
+
+Until step 6 succeeds, ChecksOps will **not** invent payment methods, copy production Moov IDs, or send transfer HTTP.
+
+## Staging code fix deployed
+
+`/sandbox/moov/probe` now prefers the configured `MOOV_SANDBOX_PLATFORM_ACCOUNT_ID` when `GET /accounts` list is unauthorized (still refuses RDS production ID overlap). Live probe now reports `reads.account.httpStatus: 401` instead of skipping account reads.
 
 ## Production remains OFF (verified)
 
@@ -68,17 +75,17 @@ AWS_CHECKALT_ENABLED=false
 AWS_PLAID_ENABLED=false
 AWS_FINANCIAL_PERMISSIONS_ACTIVATED=false
 AWS_PROVIDER_WEBHOOK_DRY_RUN=true
-AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED=true   # sandbox HTTP only
+AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED=true
 ```
 
-`64_financial_activation_grants.sql` was **not** applied. Deposit Ops money RPCs remain disabled.
+`64_financial_activation_grants.sql` was not applied. Production Moov → Supabase webhooks were not modified.
 
-## Evidence artifacts
+## Plaid
 
-- `/opt/cursor/artifacts/moov_sandbox_certification_blocked.json`
-- `/opt/cursor/artifacts/moov_bootstrap_result.json`
-- Repo: `aws/providers/results/moov_sandbox_certification_blocked.json`
+Plaid is **not required** by ChecksOps and is removed from the genuine production-cutover blocker list. Keep `AWS_PLAID_ENABLED=false`.
 
-## Architecture note
+## Evidence
 
-No second Moov integration was added. Certification uses the existing sandbox harness (`/sandbox/moov/*`, `bootstrap-moov-sandbox.mjs`, parity client). Host is `https://api.moov.io` for both sandbox and production; **keys** select the ledger.
+- `/opt/cursor/artifacts/moov_sandbox_certification_resume.json`
+- `/opt/cursor/artifacts/moov_probe_after_platform_fix.json`
+- Repo mirrors under `aws/providers/results/`

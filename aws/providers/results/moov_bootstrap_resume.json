@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "alreadyConfigured": true,
+  "platformAccountId": "[redacted-in-artifact]",
+  "platformAccountIdRedacted": "36b7\u202647bb",
+  "connectedAccountId": null,
+  "connectedAccountIdRedacted": null,
+  "usedProductionPlatformId": false,
+  "copiedFromProduction": false,
+  "source": "secrets_manager",
+  "originConfigured": true
+}

@@ -1,0 +1,155 @@
+{
+  "identity": {
+    "status": 200,
+    "applicationUserId": "7dbb\u20269330",
+    "ok": true
+  },
+  "egress": {
+    "status": 200,
+    "moovReachable": true,
+    "ok": true
+  },
+  "isolation": {
+    "status": 200,
+    "ok": true,
+    "productionIdOverlap": false,
+    "httpAllowed": {
+      "moov": true,
+      "checkalt": true,
+      "reason": {
+        "moov": "sandbox_keys_isolated",
+        "checkalt": "uat_host_approved"
+      }
+    },
+    "sandboxObjectCount": 0,
+    "productionAccountCount": 1
+  },
+  "moov_probe": {
+    "status": 200,
+    "ok": true,
+    "error": null,
+    "sandboxHttpCalled": true,
+    "productionExecution": false,
+    "environment": "sandbox",
+    "reads": {
+      "authentication": {
+        "ok": true,
+        "tokenPresent": true
+      },
+      "listedAccounts": {
+        "ok": false,
+        "count": 0,
+        "isolatedCount": 0,
+        "overlapCount": 0
+      },
+      "account": null,
+      "wallets": null,
+      "paymentMethods": null,
+      "capabilities": null
+    },
+    "capability": "moov",
+    "message": null
+  },
+  "moov_transfer": {
+    "status": 200,
+    "ok": true,
+    "error": "sandbox_account_unmapped",
+    "message": "Same ChecksOps operation replayed. Production Moov account IDs were not used.",
+    "sandboxHttpCalled": false,
+    "productionExecution": false
+  },
+  "production_moov_path": {
+    "status": 403,
+    "error": "provider_disabled"
+  },
+  "webhook_valid": {
+    "status": 200,
+    "ok": true,
+    "duplicate": false,
+    "signature_ok": true,
+    "applied": false,
+    "error": null,
+    "tenantFromPayloadIgnored": true,
+    "productionRecordsMutated": false
+  },
+  "webhook_replay": {
+    "status": 200,
+    "ok": true,
+    "duplicate": true,
+    "applied": false,
+    "error": null
+  },
+  "webhook_bad_sig": {
+    "status": 401,
+    "ok": false,
+    "error": "invalid_signature"
+  },
+  "webhook_expired": {
+    "status": 401,
+    "ok": false,
+    "error": "timestamp_outside_window"
+  },
+  "c1c_probe": {
+    "status": 200,
+    "ok": true,
+    "error": null,
+    "reads": {
+      "authentication": {
+        "ok": true,
+        "tokenPresent": true
+      },
+      "listedAccounts": {
+        "ok": false,
+        "count": 0,
+        "isolatedCount": 0,
+        "overlapCount": 0
+      },
+      "account": null,
+      "wallets": null,
+      "paymentMethods": null,
+      "capabilities": null
+    },
+    "sandboxHttpCalled": true
+  },
+  "c1c_transfer": {
+    "status": 200,
+    "ok": true,
+    "error": "sandbox_account_unmapped",
+    "sandboxHttpCalled": false
+  },
+  "flags": {
+    "AWS_PROVIDER_EXECUTION_ENABLED": "false",
+    "AWS_MOOV_ENABLED": "false",
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": "true",
+    "AWS_PROVIDER_WEBHOOK_DRY_RUN": "true",
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "false",
+    "AWS_CHECKALT_ENABLED": "false",
+    "AWS_PLAID_ENABLED": "false"
+  },
+  "secrets_configured": {
+    "platform": true,
+    "connected": false,
+    "webhook_secret": true,
+    "allowed_origin_staging": true
+  },
+  "direct_moov_account_auth": {
+    "oauth": "PASS",
+    "GET_/accounts": "401",
+    "GET_/accounts/{platform}": "401",
+    "wallets": "401",
+    "payment_methods": "401",
+    "capabilities": "401",
+    "note": "OAuth token mint succeeds for account-scoped scopes, but resource GETs return 401 empty body. Platform ID does not overlap RDS production provider_account_id rows."
+  },
+  "verdict": {
+    "oauth": "PASS",
+    "platform_configured": "PASS",
+    "platform_account_authorization": "FAIL_401",
+    "connected_account": "NOT_CONFIGURED",
+    "capabilities_wallet_methods": "BLOCKED_BY_ACCOUNT_401",
+    "webhook_signature_idempotency": "PASS",
+    "sandbox_transfer": "NOT_ATTEMPTED_HTTP",
+    "production_kill_switches": "PASS",
+    "overall": "PARTIAL"
+  }
+}

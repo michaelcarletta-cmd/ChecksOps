@@ -7,12 +7,12 @@
 
 | Item | Status |
 |---|---|
-| Secrets present | `MOOV_SANDBOX_PUBLIC_KEY`, `MOOV_SANDBOX_SECRET_KEY` in `checksops/staging/providers` |
-| Missing | `MOOV_SANDBOX_PLATFORM_ACCOUNT_ID`, `MOOV_SANDBOX_CONNECTED_ACCOUNT_ID`, `MOOV_SANDBOX_WEBHOOK_SECRET`, `MOOV_SANDBOX_ALLOWED_ORIGIN` |
-| Discovery attempt (2026-09-04) | OAuth **PASS**; `GET/POST /accounts` **401**; bootstrap cannot resolve `wallet.partnerAccountID` without a connected account. **Do not guess.** See `MOOV_SANDBOX_CERTIFICATION.md`. |
+| Secrets present | `MOOV_SANDBOX_PUBLIC_KEY`, `MOOV_SANDBOX_SECRET_KEY`, `MOOV_SANDBOX_PLATFORM_ACCOUNT_ID`, `MOOV_SANDBOX_WEBHOOK_SECRET`, `MOOV_SANDBOX_ALLOWED_ORIGIN` (`https://staging.checksops.com`) |
+| Missing / failing | `MOOV_SANDBOX_CONNECTED_ACCOUNT_ID` (optional). **Account resource authorization:** OAuth PASS but `GET /accounts/{platform}` returns **401** — Moov app/key cannot read the configured account. |
+| Discovery / cert (2026-09-04 resume) | OAuth **PASS**; webhook signature + idempotency **PASS**; capabilities/wallet/methods/transfer **blocked** by account 401. See `MOOV_SANDBOX_CERTIFICATION.md`. |
 | Network/egress | **Reachable** (`moovReachable: true`) |
-| Webhooks | Path ready; signature cert **blocked** until `MOOV_SANDBOX_WEBHOOK_SECRET`; production webhooks not redirected |
-| Certification | **BLOCKED** on platform account ID (manual Moov dashboard) |
+| Webhooks | Staging `/sandbox/webhooks/moov` signature + replay **PASS**; production webhooks not redirected |
+| Certification | **PARTIAL** |
 | Why execution disabled | `AWS_PROVIDER_EXECUTION_ENABLED=false`, `AWS_MOOV_ENABLED=false`; Class C money movement intentionally off |
 
 ## CheckAlt UAT
@@ -25,25 +25,29 @@
 | Webhooks | Staging dry-run; production not redirected |
 | Why execution disabled | Deposit submit/approve remain Class C; flags keep execution off |
 
-## Plaid sandbox
+## Plaid
 
-| Item | Status |
-|---|---|
-| Secrets present | **Missing** `PLAID_SANDBOX_CLIENT_ID` / `PLAID_SANDBOX_SECRET` |
-| Network/egress | Not probed (no keys); NAT/egress already proven for HTTPS generally |
-| Webhooks | Not configured for sandbox |
-| Why execution disabled | No sandbox credentials; transfers Class C |
+**Not required for ChecksOps.** Do not treat missing Plaid sandbox keys as a production-cutover blocker. Keep `AWS_PLAID_ENABLED=false`. Existing Plaid adapter code may remain dormant.
 
 ## Shared staging gates (keep false)
 
 - `AWS_PROVIDER_EXECUTION_ENABLED=false`
 - `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=false`
 - Do **not** apply `64_financial_activation_grants.sql`
-- Do **not** enable production Moov/CheckAlt/Plaid
+- Do **not** enable production Moov/CheckAlt
+
+## Genuine production-cutover blockers (current)
+
+1. Moov: sandbox account resource authorization (GET `/accounts/{platform}` must return 200 with staging sandbox keys) before any Moov money path
+2. Moov: production activation intentionally held (`AWS_MOOV_ENABLED` / master execution flags)
+3. CheckAlt: UAT deposit account binding + production activation held
+4. Production DNS / webhooks / auth / data cutover not performed (intentional)
+5. Financial activation grants / Deposit Ops money RPCs intentionally disabled
+
+Removed from blocker list: **Plaid** (not required).
 
 ## Next certification phase prerequisites (external)
 
-1. Moov: platform account id for sandbox + confirm sandbox business account mapping  
+1. Moov: fix sandbox platform account ↔ API key authorization (see `MOOV_SANDBOX_CERTIFICATION.md`), then resume capabilities/wallet/transfer cert  
 2. CheckAlt: UAT deposit account number approved for lockbox5 merchant  
-3. Plaid: create sandbox app keys in Secrets Manager  
-4. Keep NAT/egress healthy (currently OK)
+3. Keep NAT/egress healthy (currently OK)

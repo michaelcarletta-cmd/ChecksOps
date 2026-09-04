@@ -461,8 +461,16 @@ const handleMoovProbe = async (event, deps) => handleAuthenticated(event, async 
     });
   }
   const isolatedIds = listedIds.filter((id) => !production.productionAccountIds.includes(id));
-  const accountId = (loaded.moov.platformAccountId && isolatedIds.includes(loaded.moov.platformAccountId))
-    ? loaded.moov.platformAccountId
+  // Prefer configured sandbox platform account even when GET /accounts list is
+  // unauthorized (common for Moov apps that only grant account-scoped scopes).
+  // Still refuse any ID that overlaps production RDS mappings.
+  const configuredPlatform = loaded.moov.platformAccountId || null;
+  const configuredOk = Boolean(
+    configuredPlatform
+    && !production.productionAccountIds.includes(configuredPlatform),
+  );
+  const accountId = configuredOk
+    ? configuredPlatform
     : (isolatedIds[0] || null);
   const reads = {
     authentication: { ok: true, tokenPresent: auth.accessTokenPresent },
