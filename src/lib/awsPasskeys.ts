@@ -23,6 +23,9 @@ export type AwsPasskeyCredential = {
   relyingPartyId: string | null;
   createdAt: string | null;
   authenticatorAttachment: string | null;
+  authenticatorTransports?: string[];
+  /** Cognito ListWebAuthnCredentials does not provide last-used; always null. */
+  lastUsedAt?: string | null;
 };
 
 const requireHttpsPasskeys = () => {
