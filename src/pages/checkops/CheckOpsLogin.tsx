@@ -76,8 +76,10 @@ export default function CheckOpsLogin() {
         if (!awsHttpsPasskeys) {
           throw new Error("Passkeys require https://staging.checksops.com. Use email verification on this origin.");
         }
-        const result = await signInWithAwsPasskey(email);
-        await resolveAndRedirect(result.id, result.email || email);
+        // Persist Cognito tokens + emit SIGNED_IN, then full reload so useAuth()
+        // hydrates before route guards run (same pattern as EMAIL_OTP verify).
+        await signInWithAwsPasskey(email);
+        window.location.assign("/login");
         return;
       }
       const result = await signInWithPasskey(email || undefined);
