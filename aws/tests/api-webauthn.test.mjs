@@ -83,7 +83,7 @@ test('CloudFront HTTPS template is staging-only and targets staging.checksops.co
   const yaml = fs.readFileSync(path.join(ROOT, 'frontend/https-cloudfront.yaml'), 'utf8');
   assert.match(yaml, /Default: staging\.checksops\.com/);
   assert.match(yaml, /AWS::CloudFront::Distribution/);
-  assert.match(yaml, /AWS::CertificateManager::Certificate/);
+  assert.match(yaml, /ExistingCertificateArn/);
   assert.match(yaml, /OriginAccessControl/);
   // Distribution aliases come only from StagingHostname — never hard-coded apex/www.
   const aliasesBlock = yaml.match(/Aliases:\n(?:[ \t]+-[^\n]*\n)+/);
