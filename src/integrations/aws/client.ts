@@ -42,6 +42,17 @@ const AWS_WRITE_TABLES = new Set([
   "homeowner_intro_requests",
   "check_cases",
   "contractor_profiles",
+  "notifications",
+  "tenant_documents",
+  "loss_draft_documents",
+  "mortgage_companies",
+  "shared_check_messages",
+  "profiles",
+  "company_branding",
+  "referral_alerts",
+  "tenants",
+  "privacy_notice_acknowledgments",
+  "tenant_users",
 ]);
 
 const REVIEW_DECISION_RPCS = new Set([
@@ -691,6 +702,21 @@ export function createAwsStagingClient() {
             p_deposit_path: args.p_deposit_path,
             review_notes: args.p_reviewer_notes,
           }),
+        }, token);
+        if (response.status === 401) {
+          writeStored(null);
+          emit("SIGNED_OUT", null);
+        }
+        if (!response.ok) {
+          return { data: null, error: postgrestError(String(body.message || body.error || "rpc_failed"), String(body.error || "42501")) };
+        }
+        return { data: body.data ?? body, error: null };
+      }
+      if (name === "admin_delete_check") {
+        const checkId = String(args.p_check_id || args.check_id || "");
+        const { response, body } = await apiFetch(`/workflow/checks/${encodeURIComponent(checkId)}`, {
+          method: "DELETE",
+          body: JSON.stringify({ check_id: checkId }),
         }, token);
         if (response.status === 401) {
           writeStored(null);

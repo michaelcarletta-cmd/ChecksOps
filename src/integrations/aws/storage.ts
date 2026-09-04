@@ -226,6 +226,7 @@ export const STAGING_STORAGE_BUCKETS = [
   "loss-draft-documents",
   "company-branding",
   "tenant-logos",
+  "tenant-documents",
   "endorsement-packets",
   "homeowner-uploads",
 ] as const;

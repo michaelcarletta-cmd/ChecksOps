@@ -232,7 +232,7 @@ test('C1C cannot authorize a Freedom check-scoped upload and knowing the key is 
   assert.equal(result.error, 'rls_denied');
 });
 
-test('deposit and endorsement-packet writes stay denied', async () => {
+test('malformed deposit-attachment paths stay denied; check-scoped endorsement packets are allowlisted', async () => {
   const client = mockClient({ writeCheck: true, authorize: true });
   const deposit = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
     bucket: 'deposit-attachments',
@@ -240,12 +240,41 @@ test('deposit and endorsement-packet writes stay denied', async () => {
     contentType: 'application/pdf',
   }), depsFor(client, { forceStorageWrites: true }));
   assert.equal(deposit.statusCode, 403);
+
   const packet = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
     bucket: 'endorsement-packets',
     path: WRITE_PATH,
     contentType: 'application/pdf',
   }), depsFor(client, { forceStorageWrites: true }));
-  assert.equal(packet.statusCode, 403);
+  assert.equal(packet.ok, true, JSON.stringify(packet));
+  assert.equal(packet.path, WRITE_PATH);
+});
+
+test('tenant-documents require membership-scoped library paths', async () => {
+  const TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
+  const path = `${TENANT}/library/mortgage/doc.pdf`;
+  const memberClient = mockClient({ authorize: true });
+  const ok = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'tenant-documents',
+    path,
+    contentType: 'application/pdf',
+  }), depsFor(memberClient, { forceStorageWrites: true }));
+  assert.equal(ok.ok, true, JSON.stringify(ok));
+
+  const outsider = mockClient({ authorize: false });
+  const denied = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'tenant-documents',
+    path,
+    contentType: 'application/pdf',
+  }), depsFor(outsider, { forceStorageWrites: true }));
+  assert.equal(denied.statusCode, 403);
+});
+
+test('company-branding public bucket is allowlisted for signed public reads', async () => {
+  const { PUBLIC_BRANDING_BUCKETS, STORAGE_WRITE_BUCKETS } = await import('../functions/api/storage-paths.mjs');
+  assert.ok(PUBLIC_BRANDING_BUCKETS.includes('company-branding'));
+  assert.ok(STORAGE_WRITE_BUCKETS.includes('tenant-documents'));
+  assert.ok(STORAGE_WRITE_BUCKETS.includes('homeowner-uploads'));
 });
 
 test('delete and move require server-side authorization', async () => {

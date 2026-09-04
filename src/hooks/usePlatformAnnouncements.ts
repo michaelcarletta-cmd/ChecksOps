@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
 
 export interface PlatformAnnouncement {
   id: string;
@@ -44,6 +45,13 @@ export function useActivePlatformAnnouncements() {
     },
   });
 
+  const invalidate = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["platform-announcements"] });
+  }, [queryClient]);
+
+  // AWS staging: refetchInterval already covers freshness; keep a light poll hook for consistency.
+  useAwsPollingFallback(true, invalidate, 30_000);
+
   // Push updates: any change to announcements appears instantly, no refresh needed.
   useEffect(() => {
     const channel = supabase
@@ -51,15 +59,13 @@ export function useActivePlatformAnnouncements() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "platform_announcements" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["platform-announcements"] });
-        }
+        invalidate,
       )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [queryClient]);
+  }, [invalidate]);
 
   return query;
 }

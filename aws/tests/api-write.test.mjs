@@ -203,12 +203,24 @@ test('unauthenticated write is 401; unapproved table/column/financial tables are
 
   const client = mockClient();
   const unknown = await handleWrite(jwtEvent('/data/write', 'POST', {
-    table: 'tenants',
+    table: 'organizations',
     op: 'update',
     values: { name: 'x' },
   }), depsFor(client));
   assert.equal(unknown.statusCode, 403);
   assert.equal(unknown.error, 'table_not_allowlisted');
+
+  const tenantBilling = await handleWrite(jwtEvent('/data/write', 'POST', {
+    table: 'tenants',
+    op: 'update',
+    values: { checkalt_enabled: true },
+    filters: [{ column: 'id', op: 'eq', value: '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a' }],
+  }), depsFor(client));
+  assert.equal(tenantBilling.statusCode, 403);
+  assert.ok(
+    tenantBilling.error === 'column_not_allowlisted'
+      || tenantBilling.error === 'application_workflow_writes_disabled',
+  );
 
   const financial = await handleWrite(jwtEvent('/data/write', 'POST', {
     table: 'disbursement_batches',

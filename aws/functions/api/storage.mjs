@@ -297,11 +297,31 @@ const publicClient = async (deps) => {
 export const isPublicBrandingPath = async (client, bucket, rel) => {
   if (!PUBLIC_BRANDING_BUCKETS.includes(bucket)) return false;
   if (bucket === 'email-assets') return rel === 'checksops-logo.png';
-  const result = await client.query(
-    `SELECT 1 FROM tenants_public WHERE logo_url IS NOT NULL AND split_part(logo_url, '?', 1) LIKE '%' || $1 LIMIT 1`,
-    [rel],
-  );
-  return result.rows.length > 0;
+  if (bucket === 'tenant-logos') {
+    const result = await client.query(
+      `SELECT 1 FROM tenants_public WHERE logo_url IS NOT NULL AND split_part(logo_url, '?', 1) LIKE '%' || $1 LIMIT 1`,
+      [rel],
+    );
+    return result.rows.length > 0;
+  }
+  if (bucket === 'company-branding') {
+    const branding = await client.query(
+      `SELECT 1 FROM public.company_branding
+       WHERE split_part(COALESCE(letterhead_url, ''), '?', 1) LIKE '%' || $1
+       LIMIT 1`,
+      [rel],
+    );
+    if (branding.rows.length) return true;
+    const tenants = await client.query(
+      `SELECT 1 FROM public.tenants
+       WHERE split_part(COALESCE(invoice_letterhead_url, ''), '?', 1) LIKE '%' || $1
+          OR split_part(COALESCE(logo_url, ''), '?', 1) LIKE '%' || $1
+       LIMIT 1`,
+      [rel],
+    );
+    return tenants.rows.length > 0;
+  }
+  return false;
 };
 
 export const handleStoragePublic = async (event, deps = {}) => {
