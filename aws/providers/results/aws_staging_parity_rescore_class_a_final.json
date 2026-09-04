@@ -21,7 +21,7 @@
   "pdf_generation": "PASS",
   "email_sms_sink": "PASS",
   "scheduled_jobs": "PASS_endpoint_verified_eventbridge_iam_blocked",
-  "textract": "SubscriptionRequiredException_manual_enable",
+  "textract": "PASS",
   "provider_readiness": "see PROVIDER_CERTIFICATION_READINESS.md",
   "items_preventing_production_cutover": [
     "Textract account subscription enablement",
@@ -32,5 +32,7 @@
     "Production DNS/webhook/data cutover (intentional hold)",
     "Financial activation decision (64_financial_activation_grants.sql must stay off)",
     "Optional EventBridge API Destination IAM for managed schedules"
-  ]
+  ],
+  "textract_engine": "aws_textract_analyze",
+  "textract_subscription_required": false
 }

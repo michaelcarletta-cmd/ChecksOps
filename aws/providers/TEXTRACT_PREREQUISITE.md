@@ -1,36 +1,40 @@
-# Textract live-image prerequisite (account 806168576068)
+# Textract live-image readiness (account 806168576068)
 
-## Exact blocker
+## Status: **PASS** (verified 2026-09-04)
+
+`SubscriptionRequiredException` is cleared. Live staging path confirmed:
+
+**synthetic PNG → S3 `claim-files` → Textract `AnalyzeDocument` → ChecksOps `parseCheckFields` → descriptive DB commit**
+
+## Verification evidence
+
+| Check | Result |
+|---|---|
+| Engine | `aws_textract_analyze` |
+| `SubscriptionRequiredException` | **gone** (`textract_error: null`) |
+| Parsed fields | carrier `Synthetic Staging Mutual Insurance Company`, check `778899`, amount `1234.56`, claim `CLM-STAGING-7788`, payees split |
+| DB descriptive commit | carrier / check_number / payee_line updated (T2 column grants) |
+| Amount / ledger | **unchanged** (no amount write; no financial side effects) |
+| Cross-tenant | C1C → Freedom check `check_not_found` / 0 visible rows |
+| Image used | Synthetic only: `files/claim-files/checks/dc647a1f-…/synthetic-textract-live-verify-20260904.png` (`customer-doc=false`) |
+| Moov / CheckAlt / Plaid / deposits | Still disabled (`provider_disabled` / `financial_job_disabled`) |
+
+Artifact: `aws/providers/results/textract_live_verify_pass.json` (also `/opt/cursor/artifacts/textract_live_verify_pass.json`).
+
+## What remains ready (unchanged)
+
+| Item | Status |
+|---|---|
+| IAM `textract:DetectDocumentText` / `AnalyzeDocument` / `AnalyzeExpense` / `AnalyzeID` | Present on `ApiFunctionRolePolicyClassA` |
+| Lambda `check-ocr-intake` | Textract first; stored-OCR fallback retained |
+| Tenant-scoped S3 image load + RLS | Intact |
+| OCR commit strategy | Descriptive T2 columns only (avoids `ocr_commit_results` amount/stage/payment writes) |
+
+## Historical blocker (resolved)
 
 ```
 SubscriptionRequiredException:
 The AWS Access Key Id needs a subscription for the service
 ```
 
-Observed from:
-- Agent STS role `ChecksOpsCursorCloudStaging`
-- Staging Lambda role `checksops-staging-ApiFunctionRole-*` (OCR intake)
-
-## What is already ready
-
-| Item | Status |
-|---|---|
-| IAM `textract:DetectDocumentText` / `AnalyzeDocument` / `AnalyzeExpense` / `AnalyzeID` | Present on `ApiFunctionRolePolicyClassA` |
-| Lambda code path `check-ocr-intake` | Calls Textract first, then stored-OCR fallback |
-| Tenant-scoped S3 image load + RLS | Implemented |
-| Staging fallback | `aws_stored_ocr_reparse` works without Textract |
-
-## Manual AWS step (console)
-
-Cursor cannot safely complete marketplace/account enablement for this service.
-
-1. Sign in to AWS account **806168576068** as an admin (not the Cloud Agent staging role).
-2. Open **Amazon Textract** in **us-east-1**.
-3. If prompted, **enable / subscribe** to Amazon Textract (first-time account activation / free tier enrollment).  
-   Equivalent: AWS Console → Textract → Get started, or enable the service subscription that clears `SubscriptionRequiredException`.
-4. Confirm a trivial `DetectDocumentText` call succeeds from the console or CloudShell.
-5. Re-run staging OCR on a **non-production** check image (synthetic/staging-only object). Do **not** use production customer documents merely for testing.
-
-## After enablement
-
-No code deploy should be required if IAM + handler remain as shipped. Expected engine on live images: `aws_textract_analyze` or `aws_textract_detect`.
+Resolved by account-level Textract enablement in **us-east-1** for account **806168576068**.

@@ -23,7 +23,7 @@
 
 ## Textract
 
-See `TEXTRACT_PREREQUISITE.md` — `SubscriptionRequiredException` requires console enablement.
+See `TEXTRACT_PREREQUISITE.md` — **PASS** (live `aws_textract_analyze` on synthetic staging image; subscription blocker cleared).
 
 ## SQL
 
