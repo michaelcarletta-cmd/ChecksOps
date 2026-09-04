@@ -100,3 +100,12 @@ Ordinary services such as **email** and **OCR** must **not** remain disabled mer
 - CashJobs + homeowner timeline **note** inserts allowlisted (no `amount`, no `cash_job_payments`).
 - Provider/financial edge invokes remain `provider_disabled`.
 - Next engineering batches should prioritize **A** mailer + OCR + HomeownerOps public routes before any **B/C** work.
+
+## Staging posture after Class A batch
+
+See `aws/providers/CLASS_A_SERVICES.md`.
+
+Migrated to AWS handlers (invoke no longer `provider_disabled`):
+email send/transactional/unsubscribe/notifies, OCR intake/backlog/zone, HomeownerOps ledger/claim/upload/sign-link/send, get-check-image-urls, public contractor directory, partner code lookup.
+
+Still `provider_disabled` / deferred: Class B/C providers, document PDF generators, domain cron, tenant invite Cognito admin, SMS, SES bounce webhooks, `homeowner-deductible-pay`.

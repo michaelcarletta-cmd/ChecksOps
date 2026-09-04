@@ -397,6 +397,24 @@ export const handler = async (event) => {
     });
   }
 
+  // Class A ordinary application services (email / OCR / HomeownerOps / public directory).
+  // MUST run before handleProviderRequest — providers.mjs matches every
+  // /functions/v1/* path and returns provider_disabled for unknown names,
+  // which would otherwise shadow Class A routes.
+  const { handleAppServiceRequest } = await import('./app-services.mjs');
+  const appService = await handleAppServiceRequest(event, path, method);
+  if (appService) {
+    return json(appService.statusCode || (appService.ok ? 200 : 403), {
+      service: 'checksops-api',
+      environment: process.env.CHECKSOPS_ENV || 'unknown',
+      productionSupabaseChanged: false,
+      productionWebhooksRedirected: false,
+      ...appService,
+    });
+  }
+
+  // Provider / financial Edge Function stubs (staging: execution disabled).
+  // Real Moov/CheckAlt/Plaid money movement stays off until a later controlled phase.
   const provider = await handleProviderRequest(event, path, method);
   if (provider) {
     return json(provider.statusCode || (provider.ok ? 200 : 403), {
