@@ -156,7 +156,7 @@ const requireSandboxGate = ({ spoof }) => {
 
 const lookupSandboxObject = async (client, { tenantId, provider, objectType }) => {
   const rows = (await client.query(
-    `SELECT id, tenant_id, provider, object_type, sandbox_provider_id, environment
+    `SELECT id, tenant_id, provider, object_type, sandbox_provider_id, environment, metadata
      FROM public.aws_provider_sandbox_objects
      WHERE tenant_id = $1::uuid AND provider = $2 AND object_type = $3
      ORDER BY created_at DESC
