@@ -7,18 +7,26 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Fingerprint, Mail, CheckCircle2 } from "lucide-react";
+import { Fingerprint, Mail, CheckCircle2, Loader2 } from "lucide-react";
 import mortgageOpsLogo from "@/assets/mortgage-ops-logo.png";
+import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { signInWithPasskey, sendMagicLink, passkeysSupported } from "@/lib/passkeys";
+import { startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
 
 export default function MortgageOpsLogin() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [linkSent, setLinkSent] = useState(false);
-  const canUsePasskeys = passkeysSupported();
+  const [awsSession, setAwsSession] = useState("");
+  const [code, setCode] = useState("");
+  const awsStaging = isAwsStaging();
+  const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
+  const canUsePasskeys = awsStaging
+    ? awsHttpsPasskeys && passkeysSupported()
+    : passkeysSupported();
   const { user, userRole, loading: authLoading } = useMortgageAuth();
   const navigate = useNavigate();
-
 
   useEffect(() => {
     if (authLoading) return;
@@ -50,6 +58,15 @@ export default function MortgageOpsLogin() {
   const handlePasskey = async () => {
     setLoading(true);
     try {
+      if (awsStaging) {
+        if (!awsHttpsPasskeys) {
+          throw new Error("Passkeys require https://staging.checksops.com. Use email verification on this origin.");
+        }
+        // Same Cognito handoff as CheckOpsLogin; useMortgageAuth hydrates after reload.
+        await signInWithAwsPasskey(email);
+        window.location.assign("/mortgage-ops/login");
+        return;
+      }
       const result = await signInWithPasskey(email || undefined, supabase as any);
       const userId = result.user?.id;
       if (!userId) throw new Error("Unable to start your session");
@@ -70,10 +87,30 @@ export default function MortgageOpsLogin() {
     }
     setLoading(true);
     try {
-      await sendMagicLink(email, `${window.location.origin}/mortgage-ops/login`, supabase as any);
-      setLinkSent(true);
+      if (awsStaging) {
+        const pending = await startAwsEmailOtp(email);
+        setEmail(pending.email);
+        setAwsSession(pending.session);
+        setLinkSent(true);
+      } else {
+        await sendMagicLink(email, `${window.location.origin}/mortgage-ops/login`, supabase as any);
+        setLinkSent(true);
+      }
     } catch (err: any) {
-      toast.error(err.message || "Could not send sign-in link");
+      toast.error(err.message || (awsStaging ? "Could not send verification code" : "Could not send sign-in link"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAwsVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await verifyAwsEmailOtp(email, awsSession, code);
+      window.location.assign("/mortgage-ops/login");
+    } catch (err: any) {
+      toast.error(err.message || "Verification failed");
     } finally {
       setLoading(false);
     }
@@ -90,7 +127,9 @@ export default function MortgageOpsLogin() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle>ChecksOps Mortgage Desk</CardTitle>
-          <p className="text-sm text-muted-foreground">Employee sign-in</p>
+          <p className="text-sm text-muted-foreground">
+            Employee sign-in{awsStaging ? " · AWS staging" : ""}
+          </p>
         </CardHeader>
         <CardContent className="space-y-5">
           {linkSent ? (
@@ -98,18 +137,61 @@ export default function MortgageOpsLogin() {
               <CheckCircle2 className="h-10 w-10 mx-auto text-primary" />
               <p className="font-medium">Check your email</p>
               <p className="text-sm text-muted-foreground">
-                We sent a one-time sign-in link to {email}. It opens the Mortgage Desk directly.
+                {awsStaging
+                  ? `We sent a one-time verification code to ${email}.`
+                  : `We sent a one-time sign-in link to ${email}. It opens the Mortgage Desk directly.`}
               </p>
-              <Button variant="ghost" onClick={() => setLinkSent(false)}>
-                Use a different email
-              </Button>
+              {awsStaging ? (
+                <form onSubmit={handleAwsVerify} className="space-y-3 text-left">
+                  <div className="space-y-2">
+                    <Label htmlFor="mops-code">Email verification code</Label>
+                    <Input
+                      id="mops-code"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                      required
+                      autoFocus
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading || !code.trim()}>
+                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Verify and sign in
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => { setLinkSent(false); setAwsSession(""); setCode(""); }}
+                  >
+                    Use a different email
+                  </Button>
+                </form>
+              ) : (
+                <Button variant="ghost" onClick={() => setLinkSent(false)}>
+                  Use a different email
+                </Button>
+              )}
             </div>
           ) : (
             <>
               {canUsePasskeys && (
                 <div className="space-y-2">
-                  <Button type="button" className="w-full" disabled={loading} onClick={handlePasskey}>
-                    <Fingerprint className="mr-2 h-4 w-4" />
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Work email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      autoComplete="username webauthn"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      autoFocus
+                    />
+                  </div>
+                  <Button type="button" className="w-full" disabled={loading} onClick={() => void handlePasskey()}>
+                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Fingerprint className="mr-2 h-4 w-4" />}
                     {loading ? "Signing in…" : "Sign in with passkey"}
                   </Button>
                   <p className="text-xs text-center text-muted-foreground">
@@ -123,25 +205,29 @@ export default function MortgageOpsLogin() {
                   <span className="w-full border-t" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-card px-2 text-muted-foreground">or email link</span>
+                  <span className="bg-card px-2 text-muted-foreground">
+                    {awsStaging ? "or email code" : "or email link"}
+                  </span>
                 </div>
               </div>
 
               <form onSubmit={handleMagicLink} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Work email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    autoFocus
-                  />
-                </div>
+                {!canUsePasskeys && (
+                  <div className="space-y-2">
+                    <Label htmlFor="email-fallback">Work email</Label>
+                    <Input
+                      id="email-fallback"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      autoFocus
+                    />
+                  </div>
+                )}
                 <Button type="submit" variant="outline" className="w-full" disabled={loading}>
-                  <Mail className="mr-2 h-4 w-4" />
-                  {loading ? "Sending…" : "Email me a sign-in link"}
+                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+                  {loading ? "Sending…" : (awsStaging ? "Email me a verification code" : "Email me a sign-in link")}
                 </Button>
               </form>
 

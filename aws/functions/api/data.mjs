@@ -169,14 +169,26 @@ export const parseSelect = (select) => {
   if (raw === '*') return { columns: ['*'], embeds: [] };
   const embeds = [];
   const columns = [];
-  const re = /([a-zA-Z_][a-zA-Z0-9_]*)(!inner)?\(([^)]*)\)/g;
+  // Supports:
+  //   table(cols)
+  //   table!inner(cols)
+  //   table!<fk_or_hint>(cols)
+  //   alias:table!...(cols)
+  const re = /(?:([a-zA-Z_][a-zA-Z0-9_]*):)?([a-zA-Z_][a-zA-Z0-9_]*)(?:!([a-zA-Z_][a-zA-Z0-9_]*))?\(([^)]*)\)/g;
   let remainder = raw;
   let match;
   while ((match = re.exec(raw))) {
+    const alias = match[1] || null;
+    const table = match[2];
+    const hint = match[3] || null;
+    const inner = hint === 'inner';
+    const fkHint = hint && hint !== 'inner' ? hint : null;
     embeds.push({
-      table: match[1],
-      inner: Boolean(match[2]),
-      columns: match[3].split(',').map((c) => c.trim()).filter(Boolean),
+      table,
+      alias,
+      inner,
+      fkHint,
+      columns: match[4].split(',').map((c) => c.trim()).filter(Boolean),
     });
     remainder = remainder.replace(match[0], '');
   }
@@ -185,12 +197,27 @@ export const parseSelect = (select) => {
   return { columns, embeds };
 };
 
+/**
+ * Derive parent FK column from PostgREST named-hint like
+ * `shared_checks_source_tenant_id_fkey` → `source_tenant_id`.
+ */
+export const fkColumnFromHint = (parentTable, hint) => {
+  if (!hint || hint === 'inner') return null;
+  let rest = String(hint);
+  if (rest.endsWith('_fkey')) rest = rest.slice(0, -5);
+  const prefix = `${parentTable}_`;
+  if (rest.startsWith(prefix)) rest = rest.slice(prefix.length);
+  if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(rest) && rest.length > 0) return rest;
+  return null;
+};
+
 export const embedColumnSql = (columns) => {
   if (!columns?.length || columns.includes('*')) return '*';
   return columns.map((c) => ident(c, 'column')).join(', ');
 };
 
-export const relatedFk = (table, embedTable) => {
+export const relatedFk = (table, embedTable, fkHint = null) => {
+  if (fkHint) return fkHint;
   if (embedTable === 'tenants' || embedTable === 'tenants_public') {
     if (table === 'claims') return 'org_id';
     return 'tenant_id';
@@ -389,12 +416,13 @@ const runSelect = async (client, body) => {
   if (needed.has('*') === false) {
     needed.add('id');
     for (const embed of parsed.embeds) {
-      // Parent-side FKs only for belongs-to embeds (tenants, profiles).
+      // Parent-side FKs for belongs-to embeds (tenants, profiles) and named-FK hints.
       // Has-many embeds such as check_payees / checkalt_deposits live on the
       // child row (check_intake_item_id). Guessing check_payee_id onto the
       // parent SELECT makes PostgreSQL fail before the child-array path runs.
-      if (belongsToEmbed(table, embed.table)) {
-        needed.add(relatedFk(table, embed.table));
+      const namedFk = fkColumnFromHint(table, embed.fkHint);
+      if (namedFk || belongsToEmbed(table, embed.table)) {
+        needed.add(namedFk || relatedFk(table, embed.table));
       }
     }
   }
@@ -410,7 +438,9 @@ const runSelect = async (client, body) => {
   for (const embed of parsed.embeds) {
     const relTable = ident(embed.table, 'table');
     if (!ALLOWED.has(relTable) && relTable !== 'tenants') continue;
-    const fk = relatedFk(table, relTable);
+    const namedFk = fkColumnFromHint(table, embed.fkHint);
+    const fk = relatedFk(table, relTable, namedFk);
+    const resultKey = embed.alias || relTable;
     const parentHasFk = rows.some((row) => Object.prototype.hasOwnProperty.call(row, fk));
     const embedCols = embedColumnSql(embed.columns);
     if (parentHasFk) {
@@ -419,7 +449,7 @@ const runSelect = async (client, body) => {
         const next = [];
         for (const row of rows) {
           if (embed.inner) continue;
-          next.push({ ...row, [relTable]: null });
+          next.push({ ...row, [resultKey]: null });
         }
         rows.length = 0;
         rows.push(...next);
@@ -434,7 +464,7 @@ const runSelect = async (client, body) => {
       for (const row of rows) {
         const relatedRow = byId.get(String(row[fk]));
         if (embed.inner && !relatedRow) continue;
-        next.push({ ...row, [relTable]: relatedRow || null });
+        next.push({ ...row, [resultKey]: relatedRow || null });
       }
       rows.length = 0;
       rows.push(...next);
@@ -442,7 +472,7 @@ const runSelect = async (client, body) => {
       const parentIds = [...new Set(rows.map((row) => row.id).filter(Boolean))];
       const childKey = childFk(table, relTable);
       if (!parentIds.length) {
-        for (const row of rows) row[relTable] = [];
+        for (const row of rows) row[resultKey] = [];
         continue;
       }
       const related = (await client.query(
@@ -459,7 +489,7 @@ const runSelect = async (client, body) => {
       for (const row of rows) {
         const children = byParent.get(String(row.id)) || [];
         if (embed.inner && !children.length) continue;
-        next.push({ ...row, [relTable]: children });
+        next.push({ ...row, [resultKey]: children });
       }
       rows.length = 0;
       rows.push(...next);

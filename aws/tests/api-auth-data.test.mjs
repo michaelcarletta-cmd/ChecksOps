@@ -5,6 +5,7 @@ import {
   applyFilters,
   belongsToEmbed,
   childFk,
+  fkColumnFromHint,
   handleDataQuery,
   handleDataRpc,
   parseOrExpr,
@@ -79,6 +80,25 @@ test('parseSelect extracts inner tenant embeds used by login redirect', () => {
   assert.deepEqual(parsed.columns, ['tenant_id']);
   assert.equal(parsed.embeds[0].table, 'tenants');
   assert.equal(parsed.embeds[0].inner, true);
+  assert.equal(parsed.embeds[0].fkHint, null);
+});
+
+test('parseSelect supports named FK hints and aliases used by partners/shared checks', () => {
+  const shared = parseSelect('check_id, source_tenant_id, tenants!shared_checks_source_tenant_id_fkey(name)');
+  assert.equal(shared.embeds[0].table, 'tenants');
+  assert.equal(shared.embeds[0].fkHint, 'shared_checks_source_tenant_id_fkey');
+  assert.equal(shared.embeds[0].inner, false);
+  assert.equal(fkColumnFromHint('shared_checks', shared.embeds[0].fkHint), 'source_tenant_id');
+  assert.equal(relatedFk('shared_checks', 'tenants', 'source_tenant_id'), 'source_tenant_id');
+
+  const partners = parseSelect(
+    '*, inviter:tenants!tenant_partnerships_inviter_tenant_id_fkey(name), invitee:tenants!tenant_partnerships_invitee_tenant_id_fkey(name)',
+  );
+  assert.equal(partners.embeds[0].alias, 'inviter');
+  assert.equal(partners.embeds[0].table, 'tenants');
+  assert.equal(fkColumnFromHint('tenant_partnerships', partners.embeds[0].fkHint), 'inviter_tenant_id');
+  assert.equal(partners.embeds[1].alias, 'invitee');
+  assert.equal(fkColumnFromHint('tenant_partnerships', partners.embeds[1].fkHint), 'invitee_tenant_id');
 });
 
 test('has-many star embeds do not pass * through ident', () => {
