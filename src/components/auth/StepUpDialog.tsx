@@ -232,9 +232,17 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
                 if (e.key === "Enter") void submit();
               }}
             />
+            {mode === "verify" && (
+              <p className="text-xs text-muted-foreground">
+                Open your authenticator app (Google Authenticator, Microsoft Authenticator, Authy,
+                1Password or iPhone Passwords) and enter the current 6-digit number listed for
+                ChecksOps.
+              </p>
+            )}
             {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
         )}
+
 
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" disabled={busy} onClick={() => onResolved(false)}>
