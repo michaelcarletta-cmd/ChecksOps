@@ -550,11 +550,75 @@ export const handleHomeownerUploadCheck = async (event) => {
     return { ok: false, statusCode: 400, error: 'unsupported file type', spoofFieldsIgnored: spoof };
   }
 
+  const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
+  const bearer = authHeader.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || '';
+  const uploadToken = String(
+    body.upload_token
+    || body.uploadToken
+    || event.headers?.['x-homeowner-upload-token']
+    || event.headers?.['X-Homeowner-Upload-Token']
+    || '',
+  ).trim() || (/^[a-f0-9]{64}$/i.test(bearer) ? bearer : '');
+
+  // Purpose-scoped AWS upload session (replaces Supabase Auth on /h/upload).
+  if (uploadToken) {
+    let client;
+    try {
+      const { resolveHomeownerUploadToken } = await import('./homeowner-otp.mjs');
+      client = await publicDb(true);
+      await client.query('BEGIN');
+      await client.query('SET TRANSACTION READ WRITE');
+      const session = await resolveHomeownerUploadToken(client, uploadToken);
+      if (!session) {
+        await client.query('ROLLBACK');
+        return { ok: false, statusCode: 401, error: 'invalid session', spoofFieldsIgnored: spoof };
+      }
+      const result = await insertHomeownerCheckUpload(client, {
+        body: {
+          ...body,
+          lead_id: body.lead_id || session.lead_id,
+          contractor_profile_id: contractorProfileId || session.contractor_profile_id,
+        },
+        homeownerEmail: normalizeEmail(session.email),
+        homeownerUserId: null,
+        spoof,
+        verifiedLead: session.lead
+          ? {
+            id: session.lead.id,
+            homeowner_email: session.lead.homeowner_email || session.email,
+            contractor_profile_id: session.lead.contractor_profile_id || session.contractor_profile_id,
+          }
+          : (session.lead_id ? {
+            id: session.lead_id,
+            homeowner_email: session.email,
+            contractor_profile_id: session.contractor_profile_id,
+          } : null),
+      });
+      if (result.ok) await client.query('COMMIT');
+      else await client.query('ROLLBACK');
+      return result;
+    } catch (error) {
+      if (client) {
+        try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      }
+      return {
+        ok: false,
+        statusCode: 503,
+        error: 'upload failed',
+        message: sanitizePublicError(error),
+        spoofFieldsIgnored: spoof,
+      };
+    } finally {
+      if (client) {
+        try { await client.end(); } catch { /* ignore */ }
+      }
+    }
+  }
+
   // Prefer Cognito-mapped identity email when present; otherwise require lead access token + email.
   let homeownerEmail = normalizeEmail(body.homeowner_email || body.email);
   let homeownerUserId = null;
-  const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
-  const hasBearer = /^Bearer\s+\S+/i.test(authHeader);
+  const hasBearer = Boolean(bearer) && bearer.includes('.');
 
   let client;
   try {
@@ -581,7 +645,7 @@ export const handleHomeownerUploadCheck = async (event) => {
         ok: false,
         statusCode: 401,
         error: 'unauthenticated',
-        message: 'Cognito session or lead access_token + homeowner_email required on AWS staging',
+        message: 'Upload session token, Cognito session, or lead access_token + homeowner_email required',
         spoofFieldsIgnored: spoof,
       };
     }

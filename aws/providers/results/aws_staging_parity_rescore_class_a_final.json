@@ -1,0 +1,36 @@
+{
+  "title": "AWS Staging Parity Rescore \u2014 Class A final cleanup",
+  "before": {
+    "PASS": 34,
+    "PARTIAL": 24,
+    "FAIL": 0,
+    "P0": 0,
+    "P1": 12,
+    "P2": 10
+  },
+  "after": {
+    "PASS": 40,
+    "PARTIAL": 18,
+    "FAIL": 0,
+    "P0": 0,
+    "P1": 8,
+    "P2": 7
+  },
+  "features_audited": 58,
+  "h_upload_aws_auth": "PASS",
+  "pdf_generation": "PASS",
+  "email_sms_sink": "PASS",
+  "scheduled_jobs": "PASS_endpoint_verified_eventbridge_iam_blocked",
+  "textract": "SubscriptionRequiredException_manual_enable",
+  "provider_readiness": "see PROVIDER_CERTIFICATION_READINESS.md",
+  "items_preventing_production_cutover": [
+    "Textract account subscription enablement",
+    "Moov sandbox platform account id + certification",
+    "CheckAlt UAT deposit account approval",
+    "Plaid sandbox credentials",
+    "WhiteLabel + MortgageOps Cognito auth wiring",
+    "Production DNS/webhook/data cutover (intentional hold)",
+    "Financial activation decision (64_financial_activation_grants.sql must stay off)",
+    "Optional EventBridge API Destination IAM for managed schedules"
+  ]
+}

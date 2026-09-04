@@ -1,0 +1,94 @@
+{
+  "summary": {
+    "otp_wrong_email": {
+      "ok": false,
+      "error": "otp_create_failed"
+    },
+    "otp_start_ok": true,
+    "otp_has_debug_code": true,
+    "otp_verify_ok": true,
+    "otp_reuse_error": "used",
+    "session_malformed_error": "missing_upload_token",
+    "session_ok": true,
+    "sms_mode": null,
+    "sms_sunk": null,
+    "pdf_ok": false,
+    "pdf_path": null,
+    "queue_mode": "sink",
+    "domain_ok": false,
+    "moov_error": "Disbursement batch not found.",
+    "fin_job_error": "financial_job_disabled"
+  },
+  "raw": {
+    "otp_wrong_email": {
+      "ok": false,
+      "statusCode": 503,
+      "error": "otp_create_failed"
+    },
+    "otp_start": {
+      "ok": true,
+      "statusCode": 200,
+      "sent": true,
+      "stagingDebugCode": "890128"
+    },
+    "otp_verify_bad": {
+      "ok": false,
+      "statusCode": 401,
+      "error": "invalid_code"
+    },
+    "otp_verify": {
+      "ok": true,
+      "statusCode": 200
+    },
+    "otp_reuse": {
+      "ok": false,
+      "statusCode": 409,
+      "error": "used"
+    },
+    "session_malformed": {
+      "ok": false,
+      "statusCode": 401,
+      "error": "missing_upload_token"
+    },
+    "session_ok": {
+      "ok": true,
+      "statusCode": 200
+    },
+    "sms": {
+      "ok": false,
+      "statusCode": 503,
+      "error": "data_query_failed",
+      "message": "column \"tenant_id\" does not exist"
+    },
+    "pdf": {
+      "ok": false,
+      "statusCode": 503,
+      "error": "data_query_failed",
+      "message": "column \"tenant_id\" does not exist"
+    },
+    "queue": {
+      "ok": true,
+      "statusCode": 200,
+      "sunk": 0,
+      "mode": "sink",
+      "note": "no_email_queue_table"
+    },
+    "domain": {
+      "ok": false,
+      "statusCode": 503,
+      "error": "data_query_failed",
+      "message": "column \"custom_domain\" does not exist"
+    },
+    "moov": {
+      "ok": false,
+      "statusCode": 404,
+      "error": "Disbursement batch not found."
+    },
+    "fin_job": {
+      "ok": false,
+      "statusCode": 403,
+      "error": "financial_job_disabled",
+      "message": "deposit-daily-automation remains disabled until financial activation"
+    }
+  }
+}
