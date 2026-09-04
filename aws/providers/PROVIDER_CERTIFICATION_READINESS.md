@@ -5,13 +5,8 @@
 
 ## Moov sandbox
 
-| Item | Status |
-|---|---|
-| Secrets present | `MOOV_SANDBOX_PUBLIC_KEY`, `MOOV_SANDBOX_SECRET_KEY` in `checksops/staging/providers` |
-| Missing | `MOOV_SANDBOX_PLATFORM_ACCOUNT_ID` (and optional webhook secret / allowed origin) |
-| Network/egress | **Reachable** from `checksops-staging-api` (`GET /providers/egress` → `moovReachable: true`, HTTP 403 at edge without credentials — expected) |
-| Webhooks | Dry-run path present; production webhooks not redirected |
-| Why execution disabled | `AWS_PROVIDER_EXECUTION_ENABLED=false`, `AWS_MOOV_ENABLED=false`; Class C money movement intentionally off |
+**Status (2026-09-04):** **PASS** on AWS staging (PR #124).  
+Platform account `36b7…47bb` authorized with Origin `https://staging.checksops.com`. Probe → $0.01 transfer → webhook signature/idempotency → reconcile → C1C cross-tenant denial all green. Production Moov/CheckAlt/financial execution flags remain **false**.
 
 ## CheckAlt UAT
 
@@ -23,25 +18,28 @@
 | Webhooks | Staging dry-run; production not redirected |
 | Why execution disabled | Deposit submit/approve remain Class C; flags keep execution off |
 
-## Plaid sandbox
+## Plaid
 
-| Item | Status |
-|---|---|
-| Secrets present | **Missing** `PLAID_SANDBOX_CLIENT_ID` / `PLAID_SANDBOX_SECRET` |
-| Network/egress | Not probed (no keys); NAT/egress already proven for HTTPS generally |
-| Webhooks | Not configured for sandbox |
-| Why execution disabled | No sandbox credentials; transfers Class C |
+**Not required for ChecksOps.** Do not treat missing Plaid sandbox keys as a production-cutover blocker. Keep `AWS_PLAID_ENABLED=false`. Existing Plaid adapter code may remain dormant.
 
 ## Shared staging gates (keep false)
 
 - `AWS_PROVIDER_EXECUTION_ENABLED=false`
 - `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=false`
 - Do **not** apply `64_financial_activation_grants.sql`
-- Do **not** enable production Moov/CheckAlt/Plaid
+- Do **not** enable production Moov/CheckAlt
+
+## Genuine production-cutover blockers (current)
+
+1. Moov: production activation intentionally held (`AWS_MOOV_ENABLED` / master execution flags) — sandbox cert is **PASS**
+2. CheckAlt: UAT deposit account binding + production activation held
+3. Production DNS / webhooks / auth / data cutover not performed (intentional)
+4. Financial activation grants / Deposit Ops money RPCs intentionally disabled
+
+Removed from blocker list: **Plaid** (not required); **Moov sandbox account authorization** (resolved 2026-09-04).
 
 ## Next certification phase prerequisites (external)
 
-1. Moov: platform account id for sandbox + confirm sandbox business account mapping  
-2. CheckAlt: UAT deposit account number approved for lockbox5 merchant  
-3. Plaid: create sandbox app keys in Secrets Manager  
-4. Keep NAT/egress healthy (currently OK)
+1. CheckAlt: UAT deposit account number approved for lockbox5 merchant  
+2. Keep NAT/egress healthy (currently OK)
+3. Moov production activation remains a deliberate, separate gate — do not flip production flags from this sandbox PASS

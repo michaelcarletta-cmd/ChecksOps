@@ -25,6 +25,7 @@ import {
   moovSandboxScopes,
   moovSandboxToken,
   normalizeMoovSandboxTransfer,
+  pickMoovSandboxTransferMethods,
   redactProviderId,
 } from './providers/moov-sandbox.mjs';
 import {
@@ -461,8 +462,16 @@ const handleMoovProbe = async (event, deps) => handleAuthenticated(event, async 
     });
   }
   const isolatedIds = listedIds.filter((id) => !production.productionAccountIds.includes(id));
-  const accountId = (loaded.moov.platformAccountId && isolatedIds.includes(loaded.moov.platformAccountId))
-    ? loaded.moov.platformAccountId
+  // Prefer configured sandbox platform account even when GET /accounts list is
+  // unauthorized (common for Moov apps that only grant account-scoped scopes).
+  // Still refuse any ID that overlaps production RDS mappings.
+  const configuredPlatform = loaded.moov.platformAccountId || null;
+  const configuredOk = Boolean(
+    configuredPlatform
+    && !production.productionAccountIds.includes(configuredPlatform),
+  );
+  const accountId = configuredOk
+    ? configuredPlatform
     : (isolatedIds[0] || null);
   const reads = {
     authentication: { ok: true, tokenPresent: auth.accessTokenPresent },
@@ -473,46 +482,47 @@ const handleMoovProbe = async (event, deps) => handleAuthenticated(event, async 
     capabilities: null,
   };
   if (accountId) {
+    // Mint account-scoped tokens per read. Do not reuse the /accounts.read list
+    // token — Moov returns 403 when that bearer is used for profile/wallets/etc.
     const account = await moovSandboxFetch({
       credentials: loaded.moov,
       path: `/accounts/${accountId}`,
       scopes: moovSandboxScopes.accountRead(accountId),
       fetchImpl,
-      token: auth.token,
     });
     reads.account = { ok: account.ok, redactedId: redactProviderId(accountId), httpStatus: account.statusCode || account.httpStatus || null };
     const wallets = await moovSandboxFetch({
       credentials: loaded.moov,
       path: `/accounts/${accountId}/wallets`,
-      scopes: moovSandboxScopes.accountRead(accountId),
+      scopes: moovSandboxScopes.walletsRead(accountId),
       fetchImpl,
-      token: auth.token,
     });
     reads.wallets = {
       ok: wallets.ok,
       count: Array.isArray(wallets.data) ? wallets.data.length : null,
+      httpStatus: wallets.statusCode || wallets.httpStatus || null,
     };
     const methods = await moovSandboxFetch({
       credentials: loaded.moov,
       path: `/accounts/${accountId}/payment-methods`,
       scopes: moovSandboxScopes.paymentMethodsRead(accountId),
       fetchImpl,
-      token: auth.token,
     });
     reads.paymentMethods = {
       ok: methods.ok,
       count: Array.isArray(methods.data) ? methods.data.length : null,
+      httpStatus: methods.statusCode || methods.httpStatus || null,
     };
     const caps = await moovSandboxFetch({
       credentials: loaded.moov,
       path: `/accounts/${accountId}/capabilities`,
       scopes: moovSandboxScopes.capabilitiesRead(accountId),
       fetchImpl,
-      token: auth.token,
     });
     reads.capabilities = {
       ok: caps.ok,
       count: Array.isArray(caps.data) ? caps.data.length : null,
+      httpStatus: caps.statusCode || caps.httpStatus || null,
     };
     if (wallets.ok && Array.isArray(wallets.data)) {
       for (const wallet of wallets.data.slice(0, 5)) {
@@ -532,7 +542,7 @@ const handleMoovProbe = async (event, deps) => handleAuthenticated(event, async 
           provider: 'moov',
           objectType: 'payment_method',
           sandboxProviderId: method.paymentMethodID || method.paymentMethodId || method.id,
-          metadata: { source: 'sandbox_probe' },
+          metadata: { source: 'sandbox_probe', paymentMethodType: method.paymentMethodType || method.type || null },
         });
       }
     }
@@ -543,34 +553,36 @@ const handleMoovProbe = async (event, deps) => handleAuthenticated(event, async 
         path: `/accounts/${extraId}/payment-methods`,
         scopes: moovSandboxScopes.paymentMethodsRead(extraId),
         fetchImpl,
-        token: auth.token,
       });
       isolatedMethods.push(...collectMoovPaymentMethods(extraMethods.data).map((row) => ({ ...row, fromAccount: extraId })));
       if (extraMethods.ok && Array.isArray(extraMethods.data)) {
         reads.paymentMethods = {
           ok: true,
           count: (reads.paymentMethods?.count || 0) + extraMethods.data.length,
+          httpStatus: extraMethods.statusCode || extraMethods.httpStatus || reads.paymentMethods?.httpStatus || null,
         };
       }
     }
-    if (isolatedMethods[0]?.id) {
+    const pairing = pickMoovSandboxTransferMethods(isolatedMethods);
+    if (pairing.source?.id) {
       await insertSandboxObject(client, {
         tenantId,
         provider: 'moov',
         objectType: 'source_payment_method',
-        sandboxProviderId: isolatedMethods[0].id,
-        metadata: { source: 'sandbox_probe' },
+        sandboxProviderId: pairing.source.id,
+        metadata: { source: 'sandbox_probe', paymentMethodType: pairing.source.type || null, pairing: pairing.pairing },
       });
     }
-    if (isolatedMethods[1]?.id && isolatedMethods[1].id !== isolatedMethods[0]?.id) {
+    if (pairing.destination?.id) {
       await insertSandboxObject(client, {
         tenantId,
         provider: 'moov',
         objectType: 'destination_payment_method',
-        sandboxProviderId: isolatedMethods[1].id,
-        metadata: { source: 'sandbox_probe' },
+        sandboxProviderId: pairing.destination.id,
+        metadata: { source: 'sandbox_probe', paymentMethodType: pairing.destination.type || null, pairing: pairing.pairing },
       });
     }
+    reads.transferPairing = pairing.pairing || null;
     await insertSandboxObject(client, {
       tenantId,
       provider: 'moov',

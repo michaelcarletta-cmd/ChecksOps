@@ -142,7 +142,7 @@ Do not copy staging secrets into production merely because staging passes.
 | CheckAlt FI key / API login | UAT credentials | Production FinCapture credentials |
 | CheckAlt depositor registrations | UAT-only isolated rows | Production tenant registrations/mapping, migrated only through an approved plan |
 | CheckAlt webhook secret | UAT/sandbox only if supported | Production secret if provider supports signing |
-| Plaid | Sandbox only if required for the current flow | Production only after separate approval |
+| Plaid | **Not required for ChecksOps** — keep disabled; not a cutover blocker | N/A |
 
 ## Production webhook / DNS cutover prerequisites
 

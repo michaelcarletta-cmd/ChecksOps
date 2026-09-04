@@ -243,9 +243,29 @@ export const normalizeMoovSandboxTransfer = (payload = {}) => ({
 export const moovSandboxScopes = {
   accountsRead: () => ['/accounts.read'],
   accountRead: (id) => [`/accounts/${id}/profile.read`],
+  walletsRead: (id) => [`/accounts/${id}/wallets.read`],
   capabilitiesRead: (id) => [`/accounts/${id}/capabilities.read`],
   bankAccountsRead: (id) => [`/accounts/${id}/bank-accounts.read`],
   paymentMethodsRead: (id) => [`/accounts/${id}/payment-methods.read`],
   transfersWrite: (id) => [`/accounts/${id}/transfers.write`],
   transfersRead: (id) => [`/accounts/${id}/transfers.read`],
+};
+
+/** Prefer a fundable sandbox pair (ACH debit → wallet, else wallet → ACH credit). */
+export const pickMoovSandboxTransferMethods = (methods = []) => {
+  const rows = Array.isArray(methods) ? methods.filter((row) => row?.id) : [];
+  const byType = (type) => rows.find((row) => row.type === type) || null;
+  const wallet = byType('moov-wallet');
+  const debit = byType('ach-debit-fund') || byType('ach-debit-collect');
+  const credit = byType('ach-credit-standard') || byType('ach-credit-same-day') || byType('rtp-credit');
+  if (debit && wallet && debit.id !== wallet.id) {
+    return { source: debit, destination: wallet, pairing: 'ach_debit_to_wallet' };
+  }
+  if (wallet && credit && wallet.id !== credit.id) {
+    return { source: wallet, destination: credit, pairing: 'wallet_to_ach_credit' };
+  }
+  if (rows[0]?.id && rows[1]?.id && rows[0].id !== rows[1].id) {
+    return { source: rows[0], destination: rows[1], pairing: 'first_two_distinct' };
+  }
+  return { source: null, destination: null, pairing: null };
 };

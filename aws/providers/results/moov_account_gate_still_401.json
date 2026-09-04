@@ -1,0 +1,91 @@
+{
+  "verdict": "BLOCKED",
+  "gate": "ACCOUNT_UNAUTHORIZED_401",
+  "direct": {
+    "meta": {
+      "secretVersionId": "c846\u202631c6",
+      "platformConfigured": true,
+      "platformRedacted": "eb75\u2026613b",
+      "platformLooksUuid": true,
+      "origin": "https://staging.checksops.com",
+      "platformRedactionChangedFromPriorWrong": true,
+      "keysPresent": {
+        "public": true,
+        "secret": true,
+        "webhook": true,
+        "connected": false
+      }
+    },
+    "host": "https://api.moov.io",
+    "apiVersion": "v2024.01.00",
+    "oauth_accounts_read": {
+      "status": 200,
+      "ok": true,
+      "hasToken": true,
+      "scopeGranted": "/accounts.read",
+      "error": null
+    },
+    "oauth_platform_scoped": {
+      "status": 200,
+      "ok": true,
+      "hasToken": true,
+      "scopeGranted": "/accounts/[account]/profile.read /accounts/[account]/wallets.read /accounts/[account]/payment-methods.read /accounts/[account]/capabilities.read /accounts/[account]/transfers.read /accounts/[account]/transfers.write",
+      "error": null
+    },
+    "get_platform_account": {
+      "status": 401,
+      "ok": false,
+      "bodyLen": 0,
+      "accountType": null,
+      "displayName": null,
+      "legalBusinessName": null,
+      "looksLikeChecksOps": false,
+      "modeHints": {
+        "hasVerification": false,
+        "verificationStatus": null
+      },
+      "errorCode": null
+    },
+    "gate": "ACCOUNT_UNAUTHORIZED_401",
+    "stop": true
+  },
+  "staging_probe": {
+    "ok": true,
+    "sandboxHttpCalled": true,
+    "productionExecution": false,
+    "authentication": {
+      "ok": true,
+      "tokenPresent": true
+    },
+    "listedAccounts": {
+      "ok": false,
+      "count": 0,
+      "isolatedCount": 0,
+      "overlapCount": 0
+    },
+    "account": {
+      "ok": false,
+      "redactedId": "eb75\u2026613b",
+      "httpStatus": 401
+    },
+    "wallets": {
+      "ok": false,
+      "count": null
+    },
+    "paymentMethods": {
+      "ok": false,
+      "count": null
+    },
+    "capabilities": {
+      "ok": false,
+      "count": null
+    }
+  },
+  "production_flags": {
+    "AWS_PROVIDER_EXECUTION_ENABLED": "false",
+    "AWS_MOOV_ENABLED": "false",
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": "true",
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "false",
+    "AWS_CHECKALT_ENABLED": "false"
+  }
+}

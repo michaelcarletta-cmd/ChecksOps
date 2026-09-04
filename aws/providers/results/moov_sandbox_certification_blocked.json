@@ -1,0 +1,205 @@
+{
+  "sandbox_status": {
+    "status": 200,
+    "ok": true,
+    "flags": {
+      "productionExecution": false
+    },
+    "snapshot_keys": [
+      "service",
+      "environment",
+      "productionSupabaseChanged",
+      "productionWebhooksRedirected",
+      "productionDnsChanged",
+      "liveProviderTransactions",
+      "ok",
+      "statusCode",
+      "phase",
+      "productionExecution",
+      "productionRecordsMutated",
+      "liveProductionProviderTransactions",
+      "flags",
+      "capability",
+      "amountUnits",
+      "isolation",
+      "cutover"
+    ]
+  },
+  "sandbox_status_slim": {
+    "status": 200,
+    "ok": true,
+    "providerSandboxExecutionEnabled": true,
+    "productionExecutionEnabled": false,
+    "moovEnabled": false,
+    "capabilities": null
+  },
+  "egress": {
+    "status": 200,
+    "moovReachable": true,
+    "checkaltUatReachable": true,
+    "ok": true
+  },
+  "isolation": {
+    "status": 200,
+    "ok": true,
+    "error": null,
+    "passed": null,
+    "keys": [
+      "service",
+      "environment",
+      "productionSupabaseChanged",
+      "productionWebhooksRedirected",
+      "productionDnsChanged",
+      "liveProviderTransactions",
+      "ok",
+      "statusCode",
+      "productionExecution",
+      "productionRecordsMutated",
+      "applicationUserId",
+      "cognitoSub",
+      "spoofFieldsIgnored",
+      "capability",
+      "productionProviderEnvironments",
+      "productionAccountCount",
+      "sandboxObjectCount",
+      "productionIdOverlap",
+      "httpAllowed",
+      "stopHttpUnlessProven"
+    ]
+  },
+  "moov_probe": {
+    "status": 200,
+    "ok": true,
+    "error": null,
+    "message": null,
+    "classification": null,
+    "oauth": null,
+    "platformAccountConfigured": null,
+    "sandboxHttpCalled": true,
+    "productionExecution": false,
+    "liveProviderCalled": null,
+    "host": null,
+    "environment": "sandbox"
+  },
+  "moov_probe_detail": {
+    "service": "checksops-api",
+    "environment": "sandbox",
+    "productionSupabaseChanged": false,
+    "productionWebhooksRedirected": false,
+    "productionDnsChanged": false,
+    "liveProviderTransactions": false,
+    "ok": true,
+    "statusCode": 200,
+    "provider": "moov",
+    "apiVersion": "v2024.01.00",
+    "sandboxHttpCalled": true,
+    "productionExecution": false,
+    "productionRecordsMutated": false,
+    "applicationUserId": "7dbb3009-f059-4767-b5dc-1c5c72379330",
+    "authUid": "7dbb3009-f059-4767-b5dc-1c5c72379330",
+    "cognitoSub": "54a8b4c8-60d1-7028-cfbb-0eb2baee5592",
+    "amountUnits": {
+      "provider": "moov",
+      "apiVersions": [
+        "v2026.04.00",
+        "v2026.07.00"
+      ],
+      "field": "amount.value",
+      "scale": "integer_cents",
+      "currency": "USD",
+      "example": {
+        "dollars": 123.45,
+        "value": 12345
+      },
+      "notes": "Do not send dollar floats. Do not use amount.valueDecimal for ChecksOps execution.",
+      "pinnedRequestVersion": "v2024.01.00",
+      "documentedAmountVersions": [
+        "v2026.04.00",
+        "v2026.07.00"
+      ]
+    },
+    "reads": {
+      "authentication": {
+        "ok": true,
+        "tokenPresent": true
+      },
+      "listedAccounts": {
+        "ok": false,
+        "count": 0,
+        "isolatedCount": 0,
+        "overlapCount": 0
+      },
+      "account": null,
+      "wallets": null,
+      "paymentMethods": null,
+      "capabilities": null
+    }
+  },
+  "moov_transfer_without_platform": {
+    "status": 200,
+    "ok": true,
+    "error": "sandbox_account_unmapped",
+    "message": "No sandbox payment methods are mapped for this tenant. Production Moov account IDs were not used.",
+    "sandboxHttpCalled": false,
+    "productionExecution": false
+  },
+  "production_moov_path": {
+    "status": 403,
+    "error": "provider_disabled"
+  },
+  "webhook_no_or_bad_secret": {
+    "status": 401,
+    "error": "sandbox_webhook_secret_unavailable",
+    "ok": false,
+    "duplicate": null
+  },
+  "c1c_moov_probe": {
+    "status": 200,
+    "ok": true,
+    "error": null,
+    "tenant": null
+  },
+  "identity": {
+    "status": 200,
+    "applicationUserId": "7dbb3009-f059-4767-b5dc-1c5c72379330",
+    "cognitoSubPresent": true
+  },
+  "lambda_flags": {
+    "AWS_PROVIDER_EXECUTION_ENABLED": "false",
+    "AWS_MOOV_ENABLED": "false",
+    "AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED": "true",
+    "AWS_PROVIDER_WEBHOOK_DRY_RUN": "true",
+    "AWS_FINANCIAL_PERMISSIONS_ACTIVATED": "false",
+    "AWS_CHECKALT_ENABLED": "false",
+    "AWS_PLAID_ENABLED": "false"
+  },
+  "secrets_present": {
+    "MOOV_SANDBOX_PUBLIC_KEY": true,
+    "MOOV_SANDBOX_SECRET_KEY": true,
+    "MOOV_SANDBOX_PLATFORM_ACCOUNT_ID": false,
+    "MOOV_SANDBOX_CONNECTED_ACCOUNT_ID": false,
+    "MOOV_SANDBOX_WEBHOOK_SECRET": false,
+    "MOOV_SANDBOX_ALLOWED_ORIGIN": false,
+    "MOOV_PLATFORM_ACCOUNT_ID_prod_key_absent": true
+  },
+  "bootstrap": {
+    "ok": false,
+    "classification": "BLOCKED BY PROVIDER TEST CONFIGURATION",
+    "error": "moov_account_create_401",
+    "oauth": true,
+    "usedProductionPlatformId": false,
+    "required": "Moov sandbox /accounts.write OR MOOV_SANDBOX_CONNECTED_ACCOUNT_ID",
+    "note": "Do not guess a sandbox account id and do not copy production."
+  },
+  "discovery": {
+    "oauth_accounts_read": true,
+    "oauth_accounts_write_token_mint": true,
+    "GET_/accounts": "401",
+    "POST_/accounts": "401",
+    "platform_discoverable_from_api": false,
+    "reason": "Sandbox API key can mint OAuth tokens but cannot list/create accounts; no connected account id in secrets to resolve wallet.partnerAccountID"
+  },
+  "certification": "BLOCKED",
+  "blocker": "MOOV_SANDBOX_PLATFORM_ACCOUNT_ID",
+  "manual_action_required": true
+}
