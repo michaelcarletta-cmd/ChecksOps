@@ -350,7 +350,38 @@ test('CheckAlt sandbox deposit converts cents with a synthetic non-negotiable im
   assert.equal(deposit.userAmount, 1);
   assert.equal(deposit.negotiableCheck, false);
   assert.equal(deposit.imageIncluded, true);
-  assert.equal(deposit.imageKind, 'synthetic_void_check_jpeg');
+  assert.equal(deposit.imageKind, 'synthetic_uat_via_prepare_pipeline');
+});
+
+test('CheckAlt UAT deposit body matches production prepare + submit contract', async () => {
+  const { buildCheckAltUatDepositBody } = await import('../functions/api/providers/checkalt-sandbox.mjs');
+  const packed = buildCheckAltUatDepositBody({
+    credentials: { fiKey: 'test-fi' },
+    amountCents: 1,
+    reference: 'ref',
+    ssoKey: 'sso-uat',
+    depositAccountNumber: 'acct-uat',
+  });
+  assert.equal(packed.request.fiKey, 'test-fi');
+  assert.equal(packed.request.ssoKey, 'sso-uat');
+  assert.equal(packed.request.depositAccountNumber, 'acct-uat');
+  assert.equal(packed.request.userAmount, 1);
+  assert.equal(packed.request.performRiskAssessment, true);
+  assert.equal(packed.request.testDeposit, undefined);
+  assert.ok(packed.request.captureDateTime);
+  assert.ok(packed.request.frontImage);
+  assert.ok(packed.request.rearImage);
+  assert.equal(packed.request.frontImage.startsWith('data:'), false);
+  assert.equal(packed.request.rearImage.startsWith('data:'), false);
+  assert.ok(Math.max(packed.meta.frontInfo.width, packed.meta.frontInfo.height) >= 1300);
+  assert.ok(Math.max(packed.meta.rearInfo.width, packed.meta.rearInfo.height) >= 1300);
+  assert.equal(packed.meta.frontInfo.landscape, true);
+  assert.equal(packed.meta.rearInfo.landscape, true);
+  assert.ok(packed.meta.frontInfo.preparedBytes <= 450_000);
+  assert.ok(packed.meta.rearInfo.preparedBytes <= 450_000);
+  assert.equal(packed.meta.imagePipeline.prepare, 'normalizeToBudget');
+  assert.equal(packed.meta.imagePipeline.targetMaxDim, 1600);
+  assert.equal(packed.meta.imagePipeline.minDim, 1300);
 });
 
 test('CheckAlt and Moov reject zero, negative, over-max, and extra precision', () => {

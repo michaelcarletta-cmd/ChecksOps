@@ -11,9 +11,8 @@ import {
 } from '../sandbox-credentials.mjs';
 import { SANDBOX_MIN_CENTS } from './moov-sandbox.mjs';
 import {
-  SYNTHETIC_VOID_FRONT_PNG_B64,
-  SYNTHETIC_VOID_REAR_PNG_B64,
-} from './checkalt-uat-images.mjs';
+  prepareSyntheticUatDepositImages,
+} from './parity/checkalt-image.mjs';
 
 /**
  * CheckAlt FinCapture `userAmount` is integer cents with no decimal point.
@@ -146,10 +145,14 @@ export const extractCheckAltStatus = (data = {}) => (
   data?.statusDescription || data?.status || data?.statusCode || data?.itemStatus || null
 );
 
-/** Minimal 1x1 PNG kept for unit tests. Live UAT process uses check-sized VOID fixtures. */
+/** Minimal 1x1 PNG kept for unit tests only — live UAT uses prepareSyntheticUatDepositImages. */
 export const SYNTHETIC_VOID_PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
-export const SYNTHETIC_UAT_CHECK_FRONT_B64 = SYNTHETIC_VOID_FRONT_PNG_B64;
-export const SYNTHETIC_UAT_CHECK_REAR_B64 = SYNTHETIC_VOID_REAR_PNG_B64;
+
+/**
+ * Build front/rear base64 through the same normalizeToBudget pipeline as
+ * production checkalt-prepare-image (landscape, 1600px, q78→35, ≥1300px, 450KB).
+ */
+export const buildPreparedSyntheticUatImages = () => prepareSyntheticUatDepositImages();
 
 export const convertChecksOpsCentsToCheckAltUserAmount = (cents) => {
   const validated = validateProviderCents(cents);
@@ -214,7 +217,7 @@ export const buildCheckAltSandboxDeposit = ({ amountCents = SANDBOX_MIN_CENTS, r
     reference: reference || null,
     negotiableCheck: false,
     imageIncluded: true,
-    imageKind: 'synthetic_void_check_jpeg',
+    imageKind: 'synthetic_uat_via_prepare_pipeline',
     unit: CHECKALT_USER_AMOUNT,
   };
 };
@@ -358,6 +361,10 @@ export const buildCheckAltUatDepositBody = ({
       negotiableCheck: false,
     };
   }
+  // Match production checkalt-submit-deposit process body field-for-field.
+  // Images go through normalizeToBudget (same constants as checkalt-prepare-image).
+  // No testDeposit — production does not send it. No data-URI prefix.
+  const images = prepareSyntheticUatDepositImages();
   return {
     request: {
       fiKey: credentials?.fiKey || null,
@@ -365,12 +372,17 @@ export const buildCheckAltUatDepositBody = ({
       depositAccountNumber,
       captureDateTime: new Date().toISOString(),
       userAmount: deposit.userAmount,
-      frontImage: SYNTHETIC_UAT_CHECK_FRONT_B64,
-      rearImage: SYNTHETIC_UAT_CHECK_REAR_B64,
-      performRiskAssessment: false,
-      testDeposit: true,
+      frontImage: images.frontImage,
+      rearImage: images.rearImage,
+      performRiskAssessment: true,
     },
-    meta: deposit,
+    meta: {
+      ...deposit,
+      imageKind: images.imageKind,
+      imagePipeline: images.pipeline,
+      frontInfo: images.frontInfo,
+      rearInfo: images.rearInfo,
+    },
   };
 };
 
