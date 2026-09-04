@@ -45,7 +45,7 @@ export function WhiteLabelLogin() {
 
   const resolveAndRedirect = async (userId: string, emailHint?: string | null) => {
     const emailLc = (emailHint ?? "").trim().toLowerCase();
-    if (isPlatformOwner(emailLc)) {
+    if (isPlatformOwner(emailLc, userId)) {
       navigate("/admin/tenants", { replace: true });
       return;
     }

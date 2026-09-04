@@ -1340,6 +1340,7 @@ export const executeCheckWorkflowWrite = async ({ client, mapping, table, op, va
     'notifications', 'tenant_documents', 'loss_draft_documents', 'mortgage_companies',
     'shared_check_messages', 'profiles', 'company_branding', 'referral_alerts',
     'tenants', 'privacy_notice_acknowledgments', 'tenant_users',
+    'cash_jobs', 'cash_job_line_items', 'cash_job_attachments', 'homeowner_ledger_events',
   ].includes(table)) {
     const { executeAppMetadataWrite } = await import('./write-app-metadata.mjs');
     return executeAppMetadataWrite({ client, mapping, table, op, values, filters });

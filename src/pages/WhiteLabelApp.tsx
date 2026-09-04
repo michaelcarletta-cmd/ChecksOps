@@ -75,7 +75,7 @@ function WhiteLabelRoutes() {
   });
 
   // Master merchant can preview any tenant's Check Center
-  const isMember = !!isTenantMember || isMasterMerchant(user?.email);
+  const isMember = !!isTenantMember || isMasterMerchant(user?.email, user?.id);
 
 
   if (loading || authLoading || (user && memberLoading)) {

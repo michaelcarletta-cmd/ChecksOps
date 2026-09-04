@@ -44,6 +44,8 @@ const READ_RPCS = new Set([
   'lookup_tenant_by_partner_code',
   'get_tenant_users_with_profiles',
   'is_approval_required',
+  'is_master_owner',
+  'is_platform_owner',
 ]);
 
 const RPC_UNWRAP_SINGLE_COLUMN = new Set([
@@ -59,6 +61,8 @@ const RPC_UNWRAP_SINGLE_COLUMN = new Set([
   'contractor_verification_status',
   'get_check_claim_settlement',
   'lookup_tenant_by_partner_code',
+  'is_master_owner',
+  'is_platform_owner',
 ]);
 
 export const ident = (name, kind = 'identifier') => {
