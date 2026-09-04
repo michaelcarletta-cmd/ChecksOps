@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { PLATFORM_OWNER_EMAIL } from "@/lib/masterMerchant";
+import { PLATFORM_OWNER_EMAIL, isPlatformOwner } from "@/lib/masterMerchant";
 import { TenantMoovIdentityCard } from "@/components/admin/TenantMoovIdentityCard";
 import { PlatformBankPanel } from "@/components/admin/PlatformBankPanel";
 import { PlatformTreasuryPanel } from "@/components/admin/PlatformTreasuryPanel";
@@ -97,11 +97,9 @@ export default function AdminTenants() {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       const email = session?.user?.email?.toLowerCase();
-      if (!email || email !== ALLOWED_EMAIL) {
-        setAuthorized(false);
-      } else {
-        setAuthorized(true);
-      }
+      const userId = session?.user?.id;
+      // Prefer application UUID (matches is_master_owner()); email is secondary.
+      setAuthorized(isPlatformOwner(email, userId));
       setAuthChecked(true);
     })();
   }, []);

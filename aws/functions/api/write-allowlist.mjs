@@ -629,6 +629,67 @@ export const WRITE_ALLOWLIST = {
     clientIgnored: new Set(['id', 'acknowledged_at', 'created_at']),
     frontend: { file: 'Privacy notice UI', op: 'insert', reason: 'Ack own notice; user_id server-derived.' },
   },
+  cash_jobs: {
+    tranche: 6,
+    ops: new Set(['insert', 'update', 'delete']),
+    columns: new Set([
+      'tenant_id',
+      'job_name', 'work_type', 'customer_name', 'customer_phone', 'customer_email',
+      'property_address', 'property_city', 'property_state', 'property_zip',
+      'contract_amount', 'estimate_date', 'start_date', 'completion_date',
+      'description', 'notes', 'status', 'updated_at',
+    ]),
+    identityColumn: 'created_by',
+    requiredForWrite: { insert: ['job_name', 'customer_name', 'tenant_id'] },
+    filterColumns: new Set(['id', 'tenant_id']),
+    clientIgnored: new Set(['id', 'created_at', 'total_paid', 'balance_due', 'created_by']),
+    frontend: {
+      file: 'CashJobForm',
+      op: 'insert/update/delete',
+      reason: 'Job estimate CRUD. Denies total_paid/balance_due; cash_job_payments stays financial.',
+    },
+  },
+  cash_job_line_items: {
+    tranche: 6,
+    ops: new Set(['insert', 'update', 'delete']),
+    columns: new Set([
+      'cash_job_id', 'tenant_id', 'description', 'quantity', 'unit_price', 'sort_order', 'total',
+    ]),
+    identityColumn: null,
+    requiredForWrite: { insert: ['cash_job_id', 'tenant_id', 'description'] },
+    filterColumns: new Set(['id', 'cash_job_id', 'tenant_id']),
+    clientIgnored: new Set(['id', 'created_at']),
+    frontend: { file: 'CashJobForm', op: 'insert/delete', reason: 'Line-item metadata for cash jobs.' },
+  },
+  cash_job_attachments: {
+    tranche: 6,
+    ops: new Set(['insert', 'delete']),
+    columns: new Set([
+      'cash_job_id', 'tenant_id', 'file_path', 'file_name', 'file_type', 'file_size', 'attachment_type',
+    ]),
+    identityColumn: 'uploaded_by',
+    requiredForWrite: { insert: ['cash_job_id', 'tenant_id', 'file_path', 'file_name'] },
+    filterColumns: new Set(['id', 'cash_job_id', 'tenant_id']),
+    clientIgnored: new Set(['id', 'created_at', 'uploaded_by']),
+    frontend: { file: 'CashJobDetail', op: 'insert/delete', reason: 'Attachment metadata only.' },
+  },
+  homeowner_ledger_events: {
+    tranche: 6,
+    ops: new Set(['insert']),
+    columns: new Set([
+      'tenant_id', 'claim_id', 'check_id', 'case_id', 'event_type',
+      'occurred_at', 'actor_label', 'payload_json',
+    ]),
+    identityColumn: 'created_by',
+    requiredForWrite: { insert: ['tenant_id', 'claim_id', 'event_type'] },
+    filterColumns: new Set(['id', 'tenant_id', 'claim_id']),
+    clientIgnored: new Set(['id', 'created_at', 'created_by', 'amount']),
+    frontend: {
+      file: 'PostHomeownerUpdateCard / MortgageOps',
+      op: 'insert',
+      reason: 'Timeline notes only. amount is ignored/denied; no payment movement.',
+    },
+  },
 };
 
 export const FINANCIAL_OR_PROVIDER_TABLES = new Set([
@@ -684,7 +745,14 @@ export const pickAllowlistedValues = (table, values = {}) => {
   const denied = [];
   const ignored = [];
   for (const [key, value] of Object.entries(values || {})) {
-    if (IGNORED.has(key) || key === spec.identityColumn || extraIgnored.has(key)) {
+    // Always ignore server-owned identity column (e.g. created_by / uploaded_by).
+    if (key === spec.identityColumn || extraIgnored.has(key)) {
+      ignored.push(key);
+      continue;
+    }
+    // Global identity keys are ignored unless this table explicitly allowlists them
+    // (e.g. tenant_id on membership-scoped inserts — executor still verifies membership).
+    if (IGNORED.has(key) && !spec.columns.has(key)) {
       ignored.push(key);
       continue;
     }

@@ -59,7 +59,7 @@ export function CheckUsageCard() {
     },
   });
 
-  const showBillingAmounts = isPlatformOwner(user?.email) || tenant?.per_check_billing_enabled;
+  const showBillingAmounts = isPlatformOwner(user?.email, user?.id) || tenant?.per_check_billing_enabled;
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["check-usage-current-month", tenantId],

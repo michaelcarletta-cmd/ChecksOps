@@ -84,6 +84,7 @@ export const resolveIdentitySession = async ({
     const profile = (await client.query(PROFILE_SQL, [mapping.application_user_id])).rows[0] || null;
     const tenants = (await client.query(TENANT_MEMBERSHIP_SQL, [mapping.application_user_id])).rows;
     const roles = (await client.query(USER_ROLES_SQL, [mapping.application_user_id])).rows.map((row) => row.role);
+    const masterOwner = (await client.query('SELECT public.is_master_owner() AS is_master_owner')).rows[0]?.is_master_owner === true;
 
     await client.query('ROLLBACK');
 
@@ -94,6 +95,7 @@ export const resolveIdentitySession = async ({
       applicationUserId: mapping.application_user_id,
       authUid: uid,
       mappingStatus: mapping.status,
+      isMasterOwner: masterOwner,
       profile: profile ? {
         id: profile.id,
         email: jsonSafe(profile.email),

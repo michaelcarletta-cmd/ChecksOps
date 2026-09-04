@@ -66,7 +66,7 @@ export function TenantPartnerManager() {
       // Preflight: confirm current user is actually a member of their tenant.
       // Master merchant / super admins bypass this check so they can help tenants
       // during preview without being added to tenant_users.
-      const superAdmin = isMasterMerchant(user!.email);
+      const superAdmin = isMasterMerchant(user!.email, user!.id);
       if (!superAdmin) {
         const { data: membership, error: memErr } = await supabase
           .from("tenant_users")

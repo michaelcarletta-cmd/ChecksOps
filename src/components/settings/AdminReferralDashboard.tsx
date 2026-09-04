@@ -16,7 +16,7 @@ export function AdminReferralDashboard() {
   const [search, setSearch] = useState("");
 
   // Only show to admin
-  if (!isPlatformOwner(user?.email)) return null;
+  if (!isPlatformOwner(user?.email, user?.id)) return null;
 
   const { data: tenants = [], isLoading } = useQuery({
     queryKey: ["admin-referral-tenants"],

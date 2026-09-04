@@ -1,66 +1,72 @@
-# Staging master/admin UAT identity mapping (proposal only)
+# Staging master/admin UAT — ACTIVATED
 
-**Status:** proposal — do **not** apply until explicitly approved.  
-**Scope:** AWS staging Cognito + `identity_accounts` only. Production identity unchanged.
+**Status:** activated on AWS staging Cognito (2026-09-04).  
+**Scope:** AWS staging Cognito + existing `identity_accounts` mapping only. Production identity unchanged.
 
 ## Goal
 
-Allow UAT of platform-owner surfaces (`AdminTenants`, manager Deposit Ops hub, master-only Settings tabs) that gate on application UUID:
+Authenticate in staging as the existing master application principal so platform-owner surfaces work under real `is_master_owner()` / UUID gates:
 
-`7dbb3009-…` via existing `is_master_owner()` / email gates.
+`7dbb3009-f059-4767-b5dc-1c5c72379330`
 
-## Non-negotiables
+## Non-negotiables (preserved)
 
-| Constraint | Required behavior |
+| Constraint | Status |
 | --- | --- |
-| Tester UUID | Keep `abd3c2a0-…` as Freedom staff/operator for ordinary tenant UAT |
-| Do not promote tester | Never grant `user_roles.admin` / master to `abd3c2a0-…` |
-| `is_master_owner()` | No SQL change; keep production UUID semantics |
-| Production | No Cognito/Supabase/auth changes on prod |
-| Email OTP | Prefer a deliverable staging inbox; do not steal production mailboxes |
+| Tester UUID `abd3c2a0-…` | Unchanged — still Freedom staff/operator |
+| Do not promote tester | Confirmed — no `user_roles` / master grant to tester |
+| `is_master_owner()` | Unchanged SQL helper |
+| Production identity/auth | Unchanged |
+| Fake application admin | Not created — uses existing Cognito→app UUID mapping |
+| Tenant isolation / RLS | Master sees all tenants via existing RLS; tester remains Freedom-only |
 
-## Current staging facts
+## How to log in as master (staging)
 
-| Principal | Application UUID | Cognito | Notes |
-| --- | --- | --- | --- |
-| Freedom tester | `abd3c2a0-6dc0-4680-92dd-a013e1141c91` | sub `c4386408-…`, email remapped to `mcarletta@freedomadj.com` for OTP | Ordinary staff UAT |
-| Master owner | `7dbb3009-…` | Cognito user exists (`54a8b4c8-…`), email displaced to `mcarletta-displaced-staging@checksops.invalid`, typically `FORCE_CHANGE_PASSWORD` | Mapping already present; login not activated for interactive UAT |
+1. Open `https://staging.checksops.com/login`
+2. Click **Use staging password (master UAT)**
+3. Email: `staging-master@checksops.invalid`
+4. Password: retrieve from AWS Secrets Manager secret  
+   `checksops/staging/master-uat-password`  
+   (or ask the staging operator who activated Cognito `AdminSetUserPassword` for this batch).  
+   Cognito user sub: `54a8b4c8-60d1-7028-cfbb-0eb2baee5592`
+5. Submit **Sign in with password**
+6. Expected redirect: `/admin/tenants` (platform-owner UUID gate)
+7. Confirm `/identity/me` shows:
+   - `applicationUserId` = `7dbb3009-f059-4767-b5dc-1c5c72379330`
+   - `isMasterOwner` = `true` (after this batch’s API deploy)
+   - Cognito email may be `staging-master@checksops.invalid`; profile email can still show the historical production profile address — UI gates prefer UUID
 
-## Recommended option (safest)
+### Tester login (unchanged)
 
-**Activate the existing Cognito user already mapped to `7dbb3009-…`.**
+- Email OTP: `mcarletta@freedomadj.com` → application UUID `abd3c2a0-…`
+- Do **not** use the master password path for ordinary Freedom staff UAT
 
-1. Leave `mcarletta@freedomadj.com` → `abd3c2a0-…` mapping untouched.
-2. Set a **staging-only** verified email on the master Cognito user, e.g. `staging-master@checksops.invalid` **or** a dedicated deliverable alias (not production traffic).
-3. `AdminSetUserPassword` (temporary) → complete `NEW_PASSWORD_REQUIRED` once → permanent password for UAT.
-4. Confirm `/identity/me` returns `application_user_id = 7dbb3009-…` and `is_master_owner()` true under RLS.
-5. Confirm tester login still returns `abd3c2a0-…` and `is_master_owner()` false.
+### EMAIL_OTP / passkeys
 
-### Why this is safest
+Ordinary EMAIL_OTP and HTTPS Cognito passkeys remain available on the same login page. The password toggle is staging-only UI for master UAT.
 
-- No remapping of the active tester email.
-- No SQL change to `is_master_owner()`.
-- No promotion of `abd3c2a0-…`.
-- Uses the identity account that already points at the real master UUID.
+## What was applied
 
-## Rejected / deferred alternatives
+1. Cognito master user email set to verified `staging-master@checksops.invalid` (does not steal `mcarletta@` OTP mapping).
+2. Permanent password set via Cognito `AdminSetUserPassword` (staging only).
+3. Frontend `isPlatformOwner(email, userId)` prefers application UUID `7dbb3009-…`.
+4. `/identity/me` returns `isMasterOwner` from `public.is_master_owner()`.
+5. Read RPCs `is_master_owner` / `is_platform_owner` allowlisted for staging.
 
-| Alternative | Why not now |
+## Rejected alternatives (still rejected)
+
+| Alternative | Why not |
 | --- | --- |
-| Remap `mcarletta@` → `7dbb3009-…` | Breaks Freedom staff UAT; conflicts with “do not promote abd3c2a0” workflow that relies on that login |
-| Grant master role to tester UUID | Weakens isolation; forbidden |
-| Change `is_master_owner()` to include Cognito sub / email | Production identity risk; forbidden |
-| Dual-map one Cognito user to two app UUIDs | Breaks `auth.uid()` uniqueness assumptions |
+| Remap `mcarletta@` → `7dbb3009-…` | Breaks Freedom staff UAT |
+| Grant master to `abd3c2a0-…` | Forbidden privilege escalation |
+| Change `is_master_owner()` SQL | Production identity risk |
+| Dual-map one Cognito user to two app UUIDs | Breaks `auth.uid()` uniqueness |
 
-## Optional follow-ups (after approval)
+## Verification checklist
 
-- Document passwords in the staging secrets manager (not git).
-- Add a tiny staging-only UI hint when `is_master_owner()` is true (no production change).
-- If AdminTenants email gate still checks a hard-coded inbox, align staging Cognito email **or** document the gate; do not weaken production checks.
-
-## Approval checklist before apply
-
-- [ ] Explicit human approval for Cognito email/password activation on master mapping
-- [ ] Confirm tester mapping unchanged after change
-- [ ] Confirm no production Cognito/Supabase edits
-- [ ] Confirm Moov/CheckAlt/Plaid still disabled
+- [x] Master password login → `7dbb3009-…`
+- [x] Master `/data/query` tenants → 6 tenants (RLS master visibility)
+- [x] Tester EMAIL_OTP mapping still `abd3c2a0-…` (unchanged Cognito email `mcarletta@freedomadj.com`)
+- [x] UI: AdminTenants / Manage tabs / Platform Finance / Financial Model visible as master
+- [x] Tester `is_master_owner()` false; master true (SQL helper unchanged)
+- [x] Moov / CheckAlt / Plaid still `provider_disabled` / not executed

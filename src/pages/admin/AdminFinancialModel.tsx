@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { PLATFORM_OWNER_EMAIL } from "@/lib/masterMerchant";
+import { PLATFORM_OWNER_EMAIL, isPlatformOwner } from "@/lib/masterMerchant";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,8 @@ export default function AdminFinancialModel() {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       const email = session?.user?.email?.toLowerCase();
-      setAuthorized(!!email && email === ALLOWED_EMAIL);
+      const userId = session?.user?.id;
+      setAuthorized(isPlatformOwner(email, userId));
       setAuthChecked(true);
     })();
   }, []);

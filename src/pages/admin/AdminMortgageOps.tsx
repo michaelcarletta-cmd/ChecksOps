@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { PLATFORM_OWNER_EMAIL } from "@/lib/masterMerchant";
+import { PLATFORM_OWNER_EMAIL, isPlatformOwner } from "@/lib/masterMerchant";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -50,7 +50,7 @@ export default function AdminMortgageOps() {
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user || user.email !== ALLOWED_EMAIL) {
+      if (!user || !isPlatformOwner(user.email, user.id)) {
         toast.error("Not authorized");
         navigate("/");
         return;

@@ -520,6 +520,290 @@ export const executePrivacyAck = async ({ client, mapping, values }) => {
   return { rows };
 };
 
+const SAFE_LEDGER_EVENT_TYPES = new Set([
+  'ops_note',
+  'mortgage_update',
+  'mortgage_followup',
+  'document_uploaded',
+  'document_sent',
+  'document_shared',
+  'document_delivered',
+  'document_viewed',
+  'signature_reminder',
+  'mortgage_check_sent',
+  'mortgage_check_returned',
+  'contractor_upload',
+  'homeowner_check_upload',
+  'homeowner_upload_attached',
+  'production_doc_uploaded',
+]);
+
+/** UI aliases that are not in the DB check constraint — coerce to ops_note. */
+const LEDGER_EVENT_ALIASES = {
+  tenant_update: 'ops_note',
+  status_update: 'ops_note',
+};
+
+export const executeHomeownerLedgerEvents = async ({ client, mapping, values }) => {
+  if (values.amount !== undefined && values.amount !== null) {
+    return { error: 'column_not_allowlisted', columns: ['amount'], table: 'homeowner_ledger_events' };
+  }
+  const tenantId = values.tenant_id;
+  const claimId = values.claim_id;
+  if (!isUuid(tenantId)) return { error: 'invalid_uuid', field: 'tenant_id' };
+  if (!isUuid(claimId)) return { error: 'invalid_uuid', field: 'claim_id' };
+  if (!(await memberOfTenant(client, mapping.application_user_id, tenantId))) {
+    return { error: 'not_authorized', message: 'Not a member of tenant' };
+  }
+  let eventType = clip(values.event_type, 80);
+  if (eventType?.error || !eventType) {
+    return eventType?.error || { error: 'missing_required_field', field: 'event_type' };
+  }
+  if (LEDGER_EVENT_ALIASES[eventType]) {
+    eventType = LEDGER_EVENT_ALIASES[eventType];
+  }
+  if (!SAFE_LEDGER_EVENT_TYPES.has(eventType)) {
+    return { error: 'event_type_not_allowlisted', event_type: eventType };
+  }
+  const actor = clip(values.actor_label, 200);
+  if (actor?.error) return actor;
+  let checkId = values.check_id || null;
+  if (checkId && !isUuid(checkId)) return { error: 'invalid_uuid', field: 'check_id' };
+  let caseId = values.case_id || null;
+  if (caseId && !isUuid(caseId)) return { error: 'invalid_uuid', field: 'case_id' };
+  const occurredAt = values.occurred_at || new Date().toISOString();
+  const payload = values.payload_json && typeof values.payload_json === 'object'
+    ? values.payload_json
+    : (values.payload_json ? JSON.parse(String(values.payload_json)) : {});
+  const rows = (await client.query(
+    `INSERT INTO public.homeowner_ledger_events (
+       tenant_id, claim_id, check_id, case_id, event_type, occurred_at,
+       actor_label, payload_json, created_by, amount
+     ) VALUES (
+       $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text, $6::timestamptz,
+       $7::text, $8::jsonb, $9::uuid, NULL
+     ) RETURNING *`,
+    [
+      tenantId, claimId, checkId, caseId, eventType, occurredAt,
+      actor, JSON.stringify(payload || {}), mapping.application_user_id,
+    ],
+  )).rows;
+  return { rows };
+};
+
+export const executeCashJobs = async ({ client, mapping, op, values, filters }) => {
+  if (op === 'insert') {
+    const tenantId = values.tenant_id;
+    if (!isUuid(tenantId)) return { error: 'invalid_uuid', field: 'tenant_id' };
+    if (!(await memberOfTenant(client, mapping.application_user_id, tenantId))) {
+      return { error: 'not_authorized', message: 'Not a member of tenant' };
+    }
+    const jobName = clip(values.job_name, 200);
+    if (jobName?.error || !jobName) return jobName?.error || { error: 'missing_required_field', field: 'job_name' };
+    const customerName = clip(values.customer_name, 200);
+    if (customerName?.error || !customerName) {
+      return customerName?.error || { error: 'missing_required_field', field: 'customer_name' };
+    }
+    const workType = clip(values.work_type || 'other', 40);
+    if (workType?.error) return workType;
+    const status = clip(values.status || 'estimate', 40);
+    if (status?.error) return status;
+    const contractAmount = values.contract_amount == null || values.contract_amount === ''
+      ? 0
+      : Number(values.contract_amount);
+    if (!Number.isFinite(contractAmount) || contractAmount < 0) {
+      return { error: 'invalid_field', field: 'contract_amount' };
+    }
+    const phone = clip(values.customer_phone, 40);
+    if (phone?.error) return phone;
+    const email = clip(values.customer_email, 200);
+    if (email?.error) return email;
+    const address = clip(values.property_address, 300);
+    if (address?.error) return address;
+    const city = clip(values.property_city, 120);
+    if (city?.error) return city;
+    const state = clip(values.property_state, 40);
+    if (state?.error) return state;
+    const zip = clip(values.property_zip, 20);
+    if (zip?.error) return zip;
+    const description = clip(values.description, 4000);
+    if (description?.error) return description;
+    const notes = clip(values.notes, 4000);
+    if (notes?.error) return notes;
+    const rows = (await client.query(
+      `INSERT INTO public.cash_jobs (
+         tenant_id, created_by, job_name, work_type, customer_name, customer_phone,
+         customer_email, property_address, property_city, property_state, property_zip,
+         contract_amount, estimate_date, start_date, completion_date, description, notes, status
+       ) VALUES (
+         $1::uuid, $2::uuid, $3::text, $4::cash_job_work_type, $5::text, $6::text,
+         $7::text, $8::text, $9::text, $10::text, $11::text,
+         $12::numeric, $13::date, $14::date, $15::date, $16::text, $17::text, $18::cash_job_status
+       ) RETURNING *`,
+      [
+        tenantId,
+        mapping.application_user_id,
+        jobName,
+        workType,
+        customerName,
+        phone,
+        email,
+        address,
+        city,
+        state,
+        zip,
+        contractAmount,
+        values.estimate_date || null,
+        values.start_date || null,
+        values.completion_date || null,
+        description,
+        notes,
+        status,
+      ],
+    )).rows;
+    return { rows };
+  }
+
+  const id = eqFilter(filters, 'id');
+  if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
+
+  if (op === 'delete') {
+    const rows = (await client.query(
+      'DELETE FROM public.cash_jobs WHERE id = $1::uuid RETURNING *',
+      [id],
+    )).rows;
+    if (!rows.length) return { error: 'rls_denied', message: 'cash_job not writable' };
+    return { rows };
+  }
+
+  const casts = {
+    contract_amount: 'numeric',
+    estimate_date: 'date',
+    start_date: 'date',
+    completion_date: 'date',
+    work_type: 'cash_job_work_type',
+    status: 'cash_job_status',
+  };
+  const built = buildSet(values, casts);
+  if (!built.sets.length) return { error: 'missing_required_field', field: 'values' };
+  built.params.push(id);
+  const rows = (await client.query(
+    `UPDATE public.cash_jobs SET ${built.sets.join(', ')}, updated_at = now()
+     WHERE id = $${built.next}::uuid RETURNING *`,
+    built.params,
+  )).rows;
+  if (!rows.length) return { error: 'rls_denied', message: 'cash_job not writable' };
+  return { rows };
+};
+
+export const executeCashJobLineItems = async ({ client, mapping, op, values, filters }) => {
+  if (op === 'insert') {
+    const tenantId = values.tenant_id;
+    const jobId = values.cash_job_id;
+    if (!isUuid(tenantId)) return { error: 'invalid_uuid', field: 'tenant_id' };
+    if (!isUuid(jobId)) return { error: 'invalid_uuid', field: 'cash_job_id' };
+    if (!(await memberOfTenant(client, mapping.application_user_id, tenantId))) {
+      return { error: 'not_authorized', message: 'Not a member of tenant' };
+    }
+    const description = clip(values.description, 500);
+    if (description?.error || !description) {
+      return description?.error || { error: 'missing_required_field', field: 'description' };
+    }
+    const quantity = Number(values.quantity ?? 1);
+    const unitPrice = Number(values.unit_price ?? 0);
+    if (!Number.isFinite(quantity) || !Number.isFinite(unitPrice)) {
+      return { error: 'invalid_field', field: 'quantity_or_unit_price' };
+    }
+    const total = values.total == null ? quantity * unitPrice : Number(values.total);
+    const sortOrder = Number(values.sort_order ?? 0);
+    const rows = (await client.query(
+      `INSERT INTO public.cash_job_line_items (
+         cash_job_id, tenant_id, description, quantity, unit_price, total, sort_order
+       ) VALUES ($1::uuid, $2::uuid, $3::text, $4::numeric, $5::numeric, $6::numeric, $7::int)
+       RETURNING *`,
+      [jobId, tenantId, description, quantity, unitPrice, total, sortOrder],
+    )).rows;
+    return { rows };
+  }
+
+  if (op === 'delete') {
+    const id = eqFilter(filters, 'id');
+    const jobId = eqFilter(filters, 'cash_job_id');
+    if (id) {
+      if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
+      const rows = (await client.query(
+        'DELETE FROM public.cash_job_line_items WHERE id = $1::uuid RETURNING *',
+        [id],
+      )).rows;
+      return { rows };
+    }
+    if (jobId) {
+      if (!isUuid(jobId)) return { error: 'invalid_uuid', field: 'cash_job_id' };
+      const rows = (await client.query(
+        'DELETE FROM public.cash_job_line_items WHERE cash_job_id = $1::uuid RETURNING *',
+        [jobId],
+      )).rows;
+      return { rows };
+    }
+    return { error: 'missing_required_field', field: 'id_or_cash_job_id' };
+  }
+
+  const id = eqFilter(filters, 'id');
+  if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
+  const casts = { quantity: 'numeric', unit_price: 'numeric', total: 'numeric', sort_order: 'int' };
+  const built = buildSet(values, casts);
+  if (!built.sets.length) return { error: 'missing_required_field', field: 'values' };
+  built.params.push(id);
+  const rows = (await client.query(
+    `UPDATE public.cash_job_line_items SET ${built.sets.join(', ')}
+     WHERE id = $${built.next}::uuid RETURNING *`,
+    built.params,
+  )).rows;
+  if (!rows.length) return { error: 'rls_denied', message: 'line item not writable' };
+  return { rows };
+};
+
+export const executeCashJobAttachments = async ({ client, mapping, op, values, filters }) => {
+  if (op === 'insert') {
+    const tenantId = values.tenant_id;
+    const jobId = values.cash_job_id;
+    if (!isUuid(tenantId)) return { error: 'invalid_uuid', field: 'tenant_id' };
+    if (!isUuid(jobId)) return { error: 'invalid_uuid', field: 'cash_job_id' };
+    if (!(await memberOfTenant(client, mapping.application_user_id, tenantId))) {
+      return { error: 'not_authorized', message: 'Not a member of tenant' };
+    }
+    const filePath = clip(values.file_path, 512);
+    if (filePath?.error || !filePath) return filePath?.error || { error: 'missing_required_field', field: 'file_path' };
+    const fileName = clip(values.file_name, 255);
+    if (fileName?.error || !fileName) return fileName?.error || { error: 'missing_required_field', field: 'file_name' };
+    const rows = (await client.query(
+      `INSERT INTO public.cash_job_attachments (
+         cash_job_id, tenant_id, file_path, file_name, file_type, file_size, attachment_type, uploaded_by
+       ) VALUES ($1::uuid, $2::uuid, $3::text, $4::text, $5::text, $6::bigint, $7::text, $8::uuid)
+       RETURNING *`,
+      [
+        jobId, tenantId, filePath, fileName,
+        clip(values.file_type, 120) || null,
+        values.file_size == null ? null : Number(values.file_size),
+        clip(values.attachment_type, 80) || null,
+        mapping.application_user_id,
+      ],
+    )).rows;
+    return { rows };
+  }
+  if (op === 'delete') {
+    const id = eqFilter(filters, 'id');
+    if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
+    const rows = (await client.query(
+      'DELETE FROM public.cash_job_attachments WHERE id = $1::uuid RETURNING *',
+      [id],
+    )).rows;
+    if (!rows.length) return { error: 'rls_denied', message: 'attachment not writable' };
+    return { rows };
+  }
+  return { error: 'operation_not_allowlisted', op };
+};
+
 export const executeAppMetadataWrite = async ({ client, mapping, table, op, values, filters }) => {
   switch (table) {
     case 'notifications':
@@ -544,6 +828,14 @@ export const executeAppMetadataWrite = async ({ client, mapping, table, op, valu
       return executePrivacyAck({ client, mapping, values });
     case 'tenant_users':
       return executeTenantUsers({ client, mapping, op, values, filters });
+    case 'cash_jobs':
+      return executeCashJobs({ client, mapping, op, values, filters });
+    case 'cash_job_line_items':
+      return executeCashJobLineItems({ client, mapping, op, values, filters });
+    case 'cash_job_attachments':
+      return executeCashJobAttachments({ client, mapping, op, values, filters });
+    case 'homeowner_ledger_events':
+      return executeHomeownerLedgerEvents({ client, mapping, values });
     default:
       return { error: 'table_not_allowlisted', table };
   }
