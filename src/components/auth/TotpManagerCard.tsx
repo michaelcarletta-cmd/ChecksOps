@@ -51,6 +51,13 @@ export function TotpManagerCard() {
     const { data } = await supabase.auth.mfa.listFactors();
     const factor = (data?.totp ?? []).find((f) => f.status === "verified");
     if (!factor) return;
+    // Removing a verified factor requires a fresh code first (AAL2).
+    const ok = await requireStepUp({
+      actionKey: "totp.unenroll",
+      title: "Confirm before removing",
+      description: "Enter a current code from your authenticator app to remove it.",
+    });
+    if (!ok) return;
     const { error } = await supabase.auth.mfa.unenroll({ factorId: factor.id });
     if (error) {
       toast({ title: "Could not remove", description: error.message, variant: "destructive" });
@@ -63,6 +70,7 @@ export function TotpManagerCard() {
     await refreshFactors();
     await load();
   };
+
 
   return (
     <Card>
