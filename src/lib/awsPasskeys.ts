@@ -7,6 +7,7 @@ import {
   startRegistration,
   browserSupportsWebAuthn,
 } from "@simplewebauthn/browser";
+import { supabase } from "@/integrations/supabase/client";
 import {
   AWS_STAGING_HTTPS_ORIGIN,
   AWS_STAGING_RP_ID,
@@ -73,64 +74,38 @@ const post = async (
   return payload;
 };
 
+type CognitoAuthTokens = {
+  idToken: string;
+  accessToken: string;
+  refreshToken?: string | null;
+  expiresIn?: number;
+};
+
+/**
+ * Persist Cognito tokens and notify React auth (useAuth) via SIGNED_IN.
+ * Writing localStorage alone is not enough — guards read useAuth().user.
+ */
 const persistAwsSession = async (
-  tokens: {
-    idToken: string;
-    accessToken: string;
-    refreshToken?: string | null;
-    expiresIn?: number;
-  },
+  tokens: CognitoAuthTokens,
   emailHint?: string,
 ) => {
-  const identityResponse = await fetch(`${awsApiBaseUrl()}/identity/me`, {
-    headers: { authorization: `Bearer ${tokens.idToken}` },
-  });
-  const identity: any = await identityResponse.json().catch(() => ({}));
-  if (!identityResponse.ok || !identity?.applicationUserId) {
-    throw new Error(String(identity?.error || "This AWS identity is not linked to a ChecksOps user."));
-  }
-  if (String(identity.applicationUserId) === String(identity.cognitoSub || "")) {
-    throw new Error("Unsafe AWS identity mapping was refused.");
+  const establish = (supabase.auth as any).establishCognitoSession as
+    | ((auth: CognitoAuthTokens, email?: string | null) => Promise<{
+      data: { user: { id: string; email?: string } | null };
+      error: { message?: string } | null;
+    }>)
+    | undefined;
+
+  if (typeof establish === "function") {
+    const { data, error } = await establish(tokens, emailHint || null);
+    if (error || !data.user?.id) {
+      throw new Error(error?.message || "Could not establish the AWS staging session.");
+    }
+    return { id: String(data.user.id), email: String(data.user.email || emailHint || "") };
   }
 
-  const now = new Date().toISOString();
-  const mappedEmail = String(identity?.profile?.email || identity?.email || emailHint || "");
-  const user = {
-    id: String(identity.applicationUserId),
-    aud: "authenticated",
-    role: "authenticated",
-    email: mappedEmail,
-    email_confirmed_at: now,
-    phone: "",
-    confirmed_at: now,
-    last_sign_in_at: now,
-    app_metadata: { provider: "cognito", providers: ["cognito"] },
-    user_metadata: {
-      email: mappedEmail,
-      full_name: identity?.profile?.fullName || null,
-      application_user_id: String(identity.applicationUserId),
-    },
-    identities: [],
-    created_at: now,
-    updated_at: now,
-    is_anonymous: false,
-  };
-  const expiresIn = Number(tokens.expiresIn || 3600);
-  const expiresAt = Math.floor(Date.now() / 1000) + expiresIn;
-  localStorage.setItem(
-    AUTH_KEY,
-    JSON.stringify({
-      tokens: {
-        idToken: tokens.idToken,
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken || null,
-        expiresIn,
-      },
-      user,
-      expiresAt,
-    }),
-  );
-  return user;
+  // Fallback for non-AWS builds (should not run when VITE_AUTH_PROVIDER=cognito).
+  throw new Error("AWS Cognito session handoff is unavailable in this build.");
 };
 
 /** Register a Cognito passkey after EMAIL_OTP (or other) sign-in. */
@@ -180,8 +155,7 @@ export async function signInWithAwsPasskey(email: string): Promise<{ id: string;
 
   const start = await post("/auth/passkey/authenticate/start", { email: normalized });
   if (start.completed && start.authentication?.idToken) {
-    const user = await persistAwsSession(start.authentication, normalized);
-    return { id: user.id, email: user.email };
+    return persistAwsSession(start.authentication, normalized);
   }
   if (start.error === "webauthn_unavailable" || !start.options || !start.session) {
     throw new Error(
@@ -205,8 +179,7 @@ export async function signInWithAwsPasskey(email: string): Promise<{ id: string;
   if (!verified.authentication?.idToken) {
     throw new Error("AWS did not return an authenticated session.");
   }
-  const user = await persistAwsSession(verified.authentication, normalized);
-  return { id: user.id, email: user.email };
+  return persistAwsSession(verified.authentication, normalized);
 }
 
 export const AWS_PASSKEY_META = {

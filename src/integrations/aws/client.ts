@@ -591,6 +591,39 @@ export function createAwsStagingClient() {
         return { data: { user: null, session: null }, error: authError(error.message || "setSession failed") };
       }
     },
+    /**
+     * Establish an AWS staging session from Cognito AuthenticationResult tokens.
+     * Stores id/access/refresh tokens, maps /identity/me → application UUID, and
+     * emits SIGNED_IN so useAuth() updates (required after passkey login).
+     */
+    establishCognitoSession: async (
+      authentication: {
+        idToken: string;
+        accessToken: string;
+        refreshToken?: string | null;
+        expiresIn?: number;
+      },
+      emailFallback?: string | null,
+    ) => {
+      try {
+        const mapped = await identityFromTokens(
+          {
+            idToken: authentication.idToken,
+            accessToken: authentication.accessToken,
+            refreshToken: authentication.refreshToken || null,
+            expiresIn: authentication.expiresIn || 3600,
+          },
+          emailFallback,
+        );
+        emit("SIGNED_IN", mapped.session);
+        return { data: { user: mapped.user, session: mapped.session }, error: null };
+      } catch (error: any) {
+        return {
+          data: { user: null, session: null },
+          error: authError(error.message || "establishCognitoSession failed"),
+        };
+      }
+    },
     signUp: async () => ({
       data: { user: null, session: null },
       error: authError("signUp is disabled on AWS staging"),
