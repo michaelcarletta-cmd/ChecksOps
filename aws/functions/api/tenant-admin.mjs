@@ -9,6 +9,13 @@ import {
   DeleteSecretCommand,
   GetSecretValueCommand,
 } from '@aws-sdk/client-secrets-manager';
+import {
+  CognitoIdentityProviderClient,
+  AdminCreateUserCommand,
+  AdminGetUserCommand,
+  AdminDisableUserCommand,
+  AdminSetUserPasswordCommand,
+} from '@aws-sdk/client-cognito-identity-provider';
 import { withIdentity, parseBody, ignoredSpoof } from './data.mjs';
 import { normalizeEmail } from './email-policy.mjs';
 import { sendViaSesOrSink } from './email.mjs';
@@ -16,27 +23,31 @@ import { sendViaSesOrSink } from './email.mjs';
 const POOL_ID = () => process.env.COGNITO_USER_POOL_ID;
 const CLIENT_ID = () => process.env.COGNITO_CLIENT_ID;
 const sm = () => new SecretsManagerClient({ region: process.env.AWS_REGION || 'us-east-1' });
+const cognito = () => new CognitoIdentityProviderClient({ region: process.env.AWS_REGION || 'us-east-1' });
 
+/** Admin Cognito APIs require SigV4 (Lambda execution role). Unsigned fetch returns Missing Authentication Token. */
 const cognitoJson = async (target, payload) => {
-  const response = await fetch('https://cognito-idp.us-east-1.amazonaws.com/', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/x-amz-json-1.1',
-      'x-amz-target': `AWSCognitoIdentityProviderService.${target}`,
-    },
-    body: JSON.stringify(payload),
-  });
-  const text = await response.text();
-  let body = {};
-  try { body = text ? JSON.parse(text) : {}; } catch { body = { message: text.slice(0, 200) }; }
-  if (!response.ok) {
-    const error = new Error(body.message || body.Message || body.__type || 'CognitoError');
-    error.name = String(body.__type || 'CognitoError').split('#').pop();
-    error.statusCode = response.status;
-    error.body = body;
+  const commands = {
+    AdminCreateUser: AdminCreateUserCommand,
+    AdminGetUser: AdminGetUserCommand,
+    AdminDisableUser: AdminDisableUserCommand,
+    AdminSetUserPassword: AdminSetUserPasswordCommand,
+  };
+  const Command = commands[target];
+  if (!Command) {
+    const error = new Error(`unsupported_cognito_admin_target:${target}`);
+    error.name = 'UnsupportedCognitoAdminTarget';
     throw error;
   }
-  return body;
+  try {
+    return await cognito().send(new Command(payload));
+  } catch (err) {
+    const error = new Error(err?.message || err?.name || 'CognitoError');
+    error.name = String(err?.name || 'CognitoError').split('#').pop();
+    error.statusCode = err?.$metadata?.httpStatusCode || 502;
+    error.body = { message: err?.message, __type: err?.name };
+    throw error;
+  }
 };
 
 const assertTenantAdmin = async (client, mapping, tenantId) => {
@@ -143,12 +154,13 @@ export const handleTenantInviteUser = async (event) => withIdentity(event, async
 
   if (cognitoSub && appUserId && String(cognitoSub) !== String(appUserId)) {
     await client.query(
-      `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, created_at, updated_at)
-       VALUES ($1, $2::uuid, $3, now(), now())
+      `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, status, linked_at, created_at)
+       VALUES ($1, $2::uuid, $3, 'active', now(), now())
        ON CONFLICT (cognito_sub) DO UPDATE
          SET application_user_id = EXCLUDED.application_user_id,
              email = EXCLUDED.email,
-             updated_at = now()`,
+             status = 'active',
+             linked_at = COALESCE(public.identity_accounts.linked_at, now())`,
       [cognitoSub, appUserId, email],
     ).catch(() => {});
   }
@@ -496,23 +508,7 @@ export const handleHireMortgageAgent = async (event) => withIdentity(event, asyn
     }
   }
 
-  if (!appUserId) {
-    appUserId = randomUUID();
-    created = true;
-    await client.query(
-      `INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
-       VALUES ($1::uuid, $2, $3, now(), now())
-       ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, full_name = EXCLUDED.full_name, updated_at = now()`,
-      [appUserId, email, fullName],
-    );
-  } else {
-    await client.query(
-      `UPDATE public.profiles SET full_name = $2, email = $3, updated_at = now() WHERE id = $1::uuid`,
-      [appUserId, fullName, email],
-    ).catch(() => {});
-  }
-
-  if (!cognitoSub || String(cognitoSub) === String(appUserId)) {
+  if (!cognitoSub || (appUserId && String(cognitoSub) === String(appUserId))) {
     return {
       ok: false,
       statusCode: 500,
@@ -521,14 +517,37 @@ export const handleHireMortgageAgent = async (event) => withIdentity(event, asyn
     };
   }
 
+  if (!appUserId) {
+    appUserId = randomUUID();
+    created = true;
+  }
+  if (String(cognitoSub) === String(appUserId)) {
+    return {
+      ok: false,
+      statusCode: 500,
+      error: 'unsafe_or_missing_cognito_sub',
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
+  // identity_accounts must exist before profiles (FK profiles_id_identity_fkey).
+  // Schema has created_at/linked_at/status — no updated_at column.
   await client.query(
-    `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, created_at, updated_at)
-     VALUES ($1, $2::uuid, $3, now(), now())
+    `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, status, linked_at, created_at)
+     VALUES ($1, $2::uuid, $3, 'active', now(), now())
      ON CONFLICT (cognito_sub) DO UPDATE
        SET application_user_id = EXCLUDED.application_user_id,
            email = EXCLUDED.email,
-           updated_at = now()`,
+           status = 'active',
+           linked_at = COALESCE(public.identity_accounts.linked_at, now())`,
     [cognitoSub, appUserId, email],
+  );
+
+  await client.query(
+    `INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
+     VALUES ($1::uuid, $2, $3, now(), now())
+     ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, full_name = EXCLUDED.full_name, updated_at = now()`,
+    [appUserId, email, fullName],
   );
 
   let roleOk = false;
