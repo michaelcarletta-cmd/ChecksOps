@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useStepUp } from "@/hooks/useStepUp";
+import { isAwsStaging } from "@/lib/awsStaging";
 
 /**
  * Shows TOTP status and lets the user enrol. Enrolment reuses the same
@@ -17,20 +18,40 @@ export function TotpManagerCard() {
   const { requireStepUp, refreshFactors, verified } = useStepUp();
   const [enrolled, setEnrolled] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  const awsStaging = isAwsStaging();
 
   const load = useCallback(async () => {
+    if (awsStaging) {
+      setEnrolled(false);
+      return;
+    }
     const { data, error } = await supabase.auth.mfa.listFactors();
     if (error) {
       setEnrolled(null);
       return;
     }
     setEnrolled((data?.totp ?? []).some((f) => f.status === "verified"));
-  }, []);
+  }, [awsStaging]);
 
   useEffect(() => {
     void load();
   }, [load, verified]);
 
+  if (awsStaging) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <ShieldAlert className="h-4 w-4 text-amber-500" />
+            Authenticator (TOTP)
+          </CardTitle>
+          <CardDescription>
+            AWS staging uses Cognito EMAIL_OTP and WebAuthn passkeys. Supabase TOTP step-up is production-only until Cognito MFA is provisioned.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
   const start = async () => {
     setBusy(true);
     const ok = await requireStepUp({

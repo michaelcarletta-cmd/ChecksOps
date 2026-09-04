@@ -1,8 +1,15 @@
 import type { Session, User } from "@supabase/supabase-js";
-import { awsApiBaseUrl } from "@/lib/awsStaging";
+import {
+  AWS_STAGING_AUTH_SESSION_KEY,
+  awsApiBaseUrl,
+} from "@/lib/awsStaging";
 import { createAwsStorageAdapter, rewriteStorageFields } from "./storage";
 
-const SESSION_KEY = "checksops.aws.staging.auth";
+export {
+  AWS_STAGING_AUTH_SESSION_KEY,
+  AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY,
+} from "@/lib/awsStaging";
+
 const TESTER_EMAIL = "checksops-tester@freedomadj.com";
 
 type AuthListener = (event: string, session: Session | null) => void;
@@ -60,18 +67,6 @@ const REVIEW_DECISION_RPCS = new Set([
   "submit_check_review_decision",
 ]);
 
-const listeners = new Set<AuthListener>();
-
-const emit = (event: string, session: Session | null) => {
-  listeners.forEach((listener) => {
-    try {
-      listener(event, session);
-    } catch {
-      /* ignore listener errors */
-    }
-  });
-};
-
 const authError = (message: string, extra: Record<string, unknown> = {}) => ({
   name: "AuthApiError",
   message,
@@ -86,24 +81,6 @@ const postgrestError = (message: string, code = "42501", extra: Record<string, u
   code,
   ...extra,
 });
-
-const readStored = (): Record<string, unknown> | null => {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-};
-
-const writeStored = (value: Record<string, unknown> | null) => {
-  try {
-    if (!value) localStorage.removeItem(SESSION_KEY);
-    else localStorage.setItem(SESSION_KEY, JSON.stringify(value));
-  } catch {
-    /* ignore quota */
-  }
-};
 
 const toUser = (identity: Record<string, unknown>, emailFallback?: string | null): User => {
   const applicationUserId = String(identity.applicationUserId || "");
@@ -159,64 +136,125 @@ const apiFetch = async (path: string, init: RequestInit = {}, token?: string | n
   return { response, body };
 };
 
-async function identityFromTokens(tokens: Record<string, unknown>, emailFallback?: string | null) {
-  const idToken = String(tokens.idToken || "");
-  const { response, body } = await apiFetch("/identity/me", { method: "GET" }, idToken);
-  if (!response.ok || !body.applicationUserId) {
-    throw authError(String(body.error || "identity_not_linked"), { status: response.status, details: body });
-  }
-  if (String(body.applicationUserId) === String(body.cognitoSub)) {
-    throw authError("refusing identity mapping where application_user_id equals cognito_sub");
-  }
-  const user = toUser(body, emailFallback);
-  const session = toSession(tokens, user);
-  writeStored({
-    tokens: {
-      idToken: tokens.idToken,
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      expiresIn: tokens.expiresIn,
-    },
-    user,
-    expiresAt: session.expires_at,
-  });
-  return { user, session };
-}
+type SessionStore = {
+  sessionKey: string;
+  emit: (event: string, session: Session | null) => void;
+  addListener: (listener: AuthListener) => void;
+  removeListener: (listener: AuthListener) => void;
+  readStored: () => Record<string, unknown> | null;
+  writeStored: (value: Record<string, unknown> | null) => void;
+  identityFromTokens: (
+    tokens: Record<string, unknown>,
+    emailFallback?: string | null,
+  ) => Promise<{ user: User; session: Session }>;
+  restoreSession: (forceRefresh?: boolean) => Promise<{ session: Session | null; error: unknown }>;
+};
 
-let refreshInFlight: Promise<{ session: Session | null; error: unknown }> | null = null;
+/** Portal-scoped Cognito session store (CheckOps/WL vs Mortgage Desk isolation). */
+export function createAwsSessionStore(sessionKey: string): SessionStore {
+  const listeners = new Set<AuthListener>();
+  let refreshInFlight: Promise<{ session: Session | null; error: unknown }> | null = null;
 
-async function restoreSession(forceRefresh = false): Promise<{ session: Session | null; error: unknown }> {
-  const stored = readStored();
-  if (!stored?.tokens || !stored.user) return { session: null, error: null };
-  const expiresAt = Number(stored.expiresAt || 0);
-  const shouldRefresh = forceRefresh || !expiresAt || expiresAt * 1000 < Date.now() + 60_000;
-  if (!shouldRefresh) {
-    const session = toSession(stored.tokens as Record<string, unknown>, stored.user as User);
-    return { session, error: null };
-  }
-  if (refreshInFlight) return refreshInFlight;
-  refreshInFlight = (async () => {
-    const { response, body } = await apiFetch("/auth/refresh", {
-      method: "POST",
-      body: JSON.stringify({ refreshToken: (stored.tokens as Record<string, unknown>).refreshToken }),
+  const emit = (event: string, session: Session | null) => {
+    listeners.forEach((listener) => {
+      try {
+        listener(event, session);
+      } catch {
+        /* ignore listener errors */
+      }
     });
-    if (!response.ok || !body.authentication) {
-      writeStored(null);
-      emit("SIGNED_OUT", null);
-      return { session: null, error: authError("session_expired", { status: 401, code: "session_expired" }) };
+  };
+
+  const readStored = (): Record<string, unknown> | null => {
+    try {
+      const raw = localStorage.getItem(sessionKey);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
     }
-    const mapped = await identityFromTokens(body.authentication as Record<string, unknown>, (stored.user as User).email);
-    emit("TOKEN_REFRESHED", mapped.session);
-    return { session: mapped.session, error: null };
-  })();
-  try {
-    return await refreshInFlight;
-  } finally {
-    refreshInFlight = null;
+  };
+
+  const writeStored = (value: Record<string, unknown> | null) => {
+    try {
+      if (!value) localStorage.removeItem(sessionKey);
+      else localStorage.setItem(sessionKey, JSON.stringify(value));
+    } catch {
+      /* ignore quota */
+    }
+  };
+
+  async function identityFromTokens(tokens: Record<string, unknown>, emailFallback?: string | null) {
+    const idToken = String(tokens.idToken || "");
+    const { response, body } = await apiFetch("/identity/me", { method: "GET" }, idToken);
+    if (!response.ok || !body.applicationUserId) {
+      throw authError(String(body.error || "identity_not_linked"), { status: response.status, details: body });
+    }
+    if (String(body.applicationUserId) === String(body.cognitoSub)) {
+      throw authError("refusing identity mapping where application_user_id equals cognito_sub");
+    }
+    const user = toUser(body, emailFallback);
+    const session = toSession(tokens, user);
+    writeStored({
+      tokens: {
+        idToken: tokens.idToken,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresIn: tokens.expiresIn,
+      },
+      user,
+      expiresAt: session.expires_at,
+    });
+    return { user, session };
   }
+
+  async function restoreSession(forceRefresh = false): Promise<{ session: Session | null; error: unknown }> {
+    const stored = readStored();
+    if (!stored?.tokens || !stored.user) return { session: null, error: null };
+    const expiresAt = Number(stored.expiresAt || 0);
+    const shouldRefresh = forceRefresh || !expiresAt || expiresAt * 1000 < Date.now() + 60_000;
+    if (!shouldRefresh) {
+      const session = toSession(stored.tokens as Record<string, unknown>, stored.user as User);
+      return { session, error: null };
+    }
+    if (refreshInFlight) return refreshInFlight;
+    refreshInFlight = (async () => {
+      const { response, body } = await apiFetch("/auth/refresh", {
+        method: "POST",
+        body: JSON.stringify({ refreshToken: (stored.tokens as Record<string, unknown>).refreshToken }),
+      });
+      if (!response.ok || !body.authentication) {
+        writeStored(null);
+        emit("SIGNED_OUT", null);
+        return { session: null, error: authError("session_expired", { status: 401, code: "session_expired" }) };
+      }
+      const mapped = await identityFromTokens(body.authentication as Record<string, unknown>, (stored.user as User).email);
+      emit("TOKEN_REFRESHED", mapped.session);
+      return { session: mapped.session, error: null };
+    })();
+    try {
+      return await refreshInFlight;
+    } finally {
+      refreshInFlight = null;
+    }
+  }
+
+  return {
+    sessionKey,
+    emit,
+    addListener: (listener: AuthListener) => {
+      listeners.add(listener);
+    },
+    removeListener: (listener: AuthListener) => {
+      listeners.delete(listener);
+    },
+    readStored,
+    writeStored,
+    identityFromTokens,
+    restoreSession,
+  };
 }
 
-function createBuilder(table: string) {
+function createBuilder(table: string, store: SessionStore) {
   const state: QueryState = {
     table,
     op: "select",
@@ -248,8 +286,8 @@ function createBuilder(table: string) {
       }),
     }, token);
     if (response.status === 401) {
-      writeStored(null);
-      emit("SIGNED_OUT", null);
+      store.writeStored(null);
+      store.emit("SIGNED_OUT", null);
     }
     if (!response.ok) {
       return {
@@ -282,7 +320,7 @@ function createBuilder(table: string) {
           statusText: "Forbidden",
         };
       }
-      const restoredWrite = await restoreSession();
+      const restoredWrite = await store.restoreSession();
       const writeToken = restoredWrite.session?.access_token;
       if (!writeToken) {
         return {
@@ -295,7 +333,7 @@ function createBuilder(table: string) {
       }
       return executeWrite(writeToken);
     }
-    const restored = await restoreSession();
+    const restored = await store.restoreSession();
     const token = restored.session?.access_token;
     const allowPublicTenant = state.table === "tenants_public" && state.op === "select";
     if (!token && !allowPublicTenant) {
@@ -324,8 +362,8 @@ function createBuilder(table: string) {
       }),
     }, token);
     if (response.status === 401) {
-      writeStored(null);
-      emit("SIGNED_OUT", null);
+      store.writeStored(null);
+      store.emit("SIGNED_OUT", null);
     }
     if (!response.ok) {
       return {
@@ -459,7 +497,21 @@ function createBuilder(table: string) {
   return builder;
 }
 
-export function createAwsStagingClient() {
+export type AwsStagingClientOptions = {
+  /** localStorage key for Cognito tokens + mapped application user. */
+  sessionKey?: string;
+};
+
+export function createAwsStagingClient(options: AwsStagingClientOptions = {}) {
+  const sessionKey = options.sessionKey || AWS_STAGING_AUTH_SESSION_KEY;
+  const store = createAwsSessionStore(sessionKey);
+  const { emit, addListener, removeListener, readStored, writeStored, identityFromTokens, restoreSession } = store;
+
+  const mfaUnavailable = async () => ({
+    data: null,
+    error: authError("Supabase MFA/TOTP is not available on AWS staging Cognito. Step-up remains production-only until Cognito MFA is enabled."),
+  });
+
   const auth = {
     signInWithPassword: async ({ email, password }: { email: string; password: string }) => {
       const { response, body } = await apiFetch("/auth/login", {
@@ -542,7 +594,7 @@ export function createAwsStagingClient() {
       error: result.error,
     })),
     onAuthStateChange: (callback: AuthListener) => {
-      listeners.add(callback);
+      addListener(callback);
       queueMicrotask(async () => {
         const restored = await restoreSession();
         callback("INITIAL_SESSION", restored.session);
@@ -551,7 +603,7 @@ export function createAwsStagingClient() {
         data: {
           subscription: {
             unsubscribe: () => {
-              listeners.delete(callback);
+              removeListener(callback);
             },
           },
         },
@@ -646,8 +698,24 @@ export function createAwsStagingClient() {
     }),
     signInWithOtp: async () => ({
       data: { user: null, session: null },
-      error: authError("OTP sign-in is disabled on AWS staging"),
+      error: authError("Use Cognito EMAIL_OTP via /auth/passwordless on AWS staging"),
     }),
+    verifyOtp: async () => ({
+      data: { user: null, session: null },
+      error: authError("Supabase OTP verify is disabled on AWS staging"),
+    }),
+    /** Staging stub — Cognito MFA not provisioned; production Supabase TOTP unchanged. */
+    mfa: {
+      listFactors: async () => ({ data: { totp: [], all: [], phone: [] }, error: null }),
+      enroll: mfaUnavailable,
+      challenge: mfaUnavailable,
+      verify: mfaUnavailable,
+      unenroll: mfaUnavailable,
+      getAuthenticatorAssuranceLevel: async () => ({
+        data: { currentLevel: "aal1", nextLevel: "aal1" },
+        error: null,
+      }),
+    },
   };
 
   const functions = {
@@ -687,7 +755,7 @@ export function createAwsStagingClient() {
 
   return {
     auth,
-    from: (table: string) => createBuilder(table),
+    from: (table: string) => createBuilder(table, store),
     rpc: async (name: string, args: Record<string, unknown> = {}) => {
       const restored = await restoreSession();
       const token = restored.session?.access_token;

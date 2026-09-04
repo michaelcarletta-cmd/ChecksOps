@@ -1,7 +1,13 @@
-import { awsApiBaseUrl } from "@/lib/awsStaging";
+import {
+  AWS_STAGING_AUTH_SESSION_KEY,
+  AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY,
+  awsApiBaseUrl,
+} from "@/lib/awsStaging";
 
-const PENDING_KEY = "checksops.aws.staging.passwordless.pending";
-const AUTH_KEY = "checksops.aws.staging.auth";
+const PENDING_KEY_DEFAULT = "checksops.aws.staging.passwordless.pending";
+const PENDING_KEY_MORTGAGE = "checksops.aws.staging.passwordless.pending.mortgage-ops";
+
+export type AwsPasswordlessPortal = "checkops" | "mortgage-ops";
 
 type StartResult = {
   email: string;
@@ -15,6 +21,27 @@ type VerifyResult = {
   accessToken: string;
   refreshToken?: string | null;
   expiresIn?: number;
+};
+
+export type AwsPasswordlessOptions = {
+  /** Portal-scoped session key (Mortgage Desk isolation). */
+  sessionKey?: string;
+  /** Portal-scoped pending OTP key. */
+  pendingKey?: string;
+  portal?: AwsPasswordlessPortal;
+};
+
+const resolveKeys = (options: AwsPasswordlessOptions = {}) => {
+  const portal = options.portal || "checkops";
+  const sessionKey =
+    options.sessionKey ||
+    (portal === "mortgage-ops"
+      ? AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY
+      : AWS_STAGING_AUTH_SESSION_KEY);
+  const pendingKey =
+    options.pendingKey ||
+    (portal === "mortgage-ops" ? PENDING_KEY_MORTGAGE : PENDING_KEY_DEFAULT);
+  return { sessionKey, pendingKey };
 };
 
 const post = async (path: string, body: Record<string, unknown>) => {
@@ -31,7 +58,11 @@ const post = async (path: string, body: Record<string, unknown>) => {
   return payload;
 };
 
-export async function startAwsEmailOtp(email: string): Promise<StartResult> {
+export async function startAwsEmailOtp(
+  email: string,
+  options: AwsPasswordlessOptions = {},
+): Promise<StartResult> {
+  const { pendingKey } = resolveKeys(options);
   const normalized = email.trim().toLowerCase();
   if (!normalized) throw new Error("Enter your email first.");
   const result = await post("/auth/passwordless/start", { email: normalized });
@@ -44,17 +75,50 @@ export async function startAwsEmailOtp(email: string): Promise<StartResult> {
     challenge: "EMAIL_OTP",
     destination: result.delivery?.destination ?? null,
   };
-  try { sessionStorage.setItem(PENDING_KEY, JSON.stringify(pending)); } catch { /* best effort */ }
+  try { sessionStorage.setItem(pendingKey, JSON.stringify(pending)); } catch { /* best effort */ }
   return pending;
 }
 
-export async function verifyAwsEmailOtp(email: string, session: string, code: string): Promise<VerifyResult> {
+/**
+ * Verify Cognito EMAIL_OTP and persist tokens under the portal session key.
+ * Identity mapping: Cognito sub → identity_accounts.application_user_id → app UUID.
+ * Prefer establishCognitoSession on the portal client when available so SIGNED_IN fires;
+ * otherwise persist to localStorage for the hard-reload handoff used by login pages.
+ */
+export async function verifyAwsEmailOtp(
+  email: string,
+  session: string,
+  code: string,
+  options: AwsPasswordlessOptions & {
+    /** Portal AWS client with establishCognitoSession (preferred). */
+    authClient?: { auth: { establishCognitoSession?: Function } };
+  } = {},
+): Promise<VerifyResult> {
+  const { sessionKey, pendingKey } = resolveKeys(options);
   const normalized = email.trim().toLowerCase();
   const otp = code.trim().replace(/\s+/g, "");
   if (!normalized || !session || !otp) throw new Error("Enter the email verification code.");
   const result = await post("/auth/passwordless/verify", { email: normalized, session, code: otp });
   const tokens = result.authentication as VerifyResult | undefined;
   if (!tokens?.idToken || !tokens?.accessToken) throw new Error("AWS did not return an authenticated session.");
+
+  const establish = options.authClient?.auth?.establishCognitoSession;
+  if (typeof establish === "function") {
+    const { data, error } = await establish(
+      {
+        idToken: tokens.idToken,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken || null,
+        expiresIn: tokens.expiresIn || 3600,
+      },
+      normalized,
+    );
+    if (error || !data?.user?.id) {
+      throw new Error(error?.message || "Could not establish the AWS staging session.");
+    }
+    try { sessionStorage.removeItem(pendingKey); } catch { /* best effort */ }
+    return tokens;
+  }
 
   const identityResponse = await fetch(`${awsApiBaseUrl()}/identity/me`, {
     headers: { authorization: `Bearer ${tokens.idToken}` },
@@ -92,7 +156,7 @@ export async function verifyAwsEmailOtp(email: string, session: string, code: st
   const expiresIn = Number(tokens.expiresIn || 3600);
   const expiresAt = Math.floor(Date.now() / 1000) + expiresIn;
   try {
-    localStorage.setItem(AUTH_KEY, JSON.stringify({
+    localStorage.setItem(sessionKey, JSON.stringify({
       tokens: {
         idToken: tokens.idToken,
         accessToken: tokens.accessToken,
@@ -102,16 +166,17 @@ export async function verifyAwsEmailOtp(email: string, session: string, code: st
       user,
       expiresAt,
     }));
-    sessionStorage.removeItem(PENDING_KEY);
+    sessionStorage.removeItem(pendingKey);
   } catch {
     throw new Error("The authenticated AWS session could not be saved in this browser.");
   }
   return tokens;
 }
 
-export function readPendingAwsEmailOtp(): StartResult | null {
+export function readPendingAwsEmailOtp(options: AwsPasswordlessOptions = {}): StartResult | null {
+  const { pendingKey } = resolveKeys(options);
   try {
-    const raw = sessionStorage.getItem(PENDING_KEY);
+    const raw = sessionStorage.getItem(pendingKey);
     if (!raw) return null;
     const value = JSON.parse(raw);
     if (!value?.email || !value?.session || value?.challenge !== "EMAIL_OTP") return null;
@@ -119,6 +184,7 @@ export function readPendingAwsEmailOtp(): StartResult | null {
   } catch { return null; }
 }
 
-export function clearPendingAwsEmailOtp() {
-  try { sessionStorage.removeItem(PENDING_KEY); } catch { /* best effort */ }
+export function clearPendingAwsEmailOtp(options: AwsPasswordlessOptions = {}) {
+  const { pendingKey } = resolveKeys(options);
+  try { sessionStorage.removeItem(pendingKey); } catch { /* best effort */ }
 }

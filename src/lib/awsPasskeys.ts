@@ -9,13 +9,12 @@ import {
 } from "@simplewebauthn/browser";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  AWS_STAGING_AUTH_SESSION_KEY,
   AWS_STAGING_HTTPS_ORIGIN,
   AWS_STAGING_RP_ID,
   awsApiBaseUrl,
   isAwsStagingHttpsPasskeysEnabled,
 } from "@/lib/awsStaging";
-
-const AUTH_KEY = "checksops.aws.staging.auth";
 
 export type AwsPasskeyCredential = {
   credentialId: string;
@@ -26,6 +25,26 @@ export type AwsPasskeyCredential = {
   authenticatorTransports?: string[];
   /** Cognito ListWebAuthnCredentials does not provide last-used; always null. */
   lastUsedAt?: string | null;
+};
+
+export type AwsPasskeyOptions = {
+  /** Portal session key for token reads (Mortgage Desk isolation). */
+  sessionKey?: string;
+  /**
+   * Portal client whose establishCognitoSession should receive tokens.
+   * Defaults to the CheckOps/WhiteLabel `supabase` client.
+   */
+  authClient?: {
+    auth: {
+      establishCognitoSession?: (
+        authentication: CognitoAuthTokens,
+        emailFallback?: string | null,
+      ) => Promise<{
+        data: { user: { id: string; email?: string } | null };
+        error: { message?: string } | null;
+      }>;
+    };
+  };
 };
 
 const requireHttpsPasskeys = () => {
@@ -39,9 +58,9 @@ const requireHttpsPasskeys = () => {
   }
 };
 
-const readAccessToken = (): string | null => {
+const readAccessToken = (sessionKey: string): string | null => {
   try {
-    const raw = localStorage.getItem(AUTH_KEY);
+    const raw = localStorage.getItem(sessionKey);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     const token = parsed?.tokens?.accessToken;
@@ -85,14 +104,16 @@ type CognitoAuthTokens = {
 };
 
 /**
- * Persist Cognito tokens and notify React auth (useAuth) via SIGNED_IN.
- * Writing localStorage alone is not enough — guards read useAuth().user.
+ * Persist Cognito tokens and notify React auth via SIGNED_IN on the portal client.
+ * Writing localStorage alone is not enough — guards read useAuth()/useMortgageAuth().
  */
 const persistAwsSession = async (
   tokens: CognitoAuthTokens,
-  emailHint?: string,
+  emailHint: string | undefined,
+  options: AwsPasskeyOptions,
 ) => {
-  const establish = (supabase.auth as any).establishCognitoSession as
+  const client = options.authClient || (supabase as any);
+  const establish = client?.auth?.establishCognitoSession as
     | ((auth: CognitoAuthTokens, email?: string | null) => Promise<{
       data: { user: { id: string; email?: string } | null };
       error: { message?: string } | null;
@@ -112,9 +133,10 @@ const persistAwsSession = async (
 };
 
 /** Register a Cognito passkey after EMAIL_OTP (or other) sign-in. */
-export async function registerAwsPasskey(): Promise<true> {
+export async function registerAwsPasskey(options: AwsPasskeyOptions = {}): Promise<true> {
   requireHttpsPasskeys();
-  const accessToken = readAccessToken();
+  const sessionKey = options.sessionKey || AWS_STAGING_AUTH_SESSION_KEY;
+  const accessToken = readAccessToken(sessionKey);
   if (!accessToken) {
     throw new Error("Sign in with email verification first, then add a passkey.");
   }
@@ -135,30 +157,38 @@ export async function registerAwsPasskey(): Promise<true> {
   return true;
 }
 
-export async function listAwsPasskeys(): Promise<AwsPasskeyCredential[]> {
+export async function listAwsPasskeys(options: AwsPasskeyOptions = {}): Promise<AwsPasskeyCredential[]> {
   requireHttpsPasskeys();
-  const accessToken = readAccessToken();
+  const sessionKey = options.sessionKey || AWS_STAGING_AUTH_SESSION_KEY;
+  const accessToken = readAccessToken(sessionKey);
   if (!accessToken) return [];
   const result = await post("/auth/passkey/list", {}, accessToken);
   return Array.isArray(result.credentials) ? result.credentials : [];
 }
 
-export async function deleteAwsPasskey(credentialId: string): Promise<void> {
+export async function deleteAwsPasskey(
+  credentialId: string,
+  options: AwsPasskeyOptions = {},
+): Promise<void> {
   requireHttpsPasskeys();
-  const accessToken = readAccessToken();
+  const sessionKey = options.sessionKey || AWS_STAGING_AUTH_SESSION_KEY;
+  const accessToken = readAccessToken(sessionKey);
   if (!accessToken) throw new Error("Sign in again to manage passkeys.");
   await post("/auth/passkey/delete", { credentialId }, accessToken);
 }
 
 /** Cognito WEB_AUTHN sign-in. Falls back to EMAIL_OTP when unavailable. */
-export async function signInWithAwsPasskey(email: string): Promise<{ id: string; email: string }> {
+export async function signInWithAwsPasskey(
+  email: string,
+  options: AwsPasskeyOptions = {},
+): Promise<{ id: string; email: string }> {
   requireHttpsPasskeys();
   const normalized = email.trim().toLowerCase();
   if (!normalized) throw new Error("Enter your email first so we can find your passkey.");
 
   const start = await post("/auth/passkey/authenticate/start", { email: normalized });
   if (start.completed && start.authentication?.idToken) {
-    return persistAwsSession(start.authentication, normalized);
+    return persistAwsSession(start.authentication, normalized, options);
   }
   if (start.error === "webauthn_unavailable" || !start.options || !start.session) {
     throw new Error(
@@ -182,7 +212,7 @@ export async function signInWithAwsPasskey(email: string): Promise<{ id: string;
   if (!verified.authentication?.idToken) {
     throw new Error("AWS did not return an authenticated session.");
   }
-  return persistAwsSession(verified.authentication, normalized);
+  return persistAwsSession(verified.authentication, normalized, options);
 }
 
 export const AWS_PASSKEY_META = {

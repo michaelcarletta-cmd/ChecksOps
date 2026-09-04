@@ -17,7 +17,11 @@ test('WhiteLabelLogin and MortgageOpsLogin use Cognito passkey + EMAIL_OTP on AW
     assert.match(src, /startAwsEmailOtp/);
     assert.match(src, /verifyAwsEmailOtp/);
     assert.match(src, /window\.location\.assign/);
+    assert.match(src, /authClient:\s*supabase/);
   }
+  // Mortgage Desk must use the isolated portal session key on AWS staging.
+  assert.match(mops, /portal:\s*"mortgage-ops"/);
+  assert.match(mops, /AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY/);
   // Production paths preserved.
   assert.match(wl, /signInWithPasskey/);
   assert.match(wl, /sendMagicLink/);

@@ -1,7 +1,9 @@
-import { awsApiBaseUrl } from "@/lib/awsStaging";
+import {
+  AWS_STAGING_AUTH_SESSION_KEY,
+  AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY,
+  awsApiBaseUrl,
+} from "@/lib/awsStaging";
 import { toStorageObjectPath } from "@/lib/storagePath";
-
-const SESSION_KEY = "checksops.aws.staging.auth";
 
 const storageError = (message: string, statusCode = 403) => ({
   message,
@@ -11,15 +13,20 @@ const storageError = (message: string, statusCode = 403) => ({
 
 type TokenGetter = () => Promise<string | null>;
 
+/** Prefer CheckOps session; fall back to Mortgage Desk if only that portal is signed in. */
 const readIdToken = (): string | null => {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed?.tokens?.idToken || null;
-  } catch {
-    return null;
+  for (const key of [AWS_STAGING_AUTH_SESSION_KEY, AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY]) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      const token = parsed?.tokens?.idToken;
+      if (typeof token === "string" && token) return token;
+    } catch {
+      /* try next portal key */
+    }
   }
+  return null;
 };
 
 async function apiFetch(path: string, init: RequestInit, token?: string | null) {
