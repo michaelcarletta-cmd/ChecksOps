@@ -11,12 +11,10 @@ import { authorizeObject } from './storage.mjs';
 import {
   ALLOWED_UPLOAD_CONTENT_TYPES,
   MAX_UPLOAD_BYTES,
-  STORAGE_WRITE_BUCKETS,
-  isCheckScopedPathFor,
-  matchCheckScopedPath,
   normalizePath,
   s3KeyFor,
 } from './storage-paths.mjs';
+import { authorizeStorageWritePath } from './storage-write-auth.mjs';
 import { storageWritesEnabled } from './write-allowlist.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -33,18 +31,6 @@ const disabled = (spoof) => ({
   spoofFieldsIgnored: spoof,
 });
 
-const denyBucket = (bucket) => {
-  if (!STORAGE_WRITE_BUCKETS.includes(bucket)) {
-    return {
-      ok: false,
-      statusCode: 403,
-      error: 'bucket_not_allowed',
-      message: 'Storage writes are limited to claim-files check-scoped prefixes',
-    };
-  }
-  return null;
-};
-
 const objectExists = async (deps, key) => {
   const s3 = defaultS3(deps);
   try {
@@ -57,48 +43,12 @@ const objectExists = async (deps, key) => {
   }
 };
 
-const lookupWritableCheck = async (client, checkId) => {
-  if (!UUID_RE.test(String(checkId || ''))) return { error: 'invalid_uuid', field: 'check_id' };
-  const rows = (await client.query(
-    'SELECT id, tenant_id FROM public.check_intake_items WHERE id = $1::uuid',
-    [checkId],
-  )).rows;
-  if (!rows.length) return { error: 'rls_denied', message: 'check not found or not writable' };
-  return { check: rows[0] };
-};
+const authorizeWritePath = async (client, bucket, objectPath, userId) => (
+  authorizeStorageWritePath(client, bucket, objectPath, userId)
+);
 
-const authorizeWritePath = async (client, bucket, objectPath) => {
-  const denied = denyBucket(bucket);
-  if (denied) return denied;
-  const rel = normalizePath(objectPath, bucket);
-  if (!rel) return { ok: false, statusCode: 400, error: 'invalid_path' };
-  const checkId = matchCheckScopedPath(rel);
-  if (!checkId) {
-    return {
-      ok: false,
-      statusCode: 403,
-      error: 'path_not_allowlisted',
-      message: 'Object path is not in a check-scoped write prefix',
-    };
-  }
-  const looked = await lookupWritableCheck(client, checkId);
-  if (looked.error) {
-    return {
-      ok: false,
-      statusCode: looked.error === 'invalid_uuid' ? 400 : 403,
-      error: looked.error,
-      message: looked.message || 'Not authorized for this object',
-      field: looked.field,
-    };
-  }
-  if (!isCheckScopedPathFor(rel, looked.check.id)) {
-    return { ok: false, statusCode: 403, error: 'rls_denied', message: 'path is not scoped to this check' };
-  }
-  return { ok: true, rel, check: looked.check, key: s3KeyFor(bucket, rel) };
-};
-
-const authorizeDeletePath = async (client, bucket, objectPath) => {
-  const writeAuth = await authorizeWritePath(client, bucket, objectPath);
+const authorizeDeletePath = async (client, bucket, objectPath, userId) => {
+  const writeAuth = await authorizeWritePath(client, bucket, objectPath, userId);
   if (writeAuth.ok) return writeAuth;
   if (writeAuth.error === 'bucket_not_allowed' || writeAuth.error === 'invalid_path') return writeAuth;
   const rel = normalizePath(objectPath, bucket);
@@ -124,7 +74,7 @@ export const handleStorageUploadUrl = async (event, deps = {}) => {
   return withIdentity(event, async ({ client, mapping, claims, body, spoof }) => {
     const bucket = String(body.bucket || '').trim();
     const objectPath = body.path || body.paths?.[0];
-    const auth = await authorizeWritePath(client, bucket, objectPath);
+    const auth = await authorizeWritePath(client, bucket, objectPath, mapping.application_user_id);
     if (!auth.ok) return { ...auth, spoofFieldsIgnored: spoof };
 
     const contentType = String(body.contentType || body.content_type || 'application/octet-stream').toLowerCase();
@@ -207,7 +157,7 @@ export const handleStorageDelete = async (event, deps = {}) => {
     const s3 = defaultS3(deps);
     const deleted = [];
     for (const objectPath of paths) {
-      const auth = await authorizeDeletePath(client, bucket, objectPath);
+      const auth = await authorizeDeletePath(client, bucket, objectPath, mapping.application_user_id);
       if (!auth.ok) return { ...auth, spoofFieldsIgnored: spoof };
       try {
         await s3.send(new DeleteObjectCommand({ Bucket: filesBucket(), Key: auth.key }));
@@ -244,9 +194,9 @@ export const handleStorageMove = async (event, deps = {}) => {
     const bucket = String(body.bucket || '').trim();
     const fromPath = body.from || body.source || body.path;
     const toPath = body.to || body.destination;
-    const fromAuth = await authorizeDeletePath(client, bucket, fromPath);
+    const fromAuth = await authorizeDeletePath(client, bucket, fromPath, mapping.application_user_id);
     if (!fromAuth.ok) return { ...fromAuth, spoofFieldsIgnored: spoof, field: 'from' };
-    const toAuth = await authorizeWritePath(client, bucket, toPath);
+    const toAuth = await authorizeWritePath(client, bucket, toPath, mapping.application_user_id);
     if (!toAuth.ok) return { ...toAuth, spoofFieldsIgnored: spoof, field: 'to' };
     if (fromAuth.rel === toAuth.rel) {
       return { ok: false, statusCode: 400, error: 'invalid_field', field: 'to', message: 'source and destination are the same', spoofFieldsIgnored: spoof };

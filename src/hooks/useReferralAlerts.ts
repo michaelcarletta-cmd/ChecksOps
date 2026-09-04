@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
 
 export type ReferralAlertType = "needs_contractor" | "needs_public_adjuster" | "needs_attorney";
 
@@ -36,7 +37,13 @@ export function useReferralAlerts(claimId: string) {
     enabled: !!claimId && !!user?.id,
   });
 
-  // Realtime refresh
+  const invalidate = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["referral-alerts", claimId] });
+  }, [claimId, queryClient]);
+
+  useAwsPollingFallback(!!claimId && !!user?.id, invalidate, 20_000);
+
+  // Realtime refresh (Supabase); AWS staging uses polling fallback above.
   useEffect(() => {
     if (!claimId) return;
     const channel = supabase
@@ -44,11 +51,11 @@ export function useReferralAlerts(claimId: string) {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "referral_alerts", filter: `claim_id=eq.${claimId}` },
-        () => queryClient.invalidateQueries({ queryKey: ["referral-alerts", claimId] })
+        invalidate,
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [claimId, queryClient]);
+  }, [claimId, invalidate]);
 
   const dismissAlert = async (alertId: string) => {
     await supabase

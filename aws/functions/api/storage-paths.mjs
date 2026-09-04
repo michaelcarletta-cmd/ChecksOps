@@ -34,6 +34,7 @@ export const SKIP_BUCKETS = Object.freeze([
 export const PUBLIC_BRANDING_BUCKETS = Object.freeze([
   'tenant-logos',
   'email-assets',
+  'company-branding',
 ]);
 
 export const APP_BUCKET_SET = new Set(APP_BUCKETS);
@@ -97,7 +98,20 @@ const CHECK_WRITE_PREFIXES = [
   new RegExp(`^checks/(${CHECK_UUID_RE})/`, 'i'),
 ];
 
-export const STORAGE_WRITE_BUCKETS = Object.freeze(['claim-files']);
+/**
+ * Buckets that accept authenticated uploads when path + membership checks pass.
+ * Deposit/homeowner uploads are metadata-only (no deposit_action / provider calls).
+ */
+export const STORAGE_WRITE_BUCKETS = Object.freeze([
+  'claim-files',
+  'endorsement-packets',
+  'loss-draft-documents',
+  'tenant-documents',
+  'tenant-logos',
+  'company-branding',
+  'deposit-attachments',
+  'homeowner-uploads',
+]);
 
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
@@ -112,7 +126,18 @@ export const ALLOWED_UPLOAD_CONTENT_TYPES = new Set([
   'application/pdf',
   'application/octet-stream',
   'text/plain',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'image/svg+xml',
 ]);
+
+const UUID_RE_SRC = '[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
+const TENANT_DOC_PREFIX = new RegExp(`^(${UUID_RE_SRC})/library/`, 'i');
+const LOSS_DRAFT_DOC_PATH = new RegExp(
+  `^${UUID_RE_SRC}/(${UUID_RE_SRC})/${UUID_RE_SRC}/`,
+  'i',
+);
+const DEPOSIT_ATTACHMENT_PREFIX = new RegExp(`^(${UUID_RE_SRC})/`, 'i');
 
 /** Return the check UUID encoded in an allowlisted write prefix, or null. */
 export const matchCheckScopedPath = (rel) => {
@@ -127,6 +152,28 @@ export const matchCheckScopedPath = (rel) => {
 export const isCheckScopedPathFor = (rel, checkId) => {
   const scoped = matchCheckScopedPath(rel);
   return Boolean(scoped && checkId && scoped === String(checkId).toLowerCase());
+};
+
+export const matchTenantDocumentPath = (rel) => {
+  const match = String(rel || '').match(TENANT_DOC_PREFIX);
+  return match ? match[1].toLowerCase() : null;
+};
+
+export const matchLossDraftDocumentPath = (rel) => {
+  const match = String(rel || '').match(LOSS_DRAFT_DOC_PATH);
+  return match ? match[1].toLowerCase() : null;
+};
+
+export const matchDepositAttachmentPath = (rel) => {
+  const match = String(rel || '').match(DEPOSIT_ATTACHMENT_PREFIX);
+  return match ? match[1].toLowerCase() : null;
+};
+
+export const isBrandingUploadPath = (rel) => {
+  const path = String(rel || '');
+  if (!path || path.includes('..')) return false;
+  if (path.split('/').length > 4) return false;
+  return /^[A-Za-z0-9._\-/=]+$/.test(path) && path.length <= 512;
 };
 
 export const parsePublicQuery = (event) => {

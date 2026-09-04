@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Send, MessageSquare } from "lucide-react";
+import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
 
 interface SharedCheckThreadProps {
   checkId: string;
@@ -76,19 +77,25 @@ export function SharedCheckThread({ checkId }: SharedCheckThreadProps) {
   const profileMap = new Map(profiles.map((p: any) => [p.id, p]));
   const tenantMap = new Map(tenantNames.map((t: any) => [t.id, t.name]));
 
+  const invalidateThread = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ["shared-check-messages", checkId] });
+  }, [qc, checkId]);
+
+  useAwsPollingFallback(!!checkId, invalidateThread, 12_000);
+
   useEffect(() => {
     const channel = supabase
       .channel(`shared-check-${checkId}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "shared_check_messages", filter: `check_id=eq.${checkId}` },
-        () => qc.invalidateQueries({ queryKey: ["shared-check-messages", checkId] })
+        invalidateThread,
       )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [checkId, qc]);
+  }, [checkId, invalidateThread]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });

@@ -10,6 +10,7 @@ import { FunctionsHttpError, FunctionsRelayError, FunctionsFetchError } from "@s
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
+import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -715,6 +716,14 @@ export default function CheckCommandCenter() {
   // Realtime: when the source tenant updates a shared check (e.g. marks it
   // deposited), invalidate the partner's shared-checks list so the new status
   // shows up without a manual refresh.
+  const sharedIdsKey = sharedChecks.map((c) => c.id).join(",");
+  const pollSharedChecks = useCallback(() => {
+    if (!tenantId || sharedChecks.length === 0) return;
+    qc.invalidateQueries({ queryKey: ["shared-with-me-checks", tenantId] });
+    qc.invalidateQueries({ queryKey: ["check-detail"] });
+  }, [tenantId, sharedChecks.length, qc]);
+  useAwsPollingFallback(!!tenantId && sharedChecks.length > 0, pollSharedChecks, 20_000);
+
   useEffect(() => {
     if (!tenantId || sharedChecks.length === 0) return;
     const ids = sharedChecks.map((c) => c.id);
@@ -730,7 +739,7 @@ export default function CheckCommandCenter() {
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [tenantId, sharedChecks.map((c) => c.id).join(","), qc]);
+  }, [tenantId, sharedIdsKey, qc]);
 
   // Fetch claim numbers + policyholder names for any linked claims so search works on them
   const linkedClaimIds = useMemo(() => {
@@ -1176,6 +1185,18 @@ export default function CheckCommandCenter() {
 
   // Realtime: when a disbursement is recorded (Actum or external check), advance
   // the check stage and move it into the Funds Released bucket without a refresh.
+  const pollCheckOpsRealtime = useCallback(() => {
+    if (!tenantId) return;
+    qc.invalidateQueries({ queryKey: ["funds-released", tenantId] });
+    qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+    qc.invalidateQueries({ queryKey: ["check-intake-items-deposited"] });
+    qc.invalidateQueries({ queryKey: ["check-intake-items", "disbursed_externally"] });
+    qc.invalidateQueries({ queryKey: ["check-stage-totals"] });
+    qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+    qc.invalidateQueries({ queryKey: ["funds-tab-disbursements", tenantId] });
+  }, [tenantId, qc]);
+  useAwsPollingFallback(!!tenantId, pollCheckOpsRealtime, 20_000);
+
   useEffect(() => {
     if (!tenantId) return;
     const channel = supabase
@@ -3006,6 +3027,14 @@ function CheckDetailPanel({
   });
 
   // Realtime: refresh check detail + endorsements when any partner deposits or a payee signs.
+  // AWS staging: poll while the detail panel is open.
+  const pollCheckDetail = useCallback(() => {
+    if (!checkId) return;
+    qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+    qc.invalidateQueries({ queryKey: ["check-endorsement-signatures", checkId] });
+  }, [checkId, qc]);
+  useAwsPollingFallback(!!checkId, pollCheckDetail, 12_000);
+
   useEffect(() => {
     if (!checkId) return;
     const channel = supabase

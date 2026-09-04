@@ -60,7 +60,7 @@ export const SAFE_WRITE_RPC_CLASSIFICATION = {
   resolve_check_return: 'safe_now',
   get_payment_direction_by_token: 'financial_sensitive',
   admin_override_check_status: 'financial_sensitive',
-  admin_delete_check: 'safe_now_deferred', // overlaps DELETE /workflow/checks; keep rpc_disabled
+  admin_delete_check: 'already_bridged', // client → DELETE /workflow/checks
   deposit_action: 'financial_sensitive',
   assign_deposit_owner: 'financial_sensitive',
   bulk_deposit_closeout: 'financial_sensitive',

@@ -15,6 +15,7 @@ import { MortgageOpsDirectory } from "./MortgageOpsDirectory";
 import mortgageOpsLogo from "@/assets/mortgage-ops-logo.png";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { SettingsHero } from "@/components/settings/SettingsHero";
+import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
 
 interface Request {
   id: string;
@@ -117,6 +118,8 @@ export default function MortgageOpsQueue() {
       supabase.removeChannel(channel);
     };
   }, [user, fetchQueues]);
+
+  useAwsPollingFallback(!!user, fetchQueues, 15_000);
 
   const handleAccept = async (id: string) => {
     setBusyId(id);

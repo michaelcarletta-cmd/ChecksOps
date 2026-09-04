@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
 
 interface Notification {
   id: string;
@@ -34,33 +35,7 @@ export function NotificationPopover() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  useEffect(() => {
-    if (!user) return;
-    
-    fetchNotifications();
-
-    const notificationsChannel = supabase
-      .channel('notifications-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`
-        },
-        () => {
-          fetchNotifications();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(notificationsChannel);
-    };
-  }, [user]);
-
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     if (!user) return;
 
     const { data } = await supabase
@@ -89,7 +64,35 @@ export function NotificationPopover() {
       setNotifications(data as any);
       setUnreadCount(data.length);
     }
-  };
+  }, [user]);
+
+  useAwsPollingFallback(!!user, fetchNotifications, 20_000);
+
+  useEffect(() => {
+    if (!user) return;
+    
+    fetchNotifications();
+
+    const notificationsChannel = supabase
+      .channel('notifications-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`
+        },
+        () => {
+          fetchNotifications();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(notificationsChannel);
+    };
+  }, [user, fetchNotifications]);
 
   const markNotificationAsRead = async (notificationId: string, claimId: string) => {
     await supabase

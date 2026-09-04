@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
 
 /**
  * Consolidated realtime subscription for the Check Command Center.
@@ -12,9 +13,21 @@ import { supabase } from "@/integrations/supabase/client";
  *
  * NOTE: check_endorsements has no tenant_id, so we don't subscribe here.
  * The per-check detail view subscribes scoped by check_id.
+ *
+ * AWS staging: Supabase realtime is a no-op — poll/refetch every 15s.
  */
 export function useCheckCommandRealtime(tenantId: string | null | undefined) {
   const qc = useQueryClient();
+
+  const poll = useCallback(() => {
+    if (!tenantId) return;
+    qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+    qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+    qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+    qc.invalidateQueries({ queryKey: ["loss-draft-counts", tenantId] });
+  }, [qc, tenantId]);
+
+  useAwsPollingFallback(!!tenantId, poll, 15_000);
 
   useEffect(() => {
     if (!tenantId) return;

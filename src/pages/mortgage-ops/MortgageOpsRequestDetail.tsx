@@ -31,6 +31,7 @@ import {
 import { formatDistanceToNow, format } from "date-fns";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
 import { LossDraftDocsManager } from "@/components/loss-draft/LossDraftDocsManager";
+import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
 
 
 interface Props {
@@ -403,7 +404,9 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     if (open && requestId) void load();
   }, [open, requestId, load]);
 
-  // Realtime subscribe to messages
+  // Realtime subscribe to messages (Supabase). AWS staging polls via useAwsPollingFallback.
+  useAwsPollingFallback(!!open && !!check?.id, load, 12_000);
+
   useEffect(() => {
     if (!open || !check?.id) return;
     const ch = supabase
