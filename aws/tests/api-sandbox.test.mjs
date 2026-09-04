@@ -23,6 +23,7 @@ import {
   buildMoovSandboxTransferBody,
   idempotencyUuid,
   moovSandboxToken,
+  pickMoovSandboxTransferMethods,
   SANDBOX_MIN_CENTS,
 } from '../functions/api/providers/moov-sandbox.mjs';
 import { buildCheckAltSandboxDeposit } from '../functions/api/providers/checkalt-sandbox.mjs';
@@ -947,5 +948,97 @@ test('CheckAlt deposit without a UAT ssoKey does not process', async () => {
     );
     assert.equal(result.error, 'account_unregistered');
     assert.equal(processes, 0);
+  });
+});
+
+test('pickMoovSandboxTransferMethods prefers ACH debit to wallet', () => {
+  const picked = pickMoovSandboxTransferMethods([
+    { id: 'pm-wallet', type: 'moov-wallet' },
+    { id: 'pm-debit', type: 'ach-debit-fund' },
+    { id: 'pm-credit', type: 'ach-credit-standard' },
+  ]);
+  assert.equal(picked.pairing, 'ach_debit_to_wallet');
+  assert.equal(picked.source.id, 'pm-debit');
+  assert.equal(picked.destination.id, 'pm-wallet');
+});
+
+test('sandbox probe mints account-scoped tokens instead of reusing /accounts.read', async () => {
+  await withEnv({
+    AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+    AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true',
+    AWS_FINANCIAL_PERMISSIONS_ACTIVATED: 'false',
+  }, async () => {
+    const client = mockClient();
+    const accountId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const oauthBodies = [];
+    const paths = [];
+    const fetchImpl = async (url, init = {}) => {
+      const u = String(url);
+      if (u.includes('/oauth2/token')) {
+        const body = String(init.body || '');
+        oauthBodies.push(body);
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ access_token: `tok-${oauthBodies.length}`, token_type: 'Bearer', expires_in: 60, scope: body }),
+        };
+      }
+      paths.push(u.replace('https://api.moov.io', ''));
+      if (u.endsWith('/accounts') && !u.includes(accountId)) {
+        return { ok: true, status: 200, text: async () => JSON.stringify([{ accountID: accountId }]) };
+      }
+      if (u.includes(`/accounts/${accountId}/wallets`)) {
+        return { ok: true, status: 200, text: async () => JSON.stringify([{ walletID: 'wallet-1' }]) };
+      }
+      if (u.includes(`/accounts/${accountId}/payment-methods`)) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify([
+            { paymentMethodID: 'pm-wallet', paymentMethodType: 'moov-wallet' },
+            { paymentMethodID: 'pm-debit', paymentMethodType: 'ach-debit-fund' },
+          ]),
+        };
+      }
+      if (u.includes(`/accounts/${accountId}/capabilities`)) {
+        return { ok: true, status: 200, text: async () => JSON.stringify([{ capability: 'transfers', status: 'enabled' }]) };
+      }
+      if (u.endsWith(`/accounts/${accountId}`)) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ accountID: accountId, accountType: 'business' }) };
+      }
+      return { ok: false, status: 404, text: async () => '{}' };
+    };
+    const result = await handleSandboxRequest(
+      jwtEvent('/sandbox/moov/probe', 'POST', {}),
+      '/sandbox/moov/probe',
+      'POST',
+      depsFor(client, {
+        loadSandboxCredentials: async () => ({
+          moov: {
+            environment: 'sandbox',
+            host: 'https://api.moov.io',
+            publicKey: 'pk_sbox',
+            secretKey: 'sk_sbox',
+            platformAccountId: accountId,
+            origin: 'https://staging.checksops.com',
+            apiVersion: 'v2024.01.00',
+          },
+          snapshot: { moov: { available: true, reason: 'sandbox_keys_configured' } },
+        }),
+        fetchImpl,
+      }),
+    );
+    assert.equal(result.ok, true);
+    assert.equal(result.reads.account.ok, true);
+    assert.equal(result.reads.wallets.ok, true);
+    assert.equal(result.reads.paymentMethods.ok, true);
+    assert.equal(result.reads.capabilities.ok, true);
+    assert.equal(result.reads.transferPairing, 'ach_debit_to_wallet');
+    assert.ok(oauthBodies.some((b) => decodeURIComponent(b).includes('/accounts.read')));
+    assert.ok(oauthBodies.some((b) => decodeURIComponent(b).includes(`/accounts/${accountId}/profile.read`)));
+    assert.ok(oauthBodies.some((b) => decodeURIComponent(b).includes(`/accounts/${accountId}/wallets.read`)));
+    assert.ok(oauthBodies.some((b) => decodeURIComponent(b).includes(`/accounts/${accountId}/payment-methods.read`)));
+    assert.ok(oauthBodies.some((b) => decodeURIComponent(b).includes(`/accounts/${accountId}/capabilities.read`)));
+    assert.ok(paths.includes(`/accounts/${accountId}`));
   });
 });
