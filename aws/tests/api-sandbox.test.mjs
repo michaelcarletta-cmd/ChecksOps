@@ -350,7 +350,7 @@ test('CheckAlt sandbox deposit converts cents with a synthetic non-negotiable im
   assert.equal(deposit.userAmount, 1);
   assert.equal(deposit.negotiableCheck, false);
   assert.equal(deposit.imageIncluded, true);
-  assert.equal(deposit.imageKind, 'synthetic_void_png');
+  assert.equal(deposit.imageKind, 'synthetic_void_check_png');
 });
 
 test('CheckAlt and Moov reject zero, negative, over-max, and extra precision', () => {
