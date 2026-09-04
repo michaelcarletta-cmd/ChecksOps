@@ -1,0 +1,20 @@
+{
+  "service": "checksops-api",
+  "environment": "staging",
+  "productionSupabaseChanged": false,
+  "productionWebhooksRedirected": false,
+  "ok": true,
+  "statusCode": 200,
+  "id": "bb54eb3a-293d-4d7e-879a-28f2506690fb",
+  "spoofFieldsIgnored": {
+    "ignored": true,
+    "queryUserId": null,
+    "queryTenantId": null,
+    "headerUserId": null,
+    "headerTenantId": null,
+    "headerRole": null,
+    "bodyUserId": null,
+    "bodyTenantId": null,
+    "bodyRole": null
+  }
+}

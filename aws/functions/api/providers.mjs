@@ -338,6 +338,14 @@ const dispatchKnownFunction = (spec, body) => {
 };
 
 export const handleFunctionInvoke = async (event, name, deps = {}) => {
+  // Class A ordinary services are owned by app-services.mjs — never stub them here.
+  try {
+    const { CLASS_A_FUNCTIONS } = await import('./app-services.mjs');
+    if (CLASS_A_FUNCTIONS?.has?.(name)) return null;
+  } catch {
+    /* app-services optional during early boot */
+  }
+
   const spec = classifyFunction(name) || (name === 'actum' ? ACTUM_BOUNDARY : null);
   if (!spec) {
     return denyProviderExecution(null, name, {

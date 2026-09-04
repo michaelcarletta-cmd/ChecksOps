@@ -1,0 +1,165 @@
+{
+  "email_sink_gmail": {
+    "http": 200,
+    "ok": true,
+    "error": null,
+    "mode": null,
+    "sunkCount": null,
+    "deliveredCount": null,
+    "results": null
+  },
+  "email_tx_yahoo": {
+    "http": 200,
+    "ok": true,
+    "success": true,
+    "mode": null,
+    "status": null,
+    "error": null,
+    "delivery": null,
+    "keys": [
+      "service",
+      "environment",
+      "productionSupabaseChanged",
+      "productionWebhooksRedirected",
+      "ok",
+      "statusCode",
+      "success",
+      "sent",
+      "queued",
+      "sunk",
+      "provider",
+      "id",
+      "stagingPolicy",
+      "spoofFieldsIgnored"
+    ]
+  },
+  "ledger_view": {
+    "http": 200,
+    "ok": true,
+    "error": null,
+    "allow_deductible_payment": false,
+    "money": null,
+    "has_claim": true,
+    "events": 42,
+    "token_tenant": "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a"
+  },
+  "ledger_bad": {
+    "http": 404,
+    "ok": false,
+    "error": "not_found"
+  },
+  "claim_portal": {
+    "http": 200,
+    "ok": true,
+    "error": null,
+    "has_lead": true,
+    "keys": [
+      "service",
+      "environment",
+      "productionSupabaseChanged",
+      "productionWebhooksRedirected",
+      "ok",
+      "statusCode",
+      "pending",
+      "lead",
+      "contractor",
+      "spoofFieldsIgnored"
+    ]
+  },
+  "ocr": {
+    "http": 200,
+    "ok": true,
+    "success": false,
+    "ocr_success": false,
+    "error": "The AWS Access Key Id needs a subscription for the service",
+    "stage": "textract",
+    "fields": null,
+    "lineCount": 0,
+    "keys": [
+      "service",
+      "environment",
+      "productionSupabaseChanged",
+      "productionWebhooksRedirected",
+      "ok",
+      "statusCode",
+      "success",
+      "ocr_success",
+      "error",
+      "stage",
+      "spoofFieldsIgnored"
+    ]
+  },
+  "endorse": {
+    "http": 200,
+    "ok": true,
+    "error": null,
+    "keys": [
+      "service",
+      "environment",
+      "productionSupabaseChanged",
+      "productionWebhooksRedirected",
+      "ok",
+      "statusCode",
+      "detected",
+      "zone",
+      "suggested",
+      "engine",
+      "spoofFieldsIgnored"
+    ]
+  },
+  "images": {
+    "http": 200,
+    "ok": true,
+    "error": null,
+    "hasFront": true,
+    "keys": [
+      "service",
+      "environment",
+      "productionSupabaseChanged",
+      "productionWebhooksRedirected",
+      "ok",
+      "statusCode",
+      "frontUrl",
+      "backUrl",
+      "spoofFieldsIgnored"
+    ]
+  },
+  "ocr_cross": {
+    "http": 404,
+    "ok": false,
+    "error": "check_not_found",
+    "spoof": {
+      "ignored": true,
+      "queryUserId": null,
+      "queryTenantId": null,
+      "headerUserId": "00000000-0000-0000-0000-000000000099",
+      "headerTenantId": "00000000-0000-0000-0000-000000000099",
+      "headerRole": null,
+      "bodyUserId": null,
+      "bodyTenantId": null,
+      "bodyRole": null
+    }
+  },
+  "ocr_unauth": {
+    "http": 401,
+    "ok": false,
+    "error": "missing_cognito_token"
+  },
+  "email_unauth": {
+    "http": 401,
+    "ok": false,
+    "error": "missing_cognito_token"
+  },
+  "moov": {
+    "http": 404,
+    "ok": false,
+    "error": "Disbursement batch not found.",
+    "execution": null,
+    "provider_disabled": false
+  },
+  "partner": {
+    "http": 200,
+    "ok": true,
+    "error": null
+  }
+}
