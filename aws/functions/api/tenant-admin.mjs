@@ -387,3 +387,202 @@ export const handleTenantRemoveOpenaiKey = async (event) => withIdentity(event, 
   }
   return { ok: true, statusCode: 200, removed: true, spoofFieldsIgnored: spoof };
 }, { write: true, commit: true });
+
+/**
+ * Hire mortgage desk agent (Class A Cognito bridge for hire-mortgage-agent).
+ * Preserves production semantics: mortgage_agent-only accounts, identity mapping
+ * Cognito sub → application UUID (never equal), optional temp password for new users.
+ */
+export const handleHireMortgageAgent = async (event) => withIdentity(event, async ({
+  client, mapping, body, spoof,
+}) => {
+  const system = (await client.query(
+    `SELECT role FROM public.user_roles WHERE user_id = $1::uuid AND role = 'admin' LIMIT 1`,
+    [mapping.application_user_id],
+  )).rows[0];
+  const master = (await client.query(`SELECT public.is_master_owner() AS is_master`)).rows[0];
+  if (!master?.is_master && !system) {
+    return { ok: false, statusCode: 403, error: 'Admin access required', spoofFieldsIgnored: spoof };
+  }
+
+  const email = normalizeEmail(body.email);
+  const fullName = String(body.full_name || body.fullName || '').trim();
+  if (!email || !fullName) {
+    return { ok: false, statusCode: 400, error: 'Name and email are required', spoofFieldsIgnored: spoof };
+  }
+
+  const providedPassword = body.password && String(body.password).length >= 8
+    ? String(body.password)
+    : null;
+  const tempPassword = providedPassword
+    || `MortgageOps!${randomBytes(6).toString('base64url')}9a`;
+
+  // Existing profile by email → reuse ChecksOps application UUID
+  let appUserId = (await client.query(
+    `SELECT id::text AS id FROM public.profiles WHERE lower(email) = $1 LIMIT 1`,
+    [email],
+  )).rows[0]?.id || null;
+  let created = false;
+  let cognitoSub = null;
+
+  if (appUserId) {
+    const roles = (await client.query(
+      `SELECT role FROM public.user_roles WHERE user_id = $1::uuid`,
+      [appUserId],
+    )).rows.map((r) => r.role);
+    if (roles.includes('staff') || roles.includes('admin')) {
+      return {
+        ok: false,
+        statusCode: 400,
+        error: 'This account already has staff/admin access. Mortgage ops access must be scoped-only — remove those roles first.',
+        spoofFieldsIgnored: spoof,
+      };
+    }
+    if (roles.includes('mortgage_agent')) {
+      return {
+        ok: false,
+        statusCode: 409,
+        error: 'User already has mortgage ops access.',
+        spoofFieldsIgnored: spoof,
+      };
+    }
+  }
+
+  try {
+    const createdUser = await cognitoJson('AdminCreateUser', {
+      UserPoolId: POOL_ID(),
+      Username: email,
+      TemporaryPassword: tempPassword,
+      MessageAction: 'SUPPRESS',
+      UserAttributes: [
+        { Name: 'email', Value: email },
+        { Name: 'email_verified', Value: 'true' },
+        { Name: 'name', Value: fullName },
+      ],
+    });
+    const attrs = createdUser.User?.Attributes || [];
+    cognitoSub = attrs.find((a) => a.Name === 'sub')?.Value
+      || createdUser.User?.Username
+      || null;
+    created = true;
+    if (providedPassword) {
+      try {
+        await cognitoJson('AdminSetUserPassword', {
+          UserPoolId: POOL_ID(),
+          Username: email,
+          Password: providedPassword,
+          Permanent: true,
+        });
+      } catch {
+        /* temp password remains usable via NEW_PASSWORD_REQUIRED / forgot */
+      }
+    }
+  } catch (error) {
+    if (String(error.name).includes('UsernameExistsException')) {
+      const listed = await cognitoJson('AdminGetUser', {
+        UserPoolId: POOL_ID(),
+        Username: email,
+      });
+      const attrs = listed.UserAttributes || [];
+      cognitoSub = attrs.find((a) => a.Name === 'sub')?.Value || listed.Username;
+    } else {
+      return {
+        ok: false,
+        statusCode: 502,
+        error: 'cognito_hire_failed',
+        message: String(error.message || error).slice(0, 240),
+        spoofFieldsIgnored: spoof,
+      };
+    }
+  }
+
+  if (!appUserId) {
+    appUserId = randomUUID();
+    created = true;
+    await client.query(
+      `INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
+       VALUES ($1::uuid, $2, $3, now(), now())
+       ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, full_name = EXCLUDED.full_name, updated_at = now()`,
+      [appUserId, email, fullName],
+    );
+  } else {
+    await client.query(
+      `UPDATE public.profiles SET full_name = $2, email = $3, updated_at = now() WHERE id = $1::uuid`,
+      [appUserId, fullName, email],
+    ).catch(() => {});
+  }
+
+  if (!cognitoSub || String(cognitoSub) === String(appUserId)) {
+    return {
+      ok: false,
+      statusCode: 500,
+      error: 'unsafe_or_missing_cognito_sub',
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
+  await client.query(
+    `INSERT INTO public.identity_accounts (cognito_sub, application_user_id, email, created_at, updated_at)
+     VALUES ($1, $2::uuid, $3, now(), now())
+     ON CONFLICT (cognito_sub) DO UPDATE
+       SET application_user_id = EXCLUDED.application_user_id,
+           email = EXCLUDED.email,
+           updated_at = now()`,
+    [cognitoSub, appUserId, email],
+  );
+
+  let roleOk = false;
+  try {
+    const roleInsert = await client.query(
+      `INSERT INTO public.user_roles (user_id, role)
+       VALUES ($1::uuid, 'mortgage_agent')
+       ON CONFLICT DO NOTHING
+       RETURNING id`,
+      [appUserId],
+    );
+    roleOk = Boolean(roleInsert?.rows?.length);
+  } catch {
+    try {
+      const roleInsert = await client.query(
+        `INSERT INTO public.user_roles (id, user_id, role)
+         VALUES ($1::uuid, $2::uuid, 'mortgage_agent')
+         ON CONFLICT DO NOTHING
+         RETURNING id`,
+        [randomUUID(), appUserId],
+      );
+      roleOk = Boolean(roleInsert?.rows?.length);
+    } catch {
+      roleOk = false;
+    }
+  }
+
+  if (!roleOk) {
+    const has = (await client.query(
+      `SELECT 1 FROM public.user_roles WHERE user_id = $1::uuid AND role = 'mortgage_agent' LIMIT 1`,
+      [appUserId],
+    )).rows[0];
+    if (!has) {
+      return {
+        ok: false,
+        statusCode: 400,
+        error: 'Failed to grant mortgage_agent role',
+        spoofFieldsIgnored: spoof,
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    statusCode: 200,
+    success: true,
+    user_id: appUserId,
+    email,
+    full_name: fullName,
+    created,
+    temp_password: created ? tempPassword : null,
+    cognitoSub,
+    applicationUserId: appUserId,
+    spoofFieldsIgnored: spoof,
+  };
+}, { write: true, commit: true });
+

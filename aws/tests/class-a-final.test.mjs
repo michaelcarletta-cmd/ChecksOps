@@ -46,6 +46,7 @@ test('class A registry includes final cleanup functions', () => {
   for (const name of [
     'generate-checksops-doc',
     'tenant-invite-user',
+    'hire-mortgage-agent',
     'send-sms',
     'process-email-queue',
     'homeowner-upload-otp-verify',
